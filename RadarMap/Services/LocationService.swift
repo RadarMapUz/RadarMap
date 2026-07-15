@@ -133,6 +133,8 @@ final class LocationService: NSObject {
         for (_, t) in passTracking { trip.registerPass(camera: t.camera, speedKmh: t.speedAtMin) }
         passTracking.removeAll()
         trip.finish()
+        // Припарковались у цели — маршрут выполнен, линия не должна висеть на карте.
+        route?.finishIfNearDestination(coordinate: currentCoordinate)
         applyLocationMode()
         liveActivity?.end()
     }
@@ -315,20 +317,30 @@ final class LocationService: NSObject {
         distanceToNearest = ranked?.1
     }
 
-    /// Фиксация скорости прохождения: держим минимальную дистанцию до камеры,
-    /// а когда отъехали за радиус — записываем «пройдено» со скоростью в точке сближения.
+    /// Фиксация скорости прохождения — как у настоящего радара: скорость в точке
+    /// максимального сближения (траверз камеры), а не на подходе.
     private func updatePassTracking(from coordinate: CLLocationCoordinate2D) {
         let radius = effectiveAlertRadius
-        if let camera = nearestCamera, let distance = distanceToNearest, distance <= radius {
-            if var t = passTracking[camera.id] {
-                if distance < t.minDist { t.minDist = distance; t.speedAtMin = speedKmh; passTracking[camera.id] = t }
-            } else {
-                passTracking[camera.id] = (camera, distance, speedKmh)
-            }
+        // Вошли в радиус камеры впереди — начинаем следить.
+        if let camera = nearestCamera, let distance = distanceToNearest,
+           distance <= radius, passTracking[camera.id] == nil {
+            passTracking[camera.id] = (camera, distance, speedKmh)
         }
-        for (id, t) in passTracking where t.camera.distance(from: coordinate) > radius + 120 {
-            trip.registerPass(camera: t.camera, speedKmh: t.speedAtMin)
-            passTracking.removeValue(forKey: id)
+        // Точку сближения обновляем для ВСЕХ отслеживаемых: после проезда камера уходит
+        // из «ближайших впереди» (направленный фильтр), но траверз ещё не пройден.
+        for (id, entry) in passTracking {
+            var tracked = entry
+            let distance = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
+                                                tracked.camera.lat, tracked.camera.lon)
+            if distance < tracked.minDist {
+                tracked.minDist = distance
+                tracked.speedAtMin = speedKmh
+                passTracking[id] = tracked
+            } else if distance > radius + 120 {
+                // Отъехали — «пройдено» со скоростью в момент проезда.
+                trip.registerPass(camera: tracked.camera, speedKmh: tracked.speedAtMin)
+                passTracking.removeValue(forKey: id)
+            }
         }
     }
 

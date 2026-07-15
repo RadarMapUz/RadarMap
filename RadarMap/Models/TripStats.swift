@@ -115,9 +115,24 @@ final class TripStats {
         persist()
     }
 
+    func deleteRecord(id: Double) {
+        history.removeAll { $0.id == id }
+        persist()
+    }
+
     func clearHistory() {
         history = []
         persist()
+    }
+
+    /// Сводка за последние 7 дней — заголовок истории.
+    var weekSummary: (trips: Int, distance: CLLocationDistance, cameras: Int)? {
+        let weekAgo = Date().addingTimeInterval(-7 * 24 * 3600)
+        let recent = history.filter { $0.startedAt > weekAgo }
+        guard !recent.isEmpty else { return nil }
+        return (recent.count,
+                recent.reduce(0) { $0 + $1.distanceMeters },
+                recent.reduce(0) { $0 + $1.camerasPassed })
     }
 
     // MARK: - Хранение

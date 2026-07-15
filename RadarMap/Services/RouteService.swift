@@ -91,6 +91,17 @@ final class RouteService {
     var distanceText: String { selected?.distanceText ?? "" }
     var etaText: String { selected?.etaText ?? "" }
 
+    // Живой остаток пути (для компактной панели поездки).
+    var remainingDistance: CLLocationDistance {
+        guard let selected else { return 0 }
+        return max(0, selected.distance - progressAlong)
+    }
+    var remainingTime: TimeInterval {
+        guard let selected, selected.distance > 0 else { return 0 }
+        return selected.travelTime * remainingDistance / selected.distance
+    }
+    var arrivalDate: Date { Date().addingTimeInterval(remainingTime) }
+
     // MARK: - Построение
 
     func build(from source: CLLocationCoordinate2D,
@@ -127,6 +138,24 @@ final class RouteService {
         resetProgress()
     }
 
+    /// Поездка завершена рядом с целью — маршрут выполнен, убираем его сами.
+    /// (Пользователь припарковался и вышел: линия не должна висеть на карте.)
+    func finishIfNearDestination(coordinate: CLLocationCoordinate2D?) {
+        guard isActive, let destination = destinationCoordinate else { return }
+        let destinationDistance = coordinate.map {
+            MKMapPoint($0).distance(to: MKMapPoint(destination))
+        } ?? .greatestFiniteMagnitude
+        if remainingDistance < 400 || destinationDistance < 400 {
+            arrive()
+        }
+    }
+
+    private func arrive() {
+        lastArrival = ArrivalSummary(name: destinationName, at: Date())
+        clear()
+        onArrived?()
+    }
+
     private func resetProgress() {
         progressAlong = 0
         nextCamera = nil
@@ -148,15 +177,17 @@ final class RouteService {
               let destination = destinationCoordinate else { return }
         let point = MKMapPoint(coordinate)
 
-        if point.distance(to: MKMapPoint(destination)) <= AppConfig.arrivalRadiusMeters {
-            lastArrival = ArrivalSummary(name: destinationName, at: Date())
-            clear()
-            onArrived?()
-            return
-        }
-
         let (along, deviation) = Self.project(point, onto: variant.points, hint: &segmentHint)
         progressAlong = along
+
+        // Прибытие: у самой цели ИЛИ проехали финиш по маршруту (парковка чуть в стороне,
+        // GPS-точка не попала в малый радиус — маршрут всё равно выполнен).
+        let destinationDistance = point.distance(to: MKMapPoint(destination))
+        if destinationDistance <= AppConfig.arrivalRadiusMeters
+            || (variant.distance - along < 80 && destinationDistance < 250) {
+            arrive()
+            return
+        }
 
         // Пройденный кусок для тусклой отрисовки (пересобираем не чаще, чем раз в 40 м).
         if abs(along - lastSplitAlong) > 40 {

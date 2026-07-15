@@ -163,6 +163,23 @@ struct TripStatsSheet: View {
                 .font(.rounded(14, .semibold))
                 .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Сводка за 7 дней — общая картина одним взглядом.
+            if let week = trip.weekSummary {
+                HStack(spacing: 0) {
+                    weekMetric(String(format: String(localized: "%lld поездок"), week.trips), "car.fill")
+                    weekDivider
+                    weekMetric(Formatting.distance(week.distance), "point.topleft.down.to.point.bottomright.curvepath")
+                    weekDivider
+                    weekMetric(String(format: String(localized: "%lld камер"), week.cameras), "camera.fill")
+                }
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
+                    .stroke(Theme.accent.opacity(0.25), lineWidth: 1))
+            }
+
             ForEach(trip.history) { record in
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
@@ -193,8 +210,35 @@ struct TripStatsSheet: View {
                 }
                 .padding(14)
                 .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+                .contextMenu {
+                    if let onRoute, let end = record.endCoordinate {
+                        Button {
+                            onRoute(end, String(localized: "Как в прошлый раз"))
+                            dismiss()
+                        } label: {
+                            Label("Повторить маршрут", systemImage: "arrow.triangle.turn.up.right.circle")
+                        }
+                    }
+                    Button(role: .destructive) {
+                        withAnimation { trip.deleteRecord(id: record.id) }
+                    } label: {
+                        Label("Удалить запись", systemImage: "trash")
+                    }
+                }
             }
         }
+    }
+
+    private func weekMetric(_ value: String, _ icon: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon).font(.rounded(12, .semibold)).foregroundStyle(Theme.accent)
+            Text(value).font(.rounded(14, .bold)).foregroundStyle(Theme.textPrimary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var weekDivider: some View {
+        Rectangle().fill(Theme.accent.opacity(0.2)).frame(width: 1, height: 32)
     }
 
     private var emptyHint: some View {

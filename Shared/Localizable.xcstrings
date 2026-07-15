@@ -2800,6 +2800,70 @@
           }
         }
       }
+    },
+    "%lld поездок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld поездок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld safar"
+          }
+        }
+      }
+    },
+    "%lld камер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld kamera"
+          }
+        }
+      }
+    },
+    "Повторить маршрут": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторить маршрут"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrutni takrorlash"
+          }
+        }
+      }
+    },
+    "Удалить запись": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить запись"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yozuvni o‘chirish"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

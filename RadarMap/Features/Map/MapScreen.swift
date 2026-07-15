@@ -291,14 +291,19 @@ struct MapScreen: View {
                     }
                     .transition(.move(edge: .leading).combined(with: .opacity))
                 }
-                if env.route.isActive {
-                    if !controlsHidden {
-                        RoutePanel(
-                            onShowCameras: { showRouteCameras = true },
-                            onTripToggle: { toggleTrip() }
-                        )
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
+                if env.location.isTripActive {
+                    // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
+                    // максимум экрана отдан карте, и она не прячется вместе с кнопками.
+                    TripLiveBar(
+                        onShowCameras: { showRouteCameras = true },
+                        onStop: { toggleTrip() }
+                    )
+                } else if env.route.isActive {
+                    RoutePanel(
+                        onShowCameras: { showRouteCameras = true },
+                        onTripToggle: { toggleTrip() }
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else if !controlsHidden {
                     if env.route.isBuilding {
                         HStack(spacing: 8) {

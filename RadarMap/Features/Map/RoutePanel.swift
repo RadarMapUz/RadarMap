@@ -51,23 +51,19 @@ struct RoutePanel: View {
                         }
                     }
 
-                    if env.location.isTripActive, env.settings.showNextCamera {
-                        nextCameraRow
-                    } else {
-                        camerasButton
-                    }
+                    // В поездке панель заменяется компактной TripLiveBar — здесь всегда «до старта».
+                    camerasButton
 
-                    // Поехали / Завершить
                     Button(action: onTripToggle) {
                         HStack(spacing: 10) {
-                            Image(systemName: env.location.isTripActive ? "stop.fill" : "play.fill")
-                            Text(env.location.isTripActive ? "Завершить поездку" : "Поехали")
+                            Image(systemName: "play.fill")
+                            Text("Поехали")
                         }
                         .font(.rounded(17, .bold))
-                        .foregroundStyle(env.location.isTripActive ? .white : Theme.background)
+                        .foregroundStyle(Theme.background)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
-                        .background(env.location.isTripActive ? Theme.danger : Theme.success,
+                        .background(Theme.success,
                                     in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
                     }
                 }
@@ -142,51 +138,75 @@ struct RoutePanel: View {
         .disabled(route.camerasOnRoute.isEmpty)
     }
 
-    /// В движении: живая строка «следующая камера через X».
-    @ViewBuilder private var nextCameraRow: some View {
+}
+
+/// Компактная панель поездки: максимум карты, минимум панели.
+/// С маршрутом — время прибытия и остаток; без — таймер и путь. Справа — стоп.
+struct TripLiveBar: View {
+    @Environment(AppEnvironment.self) private var env
+    let onShowCameras: () -> Void
+    let onStop: () -> Void
+
+    var body: some View {
         let route = env.route
-        if let next = route.nextCamera {
-            Button(action: onShowCameras) {
-                HStack(spacing: 10) {
-                    Image(systemName: next.camera.kind.symbolName)
-                        .font(.rounded(13, .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 32)
-                        .background(next.camera.kind.tint.gradient, in: Circle())
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(String(format: String(localized: "Камера через %@"),
-                                    Formatting.distance(route.nextCameraDistance)))
-                            .font(.rounded(14, .bold))
-                            .foregroundStyle(Theme.textPrimary)
-                            .contentTransition(.numericText())
-                        Text(next.camera.kind.displayName)
-                            .font(.rounded(11))
-                            .foregroundStyle(Theme.textSecondary)
-                    }
-                    Spacer()
-                    Text("\(route.camerasOnRoute.filter { $0.distanceAlong > route.progressAlong }.count)")
-                        .font(.rounded(12, .bold))
+        HStack(spacing: 12) {
+            if route.isActive {
+                // Прибытие: как в настоящих навигаторах — время на часах + остаток.
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(route.arrivalDate, style: .time)
+                        .font(.rounded(22, .heavy))
+                        .foregroundStyle(Theme.success)
+                        .contentTransition(.numericText())
+                    Text("\(Formatting.duration(route.remainingTime)) · \(Formatting.distance(route.remainingDistance))")
+                        .font(.rounded(12, .medium))
                         .foregroundStyle(Theme.textSecondary)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Theme.stroke, in: Capsule())
+                        .contentTransition(.numericText())
                 }
-                .padding(10)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+                if env.settings.showNextCamera, let next = route.nextCamera {
+                    Button(action: onShowCameras) {
+                        HStack(spacing: 6) {
+                            Image(systemName: next.camera.kind.symbolName)
+                                .font(.rounded(11, .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 24, height: 24)
+                                .background(next.camera.kind.tint.gradient, in: Circle())
+                            Text(Formatting.distance(route.nextCameraDistance))
+                                .font(.rounded(13, .bold))
+                                .foregroundStyle(Theme.textPrimary)
+                                .contentTransition(.numericText())
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .background(Theme.surface, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                // Свободная поездка без маршрута: таймер + путь.
+                VStack(alignment: .leading, spacing: 1) {
+                    if let started = env.trip.startedAt {
+                        Text(timerInterval: started...Date.distantFuture, countsDown: false)
+                            .font(.rounded(20, .heavy).monospacedDigit())
+                            .foregroundStyle(Theme.success)
+                    }
+                    Text("\(Formatting.distance(env.trip.distanceMeters)) · \(env.trip.camerasPassed) 📷")
+                        .font(.rounded(12, .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                        .contentTransition(.numericText())
+                }
             }
-            .buttonStyle(.plain)
-        } else {
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.shield.fill")
-                    .font(.rounded(13, .bold))
-                    .foregroundStyle(Theme.success)
-                Text("Камер впереди нет")
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(Theme.textSecondary)
-                Spacer()
+            Spacer(minLength: 8)
+            Button(action: onStop) {
+                Image(systemName: "stop.fill")
+                    .font(.rounded(16, .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.danger.gradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
-            .padding(12)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
 

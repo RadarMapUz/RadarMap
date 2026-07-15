@@ -1,0 +1,163 @@
+//
+//  Camera.swift
+//  RadarMap
+//
+//  Модель камеры видеофиксации (шаг 2).
+//
+
+import Foundation
+import CoreLocation
+
+/// Тип устройства фиксации. Строковое значение из PDF маппится в понятные категории,
+/// неизвестные типы попадают в `.other`, чтобы приложение не падало на новых данных.
+enum CameraType: Hashable {
+    case stationaryCamera   // «Стационар камера» — фиксирует все нарушения
+    case stationaryRadar    // «Стационар радар» — только превышение скорости
+    case intelligentRadar   // «Интеллектуал + радар» — новое поколение, фиксирует всё + скорость
+    case mobileRadar        // «Передвижной радар» — краудсорсинг, живёт несколько часов
+    case other(String)
+
+    init(raw: String) {
+        switch raw {
+        case "Стационар камера", "Statsionar kamera":   self = .stationaryCamera
+        case "Стационар радар", "Statsionar radar":     self = .stationaryRadar
+        case "Интеллектуал + радар", "Intellektual + radar": self = .intelligentRadar
+        case "Передвижной радар":                        self = .mobileRadar
+        default:                                         self = .other(raw)
+        }
+    }
+
+    /// Человекочитаемое название для UI.
+    var displayName: String {
+        switch self {
+        case .stationaryCamera: return String(localized: "Стационарная камера")
+        case .stationaryRadar:  return String(localized: "Стационарный радар")
+        case .intelligentRadar: return String(localized: "Интеллектуальная камера + радар")
+        case .mobileRadar:      return String(localized: "Передвижной радар")
+        case .other(let raw):   return raw
+        }
+    }
+
+    /// Короткая фраза в родительном падеже для HUD («до камеры»).
+    var genitivePhrase: String {
+        switch self {
+        case .stationaryCamera: return String(localized: "до камеры")
+        case .stationaryRadar:  return String(localized: "до радара")
+        case .intelligentRadar: return String(localized: "до камеры")
+        case .mobileRadar:      return String(localized: "до передв. радара")
+        case .other:            return String(localized: "до точки")
+        }
+    }
+
+    /// Исходная строка типа (для записи в JSON своих камер).
+    var sourceString: String {
+        switch self {
+        case .stationaryCamera: return "Стационар камера"
+        case .stationaryRadar:  return "Стационар радар"
+        case .intelligentRadar: return "Интеллектуал + радар"
+        case .mobileRadar:      return "Передвижной радар"
+        case .other(let raw):   return raw
+        }
+    }
+
+    /// SF Symbol для аннотации на карте.
+    var symbolName: String {
+        switch self {
+        case .stationaryCamera: return "camera.fill"
+        case .stationaryRadar:  return "speedometer"
+        case .intelligentRadar: return "camera.metering.matrix"
+        case .mobileRadar:      return "dot.radiowaves.left.and.right"
+        case .other:            return "mappin"
+        }
+    }
+}
+
+struct Camera: Identifiable, Codable, Hashable {
+    let id: Int
+    let region: String
+    let city: String
+    let location: String
+    let lat: Double
+    let lon: Double
+    let type: String
+    let violations: [String]
+    /// `true`, если координаты восстановлены приблизительно (битые данные в исходном PDF).
+    let needsReview: Bool?
+
+    init(id: Int, region: String, city: String, location: String,
+         lat: Double, lon: Double, type: String, violations: [String], needsReview: Bool?) {
+        self.id = id
+        self.region = region
+        self.city = city
+        self.location = location
+        self.lat = lat
+        self.lon = lon
+        self.type = type
+        self.violations = violations
+        self.needsReview = needsReview
+    }
+
+    /// В bundled-JSON поле `violations` опущено (на 100% определяется типом) —
+    /// восстанавливаем из типа. Общие статические массивы = одна копия в памяти на все камеры.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        region = try c.decode(String.self, forKey: .region)
+        city = try c.decode(String.self, forKey: .city)
+        location = try c.decode(String.self, forKey: .location)
+        lat = try c.decode(Double.self, forKey: .lat)
+        lon = try c.decode(Double.self, forKey: .lon)
+        type = try c.decode(String.self, forKey: .type)
+        needsReview = try c.decodeIfPresent(Bool.self, forKey: .needsReview)
+        violations = try c.decodeIfPresent([String].self, forKey: .violations)
+            ?? Self.defaultViolations(forType: type)
+    }
+
+    static let standardViolations = [
+        "йўл белгилари", "хавфсизлик камаридан фойдаланиш", "тезликни ошириш",
+        "қизил чироқда бўйсунмасдан ўтиш", "қарама қарши йўналишда ҳаракатланиш",
+        "тўхташ қоидаларини бузиш", "тўхтаб туриш қоидаларини бузиш",
+        "қизил чироқда тўхташ чизиғини босиб кириш",
+    ]
+    static let radarViolations = ["тезликни ошириш"]
+
+    static func defaultViolations(forType type: String) -> [String] {
+        switch CameraType(raw: type) {
+        case .stationaryCamera, .intelligentRadar: return standardViolations
+        case .stationaryRadar, .mobileRadar:       return radarViolations
+        case .other:                               return []
+        }
+    }
+
+    // MARK: - Вычисляемые свойства
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: lat, longitude: lon)
+    }
+
+    var kind: CameraType { CameraType(raw: type) }
+
+    /// Заголовок для маркера/попапа: адрес, иначе город, иначе регион.
+    var displayTitle: String {
+        if !location.isEmpty { return location }
+        if !city.isEmpty { return city }
+        return region
+    }
+
+    /// Подзаголовок «Город, Регион».
+    var subtitle: String {
+        [city, region].filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+
+    var isApproximate: Bool { needsReview == true }
+
+    /// Расстояние в метрах от заданной координаты до камеры.
+    func distance(from coordinate: CLLocationCoordinate2D) -> CLLocationDistance {
+        CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            .distance(from: CLLocation(latitude: lat, longitude: lon))
+    }
+
+    // Равенство/хеш по id — координаты вычисляемые и в синтез не должны попадать.
+    static func == (lhs: Camera, rhs: Camera) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+}

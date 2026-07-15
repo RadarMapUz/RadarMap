@@ -1,0 +1,20 @@
+# Xcode
+build/
+build_device/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Секреты — никогда не коммитим
+*.env
+*.pem
+*.mobileprovision

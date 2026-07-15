@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>ru</string>
+	<key>NSMotionUsageDescription</key>
+	<string>RadarMap определяет начало и конец поездки, чтобы автоматически включать оповещения за рулём и не тратить заряд, когда вы не едете.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>RadarMap показывает камеры видеофиксации на карте рядом с вами и определяет ваше положение, чтобы предупреждать о ближайших камерах.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Чтобы предупреждать о камерах во время движения даже когда приложение свёрнуто, RadarMap использует геолокацию в фоновом режиме. Данные о местоположении обрабатываются только на вашем устройстве.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>audio</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>CameraAlerts</key>
+		<string>Точная геопозиция нужна, чтобы вовремя предупреждать о камерах именно на вашей дороге.</string>
+	</dict>
+	<!-- База камер обновляется с сервера по IP (HTTP). ATS-исключения не работают для
+	     IP-адресов, поэтому временно разрешаем произвольные загрузки.
+	     TODO: перед App Store — домен + HTTPS и убрать этот ключ. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+</dict>
+</plist>

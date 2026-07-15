@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Groups отключены: бесплатный Apple ID их не поддерживает.
+	     При платном аккаунте вернуть:
+	     <key>com.apple.security.application-groups</key>
+	     <array><string>group.uz.rasul.radarmap</string></array> -->
+</dict>
+</plist>

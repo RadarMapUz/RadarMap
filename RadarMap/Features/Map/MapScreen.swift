@@ -16,6 +16,11 @@ struct MapScreen: View {
     @State private var dismissedApproachID: Int?
     @State private var headingUp = false
     @State private var showRouteCameras = false
+    // Умные кнопки: в поездке через 5 с бездействия интерфейс прячется, тап по карте возвращает.
+    @State private var controlsHidden = false
+    @State private var hideControlsTask: Task<Void, Never>?
+    @State private var legendExpanded = false
+    @State private var legendCollapseTask: Task<Void, Never>?
 
     var body: some View {
         @Bindable var vm = vm
@@ -26,7 +31,6 @@ struct MapScreen: View {
             if vm.isAddingCamera { crosshair }
 
             topLayer
-            if !vm.isAddingCamera { controlColumn }
             bottomLayer
         }
         .task {
@@ -79,6 +83,11 @@ struct MapScreen: View {
         }
         .onChange(of: env.location.isTripActive) { _, active in
             headingUp = active   // в поездке карта сама встаёт «по ходу движения»
+            if active {
+                scheduleControlsHide()
+            } else {
+                revealControls()
+            }
         }
         .onChange(of: env.location.locationTick) { _, _ in
             // Прогресс маршрута (прибытие/манёвры/камеры) тикает в LocationService —
@@ -179,6 +188,30 @@ struct MapScreen: View {
         .onMapCameraChange(frequency: .onEnd) { context in
             vm.updateVisible(for: context.region)
         }
+        // Любое касание карты будит спрятанные кнопки (не мешая тапам по маркерам).
+        .simultaneousGesture(TapGesture().onEnded { revealControls() })
+        .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in revealControls() })
+    }
+
+    // MARK: - Умные кнопки
+
+    /// В поездке интерфейс не нужен постоянно: прячем всё, кроме HUD, манёвра и панели.
+    private func scheduleControlsHide() {
+        hideControlsTask?.cancel()
+        guard env.location.isTripActive else { return }
+        hideControlsTask = Task {
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.45)) { controlsHidden = true }
+        }
+    }
+
+    private func revealControls() {
+        hideControlsTask?.cancel()
+        if controlsHidden {
+            withAnimation(.easeOut(duration: 0.25)) { controlsHidden = false }
+        }
+        scheduleControlsHide()
     }
 
     private var crosshair: some View {
@@ -198,15 +231,24 @@ struct MapScreen: View {
             if env.location.isTripActive, let step = env.route.nextStep {
                 ManeuverBanner(step: step, distance: env.route.nextStepDistance)
             }
+            // Кнопки навигации — сразу под HUD справа; в поездке сами прячутся.
+            if !vm.isAddingCamera && !controlsHidden {
+                HStack {
+                    Spacer()
+                    controlColumn
+                }
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
             Spacer()
         }
         .padding(.horizontal, 16)
         .padding(.top, 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(.spring(duration: 0.3), value: env.route.nextStep?.distanceAlong)
+        .animation(.easeInOut(duration: 0.3), value: controlsHidden)
     }
 
-    // MARK: - Правая колонка навигации
+    // MARK: - Колонка навигации (компас, локация, зум)
 
     private var controlColumn: some View {
         VStack(spacing: 12) {
@@ -216,15 +258,17 @@ struct MapScreen: View {
                 if headingUp {
                     vm.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
                 }
+                revealControls()
             }
-            CircleControl(systemName: "location.fill", tint: Theme.accent) { recenter() }
+            CircleControl(systemName: "location.fill", tint: Theme.accent) {
+                recenter()
+                revealControls()
+            }
             VStack(spacing: 1) {
-                CircleControl(systemName: "plus") { vm.zoom(0.5) }
-                CircleControl(systemName: "minus") { vm.zoom(2.0) }
+                CircleControl(systemName: "plus") { vm.zoom(0.5); revealControls() }
+                CircleControl(systemName: "minus") { vm.zoom(2.0); revealControls() }
             }
         }
-        .padding(.trailing, 16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
     }
 
     // MARK: - Низ: панель действий / режим добавления
@@ -240,16 +284,22 @@ struct MapScreen: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
                 permissionBanner
-                HStack(alignment: .bottom) {
-                    legend
-                    Spacer()
+                if !controlsHidden {
+                    HStack(alignment: .bottom) {
+                        smartLegend
+                        Spacer()
+                    }
+                    .transition(.move(edge: .leading).combined(with: .opacity))
                 }
                 if env.route.isActive {
-                    RoutePanel(
-                        onShowCameras: { showRouteCameras = true },
-                        onTripToggle: { toggleTrip() }
-                    )
-                } else {
+                    if !controlsHidden {
+                        RoutePanel(
+                            onShowCameras: { showRouteCameras = true },
+                            onTripToggle: { toggleTrip() }
+                        )
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                } else if !controlsHidden {
                     if env.route.isBuilding {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
@@ -275,13 +325,17 @@ struct MapScreen: View {
                     }
                     tripButton
                 }
-                actionBar
+                if !controlsHidden {
+                    actionBar
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .animation(.spring(duration: 0.3), value: vm.isAddingCamera)
+        .animation(.easeInOut(duration: 0.3), value: controlsHidden)
     }
 
     private func toggleTrip() {
@@ -361,16 +415,45 @@ struct MapScreen: View {
         }
     }
 
-    private var legend: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            LegendChip(color: Theme.camera, symbol: "camera.fill", text: "Камера")
-            LegendChip(color: Theme.radar, symbol: "speedometer", text: "Радар")
-            LegendChip(color: Theme.intelligent, symbol: "camera.metering.matrix", text: "Интеллект.")
-            LegendChip(color: Theme.mobile, symbol: "dot.radiowaves.left.and.right", text: "Передвижной")
+    /// Легенда-кнопка: свёрнута в компактный кружок, тап раскрывает на 6 секунд.
+    @ViewBuilder private var smartLegend: some View {
+        if legendExpanded {
+            VStack(alignment: .leading, spacing: 8) {
+                LegendChip(color: Theme.camera, symbol: "camera.fill", text: "Камера")
+                LegendChip(color: Theme.radar, symbol: "speedometer", text: "Радар")
+                LegendChip(color: Theme.intelligent, symbol: "camera.metering.matrix", text: "Интеллект.")
+                LegendChip(color: Theme.mobile, symbol: "dot.radiowaves.left.and.right", text: "Передвижной")
+            }
+            .padding(12)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+            .onTapGesture { toggleLegend() }
+            .transition(.scale(scale: 0.7, anchor: .bottomLeading).combined(with: .opacity))
+        } else {
+            Button {
+                toggleLegend()
+            } label: {
+                Image(systemName: "square.3.layers.3d")
+                    .font(.rounded(16, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(width: 40, height: 40)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().stroke(Theme.stroke, lineWidth: 1))
+            }
+            .transition(.scale(scale: 0.7, anchor: .bottomLeading).combined(with: .opacity))
         }
-        .padding(12)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+    }
+
+    private func toggleLegend() {
+        legendCollapseTask?.cancel()
+        withAnimation(.spring(duration: 0.35)) { legendExpanded.toggle() }
+        if legendExpanded {
+            legendCollapseTask = Task {
+                try? await Task.sleep(for: .seconds(6))
+                guard !Task.isCancelled else { return }
+                withAnimation(.spring(duration: 0.35)) { legendExpanded = false }
+            }
+        }
     }
 
     @ViewBuilder private var permissionBanner: some View {

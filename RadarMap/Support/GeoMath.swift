@@ -23,6 +23,15 @@ enum GeoMath {
         return d > 180 ? 360 - d : d
     }
 
+    /// Быстрая дистанция (метры) без аллокаций CLLocation — equirectangular-приближение.
+    /// Погрешность <0.5% на городских/областных масштабах; для сортировок и фильтров идеальна.
+    static func fastDistance(_ aLat: Double, _ aLon: Double,
+                             _ bLat: Double, _ bLon: Double) -> Double {
+        let dLat = (bLat - aLat) * 111_320
+        let dLon = (bLon - aLon) * 111_320 * cos(aLat * .pi / 180)
+        return (dLat * dLat + dLon * dLon).squareRoot()
+    }
+
     /// Точка на расстоянии `distanceMeters` по азимуту `bearing` от исходной
     /// (для 3D-камеры: смотрим вперёд по ходу, а не на крышу машины).
     static func destination(from c: CLLocationCoordinate2D, bearing: Double,

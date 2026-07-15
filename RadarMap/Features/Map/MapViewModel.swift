@@ -43,6 +43,21 @@ final class MapViewModel {
         if self.repository == nil { self.repository = repository }
     }
 
+    /// Первый GPS-фикс после запуска: показываем окрестности (~2.5 км), а не всю страну —
+    /// на экране только ближайшие камеры, старт мгновенный и плавный на любом железе.
+    @ObservationIgnored private var didInitialSnap = false
+    func snapToUserOnce(_ coordinate: CLLocationCoordinate2D) {
+        guard !didInitialSnap else { return }
+        didInitialSnap = true
+        withAnimation(.easeOut(duration: 0.6)) {
+            position = .region(MKCoordinateRegion(
+                center: coordinate,
+                latitudinalMeters: 2500,
+                longitudinalMeters: 2500
+            ))
+        }
+    }
+
     /// Принудительно перезагрузить видимые камеры (после добавления/скрытия/смены фильтра).
     func invalidateVisible() {
         loadedRegion = nil

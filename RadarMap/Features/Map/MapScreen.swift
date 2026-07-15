@@ -35,6 +35,9 @@ struct MapScreen: View {
             // Если карта уже отдала регион до конфигурации (статичный старт без геопозиции) —
             // пересчитываем принудительно, иначе аннотации не появятся до первого движения карты.
             vm.invalidateVisible()
+            if let coordinate = env.location.currentCoordinate {
+                vm.snapToUserOnce(coordinate)   // геопозиция уже известна — сразу к своим камерам
+            }
         }
         .onChange(of: env.settings.filter) { _, newValue in
             vm.filter = newValue
@@ -82,6 +85,9 @@ struct MapScreen: View {
             // здесь только следование карты за курсом.
             if headingUp {
                 vm.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
+            }
+            if let coordinate = env.location.currentCoordinate {
+                vm.snapToUserOnce(coordinate)   // первый фикс после запуска → окрестности
             }
         }
         .animation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)

@@ -34,6 +34,9 @@ final class CameraStore: CameraRepository {
     /// Кэш объединённого списка: пересобирается только при изменении данных,
     /// а не при каждом обращении (горячий путь: retile, ближайшие, вход в зону).
     @ObservationIgnored private var mergedCache: [Camera]?
+    /// Пространственный индекс: ячейка 0.05° (~5.5 км) → индексы камер в merged-списке.
+    /// Запросы «в области» и «ближайшие» не сканируют все 3341 камеры, а берут пару ячеек.
+    @ObservationIgnored private var gridCache: [Int: [Int]]?
 
     /// Итоговый набор для карты и оповещений: база + свои + передвижные, без скрытых.
     var cameras: [Camera] {
@@ -41,6 +44,29 @@ final class CameraStore: CameraRepository {
         let merged = (bundled + custom + mobile).filter { !hiddenIDs.contains($0.id) }
         mergedCache = merged
         return merged
+    }
+
+    // MARK: - Пространственный индекс
+
+    private static let gridCellDegrees = 0.05
+
+    nonisolated private static func cellKey(latCell: Int, lonCell: Int) -> Int {
+        latCell * 8000 + lonCell
+    }
+    nonisolated private static func cellOf(lat: Double, lon: Double) -> (Int, Int) {
+        (Int((lat + 90) / gridCellDegrees), Int((lon + 180) / gridCellDegrees))
+    }
+
+    private func grid() -> [Int: [Int]] {
+        if let gridCache { return gridCache }
+        var built: [Int: [Int]] = [:]
+        built.reserveCapacity(cameras.count / 2)
+        for (index, camera) in cameras.enumerated() {
+            let (latCell, lonCell) = Self.cellOf(lat: camera.lat, lon: camera.lon)
+            built[Self.cellKey(latCell: latCell, lonCell: lonCell), default: []].append(index)
+        }
+        gridCache = built
+        return built
     }
 
     /// Обновить список передвижных радаров (вызывается MobileCameraService).
@@ -115,14 +141,53 @@ final class CameraStore: CameraRepository {
 
     private func dataChanged() {
         mergedCache = nil
+        gridCache = nil
         revision += 1
     }
 
     // MARK: - Запросы
 
+    /// Ближайшие камеры: расширяющиеся кольца ячеек индекса вместо сортировки всех 3341
+    /// (и без аллокаций CLLocation — критично для ретайлинга на каждом км пути).
     func nearest(to coordinate: CLLocationCoordinate2D, limit: Int) -> [Camera] {
-        cameras
-            .map { ($0, $0.distance(from: coordinate)) }
+        let all = cameras
+        guard !all.isEmpty else { return [] }
+        let index = grid()
+        let (centerLat, centerLon) = Self.cellOf(lat: coordinate.latitude, lon: coordinate.longitude)
+
+        var candidates: [Int] = []
+        var ring = 0
+        let maxRing = 60   // 60 × 0.05° ≈ 330 км — дальше камер точно нет смысла искать
+        while ring <= maxRing {
+            // Ячейки на чебышёвском расстоянии == ring (рамка кольца).
+            for latCell in (centerLat - ring)...(centerLat + ring) {
+                for lonCell in (centerLon - ring)...(centerLon + ring)
+                where max(abs(latCell - centerLat), abs(lonCell - centerLon)) == ring {
+                    if let found = index[Self.cellKey(latCell: latCell, lonCell: lonCell)] {
+                        candidates.append(contentsOf: found)
+                    }
+                }
+            }
+            // Набрали достаточно — добираем ещё одно кольцо (камера у границы ячейки
+            // может быть ближе, чем найденные) и выходим.
+            if candidates.count >= limit {
+                ring += 1
+                for latCell in (centerLat - ring)...(centerLat + ring) {
+                    for lonCell in (centerLon - ring)...(centerLon + ring)
+                    where max(abs(latCell - centerLat), abs(lonCell - centerLon)) == ring {
+                        if let found = index[Self.cellKey(latCell: latCell, lonCell: lonCell)] {
+                            candidates.append(contentsOf: found)
+                        }
+                    }
+                }
+                break
+            }
+            ring += 1
+        }
+
+        return candidates
+            .map { (all[$0], GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
+                                                  all[$0].lat, all[$0].lon)) }
             .sorted { $0.1 < $1.1 }
             .prefix(limit)
             .map(\.0)
@@ -134,12 +199,38 @@ final class CameraStore: CameraRepository {
         let lonMin = region.center.longitude - region.span.longitudeDelta / 2
         let lonMax = region.center.longitude + region.span.longitudeDelta / 2
 
-        let visible = cameras.filter {
-            $0.lat >= latMin && $0.lat <= latMax && $0.lon >= lonMin && $0.lon <= lonMax
+        // Область → ячейки индекса; при гигантской области (десятки тысяч ячеек)
+        // дешевле пройтись по списку целиком.
+        let all = cameras
+        let (loLat, loLon) = Self.cellOf(lat: latMin, lon: lonMin)
+        let (hiLat, hiLon) = Self.cellOf(lat: latMax, lon: lonMax)
+        let cellCount = (hiLat - loLat + 1) * (hiLon - loLon + 1)
+
+        var visible: [Camera] = []
+        if cellCount <= 6000 {
+            let index = grid()
+            for latCell in loLat...hiLat {
+                for lonCell in loLon...hiLon {
+                    guard let found = index[Self.cellKey(latCell: latCell, lonCell: lonCell)] else { continue }
+                    for i in found {
+                        let camera = all[i]
+                        if camera.lat >= latMin, camera.lat <= latMax,
+                           camera.lon >= lonMin, camera.lon <= lonMax {
+                            visible.append(camera)
+                        }
+                    }
+                }
+            }
+        } else {
+            visible = all.filter {
+                $0.lat >= latMin && $0.lat <= latMax && $0.lon >= lonMin && $0.lon <= lonMax
+            }
         }
+
         guard visible.count > limit else { return visible }
         return visible
-            .map { ($0, $0.distance(from: region.center)) }
+            .map { ($0, GeoMath.fastDistance(region.center.latitude, region.center.longitude,
+                                             $0.lat, $0.lon)) }
             .sorted { $0.1 < $1.1 }
             .prefix(limit)
             .map(\.0)

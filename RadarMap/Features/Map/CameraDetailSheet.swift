@@ -139,8 +139,7 @@ struct CameraDetailSheet: View {
 
     private var openInMapsButton: some View {
         PrimaryButton(title: "Открыть в Картах", systemImage: "map.fill") {
-            let item = MKMapItem(location: CLLocation(latitude: camera.lat, longitude: camera.lon),
-                                 address: nil)
+            let item = MKMapItem(placemark: MKPlacemark(coordinate: camera.coordinate))
             item.name = camera.displayTitle
             item.openInMaps()
         }

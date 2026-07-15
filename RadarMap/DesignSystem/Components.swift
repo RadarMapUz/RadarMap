@@ -109,7 +109,16 @@ extension View {
 struct RatingRing: View {
     let rating: Int
     var compact: Bool = false
+    /// false — кольцо сразу заполнено (для ImageRenderer: onAppear там не приходит).
+    var animated: Bool = true
     @State private var shown = false
+
+    init(rating: Int, compact: Bool = false, animated: Bool = true) {
+        self.rating = rating
+        self.compact = compact
+        self.animated = animated
+        _shown = State(initialValue: !animated)
+    }
 
     private var color: Color {
         switch DrivingScore.tier(for: rating) {
@@ -140,6 +149,7 @@ struct RatingRing: View {
             }
         }
         .onAppear {
+            guard animated else { return }
             withAnimation(.spring(duration: 0.9, bounce: 0.15).delay(0.25)) { shown = true }
         }
     }

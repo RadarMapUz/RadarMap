@@ -19,6 +19,7 @@ struct TripStatsSheet: View {
     @State private var selectedRecord: TripRecord?
     /// Каскадное появление секций при открытии (одноразовое).
     @State private var appeared = false
+    @State private var shareImage: Image?
 
     var body: some View {
         let trip = env.trip
@@ -60,15 +61,24 @@ struct TripStatsSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
                 if !trip.history.isEmpty {
-                    ToolbarItem(placement: .cancellationAction) {
+                    ToolbarItemGroup(placement: .cancellationAction) {
                         Menu {
                             Button("Очистить историю", systemImage: "trash", role: .destructive) {
                                 trip.clearHistory()
                             }
                         } label: { Image(systemName: "ellipsis.circle") }
+                        // Похвастаться итогами: рейтинг + экономия одной картинкой.
+                        if let shareImage {
+                            ShareLink(item: shareImage,
+                                      preview: SharePreview(String(localized: "Мои итоги RadarMap"),
+                                                            image: shareImage)) {
+                                Image(systemName: "square.and.arrow.up")
+                            }
+                        }
                     }
                 }
             }
+            .task { renderShareCard(trip: trip) }
             .onAppear {
                 appeared = true
                 #if DEBUG
@@ -308,7 +318,8 @@ struct TripStatsSheet: View {
                 weekCard(week: week, trip: trip)
             }
 
-            ForEach(dayGroups(trip.history), id: \.day) { group in
+            // Показываем только 7 последних — старое хранится лишь для статистики.
+            ForEach(dayGroups(Array(trip.history.prefix(TripStats.visibleHistory))), id: \.day) { group in
                 Text(group.title)
                     .font(.rounded(12, .semibold))
                     .foregroundStyle(Theme.textTertiary)
@@ -408,8 +419,9 @@ struct TripStatsSheet: View {
                 weekMetric(String(format: String(localized: "%lld камер"), week.cameras), "camera.fill")
             }
 
-            // Километры по дням недели: столбики «вырастают» один раз при открытии.
+            // Километры по дням недели: цифры над столбиками, сегодняшний — ярче.
             Chart(weekDaily(trip.history), id: \.day) { item in
+                let isToday = Calendar.current.isDateInToday(item.day)
                 BarMark(
                     x: .value("День", item.day, unit: .day),
                     y: .value("км", chartAppeared ? item.km : 0),
@@ -419,7 +431,15 @@ struct TripStatsSheet: View {
                     LinearGradient(colors: [Theme.accent, Theme.intelligent],
                                    startPoint: .bottom, endPoint: .top)
                 )
+                .opacity(isToday ? 1 : 0.55)
                 .cornerRadius(3)
+                .annotation(position: .top, spacing: 3) {
+                    if item.km >= 0.5 {
+                        Text(item.km >= 10 ? "\(Int(item.km.rounded()))" : String(format: "%.1f", item.km))
+                            .font(.rounded(9, .semibold).monospacedDigit())
+                            .foregroundStyle(isToday ? Theme.textPrimary : Theme.textTertiary)
+                    }
+                }
             }
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day)) { _ in
@@ -429,7 +449,7 @@ struct TripStatsSheet: View {
                 }
             }
             .chartYAxis(.hidden)
-            .frame(height: 52)
+            .frame(height: 64)
             .padding(.horizontal, 12)
             .onAppear {
                 withAnimation(.spring(duration: 0.7, bounce: 0.25).delay(0.15)) {
@@ -508,6 +528,18 @@ struct TripStatsSheet: View {
         }
     }
 
+    // MARK: - Шеринг итогов
+
+    private func renderShareCard(trip: TripStats) {
+        guard trip.rating != nil else { return }   // хвастаться пока нечем
+        let renderer = ImageRenderer(content: StatsShareCard(trip: trip))
+        renderer.scale = 2
+        renderer.proposedSize = ProposedViewSize(width: 540, height: 675)
+        if let uiImage = renderer.uiImage {
+            shareImage = Image(uiImage: uiImage)
+        }
+    }
+
     private var emptyHint: some View {
         VStack(spacing: 12) {
             ZStack {
@@ -565,5 +597,107 @@ private struct AchievementBadge: View {
                 .lineLimit(2)
         }
         .frame(width: 82)
+    }
+}
+
+// MARK: - Карточка «Мои итоги» для шеринга (рендерится в 1080×1350)
+
+private struct StatsShareCard: View {
+    let trip: TripStats
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Шапка
+            HStack(spacing: 10) {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .font(.system(size: 22, weight: .heavy))
+                    .foregroundStyle(Theme.accent)
+                Text("RadarMap")
+                    .font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                Spacer()
+                Text("Мои итоги")
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+            .padding(.horizontal, 32)
+            .padding(.top, 32)
+
+            Spacer()
+
+            // Рейтинг
+            if let rating = trip.rating {
+                RatingRing(rating: rating, animated: false)
+                    .frame(width: 170, height: 170)
+                Text(DrivingScore.level(for: rating))
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.top, 16)
+                if trip.lifetime.cleanStreak >= 2 {
+                    Label(String(format: String(localized: "чистая серия: %lld подряд"),
+                                 trip.lifetime.cleanStreak),
+                          systemImage: "flame.fill")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.radar)
+                        .padding(.top, 6)
+                }
+            }
+
+            // Экономия
+            if trip.lifetime.savedFinesSum > 0 {
+                VStack(spacing: 4) {
+                    Text("Сэкономлено на штрафах")
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.55))
+                    Text("≈ \(Formatting.money(trip.lifetime.savedFinesSum))")
+                        .font(.system(size: 34, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Theme.success)
+                }
+                .padding(.top, 26)
+            }
+
+            Spacer()
+
+            // Метрики недели
+            HStack(spacing: 0) {
+                cardMetric(Formatting.distance(trip.weekSummary?.distance ?? 0),
+                           String(localized: "за 7 дней"))
+                cardDivider
+                cardMetric("\(trip.weekSummary?.cameras ?? 0)", String(localized: "камер"))
+                cardDivider
+                cardMetric("\(trip.lifetime.trips)", String(localized: "поездок всего"))
+            }
+            .padding(.vertical, 20)
+            .background(.white.opacity(0.06))
+
+            Text("Карта камер и навигатор Узбекистана")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.4))
+                .padding(.vertical, 14)
+        }
+        .frame(width: 540, height: 675)
+        .background(
+            ZStack {
+                Theme.background
+                RadialGradient(colors: [Theme.accent.opacity(0.14), .clear],
+                               center: .center, startRadius: 40, endRadius: 380)
+            }
+        )
+    }
+
+    private func cardMetric(_ value: String, _ label: String) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+            Text(label)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.5))
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var cardDivider: some View {
+        Rectangle().fill(.white.opacity(0.12)).frame(width: 1, height: 34)
     }
 }

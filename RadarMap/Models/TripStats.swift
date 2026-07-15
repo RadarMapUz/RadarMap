@@ -102,8 +102,12 @@ final class TripStats {
 
     var camerasPassed: Int { passed.count }
 
+    /// finish() обнуляет startedAt — длительность последней поездки храним отдельно,
+    /// иначе «средняя км/ч» и «в пути» на экране Итогов превращаются в нули.
+    private var finishedDuration: TimeInterval = 0
+
     var durationSeconds: TimeInterval {
-        guard let startedAt, let lastPointAt else { return 0 }
+        guard let startedAt, let lastPointAt else { return finishedDuration }
         return max(0, lastPointAt.timeIntervalSince(startedAt))
     }
     var averageSpeedKmh: Double {
@@ -116,6 +120,7 @@ final class TripStats {
         lastCoordinate = nil
         passed = []
         trackBuffer = []
+        finishedDuration = 0
         startedAt = Date()
         lastPointAt = startedAt
     }
@@ -153,6 +158,7 @@ final class TripStats {
     }
 
     func finish() {
+        finishedDuration = durationSeconds
         defer { startedAt = nil }
         guard let startedAt, distanceMeters >= 100 else { return }
         // Рейтинг считаем по сырому треку (упрощённый теряет пики скорости).
@@ -174,11 +180,33 @@ final class TripStats {
             score: score
         )
         history.insert(record, at: 0)
-        if history.count > Self.maxHistory { history.removeLast(history.count - Self.maxHistory) }
+        history = Self.pruned(history)
         lifetime = LifetimeStats.updated(lifetime, passes: scorePasses, distanceMeters: distanceMeters)
         persist()
         persistLifetime()
         onTripFinished?()
+    }
+
+    /// Сколько поездок показывает список истории.
+    static let visibleHistory = 7
+
+    /// Чистка хранилища: список живёт 7 поездками, более старые нужны только
+    /// статистике (рейтинг и экономия за 30 дней) — у них выбрасываем тяжёлый трек,
+    /// а старше 30 дней удаляем совсем (пожизненные цифры давно в lifetime).
+    nonisolated static func pruned(_ history: [TripRecord], now: Date = Date()) -> [TripRecord] {
+        let monthAgo = now.addingTimeInterval(-30 * 86400)
+        var result: [TripRecord] = []
+        result.reserveCapacity(min(history.count, maxHistory))
+        for (index, record) in history.enumerated() {
+            if index < visibleHistory {
+                result.append(record)
+            } else if record.startedAt > monthAgo && result.count < maxHistory {
+                var slim = record
+                slim.track = nil
+                result.append(slim)
+            }
+        }
+        return result
     }
 
     func deleteRecord(id: Double) {

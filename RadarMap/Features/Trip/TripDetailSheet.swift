@@ -151,6 +151,8 @@ struct TripDetailSheet: View {
 
     @State private var shareImage: Image?
     @State private var appeared = false
+    /// Выбранная точка профиля скорости (тап/протяжка по графику).
+    @State private var selectedKm: Double?
 
     var body: some View {
         NavigationStack {
@@ -397,7 +399,33 @@ struct TripDetailSheet: View {
                             .symbolSize(80)
                             .foregroundStyle(mark.color)
                     }
+                    // Линейка: тап или протяжка — скорость в этой точке маршрута.
+                    if let selectedKm, let sample = nearestSample(to: selectedKm, in: samples) {
+                        RuleMark(x: .value("км", sample.km))
+                            .foregroundStyle(Theme.textTertiary.opacity(0.55))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                            .annotation(position: .top,
+                                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                VStack(spacing: 1) {
+                                    Text("\(Int(sample.speedKmh)) км/ч")
+                                        .font(.rounded(12, .bold).monospacedDigit())
+                                        .foregroundStyle(Theme.textPrimary)
+                                    Text(String(format: "%.1f км", sample.km))
+                                        .font(.rounded(9, .medium))
+                                        .foregroundStyle(Theme.textTertiary)
+                                }
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                                .background(Theme.background.opacity(0.92),
+                                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(Theme.stroke, lineWidth: 1))
+                            }
+                        PointMark(x: .value("км", sample.km), y: .value("км/ч", sample.speedKmh))
+                            .symbolSize(120)
+                            .foregroundStyle(Theme.accent)
+                    }
                 }
+                .chartXSelection(value: $selectedKm)
                 .chartXAxis(.hidden)
                 .chartYAxis {
                     AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { _ in
@@ -407,18 +435,26 @@ struct TripDetailSheet: View {
                             .font(.rounded(10, .medium))
                     }
                 }
-                .frame(height: 140)
+                .frame(height: 150)
 
                 // Точки — проезды камер, цвет по честности относительно лимита.
                 HStack(spacing: 14) {
                     chartLegendDot(Theme.success, "в лимите")
                     chartLegendDot(Theme.radar, "слегка выше")
                     chartLegendDot(Theme.danger, "превышение")
+                    Spacer()
+                    Text("коснитесь графика")
+                        .font(.rounded(10))
+                        .foregroundStyle(Theme.textTertiary)
                 }
             }
             .padding(16)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
         }
+    }
+
+    private func nearestSample(to km: Double, in samples: [SpeedSample]) -> SpeedSample? {
+        samples.min { abs($0.km - km) < abs($1.km - km) }
     }
 
     private func chartLegendDot(_ color: Color, _ text: LocalizedStringKey) -> some View {

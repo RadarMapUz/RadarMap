@@ -118,3 +118,43 @@ final class DrivingScoreTests: XCTestCase {
         XCTAssertEqual(badges.first { $0.id == "streak5" }!.fraction, 0.6, accuracy: 0.01)
     }
 }
+
+// MARK: - Чистка истории
+
+final class HistoryPruneTests: XCTestCase {
+    private func record(daysAgo: Double, withTrack: Bool = true) -> TripRecord {
+        TripRecord(id: daysAgo, startedAt: Date().addingTimeInterval(-daysAgo * 86400),
+                   endedAt: Date().addingTimeInterval(-daysAgo * 86400 + 600),
+                   distanceMeters: 5000, maxSpeedKmh: 70, passed: [],
+                   endLat: 41, endLon: 69,
+                   track: withTrack ? [41, 69, 50, 41.01, 69.01, 55] : nil,
+                   score: 90)
+    }
+
+    func testPruneKeepsSevenFullThenStripsTracksAndDropsOld() {
+        // 12 поездок: 10 свежих + 2 старше месяца.
+        var history = (0..<10).map { record(daysAgo: Double($0)) }
+        history.append(record(daysAgo: 35))
+        history.append(record(daysAgo: 40))
+
+        let pruned = TripStats.pruned(history)
+
+        // Старше 30 дней — удалены (кроме случаев в первой семёрке).
+        XCTAssertEqual(pruned.count, 10)
+        // Первые 7 — с треками (для просмотра).
+        for i in 0..<7 { XCTAssertNotNil(pruned[i].track, "поездка \(i) должна сохранить трек") }
+        // Дальше — только цифры для статистики.
+        for i in 7..<pruned.count { XCTAssertNil(pruned[i].track, "поездка \(i) должна потерять трек") }
+        // Баллы и дистанции не тронуты.
+        XCTAssertEqual(pruned[8].score, 90)
+        XCTAssertEqual(pruned[8].distanceMeters, 5000)
+    }
+
+    func testPruneKeepsRecentSevenEvenIfOld() {
+        // Все поездки древние — но первые 7 остаются целиком (список не пустеет).
+        let history = (0..<9).map { record(daysAgo: Double(40 + $0)) }
+        let pruned = TripStats.pruned(history)
+        XCTAssertEqual(pruned.count, 7)
+        XCTAssertNotNil(pruned[0].track)
+    }
+}

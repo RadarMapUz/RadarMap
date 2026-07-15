@@ -1761,6 +1761,38 @@
         }
       }
     },
+    "Мои итоги": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мои итоги"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mening yakunlarim"
+          }
+        }
+      }
+    },
+    "Мои итоги RadarMap": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мои итоги RadarMap"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mening RadarMap yakunlarim"
+          }
+        }
+      }
+    },
     "Мои места": {
       "localizations": {
         "ru": {
@@ -3425,6 +3457,22 @@
         }
       }
     },
+    "за 7 дней": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "за 7 дней"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7 kunda"
+          }
+        }
+      }
+    },
     "камер": {
       "localizations": {
         "ru": {
@@ -3485,6 +3533,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "km/soat"
+          }
+        }
+      }
+    },
+    "коснитесь графика": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "коснитесь графика"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "grafikka tegining"
           }
         }
       }
@@ -3645,6 +3709,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "o‘ngga buriling"
+          }
+        }
+      }
+    },
+    "поездок всего": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "поездок всего"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "jami safarlar"
           }
         }
       }

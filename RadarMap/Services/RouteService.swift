@@ -61,6 +61,16 @@ final class RouteService {
     private(set) var nextCameraDistance: CLLocationDistance = 0
     private(set) var nextStep: RouteStep?
     private(set) var nextStepDistance: CLLocationDistance = 0
+    /// Пройденный кусок маршрута (рисуется тусклым поверх линии).
+    private(set) var traveledPolyline: MKPolyline?
+
+    /// Прибытие к цели — данные для карточки «Вы на месте».
+    struct ArrivalSummary: Equatable {
+        let name: String
+        let at: Date
+    }
+    private(set) var lastArrival: ArrivalSummary?
+    func dismissArrival() { lastArrival = nil }
 
     /// Голосовые события — подключаются в AppEnvironment.
     @ObservationIgnored var onRerouted: (() -> Void)?
@@ -68,6 +78,7 @@ final class RouteService {
     @ObservationIgnored var onManeuver: ((String) -> Void)?
 
     @ObservationIgnored private var offRouteTicks = 0
+    @ObservationIgnored private var lastSplitAlong: CLLocationDistance = -1
     @ObservationIgnored private var lastRebuildAt: Date = .distantPast
     @ObservationIgnored private var isRebuilding = false
     @ObservationIgnored private var announcedStage: [Int: Int] = [:]   // индекс шага → стадия (2 далеко, 1 близко, 0 сейчас)
@@ -90,6 +101,7 @@ final class RouteService {
         errorMessage = nil
         defer { isBuilding = false }
 
+        lastArrival = nil   // новый маршрут — карточка прошлого прибытия неактуальна
         do {
             let built = try await calculate(from: source, to: destination, alternatives: alternatives)
             await apply(built, name: name, destination: destination, cameras: cameras)
@@ -121,6 +133,8 @@ final class RouteService {
         nextCameraDistance = 0
         nextStep = nil
         nextStepDistance = 0
+        traveledPolyline = nil
+        lastSplitAlong = -1
         offRouteTicks = 0
         announcedStage = [:]
         segmentHint = 0
@@ -135,6 +149,7 @@ final class RouteService {
         let point = MKMapPoint(coordinate)
 
         if point.distance(to: MKMapPoint(destination)) <= AppConfig.arrivalRadiusMeters {
+            lastArrival = ArrivalSummary(name: destinationName, at: Date())
             clear()
             onArrived?()
             return
@@ -142,6 +157,12 @@ final class RouteService {
 
         let (along, deviation) = Self.project(point, onto: variant.points, hint: &segmentHint)
         progressAlong = along
+
+        // Пройденный кусок для тусклой отрисовки (пересобираем не чаще, чем раз в 40 м).
+        if abs(along - lastSplitAlong) > 40 {
+            lastSplitAlong = along
+            traveledPolyline = Self.traveledPrefix(points: variant.points, upTo: along)
+        }
 
         // Следующая камера впереди по маршруту.
         if let cam = variant.cameras.first(where: { $0.distanceAlong > along - 30 }) {
@@ -472,6 +493,26 @@ final class RouteService {
         for i in 0..<index { along += pts[i].distance(to: pts[i + 1]) }
         along += t * pts[index].distance(to: pts[index + 1])
         return (along, deviation)
+    }
+
+    /// Начальный кусок маршрута длиной `upTo` метров (пройденная часть).
+    nonisolated private static func traveledPrefix(points: [MKMapPoint],
+                                                   upTo along: CLLocationDistance) -> MKPolyline? {
+        guard along > 60, points.count >= 2 else { return nil }
+        var result: [MKMapPoint] = [points[0]]
+        var acc: CLLocationDistance = 0
+        for i in 1..<points.count {
+            let step = points[i - 1].distance(to: points[i])
+            if acc + step >= along {
+                let t = step > 0 ? (along - acc) / step : 0
+                result.append(MKMapPoint(x: points[i - 1].x + (points[i].x - points[i - 1].x) * t,
+                                         y: points[i - 1].y + (points[i].y - points[i - 1].y) * t))
+                break
+            }
+            acc += step
+            result.append(points[i])
+        }
+        return result.count >= 2 ? MKPolyline(points: result, count: result.count) : nil
     }
 
     /// Ближайшая точка на сегменте AB к точке P + параметр t (0…1).

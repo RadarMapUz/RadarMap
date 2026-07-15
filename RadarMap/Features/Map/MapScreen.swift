@@ -70,6 +70,7 @@ struct MapScreen: View {
         }
         .overlay { loadErrorOverlay }
         .overlay { approachOverlay }
+        .overlay { arrivalOverlay }
         .onChange(of: env.location.nearestCamera?.id) { _, _ in
             dismissedApproachID = nil   // новая ближайшая камера — снова показываем предупреждение
         }
@@ -80,10 +81,17 @@ struct MapScreen: View {
             // Прогресс маршрута (прибытие/манёвры/камеры) тикает в LocationService —
             // здесь только следование карты за курсом.
             if headingUp {
-                vm.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse)
+                vm.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)
+    }
+
+    @ViewBuilder private var arrivalOverlay: some View {
+        if let arrival = env.route.lastArrival {
+            ArrivalCardView(arrival: arrival, onDismiss: { env.route.dismissArrival() })
+                .transition(.opacity)
+        }
     }
 
     @ViewBuilder private var approachOverlay: some View {
@@ -124,8 +132,15 @@ struct MapScreen: View {
                     .stroke(Theme.background.opacity(0.85),
                             style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
                 MapPolyline(polyline)
-                    .stroke(Theme.accent,
+                    .stroke(LinearGradient(colors: [Theme.accent, Theme.intelligent],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
                             style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                // Пройденная часть тускнеет — видно, сколько осталось.
+                if env.location.isTripActive, let traveled = env.route.traveledPolyline {
+                    MapPolyline(traveled)
+                        .stroke(Theme.textTertiary.opacity(0.7),
+                                style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                }
             }
             if let dest = env.route.destinationCoordinate {
                 Annotation(env.route.destinationName, coordinate: dest, anchor: .center) {
@@ -193,7 +208,7 @@ struct MapScreen: View {
                           tint: headingUp ? Theme.accent : Theme.textPrimary) {
                 headingUp.toggle()
                 if headingUp {
-                    vm.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse)
+                    vm.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
                 }
             }
             CircleControl(systemName: "location.fill", tint: Theme.accent) { recenter() }
@@ -400,7 +415,7 @@ struct MapScreen: View {
 
     private func recenter() {
         if headingUp {
-            vm.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse)
+            vm.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
         } else {
             withAnimation(.easeInOut(duration: 0.35)) {
                 vm.position = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))

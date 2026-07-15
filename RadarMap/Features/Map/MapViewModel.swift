@@ -160,8 +160,9 @@ final class MapViewModel {
     @ObservationIgnored private var lastFollowCourse: CLLocationDirection = -1
 
     /// Центрировать карту на пользователе и повернуть по курсу движения.
+    /// `pitched` — 3D-вид навигатора: камера наклонена, смотрим вперёд по дороге.
     /// Троттлинг: пропускаем мелкие сдвиги/повороты, чтобы карта не дёргалась.
-    func follow(coordinate: CLLocationCoordinate2D?, course: CLLocationDirection) {
+    func follow(coordinate: CLLocationCoordinate2D?, course: CLLocationDirection, pitched: Bool = false) {
         guard let coordinate else { return }
         if let last = lastFollowCoord {
             let moved = CLLocation(latitude: last.latitude, longitude: last.longitude)
@@ -172,12 +173,16 @@ final class MapViewModel {
         }
         lastFollowCoord = coordinate
         lastFollowCourse = course
+        // В 3D центрируем точку впереди машины — сам ты в нижней трети экрана, как в навигаторе.
+        let center = (pitched && course >= 0)
+            ? GeoMath.destination(from: coordinate, bearing: course, distanceMeters: 160)
+            : coordinate
         withAnimation(.easeOut(duration: 0.4)) {
             position = .camera(MapCamera(
-                centerCoordinate: coordinate,
-                distance: 900,
+                centerCoordinate: center,
+                distance: pitched ? 700 : 900,
                 heading: course >= 0 ? course : 0,
-                pitch: 0
+                pitch: pitched ? 55 : 0
             ))
         }
     }

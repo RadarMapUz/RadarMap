@@ -224,10 +224,20 @@ final class LocationService: NSObject {
 
     /// Растёт на каждое обновление локации — карта в режиме следования подписывается на это.
     private(set) var locationTick = 0
+    @ObservationIgnored private var lastSpeedTickAt: Date?
 
     private func handleLocation(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed, course: CLLocationDirection) {
         currentCoordinate = coordinate
-        speedKmh = max(0, speed) * 3.6
+        // Спидометр без дёрганья: GPS-скорость шумит (68→71→69) — лёгкое экспоненциальное
+        // сглаживание, но только по свежим точкам (после паузы берём сырое значение).
+        let rawKmh = max(0, speed) * 3.6
+        if let lastAt = lastSpeedTickAt, Date().timeIntervalSince(lastAt) < 5 {
+            let smoothed = speedKmh * 0.6 + rawKmh * 0.4
+            speedKmh = smoothed < 1 ? 0 : smoothed
+        } else {
+            speedKmh = rawKmh
+        }
+        lastSpeedTickAt = Date()
         currentCourse = course
         locationTick &+= 1
         retileIfNeeded(around: coordinate)

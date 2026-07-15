@@ -28,6 +28,10 @@ struct SettingsView: View {
                         }
                     }
                     Toggle("Голосовое предупреждение", isOn: $settings.voiceEnabled)
+                    Toggle("Итоги недели по воскресеньям", isOn: $settings.weeklyDigest)
+                        .onChange(of: settings.weeklyDigest) { _, enabled in
+                            if !enabled { env.notifications.cancelWeeklyDigest() }
+                        }
                 }
 
                 Section {

@@ -74,6 +74,7 @@ final class AppSettings {
     var overspeedTolerance: Double { didSet { store.set(overspeedTolerance, forKey: Keys.overspeed) } }
     var adaptiveGPS: Bool { didSet { store.set(adaptiveGPS, forKey: Keys.adaptive) } }
     var showNextCamera: Bool { didSet { store.set(showNextCamera, forKey: Keys.nextCamera) } }
+    var weeklyDigest: Bool { didSet { store.set(weeklyDigest, forKey: Keys.digest) } }
     var recentPlaces: [SavedPlace] { didSet { saveRecents() } }
 
     @ObservationIgnored private let store = UserDefaults.standard
@@ -93,6 +94,7 @@ final class AppSettings {
         static let overspeed = "overspeedTolerance"
         static let adaptive = "adaptiveGPS"
         static let nextCamera = "showNextCamera"
+        static let digest = "weeklyDigest"
         static let recents = "recentPlaces"
     }
 
@@ -109,6 +111,7 @@ final class AppSettings {
             Keys.overspeed: 5.0,
             Keys.adaptive: true,
             Keys.nextCamera: true,
+            Keys.digest: true,
         ])
         soundEnabled = store.bool(forKey: Keys.sound)
         voiceEnabled = store.bool(forKey: Keys.voice)
@@ -124,6 +127,7 @@ final class AppSettings {
         overspeedTolerance = store.double(forKey: Keys.overspeed)
         adaptiveGPS = store.bool(forKey: Keys.adaptive)
         showNextCamera = store.bool(forKey: Keys.nextCamera)
+        weeklyDigest = store.bool(forKey: Keys.digest)
         if let data = store.data(forKey: Keys.recents),
            let list = try? JSONDecoder().decode([SavedPlace].self, from: data) {
             recentPlaces = list

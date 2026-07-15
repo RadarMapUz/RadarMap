@@ -48,6 +48,8 @@ struct TripRecord: Codable, Identifiable {
     var endLon: Double?
     /// Упрощённый трек: плоский массив [lat, lon, speed, lat, lon, speed, …].
     var track: [Double]?
+    /// Рейтинг поездки 0–100 (у старых записей отсутствует).
+    var score: Double?
 
     var camerasPassed: Int { passed.count }
     var duration: TimeInterval { max(0, endedAt.timeIntervalSince(startedAt)) }
@@ -83,6 +85,10 @@ final class TripStats {
     private(set) var passed: [PassedCamera] = []
 
     private(set) var history: [TripRecord] = []
+    /// Пожизненные счётчики — живут отдельно от истории (она обрезается до 50 поездок).
+    private(set) var lifetime = LifetimeStats()
+    /// Вызывается после сохранения поездки (AppEnvironment вешает сюда недельный дайджест).
+    @ObservationIgnored var onTripFinished: (() -> Void)?
 
     @ObservationIgnored private var lastCoordinate: CLLocationCoordinate2D?
     /// Сырой трек текущей поездки: точка каждые ≥30 м, упрощается при финише.
@@ -149,6 +155,10 @@ final class TripStats {
     func finish() {
         defer { startedAt = nil }
         guard let startedAt, distanceMeters >= 100 else { return }
+        // Рейтинг считаем по сырому треку (упрощённый теряет пики скорости).
+        let scorePasses = passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) }
+        let score = DrivingScore.tripScore(passes: scorePasses,
+                                           trackSpeeds: trackBuffer.map(\.speedKmh))
         let record = TripRecord(
             id: startedAt.timeIntervalSince1970,
             startedAt: startedAt,
@@ -160,11 +170,15 @@ final class TripStats {
             endLon: lastCoordinate?.longitude,
             track: Self.packTrack(Self.simplify(trackBuffer,
                                                 tolerance: Self.trackTolerance,
-                                                maxPoints: Self.trackMaxPoints))
+                                                maxPoints: Self.trackMaxPoints)),
+            score: score
         )
         history.insert(record, at: 0)
         if history.count > Self.maxHistory { history.removeLast(history.count - Self.maxHistory) }
+        lifetime = LifetimeStats.updated(lifetime, passes: scorePasses, distanceMeters: distanceMeters)
         persist()
+        persistLifetime()
+        onTripFinished?()
     }
 
     func deleteRecord(id: Double) {
@@ -185,6 +199,63 @@ final class TripStats {
         return (recent.count,
                 recent.reduce(0) { $0 + $1.distanceMeters },
                 recent.reduce(0) { $0 + $1.camerasPassed })
+    }
+
+    // MARK: - Рейтинг и экономия
+
+    /// Текущий рейтинг: средний балл поездок за 30 дней, взвешенный по дистанции
+    /// (длинная трасса весит больше короткой поездки до магазина).
+    var rating: Int? {
+        Self.weightedRating(history, within: 30 * 86400, now: Date())
+    }
+
+    /// Тренд к прошлой неделе: (текущая неделя, прошлая неделя) — для стрелки у кольца.
+    var ratingTrend: Int? {
+        let now = Date()
+        guard let current = Self.weightedRating(history, within: 7 * 86400, now: now),
+              let previous = Self.weightedRating(history, within: 7 * 86400,
+                                                 now: now.addingTimeInterval(-7 * 86400))
+        else { return nil }
+        return current - previous
+    }
+
+    nonisolated private static func weightedRating(_ history: [TripRecord],
+                                                   within interval: TimeInterval,
+                                                   now: Date) -> Int? {
+        let from = now.addingTimeInterval(-interval)
+        var weightedSum = 0.0
+        var weight = 0.0
+        for record in history where record.startedAt > from && record.startedAt <= now {
+            guard let score = record.score else { continue }
+            let w = max(record.distanceMeters, 500)
+            weightedSum += score * w
+            weight += w
+        }
+        guard weight > 0 else { return nil }
+        return Int((weightedSum / weight).rounded())
+    }
+
+    /// «Сэкономлено на штрафах» за последние 30 дней (по истории; пожизненное — в lifetime).
+    var monthSaved: Double {
+        let from = Date().addingTimeInterval(-30 * 86400)
+        var sum = 0.0
+        for record in history where record.startedAt > from {
+            for pass in record.passed {
+                guard let limit = pass.limitKmh else { continue }
+                if FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) == 0 {
+                    sum += FineSchedule.minimumFine
+                }
+            }
+        }
+        return sum
+    }
+
+    /// «Возможные штрафы» поездки/записи — красная строка в деталке.
+    nonisolated static func fineRisk(of passes: [PassedCamera]) -> Double {
+        passes.reduce(0.0) { total, pass in
+            guard let limit = pass.limitKmh else { return total }
+            return total + FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
+        }
     }
 
     // MARK: - Трек: упаковка и упрощение (Дуглас-Пекер)
@@ -247,10 +318,22 @@ final class TripStats {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("trips.json")
     }
+    private static let lifetimeKey = "lifetimeStats"
+
     private func loadHistory() {
-        guard let data = try? Data(contentsOf: storeURL),
-              let decoded = try? JSONDecoder().decode([TripRecord].self, from: data) else { return }
-        history = decoded
+        if let data = try? Data(contentsOf: storeURL),
+           let decoded = try? JSONDecoder().decode([TripRecord].self, from: data) {
+            history = decoded
+        }
+        if let data = UserDefaults.standard.data(forKey: Self.lifetimeKey),
+           let decoded = try? JSONDecoder().decode(LifetimeStats.self, from: data) {
+            lifetime = decoded
+        }
+    }
+
+    private func persistLifetime() {
+        guard let data = try? JSONEncoder().encode(lifetime) else { return }
+        UserDefaults.standard.set(data, forKey: Self.lifetimeKey)
     }
     private func persist() {
         guard let data = try? JSONEncoder().encode(history) else { return }

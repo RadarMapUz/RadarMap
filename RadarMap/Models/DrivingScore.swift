@@ -1,0 +1,186 @@
+//
+//  DrivingScore.swift
+//  RadarMap
+//
+//  Ядро удержания: рейтинг вождения 0–100, «сэкономлено на штрафах»,
+//  пожизненные счётчики и достижения. Все расчёты — чистые nonisolated-функции
+//  (покрыты тестами), состояние хранит TripStats.
+//
+
+import Foundation
+
+// MARK: - Штрафная арифметика (ст. 128-3 КоАО РУз)
+
+/// Ступени штрафов за превышение скорости. Первая фиксация (повторность нам неизвестна),
+/// поэтому все суммы в UI подписываются как «оценка».
+enum FineSchedule {
+    /// БРВ (базовая расчётная величина) с 01.07.2026. Меняется раз в год — обновлять здесь.
+    static let brv: Double = 440_000
+    /// Камеры на практике не штрафуют за первые ~5 км/ч сверх лимита.
+    static let toleranceKmh: Double = 5
+
+    /// Штраф первой фиксации для данного превышения (сум); 0 — в допуске.
+    /// до +20 → 1 БРВ, +20…40 → 5 БРВ, свыше 40 → 9 БРВ.
+    nonisolated static func fine(overKmh: Double) -> Double {
+        if overKmh <= toleranceKmh { return 0 }
+        if overKmh <= 20 { return brv }
+        if overKmh <= 40 { return 5 * brv }
+        return 9 * brv
+    }
+
+    /// Минимальный штраф — столько «экономит» каждый чистый проезд камеры с лимитом.
+    nonisolated static var minimumFine: Double { brv }
+}
+
+// MARK: - Рейтинг поездки
+
+enum DrivingScore {
+    /// Проезд камеры для расчёта: скорость и лимит дороги (если известен).
+    struct Pass {
+        let speedKmh: Double
+        let limitKmh: Int?
+    }
+
+    /// Балл поездки 0–100. nil — данных мало (ни лимитных проездов, ни трека).
+    /// Камеры — главный компонент (штрафные ступени), плавность по треку — второй.
+    nonisolated static func tripScore(passes: [Pass], trackSpeeds: [Double]) -> Double? {
+        var cameraPenalty = 0.0
+        var limitedPasses = 0
+        for pass in passes {
+            guard let limit = pass.limitKmh else { continue }
+            limitedPasses += 1
+            let over = pass.speedKmh - Double(limit)
+            switch over {
+            case ..<2:    break               // идеально
+            case 2..<5:   cameraPenalty += 2  // на грани
+            case 5..<12:  cameraPenalty += 8  // штрафная ступень близко
+            case 12..<20: cameraPenalty += 14
+            case 20..<40: cameraPenalty += 25 // 5 БРВ
+            default:      cameraPenalty += 40 // 9 БРВ
+            }
+        }
+        cameraPenalty = min(cameraPenalty, 70)
+
+        // Плавность: средний перепад скорости между точками трека (шаг ~30 м).
+        // Спокойная езда — 2–4 км/ч на шаг, дёрганая — 8+.
+        var smoothPenalty = 0.0
+        var hasTrack = false
+        if trackSpeeds.count >= 10 {
+            hasTrack = true
+            var delta = 0.0
+            for i in 1..<trackSpeeds.count {
+                delta += abs(trackSpeeds[i] - trackSpeeds[i - 1])
+            }
+            let mean = delta / Double(trackSpeeds.count - 1)
+            smoothPenalty = min(max((mean - 3.5) * 5, 0), 20)
+        }
+
+        guard limitedPasses > 0 || hasTrack else { return nil }
+        return max(0, 100 - cameraPenalty - smoothPenalty)
+    }
+
+    /// Уровень по баллу — для шапки Итогов.
+    nonisolated static func level(for rating: Int) -> String {
+        switch rating {
+        case 90...: return String(localized: "Идеальный стиль")
+        case 75..<90: return String(localized: "Аккуратный водитель")
+        case 60..<75: return String(localized: "Уверенный, но с риском")
+        default: return String(localized: "Рискованный стиль")
+        }
+    }
+
+    /// Цветовая зона рейтинга (используется для кольца и цифры).
+    nonisolated static func tier(for rating: Int) -> Int {
+        rating >= 75 ? 2 : rating >= 60 ? 1 : 0   // 2 зелёный, 1 жёлтый, 0 красный
+    }
+}
+
+// MARK: - Пожизненные счётчики
+
+/// Аккумулируются при каждом finish() и живут отдельно от истории
+/// (история обрезается до 50 поездок, эти цифры — навсегда).
+struct LifetimeStats: Codable, Equatable {
+    var trips = 0
+    var distanceMeters = 0.0
+    var camerasPassed = 0
+    var camerasInLimit = 0        // проезды лимитных камер без штрафной ступени
+    var savedFinesSum = 0.0       // сум: чистые проезды × минимальный штраф
+    var riskFinesSum = 0.0        // сум: сумма «возможных штрафов» за превышения
+    var cleanStreak = 0           // подряд чистых поездок (текущая серия)
+    var bestStreak = 0
+
+    /// Обновление после поездки — чистая функция, покрыта тестами.
+    /// Чистая поездка = есть лимитные проезды и ни один не попал на штраф.
+    /// Поездка без лимитных камер серию не трогает (нет данных — нет вердикта).
+    nonisolated static func updated(_ stats: LifetimeStats,
+                                    passes: [DrivingScore.Pass],
+                                    distanceMeters: Double) -> LifetimeStats {
+        var s = stats
+        s.trips += 1
+        s.distanceMeters += distanceMeters
+        s.camerasPassed += passes.count
+
+        var limited = 0
+        var fined = 0
+        for pass in passes {
+            guard let limit = pass.limitKmh else { continue }
+            limited += 1
+            let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
+            if fine > 0 {
+                fined += 1
+                s.riskFinesSum += fine
+            } else {
+                s.camerasInLimit += 1
+                s.savedFinesSum += FineSchedule.minimumFine
+            }
+        }
+
+        if limited > 0 {
+            s.cleanStreak = fined == 0 ? s.cleanStreak + 1 : 0
+            s.bestStreak = max(s.bestStreak, s.cleanStreak)
+        }
+        return s
+    }
+}
+
+// MARK: - Достижения
+
+struct Achievement: Identifiable {
+    let id: String
+    let icon: String
+    let title: String
+    let target: Double
+    let progress: Double
+
+    var earned: Bool { progress >= target }
+    var fraction: Double { min(1, progress / max(target, 1)) }
+}
+
+enum Achievements {
+    /// Девять бейджей: дистанция, чистые камеры, лучшая серия.
+    nonisolated static func all(for stats: LifetimeStats) -> [Achievement] {
+        let km = stats.distanceMeters / 1000
+        let clean = Double(stats.camerasInLimit)
+        let streak = Double(stats.bestStreak)
+        return [
+            Achievement(id: "km100", icon: "point.topleft.down.to.point.bottomright.curvepath",
+                        title: String(localized: "100 км"), target: 100, progress: km),
+            Achievement(id: "km1000", icon: "road.lanes",
+                        title: String(localized: "1 000 км"), target: 1000, progress: km),
+            Achievement(id: "km10000", icon: "globe.asia.australia.fill",
+                        title: String(localized: "10 000 км"), target: 10000, progress: km),
+            Achievement(id: "clean50", icon: "camera.metering.center.weighted",
+                        title: String(localized: "50 камер в лимите"), target: 50, progress: clean),
+            Achievement(id: "clean500", icon: "checkmark.seal.fill",
+                        title: String(localized: "500 камер в лимите"), target: 500, progress: clean),
+            Achievement(id: "clean5000", icon: "crown.fill",
+                        title: String(localized: "5 000 камер в лимите"), target: 5000, progress: clean),
+            Achievement(id: "streak5", icon: "flame",
+                        title: String(localized: "5 чистых подряд"), target: 5, progress: streak),
+            Achievement(id: "streak20", icon: "flame.fill",
+                        title: String(localized: "20 чистых подряд"), target: 20, progress: streak),
+            Achievement(id: "streak50", icon: "trophy.fill",
+                        title: String(localized: "50 чистых подряд"), target: 50, progress: streak),
+        ]
+    }
+}

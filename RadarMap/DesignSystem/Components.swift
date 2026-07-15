@@ -104,3 +104,43 @@ extension View {
         modifier(EntranceModifier(index: index, appeared: appeared))
     }
 }
+
+/// Кольцо рейтинга вождения 0–100: цвет по зоне, заполняется один раз при появлении.
+struct RatingRing: View {
+    let rating: Int
+    var compact: Bool = false
+    @State private var shown = false
+
+    private var color: Color {
+        switch DrivingScore.tier(for: rating) {
+        case 2: return Theme.success
+        case 1: return Theme.radar
+        default: return Theme.danger
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(Theme.stroke.opacity(0.7), lineWidth: compact ? 5 : 7)
+            Circle()
+                .trim(from: 0, to: shown ? Double(rating) / 100 : 0)
+                .stroke(color.gradient,
+                        style: StrokeStyle(lineWidth: compact ? 5 : 7, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .shadow(color: color.opacity(0.5), radius: compact ? 3 : 5)
+            VStack(spacing: 0) {
+                Text("\(rating)")
+                    .font(.rounded(compact ? 20 : 30, .heavy).monospacedDigit())
+                    .foregroundStyle(Theme.textPrimary)
+                if !compact {
+                    Text("рейтинг")
+                        .font(.rounded(10, .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+            }
+        }
+        .onAppear {
+            withAnimation(.spring(duration: 0.9, bounce: 0.15).delay(0.25)) { shown = true }
+        }
+    }
+}

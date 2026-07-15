@@ -63,9 +63,20 @@ struct PassRow: View {
                 }
                 .frame(width: 26, height: 26)
             }
-            Text("\(Int(pass.speedKmh)) км/ч")
-                .font(.rounded(15, .bold))
-                .foregroundStyle(PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh))
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(Int(pass.speedKmh)) км/ч")
+                    .font(.rounded(15, .bold))
+                    .foregroundStyle(PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh))
+                // Превышение попало в штрафную ступень — показываем цену вопроса.
+                if let limit = pass.limitKmh {
+                    let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
+                    if fine > 0 {
+                        Text("риск ≈ \(Formatting.money(fine))")
+                            .font(.rounded(10, .medium))
+                            .foregroundStyle(Theme.danger)
+                    }
+                }
+            }
         }
         .padding(12)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
@@ -147,13 +158,15 @@ struct TripDetailSheet: View {
                 VStack(spacing: 16) {
                     mapSection
                         .entrance(0, appeared)
-                    statsGrid
+                    scoreRow
                         .entrance(1, appeared)
-                    speedChartSection
+                    statsGrid
                         .entrance(2, appeared)
+                    speedChartSection
+                        .entrance(3, appeared)
                     if !record.passed.isEmpty {
                         passesSection
-                            .entrance(3, appeared)
+                            .entrance(4, appeared)
                     }
                     if let onRoute, let end = record.endCoordinate {
                         PrimaryButton(title: "Повторить маршрут",
@@ -245,6 +258,40 @@ struct TripDetailSheet: View {
             rect = rect.union(MKMapRect(origin: mp, size: MKMapSize()))
         }
         return rect.insetBy(dx: -rect.width * 0.15, dy: -rect.height * 0.15)
+    }
+
+    // MARK: Рейтинг поездки и риск штрафов
+
+    @ViewBuilder private var scoreRow: some View {
+        let risk = TripStats.fineRisk(of: record.passed)
+        if record.score != nil || risk > 0 {
+            HStack(spacing: 14) {
+                if let score = record.score {
+                    RatingRing(rating: Int(score), compact: true)
+                        .frame(width: 56, height: 56)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    if let score = record.score {
+                        Text(DrivingScore.level(for: Int(score)))
+                            .font(.rounded(15, .bold))
+                            .foregroundStyle(Theme.textPrimary)
+                    }
+                    if risk > 0 {
+                        Label("возможные штрафы ≈ \(Formatting.money(risk))",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.rounded(12, .semibold))
+                            .foregroundStyle(Theme.danger)
+                    } else {
+                        Label("Без риска штрафов", systemImage: "checkmark.shield.fill")
+                            .font(.rounded(12, .semibold))
+                            .foregroundStyle(Theme.success)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        }
     }
 
     // MARK: Метрики
@@ -434,6 +481,10 @@ struct TripShareCard: View {
 
             // Метрики
             HStack(spacing: 0) {
+                if let score = record.score {
+                    cardMetric("\(Int(score))", String(localized: "рейтинг"))
+                    cardDivider
+                }
                 cardMetric(Formatting.duration(record.duration), String(localized: "в пути"))
                 cardDivider
                 cardMetric(Formatting.distance(record.distanceMeters), String(localized: "путь"))

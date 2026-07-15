@@ -64,6 +64,18 @@ final class AppEnvironment {
             location.endTrip()
         }
 
+        // Недельный дайджест: после каждой поездки перепланируем пуш со свежими цифрами.
+        trip.onTripFinished = { [weak trip, weak notifications] in
+            guard let trip, let notifications,
+                  let week = trip.weekSummary else { return }
+            notifications.scheduleWeeklyDigest(
+                distance: week.distance,
+                cameras: week.cameras,
+                rating: trip.rating,
+                saved: trip.monthSaved
+            )
+        }
+
         // Голосовое сопровождение маршрута: перестроение, прибытие, манёвры.
         route.onRerouted = { [weak alerts] in
             guard settings.voiceEnabled else { return }

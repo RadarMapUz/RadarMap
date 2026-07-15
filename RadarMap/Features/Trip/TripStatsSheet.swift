@@ -2,11 +2,14 @@
 //  TripStatsSheet.swift
 //  RadarMap
 //
-//  «Итоги»: текущая/последняя поездка + история поездок.
+//  «Итоги»: текущая/последняя поездка + история по дням.
+//  Анимации одноразовые (каскад появления, живые цифры) — GPU почти не трогаем,
+//  история ленивая, спарклайны рисуются только у видимых строк.
 //
 
 import SwiftUI
 import CoreLocation
+import Charts
 
 struct TripStatsSheet: View {
     @Environment(AppEnvironment.self) private var env
@@ -14,6 +17,8 @@ struct TripStatsSheet: View {
     /// Повторить поездку: маршрут к точке финиша записи из истории.
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
     @State private var selectedRecord: TripRecord?
+    /// Каскадное появление секций при открытии (одноразовое).
+    @State private var appeared = false
 
     var body: some View {
         let trip = env.trip
@@ -21,18 +26,23 @@ struct TripStatsSheet: View {
 
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
+                LazyVStack(spacing: 16) {
                     statusHeader(active: active, trip: trip)
+                        .entrance(0, appeared)
                     statsGrid(trip: trip)
+                        .entrance(1, appeared)
 
                     if !trip.passed.isEmpty {
                         passedSection(trip: trip)
+                            .entrance(2, appeared)
                     }
 
                     if !trip.history.isEmpty {
                         historySection(trip: trip)
+                            .entrance(3, appeared)
                     } else if !active {
                         emptyHint
+                            .entrance(2, appeared)
                     }
                 }
                 .padding(20)
@@ -51,6 +61,15 @@ struct TripStatsSheet: View {
                         } label: { Image(systemName: "ellipsis.circle") }
                     }
                 }
+            }
+            .onAppear {
+                appeared = true
+                #if DEBUG
+                // Скриншот-автоматизация: сразу открыть деталку первой поездки.
+                if ProcessInfo.processInfo.arguments.contains("-openFirstTrip") {
+                    selectedRecord = env.trip.history.first
+                }
+                #endif
             }
         }
         .presentationDetents([.large])
@@ -76,6 +95,7 @@ struct TripStatsSheet: View {
                 Image(systemName: active ? "record.circle" : "flag.checkered")
                     .font(.rounded(20, .bold))
                     .foregroundStyle(active ? Theme.success : Theme.textSecondary)
+                    .symbolEffect(.pulse, options: .repeating, isActive: active)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(active ? "Поездка идёт" : (trip.startedAt != nil || trip.distanceMeters > 0 ? "Последняя поездка" : "Поездка не начата"))
@@ -92,6 +112,19 @@ struct TripStatsSheet: View {
                 }
             }
             Spacer()
+            // Живая скорость — Итоги можно держать открытыми в поездке.
+            if active {
+                VStack(spacing: 0) {
+                    Text("\(Int(env.location.speedKmh))")
+                        .font(.rounded(26, .heavy).monospacedDigit())
+                        .foregroundStyle(Theme.textPrimary)
+                        .contentTransition(.numericText())
+                        .animation(.snappy(duration: 0.35), value: Int(env.location.speedKmh))
+                    Text("км/ч")
+                        .font(.rounded(10, .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
@@ -113,12 +146,16 @@ struct TripStatsSheet: View {
     private func tile(_ value: String, _ label: LocalizedStringKey, _ icon: String, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: icon).font(.rounded(18, .bold)).foregroundStyle(color)
-            Text(value).font(.rounded(28, .bold)).foregroundStyle(Theme.textPrimary)
+            Text(value)
+                .font(.rounded(28, .bold))
+                .foregroundStyle(Theme.textPrimary)
+                .contentTransition(.numericText())
             Text(label).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .animation(.snappy(duration: 0.4), value: value)
     }
 
     // MARK: - Пройденные камеры (со скоростью прохождения)
@@ -131,8 +168,11 @@ struct TripStatsSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             ForEach(trip.passed.reversed()) { pass in
                 PassRow(pass: pass)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        // Новый проезд в живой поездке въезжает сверху, а не вспыхивает.
+        .animation(.spring(duration: 0.4), value: trip.passed.count)
     }
 
     // MARK: - История
@@ -144,79 +184,137 @@ struct TripStatsSheet: View {
                 .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Сводка за 7 дней — общая картина одним взглядом.
+            // Сводка за 7 дней + мини-график по дням — общая картина одним взглядом.
             if let week = trip.weekSummary {
-                HStack(spacing: 0) {
-                    weekMetric(String(format: String(localized: "%lld поездок"), week.trips), "car.fill")
-                    weekDivider
-                    weekMetric(Formatting.distance(week.distance), "point.topleft.down.to.point.bottomright.curvepath")
-                    weekDivider
-                    weekMetric(String(format: String(localized: "%lld камер"), week.cameras), "camera.fill")
-                }
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity)
-                .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
-                    .stroke(Theme.accent.opacity(0.25), lineWidth: 1))
+                weekCard(week: week, trip: trip)
             }
 
-            ForEach(trip.history) { record in
-                Button {
-                    selectedRecord = record   // тап — деталка: карта трека, проезды, шеринг
-                } label: {
-                    HStack(spacing: 12) {
-                        // Мини-силуэт трека — поездку узнаёшь с одного взгляда.
-                        if record.trackPoints.count >= 2 {
-                            TrackCanvas(points: record.trackPoints, lineWidth: 2)
-                                .frame(width: 44, height: 44)
-                                .background(Theme.background.opacity(0.6),
-                                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        } else {
-                            Image(systemName: "car.side")
-                                .font(.rounded(15))
-                                .foregroundStyle(Theme.textTertiary)
-                                .frame(width: 44, height: 44)
-                                .background(Theme.background.opacity(0.6),
-                                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        }
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(record.startedAt.formatted(date: .abbreviated, time: .shortened))
-                                .font(.rounded(14, .semibold))
-                                .foregroundStyle(Theme.textPrimary)
-                            Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration)) · \(Int(record.averageSpeedKmh)) км/ч сред.")
-                                .font(.rounded(12))
-                                .foregroundStyle(Theme.textSecondary)
-                        }
-                        Spacer(minLength: 8)
-                        VStack(spacing: 2) {
-                            Text("\(record.camerasPassed)").font(.rounded(18, .bold)).foregroundStyle(Theme.accent)
-                            Image(systemName: "camera.fill").font(.system(size: 9)).foregroundStyle(Theme.textTertiary)
-                        }
-                        Image(systemName: "chevron.right")
-                            .font(.rounded(12, .semibold))
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                    .padding(14)
-                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .contextMenu {
-                    if let onRoute, let end = record.endCoordinate {
-                        Button {
-                            onRoute(end, String(localized: "Как в прошлый раз"))
-                            dismiss()
-                        } label: {
-                            Label("Повторить маршрут", systemImage: "arrow.triangle.turn.up.right.circle")
-                        }
-                    }
-                    Button(role: .destructive) {
-                        withAnimation { trip.deleteRecord(id: record.id) }
-                    } label: {
-                        Label("Удалить запись", systemImage: "trash")
-                    }
+            ForEach(dayGroups(trip.history), id: \.day) { group in
+                Text(group.title)
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+                    .textCase(.uppercase)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 6)
+                ForEach(group.records) { record in
+                    historyRow(record, trip: trip)
                 }
             }
         }
+    }
+
+    private func historyRow(_ record: TripRecord, trip: TripStats) -> some View {
+        Button {
+            selectedRecord = record   // тап — деталка: карта трека, проезды, шеринг
+        } label: {
+            HStack(spacing: 12) {
+                // Мини-силуэт трека — поездку узнаёшь с одного взгляда.
+                if record.trackPoints.count >= 2 {
+                    TrackCanvas(points: record.trackPoints, lineWidth: 2)
+                        .frame(width: 44, height: 44)
+                        .background(Theme.background.opacity(0.6),
+                                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                } else {
+                    Image(systemName: "car.side")
+                        .font(.rounded(15))
+                        .foregroundStyle(Theme.textTertiary)
+                        .frame(width: 44, height: 44)
+                        .background(Theme.background.opacity(0.6),
+                                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(record.startedAt.formatted(date: .omitted, time: .shortened))
+                        .font(.rounded(14, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration)) · \(Int(record.averageSpeedKmh)) км/ч сред.")
+                        .font(.rounded(12))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                Spacer(minLength: 8)
+                VStack(spacing: 2) {
+                    Text("\(record.camerasPassed)").font(.rounded(18, .bold)).foregroundStyle(Theme.accent)
+                    Image(systemName: "camera.fill").font(.system(size: 9)).foregroundStyle(Theme.textTertiary)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .padding(14)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        // Лёгкое «проявление» строк при прокрутке — живо, но не мешает.
+        .scrollTransition(.interactive(timingCurve: .easeOut)) { content, phase in
+            content
+                .opacity(phase.isIdentity ? 1 : 0.4)
+                .scaleEffect(phase.isIdentity ? 1 : 0.96)
+        }
+        .contextMenu {
+            if let onRoute, let end = record.endCoordinate {
+                Button {
+                    onRoute(end, String(localized: "Как в прошлый раз"))
+                    dismiss()
+                } label: {
+                    Label("Повторить маршрут", systemImage: "arrow.triangle.turn.up.right.circle")
+                }
+            }
+            Button(role: .destructive) {
+                withAnimation { trip.deleteRecord(id: record.id) }
+            } label: {
+                Label("Удалить запись", systemImage: "trash")
+            }
+        }
+    }
+
+    // MARK: - Неделя: сводка + мини-график
+
+    @State private var chartAppeared = false
+
+    private func weekCard(week: (trips: Int, distance: CLLocationDistance, cameras: Int),
+                          trip: TripStats) -> some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 0) {
+                weekMetric(String(format: String(localized: "%lld поездок"), week.trips), "car.fill")
+                weekDivider
+                weekMetric(Formatting.distance(week.distance), "point.topleft.down.to.point.bottomright.curvepath")
+                weekDivider
+                weekMetric(String(format: String(localized: "%lld камер"), week.cameras), "camera.fill")
+            }
+
+            // Километры по дням недели: столбики «вырастают» один раз при открытии.
+            Chart(weekDaily(trip.history), id: \.day) { item in
+                BarMark(
+                    x: .value("День", item.day, unit: .day),
+                    y: .value("км", chartAppeared ? item.km : 0),
+                    width: .ratio(0.55)
+                )
+                .foregroundStyle(
+                    LinearGradient(colors: [Theme.accent, Theme.intelligent],
+                                   startPoint: .bottom, endPoint: .top)
+                )
+                .cornerRadius(3)
+            }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day)) { _ in
+                    AxisValueLabel(format: .dateTime.weekday(.narrow), centered: true)
+                        .foregroundStyle(Theme.textTertiary)
+                        .font(.rounded(10, .medium))
+                }
+            }
+            .chartYAxis(.hidden)
+            .frame(height: 52)
+            .padding(.horizontal, 12)
+            .onAppear {
+                withAnimation(.spring(duration: 0.7, bounce: 0.25).delay(0.15)) {
+                    chartAppeared = true
+                }
+            }
+        }
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
+            .stroke(Theme.accent.opacity(0.25), lineWidth: 1))
     }
 
     private func weekMetric(_ value: String, _ icon: String) -> some View {
@@ -231,15 +329,69 @@ struct TripStatsSheet: View {
         Rectangle().fill(Theme.accent.opacity(0.2)).frame(width: 1, height: 32)
     }
 
+    // MARK: - Группировка и данные графика
+
+    private struct DayGroup {
+        let day: Date
+        let title: String
+        let records: [TripRecord]
+    }
+
+    /// История приходит от новых к старым — группируем по календарным дням.
+    private func dayGroups(_ history: [TripRecord]) -> [DayGroup] {
+        let calendar = Calendar.current
+        var groups: [DayGroup] = []
+        for record in history {
+            let day = calendar.startOfDay(for: record.startedAt)
+            if let last = groups.indices.last, groups[last].day == day {
+                groups[last] = DayGroup(day: day, title: groups[last].title,
+                                        records: groups[last].records + [record])
+            } else {
+                let title: String
+                if calendar.isDateInToday(day) {
+                    title = String(localized: "Сегодня")
+                } else if calendar.isDateInYesterday(day) {
+                    title = String(localized: "Вчера")
+                } else {
+                    title = day.formatted(.dateTime.day().month(.wide))
+                }
+                groups.append(DayGroup(day: day, title: title, records: [record]))
+            }
+        }
+        return groups
+    }
+
+    private func weekDaily(_ history: [TripRecord]) -> [(day: Date, km: Double)] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return (0..<7).reversed().compactMap { offset in
+            guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
+            let km = history
+                .filter { calendar.isDate($0.startedAt, inSameDayAs: day) }
+                .reduce(0.0) { $0 + $1.distanceMeters } / 1000
+            return (day, km)
+        }
+    }
+
     private var emptyHint: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "car.side").font(.rounded(30)).foregroundStyle(Theme.textTertiary)
-            Text("Нажмите «Начать поездку» на карте — здесь появятся её итоги и история.")
+        VStack(spacing: 12) {
+            ZStack {
+                Circle().fill(Theme.accent.opacity(0.10)).frame(width: 72, height: 72)
+                Image(systemName: "car.side")
+                    .font(.rounded(28))
+                    .foregroundStyle(Theme.accent)
+            }
+            Text("Здесь появятся ваши поездки")
+                .font(.rounded(16, .bold))
+                .foregroundStyle(Theme.textPrimary)
+            Text("Нажмите «Начать поездку» на карте — соберём трек, скорость у каждой камеры и статистику.")
                 .font(.rounded(13))
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 20)
+        .padding(.top, 24)
     }
 }
+

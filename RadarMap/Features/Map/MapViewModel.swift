@@ -46,9 +46,22 @@ final class MapViewModel {
     /// Первый GPS-фикс после запуска: показываем окрестности (~2.5 км), а не всю страну —
     /// на экране только ближайшие камеры, старт мгновенный и плавный на любом железе.
     @ObservationIgnored private var didInitialSnap = false
+    @ObservationIgnored private var initialSnapCoordinate: CLLocationCoordinate2D?
+    @ObservationIgnored private var initialSnapAt: Date?
+
     func snapToUserOnce(_ coordinate: CLLocationCoordinate2D) {
-        guard !didInitialSnap else { return }
+        if didInitialSnap {
+            // Первый фикс бывает кэшем со старого места (перелёт, долгая стоянка):
+            // если в первую минуту пришла точка сильно дальше — переснимаемся.
+            guard let snapped = initialSnapCoordinate, let at = initialSnapAt,
+                  Date().timeIntervalSince(at) < 60,
+                  GeoMath.fastDistance(snapped.latitude, snapped.longitude,
+                                       coordinate.latitude, coordinate.longitude) > 10_000
+            else { return }
+        }
         didInitialSnap = true
+        initialSnapCoordinate = coordinate
+        initialSnapAt = Date()
         withAnimation(.easeOut(duration: 0.6)) {
             position = .region(MKCoordinateRegion(
                 center: coordinate,
@@ -56,12 +69,32 @@ final class MapViewModel {
                 longitudinalMeters: 2500
             ))
         }
+        refreshVisible(around: coordinate, widthMeters: 2500)
+    }
+
+    /// Подгрузить камеры вокруг точки, когда целевой регион известен лишь приблизительно
+    /// (программные перемещения: onMapCameraChange после них срабатывает ненадёжно).
+    /// MapKit вписывает ширину запрошенного региона, высота растягивается по аспекту
+    /// портретного экрана — берём его с запасом, чтобы isDotZoom и буфер совпадали
+    /// с тем, что карта покажет на самом деле.
+    func refreshVisible(around coordinate: CLLocationCoordinate2D, widthMeters: Double) {
+        updateVisible(for: MKCoordinateRegion(
+            center: coordinate,
+            latitudinalMeters: widthMeters * 2.2,
+            longitudinalMeters: widthMeters
+        ))
     }
 
     /// Принудительно перезагрузить видимые камеры (после добавления/скрытия/смены фильтра).
+    /// Если карта ещё не отдала ни одного региона (onMapCameraChange не сработал —
+    /// бывает после программных перемещений), считаем от заданной позиции или всей страны.
     func invalidateVisible() {
         loadedRegion = nil
-        if let region = currentRegion { updateVisible(for: region) }
+        if let region = currentRegion ?? position.region {
+            updateVisible(for: region)
+        } else {
+            updateVisible(for: AppConfig.uzbekistanRegion)
+        }
     }
 
     // MARK: - Подгрузка аннотаций
@@ -76,7 +109,9 @@ final class MapViewModel {
         currentRegion = region
         let dotZoom = region.span.latitudeDelta > AppConfig.dotModeSpanDegrees
         if dotZoom != isDotZoom { isDotZoom = dotZoom }
-        guard let repository else { return }
+        // База декодируется асинхронно: пока камер нет, регион не кэшируем —
+        // иначе пустой результат «прилипнет» и карта останется без точек.
+        guard let repository, !repository.cameras.isEmpty else { return }
 
         if region.span.latitudeDelta > AppConfig.maxVisibleSpanDegrees {
             loadedRegion = nil
@@ -145,15 +180,17 @@ final class MapViewModel {
 
     func zoomInto(_ cluster: CameraCluster) {
         let span = currentRegion?.span ?? MKCoordinateSpan(latitudeDelta: 8, longitudeDelta: 12)
+        let region = MKCoordinateRegion(
+            center: cluster.coordinate,
+            span: MKCoordinateSpan(
+                latitudeDelta: max(0.05, span.latitudeDelta / 4),
+                longitudeDelta: max(0.05, span.longitudeDelta / 4)
+            )
+        )
         withAnimation(.easeInOut(duration: 0.4)) {
-            position = .region(MKCoordinateRegion(
-                center: cluster.coordinate,
-                span: MKCoordinateSpan(
-                    latitudeDelta: max(0.05, span.latitudeDelta / 4),
-                    longitudeDelta: max(0.05, span.longitudeDelta / 4)
-                )
-            ))
+            position = .region(region)
         }
+        updateVisible(for: region)
     }
 
     // MARK: - Действия
@@ -172,6 +209,7 @@ final class MapViewModel {
                 longitudinalMeters: AppConfig.focusDistance
             ))
         }
+        refreshVisible(around: camera.coordinate, widthMeters: AppConfig.focusDistance)
     }
 
     // MARK: - Режим следования (карта «по ходу движения»)
@@ -205,6 +243,9 @@ final class MapViewModel {
                 pitch: pitched ? 55 : 0
             ))
         }
+        // Анимации следования идут непрерывно, onMapCameraChange(.onEnd) не наступает —
+        // камеры впереди подгружаем сами. Буфер делает вызов почти бесплатным.
+        refreshVisible(around: center, widthMeters: 1200)
     }
 
     func move(to coordinate: CLLocationCoordinate2D) {
@@ -215,6 +256,7 @@ final class MapViewModel {
                 longitudinalMeters: 4000
             ))
         }
+        refreshVisible(around: coordinate, widthMeters: 4000)
     }
 
     func zoom(_ factor: Double) {
@@ -223,9 +265,11 @@ final class MapViewModel {
             latitudeDelta: min(80, max(0.002, region.span.latitudeDelta * factor)),
             longitudeDelta: min(80, max(0.002, region.span.longitudeDelta * factor))
         )
+        let zoomed = MKCoordinateRegion(center: region.center, span: span)
         withAnimation(.easeInOut(duration: 0.3)) {
-            position = .region(MKCoordinateRegion(center: region.center, span: span))
+            position = .region(zoomed)
         }
+        updateVisible(for: zoomed)
     }
 }
 

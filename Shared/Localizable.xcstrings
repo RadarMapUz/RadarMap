@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    " на %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " на %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " — %@ tomon"
+          }
+        }
+      }
+    },
     "%@ · %@ · %lld км/ч сред.": {
       "localizations": {
         "ru": {
@@ -45,6 +61,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ yo'nalish bo'yicha"
+          }
+        }
+      }
+    },
+    "%lld камер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld kamera"
           }
         }
       }
@@ -97,6 +129,70 @@
         }
       }
     },
+    "%lld поездок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld поездок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld safar"
+          }
+        }
+      }
+    },
+    "+10 км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+10 км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+10 km/soat"
+          }
+        }
+      }
+    },
+    "+5 км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+5 км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+5 km/soat"
+          }
+        }
+      }
+    },
+    "0 км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 km/soat"
+          }
+        }
+      }
+    },
     "RadarMap следит за %lld камерами вокруг": {
       "localizations": {
         "ru": {
@@ -113,6 +209,22 @@
         }
       }
     },
+    "Автостарт за рулём: сели — оповещения включились сами": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Автостарт за рулём: сели — оповещения включились сами"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rulda avtostart: o‘tirdingiz — ogohlantirishlar o‘zi yoqiladi"
+          }
+        }
+      }
+    },
     "Автостарт поездки за рулём": {
       "localizations": {
         "ru": {
@@ -125,6 +237,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rulda safarni avtomatik boshlash"
+          }
+        }
+      }
+    },
+    "Адаптивный GPS (батарея)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Адаптивный GPS (батарея)"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moslashuvchan GPS (batareya)"
           }
         }
       }
@@ -189,6 +317,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eng yaqin kameralar"
+          }
+        }
+      }
+    },
+    "Варианты маршрута": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Варианты маршрута"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut variantlari"
+          }
+        }
+      }
+    },
+    "Варианты маршрута с числом камер — езжайте, где их меньше": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Варианты маршрута с числом камер — езжайте, где их меньше"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar soni bilan marshrut variantlari — kamini tanlang"
+          }
+        }
+      }
+    },
+    "Введите город, улицу или объект — или сохраните частые адреса выше.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Введите город, улицу или объект — или сохраните частые адреса выше."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shahar, ko‘cha yoki obyekt kiriting — yoki tez-tez ishlatiladigan manzillarni yuqorida saqlang."
           }
         }
       }
@@ -273,6 +449,22 @@
         }
       }
     },
+    "Все камеры и радары Узбекистана из официальных данных. База обновляется сама.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все камеры и радары Узбекистана из официальных данных. База обновляется сама."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘zbekistonning barcha kamera va radarlari rasmiy ma’lumotlardan. Baza o‘zi yangilanadi."
+          }
+        }
+      }
+    },
     "Всегда": {
       "localizations": {
         "ru": {
@@ -285,6 +477,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "Doim"
+          }
+        }
+      }
+    },
+    "Вчера": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вчера"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kecha"
+          }
+        }
+      }
+    },
+    "Вы на месте!": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вы на месте!"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yetib keldingiz!"
+          }
+        }
+      }
+    },
+    "Вы прибыли": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вы прибыли"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siz yetib keldingiz"
+          }
+        }
+      }
+    },
+    "Выбор адреса": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбор адреса"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzil tanlash"
           }
         }
       }
@@ -321,6 +577,38 @@
         }
       }
     },
+    "Голос за 22 секунды до камеры — с учётом вашей скорости": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос за 22 секунды до камеры — с учётом вашей скорости"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameraga 22 soniya qolganda ovoz — tezligingiz hisobga olinadi"
+          }
+        }
+      }
+    },
+    "Голосовая навигация": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голосовая навигация"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovozli navigatsiya"
+          }
+        }
+      }
+    },
     "Голосовое предупреждение": {
       "localizations": {
         "ru": {
@@ -333,6 +621,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ovozli ogohlantirish"
+          }
+        }
+      }
+    },
+    "Голосовые подсказки: «через 300 метров — направо»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голосовые подсказки: «через 300 метров — направо»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovozli maslahatlar: «300 metrdan so‘ng — o‘ngga»"
           }
         }
       }
@@ -369,6 +673,22 @@
         }
       }
     },
+    "Далее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Далее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyingi"
+          }
+        }
+      }
+    },
     "Данные о местоположении остаются на устройстве.": {
       "localizations": {
         "ru": {
@@ -381,6 +701,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Joylashuv ma'lumotlari qurilmada qoladi."
+          }
+        }
+      }
+    },
+    "Два разрешения — и в путь": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Два разрешения — и в путь"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikki ruxsat — va yo‘lga"
           }
         }
       }
@@ -481,6 +817,38 @@
         }
       }
     },
+    "Дом": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дом"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uy"
+          }
+        }
+      }
+    },
+    "Допуск превышения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Допуск превышения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oshirish chegarasi"
+          }
+        }
+      }
+    },
     "Ещё": {
       "localizations": {
         "ru": {
@@ -529,6 +897,38 @@
         }
       }
     },
+    "Задать": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задать"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgilash"
+          }
+        }
+      }
+    },
+    "Закрыть": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закрыть"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yopish"
+          }
+        }
+      }
+    },
     "Звук": {
       "localizations": {
         "ru": {
@@ -557,6 +957,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameraga yaqinlashganda ovoz va banner."
+          }
+        }
+      }
+    },
+    "Здесь появятся ваши поездки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь появятся ваши поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yerda safarlaringiz paydo bo‘ladi"
+          }
+        }
+      }
+    },
+    "Знак лимита дороги и голос при превышении": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Знак лимита дороги и голос при превышении"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘l cheklovi belgisi va oshirishda ovoz"
+          }
+        }
+      }
+    },
+    "Знак лимита дороги и голос при превышении, подсказки манёвров «через 300 м направо», выбор из нескольких вариантов маршрута. Адаптивный GPS снижает точность вдали от камер — батарея живёт дольше.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Знак лимита дороги и голос при превышении, подсказки манёвров «через 300 м направо», выбор из нескольких вариантов маршрута. Адаптивный GPS снижает точность вдали от камер — батарея живёт дольше."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘l tezlik chegarasi belgisi va oshirishda ovoz, «300 m dan keyin o‘ngga» kabi manyovr eslatmalari, bir necha marshrut variantidan tanlash. Moslashuvchan GPS kameralardan uzoqda aniqlikni pasaytiradi — batareya uzoqroq ishlaydi."
+          }
+        }
+      }
+    },
+    "Изменить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘zgartirish"
+          }
+        }
+      }
+    },
+    "Изменить адрес": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменить адрес"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzilni o‘zgartirish"
           }
         }
       }
@@ -593,6 +1073,22 @@
         }
       }
     },
+    "Использовать текущее местоположение": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Использовать текущее местоположение"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joriy joylashuvdan foydalanish"
+          }
+        }
+      }
+    },
     "История поездок": {
       "localizations": {
         "ru": {
@@ -625,18 +1121,50 @@
         }
       }
     },
-    "Камер в базе": {
+    "Итоги: трек поездки и скорость у каждой камеры": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Камер в базе"
+            "value": "Итоги: трек поездки и скорость у каждой камеры"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bazadagi kameralar"
+            "value": "Natijalar: safar treki va har kameradagi tezlik"
+          }
+        }
+      }
+    },
+    "Как в прошлый раз": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как в прошлый раз"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘tgan safargidek"
+          }
+        }
+      }
+    },
+    "Камер впереди нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камер впереди нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda kameralar yo‘q"
           }
         }
       }
@@ -673,6 +1201,22 @@
         }
       }
     },
+    "Камера через %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера через %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera %@ dan keyin"
+          }
+        }
+      }
+    },
     "Камера №%lld": {
       "localizations": {
         "ru": {
@@ -701,6 +1245,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameralar"
+          }
+        }
+      }
+    },
+    "Камеры больше нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры больше нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera endi yo‘q"
           }
         }
       }
@@ -753,6 +1313,38 @@
         }
       }
     },
+    "Карта камер и навигатор Узбекистана": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта камер и навигатор Узбекистана"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘zbekiston kameralar xaritasi va navigatori"
+          }
+        }
+      }
+    },
+    "Контакт для ответа (необязательно)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Контакт для ответа (необязательно)"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Javob uchun kontakt (ixtiyoriy)"
+          }
+        }
+      }
+    },
     "Координаты приблизительные — в исходных данных они были повреждены.": {
       "localizations": {
         "ru": {
@@ -765,6 +1357,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Koordinatalar taxminiy — manba ma'lumotlarida ular buzilgan edi."
+          }
+        }
+      }
+    },
+    "Лимиты скорости": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лимиты скорости"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlik cheklovlari"
+          }
+        }
+      }
+    },
+    "Маршрут в один тап из «Поиска» — домой или на работу.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут в один тап из «Поиска» — домой или на работу."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Qidiruv»dan bir bosishda uyga yoki ishga marshrut."
+          }
+        }
+      }
+    },
+    "Маршрут и скорость": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут и скорость"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut va tezlik"
           }
         }
       }
@@ -785,6 +1425,22 @@
         }
       }
     },
+    "Маршрут перестроен": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут перестроен"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut qayta qurildi"
+          }
+        }
+      }
+    },
     "Маршрут сюда": {
       "localizations": {
         "ru": {
@@ -797,6 +1453,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shu yerga marshrut"
+          }
+        }
+      }
+    },
+    "Мои места": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мои места"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mening joylarim"
           }
         }
       }
@@ -833,18 +1505,34 @@
         }
       }
     },
-    "Нажмите «Начать поездку» на карте — здесь появятся её итоги и история.": {
+    "Навигатор и лимиты": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Нажмите «Начать поездку» на карте — здесь появятся её итоги и история."
+            "value": "Навигатор и лимиты"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Xaritada «Safarni boshlash»ni bosing — bu yerda natijalar va tarix paydo bo'ladi."
+            "value": "Navigator va cheklovlar"
+          }
+        }
+      }
+    },
+    "Нажмите «Начать поездку» на карте — соберём трек, скорость у каждой камеры и статистику.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нажмите «Начать поездку» на карте — соберём трек, скорость у каждой камеры и статистику."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xaritada «Safarni boshlash» tugmasini bosing — trek, har bir kameradagi tezlik va statistikani yig‘amiz."
           }
         }
       }
@@ -877,6 +1565,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nomi (ixtiyoriy)"
+          }
+        }
+      }
+    },
+    "Найдите и выберите адрес для «%@»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Найдите и выберите адрес для «%@»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» uchun manzilni qidirib tanlang"
+          }
+        }
+      }
+    },
+    "Написать разработчику": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Написать разработчику"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dasturchiga yozish"
           }
         }
       }
@@ -929,6 +1649,38 @@
         }
       }
     },
+    "Нашли ошибку или есть идея? Мы читаем каждое сообщение.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нашли ошибку или есть идея? Мы читаем каждое сообщение."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xato topdingizmi yoki g‘oyangiz bormi? Har bir xabarni o‘qiymiz."
+          }
+        }
+      }
+    },
+    "Не задано — нажмите, чтобы настроить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не задано — нажмите, чтобы настроить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgilanmagan — sozlash uchun bosing"
+          }
+        }
+      }
+    },
     "Не удалось загрузить камеры": {
       "localizations": {
         "ru": {
@@ -941,6 +1693,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameralarni yuklab bo'lmadi"
+          }
+        }
+      }
+    },
+    "Не удалось отправить — проверьте сеть.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось отправить — проверьте сеть."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuborib bo‘lmadi — tarmoqni tekshiring."
           }
         }
       }
@@ -961,18 +1729,98 @@
         }
       }
     },
-    "Обновлено: %lld": {
+    "Неверное место": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Обновлено: %lld"
+            "value": "Неверное место"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yangilandi: %lld"
+            "value": "Joyi noto‘g‘ri"
+          }
+        }
+      }
+    },
+    "Недавние": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Недавние"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yaqindagilar"
+          }
+        }
+      }
+    },
+    "Нет связи с сервером маршрутов — проверьте интернет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет связи с сервером маршрутов — проверьте интернет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut serveri bilan aloqa yo‘q — internetni tekshiring"
+          }
+        }
+      }
+    },
+    "Обновлено": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновлено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yangilandi"
+          }
+        }
+      }
+    },
+    "Обратная связь": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обратная связь"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fikr-mulohaza"
+          }
+        }
+      }
+    },
+    "Опишите проблему или идею…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Опишите проблему или идею…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muammo yoki g‘oyani yozing…"
           }
         }
       }
@@ -1073,6 +1921,38 @@
         }
       }
     },
+    "Отправить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuborish"
+          }
+        }
+      }
+    },
+    "Отправляем…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправляем…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuborilmoqda…"
+          }
+        }
+      }
+    },
     "Очистить историю": {
       "localizations": {
         "ru": {
@@ -1101,6 +1981,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tarmoq xatosi"
+          }
+        }
+      }
+    },
+    "Ошибки, идеи, неточные камеры — мы читаем каждое сообщение и правим базу.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибки, идеи, неточные камеры — мы читаем каждое сообщение и правим базу."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xatolar, g‘oyalar, noaniq kameralar — har bir xabarni o‘qib, bazani to‘g‘rilaymiz."
           }
         }
       }
@@ -1137,6 +2033,22 @@
         }
       }
     },
+    "Повторить маршрут": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторить маршрут"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrutni takrorlash"
+          }
+        }
+      }
+    },
     "Поездка": {
       "localizations": {
         "ru": {
@@ -1149,6 +2061,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safar"
+          }
+        }
+      }
+    },
+    "Поездка RadarMap": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездка RadarMap"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap safari"
           }
         }
       }
@@ -1297,6 +2225,38 @@
         }
       }
     },
+    "Превышение скорости": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Превышение скорости"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlik oshirildi"
+          }
+        }
+      }
+    },
+    "Предупредит заранее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предупредит заранее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldindan ogohlantiradi"
+          }
+        }
+      }
+    },
     "Проверить обновления": {
       "localizations": {
         "ru": {
@@ -1325,6 +2285,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "O'tilgan kameralar"
+          }
+        }
+      }
+    },
+    "Просто скрыть на моей карте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Просто скрыть на моей карте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shunchaki mening xaritamda yashirish"
+          }
+        }
+      }
+    },
+    "Работа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Работа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ish"
+          }
+        }
+      }
+    },
+    "Работает со свёрнутым приложением и погасшим экраном": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Работает со свёрнутым приложением и погасшим экраном"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ilova yopiq va ekran o‘chiq bo‘lsa ham ishlaydi"
           }
         }
       }
@@ -1473,6 +2481,38 @@
         }
       }
     },
+    "Сегодня": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сегодня"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bugun"
+          }
+        }
+      }
+    },
+    "Скорость по маршруту": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скорость по маршруту"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut bo‘ylab tezlik"
+          }
+        }
+      }
+    },
     "Скрыто": {
       "localizations": {
         "ru": {
@@ -1489,18 +2529,50 @@
         }
       }
     },
-    "Скрыть / пожаловаться": {
+    "Следующая камера в панели": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Скрыть / пожаловаться"
+            "value": "Следующая камера в панели"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yashirish / shikoyat qilish"
+            "value": "Panelda keyingi kamera"
+          }
+        }
+      }
+    },
+    "Спасибо! Мы читаем каждое сообщение.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Спасибо! Мы читаем каждое сообщение."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rahmat! Har bir xabarni o‘qiymiz."
+          }
+        }
+      }
+    },
+    "Спасибо! Проверим и обновим базу.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Спасибо! Проверим и обновим базу."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rahmat! Tekshirib, bazani yangilaymiz."
           }
         }
       }
@@ -1585,6 +2657,38 @@
         }
       }
     },
+    "Только камеры впереди по курсу — ничего лишнего": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только камеры впереди по курсу — ничего лишнего"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat yo‘nalishdagi kameralar — ortiqcha narsa yo‘q"
+          }
+        }
+      }
+    },
+    "Трек не записан — появится у новых поездок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Трек не записан — появится у новых поездок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trek yozilmagan — yangi safarlarda paydo bo‘ladi"
+          }
+        }
+      }
+    },
     "Уведомления": {
       "localizations": {
         "ru": {
@@ -1613,6 +2717,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bildirishnomalar o'chirilgan — kamera signalini eshitmaysiz."
+          }
+        }
+      }
+    },
+    "Удалить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘chirish"
+          }
+        }
+      }
+    },
+    "Удалить запись": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить запись"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yozuvni o‘chirish"
           }
         }
       }
@@ -1665,6 +2801,38 @@
         }
       }
     },
+    "Через %lld метров — %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Через %lld метров — %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld metrdan so‘ng — %@"
+          }
+        }
+      }
+    },
+    "Что-то не так с этой камерой?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что-то не так с этой камерой?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu kamera bilan nimadir noto‘g‘rimi?"
+          }
+        }
+      }
+    },
     "Чтобы оповещать о камерах во время движения в фоне.": {
       "localizations": {
         "ru": {
@@ -1693,6 +2861,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "sizdan %@ uzoqlikda"
+          }
+        }
+      }
+    },
+    "в лимите": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "в лимите"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "limit ichida"
+          }
+        }
+      }
+    },
+    "в пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "в пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yo‘lda"
+          }
+        }
+      }
+    },
+    "вы прибыли": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "вы прибыли"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yetib keldingiz"
+          }
+        }
+      }
+    },
+    "держитесь левее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "держитесь левее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "chap tomonda yuring"
+          }
+        }
+      }
+    },
+    "держитесь правее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "держитесь правее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘ng tomonda yuring"
           }
         }
       }
@@ -1761,18 +3009,18 @@
         }
       }
     },
-    "камер в базе": {
+    "камер": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "камер в базе"
+            "value": "камер"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "bazadagi kameralar"
+            "value": "kamera"
           }
         }
       }
@@ -1825,6 +3073,38 @@
         }
       }
     },
+    "круто налево": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "круто налево"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "keskin chapga buriling"
+          }
+        }
+      }
+    },
+    "круто направо": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "круто направо"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "keskin o‘ngga buriling"
+          }
+        }
+      }
+    },
     "макс. км/ч": {
       "localizations": {
         "ru": {
@@ -1837,6 +3117,134 @@
           "stringUnit": {
             "state": "translated",
             "value": "maks. km/soat"
+          }
+        }
+      }
+    },
+    "на кольце %lld-й съезд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на кольце %lld-й съезд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aylanada %lld-chiqish"
+          }
+        }
+      }
+    },
+    "обновляется сама": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "обновляется сама"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘zi yangilanadi"
+          }
+        }
+      }
+    },
+    "перестройтесь в поток": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "перестройтесь в поток"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oqimga qo‘shiling"
+          }
+        }
+      }
+    },
+    "плавно левее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "плавно левее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "biroz chapga oling"
+          }
+        }
+      }
+    },
+    "плавно правее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "плавно правее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "biroz o‘ngga oling"
+          }
+        }
+      }
+    },
+    "поверните налево": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "поверните налево"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "chapga buriling"
+          }
+        }
+      }
+    },
+    "поверните направо": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "поверните направо"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘ngga buriling"
+          }
+        }
+      }
+    },
+    "превышение": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "превышение"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oshirilgan"
           }
         }
       }
@@ -1889,6 +3297,54 @@
         }
       }
     },
+    "путь": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "путь"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "masofa"
+          }
+        }
+      }
+    },
+    "разворот": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "разворот"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "orqaga buriling"
+          }
+        }
+      }
+    },
+    "сверните на съезд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сверните на съезд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "chiqish yo‘liga buriling"
+          }
+        }
+      }
+    },
     "сзади слева": {
       "localizations": {
         "ru": {
@@ -1937,6 +3393,22 @@
         }
       }
     },
+    "слегка выше": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "слегка выше"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "biroz yuqori"
+          }
+        }
+      }
+    },
     "справа": {
       "localizations": {
         "ru": {
@@ -1969,422 +3441,6 @@
         }
       }
     },
-    "Мои места": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Мои места"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mening joylarim"
-          }
-        }
-      }
-    },
-    "Дом": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Дом"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Uy"
-          }
-        }
-      }
-    },
-    "Работа": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Работа"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ish"
-          }
-        }
-      }
-    },
-    "Не задано — нажмите, чтобы настроить": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Не задано — нажмите, чтобы настроить"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Belgilanmagan — sozlash uchun bosing"
-          }
-        }
-      }
-    },
-    "Изменить адрес": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Изменить адрес"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manzilni o‘zgartirish"
-          }
-        }
-      }
-    },
-    "Удалить": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Удалить"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O‘chirish"
-          }
-        }
-      }
-    },
-    "Найдите и выберите адрес для «%@»": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Найдите и выберите адрес для «%@»"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«%@» uchun manzilni qidirib tanlang"
-          }
-        }
-      }
-    },
-    "Использовать текущее местоположение": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Использовать текущее местоположение"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Joriy joylashuvdan foydalanish"
-          }
-        }
-      }
-    },
-    "Выбор адреса": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Выбор адреса"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Manzil tanlash"
-          }
-        }
-      }
-    },
-    "Введите город, улицу или объект — или сохраните частые адреса выше.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Введите город, улицу или объект — или сохраните частые адреса выше."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shahar, ko‘cha yoki obyekt kiriting — yoki tez-tez ishlatiladigan manzillarni yuqorida saqlang."
-          }
-        }
-      }
-    },
-    "Задать": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Задать"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Belgilash"
-          }
-        }
-      }
-    },
-    "Изменить": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Изменить"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O‘zgartirish"
-          }
-        }
-      }
-    },
-    "Маршрут в один тап из «Поиска» — домой или на работу.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Маршрут в один тап из «Поиска» — домой или на работу."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Qidiruv»dan bir bosishda uyga yoki ishga marshrut."
-          }
-        }
-      }
-    },
-    "Маршрут перестроен": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Маршрут перестроен"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Marshrut qayta qurildi"
-          }
-        }
-      }
-    },
-    "Вы прибыли": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вы прибыли"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Siz yetib keldingiz"
-          }
-        }
-      }
-    },
-    "Нет связи с сервером маршрутов — проверьте интернет": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Нет связи с сервером маршрутов — проверьте интернет"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Marshrut serveri bilan aloqa yo‘q — internetni tekshiring"
-          }
-        }
-      }
-    },
-    "поверните налево": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "поверните налево"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "chapga buriling"
-          }
-        }
-      }
-    },
-    "поверните направо": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "поверните направо"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "o‘ngga buriling"
-          }
-        }
-      }
-    },
-    "плавно левее": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "плавно левее"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "biroz chapga oling"
-          }
-        }
-      }
-    },
-    "плавно правее": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "плавно правее"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "biroz o‘ngga oling"
-          }
-        }
-      }
-    },
-    "круто налево": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "круто налево"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "keskin chapga buriling"
-          }
-        }
-      }
-    },
-    "круто направо": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "круто направо"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "keskin o‘ngga buriling"
-          }
-        }
-      }
-    },
-    "разворот": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "разворот"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "orqaga buriling"
-          }
-        }
-      }
-    },
-    "держитесь левее": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "держитесь левее"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "chap tomonda yuring"
-          }
-        }
-      }
-    },
-    "держитесь правее": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "держитесь правее"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "o‘ng tomonda yuring"
-          }
-        }
-      }
-    },
-    "перестройтесь в поток": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "перестройтесь в поток"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "oqimga qo‘shiling"
-          }
-        }
-      }
-    },
     "съезд на развязку": {
       "localizations": {
         "ru": {
@@ -2397,726 +3453,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "yo‘l ayirmasiga chiqing"
-          }
-        }
-      }
-    },
-    "сверните на съезд": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "сверните на съезд"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "chiqish yo‘liga buriling"
-          }
-        }
-      }
-    },
-    "на кольце %lld-й съезд": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "на кольце %lld-й съезд"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "aylanada %lld-chiqish"
-          }
-        }
-      }
-    },
-    "вы прибыли": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "вы прибыли"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "yetib keldingiz"
-          }
-        }
-      }
-    },
-    " на %@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": " на %@"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": " — %@ tomon"
-          }
-        }
-      }
-    },
-    "Через %lld метров — %@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Через %lld метров — %@"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld metrdan so‘ng — %@"
-          }
-        }
-      }
-    },
-    "Камера через %@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Камера через %@"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kamera %@ dan keyin"
-          }
-        }
-      }
-    },
-    "Камер впереди нет": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Камер впереди нет"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oldinda kameralar yo‘q"
-          }
-        }
-      }
-    },
-    "Как в прошлый раз": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Как в прошлый раз"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O‘tgan safargidek"
-          }
-        }
-      }
-    },
-    "Недавние": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Недавние"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yaqindagilar"
-          }
-        }
-      }
-    },
-    "Превышение скорости": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Превышение скорости"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tezlik oshirildi"
-          }
-        }
-      }
-    },
-    "Маршрут и скорость": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Маршрут и скорость"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Marshrut va tezlik"
-          }
-        }
-      }
-    },
-    "Лимиты скорости": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Лимиты скорости"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tezlik cheklovlari"
-          }
-        }
-      }
-    },
-    "Допуск превышения": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Допуск превышения"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oshirish chegarasi"
-          }
-        }
-      }
-    },
-    "0 км/ч": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "0 км/ч"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "0 km/soat"
-          }
-        }
-      }
-    },
-    "+5 км/ч": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+5 км/ч"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+5 km/soat"
-          }
-        }
-      }
-    },
-    "+10 км/ч": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+10 км/ч"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "+10 km/soat"
-          }
-        }
-      }
-    },
-    "Голосовая навигация": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Голосовая навигация"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ovozli navigatsiya"
-          }
-        }
-      }
-    },
-    "Варианты маршрута": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Варианты маршрута"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Marshrut variantlari"
-          }
-        }
-      }
-    },
-    "Следующая камера в панели": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Следующая камера в панели"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Panelda keyingi kamera"
-          }
-        }
-      }
-    },
-    "Адаптивный GPS (батарея)": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Адаптивный GPS (батарея)"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Moslashuvchan GPS (batareya)"
-          }
-        }
-      }
-    },
-    "Знак лимита дороги и голос при превышении, подсказки манёвров «через 300 м направо», выбор из нескольких вариантов маршрута. Адаптивный GPS снижает точность вдали от камер — батарея живёт дольше.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Знак лимита дороги и голос при превышении, подсказки манёвров «через 300 м направо», выбор из нескольких вариантов маршрута. Адаптивный GPS снижает точность вдали от камер — батарея живёт дольше."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yo‘l tezlik chegarasi belgisi va oshirishda ovoz, «300 m dan keyin o‘ngga» kabi manyovr eslatmalari, bir necha marshrut variantidan tanlash. Moslashuvchan GPS kameralardan uzoqda aniqlikni pasaytiradi — batareya uzoqroq ishlaydi."
-          }
-        }
-      }
-    },
-    "Вы на месте!": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вы на месте!"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yetib keldingiz!"
-          }
-        }
-      }
-    },
-    "в пути": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "в пути"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "yo‘lda"
-          }
-        }
-      }
-    },
-    "путь": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "путь"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "masofa"
-          }
-        }
-      }
-    },
-    "камер": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "камер"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "kamera"
-          }
-        }
-      }
-    },
-    "%lld поездок": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld поездок"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld safar"
-          }
-        }
-      }
-    },
-    "%lld камер": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld камер"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld kamera"
-          }
-        }
-      }
-    },
-    "Повторить маршрут": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Повторить маршрут"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Marshrutni takrorlash"
-          }
-        }
-      }
-    },
-    "Удалить запись": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Удалить запись"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yozuvni o‘chirish"
-          }
-        }
-      }
-    },
-    "Поездка RadarMap": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Поездка RadarMap"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "RadarMap safari"
-          }
-        }
-      }
-    },
-    "Трек не записан — появится у новых поездок": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Трек не записан — появится у новых поездок"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Trek yozilmagan — yangi safarlarda paydo bo‘ladi"
-          }
-        }
-      }
-    },
-    "Карта камер и навигатор Узбекистана": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Карта камер и навигатор Узбекистана"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O‘zbekiston kameralar xaritasi va navigatori"
-          }
-        }
-      }
-    },
-    "Далее": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Далее"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keyingi"
-          }
-        }
-      }
-    },
-    "3 341 камера и радар Узбекистана из официальных данных. База обновляется сама.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "3 341 камера и радар Узбекистана из официальных данных. База обновляется сама."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O‘zbekistonning 3 341 kamera va radari rasmiy ma’lumotlardan. Baza o‘zi yangilanadi."
-          }
-        }
-      }
-    },
-    "Предупредит заранее": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Предупредит заранее"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oldindan ogohlantiradi"
-          }
-        }
-      }
-    },
-    "Голос за 22 секунды до камеры — с учётом вашей скорости": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Голос за 22 секунды до камеры — с учётом вашей скорости"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kameraga 22 soniya qolganda ovoz — tezligingiz hisobga olinadi"
-          }
-        }
-      }
-    },
-    "Работает со свёрнутым приложением и погасшим экраном": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Работает со свёрнутым приложением и погасшим экраном"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ilova yopiq va ekran o‘chiq bo‘lsa ham ishlaydi"
-          }
-        }
-      }
-    },
-    "Автостарт за рулём: сели — оповещения включились сами": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Автостарт за рулём: сели — оповещения включились сами"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rulda avtostart: o‘tirdingiz — ogohlantirishlar o‘zi yoqiladi"
-          }
-        }
-      }
-    },
-    "Только камеры впереди по курсу — ничего лишнего": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Только камеры впереди по курсу — ничего лишнего"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Faqat yo‘nalishdagi kameralar — ortiqcha narsa yo‘q"
-          }
-        }
-      }
-    },
-    "Навигатор и лимиты": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Навигатор и лимиты"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Navigator va cheklovlar"
-          }
-        }
-      }
-    },
-    "Варианты маршрута с числом камер — езжайте, где их меньше": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Варианты маршрута с числом камер — езжайте, где их меньше"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kameralar soni bilan marshrut variantlari — kamini tanlang"
-          }
-        }
-      }
-    },
-    "Голосовые подсказки: «через 300 метров — направо»": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Голосовые подсказки: «через 300 метров — направо»"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ovozli maslahatlar: «300 metrdan so‘ng — o‘ngga»"
-          }
-        }
-      }
-    },
-    "Знак лимита дороги и голос при превышении": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Знак лимита дороги и голос при превышении"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yo‘l cheklovi belgisi va oshirishda ovoz"
-          }
-        }
-      }
-    },
-    "Итоги: трек поездки и скорость у каждой камеры": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Итоги: трек поездки и скорость у каждой камеры"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Natijalar: safar treki va har kameradagi tezlik"
-          }
-        }
-      }
-    },
-    "Два разрешения — и в путь": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Два разрешения — и в путь"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ikki ruxsat — va yo‘lga"
           }
         }
       }

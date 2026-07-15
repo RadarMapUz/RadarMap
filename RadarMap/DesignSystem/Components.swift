@@ -83,3 +83,24 @@ struct LegendChip: View {
         }
     }
 }
+
+/// Каскадное появление секций экрана: прозрачность + сдвиг, задержка по индексу.
+/// Одноразовая анимация — после появления GPU не нагружает.
+struct EntranceModifier: ViewModifier {
+    let index: Int
+    let appeared: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 16)
+            .animation(.spring(duration: 0.5, bounce: 0.18).delay(Double(index) * 0.07),
+                       value: appeared)
+    }
+}
+
+extension View {
+    func entrance(_ index: Int, _ appeared: Bool) -> some View {
+        modifier(EntranceModifier(index: index, appeared: appeared))
+    }
+}

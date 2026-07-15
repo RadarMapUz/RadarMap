@@ -52,6 +52,9 @@ struct MapScreen: View {
             if let coordinate = env.location.currentCoordinate {
                 vm.snapToUserOnce(coordinate)   // геопозиция уже известна — сразу к своим камерам
             }
+            #if DEBUG
+            openScreenFromLaunchArguments()
+            #endif
         }
         .onChange(of: env.settings.filter) { _, newValue in
             vm.filter = newValue
@@ -379,9 +382,11 @@ struct MapScreen: View {
             for variant in env.route.variants { rect = rect.union(variant.polyline.boundingMapRect) }
             if !rect.isNull {
                 headingUp = false
+                let padded = rect.insetBy(dx: -rect.width * 0.18, dy: -rect.height * 0.18)
                 withAnimation(.easeInOut(duration: 0.5)) {
-                    vm.position = .rect(rect.insetBy(dx: -rect.width * 0.18, dy: -rect.height * 0.18))
+                    vm.position = .rect(padded)
                 }
+                vm.updateVisible(for: MKCoordinateRegion(padded))
             }
         }
     }
@@ -526,6 +531,10 @@ struct MapScreen: View {
             withAnimation(.easeInOut(duration: 0.35)) {
                 vm.position = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
             }
+            // Целевой регион известен только когда есть геопозиция — подгружаем окрестности сами.
+            if let coordinate = env.location.currentCoordinate {
+                vm.refreshVisible(around: coordinate, widthMeters: 3000)
+            }
         }
     }
 
@@ -555,4 +564,23 @@ struct MapScreen: View {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
     }
+
+    #if DEBUG
+    /// Скриншот-автоматизация (симулятор): `simctl launch <app> -showStats | -showSettings |
+    /// -showCameraDetail` открывает нужный экран без тапов. В релизную сборку не попадает.
+    private func openScreenFromLaunchArguments() {
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-showStats") { vm.showStats = true }
+        if args.contains("-showSettings") { vm.showSettings = true }
+        if args.contains("-showCameraDetail") {
+            Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                if let coordinate = env.location.currentCoordinate,
+                   let camera = env.cameras.nearest(to: coordinate, limit: 1).first {
+                    vm.select(camera)
+                }
+            }
+        }
+    }
+    #endif
 }

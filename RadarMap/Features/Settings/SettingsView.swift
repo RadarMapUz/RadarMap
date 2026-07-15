@@ -11,6 +11,7 @@ struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     @State private var assignSlot: PlaceSlot?
+    @State private var showFeedback = false
 
     var body: some View {
         @Bindable var settings = env.settings
@@ -95,7 +96,6 @@ struct SettingsView: View {
 
                 Section {
                     LabeledContent("Версия базы", value: "v\(env.cameras.dbVersion)")
-                    LabeledContent("Камер в базе", value: "\(env.cameras.cameras.count)")
                     LabeledContent("Своих камер", value: "\(env.cameras.custom.count)")
                     if !env.cameras.hiddenIDs.isEmpty {
                         LabeledContent("Скрыто", value: "\(env.cameras.hiddenIDs.count)")
@@ -117,6 +117,25 @@ struct SettingsView: View {
                         Text("Последняя проверка: \(date.formatted(date: .abbreviated, time: .shortened))")
                     }
                 }
+
+                Section {
+                    Button {
+                        showFeedback = true
+                    } label: {
+                        HStack {
+                            Label("Написать разработчику", systemImage: "envelope.fill")
+                                .foregroundStyle(Theme.textPrimary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.rounded(12, .semibold))
+                                .foregroundStyle(Theme.textTertiary)
+                        }
+                    }
+                } header: {
+                    Text("Обратная связь")
+                } footer: {
+                    Text("Ошибки, идеи, неточные камеры — мы читаем каждое сообщение и правим базу.")
+                }
             }
             .scrollContentBackground(.hidden)
             .background(Theme.background)
@@ -129,6 +148,9 @@ struct SettingsView: View {
             }
             .sheet(item: $assignSlot) { slot in
                 SearchView(initialAssign: slot)
+            }
+            .sheet(isPresented: $showFeedback) {
+                FeedbackFormView()
             }
         }
     }
@@ -172,8 +194,8 @@ struct SettingsView: View {
         case .upToDate:
             Label("Актуальна", systemImage: "checkmark.circle.fill")
                 .font(.rounded(13)).foregroundStyle(Theme.success).labelStyle(.titleAndIcon)
-        case .updated(let count):
-            Label("Обновлено: \(count)", systemImage: "arrow.down.circle.fill")
+        case .updated:
+            Label("Обновлено", systemImage: "arrow.down.circle.fill")
                 .font(.rounded(13)).foregroundStyle(Theme.accent).labelStyle(.titleAndIcon)
         case .failed:
             Label("Ошибка сети", systemImage: "wifi.slash")

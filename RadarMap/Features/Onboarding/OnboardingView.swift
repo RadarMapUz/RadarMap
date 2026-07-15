@@ -64,7 +64,7 @@ struct OnboardingView: View {
             Text("RadarMap")
                 .font(.rounded(34, .bold))
                 .foregroundStyle(Theme.textPrimary)
-            Text("3 341 камера и радар Узбекистана из официальных данных. База обновляется сама.")
+            Text("Все камеры и радары Узбекистана из официальных данных. База обновляется сама.")
                 .font(.rounded(15))
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)

@@ -9,6 +9,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import Charts
 
 // MARK: - Общие помощники стиля проездов
 
@@ -138,24 +139,34 @@ struct TripDetailSheet: View {
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
 
     @State private var shareImage: Image?
+    @State private var appeared = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
                     mapSection
+                        .entrance(0, appeared)
                     statsGrid
-                    if !record.passed.isEmpty { passesSection }
+                        .entrance(1, appeared)
+                    speedChartSection
+                        .entrance(2, appeared)
+                    if !record.passed.isEmpty {
+                        passesSection
+                            .entrance(3, appeared)
+                    }
                     if let onRoute, let end = record.endCoordinate {
                         PrimaryButton(title: "Повторить маршрут",
                                       systemImage: "arrow.triangle.turn.up.right.circle.fill") {
                             dismiss()
                             onRoute(end, String(localized: "Как в прошлый раз"))
                         }
+                        .entrance(4, appeared)
                     }
                 }
                 .padding(20)
             }
+            .onAppear { appeared = true }
             .background(Theme.background)
             .navigationTitle(record.startedAt.formatted(date: .abbreviated, time: .shortened))
             .navigationBarTitleDisplayMode(.inline)
@@ -257,6 +268,117 @@ struct TripDetailSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+    }
+
+    // MARK: График скорости по маршруту
+
+    private struct SpeedSample: Identifiable {
+        let id: Int
+        let km: Double
+        let speedKmh: Double
+    }
+
+    private struct PassMark: Identifiable {
+        let id: UUID
+        let km: Double
+        let speedKmh: Double
+        let color: Color
+    }
+
+    /// Профиль скорости: дистанция вдоль трека → скорость (точки трека уже прорежены,
+    /// ≤400 штук — считается за долю миллисекунды, график статичный).
+    private func speedSamples() -> [SpeedSample] {
+        let points = record.trackPoints
+        guard points.count >= 2 else { return [] }
+        var samples: [SpeedSample] = [SpeedSample(id: 0, km: 0, speedKmh: points[0].speedKmh)]
+        samples.reserveCapacity(points.count)
+        var meters = 0.0
+        for i in 1..<points.count {
+            meters += GeoMath.fastDistance(points[i - 1].lat, points[i - 1].lon,
+                                           points[i].lat, points[i].lon)
+            samples.append(SpeedSample(id: i, km: meters / 1000, speedKmh: points[i].speedKmh))
+        }
+        return samples
+    }
+
+    /// Проезды камер на профиле: точка ставится у ближайшей точки трека,
+    /// скорость и цвет — честные, из момента проезда.
+    private func passMarks(on samples: [SpeedSample]) -> [PassMark] {
+        let points = record.trackPoints
+        guard points.count == samples.count, !points.isEmpty else { return [] }
+        return record.passed.compactMap { pass in
+            guard let lat = pass.lat, let lon = pass.lon else { return nil }
+            var bestIndex = 0
+            var bestDistance = Double.greatestFiniteMagnitude
+            for (index, point) in points.enumerated() {
+                let d = GeoMath.fastDistance(lat, lon, point.lat, point.lon)
+                if d < bestDistance { bestDistance = d; bestIndex = index }
+            }
+            return PassMark(id: pass.id,
+                            km: samples[bestIndex].km,
+                            speedKmh: pass.speedKmh,
+                            color: PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh))
+        }
+    }
+
+    @ViewBuilder private var speedChartSection: some View {
+        let samples = speedSamples()
+        if samples.count >= 8 {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Скорость по маршруту")
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+
+                Chart {
+                    ForEach(samples) { sample in
+                        AreaMark(x: .value("км", sample.km), y: .value("км/ч", sample.speedKmh))
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(
+                                LinearGradient(colors: [Theme.accent.opacity(0.30), .clear],
+                                               startPoint: .top, endPoint: .bottom)
+                            )
+                        LineMark(x: .value("км", sample.km), y: .value("км/ч", sample.speedKmh))
+                            .interpolationMethod(.monotone)
+                            .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                            .foregroundStyle(
+                                LinearGradient(colors: [Theme.accent, Theme.intelligent],
+                                               startPoint: .leading, endPoint: .trailing)
+                            )
+                    }
+                    ForEach(passMarks(on: samples)) { mark in
+                        PointMark(x: .value("км", mark.km), y: .value("км/ч", mark.speedKmh))
+                            .symbolSize(80)
+                            .foregroundStyle(mark.color)
+                    }
+                }
+                .chartXAxis(.hidden)
+                .chartYAxis {
+                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { _ in
+                        AxisGridLine().foregroundStyle(Theme.stroke.opacity(0.6))
+                        AxisValueLabel()
+                            .foregroundStyle(Theme.textTertiary)
+                            .font(.rounded(10, .medium))
+                    }
+                }
+                .frame(height: 140)
+
+                // Точки — проезды камер, цвет по честности относительно лимита.
+                HStack(spacing: 14) {
+                    chartLegendDot(Theme.success, "в лимите")
+                    chartLegendDot(Theme.radar, "слегка выше")
+                    chartLegendDot(Theme.danger, "превышение")
+                }
+            }
+            .padding(16)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        }
+    }
+
+    private func chartLegendDot(_ color: Color, _ text: LocalizedStringKey) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 7, height: 7)
+            Text(text).font(.rounded(11)).foregroundStyle(Theme.textTertiary)
+        }
     }
 
     private var passesSection: some View {

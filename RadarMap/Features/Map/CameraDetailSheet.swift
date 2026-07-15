@@ -7,12 +7,16 @@
 
 import SwiftUI
 import MapKit
+import UIKit
 
 struct CameraDetailSheet: View {
     let camera: Camera
     var onRoute: (() -> Void)? = nil
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
+
+    private enum ReportState: Equatable { case idle, sending, sent, failed }
+    @State private var reportState: ReportState = .idle
 
     var body: some View {
         NavigationStack {
@@ -168,10 +172,99 @@ struct CameraDetailSheet: View {
                 dismiss()
             }
         } else {
-            destructiveButton(title: "Скрыть / пожаловаться", icon: "eye.slash") {
-                env.cameras.hide(camera)
-                dismiss()
+            reportBlock
+        }
+    }
+
+    // MARK: - Репорт об ошибке в базе
+
+    /// Обратная связь по камере: репорт уходит на сервер (ручная модерация),
+    /// «камеры больше нет» дополнительно скрывает её локально сразу.
+    @ViewBuilder private var reportBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Что-то не так с этой камерой?")
+                .font(.rounded(14, .semibold))
+                .foregroundStyle(Theme.textSecondary)
+
+            switch reportState {
+            case .sent:
+                Label("Спасибо! Проверим и обновим базу.", systemImage: "checkmark.circle.fill")
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(Theme.success)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Theme.success.opacity(0.12),
+                                in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+                    .transition(.scale(scale: 0.9).combined(with: .opacity))
+            case .sending:
+                HStack(spacing: 10) {
+                    ProgressView().controlSize(.small)
+                    Text("Отправляем…")
+                        .font(.rounded(14, .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+            case .idle, .failed:
+                HStack(spacing: 10) {
+                    reportButton(title: "Камеры больше нет", icon: "camera.slash.fill") {
+                        sendReport(.gone)
+                    }
+                    reportButton(title: "Неверное место", icon: "mappin.slash.circle.fill") {
+                        sendReport(.wrongLocation)
+                    }
+                }
+                if reportState == .failed {
+                    Label("Не удалось отправить — проверьте сеть.", systemImage: "wifi.slash")
+                        .font(.rounded(12))
+                        .foregroundStyle(Theme.danger)
+                }
+                Button {
+                    env.cameras.hide(camera)
+                    dismiss()
+                } label: {
+                    Label("Просто скрыть на моей карте", systemImage: "eye.slash")
+                        .font(.rounded(13, .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
             }
+        }
+        .animation(.spring(duration: 0.35), value: reportState)
+    }
+
+    private func reportButton(title: LocalizedStringKey, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: icon).font(.rounded(17, .semibold))
+                Text(title).font(.rounded(13, .semibold))
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(Theme.radar)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(Theme.radar.opacity(0.10),
+                        in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        }
+    }
+
+    private func sendReport(_ reason: CameraReportReason) {
+        reportState = .sending
+        Task {
+            let ok = await env.feedback.reportCamera(camera, reason: reason,
+                                                     dbVersion: env.cameras.dbVersion)
+            guard ok else {
+                reportState = .failed
+                return
+            }
+            reportState = .sent
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            if reason == .gone {
+                env.cameras.hide(camera)   // убрали у себя сразу, база поправится после модерации
+            }
+            try? await Task.sleep(for: .seconds(1.2))
+            dismiss()
         }
     }
 

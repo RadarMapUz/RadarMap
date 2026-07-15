@@ -70,13 +70,18 @@ private struct RadarStatsView: View {
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(SW.accent)
             Spacer(minLength: 0)
-            Text("\(entry.snapshot.dbCount)")
-                .font(.system(size: 30, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-            Text("камер в базе")
+            Text("База камер")
                 .font(.system(size: 12, design: .rounded))
                 .foregroundStyle(SW.secondary)
-            Text("v\(entry.snapshot.dbVersion)")
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.green)
+                Text("Актуальна")
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+            Text("обновляется сама")
                 .font(.system(size: 10, design: .rounded))
                 .foregroundStyle(SW.secondary.opacity(0.7))
         }

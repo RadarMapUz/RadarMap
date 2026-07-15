@@ -24,6 +24,7 @@ final class AppEnvironment {
     let speedLimits: SpeedLimitService
     let liveActivity = LiveActivityService()
     let metrics = MetricsService()
+    let feedback = FeedbackService()
 
     init() {
         let settings = AppSettings()

@@ -158,3 +158,33 @@ final class HistoryPruneTests: XCTestCase {
         XCTAssertNotNil(pruned[0].track)
     }
 }
+
+// MARK: - Восстановление счётчиков из истории
+
+final class LifetimeRebuildTests: XCTestCase {
+    private func pass(_ speed: Double, limit: Int?) -> PassedCamera {
+        PassedCamera(id: UUID(), cameraID: 1, typeRaw: "Стационар радар", location: "",
+                     speedKmh: speed, date: Date(), lat: 41, lon: 69, limitKmh: limit)
+    }
+    private func record(daysAgo: Double, passes: [PassedCamera]) -> TripRecord {
+        TripRecord(id: daysAgo, startedAt: Date().addingTimeInterval(-daysAgo * 86400),
+                   endedAt: Date().addingTimeInterval(-daysAgo * 86400 + 600),
+                   distanceMeters: 10_000, maxSpeedKmh: 80, passed: passes,
+                   endLat: nil, endLon: nil, track: nil, score: nil)
+    }
+
+    func testRebuildGoesOldestToNewest() {
+        // Новейшая — чистая, старейшая — со штрафом: серия должна закончиться на 1.
+        let history = [record(daysAgo: 1, passes: [pass(55, limit: 60)]),
+                       record(daysAgo: 5, passes: [pass(90, limit: 60)])]
+        let stats = LifetimeStats.rebuilt(from: history)
+
+        XCTAssertEqual(stats.trips, 2)
+        XCTAssertEqual(stats.distanceMeters, 20_000)
+        XCTAssertEqual(stats.camerasInLimit, 1)
+        XCTAssertEqual(stats.savedFinesSum, FineSchedule.minimumFine)
+        XCTAssertEqual(stats.riskFinesSum, 5 * FineSchedule.brv)   // +30 км/ч
+        XCTAssertEqual(stats.cleanStreak, 1)   // последняя по времени — чистая
+        XCTAssertEqual(stats.bestStreak, 1)
+    }
+}

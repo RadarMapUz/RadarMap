@@ -141,6 +141,19 @@ struct LifetimeStats: Codable, Equatable {
         }
         return s
     }
+
+    /// Восстановление счётчиков из уже накопленной истории (обновление приложения:
+    /// у пользователя есть поездки, а lifetime ещё пуст) — от старых к новым.
+    nonisolated static func rebuilt(from historyNewestFirst: [TripRecord]) -> LifetimeStats {
+        var stats = LifetimeStats()
+        for record in historyNewestFirst.reversed() {
+            let passes = record.passed.map {
+                DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh)
+            }
+            stats = updated(stats, passes: passes, distanceMeters: record.distanceMeters)
+        }
+        return stats
+    }
 }
 
 // MARK: - Достижения
@@ -149,6 +162,7 @@ struct Achievement: Identifiable {
     let id: String
     let icon: String
     let title: String
+    let detail: String
     let target: Double
     let progress: Double
 
@@ -162,25 +176,28 @@ enum Achievements {
         let km = stats.distanceMeters / 1000
         let clean = Double(stats.camerasInLimit)
         let streak = Double(stats.bestStreak)
+        let kmDetail = String(localized: "Проехать столько километров с включённым RadarMap.")
+        let cleanDetail = String(localized: "Проехать столько камер с известным лимитом — без штрафной скорости.")
+        let streakDetail = String(localized: "Серия поездок подряд, где ни одна камера не поймала бы на штраф.")
         return [
             Achievement(id: "km100", icon: "point.topleft.down.to.point.bottomright.curvepath",
-                        title: String(localized: "100 км"), target: 100, progress: km),
+                        title: String(localized: "100 км"), detail: kmDetail, target: 100, progress: km),
             Achievement(id: "km1000", icon: "road.lanes",
-                        title: String(localized: "1 000 км"), target: 1000, progress: km),
+                        title: String(localized: "1 000 км"), detail: kmDetail, target: 1000, progress: km),
             Achievement(id: "km10000", icon: "globe.asia.australia.fill",
-                        title: String(localized: "10 000 км"), target: 10000, progress: km),
+                        title: String(localized: "10 000 км"), detail: kmDetail, target: 10000, progress: km),
             Achievement(id: "clean50", icon: "camera.metering.center.weighted",
-                        title: String(localized: "50 камер в лимите"), target: 50, progress: clean),
+                        title: String(localized: "50 камер в лимите"), detail: cleanDetail, target: 50, progress: clean),
             Achievement(id: "clean500", icon: "checkmark.seal.fill",
-                        title: String(localized: "500 камер в лимите"), target: 500, progress: clean),
+                        title: String(localized: "500 камер в лимите"), detail: cleanDetail, target: 500, progress: clean),
             Achievement(id: "clean5000", icon: "crown.fill",
-                        title: String(localized: "5 000 камер в лимите"), target: 5000, progress: clean),
+                        title: String(localized: "5 000 камер в лимите"), detail: cleanDetail, target: 5000, progress: clean),
             Achievement(id: "streak5", icon: "flame",
-                        title: String(localized: "5 чистых подряд"), target: 5, progress: streak),
+                        title: String(localized: "5 чистых подряд"), detail: streakDetail, target: 5, progress: streak),
             Achievement(id: "streak20", icon: "flame.fill",
-                        title: String(localized: "20 чистых подряд"), target: 20, progress: streak),
+                        title: String(localized: "20 чистых подряд"), detail: streakDetail, target: 20, progress: streak),
             Achievement(id: "streak50", icon: "trophy.fill",
-                        title: String(localized: "50 чистых подряд"), target: 50, progress: streak),
+                        title: String(localized: "50 чистых подряд"), detail: streakDetail, target: 50, progress: streak),
         ]
     }
 }

@@ -33,6 +33,22 @@
         }
       }
     },
+    "%@ из %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ из %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ / %@"
+          }
+        }
+      }
+    },
     "%@ млн сум": {
       "localizations": {
         "ru": {
@@ -93,6 +109,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ so‘m"
+          }
+        }
+      }
+    },
+    "%lld БРВ": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld БРВ"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld BHM"
           }
         }
       }
@@ -253,6 +285,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 000 km"
+          }
+        }
+      }
+    },
+    "1 БРВ": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 БРВ"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 BHM"
           }
         }
       }
@@ -509,6 +557,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameralar bazasi va safar statistikasi"
+          }
+        }
+      }
+    },
+    "Балл записывается за каждую поездку — смотрите его в истории.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Балл записывается за каждую поездку — смотрите его в истории."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bal har bir safar uchun yoziladi — tarixda ko‘ring."
           }
         }
       }
@@ -1265,6 +1329,22 @@
         }
       }
     },
+    "Из чего складывается": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из чего складывается"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nimalardan iborat"
+          }
+        }
+      }
+    },
     "Изменить": {
       "localizations": {
         "ru": {
@@ -1425,6 +1505,22 @@
         }
       }
     },
+    "Каждая камера с известным лимитом, пройденная без штрафной скорости, — несостоявшийся минимальный штраф в 1 БРВ. Складываем такие проезды. Это оценка, а не гарантия: повторность и допуски конкретных камер мы знать не можем.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Каждая камера с известным лимитом, пройденная без штрафной скорости, — несостоявшийся минимальный штраф в 1 БРВ. Складываем такие проезды. Это оценка, а не гарантия: повторность и допуски конкретных камер мы знать не можем."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limiti ma’lum kameradan jarima tezligisiz o‘tish — bo‘lmagan 1 BHM minimal jarima. Shunday o‘tishlarni qo‘shamiz. Bu taxmin, kafolat emas: takroriylik va ayrim kameralar dopuskini bila olmaymiz."
+          }
+        }
+      }
+    },
     "Каждая камера, пройденная в лимите, — несостоявшийся штраф. Посчитаем и покажем.": {
       "localizations": {
         "ru": {
@@ -1441,6 +1537,22 @@
         }
       }
     },
+    "Каждый проезд камеры с известным лимитом. Штрафные ступени снижают балл сильнее всего.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Каждый проезд камеры с известным лимитом. Штрафные ступени снижают балл сильнее всего."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limiti ma’lum har bir kameradan o‘tish. Jarima pog‘onalari balni eng ko‘p tushiradi."
+          }
+        }
+      }
+    },
     "Как в прошлый раз": {
       "localizations": {
         "ru": {
@@ -1453,6 +1565,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "O‘tgan safargidek"
+          }
+        }
+      }
+    },
+    "Как поднять": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как поднять"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qanday ko‘tarish mumkin"
+          }
+        }
+      }
+    },
+    "Как считаем": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как считаем"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qanday hisoblaymiz"
           }
         }
       }
@@ -2337,6 +2481,22 @@
         }
       }
     },
+    "Первые ~%lld км/ч сверх лимита камеры обычно не штрафуют. Суммы — первая фиксация, повторные нарушения заметно дороже.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Первые ~%lld км/ч сверх лимита камеры обычно не штрафуют. Суммы — первая фиксация, повторные нарушения заметно дороже."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limitdan ortiq dastlabki ~%lld km/soat uchun kameralar odatda jarima yozmaydi. Summalar — birinchi qayd, takroriy buzilishlar ancha qimmat."
+          }
+        }
+      }
+    },
     "Передвижной": {
       "localizations": {
         "ru": {
@@ -2365,6 +2525,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ko'chma radar"
+          }
+        }
+      }
+    },
+    "Плавность езды": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Плавность езды"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydash ravonligi"
           }
         }
       }
@@ -2513,6 +2689,22 @@
         }
       }
     },
+    "Получено!": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Получено!"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Olindi!"
+          }
+        }
+      }
+    },
     "Последняя поездка": {
       "localizations": {
         "ru": {
@@ -2621,6 +2813,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yangilanishlarni tekshirish"
+          }
+        }
+      }
+    },
+    "Проезжайте камеры не выше лимита — уже +6 км/ч попадает в штрафную ступень.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проезжайте камеры не выше лимита — уже +6 км/ч попадает в штрафную ступень."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralardan limitdan oshmasdan o‘ting — +6 km/soat allaqachon jarima pog‘onasi."
+          }
+        }
+      }
+    },
+    "Проехать столько камер с известным лимитом — без штрафной скорости.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проехать столько камер с известным лимитом — без штрафной скорости."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limiti ma’lum shuncha kameradan jarima tezligisiz o‘tish."
+          }
+        }
+      }
+    },
+    "Проехать столько километров с включённым RadarMap.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проехать столько километров с включённым RadarMap."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap yoqilgan holda shuncha kilometr bosib o‘tish."
           }
         }
       }
@@ -2769,6 +3009,22 @@
         }
       }
     },
+    "Разгоняйтесь и тормозите плавно.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разгоняйтесь и тормозите плавно."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ravon tezlaning va tormozlang."
+          }
+        }
+      }
+    },
     "Разрешить": {
       "localizations": {
         "ru": {
@@ -2781,6 +3037,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ruxsat berish"
+          }
+        }
+      }
+    },
+    "Резкие разгоны и торможения по треку поездки снижают балл.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Резкие разгоны и торможения по треку поездки снижают балл."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trek bo‘ylab keskin tezlanish va tormozlash balni tushiradi."
           }
         }
       }
@@ -2881,6 +3153,22 @@
         }
       }
     },
+    "Серия поездок подряд, где ни одна камера не поймала бы на штраф.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Серия поездок подряд, где ни одна камера не поймала бы на штраф."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Birorta kamera jarimaga tutmaydigan ketma-ket safarlar seriyasi."
+          }
+        }
+      }
+    },
     "Скорость по маршруту": {
       "localizations": {
         "ru": {
@@ -2893,6 +3181,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrut bo‘ylab tezlik"
+          }
+        }
+      }
+    },
+    "Скорость у камер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скорость у камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar oldidagi tezlik"
           }
         }
       }
@@ -2957,6 +3261,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rahmat! Tekshirib, bazani yangilaymiz."
+          }
+        }
+      }
+    },
+    "Средний балл поездок за 30 дней. Длинные поездки весят больше коротких.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Средний балл поездок за 30 дней. Длинные поездки весят больше коротких."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 kunlik safarlarning o‘rtacha bali. Uzoq safarlar qisqalaridan ko‘proq vazn oladi."
           }
         }
       }
@@ -3265,6 +3585,54 @@
         }
       }
     },
+    "Шкала": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Шкала"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shkala"
+          }
+        }
+      }
+    },
+    "Штрафы за превышение — ст. 128-3 КоАО": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Штрафы за превышение — ст. 128-3 КоАО"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlikni oshirish jarimalari — MJtK 128-3-modda"
+          }
+        }
+      }
+    },
+    "Экономия на штрафах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Экономия на штрафах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimalardan tejash"
+          }
+        }
+      }
+    },
     "в %@ от вас": {
       "localizations": {
         "ru": {
@@ -3441,18 +3809,34 @@
         }
       }
     },
-    "за 30 дней: ≈ %@ · оценка, ст. 128-3 КоАО": {
+    "за 30 дней": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "за 30 дней: ≈ %@ · оценка, ст. 128-3 КоАО"
+            "value": "за 30 дней"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "30 kunda: ≈ %@ · taxmin, MJtK 128-3-modda"
+            "value": "30 kunda"
+          }
+        }
+      }
+    },
+    "за 30 дней: ≈ %@ · как считаем?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "за 30 дней: ≈ %@ · как считаем?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 kunda: ≈ %@ · qanday hisoblaymiz?"
           }
         }
       }
@@ -3473,6 +3857,22 @@
         }
       }
     },
+    "как считается": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "как считается"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "qanday hisoblanadi"
+          }
+        }
+      }
+    },
     "камер": {
       "localizations": {
         "ru": {
@@ -3485,6 +3885,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "kamera"
+          }
+        }
+      }
+    },
+    "камер в лимите": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "камер в лимите"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "limitdagi kameralar"
           }
         }
       }
@@ -3885,6 +4301,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "chiqish yo‘liga buriling"
+          }
+        }
+      }
+    },
+    "свыше +40 км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "свыше +40 км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+40 km/soatdan ortiq"
           }
         }
       }

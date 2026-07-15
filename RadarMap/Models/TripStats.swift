@@ -357,6 +357,12 @@ final class TripStats {
            let decoded = try? JSONDecoder().decode(LifetimeStats.self, from: data) {
             lifetime = decoded
         }
+        // Обновились с версии без счётчиков, а поездки уже есть — восстанавливаем
+        // из истории, чтобы экономия и достижения не начинались с нуля.
+        if lifetime.trips == 0 && !history.isEmpty {
+            lifetime = LifetimeStats.rebuilt(from: history)
+            persistLifetime()
+        }
     }
 
     private func persistLifetime() {

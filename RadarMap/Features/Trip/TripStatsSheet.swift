@@ -20,25 +20,32 @@ struct TripStatsSheet: View {
     /// Каскадное появление секций при открытии (одноразовое).
     @State private var appeared = false
     @State private var shareImage: Image?
+    @State private var showRatingInfo = false
+    @State private var showSavingsInfo = false
+    @State private var selectedBadge: Achievement?
 
     var body: some View {
         let trip = env.trip
         let active = env.location.isTripActive
+        // После перезапуска приложения живых метрик нет — показываем последнюю
+        // поездку из истории, а не нули.
+        let lastRecord = (active || trip.distanceMeters > 0) ? nil : trip.history.first
+        let passes = lastRecord.map(\.passed) ?? trip.passed
 
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     ratingHero(trip: trip)
                         .entrance(0, appeared)
-                    statusHeader(active: active, trip: trip)
+                    statusHeader(active: active, trip: trip, last: lastRecord)
                         .entrance(1, appeared)
-                    statsGrid(trip: trip)
+                    statsGrid(trip: trip, last: lastRecord)
                         .entrance(2, appeared)
                     savedCard(trip: trip)
                         .entrance(3, appeared)
 
-                    if !trip.passed.isEmpty {
-                        passedSection(trip: trip)
+                    if !passes.isEmpty {
+                        passedSection(passes: passes)
                             .entrance(4, appeared)
                     }
 
@@ -82,10 +89,11 @@ struct TripStatsSheet: View {
             .onAppear {
                 appeared = true
                 #if DEBUG
-                // Скриншот-автоматизация: сразу открыть деталку первой поездки.
-                if ProcessInfo.processInfo.arguments.contains("-openFirstTrip") {
-                    selectedRecord = env.trip.history.first
-                }
+                // Скриншот-автоматизация: сразу открыть вложенные экраны.
+                let args = ProcessInfo.processInfo.arguments
+                if args.contains("-openFirstTrip") { selectedRecord = env.trip.history.first }
+                if args.contains("-showRatingInfo") { showRatingInfo = true }
+                if args.contains("-showSavingsInfo") { showSavingsInfo = true }
                 #endif
             }
         }
@@ -99,6 +107,9 @@ struct TripStatsSheet: View {
                 }
             })
         }
+        .sheet(isPresented: $showRatingInfo) { RatingInfoSheet() }
+        .sheet(isPresented: $showSavingsInfo) { SavingsInfoSheet() }
+        .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
     }
 
     // MARK: - Рейтинг вождения (герой)
@@ -107,33 +118,48 @@ struct TripStatsSheet: View {
     private func ratingHero(trip: TripStats) -> some View {
         HStack(spacing: 18) {
             if let rating = trip.rating {
-                RatingRing(rating: rating)
-                    .frame(width: 96, height: 96)
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(DrivingScore.level(for: rating))
-                        .font(.rounded(17, .bold))
-                        .foregroundStyle(Theme.textPrimary)
-                    if let trend = trip.ratingTrend, trend != 0 {
-                        HStack(spacing: 4) {
-                            Image(systemName: trend > 0 ? "arrow.up.right" : "arrow.down.right")
-                                .font(.rounded(11, .bold))
-                            Text(String(format: String(localized: "%lld за неделю"), abs(trend)))
-                                .font(.rounded(12, .semibold))
+                // Тап — расшифровка: шкала, из чего складывается, как поднять.
+                Button {
+                    showRatingInfo = true
+                } label: {
+                    HStack(spacing: 18) {
+                        RatingRing(rating: rating)
+                            .frame(width: 96, height: 96)
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(DrivingScore.level(for: rating))
+                                .font(.rounded(17, .bold))
+                                .foregroundStyle(Theme.textPrimary)
+                            if let trend = trip.ratingTrend, trend != 0 {
+                                HStack(spacing: 4) {
+                                    Image(systemName: trend > 0 ? "arrow.up.right" : "arrow.down.right")
+                                        .font(.rounded(11, .bold))
+                                    Text(String(format: String(localized: "%lld за неделю"), abs(trend)))
+                                        .font(.rounded(12, .semibold))
+                                }
+                                .foregroundStyle(trend > 0 ? Theme.success : Theme.danger)
+                                .padding(.horizontal, 9).padding(.vertical, 4)
+                                .background((trend > 0 ? Theme.success : Theme.danger).opacity(0.12),
+                                            in: Capsule())
+                            }
+                            if trip.lifetime.cleanStreak >= 2 {
+                                Label(String(format: String(localized: "чистая серия: %lld подряд"),
+                                             trip.lifetime.cleanStreak),
+                                      systemImage: "flame.fill")
+                                    .font(.rounded(12, .semibold))
+                                    .foregroundStyle(Theme.radar)
+                            }
+                            Text("как считается")
+                                .font(.rounded(11, .medium))
+                                .foregroundStyle(Theme.textTertiary)
                         }
-                        .foregroundStyle(trend > 0 ? Theme.success : Theme.danger)
-                        .padding(.horizontal, 9).padding(.vertical, 4)
-                        .background((trend > 0 ? Theme.success : Theme.danger).opacity(0.12),
-                                    in: Capsule())
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.rounded(13, .semibold))
+                            .foregroundStyle(Theme.textTertiary)
                     }
-                    if trip.lifetime.cleanStreak >= 2 {
-                        Label(String(format: String(localized: "чистая серия: %lld подряд"),
-                                     trip.lifetime.cleanStreak),
-                              systemImage: "flame.fill")
-                            .font(.rounded(12, .semibold))
-                            .foregroundStyle(Theme.radar)
-                    }
+                    .contentShape(Rectangle())
                 }
-                Spacer(minLength: 0)
+                .buttonStyle(.plain)
             } else {
                 Image(systemName: "gauge.with.needle")
                     .font(.rounded(30))
@@ -160,38 +186,48 @@ struct TripStatsSheet: View {
 
     @ViewBuilder
     private func savedCard(trip: TripStats) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: "shield.lefthalf.filled.badge.checkmark")
-                .font(.rounded(22, .bold))
-                .foregroundStyle(Theme.success)
-                .frame(width: 48, height: 48)
-                .background(Theme.success.opacity(0.12), in: Circle())
-            VStack(alignment: .leading, spacing: 3) {
-                if trip.lifetime.savedFinesSum > 0 {
-                    Text("Сэкономлено на штрафах")
-                        .font(.rounded(13, .medium))
-                        .foregroundStyle(Theme.textSecondary)
-                    Text("≈ \(Formatting.money(trip.lifetime.savedFinesSum))")
-                        .font(.rounded(24, .heavy))
-                        .foregroundStyle(Theme.success)
-                        .contentTransition(.numericText())
-                    Text("за 30 дней: ≈ \(Formatting.money(trip.monthSaved)) · оценка, ст. 128-3 КоАО")
-                        .font(.rounded(11))
-                        .foregroundStyle(Theme.textTertiary)
-                } else {
-                    Text("Сэкономлено на штрафах")
-                        .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text("Каждая камера, пройденная в лимите, — несостоявшийся штраф. Посчитаем и покажем.")
-                        .font(.rounded(12))
-                        .foregroundStyle(Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        // Тап — таблица штрафных ступеней и как считаем экономию.
+        Button {
+            showSavingsInfo = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                    .font(.rounded(22, .bold))
+                    .foregroundStyle(Theme.success)
+                    .frame(width: 48, height: 48)
+                    .background(Theme.success.opacity(0.12), in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    if trip.lifetime.savedFinesSum > 0 {
+                        Text("Сэкономлено на штрафах")
+                            .font(.rounded(13, .medium))
+                            .foregroundStyle(Theme.textSecondary)
+                        Text("≈ \(Formatting.money(trip.lifetime.savedFinesSum))")
+                            .font(.rounded(24, .heavy))
+                            .foregroundStyle(Theme.success)
+                            .contentTransition(.numericText())
+                        Text("за 30 дней: ≈ \(Formatting.money(trip.monthSaved)) · как считаем?")
+                            .font(.rounded(11))
+                            .foregroundStyle(Theme.textTertiary)
+                    } else {
+                        Text("Сэкономлено на штрафах")
+                            .font(.rounded(15, .bold))
+                            .foregroundStyle(Theme.textPrimary)
+                        Text("Каждая камера, пройденная в лимите, — несостоявшийся штраф. Посчитаем и покажем.")
+                            .font(.rounded(12))
+                            .foregroundStyle(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.rounded(13, .semibold))
+                    .foregroundStyle(Theme.textTertiary)
             }
-            Spacer(minLength: 0)
+            .padding(16)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+            .contentShape(Rectangle())
         }
-        .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        .buttonStyle(.plain)
     }
 
     // MARK: - Достижения
@@ -204,7 +240,13 @@ struct TripStatsSheet: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(Achievements.all(for: trip.lifetime)) { badge in
-                        AchievementBadge(badge: badge)
+                        // Тап — что это за достижение и сколько осталось.
+                        Button {
+                            selectedBadge = badge
+                        } label: {
+                            AchievementBadge(badge: badge)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.vertical, 2)
@@ -216,7 +258,44 @@ struct TripStatsSheet: View {
     // MARK: - Заголовок статуса
 
     @ViewBuilder
-    private func statusHeader(active: Bool, trip: TripStats) -> some View {
+    private func statusHeader(active: Bool, trip: TripStats, last: TripRecord?) -> some View {
+        if let last {
+            // Живых метрик нет (перезапуск) — последняя поездка из истории, тап — деталка.
+            Button {
+                selectedRecord = last
+            } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle().fill(Theme.textTertiary.opacity(0.15))
+                            .frame(width: 46, height: 46)
+                        Image(systemName: "flag.checkered")
+                            .font(.rounded(20, .bold))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Последняя поездка")
+                            .font(.rounded(17, .bold))
+                            .foregroundStyle(Theme.textPrimary)
+                        Text("\(last.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(Formatting.duration(last.duration))")
+                            .font(.rounded(14, .medium))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                .padding(16)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        } else {
+            liveHeader(active: active, trip: trip)
+        }
+    }
+
+    @ViewBuilder
+    private func liveHeader(active: Bool, trip: TripStats) -> some View {
         HStack(spacing: 12) {
             ZStack {
                 Circle().fill((active ? Theme.success : Theme.textTertiary).opacity(0.15))
@@ -227,9 +306,18 @@ struct TripStatsSheet: View {
                     .symbolEffect(.pulse, options: .repeating, isActive: active)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(active ? "Поездка идёт" : (trip.startedAt != nil || trip.distanceMeters > 0 ? "Последняя поездка" : "Поездка не начата"))
-                    .font(.rounded(17, .bold))
-                    .foregroundStyle(Theme.textPrimary)
+                // Тернарник из литералов вывелся бы в String и обошёл локализацию.
+                Group {
+                    if active {
+                        Text("Поездка идёт")
+                    } else if trip.startedAt != nil || trip.distanceMeters > 0 {
+                        Text("Последняя поездка")
+                    } else {
+                        Text("Поездка не начата")
+                    }
+                }
+                .font(.rounded(17, .bold))
+                .foregroundStyle(Theme.textPrimary)
                 if active, let started = trip.startedAt {
                     Text(timerInterval: started...Date.distantFuture, countsDown: false)
                         .font(.rounded(14, .medium).monospacedDigit())
@@ -262,13 +350,18 @@ struct TripStatsSheet: View {
 
     // MARK: - Сетка метрик
 
-    private func statsGrid(trip: TripStats) -> some View {
+    private func statsGrid(trip: TripStats, last: TripRecord?) -> some View {
+        // Живая сессия либо последняя запись из истории (после перезапуска).
+        let cameras = last?.camerasPassed ?? trip.camerasPassed
+        let distance = last?.distanceMeters ?? trip.distanceMeters
+        let maxSpeed = last?.maxSpeedKmh ?? trip.maxSpeedKmh
+        let avgSpeed = last?.averageSpeedKmh ?? trip.averageSpeedKmh
         let cols = [GridItem(.flexible()), GridItem(.flexible())]
         return LazyVGrid(columns: cols, spacing: 12) {
-            tile("\(trip.camerasPassed)", "камер пройдено", "camera.metering.center.weighted", Theme.accent)
-            tile(Formatting.distance(trip.distanceMeters), "пройдено пути", "point.topleft.down.to.point.bottomright.curvepath", Theme.success)
-            tile("\(Int(trip.maxSpeedKmh))", "макс. км/ч", "gauge.with.dots.needle.100percent", Theme.danger)
-            tile("\(Int(trip.averageSpeedKmh))", "средняя км/ч", "gauge.with.dots.needle.33percent", Theme.radar)
+            tile("\(cameras)", "камер пройдено", "camera.metering.center.weighted", Theme.accent)
+            tile(Formatting.distance(distance), "пройдено пути", "point.topleft.down.to.point.bottomright.curvepath", Theme.success)
+            tile("\(Int(maxSpeed))", "макс. км/ч", "gauge.with.dots.needle.100percent", Theme.danger)
+            tile("\(Int(avgSpeed))", "средняя км/ч", "gauge.with.dots.needle.33percent", Theme.radar)
         }
     }
 
@@ -289,19 +382,19 @@ struct TripStatsSheet: View {
 
     // MARK: - Пройденные камеры (со скоростью прохождения)
 
-    private func passedSection(trip: TripStats) -> some View {
+    private func passedSection(passes: [PassedCamera]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Пройденные камеры")
                 .font(.rounded(14, .semibold))
                 .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            ForEach(trip.passed.reversed()) { pass in
+            ForEach(passes.reversed()) { pass in
                 PassRow(pass: pass)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         // Новый проезд в живой поездке въезжает сверху, а не вспыхивает.
-        .animation(.spring(duration: 0.4), value: trip.passed.count)
+        .animation(.spring(duration: 0.4), value: passes.count)
     }
 
     // MARK: - История

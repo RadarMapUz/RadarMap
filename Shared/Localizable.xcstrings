@@ -2912,6 +2912,214 @@
           }
         }
       }
+    },
+    "Далее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Далее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyingi"
+          }
+        }
+      }
+    },
+    "3 341 камера и радар Узбекистана из официальных данных. База обновляется сама.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 341 камера и радар Узбекистана из официальных данных. База обновляется сама."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘zbekistonning 3 341 kamera va radari rasmiy ma’lumotlardan. Baza o‘zi yangilanadi."
+          }
+        }
+      }
+    },
+    "Предупредит заранее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предупредит заранее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldindan ogohlantiradi"
+          }
+        }
+      }
+    },
+    "Голос за 22 секунды до камеры — с учётом вашей скорости": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос за 22 секунды до камеры — с учётом вашей скорости"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameraga 22 soniya qolganda ovoz — tezligingiz hisobga olinadi"
+          }
+        }
+      }
+    },
+    "Работает со свёрнутым приложением и погасшим экраном": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Работает со свёрнутым приложением и погасшим экраном"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ilova yopiq va ekran o‘chiq bo‘lsa ham ishlaydi"
+          }
+        }
+      }
+    },
+    "Автостарт за рулём: сели — оповещения включились сами": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Автостарт за рулём: сели — оповещения включились сами"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rulda avtostart: o‘tirdingiz — ogohlantirishlar o‘zi yoqiladi"
+          }
+        }
+      }
+    },
+    "Только камеры впереди по курсу — ничего лишнего": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только камеры впереди по курсу — ничего лишнего"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat yo‘nalishdagi kameralar — ortiqcha narsa yo‘q"
+          }
+        }
+      }
+    },
+    "Навигатор и лимиты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Навигатор и лимиты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navigator va cheklovlar"
+          }
+        }
+      }
+    },
+    "Варианты маршрута с числом камер — езжайте, где их меньше": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Варианты маршрута с числом камер — езжайте, где их меньше"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar soni bilan marshrut variantlari — kamini tanlang"
+          }
+        }
+      }
+    },
+    "Голосовые подсказки: «через 300 метров — направо»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голосовые подсказки: «через 300 метров — направо»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovozli maslahatlar: «300 metrdan so‘ng — o‘ngga»"
+          }
+        }
+      }
+    },
+    "Знак лимита дороги и голос при превышении": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Знак лимита дороги и голос при превышении"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘l cheklovi belgisi va oshirishda ovoz"
+          }
+        }
+      }
+    },
+    "Итоги: трек поездки и скорость у каждой камеры": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Итоги: трек поездки и скорость у каждой камеры"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Natijalar: safar treki va har kameradagi tezlik"
+          }
+        }
+      }
+    },
+    "Два разрешения — и в путь": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Два разрешения — и в путь"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikki ruxsat — va yo‘lga"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

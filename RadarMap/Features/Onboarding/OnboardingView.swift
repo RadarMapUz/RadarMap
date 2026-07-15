@@ -2,7 +2,7 @@
 //  OnboardingView.swift
 //  RadarMap
 //
-//  Приветственный экран: объясняет зачем нужны разрешения, запрашивает их.
+//  Первое впечатление: четыре страницы — камеры, оповещения, навигатор, разрешения.
 //
 
 import SwiftUI
@@ -13,51 +13,37 @@ struct OnboardingView: View {
     @Environment(AppEnvironment.self) private var env
     let onFinish: () -> Void
 
+    @State private var page = 0
+    private let lastPage = 3
+
     var body: some View {
         ZStack {
             backgroundGradient
 
             VStack(spacing: 0) {
-                Spacer(minLength: 24)
-                RadarHero()
-                    .frame(width: 180, height: 180)
-                    .padding(.bottom, 28)
-
-                Text("RadarMap")
-                    .font(.rounded(34, .bold))
-                    .foregroundStyle(Theme.textPrimary)
-                Text("Камеры видеофиксации Узбекистана — предупредим заранее, даже когда телефон в кармане.")
-                    .font(.rounded(15))
-                    .foregroundStyle(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                    .padding(.top, 10)
-
-                Spacer(minLength: 24)
-
-                VStack(spacing: 12) {
-                    permissionRow(
-                        icon: "location.fill",
-                        title: "Геолокация «Всегда»",
-                        subtitle: "Чтобы оповещать о камерах во время движения в фоне.",
-                        state: locationState,
-                        action: { env.location.bootstrap() }
-                    )
-                    permissionRow(
-                        icon: "bell.badge.fill",
-                        title: "Уведомления",
-                        subtitle: "Звук и баннер при приближении к камере.",
-                        state: notificationsState,
-                        action: { env.notifications.requestAuthorization() }
-                    )
+                TabView(selection: $page) {
+                    heroPage.tag(0)
+                    alertsPage.tag(1)
+                    navigatorPage.tag(2)
+                    permissionsPage.tag(3)
                 }
-                .padding(.horizontal, 20)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .animation(.easeInOut(duration: 0.3), value: page)
 
-                Spacer(minLength: 24)
+                pageDots
+                    .padding(.bottom, 18)
 
-                PrimaryButton(title: "Начать", systemImage: "chevron.right", action: onFinish)
+                if page < lastPage {
+                    PrimaryButton(title: "Далее", systemImage: "chevron.right") {
+                        withAnimation { page += 1 }
+                    }
                     .padding(.horizontal, 20)
                     .padding(.bottom, 8)
+                } else {
+                    PrimaryButton(title: "Начать", systemImage: "checkmark") { onFinish() }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 8)
+                }
 
                 Text("Данные о местоположении остаются на устройстве.")
                     .font(.rounded(11))
@@ -65,6 +51,147 @@ struct OnboardingView: View {
                     .padding(.bottom, 12)
             }
         }
+    }
+
+    // MARK: - Страница 1: герой
+
+    private var heroPage: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            RadarHero()
+                .frame(width: 170, height: 170)
+                .padding(.bottom, 28)
+            Text("RadarMap")
+                .font(.rounded(34, .bold))
+                .foregroundStyle(Theme.textPrimary)
+            Text("3 341 камера и радар Узбекистана из официальных данных. База обновляется сама.")
+                .font(.rounded(15))
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 36)
+                .padding(.top, 10)
+            Spacer()
+        }
+    }
+
+    // MARK: - Страница 2: оповещения
+
+    private var alertsPage: some View {
+        featurePage(
+            icon: "bell.and.waves.left.and.right.fill",
+            title: "Предупредит заранее",
+            rows: [
+                ("waveform", "Голос за 22 секунды до камеры — с учётом вашей скорости"),
+                ("iphone.gen3", "Работает со свёрнутым приложением и погасшим экраном"),
+                ("car.fill", "Автостарт за рулём: сели — оповещения включились сами"),
+                ("location.north.line.fill", "Только камеры впереди по курсу — ничего лишнего"),
+            ]
+        )
+    }
+
+    // MARK: - Страница 3: навигатор
+
+    private var navigatorPage: some View {
+        featurePage(
+            icon: "map.fill",
+            title: "Навигатор и лимиты",
+            rows: [
+                ("arrow.triangle.branch", "Варианты маршрута с числом камер — езжайте, где их меньше"),
+                ("arrow.turn.up.right", "Голосовые подсказки: «через 300 метров — направо»"),
+                ("gauge.with.needle.fill", "Знак лимита дороги и голос при превышении"),
+                ("chart.bar.fill", "Итоги: трек поездки и скорость у каждой камеры"),
+            ]
+        )
+    }
+
+    // MARK: - Страница 4: разрешения
+
+    private var permissionsPage: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 24)
+            Image(systemName: "checkmark.shield.fill")
+                .font(.rounded(44, .bold))
+                .foregroundStyle(Theme.accent)
+                .shadow(color: Theme.accent.opacity(0.5), radius: 14)
+                .padding(.bottom, 18)
+            Text("Два разрешения — и в путь")
+                .font(.rounded(24, .bold))
+                .foregroundStyle(Theme.textPrimary)
+                .padding(.bottom, 20)
+
+            VStack(spacing: 12) {
+                permissionRow(
+                    icon: "location.fill",
+                    title: "Геолокация «Всегда»",
+                    subtitle: "Чтобы оповещать о камерах во время движения в фоне.",
+                    state: locationState,
+                    action: { env.location.bootstrap() }
+                )
+                permissionRow(
+                    icon: "bell.badge.fill",
+                    title: "Уведомления",
+                    subtitle: "Звук и баннер при приближении к камере.",
+                    state: notificationsState,
+                    action: { env.notifications.requestAuthorization() }
+                )
+            }
+            .padding(.horizontal, 20)
+            Spacer(minLength: 24)
+        }
+    }
+
+    // MARK: - Компоненты
+
+    private func featurePage(icon: String, title: LocalizedStringKey,
+                             rows: [(String, LocalizedStringKey)]) -> some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 20)
+            ZStack {
+                Circle().fill(Theme.accent.opacity(0.10)).frame(width: 116, height: 116)
+                Circle().stroke(Theme.accent.opacity(0.3), lineWidth: 1.5).frame(width: 116, height: 116)
+                Image(systemName: icon)
+                    .font(.rounded(42, .bold))
+                    .foregroundStyle(Theme.accent)
+                    .shadow(color: Theme.accent.opacity(0.55), radius: 12)
+            }
+            .padding(.bottom, 22)
+
+            Text(title)
+                .font(.rounded(24, .bold))
+                .foregroundStyle(Theme.textPrimary)
+                .padding(.bottom, 22)
+
+            VStack(spacing: 14) {
+                ForEach(rows, id: \.0) { icon, text in
+                    HStack(spacing: 14) {
+                        Image(systemName: icon)
+                            .font(.rounded(16, .semibold))
+                            .foregroundStyle(Theme.accent)
+                            .frame(width: 40, height: 40)
+                            .background(Theme.accent.opacity(0.10),
+                                        in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        Text(text)
+                            .font(.rounded(14, .medium))
+                            .foregroundStyle(Theme.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            .padding(.horizontal, 28)
+            Spacer(minLength: 20)
+        }
+    }
+
+    private var pageDots: some View {
+        HStack(spacing: 7) {
+            ForEach(0...lastPage, id: \.self) { index in
+                Capsule()
+                    .fill(index == page ? Theme.accent : Theme.stroke)
+                    .frame(width: index == page ? 22 : 7, height: 7)
+            }
+        }
+        .animation(.spring(duration: 0.3), value: page)
     }
 
     // MARK: - Состояния разрешений
@@ -81,8 +208,6 @@ struct OnboardingView: View {
     private var notificationsState: PermState {
         env.notifications.authorizationStatus == .authorized ? .granted : .pending
     }
-
-    // MARK: - Компоненты
 
     private func permissionRow(icon: String, title: LocalizedStringKey, subtitle: LocalizedStringKey,
                                state: PermState, action: @escaping () -> Void) -> some View {

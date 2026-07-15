@@ -28,6 +28,16 @@ struct MapScreen: View {
         ZStack {
             mapLayer.ignoresSafeArea()
 
+            // Затемнение под статус-баром: часы и батарея не тонут в карте.
+            VStack(spacing: 0) {
+                LinearGradient(colors: [Theme.background.opacity(0.7), .clear],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: 110)
+                Spacer()
+            }
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+
             if vm.isAddingCamera { crosshair }
 
             topLayer
@@ -171,8 +181,14 @@ struct MapScreen: View {
 
             ForEach(vm.visibleCameras) { camera in
                 Annotation(camera.displayTitle, coordinate: camera.coordinate, anchor: .center) {
-                    CameraAnnotationView(camera: camera, selected: vm.highlightedID == camera.id)
-                        .onTapGesture { vm.select(camera) }
+                    // Средний зум: точки; полный пин — у выбранной и ближайшей по курсу.
+                    CameraAnnotationView(
+                        camera: camera,
+                        selected: vm.highlightedID == camera.id,
+                        compact: vm.isDotZoom
+                            && camera.id != env.location.nearestCamera?.id
+                    )
+                    .onTapGesture { vm.select(camera) }
                 }
                 .annotationTitles(.hidden)
             }
@@ -264,10 +280,7 @@ struct MapScreen: View {
                 recenter()
                 revealControls()
             }
-            VStack(spacing: 1) {
-                CircleControl(systemName: "plus") { vm.zoom(0.5); revealControls() }
-                CircleControl(systemName: "minus") { vm.zoom(2.0); revealControls() }
-            }
+            // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
     }
 
@@ -373,29 +386,28 @@ struct MapScreen: View {
         }
     }
 
+    /// Компактная капсула: при автостарте кнопка почти не нужна — не даём ей кричать.
     private var tripButton: some View {
         Button {
             toggleTrip()
         } label: {
-            HStack(spacing: 10) {
-                Image(systemName: env.location.isTripActive ? "stop.fill" : "play.fill")
-                Text(env.location.isTripActive ? "Завершить поездку" : "Начать поездку")
+            HStack(spacing: 8) {
+                Image(systemName: "play.fill")
+                Text("Начать поездку")
             }
-            .font(.rounded(17, .bold))
-            .foregroundStyle(env.location.isTripActive ? .white : Theme.background)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(env.location.isTripActive ? Theme.danger : Theme.success,
-                        in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-            .shadow(color: (env.location.isTripActive ? Theme.danger : Theme.success).opacity(0.45),
-                    radius: 12, y: 4)
+            .font(.rounded(15, .bold))
+            .foregroundStyle(Theme.background)
+            .padding(.horizontal, 26)
+            .padding(.vertical, 12)
+            .background(Theme.success.gradient, in: Capsule())
+            .shadow(color: Theme.success.opacity(0.4), radius: 10, y: 3)
         }
     }
 
     private var actionBar: some View {
         HStack(spacing: 6) {
             actionButton("Поиск", "magnifyingglass") { vm.showSearch = true }
-            actionButton("Добавить", "plus.circle.fill", tint: Theme.accent) {
+            actionButton("Добавить", "plus.circle.fill") {
                 withAnimation { vm.isAddingCamera = true }
             }
             actionButton("Рядом", "list.bullet") { vm.showNearbySheet = true }

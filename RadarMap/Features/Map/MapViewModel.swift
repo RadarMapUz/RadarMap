@@ -69,8 +69,13 @@ final class MapViewModel {
     /// Вызывается при остановке движения карты. Буфер + проверка покрытия дают «умный» плавный зум:
     /// мелкие сдвиги/приближения внутри уже загруженной области не вызывают пересчёт.
     /// На широких зумах вместо отдельных точек — кластеры с количеством.
+    /// Средний зум: камеры рисуются точками, полный пин — у ближайшей/выбранной.
+    private(set) var isDotZoom = false
+
     func updateVisible(for region: MKCoordinateRegion) {
         currentRegion = region
+        let dotZoom = region.span.latitudeDelta > AppConfig.dotModeSpanDegrees
+        if dotZoom != isDotZoom { isDotZoom = dotZoom }
         guard let repository else { return }
 
         if region.span.latitudeDelta > AppConfig.maxVisibleSpanDegrees {

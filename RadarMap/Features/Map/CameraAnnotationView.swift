@@ -10,8 +10,23 @@ import SwiftUI
 struct CameraAnnotationView: View {
     let camera: Camera
     var selected: Bool = false
+    /// Средний зум: маленькая точка вместо полного пина — экран не забит кружками.
+    var compact: Bool = false
 
     var body: some View {
+        if compact && !selected {
+            Circle()
+                .fill(camera.kind.tint)
+                .frame(width: 12, height: 12)
+                .overlay(Circle().stroke(.white.opacity(0.75), lineWidth: 1))
+                .frame(width: 30, height: 30)       // тап-мишень больше самой точки
+                .contentShape(Circle())
+        } else {
+            fullPin
+        }
+    }
+
+    private var fullPin: some View {
         ZStack {
             if selected {
                 Circle()

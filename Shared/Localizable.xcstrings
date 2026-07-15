@@ -2864,6 +2864,54 @@
           }
         }
       }
+    },
+    "Поездка RadarMap": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездка RadarMap"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap safari"
+          }
+        }
+      }
+    },
+    "Трек не записан — появится у новых поездок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Трек не записан — появится у новых поездок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trek yozilmagan — yangi safarlarda paydo bo‘ladi"
+          }
+        }
+      }
+    },
+    "Карта камер и навигатор Узбекистана": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта камер и навигатор Узбекистана"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘zbekiston kameralar xaritasi va navigatori"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

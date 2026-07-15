@@ -50,7 +50,7 @@ final class LocationService: NSObject {
     @ObservationIgnored private var alertedCameraIDs: Set<Int> = []   // фон, дебаунс уведомлений
     @ObservationIgnored private var announcedLevel: [Int: Int] = [:]  // передний план, эскалация
     /// Отслеживание прохождения: минимальная дистанция и скорость в ней, по каждой камере в зоне.
-    @ObservationIgnored private var passTracking: [Int: (camera: Camera, minDist: Double, speedAtMin: Double)] = [:]
+    @ObservationIgnored private var passTracking: [Int: (camera: Camera, minDist: Double, speedAtMin: Double, limitAtMin: Int?)] = [:]
     @ObservationIgnored private var isForeground = false
 
     var isAuthorized: Bool {
@@ -130,7 +130,9 @@ final class LocationService: NSObject {
         isTripActive = false
         announcedLevel.removeAll()
         // Зафиксировать камеры, мимо которых ещё «проезжали» в момент остановки.
-        for (_, t) in passTracking { trip.registerPass(camera: t.camera, speedKmh: t.speedAtMin) }
+        for (_, t) in passTracking {
+            trip.registerPass(camera: t.camera, speedKmh: t.speedAtMin, limitKmh: t.limitAtMin)
+        }
         passTracking.removeAll()
         trip.finish()
         // Припарковались у цели — маршрут выполнен, линия не должна висеть на карте.
@@ -324,7 +326,7 @@ final class LocationService: NSObject {
         // Вошли в радиус камеры впереди — начинаем следить.
         if let camera = nearestCamera, let distance = distanceToNearest,
            distance <= radius, passTracking[camera.id] == nil {
-            passTracking[camera.id] = (camera, distance, speedKmh)
+            passTracking[camera.id] = (camera, distance, speedKmh, speedLimits?.currentLimit)
         }
         // Точку сближения обновляем для ВСЕХ отслеживаемых: после проезда камера уходит
         // из «ближайших впереди» (направленный фильтр), но траверз ещё не пройден.
@@ -335,10 +337,12 @@ final class LocationService: NSObject {
             if distance < tracked.minDist {
                 tracked.minDist = distance
                 tracked.speedAtMin = speedKmh
+                tracked.limitAtMin = speedLimits?.currentLimit ?? tracked.limitAtMin
                 passTracking[id] = tracked
             } else if distance > radius + 120 {
-                // Отъехали — «пройдено» со скоростью в момент проезда.
-                trip.registerPass(camera: tracked.camera, speedKmh: tracked.speedAtMin)
+                // Отъехали — «пройдено» со скоростью и лимитом дороги в момент проезда.
+                trip.registerPass(camera: tracked.camera, speedKmh: tracked.speedAtMin,
+                                  limitKmh: tracked.limitAtMin)
                 passTracking.removeValue(forKey: id)
             }
         }

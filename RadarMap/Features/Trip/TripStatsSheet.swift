@@ -13,6 +13,7 @@ struct TripStatsSheet: View {
     @Environment(\.dismiss) private var dismiss
     /// Повторить поездку: маршрут к точке финиша записи из истории.
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
+    @State private var selectedRecord: TripRecord?
 
     var body: some View {
         let trip = env.trip
@@ -54,6 +55,14 @@ struct TripStatsSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .sheet(item: $selectedRecord) { record in
+            TripDetailSheet(record: record, onRoute: onRoute.map { route in
+                { coord, name in
+                    dismiss()
+                    route(coord, name)
+                }
+            })
+        }
     }
 
     // MARK: - Заголовок статуса
@@ -121,37 +130,8 @@ struct TripStatsSheet: View {
                 .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             ForEach(trip.passed.reversed()) { pass in
-                HStack(spacing: 12) {
-                    Image(systemName: pass.kind.symbolName)
-                        .font(.rounded(13, .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(pass.kind.tint.gradient, in: Circle())
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(pass.location.isEmpty ? pass.kind.displayName : pass.location)
-                            .font(.rounded(14, .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(1)
-                        Text(pass.date.formatted(date: .omitted, time: .shortened))
-                            .font(.rounded(11))
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                    Spacer(minLength: 8)
-                    Text("\(Int(pass.speedKmh)) км/ч")
-                        .font(.rounded(15, .bold))
-                        .foregroundStyle(speedColor(pass.speedKmh))
-                }
-                .padding(12)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+                PassRow(pass: pass)
             }
-        }
-    }
-
-    private func speedColor(_ kmh: Double) -> Color {
-        switch kmh {
-        case ..<90:  return Theme.success
-        case 90..<110: return Theme.radar
-        default:     return Theme.danger
         }
     }
 
@@ -181,35 +161,45 @@ struct TripStatsSheet: View {
             }
 
             ForEach(trip.history) { record in
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(record.startedAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.rounded(14, .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                        Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration)) · \(Int(record.averageSpeedKmh)) км/ч сред.")
-                            .font(.rounded(12))
-                            .foregroundStyle(Theme.textSecondary)
-                    }
-                    Spacer(minLength: 8)
-                    // Повторить: маршрут к финишу той поездки.
-                    if let onRoute, let end = record.endCoordinate {
-                        Button {
-                            onRoute(end, String(localized: "Как в прошлый раз"))
-                            dismiss()
-                        } label: {
-                            Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
-                                .font(.rounded(24))
-                                .foregroundStyle(Theme.accent)
+                Button {
+                    selectedRecord = record   // тап — деталка: карта трека, проезды, шеринг
+                } label: {
+                    HStack(spacing: 12) {
+                        // Мини-силуэт трека — поездку узнаёшь с одного взгляда.
+                        if record.trackPoints.count >= 2 {
+                            TrackCanvas(points: record.trackPoints, lineWidth: 2)
+                                .frame(width: 44, height: 44)
+                                .background(Theme.background.opacity(0.6),
+                                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        } else {
+                            Image(systemName: "car.side")
+                                .font(.rounded(15))
+                                .foregroundStyle(Theme.textTertiary)
+                                .frame(width: 44, height: 44)
+                                .background(Theme.background.opacity(0.6),
+                                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         }
-                        .buttonStyle(.plain)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(record.startedAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.rounded(14, .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                            Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration)) · \(Int(record.averageSpeedKmh)) км/ч сред.")
+                                .font(.rounded(12))
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                        Spacer(minLength: 8)
+                        VStack(spacing: 2) {
+                            Text("\(record.camerasPassed)").font(.rounded(18, .bold)).foregroundStyle(Theme.accent)
+                            Image(systemName: "camera.fill").font(.system(size: 9)).foregroundStyle(Theme.textTertiary)
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.rounded(12, .semibold))
+                            .foregroundStyle(Theme.textTertiary)
                     }
-                    VStack(spacing: 2) {
-                        Text("\(record.camerasPassed)").font(.rounded(18, .bold)).foregroundStyle(Theme.accent)
-                        Image(systemName: "camera.fill").font(.system(size: 9)).foregroundStyle(Theme.textTertiary)
-                    }
+                    .padding(14)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
                 }
-                .padding(14)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+                .buttonStyle(.plain)
                 .contextMenu {
                     if let onRoute, let end = record.endCoordinate {
                         Button {

@@ -18,6 +18,13 @@
 			remoteGlobalIDString = 4B1546C1300649860097B8CA;
 			remoteInfo = RadarMapWidgets;
 		};
+		4B1546D9300649860097B8CA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4B15468D300649860097B8CA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4B154694300649860097B8CA;
+			remoteInfo = RadarMap;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -37,6 +44,7 @@
 /* Begin PBXFileReference section */
 		4B154695300649860097B8CA /* RadarMap.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RadarMap.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4B1546C0300649860097B8CA /* RadarMapWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RadarMapWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		4B1546D0300649860097B8CA /* RadarMapTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RadarMapTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -78,6 +86,11 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
+		4B1546D4300649860097B8CA /* RadarMapTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = RadarMapTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -95,6 +108,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4B1546D3300649860097B8CA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -103,6 +123,7 @@
 			children = (
 				4B154697300649860097B8CA /* RadarMap */,
 				4B1546C5300649860097B8CA /* RadarMapWidgets */,
+				4B1546D4300649860097B8CA /* RadarMapTests */,
 				4B1546C6300649860097B8CA /* Shared */,
 				4B154696300649860097B8CA /* Products */,
 			);
@@ -113,6 +134,7 @@
 			children = (
 				4B154695300649860097B8CA /* RadarMap.app */,
 				4B1546C0300649860097B8CA /* RadarMapWidgets.appex */,
+				4B1546D0300649860097B8CA /* RadarMapTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -168,6 +190,28 @@
 			productReference = 4B1546C0300649860097B8CA /* RadarMapWidgets.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		4B1546D1300649860097B8CA /* RadarMapTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4B1546D5300649860097B8CA /* Build configuration list for PBXNativeTarget "RadarMapTests" */;
+			buildPhases = (
+				4B1546D2300649860097B8CA /* Sources */,
+				4B1546D3300649860097B8CA /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4B1546D8300649860097B8CA /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				4B1546D4300649860097B8CA /* RadarMapTests */,
+			);
+			name = RadarMapTests;
+			packageProductDependencies = (
+			);
+			productName = RadarMapTests;
+			productReference = 4B1546D0300649860097B8CA /* RadarMapTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -183,6 +227,10 @@
 					};
 					4B1546C1300649860097B8CA = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					4B1546D1300649860097B8CA = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 4B154694300649860097B8CA;
 					};
 				};
 			};
@@ -204,6 +252,7 @@
 			targets = (
 				4B154694300649860097B8CA /* RadarMap */,
 				4B1546C1300649860097B8CA /* RadarMapWidgets */,
+				4B1546D1300649860097B8CA /* RadarMapTests */,
 			);
 		};
 /* End PBXProject section */
@@ -240,6 +289,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4B1546D2300649860097B8CA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -247,6 +303,11 @@
 			isa = PBXTargetDependency;
 			target = 4B1546C1300649860097B8CA /* RadarMapWidgets */;
 			targetProxy = 4B1546CE300649860097B8CA /* PBXContainerItemProxy */;
+		};
+		4B1546D8300649860097B8CA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4B154694300649860097B8CA /* RadarMap */;
+			targetProxy = 4B1546D9300649860097B8CA /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -492,6 +553,48 @@
 			};
 			name = Release;
 		};
+		4B1546D6300649860097B8CA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = AT27NPXG3V;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = uz.rasul.radarmap.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RadarMap.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/RadarMap";
+			};
+			name = Debug;
+		};
+		4B1546D7300649860097B8CA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = AT27NPXG3V;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = uz.rasul.radarmap.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RadarMap.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/RadarMap";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -518,6 +621,15 @@
 			buildConfigurations = (
 				4B1546C9300649860097B8CA /* Debug */,
 				4B1546CA300649860097B8CA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4B1546D5300649860097B8CA /* Build configuration list for PBXNativeTarget "RadarMapTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4B1546D6300649860097B8CA /* Debug */,
+				4B1546D7300649860097B8CA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

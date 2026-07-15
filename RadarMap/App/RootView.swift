@@ -32,6 +32,7 @@ struct RootView: View {
             // Тихая проверка обновлений базы (не чаще раза в сутки), не блокирует UI.
             Task { await env.sync.autoCheckIfNeeded() }
             env.speedLimits.start()   // база лимитов: локально сразу, сервер раз в неделю
+            env.metrics.start()       // MetricKit: суточные отчёты о батарее/крашах
             guard hasCompletedOnboarding else { return }
             env.location.bootstrap()
             env.location.setForeground(true)

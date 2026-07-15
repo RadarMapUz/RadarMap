@@ -23,6 +23,7 @@ final class AppEnvironment {
     let route = RouteService()
     let speedLimits: SpeedLimitService
     let liveActivity = LiveActivityService()
+    let metrics = MetricsService()
 
     init() {
         let settings = AppSettings()

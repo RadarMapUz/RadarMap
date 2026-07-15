@@ -127,7 +127,7 @@ final class SpeedLimitService {
 // MARK: - Индекс сегментов
 
 /// Иммутабельный индекс: строится в фоне, читается с главного потока без блокировок.
-private struct LimitIndex: Sendable {
+struct LimitIndex: Sendable {
     struct Segment: Sendable {
         let limit: Int
         let pts: [MKMapPoint]

@@ -311,7 +311,7 @@ final class RouteService {
         }
     }
 
-    private struct OSRMResponse: Decodable {
+    struct OSRMResponse: Decodable {
         let code: String
         let routes: [Route]?
         struct Route: Decodable {
@@ -337,7 +337,7 @@ final class RouteService {
     }
 
     /// OSRM-манёвр → человеческая фраза + иконка. nil — шаг не озвучиваем (смена названия улицы и т.п.).
-    nonisolated private static func maneuverStep(_ step: OSRMResponse.Step,
+    nonisolated static func maneuverStep(_ step: OSRMResponse.Step,
                                                  at along: CLLocationDistance) -> RouteStep? {
         let m = step.maneuver
         var text: String?
@@ -427,7 +427,7 @@ final class RouteService {
 
     // MARK: - Геометрия (фоновые потоки)
 
-    nonisolated private static func camerasAlong(pts: [MKMapPoint], bbox: MKMapRect,
+    nonisolated static func camerasAlong(pts: [MKMapPoint], bbox: MKMapRect,
                                                  centerLat: CLLocationDegrees,
                                                  cameras: [Camera]) -> [RouteCamera] {
         let n = pts.count
@@ -464,7 +464,7 @@ final class RouteService {
 
     /// Проекция точки на маршрут: (пройдено от старта, отклонение от линии).
     /// `hint` — индекс сегмента с прошлого раза: обычно машина рядом, полный перебор не нужен.
-    nonisolated private static func project(_ p: MKMapPoint, onto pts: [MKMapPoint],
+    nonisolated static func project(_ p: MKMapPoint, onto pts: [MKMapPoint],
                                             hint: inout Int) -> (along: CLLocationDistance, deviation: CLLocationDistance) {
         let n = pts.count
         guard n >= 2 else { return (0, .greatestFiniteMagnitude) }
@@ -496,7 +496,7 @@ final class RouteService {
     }
 
     /// Начальный кусок маршрута длиной `upTo` метров (пройденная часть).
-    nonisolated private static func traveledPrefix(points: [MKMapPoint],
+    nonisolated static func traveledPrefix(points: [MKMapPoint],
                                                    upTo along: CLLocationDistance) -> MKPolyline? {
         guard along > 60, points.count >= 2 else { return nil }
         var result: [MKMapPoint] = [points[0]]

@@ -1,5 +1,5 @@
 //
-//  MapViewModel.swift
+//  MapState.swift
 //  RadarMap
 //
 //  Логика карты: умная подгрузка аннотаций (буфер), выбор, зум, центрирование.
@@ -19,7 +19,7 @@ struct CameraCluster: Identifiable {
 
 @MainActor
 @Observable
-final class MapViewModel {
+final class MapState {
     var visibleCameras: [Camera] = []
     var clusters: [CameraCluster] = []
     var selectedCamera: Camera?          // открытый попап детали

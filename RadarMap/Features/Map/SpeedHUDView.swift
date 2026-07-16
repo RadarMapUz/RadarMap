@@ -41,21 +41,13 @@ struct SpeedHUDView: View {
     /// Круглый знак «ограничение скорости»; при превышении пульсирует красным.
     private func limitSign(_ limit: Int) -> some View {
         let over = env.speedLimits.isOverspeeding
-        return ZStack {
-            Circle().fill(.white)
-            Circle().strokeBorder(Color(red: 0.85, green: 0.05, blue: 0.1), lineWidth: 4.5)
-            Text("\(limit)")
-                .font(.system(size: limit >= 100 ? 13 : 16, weight: .heavy, design: .rounded))
-                .foregroundStyle(.black)
-                .contentTransition(.numericText())
-        }
-        .frame(width: 42, height: 42)
-        .shadow(color: over ? Theme.danger.opacity(0.9) : .black.opacity(0.3),
-                radius: over ? 10 : 3)
-        .scaleEffect(over ? 1.08 : 1.0)
-        .animation(over ? .easeInOut(duration: 0.55).repeatForever(autoreverses: true)
-                        : .easeOut(duration: 0.25),
-                   value: over)
+        return SpeedLimitSign(limit: limit)
+            .shadow(color: over ? Theme.danger.opacity(0.9) : .black.opacity(0.3),
+                    radius: over ? 10 : 3)
+            .scaleEffect(over ? 1.08 : 1.0)
+            .animation(over ? .easeInOut(duration: 0.55).repeatForever(autoreverses: true)
+                            : .easeOut(duration: 0.25),
+                       value: over)
     }
 
     private func speedBlock(_ speed: Double) -> some View {

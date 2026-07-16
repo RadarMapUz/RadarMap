@@ -12,7 +12,7 @@ import UIKit
 
 struct MapScreen: View {
     @Environment(AppEnvironment.self) private var env
-    @State private var vm = MapViewModel()
+    @State private var map = MapState()
     @State private var dismissedApproachID: Int?
     @State private var headingUp = false
     @State private var showRouteCameras = false
@@ -23,7 +23,7 @@ struct MapScreen: View {
     @State private var legendCollapseTask: Task<Void, Never>?
 
     var body: some View {
-        @Bindable var vm = vm
+        @Bindable var map = map
 
         ZStack {
             mapLayer.ignoresSafeArea()
@@ -38,52 +38,52 @@ struct MapScreen: View {
             .ignoresSafeArea(edges: .top)
             .allowsHitTesting(false)
 
-            if vm.isAddingCamera { crosshair }
+            if map.isAddingCamera { crosshair }
 
             topLayer
             bottomLayer
         }
         .task {
-            vm.configure(env.cameras)
-            vm.filter = env.settings.filter
+            map.configure(env.cameras)
+            map.filter = env.settings.filter
             // Если карта уже отдала регион до конфигурации (статичный старт без геопозиции) —
             // пересчитываем принудительно, иначе аннотации не появятся до первого движения карты.
-            vm.invalidateVisible()
+            map.invalidateVisible()
             if let coordinate = env.location.currentCoordinate {
-                vm.snapToUserOnce(coordinate)   // геопозиция уже известна — сразу к своим камерам
+                map.snapToUserOnce(coordinate)   // геопозиция уже известна — сразу к своим камерам
             }
             #if DEBUG
             openScreenFromLaunchArguments()
             #endif
         }
         .onChange(of: env.settings.filter) { _, newValue in
-            vm.filter = newValue
-            vm.invalidateVisible()
+            map.filter = newValue
+            map.invalidateVisible()
         }
         .onChange(of: env.cameras.revision) { _, _ in
             // Любое изменение данных (загрузка базы, свои камеры, скрытие) —
             // одна точка обновления карты и region-мониторинга.
-            vm.invalidateVisible()
+            map.invalidateVisible()
             env.location.refreshMonitoring()
         }
-        .sheet(item: $vm.selectedCamera) { camera in
+        .sheet(item: $map.selectedCamera) { camera in
             CameraDetailSheet(camera: camera,
                               onRoute: env.location.currentCoordinate == nil ? nil : {
                                   buildRoute(to: camera.coordinate, name: camera.displayTitle)
                               })
         }
-        .sheet(isPresented: $vm.showNearbySheet) {
-            NearbyCamerasSheet(onSelect: { vm.focus(on: $0) })
+        .sheet(isPresented: $map.showNearbySheet) {
+            NearbyCamerasSheet(onSelect: { map.focus(on: $0) })
         }
-        .sheet(isPresented: $vm.showSearch) {
-            SearchView(onSelect: { vm.move(to: $0) },
+        .sheet(isPresented: $map.showSearch) {
+            SearchView(onSelect: { map.move(to: $0) },
                        onRoute: { coord, name in buildRoute(to: coord, name: name) })
         }
         .sheet(isPresented: $showRouteCameras) {
-            RouteCamerasSheet(onSelect: { vm.focus(on: $0) })
+            RouteCamerasSheet(onSelect: { map.focus(on: $0) })
         }
-        .sheet(isPresented: $vm.showSettings) { SettingsView() }
-        .sheet(isPresented: $vm.showStats) {
+        .sheet(isPresented: $map.showSettings) { SettingsView() }
+        .sheet(isPresented: $map.showStats) {
             TripStatsSheet(onRoute: env.location.currentCoordinate == nil ? nil : { coord, name in
                 buildRoute(to: coord, name: name)
             })
@@ -106,10 +106,10 @@ struct MapScreen: View {
             // Прогресс маршрута (прибытие/манёвры/камеры) тикает в LocationService —
             // здесь только следование карты за курсом.
             if headingUp {
-                vm.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
+                map.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
             }
             if let coordinate = env.location.currentCoordinate {
-                vm.snapToUserOnce(coordinate)   // первый фикс после запуска → окрестности
+                map.snapToUserOnce(coordinate)   // первый фикс после запуска → окрестности
             }
         }
         .animation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)
@@ -141,7 +141,7 @@ struct MapScreen: View {
     // MARK: - Карта
 
     private var mapLayer: some View {
-        Map(position: $vm.position) {
+        Map(position: $map.position) {
             UserAnnotation()
 
             // Маршрут: сперва тусклые альтернативы, поверх — выбранный вариант
@@ -182,30 +182,30 @@ struct MapScreen: View {
                 .annotationTitles(.hidden)
             }
 
-            ForEach(vm.visibleCameras) { camera in
+            ForEach(map.visibleCameras) { camera in
                 Annotation(camera.displayTitle, coordinate: camera.coordinate, anchor: .center) {
                     // Средний зум: точки; полный пин — у выбранной и ближайшей по курсу.
                     CameraAnnotationView(
                         camera: camera,
-                        selected: vm.highlightedID == camera.id,
-                        compact: vm.isDotZoom
+                        selected: map.highlightedID == camera.id,
+                        compact: map.isDotZoom
                             && camera.id != env.location.nearestCamera?.id
                     )
-                    .onTapGesture { vm.select(camera) }
+                    .onTapGesture { map.select(camera) }
                 }
                 .annotationTitles(.hidden)
             }
-            ForEach(vm.clusters) { cluster in
+            ForEach(map.clusters) { cluster in
                 Annotation("\(cluster.count)", coordinate: cluster.coordinate, anchor: .center) {
                     ClusterAnnotationView(count: cluster.count)
-                        .onTapGesture { vm.zoomInto(cluster) }
+                        .onTapGesture { map.zoomInto(cluster) }
                 }
                 .annotationTitles(.hidden)
             }
         }
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll, showsTraffic: false))
         .onMapCameraChange(frequency: .onEnd) { context in
-            vm.updateVisible(for: context.region)
+            map.updateVisible(for: context.region)
         }
         // Любое касание карты будит спрятанные кнопки (не мешая тапам по маркерам).
         .simultaneousGesture(TapGesture().onEnded { revealControls() })
@@ -251,7 +251,7 @@ struct MapScreen: View {
                 ManeuverBanner(step: step, distance: env.route.nextStepDistance)
             }
             // Кнопки навигации — сразу под HUD справа; в поездке сами прячутся.
-            if !vm.isAddingCamera && !controlsHidden {
+            if !map.isAddingCamera && !controlsHidden {
                 HStack {
                     Spacer()
                     controlColumn
@@ -275,7 +275,7 @@ struct MapScreen: View {
                           tint: headingUp ? Theme.accent : Theme.textPrimary) {
                 headingUp.toggle()
                 if headingUp {
-                    vm.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
+                    map.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
                 }
                 revealControls()
             }
@@ -292,9 +292,9 @@ struct MapScreen: View {
     private var bottomLayer: some View {
         VStack(spacing: 10) {
             Spacer()
-            if vm.isAddingCamera {
+            if map.isAddingCamera {
                 AddCameraBar(
-                    onCancel: { vm.isAddingCamera = false },
+                    onCancel: { map.isAddingCamera = false },
                     onAdd: { kind, name in addCamera(kind: kind, name: name) }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -355,7 +355,7 @@ struct MapScreen: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .animation(.spring(duration: 0.3), value: vm.isAddingCamera)
+        .animation(.spring(duration: 0.3), value: map.isAddingCamera)
         .animation(.easeInOut(duration: 0.3), value: controlsHidden)
     }
 
@@ -384,9 +384,9 @@ struct MapScreen: View {
                 headingUp = false
                 let padded = rect.insetBy(dx: -rect.width * 0.18, dy: -rect.height * 0.18)
                 withAnimation(.easeInOut(duration: 0.5)) {
-                    vm.position = .rect(padded)
+                    map.position = .rect(padded)
                 }
-                vm.updateVisible(for: MKCoordinateRegion(padded))
+                map.updateVisible(for: MKCoordinateRegion(padded))
             }
         }
     }
@@ -411,13 +411,13 @@ struct MapScreen: View {
 
     private var actionBar: some View {
         HStack(spacing: 6) {
-            actionButton("Поиск", "magnifyingglass") { vm.showSearch = true }
+            actionButton("Поиск", "magnifyingglass") { map.showSearch = true }
             actionButton("Добавить", "plus.circle.fill") {
-                withAnimation { vm.isAddingCamera = true }
+                withAnimation { map.isAddingCamera = true }
             }
-            actionButton("Рядом", "list.bullet") { vm.showNearbySheet = true }
-            actionButton("Итоги", "chart.bar.fill") { vm.showStats = true }
-            actionButton("Ещё", "gearshape.fill") { vm.showSettings = true }
+            actionButton("Рядом", "list.bullet") { map.showNearbySheet = true }
+            actionButton("Итоги", "chart.bar.fill") { map.showStats = true }
+            actionButton("Ещё", "gearshape.fill") { map.showSettings = true }
         }
         .padding(8)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
@@ -505,8 +505,8 @@ struct MapScreen: View {
     // MARK: - Действия
 
     private func addCamera(kind: AddKind, name: String) {
-        guard let center = vm.mapCenter else {
-            withAnimation { vm.isAddingCamera = false }
+        guard let center = map.mapCenter else {
+            withAnimation { map.isAddingCamera = false }
             return
         }
         switch kind {
@@ -521,19 +521,19 @@ struct MapScreen: View {
                     .notificationOccurred(result == .failed ? .error : .success)
             }
         }
-        withAnimation { vm.isAddingCamera = false }
+        withAnimation { map.isAddingCamera = false }
     }
 
     private func recenter() {
         if headingUp {
-            vm.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
+            map.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
         } else {
             withAnimation(.easeInOut(duration: 0.35)) {
-                vm.position = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
+                map.position = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
             }
             // Целевой регион известен только когда есть геопозиция — подгружаем окрестности сами.
             if let coordinate = env.location.currentCoordinate {
-                vm.refreshVisible(around: coordinate, widthMeters: 3000)
+                map.refreshVisible(around: coordinate, widthMeters: 3000)
             }
         }
     }
@@ -570,14 +570,14 @@ struct MapScreen: View {
     /// -showCameraDetail` открывает нужный экран без тапов. В релизную сборку не попадает.
     private func openScreenFromLaunchArguments() {
         let args = ProcessInfo.processInfo.arguments
-        if args.contains("-showStats") { vm.showStats = true }
-        if args.contains("-showSettings") { vm.showSettings = true }
+        if args.contains("-showStats") { map.showStats = true }
+        if args.contains("-showSettings") { map.showSettings = true }
         if args.contains("-showCameraDetail") {
             Task {
                 await Task.pause(seconds: 1.5)
                 if let coordinate = env.location.currentCoordinate,
                    let camera = env.cameras.nearest(to: coordinate, limit: 1).first {
-                    vm.select(camera)
+                    map.select(camera)
                 }
             }
         }

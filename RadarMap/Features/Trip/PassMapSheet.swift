@@ -113,15 +113,7 @@ struct PassMapSheet: View {
 
             HStack(spacing: 14) {
                 if let limit = pass.limitKmh {
-                    ZStack {
-                        Circle().fill(.white)
-                        Circle().strokeBorder(Color(red: 0.85, green: 0.05, blue: 0.1), lineWidth: 4)
-                        Text("\(limit)")
-                            .font(.system(size: limit >= 100 ? 13 : 16,
-                                          weight: .heavy, design: .rounded))
-                            .foregroundStyle(.black)
-                    }
-                    .frame(width: 44, height: 44)
+                    SpeedLimitSign(limit: limit, diameter: 44)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text("ваша скорость")

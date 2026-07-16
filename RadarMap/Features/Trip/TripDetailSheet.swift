@@ -57,14 +57,7 @@ struct PassRow: View {
             Spacer(minLength: 8)
             // Мини-знак лимита — сразу видно, честно проехал или нет.
             if let limit = pass.limitKmh {
-                ZStack {
-                    Circle().fill(.white)
-                    Circle().strokeBorder(Color(red: 0.85, green: 0.05, blue: 0.1), lineWidth: 2.5)
-                    Text("\(limit)")
-                        .font(.system(size: limit >= 100 ? 8 : 10, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.black)
-                }
-                .frame(width: 26, height: 26)
+                SpeedLimitSign(limit: limit, diameter: 26)
             }
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(Int(pass.speedKmh)) км/ч")
@@ -179,8 +172,6 @@ struct TripDetailSheet: View {
     @State private var sharePayload: ShareImagePayload?
     @State private var selectedPass: PassedCamera?
     @State private var appeared = false
-    /// Выбранная точка профиля скорости (тап/протяжка по графику).
-    @State private var selectedKm: Double?
 
     var body: some View {
         NavigationStack {
@@ -193,7 +184,7 @@ struct TripDetailSheet: View {
                         .entrance(1, appeared)
                     statsGrid
                         .entrance(2, appeared)
-                    speedChartSection
+                    SpeedProfileChart(record: record)
                         .entrance(3, appeared)
                         .id("chart")
                     if !record.passed.isEmpty {
@@ -348,195 +339,14 @@ struct TripDetailSheet: View {
     private var statsGrid: some View {
         let cols = [GridItem(.flexible()), GridItem(.flexible())]
         return LazyVGrid(columns: cols, spacing: 12) {
-            tile("\(record.camerasPassed)", "камер пройдено", "camera.metering.center.weighted", Theme.accent)
-            tile(Formatting.distance(record.distanceMeters), "пройдено пути", "point.topleft.down.to.point.bottomright.curvepath", Theme.success)
-            tile("\(Int(record.maxSpeedKmh))", "макс. км/ч", "gauge.with.dots.needle.100percent", Theme.danger)
-            tile("\(Int(record.averageSpeedKmh))", "средняя км/ч", "gauge.with.dots.needle.33percent", Theme.radar)
-        }
-    }
-
-    private func tile(_ value: String, _ label: LocalizedStringKey, _ icon: String, _ color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: icon).font(.rounded(18, .bold)).foregroundStyle(color)
-            Text(value).font(.rounded(28, .bold)).foregroundStyle(Theme.textPrimary)
-            Text(label).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-    }
-
-    // MARK: График скорости по маршруту
-
-    private struct SpeedSample: Identifiable {
-        let id: Int
-        let km: Double
-        let speedKmh: Double
-    }
-
-    private struct PassMark: Identifiable {
-        let id: UUID
-        let km: Double
-        let speedKmh: Double
-        let color: Color
-    }
-
-    /// Профиль скорости: дистанция вдоль трека → скорость (точки трека уже прорежены,
-    /// ≤400 штук — считается за долю миллисекунды, график статичный).
-    private func speedSamples() -> [SpeedSample] {
-        let points = record.trackPoints
-        guard points.count >= 2 else { return [] }
-        var samples: [SpeedSample] = [SpeedSample(id: 0, km: 0, speedKmh: points[0].speedKmh)]
-        samples.reserveCapacity(points.count)
-        var meters = 0.0
-        for i in 1..<points.count {
-            meters += GeoMath.fastDistance(points[i - 1].lat, points[i - 1].lon,
-                                           points[i].lat, points[i].lon)
-            samples.append(SpeedSample(id: i, km: meters / 1000, speedKmh: points[i].speedKmh))
-        }
-        return samples
-    }
-
-    /// Проезды камер на профиле: точка ставится у ближайшей точки трека
-    /// и лежит на самой линии (высота — скорость трека в этом месте),
-    /// а цвет — честный, по скорости в момент проезда относительно лимита.
-    private func passMarks(on samples: [SpeedSample]) -> [PassMark] {
-        let points = record.trackPoints
-        guard points.count == samples.count, !points.isEmpty else { return [] }
-        return record.passed.compactMap { pass in
-            guard let lat = pass.lat, let lon = pass.lon else { return nil }
-            var bestIndex = 0
-            var bestDistance = Double.greatestFiniteMagnitude
-            for (index, point) in points.enumerated() {
-                let d = GeoMath.fastDistance(lat, lon, point.lat, point.lon)
-                if d < bestDistance { bestDistance = d; bestIndex = index }
-            }
-            return PassMark(id: pass.id,
-                            km: samples[bestIndex].km,
-                            speedKmh: samples[bestIndex].speedKmh,
-                            color: PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh))
-        }
-    }
-
-    @ViewBuilder private var speedChartSection: some View {
-        let samples = speedSamples()
-        if samples.count >= 8 {
-            let topSpeed = samples.map(\.speedKmh).max() ?? 60
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Скорость по маршруту")
-                        .font(.rounded(14, .semibold))
-                        .foregroundStyle(Theme.textSecondary)
-                    Spacer()
-                    HStack(spacing: 4) {
-                        Image(systemName: "hand.tap.fill").font(.rounded(9))
-                        Text("коснитесь графика").font(.rounded(10))
-                    }
-                    .foregroundStyle(Theme.textTertiary)
-                }
-
-                Chart {
-                    ForEach(samples) { sample in
-                        AreaMark(x: .value("км", sample.km), y: .value("км/ч", sample.speedKmh))
-                            .interpolationMethod(.monotone)
-                            .foregroundStyle(
-                                LinearGradient(colors: [Theme.accent.opacity(0.30), .clear],
-                                               startPoint: .top, endPoint: .bottom)
-                            )
-                        LineMark(x: .value("км", sample.km), y: .value("км/ч", sample.speedKmh))
-                            .interpolationMethod(.monotone)
-                            .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                            .foregroundStyle(
-                                LinearGradient(colors: [Theme.accent, Theme.intelligent],
-                                               startPoint: .leading, endPoint: .trailing)
-                            )
-                    }
-                    ForEach(passMarks(on: samples)) { mark in
-                        PointMark(x: .value("км", mark.km), y: .value("км/ч", mark.speedKmh))
-                            .symbol {
-                                ZStack {
-                                    Circle().fill(mark.color)
-                                    Circle().strokeBorder(.white.opacity(0.9), lineWidth: 1.5)
-                                }
-                                .frame(width: 11, height: 11)
-                            }
-                    }
-                    // Линейка: тап или протяжка — скорость в этой точке маршрута.
-                    if let selectedKm, let sample = nearestSample(to: selectedKm, in: samples) {
-                        RuleMark(x: .value("км", sample.km))
-                            .foregroundStyle(Theme.textTertiary.opacity(0.55))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                            .annotation(position: .top,
-                                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                                VStack(spacing: 1) {
-                                    Text("\(Int(sample.speedKmh)) км/ч")
-                                        .font(.rounded(12, .bold).monospacedDigit())
-                                        .foregroundStyle(Theme.textPrimary)
-                                    Text(String(format: String(localized: "%.1f км"), locale: .current, sample.km))
-                                        .font(.rounded(9, .medium))
-                                        .foregroundStyle(Theme.textTertiary)
-                                }
-                                .padding(.horizontal, 8).padding(.vertical, 5)
-                                .background(Theme.background.opacity(0.92),
-                                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(Theme.stroke, lineWidth: 1))
-                            }
-                        PointMark(x: .value("км", sample.km), y: .value("км/ч", sample.speedKmh))
-                            .symbolSize(120)
-                            .foregroundStyle(Theme.accent)
-                    }
-                }
-                .chartXSelection(value: $selectedKm)
-                // Запас сверху — пузырёк линейки не упирается в край графика.
-                .chartYScale(domain: 0...max(topSpeed * 1.25, 20))
-                .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 5)) { value in
-                        AxisGridLine().foregroundStyle(Theme.stroke.opacity(0.35))
-                        AxisValueLabel {
-                            if let km = value.as(Double.self) {
-                                Text(String(format: String(localized: "%.0f км"), km))
-                            }
-                        }
-                        .foregroundStyle(Theme.textTertiary)
-                        .font(.rounded(9, .medium))
-                    }
-                }
-                .chartYAxis {
-                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { _ in
-                        AxisGridLine().foregroundStyle(Theme.stroke.opacity(0.6))
-                        AxisValueLabel()
-                            .foregroundStyle(Theme.textTertiary)
-                            .font(.rounded(10, .medium))
-                    }
-                }
-                .frame(height: 150)
-
-                // Точки — проезды камер, цвет по честности относительно лимита.
-                HStack(spacing: 12) {
-                    chartLegendDot(Theme.success, "в лимите")
-                    chartLegendDot(Theme.radar, "слегка выше")
-                    chartLegendDot(Theme.danger, "превышение")
-                    Spacer(minLength: 0)
-                }
-            }
-            .padding(16)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-        }
-    }
-
-    private func nearestSample(to km: Double, in samples: [SpeedSample]) -> SpeedSample? {
-        samples.min { abs($0.km - km) < abs($1.km - km) }
-    }
-
-    private func chartLegendDot(_ color: Color, _ text: LocalizedStringKey) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(color).frame(width: 7, height: 7)
-            Text(text)
-                .font(.rounded(11))
-                .foregroundStyle(Theme.textTertiary)
-                .lineLimit(1)
-                .fixedSize()
+            StatTile(value: "\(record.camerasPassed)", label: "камер пройдено",
+                     icon: "camera.metering.center.weighted", color: Theme.accent)
+            StatTile(value: Formatting.distance(record.distanceMeters), label: "пройдено пути",
+                     icon: "point.topleft.down.to.point.bottomright.curvepath", color: Theme.success)
+            StatTile(value: "\(Int(record.maxSpeedKmh))", label: "макс. км/ч",
+                     icon: "gauge.with.dots.needle.100percent", color: Theme.danger)
+            StatTile(value: "\(Int(record.averageSpeedKmh))", label: "средняя км/ч",
+                     icon: "gauge.with.dots.needle.33percent", color: Theme.radar)
         }
     }
 
@@ -570,73 +380,25 @@ struct TripShareCard: View {
     let record: TripRecord
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Шапка
-            HStack(spacing: 10) {
-                Image(systemName: "dot.radiowaves.left.and.right")
-                    .font(.system(size: 22, weight: .heavy))
-                    .foregroundStyle(Theme.accent)
-                Text("RadarMap")
-                    .font(.system(size: 26, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                Spacer()
-                Text(record.startedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.55))
-            }
-            .padding(.horizontal, 32)
-            .padding(.top, 32)
-
-            // Трек
+        ShareCardShell(subtitle: record.startedAt.formatted(date: .abbreviated, time: .shortened)) {
             TrackCanvas(points: record.trackPoints, passes: record.passed, lineWidth: 5)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 12)
 
-            // Метрики
             HStack(spacing: 0) {
                 if let score = record.score {
-                    cardMetric("\(Int(score))", String(localized: "рейтинг"))
-                    cardDivider
+                    ShareMetric(value: "\(Int(score))", label: String(localized: "рейтинг"))
+                    ShareMetricDivider()
                 }
-                cardMetric(Formatting.duration(record.duration), String(localized: "в пути"))
-                cardDivider
-                cardMetric(Formatting.distance(record.distanceMeters), String(localized: "путь"))
-                cardDivider
-                cardMetric("\(record.camerasPassed)", String(localized: "камер"))
-                cardDivider
-                cardMetric("\(Int(record.maxSpeedKmh))", String(localized: "макс. км/ч"))
+                ShareMetric(value: Formatting.duration(record.duration), label: String(localized: "в пути"))
+                ShareMetricDivider()
+                ShareMetric(value: Formatting.distance(record.distanceMeters), label: String(localized: "путь"))
+                ShareMetricDivider()
+                ShareMetric(value: "\(record.camerasPassed)", label: String(localized: "камер"))
+                ShareMetricDivider()
+                ShareMetric(value: "\(Int(record.maxSpeedKmh))", label: String(localized: "макс. км/ч"))
             }
-            .padding(.vertical, 20)
-            .background(.white.opacity(0.06))
-
-            Text("Карта камер и навигатор Узбекистана")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(.white.opacity(0.4))
-                .padding(.vertical, 14)
+            .shareMetricsRow()
         }
-        .frame(width: 540, height: 675)
-        .background(
-            ZStack {
-                Theme.background
-                RadialGradient(colors: [Theme.accent.opacity(0.14), .clear],
-                               center: .center, startRadius: 40, endRadius: 380)
-            }
-        )
-    }
-
-    private func cardMetric(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
-            Text(label)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundStyle(.white.opacity(0.5))
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var cardDivider: some View {
-        Rectangle().fill(.white.opacity(0.12)).frame(width: 1, height: 34)
     }
 }

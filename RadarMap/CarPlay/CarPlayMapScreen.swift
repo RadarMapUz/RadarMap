@@ -103,14 +103,7 @@ struct CarPlayMapScreen: View {
     }
 
     private func limitSign(_ limit: Int) -> some View {
-        ZStack {
-            Circle().fill(.white)
-            Circle().strokeBorder(Color(red: 0.85, green: 0.05, blue: 0.1), lineWidth: 4)
-            Text("\(limit)")
-                .font(.system(size: limit >= 100 ? 14 : 17, weight: .heavy, design: .rounded))
-                .foregroundStyle(.black)
-        }
-        .frame(width: 46, height: 46)
+        SpeedLimitSign(limit: limit, diameter: 46)
     }
 
     private func nearestCameraRow(camera: Camera, distance: CLLocationDistance) -> some View {

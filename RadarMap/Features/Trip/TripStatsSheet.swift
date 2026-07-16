@@ -55,7 +55,13 @@ struct TripStatsSheet: View {
                         .entrance(5, appeared)
 
                     if !trip.history.isEmpty {
-                        historySection(trip: trip)
+                        TripHistorySection(
+                            trip: trip,
+                            onSelect: { selectedRecord = $0 },
+                            onRepeat: onRoute.map { route in
+                                { coord, name in dismiss(); route(coord, name) }
+                            },
+                            onDelete: { record in withAnimation { trip.deleteRecord(id: record.id) } })
                             .entrance(6, appeared)
                             .id("history")
                     } else if !active {
@@ -383,28 +389,18 @@ struct TripStatsSheet: View {
         let distance = last?.distanceMeters ?? trip.distanceMeters
         let maxSpeed = last?.maxSpeedKmh ?? trip.maxSpeedKmh
         let avgSpeed = last?.averageSpeedKmh ?? trip.averageSpeedKmh
+        // Живые цифры анимируются (numericText) — метрики тикают на глазах в поездке.
         let cols = [GridItem(.flexible()), GridItem(.flexible())]
         return LazyVGrid(columns: cols, spacing: 12) {
-            tile("\(cameras)", "камер пройдено", "camera.metering.center.weighted", Theme.accent)
-            tile(Formatting.distance(distance), "пройдено пути", "point.topleft.down.to.point.bottomright.curvepath", Theme.success)
-            tile("\(Int(maxSpeed))", "макс. км/ч", "gauge.with.dots.needle.100percent", Theme.danger)
-            tile("\(Int(avgSpeed))", "средняя км/ч", "gauge.with.dots.needle.33percent", Theme.radar)
+            StatTile(value: "\(cameras)", label: "камер пройдено",
+                     icon: "camera.metering.center.weighted", color: Theme.accent, animatesValue: true)
+            StatTile(value: Formatting.distance(distance), label: "пройдено пути",
+                     icon: "point.topleft.down.to.point.bottomright.curvepath", color: Theme.success, animatesValue: true)
+            StatTile(value: "\(Int(maxSpeed))", label: "макс. км/ч",
+                     icon: "gauge.with.dots.needle.100percent", color: Theme.danger, animatesValue: true)
+            StatTile(value: "\(Int(avgSpeed))", label: "средняя км/ч",
+                     icon: "gauge.with.dots.needle.33percent", color: Theme.radar, animatesValue: true)
         }
-    }
-
-    private func tile(_ value: String, _ label: LocalizedStringKey, _ icon: String, _ color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: icon).font(.rounded(18, .bold)).foregroundStyle(color)
-            Text(value)
-                .font(.rounded(28, .bold))
-                .foregroundStyle(Theme.textPrimary)
-                .contentTransition(.numericText())
-            Text(label).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-        .animation(.snappy(duration: 0.4), value: value)
     }
 
     // MARK: - Пройденные камеры (со скоростью прохождения)
@@ -422,194 +418,6 @@ struct TripStatsSheet: View {
         }
         // Новый проезд в живой поездке въезжает сверху, а не вспыхивает.
         .animation(.spring(duration: 0.4), value: passes.count)
-    }
-
-    // MARK: - История
-
-    private func historySection(trip: TripStats) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("История поездок")
-                .font(.rounded(14, .semibold))
-                .foregroundStyle(Theme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            // Сводка за 7 дней + мини-график по дням — общая картина одним взглядом.
-            if let week = trip.weekSummary {
-                weekCard(week: week, trip: trip)
-            }
-
-            // Показываем только 7 последних — старое хранится лишь для статистики.
-            ForEach(TripHistory.dayGroups(Array(trip.history.prefix(TripHistory.visibleHistory))),
-                    id: \.day) { group in
-                Text(Formatting.dayTitle(group.day))
-                    .font(.rounded(12, .semibold))
-                    .foregroundStyle(Theme.textTertiary)
-                    .textCase(.uppercase)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 6)
-                ForEach(group.records) { record in
-                    historyRow(record, trip: trip)
-                }
-            }
-        }
-    }
-
-    private func historyRow(_ record: TripRecord, trip: TripStats) -> some View {
-        Button {
-            selectedRecord = record   // тап — деталка: карта трека, проезды, шеринг
-        } label: {
-            HStack(spacing: 12) {
-                // Мини-силуэт трека — поездку узнаёшь с одного взгляда.
-                if record.trackPoints.count >= 2 {
-                    TrackCanvas(points: record.trackPoints, lineWidth: 2)
-                        .frame(width: 44, height: 44)
-                        .background(Theme.background.opacity(0.6),
-                                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                } else {
-                    Image(systemName: "car.side")
-                        .font(.rounded(15))
-                        .foregroundStyle(Theme.textTertiary)
-                        .frame(width: 44, height: 44)
-                        .background(Theme.background.opacity(0.6),
-                                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(record.startedAt.formatted(date: .omitted, time: .shortened))
-                        .font(.rounded(14, .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration)) · \(Int(record.averageSpeedKmh)) км/ч сред.")
-                        .font(.rounded(12))
-                        .foregroundStyle(Theme.textSecondary)
-                }
-                Spacer(minLength: 8)
-                // Балл поездки — цвет по зоне, поездки сравниваешь с одного взгляда.
-                if let score = record.score {
-                    Text("\(Int(score))")
-                        .font(.rounded(13, .heavy).monospacedDigit())
-                        .foregroundStyle(scoreColor(Int(score)))
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(scoreColor(Int(score)).opacity(0.13), in: Capsule())
-                }
-                VStack(spacing: 2) {
-                    Text("\(record.camerasPassed)").font(.rounded(18, .bold)).foregroundStyle(Theme.accent)
-                    Image(systemName: "camera.fill").font(.system(size: 9)).foregroundStyle(Theme.textTertiary)
-                }
-                Image(systemName: "chevron.right")
-                    .font(.rounded(12, .semibold))
-                    .foregroundStyle(Theme.textTertiary)
-            }
-            .padding(14)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        // Лёгкое «проявление» строк при прокрутке — живо, но не мешает.
-        .scrollTransition(.interactive(timingCurve: .easeOut)) { content, phase in
-            content
-                .opacity(phase.isIdentity ? 1 : 0.4)
-                .scaleEffect(phase.isIdentity ? 1 : 0.96)
-        }
-        .contextMenu {
-            if let onRoute, let end = record.endCoordinate {
-                Button {
-                    onRoute(end, String(localized: "Как в прошлый раз"))
-                    dismiss()
-                } label: {
-                    Label("Повторить маршрут", systemImage: "arrow.triangle.turn.up.right.circle")
-                }
-            }
-            Button(role: .destructive) {
-                withAnimation { trip.deleteRecord(id: record.id) }
-            } label: {
-                Label("Удалить запись", systemImage: "trash")
-            }
-        }
-    }
-
-    // MARK: - Неделя: сводка + мини-график
-
-    @State private var chartAppeared = false
-
-    private func weekCard(week: (trips: Int, distance: CLLocationDistance, cameras: Int),
-                          trip: TripStats) -> some View {
-        let daily = TripHistory.weekDaily(trip.history)
-        let maxKm = max(daily.map(\.km).max() ?? 0, 1)
-        return VStack(spacing: 12) {
-            HStack(spacing: 0) {
-                weekMetric(String(format: String(localized: "%lld поездок"), week.trips), "car.fill")
-                weekDivider
-                weekMetric(Formatting.distance(week.distance), "point.topleft.down.to.point.bottomright.curvepath")
-                weekDivider
-                weekMetric(String(format: String(localized: "%lld камер"), week.cameras), "camera.fill")
-            }
-
-            // Километры по дням недели: цифры над столбиками, сегодняшний — ярче.
-            Chart(daily, id: \.day) { item in
-                let isToday = Calendar.current.isDateInToday(item.day)
-                BarMark(
-                    x: .value("День", item.day, unit: .day),
-                    y: .value("км", chartAppeared ? item.km : 0),
-                    width: .ratio(0.55)
-                )
-                .foregroundStyle(
-                    LinearGradient(colors: [Theme.accent, Theme.intelligent],
-                                   startPoint: .bottom, endPoint: .top)
-                )
-                .opacity(isToday ? 1 : 0.55)
-                .cornerRadius(3)
-                .annotation(position: .top, spacing: 3) {
-                    if item.km >= 0.5 {
-                        Text(item.km >= 10 ? "\(Int(item.km.rounded()))" : String(format: "%.1f", locale: .current, item.km))
-                            .font(.rounded(9, .semibold).monospacedDigit())
-                            .foregroundStyle(isToday ? Theme.textPrimary : Theme.textTertiary)
-                    }
-                }
-            }
-            // Запас сверху — подписи км над столбиками не режутся рамкой карточки.
-            .chartYScale(domain: 0...maxKm * 1.35)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .day)) { _ in
-                    // «пн, вт…»: однобуквенные дни в русском дублируются (П, В, С).
-                    AxisValueLabel(format: .dateTime.weekday(.abbreviated), centered: true)
-                        .foregroundStyle(Theme.textTertiary)
-                        .font(.rounded(9, .medium))
-                }
-            }
-            .chartYAxis(.hidden)
-            .frame(height: 74)
-            .padding(.horizontal, 12)
-            .onAppear {
-                withAnimation(.spring(duration: 0.7, bounce: 0.25).delay(0.15)) {
-                    chartAppeared = true
-                }
-            }
-        }
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity)
-        .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
-            .stroke(Theme.accent.opacity(0.25), lineWidth: 1))
-    }
-
-    private func weekMetric(_ value: String, _ icon: String) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon).font(.rounded(12, .semibold)).foregroundStyle(Theme.accent)
-            Text(value).font(.rounded(14, .bold)).foregroundStyle(Theme.textPrimary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var weekDivider: some View {
-        Rectangle().fill(Theme.accent.opacity(0.2)).frame(width: 1, height: 32)
-    }
-
-    // MARK: - Группировка и данные графика
-
-    private func scoreColor(_ score: Int) -> Color {
-        switch DrivingScore.tier(for: score) {
-        case 2: return Theme.success
-        case 1: return Theme.radar
-        default: return Theme.danger
-        }
     }
 
     // MARK: - Шеринг итогов
@@ -644,145 +452,5 @@ struct TripStatsSheet: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 24)
-    }
-}
-
-
-// MARK: - Бейдж достижения
-
-/// Полученный — залит акцентом; будущий — серый с кольцом прогресса, видно, сколько осталось.
-private struct AchievementBadge: View {
-    let badge: Achievement
-
-    var body: some View {
-        VStack(spacing: 7) {
-            ZStack {
-                if badge.earned {
-                    Circle().fill(Theme.accent.gradient)
-                        .shadow(color: Theme.accent.opacity(0.45), radius: 6)
-                } else {
-                    Circle().fill(Theme.surface)
-                    Circle()
-                        .trim(from: 0, to: badge.fraction)
-                        .stroke(Theme.accent.opacity(0.55),
-                                style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .padding(1.5)
-                }
-                Image(systemName: badge.icon)
-                    .font(.rounded(19, .semibold))
-                    .foregroundStyle(badge.earned ? Theme.background : Theme.textTertiary)
-            }
-            .frame(width: 56, height: 56)
-
-            Text(badge.title)
-                .font(.rounded(10, .medium))
-                .foregroundStyle(badge.earned ? Theme.textPrimary : Theme.textTertiary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-        }
-        .frame(width: 82)
-    }
-}
-
-// MARK: - Карточка «Мои итоги» для шеринга (рендерится в 1080×1350)
-
-private struct StatsShareCard: View {
-    let trip: TripStats
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Шапка
-            HStack(spacing: 10) {
-                Image(systemName: "dot.radiowaves.left.and.right")
-                    .font(.system(size: 22, weight: .heavy))
-                    .foregroundStyle(Theme.accent)
-                Text("RadarMap")
-                    .font(.system(size: 26, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                Spacer()
-                Text("Мои итоги")
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.55))
-            }
-            .padding(.horizontal, 32)
-            .padding(.top, 32)
-
-            Spacer()
-
-            // Рейтинг
-            if let rating = trip.rating {
-                RatingRing(rating: rating, animated: false)
-                    .frame(width: 170, height: 170)
-                Text(DrivingScore.level(for: rating))
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .padding(.top, 16)
-                if trip.lifetime.cleanStreak >= 2 {
-                    Label(String(format: String(localized: "чистая серия: %lld подряд"),
-                                 trip.lifetime.cleanStreak),
-                          systemImage: "flame.fill")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.radar)
-                        .padding(.top, 6)
-                }
-            }
-
-            // Экономия
-            if trip.lifetime.savedFinesSum > 0 {
-                VStack(spacing: 4) {
-                    Text("Сэкономлено на штрафах")
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.55))
-                    Text("≈ \(Formatting.money(trip.lifetime.savedFinesSum))")
-                        .font(.system(size: 34, weight: .heavy, design: .rounded))
-                        .foregroundStyle(Theme.success)
-                }
-                .padding(.top, 26)
-            }
-
-            Spacer()
-
-            // Метрики недели
-            HStack(spacing: 0) {
-                cardMetric(Formatting.distance(trip.weekSummary?.distance ?? 0),
-                           String(localized: "за 7 дней"))
-                cardDivider
-                cardMetric("\(trip.weekSummary?.cameras ?? 0)", String(localized: "камер"))
-                cardDivider
-                cardMetric("\(trip.lifetime.trips)", String(localized: "поездок всего"))
-            }
-            .padding(.vertical, 20)
-            .background(.white.opacity(0.06))
-
-            Text("Карта камер и навигатор Узбекистана")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(.white.opacity(0.4))
-                .padding(.vertical, 14)
-        }
-        .frame(width: 540, height: 675)
-        .background(
-            ZStack {
-                Theme.background
-                RadialGradient(colors: [Theme.accent.opacity(0.14), .clear],
-                               center: .center, startRadius: 40, endRadius: 380)
-            }
-        )
-    }
-
-    private func cardMetric(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
-            Text(label)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundStyle(.white.opacity(0.5))
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var cardDivider: some View {
-        Rectangle().fill(.white.opacity(0.12)).frame(width: 1, height: 34)
     }
 }

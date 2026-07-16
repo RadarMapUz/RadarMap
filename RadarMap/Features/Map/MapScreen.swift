@@ -581,6 +581,23 @@ struct MapScreen: View {
                 }
             }
         }
+        // Детерминированный тест навигации: строим маршрут к фиксированной точке
+        // Ташкента (просп. Амира Темура) от текущей позиции. С -driveDemo сразу
+        // стартуем поездку (как «Поехали») — для прогонки движения по маршруту.
+        if args.contains("-demoRoute") {
+            Task {
+                await Task.pause(seconds: 2)
+                buildRoute(to: CLLocationCoordinate2D(latitude: 41.3260, longitude: 69.2810),
+                           name: "Демо-маршрут")
+                if args.contains("-driveDemo") {
+                    await Task.pause(seconds: 3)
+                    if env.route.isActive {
+                        headingUp = true
+                        env.location.startTrip()
+                    }
+                }
+            }
+        }
     }
     #endif
 }

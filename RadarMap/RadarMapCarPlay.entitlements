@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Используется ТОЛЬКО для сборок под симулятор (CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]):
+	     симулятор не сверяет entitlement с профилем, и CarPlay-иконка появляется.
+	     Для устройства нужен грант Apple (заявка: developer.apple.com/contact/carplay,
+	     категория Navigation) — после гранта перенести ключ в RadarMap.entitlements. -->
+	<key>com.apple.developer.carplay-maps</key>
+	<true/>
+</dict>
+</plist>

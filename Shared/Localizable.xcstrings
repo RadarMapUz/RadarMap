@@ -1233,6 +1233,22 @@
         }
       }
     },
+    "Завершить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завершить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yakunlash"
+          }
+        }
+      }
+    },
     "Завершить поездку": {
       "localizations": {
         "ru": {

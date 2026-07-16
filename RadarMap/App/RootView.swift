@@ -12,6 +12,11 @@ struct RootView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    #if DEBUG
+    /// Скриншот-автоматизация: CarPlay-экран на телефоне (симулятор не даёт
+    /// открыть CarPlay-дисплей без ручного клика по меню).
+    @State private var carPlayPreview = ProcessInfo.processInfo.arguments.contains("-carplayPreview")
+    #endif
 
     var body: some View {
         ZStack {
@@ -28,6 +33,13 @@ struct RootView: View {
                 .transition(.opacity)
             }
         }
+        #if DEBUG
+        .fullScreenCover(isPresented: $carPlayPreview) {
+            CarPlayMapScreen(model: CarPlayMapModel())
+                .environment(env)
+                .background(Theme.background)
+        }
+        #endif
         .task {
             // Тихая проверка обновлений базы (не чаще раза в сутки), не блокирует UI.
             Task { await env.sync.autoCheckIfNeeded() }

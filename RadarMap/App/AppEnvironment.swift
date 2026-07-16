@@ -11,6 +11,10 @@ import Observation
 @MainActor
 @Observable
 final class AppEnvironment {
+    /// Единый экземпляр: телефонная сцена и CarPlay работают с одним окружением —
+    /// CarPlay может подключиться раньше, чем поднимется SwiftUI-сцена телефона.
+    static let shared = AppEnvironment()
+
     let settings: AppSettings
     let cameras: CameraStore
     let notifications: NotificationService

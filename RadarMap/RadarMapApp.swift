@@ -9,7 +9,7 @@ import SwiftUI
 
 @main
 struct RadarMapApp: App {
-    @State private var env = AppEnvironment()
+    @State private var env = AppEnvironment.shared
 
     var body: some Scene {
         WindowGroup {

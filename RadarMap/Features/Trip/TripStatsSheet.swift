@@ -23,7 +23,6 @@ struct TripStatsSheet: View {
     @State private var showRatingInfo = false
     @State private var showSavingsInfo = false
     @State private var selectedBadge: Achievement?
-    @State private var selectedPass: PassedCamera?
 
     var body: some View {
         let trip = env.trip
@@ -31,7 +30,6 @@ struct TripStatsSheet: View {
         // После перезапуска приложения живых метрик нет — показываем последнюю
         // поездку из истории, а не нули.
         let lastRecord = trip.fallbackRecord(isTripActive: active)
-        let passes = lastRecord.map(\.passed) ?? trip.passed
 
         NavigationStack {
             ScrollView {
@@ -46,13 +44,8 @@ struct TripStatsSheet: View {
                     savedCard(trip: trip)
                         .entrance(3, appeared)
 
-                    if !passes.isEmpty {
-                        passedSection(passes: passes, track: lastRecord?.trackPoints ?? [])
-                            .entrance(4, appeared)
-                    }
-
                     achievementsSection(trip: trip)
-                        .entrance(5, appeared)
+                        .entrance(4, appeared)
 
                     if !trip.history.isEmpty {
                         TripHistorySection(
@@ -62,11 +55,11 @@ struct TripStatsSheet: View {
                                 { coord, name in dismiss(); route(coord, name) }
                             },
                             onDelete: { record in withAnimation { trip.deleteRecord(id: record.id) } })
-                            .entrance(6, appeared)
+                            .entrance(5, appeared)
                             .id("history")
                     } else if !active {
                         emptyHint
-                            .entrance(5, appeared)
+                            .entrance(4, appeared)
                     }
                 }
                 .padding(20)
@@ -113,9 +106,6 @@ struct TripStatsSheet: View {
                     if args.contains("-showRatingInfo") { showRatingInfo = true }
                     if args.contains("-showSavingsInfo") { showSavingsInfo = true }
                     if args.contains("-shareStats") { share(trip: env.trip) }
-                    if args.contains("-showPassMap") {
-                        selectedPass = env.trip.history.first?.passed.first { $0.coordinate != nil }
-                    }
                 }
                 #endif
             }
@@ -137,11 +127,6 @@ struct TripStatsSheet: View {
             ActivityShareSheet(image: payload.image)
                 .presentationDetents([.medium, .large])
                 .ignoresSafeArea()
-        }
-        .sheet(item: $selectedPass) { pass in
-            PassMapSheet(pass: pass,
-                         track: (env.location.isTripActive || trip.distanceMeters > 0)
-                             ? [] : trip.history.first?.trackPoints ?? [])
         }
     }
 
@@ -401,23 +386,6 @@ struct TripStatsSheet: View {
             StatTile(value: "\(Int(avgSpeed))", label: "средняя км/ч",
                      icon: "gauge.with.dots.needle.33percent", color: Theme.radar, animatesValue: true)
         }
-    }
-
-    // MARK: - Пройденные камеры (со скоростью прохождения)
-
-    private func passedSection(passes: [PassedCamera], track: [TrackPoint]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Пройденные камеры")
-                .font(.rounded(14, .semibold))
-                .foregroundStyle(Theme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            ForEach(passes.reversed()) { pass in
-                PassRowButton(pass: pass) { selectedPass = $0 }
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
-        }
-        // Новый проезд в живой поездке въезжает сверху, а не вспыхивает.
-        .animation(.spring(duration: 0.4), value: passes.count)
     }
 
     // MARK: - Шеринг итогов

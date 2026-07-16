@@ -66,7 +66,9 @@ struct ApproachAlertView: View {
                 // Направление + скорость
                 HStack(spacing: 22) {
                     if let rel = relativeBearing {
-                        label(icon: "location.north.fill", value: directionText(rel), rotate: rel)
+                        label(icon: "location.north.fill",
+                              value: directionText(rel),
+                              rotate: CameraDirection.arrowAngle(relativeBearing: rel))
                     }
                     label(icon: "gauge.with.dots.needle.67percent",
                           value: String(format: String(localized: "%lld км/ч"), Int(speedKmh)),
@@ -109,12 +111,12 @@ struct ApproachAlertView: View {
     }
 
     private func directionText(_ rel: Double) -> String {
-        switch rel {
-        case ..<25, 335...: return String(localized: "прямо")
-        case 25..<90:       return String(localized: "справа")
-        case 90..<180:      return String(localized: "сзади справа")
-        case 180..<270:     return String(localized: "сзади слева")
-        default:            return String(localized: "слева")
+        switch CameraDirection.classify(relativeBearing: rel) {
+        case .ahead:       return String(localized: "прямо")
+        case .right:       return String(localized: "справа")
+        case .behindRight: return String(localized: "сзади справа")
+        case .behindLeft:  return String(localized: "сзади слева")
+        case .left:        return String(localized: "слева")
         }
     }
 }

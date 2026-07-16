@@ -251,6 +251,7 @@ final class LocationService: NSObject {
         locationTick &+= 1
         retileIfNeeded(around: coordinate)
         recomputeNearest(from: coordinate)
+        recomputeDirection()
 
         // Активные оповещения (звук/голос/экран) — в поездке ИЛИ пока приложение открыто.
         if isTripActive || isForeground {
@@ -294,23 +295,47 @@ final class LocationService: NSObject {
         return GeoMath.angleDifference(bearing, currentCourse) <= AppConfig.directionalMaxAngle
     }
 
-    /// Азимут ближайшей камеры относительно курса (0 = прямо по ходу, 90 = справа, 270 = слева).
-    var relativeBearingToNearest: Double? {
+    /// Сглаженный азимут камеры относительно курса (0 = прямо по ходу, растёт по часовой).
+    /// nil — стоим/курс недостоверен. Камера на активном маршруте — всегда «прямо»:
+    /// она на твоём пути по определению, боковое смещение точки в базе не путает.
+    @ObservationIgnored private var bearingSmoother = AngleSmoother()
+    private(set) var relativeBearingToNearest: Double?
+
+    /// Пересчёт направления на ближайшую камеру — вызывается на каждом GPS-тике.
+    private func recomputeDirection() {
         guard isDirectionalFilteringActive,
               let camera = nearestCamera,
-              let coordinate = currentCoordinate else { return nil }
+              let coordinate = currentCoordinate else {
+            relativeBearingToNearest = nil
+            bearingSmoother.reset()
+            return
+        }
+        if isCameraOnRoute(camera) {
+            relativeBearingToNearest = 0   // на маршруте — прямо по ходу
+            bearingSmoother.reset()
+            return
+        }
         let bearing = GeoMath.bearing(from: coordinate, to: camera.coordinate)
-        return (bearing - currentCourse + 360).truncatingRemainder(dividingBy: 360)
+        let raw = (bearing - currentCourse + 360).truncatingRemainder(dividingBy: 360)
+        relativeBearingToNearest = bearingSmoother.update(raw)
+    }
+
+    /// Ближайшая камера лежит на активном маршруте (в его коридоре).
+    private func isCameraOnRoute(_ camera: Camera) -> Bool {
+        route?.camerasOnRoute.contains { $0.camera.id == camera.id } ?? false
+    }
+
+    /// Направление на ближайшую камеру для голоса/HUD (учитывает мёртвую зону и маршрут).
+    var nearestDirection: CameraDirection? {
+        relativeBearingToNearest.map { CameraDirection.classify(relativeBearing: $0) }
     }
 
     /// «впереди» / «впереди справа» / «впереди слева» — для голосового предупреждения.
     private var directionPhrase: String {
-        guard let rel = relativeBearingToNearest else { return "впереди" }
-        switch rel {
-        case ..<25, 335...: return "впереди"
-        case 25..<90:       return "впереди справа"
-        case 270..<335:     return "впереди слева"
-        default:            return "впереди"
+        switch nearestDirection {
+        case .right, .behindRight: return "впереди справа"
+        case .left, .behindLeft:   return "впереди слева"
+        default:                   return "впереди"
         }
     }
 

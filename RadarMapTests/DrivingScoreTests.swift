@@ -246,6 +246,42 @@ final class PassSpeedTests: XCTestCase {
     }
 }
 
+// MARK: - Направление на камеру
+
+final class CameraDirectionTests: XCTestCase {
+    func testWideAheadDeadZoneSwallowsSmallOffset() {
+        // ±40° от курса — «прямо»: смещённая вбок точка камеры не читается как «сбоку».
+        XCTAssertEqual(CameraDirection.classify(relativeBearing: 0), .ahead)
+        XCTAssertEqual(CameraDirection.classify(relativeBearing: 35), .ahead)
+        XCTAssertEqual(CameraDirection.classify(relativeBearing: 325), .ahead)
+        // За зоной — уже сторона.
+        XCTAssertEqual(CameraDirection.classify(relativeBearing: 60), .right)
+        XCTAssertEqual(CameraDirection.classify(relativeBearing: 300), .left)
+    }
+
+    func testBehindClassification() {
+        XCTAssertEqual(CameraDirection.classify(relativeBearing: 160), .behindRight)
+        XCTAssertEqual(CameraDirection.classify(relativeBearing: 200), .behindLeft)
+    }
+
+    func testArrowSnapsUpWhenAhead() {
+        // «Прямо» — стрелка строго вверх (0), без дрожи от бокового смещения.
+        XCTAssertEqual(CameraDirection.arrowAngle(relativeBearing: 30), 0)
+        // «Сбоку» — реальный азимут.
+        XCTAssertEqual(CameraDirection.arrowAngle(relativeBearing: 90), 90)
+    }
+
+    func testSmootherMovesGraduallyAndWrapsShortestArc() {
+        var s = AngleSmoother(factor: 0.5)
+        XCTAssertEqual(s.update(10), 10)            // первая проба — как есть
+        XCTAssertEqual(s.update(30), 20, accuracy: 0.001)   // на полпути к 30
+        // Кратчайшая дуга через 0: от 350 к 10 — это +20°, а не −340°.
+        var w = AngleSmoother(factor: 0.5)
+        _ = w.update(350)
+        XCTAssertEqual(w.update(10), 0, accuracy: 0.001)    // середина дуги 350→10
+    }
+}
+
 // MARK: - Движок порогов оповещения
 
 final class AlertEngineTests: XCTestCase {

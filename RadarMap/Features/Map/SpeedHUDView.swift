@@ -85,13 +85,15 @@ struct SpeedHUDView: View {
                         .shadow(color: camera.kind.tint.opacity(0.6), radius: 6)
 
                     // Стрелка направления на камеру относительно курса (вверх = прямо по ходу).
+                    // Мёртвая зона: почти по курсу — строго вверх, без дрожи.
                     if let rel = env.location.relativeBearingToNearest {
+                        let angle = CameraDirection.arrowAngle(relativeBearing: rel)
                         Image(systemName: "arrowtriangle.up.fill")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(camera.kind.tint)
                             .offset(y: -27)
-                            .rotationEffect(.degrees(rel))
-                            .animation(.easeOut(duration: 0.3), value: Int(rel / 10))
+                            .rotationEffect(.degrees(angle))
+                            .animation(.easeOut(duration: 0.3), value: Int(angle / 10))
                     }
                 }
 

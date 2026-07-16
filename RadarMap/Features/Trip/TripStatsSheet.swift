@@ -19,7 +19,7 @@ struct TripStatsSheet: View {
     @State private var selectedRecord: TripRecord?
     /// Каскадное появление секций при открытии (одноразовое).
     @State private var appeared = false
-    @State private var shareImage: Image?
+    @State private var sharePayload: ShareImagePayload?
     @State private var showRatingInfo = false
     @State private var showSavingsInfo = false
     @State private var selectedBadge: Achievement?
@@ -34,6 +34,7 @@ struct TripStatsSheet: View {
 
         NavigationStack {
             ScrollView {
+                ScrollViewReader { proxy in
                 LazyVStack(spacing: 16) {
                     ratingHero(trip: trip)
                         .entrance(0, appeared)
@@ -55,12 +56,23 @@ struct TripStatsSheet: View {
                     if !trip.history.isEmpty {
                         historySection(trip: trip)
                             .entrance(6, appeared)
+                            .id("history")
                     } else if !active {
                         emptyHint
                             .entrance(5, appeared)
                     }
                 }
                 .padding(20)
+                #if DEBUG
+                .onAppear {
+                    // Скриншот-автоматизация: прокрутить к истории.
+                    guard ProcessInfo.processInfo.arguments.contains("-scrollHistory") else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        withAnimation { proxy.scrollTo("history", anchor: .top) }
+                    }
+                }
+                #endif
+                }
             }
             .background(Theme.background)
             .navigationTitle("Итоги")
@@ -75,25 +87,26 @@ struct TripStatsSheet: View {
                             }
                         } label: { Image(systemName: "ellipsis.circle") }
                         // Похвастаться итогами: рейтинг + экономия одной картинкой.
-                        if let shareImage {
-                            ShareLink(item: shareImage,
-                                      preview: SharePreview(String(localized: "Мои итоги RadarMap"),
-                                                            image: shareImage)) {
+                        if trip.rating != nil {
+                            Button { share(trip: trip) } label: {
                                 Image(systemName: "square.and.arrow.up")
                             }
                         }
                     }
                 }
             }
-            .task { renderShareCard(trip: trip) }
             .onAppear {
                 appeared = true
                 #if DEBUG
-                // Скриншот-автоматизация: сразу открыть вложенные экраны.
+                // Скриншот-автоматизация: открыть вложенные экраны (с паузой —
+                // sheet поверх ещё анимирующегося sheet молча не показывается).
                 let args = ProcessInfo.processInfo.arguments
-                if args.contains("-openFirstTrip") { selectedRecord = env.trip.history.first }
-                if args.contains("-showRatingInfo") { showRatingInfo = true }
-                if args.contains("-showSavingsInfo") { showSavingsInfo = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+                    if args.contains("-openFirstTrip") { selectedRecord = env.trip.history.first }
+                    if args.contains("-showRatingInfo") { showRatingInfo = true }
+                    if args.contains("-showSavingsInfo") { showSavingsInfo = true }
+                    if args.contains("-shareStats") { share(trip: env.trip) }
+                }
                 #endif
             }
         }
@@ -110,6 +123,11 @@ struct TripStatsSheet: View {
         .sheet(isPresented: $showRatingInfo) { RatingInfoSheet() }
         .sheet(isPresented: $showSavingsInfo) { SavingsInfoSheet() }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
+        .sheet(item: $sharePayload) { payload in
+            ActivityShareSheet(image: payload.image)
+                .presentationDetents([.medium, .large])
+                .ignoresSafeArea()
+        }
     }
 
     // MARK: - Рейтинг вождения (герой)
@@ -503,7 +521,9 @@ struct TripStatsSheet: View {
 
     private func weekCard(week: (trips: Int, distance: CLLocationDistance, cameras: Int),
                           trip: TripStats) -> some View {
-        VStack(spacing: 12) {
+        let daily = weekDaily(trip.history)
+        let maxKm = max(daily.map(\.km).max() ?? 0, 1)
+        return VStack(spacing: 12) {
             HStack(spacing: 0) {
                 weekMetric(String(format: String(localized: "%lld поездок"), week.trips), "car.fill")
                 weekDivider
@@ -513,7 +533,7 @@ struct TripStatsSheet: View {
             }
 
             // Километры по дням недели: цифры над столбиками, сегодняшний — ярче.
-            Chart(weekDaily(trip.history), id: \.day) { item in
+            Chart(daily, id: \.day) { item in
                 let isToday = Calendar.current.isDateInToday(item.day)
                 BarMark(
                     x: .value("День", item.day, unit: .day),
@@ -528,21 +548,24 @@ struct TripStatsSheet: View {
                 .cornerRadius(3)
                 .annotation(position: .top, spacing: 3) {
                     if item.km >= 0.5 {
-                        Text(item.km >= 10 ? "\(Int(item.km.rounded()))" : String(format: "%.1f", item.km))
+                        Text(item.km >= 10 ? "\(Int(item.km.rounded()))" : String(format: "%.1f", locale: .current, item.km))
                             .font(.rounded(9, .semibold).monospacedDigit())
                             .foregroundStyle(isToday ? Theme.textPrimary : Theme.textTertiary)
                     }
                 }
             }
+            // Запас сверху — подписи км над столбиками не режутся рамкой карточки.
+            .chartYScale(domain: 0...maxKm * 1.35)
             .chartXAxis {
                 AxisMarks(values: .stride(by: .day)) { _ in
-                    AxisValueLabel(format: .dateTime.weekday(.narrow), centered: true)
+                    // «пн, вт…»: однобуквенные дни в русском дублируются (П, В, С).
+                    AxisValueLabel(format: .dateTime.weekday(.abbreviated), centered: true)
                         .foregroundStyle(Theme.textTertiary)
-                        .font(.rounded(10, .medium))
+                        .font(.rounded(9, .medium))
                 }
             }
             .chartYAxis(.hidden)
-            .frame(height: 64)
+            .frame(height: 74)
             .padding(.horizontal, 12)
             .onAppear {
                 withAnimation(.spring(duration: 0.7, bounce: 0.25).delay(0.15)) {
@@ -623,13 +646,14 @@ struct TripStatsSheet: View {
 
     // MARK: - Шеринг итогов
 
-    private func renderShareCard(trip: TripStats) {
+    /// Рендерим карточку в момент тапа — данные всегда свежие, открытие не тормозим.
+    private func share(trip: TripStats) {
         guard trip.rating != nil else { return }   // хвастаться пока нечем
         let renderer = ImageRenderer(content: StatsShareCard(trip: trip))
         renderer.scale = 2
         renderer.proposedSize = ProposedViewSize(width: 540, height: 675)
         if let uiImage = renderer.uiImage {
-            shareImage = Image(uiImage: uiImage)
+            sharePayload = ShareImagePayload(image: uiImage)
         }
     }
 

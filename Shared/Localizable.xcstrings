@@ -17,6 +17,38 @@
         }
       }
     },
+    "%.0f км": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f км"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f km"
+          }
+        }
+      }
+    },
+    "%.1f км": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.1f км"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.1f km"
+          }
+        }
+      }
+    },
     "%@ · %@ · %lld км/ч сред.": {
       "localizations": {
         "ru": {
@@ -1921,22 +1953,6 @@
         }
       }
     },
-    "Мои итоги RadarMap": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Мои итоги RadarMap"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mening RadarMap yakunlarim"
-          }
-        }
-      }
-    },
     "Мои места": {
       "localizations": {
         "ru": {
@@ -2573,22 +2589,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safar"
-          }
-        }
-      }
-    },
-    "Поездка RadarMap": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Поездка RadarMap"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "RadarMap safari"
           }
         }
       }

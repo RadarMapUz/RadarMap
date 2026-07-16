@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// Тёмная «стеклянная» карточка — базовый контейнер интерфейса.
 struct GlassCard<Content: View>: View {
@@ -153,4 +154,27 @@ struct RatingRing: View {
             withAnimation(.spring(duration: 0.9, bounce: 0.15).delay(0.25)) { shown = true }
         }
     }
+}
+
+// MARK: - Шэр картинки
+
+/// ShareLink внутри вложенного sheet (Итоги → деталка) на iOS молча не
+/// презентуется — шэрим через UIActivityViewController, он работает всегда.
+struct ShareImagePayload: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
+
+struct ActivityShareSheet: UIViewControllerRepresentable {
+    let image: UIImage
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: [image],
+                                                  applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, _ in dismiss() }
+        return controller
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }

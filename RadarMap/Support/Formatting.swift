@@ -7,6 +7,13 @@ import Foundation
 import CoreLocation
 
 enum Formatting {
+    /// Заголовок дня в истории: «Сегодня» / «Вчера» / дата.
+    static func dayTitle(_ day: Date, calendar: Calendar = .current) -> String {
+        if calendar.isDateInToday(day) { return String(localized: "Сегодня") }
+        if calendar.isDateInYesterday(day) { return String(localized: "Вчера") }
+        return day.formatted(.dateTime.day().month(.wide))
+    }
+
     /// «850 м» / «1.4 км»
     static func distance(_ meters: CLLocationDistance) -> String {
         if meters < 1000 {

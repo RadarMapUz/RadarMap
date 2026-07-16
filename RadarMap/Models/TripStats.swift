@@ -11,70 +11,6 @@ import Observation
 import CoreLocation
 import os
 
-/// Факт прохождения камеры: скорость зафиксирована в точке максимального сближения.
-struct PassedCamera: Codable, Identifiable {
-    let id: UUID
-    let cameraID: Int
-    let typeRaw: String
-    let location: String
-    let speedKmh: Double
-    let date: Date
-    // Координаты камеры и лимит дороги в момент проезда (у старых записей отсутствуют).
-    var lat: Double?
-    var lon: Double?
-    var limitKmh: Int?
-
-    var kind: CameraType { CameraType(raw: typeRaw) }
-    var coordinate: CLLocationCoordinate2D? {
-        guard let lat, let lon else { return nil }
-        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
-    }
-    /// Реальное превышение относительно лимита дороги (если лимит известен).
-    var overLimitKmh: Double? {
-        guard let limitKmh else { return nil }
-        return speedKmh - Double(limitKmh)
-    }
-}
-
-/// Одна завершённая поездка.
-struct TripRecord: Codable, Identifiable {
-    let id: Double
-    let startedAt: Date
-    let endedAt: Date
-    let distanceMeters: CLLocationDistance
-    let maxSpeedKmh: Double
-    let passed: [PassedCamera]
-    // Точка финиша — чтобы повторить маршрут из истории (у старых записей отсутствует).
-    var endLat: Double?
-    var endLon: Double?
-    /// Упрощённый трек: плоский массив [lat, lon, speed, lat, lon, speed, …].
-    var track: [Double]?
-    /// Рейтинг поездки 0–100 (у старых записей отсутствует).
-    var score: Double?
-
-    var camerasPassed: Int { passed.count }
-    var duration: TimeInterval { max(0, endedAt.timeIntervalSince(startedAt)) }
-    var averageSpeedKmh: Double { duration > 0 ? distanceMeters / duration * 3.6 : 0 }
-    var endCoordinate: CLLocationCoordinate2D? {
-        guard let endLat, let endLon else { return nil }
-        return CLLocationCoordinate2D(latitude: endLat, longitude: endLon)
-    }
-
-    /// Точки трека (lat, lon, speed) из плоского хранения.
-    var trackPoints: [TrackPoint] {
-        guard let track, track.count >= 6 else { return [] }
-        return stride(from: 0, to: track.count - 2, by: 3).map {
-            TrackPoint(lat: track[$0], lon: track[$0 + 1], speedKmh: track[$0 + 2])
-        }
-    }
-}
-
-struct TrackPoint {
-    let lat: Double
-    let lon: Double
-    let speedKmh: Double
-}
-
 @MainActor
 @Observable
 final class TripStats {
@@ -94,7 +30,6 @@ final class TripStats {
     @ObservationIgnored private var lastCoordinate: CLLocationCoordinate2D?
     /// Сырой трек текущей поездки: точка каждые ≥30 м, упрощается при финише.
     @ObservationIgnored private var trackBuffer: [TrackPoint] = []
-    private static let maxHistory = 50
     private static let trackStepMeters = 30.0
     private static let trackTolerance = 0.00022   // ~22 м — упрощение Дугласа-Пекера
     private static let trackMaxPoints = 400
@@ -181,33 +116,11 @@ final class TripStats {
             score: score
         )
         history.insert(record, at: 0)
-        history = Self.pruned(history)
+        history = TripHistory.pruned(history)
         lifetime = LifetimeStats.updated(lifetime, passes: scorePasses, distanceMeters: distanceMeters)
         persist()
         persistLifetime()
         onTripFinished?()
-    }
-
-    /// Сколько поездок показывает список истории.
-    static let visibleHistory = 7
-
-    /// Чистка хранилища: список живёт 7 поездками, более старые нужны только
-    /// статистике (рейтинг и экономия за 30 дней) — у них выбрасываем тяжёлый трек,
-    /// а старше 30 дней удаляем совсем (пожизненные цифры давно в lifetime).
-    nonisolated static func pruned(_ history: [TripRecord], now: Date = Date()) -> [TripRecord] {
-        let monthAgo = now.addingTimeInterval(-30 * 86400)
-        var result: [TripRecord] = []
-        result.reserveCapacity(min(history.count, maxHistory))
-        for (index, record) in history.enumerated() {
-            if index < visibleHistory {
-                result.append(record)
-            } else if record.startedAt > monthAgo && result.count < maxHistory {
-                var slim = record
-                slim.track = nil
-                result.append(slim)
-            }
-        }
-        return result
     }
 
     func deleteRecord(id: Double) {
@@ -220,72 +133,36 @@ final class TripStats {
         persist()
     }
 
-    /// Сводка за последние 7 дней — заголовок истории.
-    var weekSummary: (trips: Int, distance: CLLocationDistance, cameras: Int)? {
-        let weekAgo = Date().addingTimeInterval(-7 * 24 * 3600)
-        let recent = history.filter { $0.startedAt > weekAgo }
-        guard !recent.isEmpty else { return nil }
-        return (recent.count,
-                recent.reduce(0) { $0 + $1.distanceMeters },
-                recent.reduce(0) { $0 + $1.camerasPassed })
-    }
-
     // MARK: - Рейтинг и экономия
 
-    /// Текущий рейтинг: средний балл поездок за 30 дней, взвешенный по дистанции
-    /// (длинная трасса весит больше короткой поездки до магазина).
+    /// Текущий рейтинг: средний балл поездок за 30 дней, взвешенный по дистанции.
     var rating: Int? {
-        Self.weightedRating(history, within: 30 * 86400, now: Date())
+        TripHistory.weightedRating(history, within: 30 * 86400, now: Date())
     }
 
-    /// Тренд к прошлой неделе: (текущая неделя, прошлая неделя) — для стрелки у кольца.
+    /// Тренд к прошлой неделе — для стрелки у кольца рейтинга.
     var ratingTrend: Int? {
         let now = Date()
-        guard let current = Self.weightedRating(history, within: 7 * 86400, now: now),
-              let previous = Self.weightedRating(history, within: 7 * 86400,
-                                                 now: now.addingTimeInterval(-7 * 86400))
+        guard let current = TripHistory.weightedRating(history, within: 7 * 86400, now: now),
+              let previous = TripHistory.weightedRating(history, within: 7 * 86400,
+                                                        now: now.addingTimeInterval(-7 * 86400))
         else { return nil }
         return current - previous
     }
 
-    nonisolated private static func weightedRating(_ history: [TripRecord],
-                                                   within interval: TimeInterval,
-                                                   now: Date) -> Int? {
-        let from = now.addingTimeInterval(-interval)
-        var weightedSum = 0.0
-        var weight = 0.0
-        for record in history where record.startedAt > from && record.startedAt <= now {
-            guard let score = record.score else { continue }
-            let w = max(record.distanceMeters, 500)
-            weightedSum += score * w
-            weight += w
-        }
-        guard weight > 0 else { return nil }
-        return Int((weightedSum / weight).rounded())
+    /// Сводка за последние 7 дней — заголовок истории.
+    var weekSummary: (trips: Int, distance: CLLocationDistance, cameras: Int)? {
+        TripHistory.weekSummary(history)
+    }
+
+    /// Что показывать в шапке Итогов: живую сессию (nil) или последнюю поездку.
+    func fallbackRecord(isTripActive: Bool) -> TripRecord? {
+        TripHistory.fallbackRecord(history: history, isTripActive: isTripActive,
+                                   liveDistance: distanceMeters)
     }
 
     /// «Сэкономлено на штрафах» за последние 30 дней (по истории; пожизненное — в lifetime).
-    var monthSaved: Double {
-        let from = Date().addingTimeInterval(-30 * 86400)
-        var sum = 0.0
-        for record in history where record.startedAt > from {
-            for pass in record.passed {
-                guard let limit = pass.limitKmh else { continue }
-                if FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) == 0 {
-                    sum += FineSchedule.minimumFine
-                }
-            }
-        }
-        return sum
-    }
-
-    /// «Возможные штрафы» поездки/записи — красная строка в деталке.
-    nonisolated static func fineRisk(of passes: [PassedCamera]) -> Double {
-        passes.reduce(0.0) { total, pass in
-            guard let limit = pass.limitKmh else { return total }
-            return total + FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
-        }
-    }
+    var monthSaved: Double { TripHistory.monthSaved(history) }
 
     // MARK: - Трек: упаковка и упрощение (Дуглас-Пекер)
 
@@ -341,70 +218,6 @@ final class TripStats {
         return hypot(p.lon - (a.lon + t * dx), p.lat - (a.lat + t * dy))
     }
 
-    // MARK: - Гео-чистка проездов
-
-    /// Расстояние (метры) от точки до ломаной трека — по сегментам, не по вершинам:
-    /// после Дугласа-Пекера прямые участки хранят только концы.
-    nonisolated static func distanceToTrack(lat: Double, lon: Double,
-                                            track: [TrackPoint]) -> Double {
-        guard let first = track.first else { return .greatestFiniteMagnitude }
-        let metersPerLat = 111_320.0
-        let metersPerLon = 111_320.0 * cos(first.lat * .pi / 180)
-        func project(_ plat: Double, _ plon: Double) -> (x: Double, y: Double) {
-            ((plon - first.lon) * metersPerLon, (plat - first.lat) * metersPerLat)
-        }
-        let p = project(lat, lon)
-        guard track.count >= 2 else {
-            let a = project(first.lat, first.lon)
-            return hypot(p.x - a.x, p.y - a.y)
-        }
-        var best = Double.greatestFiniteMagnitude
-        var a = project(track[0].lat, track[0].lon)
-        for i in 1..<track.count {
-            let b = project(track[i].lat, track[i].lon)
-            let dx = b.x - a.x, dy = b.y - a.y
-            let len2 = dx * dx + dy * dy
-            let t = len2 > 0 ? max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0
-            best = min(best, hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy)))
-            a = b
-        }
-        return best
-    }
-
-    /// Порог ретро-чистки: трек упрощён (±22 м) и записан раз в 30 м,
-    /// поэтому допуск шире живого гейта в LocationService.
-    nonisolated static let passCleanupMaxMeters = 120.0
-
-    /// Ретро-чистка истории: убирает «проезды» камер, до которых трек ближе
-    /// 120 м не подходил (раньше засчитывались камеры с параллельных улиц),
-    /// и пересчитывает балл затронутых поездок. Возвращает (история, менялось ли).
-    nonisolated static func sanitized(_ history: [TripRecord]) -> ([TripRecord], Bool) {
-        var changed = false
-        let cleaned = history.map { record -> TripRecord in
-            let track = record.trackPoints
-            guard track.count >= 2, !record.passed.isEmpty else { return record }
-            let kept = record.passed.filter { pass in
-                guard let lat = pass.lat, let lon = pass.lon else { return true }
-                return distanceToTrack(lat: lat, lon: lon, track: track) <= passCleanupMaxMeters
-            }
-            guard kept.count != record.passed.count else { return record }
-            changed = true
-            return TripRecord(id: record.id, startedAt: record.startedAt,
-                              endedAt: record.endedAt,
-                              distanceMeters: record.distanceMeters,
-                              maxSpeedKmh: record.maxSpeedKmh, passed: kept,
-                              endLat: record.endLat, endLon: record.endLon,
-                              track: record.track,
-                              score: DrivingScore.tripScore(
-                                  passes: kept.map {
-                                      DrivingScore.Pass(speedKmh: $0.speedKmh,
-                                                        limitKmh: $0.limitKmh)
-                                  },
-                                  trackSpeeds: track.map(\.speedKmh)))
-        }
-        return (cleaned, changed)
-    }
-
     // MARK: - Хранение
 
     private var storeURL: URL {
@@ -426,7 +239,7 @@ final class TripStats {
         // Одноразовая гео-чистка: старые версии засчитывали камеры с параллельных
         // улиц — выкидываем их из истории и пересчитываем баллы и счётчики.
         if !Storage.bool(.passGeoCleanup1) {
-            let (cleaned, changed) = Self.sanitized(history)
+            let (cleaned, changed) = TripHistory.sanitized(history)
             if changed {
                 history = cleaned
                 lifetime = LifetimeStats.rebuilt(from: history)

@@ -312,7 +312,7 @@ struct TripDetailSheet: View {
     // MARK: Рейтинг поездки и риск штрафов
 
     @ViewBuilder private var scoreRow: some View {
-        let risk = TripStats.fineRisk(of: record.passed)
+        let risk = TripHistory.fineRisk(of: record.passed)
         if record.score != nil || risk > 0 {
             HStack(spacing: 14) {
                 if let score = record.score {

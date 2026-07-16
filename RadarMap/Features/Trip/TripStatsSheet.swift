@@ -30,7 +30,7 @@ struct TripStatsSheet: View {
         let active = env.location.isTripActive
         // После перезапуска приложения живых метрик нет — показываем последнюю
         // поездку из истории, а не нули.
-        let lastRecord = (active || trip.distanceMeters > 0) ? nil : trip.history.first
+        let lastRecord = trip.fallbackRecord(isTripActive: active)
         let passes = lastRecord.map(\.passed) ?? trip.passed
 
         NavigationStack {
@@ -439,8 +439,9 @@ struct TripStatsSheet: View {
             }
 
             // Показываем только 7 последних — старое хранится лишь для статистики.
-            ForEach(dayGroups(Array(trip.history.prefix(TripStats.visibleHistory))), id: \.day) { group in
-                Text(group.title)
+            ForEach(TripHistory.dayGroups(Array(trip.history.prefix(TripHistory.visibleHistory))),
+                    id: \.day) { group in
+                Text(Formatting.dayTitle(group.day))
                     .font(.rounded(12, .semibold))
                     .foregroundStyle(Theme.textTertiary)
                     .textCase(.uppercase)
@@ -530,7 +531,7 @@ struct TripStatsSheet: View {
 
     private func weekCard(week: (trips: Int, distance: CLLocationDistance, cameras: Int),
                           trip: TripStats) -> some View {
-        let daily = weekDaily(trip.history)
+        let daily = TripHistory.weekDaily(trip.history)
         let maxKm = max(daily.map(\.km).max() ?? 0, 1)
         return VStack(spacing: 12) {
             HStack(spacing: 0) {
@@ -602,48 +603,6 @@ struct TripStatsSheet: View {
     }
 
     // MARK: - Группировка и данные графика
-
-    private struct DayGroup {
-        let day: Date
-        let title: String
-        let records: [TripRecord]
-    }
-
-    /// История приходит от новых к старым — группируем по календарным дням.
-    private func dayGroups(_ history: [TripRecord]) -> [DayGroup] {
-        let calendar = Calendar.current
-        var groups: [DayGroup] = []
-        for record in history {
-            let day = calendar.startOfDay(for: record.startedAt)
-            if let last = groups.indices.last, groups[last].day == day {
-                groups[last] = DayGroup(day: day, title: groups[last].title,
-                                        records: groups[last].records + [record])
-            } else {
-                let title: String
-                if calendar.isDateInToday(day) {
-                    title = String(localized: "Сегодня")
-                } else if calendar.isDateInYesterday(day) {
-                    title = String(localized: "Вчера")
-                } else {
-                    title = day.formatted(.dateTime.day().month(.wide))
-                }
-                groups.append(DayGroup(day: day, title: title, records: [record]))
-            }
-        }
-        return groups
-    }
-
-    private func weekDaily(_ history: [TripRecord]) -> [(day: Date, km: Double)] {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        return (0..<7).reversed().compactMap { offset in
-            guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
-            let km = history
-                .filter { calendar.isDate($0.startedAt, inSameDayAs: day) }
-                .reduce(0.0) { $0 + $1.distanceMeters } / 1000
-            return (day, km)
-        }
-    }
 
     private func scoreColor(_ score: Int) -> Color {
         switch DrivingScore.tier(for: score) {

@@ -138,7 +138,7 @@ final class HistoryPruneTests: XCTestCase {
         history.append(record(daysAgo: 35))
         history.append(record(daysAgo: 40))
 
-        let pruned = TripStats.pruned(history)
+        let pruned = TripHistory.pruned(history)
 
         // Старше 30 дней — удалены (кроме случаев в первой семёрке).
         XCTAssertEqual(pruned.count, 10)
@@ -154,9 +154,80 @@ final class HistoryPruneTests: XCTestCase {
     func testPruneKeepsRecentSevenEvenIfOld() {
         // Все поездки древние — но первые 7 остаются целиком (список не пустеет).
         let history = (0..<9).map { record(daysAgo: Double(40 + $0)) }
-        let pruned = TripStats.pruned(history)
+        let pruned = TripHistory.pruned(history)
         XCTAssertEqual(pruned.count, 7)
         XCTAssertNotNil(pruned[0].track)
+    }
+}
+
+// MARK: - Аналитика истории (данные экрана Итогов)
+
+final class TripAnalyticsTests: XCTestCase {
+    private func record(daysAgo: Double, km: Double, hour: Int = 12,
+                        passes: [PassedCamera] = [], score: Double? = 90) -> TripRecord {
+        let start = Calendar.current.date(byAdding: .day, value: -Int(daysAgo), to: Date())!
+        let at = Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: start)!
+        return TripRecord(id: at.timeIntervalSince1970, startedAt: at,
+                          endedAt: at.addingTimeInterval(1800),
+                          distanceMeters: km * 1000, maxSpeedKmh: 70, passed: passes,
+                          endLat: nil, endLon: nil, track: nil, score: score)
+    }
+
+    func testWeekDailyFillsSevenDaysWithZeros() {
+        let history = [record(daysAgo: 0, km: 12), record(daysAgo: 0, km: 8),
+                       record(daysAgo: 2, km: 30)]
+        let daily = TripHistory.weekDaily(history)
+
+        XCTAssertEqual(daily.count, 7)                    // нулевые дни не выпадают
+        XCTAssertEqual(daily.last?.km ?? 0, 20, accuracy: 0.01)   // сегодня: 12+8
+        XCTAssertEqual(daily[4].km, 30, accuracy: 0.01)   // позавчера
+        XCTAssertEqual(daily[3].km, 0)                    // пустой день — ноль, не дырка
+    }
+
+    func testDayGroupsKeepOrderAndGroupByCalendarDay() {
+        let history = [record(daysAgo: 0, km: 5, hour: 19), record(daysAgo: 0, km: 3, hour: 9),
+                       record(daysAgo: 1, km: 7)]
+        let groups = TripHistory.dayGroups(history)
+
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertEqual(groups[0].records.count, 2)        // обе сегодняшние вместе
+        XCTAssertEqual(groups[1].records.count, 1)
+        // Порядок внутри дня — как в истории (новые сверху).
+        XCTAssertEqual(groups[0].records.map(\.id), history.prefix(2).map(\.id))
+    }
+
+    func testWeekSummaryCountsOnlyRecentTrips() {
+        let history = [record(daysAgo: 1, km: 10), record(daysAgo: 20, km: 99)]
+        let week = TripHistory.weekSummary(history)
+
+        XCTAssertEqual(week?.trips, 1)
+        XCTAssertEqual(week?.distance ?? 0, 10_000, accuracy: 0.01)
+        XCTAssertNil(TripHistory.weekSummary([record(daysAgo: 20, km: 99)]))
+    }
+
+    func testFallbackRecordOnlyWhenSessionIsCold() {
+        let last = record(daysAgo: 0, km: 5)
+        // Поездка идёт — фолбэк не нужен, показываем живые метрики.
+        XCTAssertNil(TripHistory.fallbackRecord(history: [last], isTripActive: true, liveDistance: 0))
+        // Сессия уже что-то намерила — тоже живые.
+        XCTAssertNil(TripHistory.fallbackRecord(history: [last], isTripActive: false, liveDistance: 800))
+        // Холодный запуск — последняя запись истории вместо нулей.
+        XCTAssertEqual(TripHistory.fallbackRecord(history: [last], isTripActive: false,
+                                                  liveDistance: 0)?.id, last.id)
+    }
+
+    func testMonthSavedCountsCleanLimitedPassesOnly() {
+        let clean = PassedCamera(id: UUID(), cameraID: 1, typeRaw: "Стационар радар", location: "",
+                                 speedKmh: 55, date: Date(), lat: nil, lon: nil, limitKmh: 60)
+        let fined = PassedCamera(id: UUID(), cameraID: 2, typeRaw: "Стационар радар", location: "",
+                                 speedKmh: 80, date: Date(), lat: nil, lon: nil, limitKmh: 60)
+        let noLimit = PassedCamera(id: UUID(), cameraID: 3, typeRaw: "Стационар радар", location: "",
+                                   speedKmh: 90, date: Date(), lat: nil, lon: nil, limitKmh: nil)
+        let history = [record(daysAgo: 1, km: 10, passes: [clean, fined, noLimit])]
+
+        XCTAssertEqual(TripHistory.monthSaved(history), FineSchedule.minimumFine)
+        // +20 км/ч — верхняя граница первой ступени: 1 БРВ.
+        XCTAssertEqual(TripHistory.fineRisk(of: [clean, fined, noLimit]), FineSchedule.brv)
     }
 }
 
@@ -298,7 +369,7 @@ final class PassCleanupTests: XCTestCase {
 
     func testDistanceMeasuredToSegmentNotVertices() {
         // Точка над серединой отрезка, смещение к северу 0.0005° ≈ 56 м.
-        let d = TripStats.distanceToTrack(lat: 41.3005, lon: 69.212, track: track)
+        let d = TripHistory.distanceToTrack(lat: 41.3005, lon: 69.212, track: track)
         XCTAssertEqual(d, 55.7, accuracy: 3)
         // До ближайшей ВЕРШИНЫ при этом ~1 км — сегментная математика обязательна.
     }
@@ -312,7 +383,7 @@ final class PassCleanupTests: XCTestCase {
                                 passed: [near, far], endLat: nil, endLon: nil,
                                 track: [41.30, 69.20, 60, 41.30, 69.224, 62], score: 60)
 
-        let (cleaned, changed) = TripStats.sanitized([record])
+        let (cleaned, changed) = TripHistory.sanitized([record])
 
         XCTAssertTrue(changed)
         XCTAssertEqual(cleaned[0].passed.map(\.cameraID), [near.cameraID])
@@ -329,7 +400,7 @@ final class PassCleanupTests: XCTestCase {
                                 endLat: nil, endLon: nil,
                                 track: [41.30, 69.20, 60, 41.30, 69.224, 62], score: 97)
 
-        let (cleaned, changed) = TripStats.sanitized([record])
+        let (cleaned, changed) = TripHistory.sanitized([record])
 
         XCTAssertFalse(changed)
         XCTAssertEqual(cleaned[0].passed.count, 1)

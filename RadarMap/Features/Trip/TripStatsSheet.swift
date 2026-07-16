@@ -23,6 +23,7 @@ struct TripStatsSheet: View {
     @State private var showRatingInfo = false
     @State private var showSavingsInfo = false
     @State private var selectedBadge: Achievement?
+    @State private var selectedPass: PassedCamera?
 
     var body: some View {
         let trip = env.trip
@@ -46,7 +47,7 @@ struct TripStatsSheet: View {
                         .entrance(3, appeared)
 
                     if !passes.isEmpty {
-                        passedSection(passes: passes)
+                        passedSection(passes: passes, track: lastRecord?.trackPoints ?? [])
                             .entrance(4, appeared)
                     }
 
@@ -106,6 +107,9 @@ struct TripStatsSheet: View {
                     if args.contains("-showRatingInfo") { showRatingInfo = true }
                     if args.contains("-showSavingsInfo") { showSavingsInfo = true }
                     if args.contains("-shareStats") { share(trip: env.trip) }
+                    if args.contains("-showPassMap") {
+                        selectedPass = env.trip.history.first?.passed.first { $0.coordinate != nil }
+                    }
                 }
                 #endif
             }
@@ -127,6 +131,11 @@ struct TripStatsSheet: View {
             ActivityShareSheet(image: payload.image)
                 .presentationDetents([.medium, .large])
                 .ignoresSafeArea()
+        }
+        .sheet(item: $selectedPass) { pass in
+            PassMapSheet(pass: pass,
+                         track: (env.location.isTripActive || trip.distanceMeters > 0)
+                             ? [] : trip.history.first?.trackPoints ?? [])
         }
     }
 
@@ -400,14 +409,14 @@ struct TripStatsSheet: View {
 
     // MARK: - Пройденные камеры (со скоростью прохождения)
 
-    private func passedSection(passes: [PassedCamera]) -> some View {
+    private func passedSection(passes: [PassedCamera], track: [TrackPoint]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Пройденные камеры")
                 .font(.rounded(14, .semibold))
                 .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             ForEach(passes.reversed()) { pass in
-                PassRow(pass: pass)
+                PassRowButton(pass: pass) { selectedPass = $0 }
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }

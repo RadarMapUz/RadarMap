@@ -49,6 +49,22 @@
         }
       }
     },
+    "%@ · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@"
+          }
+        }
+      }
+    },
     "%@ · %@ · %lld км/ч сред.": {
       "localizations": {
         "ru": {
@@ -2817,6 +2833,22 @@
         }
       }
     },
+    "Проезд камеры": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проезд камеры"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameradan o‘tish"
+          }
+        }
+      }
+    },
     "Проезжайте камеры не выше лимита — уже +6 км/ч попадает в штрафную ступень.": {
       "localizations": {
         "ru": {
@@ -3677,6 +3709,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "yo‘lda"
+          }
+        }
+      }
+    },
+    "ваша скорость": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ваша скорость"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sizning tezligingiz"
           }
         }
       }

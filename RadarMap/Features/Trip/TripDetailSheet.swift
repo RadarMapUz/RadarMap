@@ -34,6 +34,8 @@ enum PassStyle {
 /// Строка «пройденная камера» — используется в Итогах и в деталке поездки.
 struct PassRow: View {
     let pass: PassedCamera
+    /// Стрелка-подсказка: тап по строке открывает карту проезда.
+    var showsChevron = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -77,9 +79,33 @@ struct PassRow: View {
                     }
                 }
             }
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.rounded(11, .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+            }
         }
         .padding(12)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+    }
+}
+
+/// Кнопка-строка проезда: если координата камеры сохранена — тап открывает
+/// карту проезда; у старых записей без координат остаётся простая строка.
+struct PassRowButton: View {
+    let pass: PassedCamera
+    let onTap: (PassedCamera) -> Void
+
+    var body: some View {
+        if pass.coordinate != nil {
+            Button { onTap(pass) } label: {
+                PassRow(pass: pass, showsChevron: true)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            PassRow(pass: pass)
+        }
     }
 }
 
@@ -150,6 +176,7 @@ struct TripDetailSheet: View {
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
 
     @State private var sharePayload: ShareImagePayload?
+    @State private var selectedPass: PassedCamera?
     @State private var appeared = false
     /// Выбранная точка профиля скорости (тап/протяжка по графику).
     @State private var selectedKm: Double?
@@ -216,6 +243,9 @@ struct TripDetailSheet: View {
             ActivityShareSheet(image: payload.image)
                 .presentationDetents([.medium, .large])
                 .ignoresSafeArea()
+        }
+        .sheet(item: $selectedPass) { pass in
+            PassMapSheet(pass: pass, track: record.trackPoints)
         }
     }
 
@@ -516,7 +546,7 @@ struct TripDetailSheet: View {
                 .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             ForEach(record.passed.reversed()) { pass in
-                PassRow(pass: pass)
+                PassRowButton(pass: pass) { selectedPass = $0 }
             }
         }
     }

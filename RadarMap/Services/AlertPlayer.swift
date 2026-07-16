@@ -8,6 +8,8 @@
 
 import Foundation
 import AVFoundation
+import CoreHaptics
+import UIKit
 import os
 
 @MainActor
@@ -16,6 +18,10 @@ final class AlertPlayer: NSObject {
     private let synthesizer = AVSpeechSynthesizer()
     private let session = AVAudioSession.sharedInstance()
     private let settings: AppSettings
+
+    /// Тактильный движок: «дорогой» отклик (мягкий на дальнем пороге → резкий у камеры).
+    private var hapticEngine: CHHapticEngine?
+    private let supportsHaptics = CHHapticEngine.capabilitiesForHardware().supportsHaptics
 
     init(settings: AppSettings) {
         self.settings = settings
@@ -31,6 +37,66 @@ final class AlertPlayer: NSObject {
                 Log.alerts.error("alert.wav не загрузился: \(error.localizedDescription, privacy: .public)")
             }
         }
+        prepareHaptics()
+    }
+
+    // MARK: - Хаптика по уровням приближения
+
+    private func prepareHaptics() {
+        guard supportsHaptics else { return }
+        do {
+            let engine = try CHHapticEngine()
+            engine.isAutoShutdownEnabled = true   // сам гаснет в простое — экономит батарею
+            // Движок могут сбросить/остановить (звонок, фон) — поднимаем обратно.
+            engine.resetHandler = { [weak engine] in try? engine?.start() }
+            engine.stoppedHandler = { _ in }
+            try engine.start()
+            hapticEngine = engine
+        } catch {
+            Log.alerts.error("CHHapticEngine не запустился: \(error.localizedDescription, privacy: .public)")
+            hapticEngine = nil
+        }
+    }
+
+    /// Тактильный сигнал для уровня приближения: 1 — дальний порог (мягко),
+    /// 2 — средний (чётче), 3 — вплотную (резкий тройной). На симуляторе и
+    /// старом железе — откат на системный генератор.
+    func haptic(level: Int) {
+        guard supportsHaptics, let engine = hapticEngine else {
+            hapticFallback(level: level)
+            return
+        }
+        do {
+            try engine.start()   // мог авто-выключиться в простое
+            let player = try engine.makePlayer(with: hapticPattern(for: level))
+            try player.start(atTime: 0)
+        } catch {
+            hapticFallback(level: level)
+        }
+    }
+
+    private func hapticPattern(for level: Int) throws -> CHHapticPattern {
+        func tap(_ time: TimeInterval, _ intensity: Float, _ sharpness: Float) -> CHHapticEvent {
+            CHHapticEvent(eventType: .hapticTransient, parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: intensity),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: sharpness),
+            ], relativeTime: time)
+        }
+        switch max(1, min(3, level)) {
+        case 1:  // дальний порог — один мягкий «тук»
+            return try CHHapticPattern(events: [tap(0, 0.5, 0.35)], parameters: [])
+        case 2:  // средний — двойной, чётче
+            return try CHHapticPattern(events: [tap(0, 0.75, 0.6), tap(0.14, 0.75, 0.6)],
+                                       parameters: [])
+        default: // вплотную — резкий тройной «стук»
+            return try CHHapticPattern(events: [tap(0, 1.0, 0.9), tap(0.11, 1.0, 0.9),
+                                                tap(0.22, 1.0, 0.95)], parameters: [])
+        }
+    }
+
+    private func hapticFallback(level: Int) {
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(level >= 2 ? .error : .warning)
     }
 
     /// `count` коротких сигналов подряд (эскалация: чем ближе, тем больше).

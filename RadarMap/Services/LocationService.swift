@@ -15,7 +15,6 @@
 import Foundation
 import CoreLocation
 import Observation
-import UIKit
 
 @MainActor
 @Observable
@@ -373,8 +372,10 @@ final class LocationService: NSObject {
                                                   radius: effectiveAlertRadius) else { return }
 
         if settings.soundEnabled { alerts.beep(count: decision.level) }
+        // Тактильная эскалация: мягкий «тук» на дальнем пороге → резкий у камеры.
+        // Отдельно от звука — работает и в беззвучном режиме, и в энергосбережении.
+        alerts.haptic(level: decision.level)
         if decision.level == 1 {
-            UINotificationFeedbackGenerator().notificationOccurred(.warning)
             // В свёрнутом виде (поездка в фоне) — уведомление зажигает экран и вибрирует.
             if !isForeground { notifier.notifyApproaching(camera) }
             // Голос — самая дорогая часть оповещения, в энергосбережении пропускаем.

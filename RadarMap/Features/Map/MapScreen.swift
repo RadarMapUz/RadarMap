@@ -219,7 +219,7 @@ struct MapScreen: View {
         hideControlsTask?.cancel()
         guard env.location.isTripActive else { return }
         hideControlsTask = Task {
-            try? await Task.sleep(for: .seconds(5))
+            await Task.pause(seconds: 5)
             guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: 0.45)) { controlsHidden = true }
         }
@@ -471,7 +471,7 @@ struct MapScreen: View {
         withAnimation(.spring(duration: 0.35)) { legendExpanded.toggle() }
         if legendExpanded {
             legendCollapseTask = Task {
-                try? await Task.sleep(for: .seconds(6))
+                await Task.pause(seconds: 6)
                 guard !Task.isCancelled else { return }
                 withAnimation(.spring(duration: 0.35)) { legendExpanded = false }
             }
@@ -574,7 +574,7 @@ struct MapScreen: View {
         if args.contains("-showSettings") { vm.showSettings = true }
         if args.contains("-showCameraDetail") {
             Task {
-                try? await Task.sleep(for: .seconds(1.5))
+                await Task.pause(seconds: 1.5)
                 if let coordinate = env.location.currentCoordinate,
                    let camera = env.cameras.nearest(to: coordinate, limit: 1).first {
                     vm.select(camera)

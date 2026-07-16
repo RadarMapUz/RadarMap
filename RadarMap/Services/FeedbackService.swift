@@ -23,13 +23,7 @@ final class FeedbackService {
     @ObservationIgnored private let session: URLSession
 
     /// Анонимный идентификатор для защиты от спама (свой, не пересекается с другими сервисами).
-    @ObservationIgnored private let deviceID: String = {
-        let key = "feedbackDeviceID"
-        if let existing = UserDefaults.standard.string(forKey: key) { return existing }
-        let fresh = UUID().uuidString
-        UserDefaults.standard.set(fresh, forKey: key)
-        return fresh
-    }()
+    @ObservationIgnored private let deviceID = Storage.anonymousID(.feedbackDeviceID)
 
     init() {
         let config = URLSessionConfiguration.ephemeral

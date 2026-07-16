@@ -263,7 +263,7 @@ struct CameraDetailSheet: View {
             if reason == .gone {
                 env.cameras.hide(camera)   // убрали у себя сразу, база поправится после модерации
             }
-            try? await Task.sleep(for: .seconds(1.2))
+            await Task.pause(seconds: 1.2)
             dismiss()
         }
     }

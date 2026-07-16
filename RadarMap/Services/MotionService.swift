@@ -63,7 +63,7 @@ final class MotionService {
             // Не гасим сразу — вдруг светофор/пробка. Ждём устойчивую остановку.
             guard stopTask == nil else { return }
             stopTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(AppConfig.autoStopAfterSeconds))
+                await Task.pause(seconds: AppConfig.autoStopAfterSeconds)
                 guard let self, !Task.isCancelled else { return }
                 self.isDriving = false
                 self.stopTask = nil

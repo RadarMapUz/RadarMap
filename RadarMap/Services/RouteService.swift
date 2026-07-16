@@ -12,6 +12,7 @@
 import Foundation
 import MapKit
 import Observation
+import os
 
 /// Манёвр на маршруте («через 300 м — направо»).
 struct RouteStep {
@@ -221,7 +222,10 @@ final class RouteService {
         Task {
             defer { isRebuilding = false }
             // Перестраиваем без альтернатив — быстрее, и в движении выбор не нужен.
-            guard let built = try? await calculate(from: coordinate, to: destination, alternatives: false) else { return }
+            guard let built = try? await calculate(from: coordinate, to: destination, alternatives: false) else {
+                Log.route.error("перестроение маршрута не удалось — остаёмся на старой линии")
+                return
+            }
             await apply(built, name: name, destination: destination, cameras: cameras)
             onRerouted?()
         }
@@ -266,6 +270,7 @@ final class RouteService {
     private func calculate(from source: CLLocationCoordinate2D,
                            to destination: CLLocationCoordinate2D,
                            alternatives: Bool) async throws -> [BuiltVariant] {
+        // Сбой Apple-роутинга — штатный путь: ниже падаем на собственный OSRM.
         if let apple = try? await appleRoute(from: source, to: destination, alternatives: alternatives),
            !apple.isEmpty { return apple }
         return try await osrmRoute(from: source, to: destination, alternatives: alternatives)
@@ -324,7 +329,10 @@ final class RouteService {
 
         guard let response = try? JSONDecoder().decode(OSRMResponse.self, from: data),
               response.code == "Ok", let routes = response.routes, !routes.isEmpty
-        else { throw RouteError.noRoute }
+        else {
+            Log.route.error("OSRM: пустой или нечитаемый ответ")
+            throw RouteError.noRoute
+        }
 
         return routes.prefix(3).compactMap { route -> BuiltVariant? in
             guard route.geometry.coordinates.count >= 2 else { return nil }

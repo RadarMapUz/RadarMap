@@ -26,6 +26,7 @@ final class NotificationService: NSObject {
 
     func requestAuthorization() {
         Task {
+            // Отказ пользователя — валидный ответ, не ошибка: статус перечитаем ниже.
             _ = try? await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound, .badge])
             await refreshStatus()

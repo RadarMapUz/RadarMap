@@ -8,6 +8,7 @@
 import Foundation
 import Observation
 import CoreLocation
+import os
 
 enum CameraFilter: String, CaseIterable, Identifiable {
     case all, cameras, radars
@@ -128,10 +129,11 @@ final class AppSettings {
         adaptiveGPS = store.bool(forKey: Keys.adaptive)
         showNextCamera = store.bool(forKey: Keys.nextCamera)
         weeklyDigest = store.bool(forKey: Keys.digest)
-        if let data = store.data(forKey: Keys.recents),
-           let list = try? JSONDecoder().decode([SavedPlace].self, from: data) {
-            recentPlaces = list
-        } else {
+        do {
+            let data = store.data(forKey: Keys.recents)
+            recentPlaces = try data.map { try JSONDecoder().decode([SavedPlace].self, from: $0) } ?? []
+        } catch {
+            Log.app.error("recentPlaces не декодировались: \(error.localizedDescription, privacy: .public)")
             recentPlaces = []
         }
     }
@@ -150,8 +152,10 @@ final class AppSettings {
     }
 
     private func saveRecents() {
-        if let data = try? JSONEncoder().encode(recentPlaces) {
-            store.set(data, forKey: Keys.recents)
+        do {
+            store.set(try JSONEncoder().encode(recentPlaces), forKey: Keys.recents)
+        } catch {
+            Log.app.error("recentPlaces не сохранились: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -170,6 +174,7 @@ final class AppSettings {
 
     private func save(_ place: SavedPlace?, forKey key: String) {
         if let place, let data = try? JSONEncoder().encode(place) {
+            // Кодирование двух строк и координат не падает; nil ниже — осознанное удаление.
             store.set(data, forKey: key)
         } else {
             store.removeObject(forKey: key)
@@ -178,6 +183,11 @@ final class AppSettings {
 
     private static func load(_ store: UserDefaults, _ key: String) -> SavedPlace? {
         guard let data = store.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(SavedPlace.self, from: data)
+        do {
+            return try JSONDecoder().decode(SavedPlace.self, from: data)
+        } catch {
+            Log.app.error("SavedPlace(\(key, privacy: .public)) не декодировался: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 }

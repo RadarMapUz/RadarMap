@@ -9,6 +9,7 @@
 import Foundation
 import Observation
 import CoreLocation
+import os
 
 /// Факт прохождения камеры: скорость зафиксирована в точке максимального сближения.
 struct PassedCamera: Codable, Identifiable {
@@ -410,21 +411,21 @@ final class TripStats {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("trips.json")
     }
-    private static let lifetimeKey = "lifetimeStats"
-
     private func loadHistory() {
-        if let data = try? Data(contentsOf: storeURL),
-           let decoded = try? JSONDecoder().decode([TripRecord].self, from: data) {
+        if let decoded = JSONFile.load([TripRecord].self, from: storeURL, log: Log.trips) {
             history = decoded
         }
-        if let data = UserDefaults.standard.data(forKey: Self.lifetimeKey),
-           let decoded = try? JSONDecoder().decode(LifetimeStats.self, from: data) {
-            lifetime = decoded
+        if let data = Storage.data(.lifetimeStats) {
+            do {
+                lifetime = try JSONDecoder().decode(LifetimeStats.self, from: data)
+            } catch {
+                // Не читается — ниже восстановим из истории (backfill).
+                Log.trips.error("lifetimeStats не декодировались: \(error.localizedDescription, privacy: .public)")
+            }
         }
         // Одноразовая гео-чистка: старые версии засчитывали камеры с параллельных
         // улиц — выкидываем их из истории и пересчитываем баллы и счётчики.
-        let cleanupKey = "passGeoCleanup1"
-        if !UserDefaults.standard.bool(forKey: cleanupKey) {
+        if !Storage.bool(.passGeoCleanup1) {
             let (cleaned, changed) = Self.sanitized(history)
             if changed {
                 history = cleaned
@@ -432,7 +433,7 @@ final class TripStats {
                 persist()
                 persistLifetime()
             }
-            UserDefaults.standard.set(true, forKey: cleanupKey)
+            Storage.set(true, for: .passGeoCleanup1)
         }
         // Обновились с версии без счётчиков, а поездки уже есть — восстанавливаем
         // из истории, чтобы экономия и достижения не начинались с нуля.
@@ -443,11 +444,13 @@ final class TripStats {
     }
 
     private func persistLifetime() {
-        guard let data = try? JSONEncoder().encode(lifetime) else { return }
-        UserDefaults.standard.set(data, forKey: Self.lifetimeKey)
+        do {
+            Storage.set(try JSONEncoder().encode(lifetime), for: .lifetimeStats)
+        } catch {
+            Log.trips.error("lifetimeStats не сохранились: \(error.localizedDescription, privacy: .public)")
+        }
     }
     private func persist() {
-        guard let data = try? JSONEncoder().encode(history) else { return }
-        try? data.write(to: storeURL, options: .atomic)
+        JSONFile.save(history, to: storeURL, log: Log.trips)
     }
 }

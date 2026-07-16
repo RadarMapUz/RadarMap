@@ -10,6 +10,7 @@
 
 import Foundation
 import ActivityKit
+import os
 
 @MainActor
 final class LiveActivityService {
@@ -21,10 +22,15 @@ final class LiveActivityService {
     func startIfNeeded(state: CameraActivityAttributes.ContentState) {
         guard activity == nil, ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let quantized = Self.quantize(state)
-        activity = try? Activity.request(
-            attributes: CameraActivityAttributes(),
-            content: .init(state: quantized, staleDate: nil)
-        )
+        do {
+            activity = try Activity.request(
+                attributes: CameraActivityAttributes(),
+                content: .init(state: quantized, staleDate: nil)
+            )
+        } catch {
+            // Пользователь мог выключить Live Activities — работаем без плашки.
+            Log.alerts.notice("Live Activity не стартовала: \(error.localizedDescription, privacy: .public)")
+        }
         lastSentState = quantized
     }
 

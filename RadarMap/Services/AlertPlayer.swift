@@ -8,6 +8,7 @@
 
 import Foundation
 import AVFoundation
+import os
 
 @MainActor
 final class AlertPlayer: NSObject {
@@ -22,9 +23,13 @@ final class AlertPlayer: NSObject {
         synthesizer.delegate = self
         // Предзагрузка: сигнал должен звучать мгновенно, без чтения файла в момент оповещения.
         if let url = Bundle.main.url(forResource: "alert", withExtension: "wav") {
-            player = try? AVAudioPlayer(contentsOf: url)
-            player?.delegate = self
-            player?.prepareToPlay()
+            do {
+                player = try AVAudioPlayer(contentsOf: url)
+                player?.delegate = self
+                player?.prepareToPlay()
+            } catch {
+                Log.alerts.error("alert.wav не загрузился: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
@@ -52,8 +57,13 @@ final class AlertPlayer: NSObject {
     // MARK: - Сессия
 
     private func activate() {
-        try? session.setCategory(.playback, options: [.duckOthers, .mixWithOthers])
-        try? session.setActive(true)
+        do {
+            try session.setCategory(.playback, options: [.duckOthers, .mixWithOthers])
+            try session.setActive(true)
+        } catch {
+            // Сигнал всё равно попробуем сыграть — хуже не станет.
+            Log.alerts.error("аудиосессия не активировалась: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func deactivateSoon() {
@@ -62,6 +72,7 @@ final class AlertPlayer: NSObject {
             guard let self else { return }
             let stillPlaying = (self.player?.isPlaying ?? false) || self.synthesizer.isSpeaking
             if !stillPlaying {
+                // Ошибка деактивации не мешает работе — музыка просто чуть позже вернёт громкость.
                 try? self.session.setActive(false, options: .notifyOthersOnDeactivation)
             }
         }

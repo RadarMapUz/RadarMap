@@ -23,10 +23,8 @@ final class RemoteSyncService {
     private(set) var lastError: String?
 
     @ObservationIgnored private let store: CameraStore
-    @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private let session: URLSession
 
-    private static let lastCheckKey = "lastSyncCheck"
 
     init(store: CameraStore) {
         self.store = store
@@ -37,7 +35,7 @@ final class RemoteSyncService {
     }
 
     var lastCheckDate: Date? {
-        defaults.object(forKey: Self.lastCheckKey) as? Date
+        Storage.date(.lastSyncCheck)
     }
 
     /// Тихая автопроверка при запуске — не чаще, чем раз в `syncCheckInterval`.
@@ -62,7 +60,7 @@ final class RemoteSyncService {
             let manifest = try JSONDecoder().decode(Manifest.self, from: data)
 
             guard manifest.version > store.dbVersion else {
-                defaults.set(Date(), forKey: Self.lastCheckKey)
+                Storage.set(Date(), for: .lastSyncCheck)
                 state = .upToDate
                 return
             }
@@ -72,7 +70,7 @@ final class RemoteSyncService {
             let (payload, _) = try await session.data(from: dbURL)
             let count = try await store.applyRemote(data: payload, version: manifest.version)
 
-            defaults.set(Date(), forKey: Self.lastCheckKey)
+            Storage.set(Date(), for: .lastSyncCheck)
             state = .updated(count: count)
         } catch {
             lastError = error.localizedDescription

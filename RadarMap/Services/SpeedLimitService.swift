@@ -11,6 +11,7 @@
 import Foundation
 import MapKit
 import Observation
+import os
 
 @MainActor
 @Observable
@@ -56,29 +57,35 @@ final class SpeedLimitService {
         index = await Task.detached(priority: .utility) {
             (try? Data(contentsOf: url)).flatMap(LimitIndex.build)
         }.value
+        if index == nil {
+            Log.route.error("кэш лимитов есть на диске, но не прочитался")
+        }
     }
 
     private func refreshFromServerIfNeeded() async {
-        let defaults = UserDefaults.standard
-        let lastCheck = defaults.double(forKey: "speedLimitsLastCheck")
+        let lastCheck = Storage.double(.speedLimitsLastCheck)
         let weekAgo = Date().timeIntervalSince1970 - 7 * 24 * 3600
         guard index == nil || lastCheck < weekAgo else { return }
 
         var request = URLRequest(url: AppConfig.syncBaseURL.appendingPathComponent("speed_limits.json"),
                                  timeoutInterval: 30)
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        // Недельная фоновая проверка: сбой сети не критичен, попробуем в следующий раз.
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200 else { return }
 
         let url = fileURL
         let built = await Task.detached(priority: .utility) { () -> LimitIndex? in
             guard let index = LimitIndex.build(from: data) else { return nil }
-            try? data.write(to: url, options: .atomic)
+            do { try data.write(to: url, options: .atomic) } catch {
+                // Индекс уже в памяти — без кэша просто перекачаем через неделю.
+                Log.route.error("кэш лимитов не записался: \(error.localizedDescription, privacy: .public)")
+            }
             return index
         }.value
         if let built {
             index = built
-            defaults.set(Date().timeIntervalSince1970, forKey: "speedLimitsLastCheck")
+            Storage.set(Date().timeIntervalSince1970, for: .speedLimitsLastCheck)
         }
     }
 
@@ -144,7 +151,10 @@ struct LimitIndex: Sendable {
 
     nonisolated static func build(from data: Data) -> LimitIndex? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let raw = root["segments"] as? [[Any]] else { return nil }
+              let raw = root["segments"] as? [[Any]] else {
+            Log.route.error("speed_limits.json: неожиданный формат")
+            return nil
+        }
 
         var segments: [Segment] = []
         segments.reserveCapacity(raw.count)

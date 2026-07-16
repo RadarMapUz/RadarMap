@@ -10,6 +10,7 @@ import Foundation
 import CoreLocation
 import MapKit
 import Observation
+import os
 
 protocol CameraRepository {
     var cameras: [Camera] { get }
@@ -77,11 +78,10 @@ final class CameraStore: CameraRepository {
     }
 
     private static let firstCustomID = 1_000_001
-    private static let dbVersionKey = "cameraDBVersion"
 
     /// Версия активной базы (встроенная = bundledDBVersion; после OTA — версия с сервера).
     private(set) var dbVersion: Int =
-        (UserDefaults.standard.object(forKey: dbVersionKey) as? Int) ?? AppConfig.bundledDBVersion
+        Storage.intIfPresent(.cameraDBVersion) ?? AppConfig.bundledDBVersion
 
     init() {
         loadUserData()
@@ -94,7 +94,7 @@ final class CameraStore: CameraRepository {
             if !result.usedRemote && self.dbVersion != AppConfig.bundledDBVersion {
                 // Скачанная копия испорчена/удалена — честно откатываемся на встроенную версию.
                 self.dbVersion = AppConfig.bundledDBVersion
-                UserDefaults.standard.removeObject(forKey: Self.dbVersionKey)
+                Storage.remove(.cameraDBVersion)
             }
             self.dataChanged()
         }
@@ -108,15 +108,15 @@ final class CameraStore: CameraRepository {
 
     nonisolated private static func decodeDatabase() async -> (cameras: [Camera], error: String?, usedRemote: Bool) {
         // 1) скачанная с сервера копия (если валидна)
-        if let data = try? Data(contentsOf: remoteFileURL),
-           let decoded = try? JSONDecoder().decode([Camera].self, from: data),
+        if let decoded = JSONFile.load([Camera].self, from: remoteFileURL, log: Log.cameras),
            decoded.count >= 100 {
             return (decoded, nil, true)
         }
-        // 2) встроенная база
+        // 2) встроенная база — её отсутствие означает битую сборку, кричим громко
         guard let url = Bundle.main.url(forResource: "cameras", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let decoded = try? JSONDecoder().decode([Camera].self, from: data) else {
+            Log.cameras.fault("встроенная cameras.json не читается — приложение без базы")
             return ([], "Не удалось загрузить cameras.json из бандла.", false)
         }
         return (decoded, nil, false)
@@ -134,7 +134,7 @@ final class CameraStore: CameraRepository {
         try data.write(to: Self.remoteFileURL, options: .atomic)
         bundled = decoded
         dbVersion = version
-        UserDefaults.standard.set(version, forKey: Self.dbVersionKey)
+        Storage.set(version, for: .cameraDBVersion)
         dataChanged()
         return decoded.count
     }
@@ -297,15 +297,13 @@ final class CameraStore: CameraRepository {
     }
 
     private func loadUserData() {
-        guard let data = try? Data(contentsOf: storeURL),
-              let decoded = try? JSONDecoder().decode(UserData.self, from: data) else { return }
+        guard let decoded = JSONFile.load(UserData.self, from: storeURL, log: Log.cameras) else { return }
         custom = decoded.custom
         hiddenIDs = Set(decoded.hidden)
     }
 
     private func persist() {
-        let payload = UserData(custom: custom, hidden: Array(hiddenIDs))
-        guard let data = try? JSONEncoder().encode(payload) else { return }
-        try? data.write(to: storeURL, options: .atomic)
+        JSONFile.save(UserData(custom: custom, hidden: Array(hiddenIDs)),
+                      to: storeURL, log: Log.cameras)
     }
 }

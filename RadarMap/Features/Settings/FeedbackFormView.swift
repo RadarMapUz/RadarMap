@@ -122,7 +122,7 @@ struct FeedbackFormView: View {
                 state = ok ? .sent : .failed
             }
             guard ok else { return }
-            try? await Task.sleep(for: .seconds(1.6))
+            await Task.pause(seconds: 1.6)
             dismiss()
         }
     }

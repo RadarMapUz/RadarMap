@@ -33,7 +33,7 @@ struct ArrivalCardView: View {
         }
         .task {
             // Сам исчезает: водителю не до кнопок.
-            try? await Task.sleep(for: .seconds(12))
+            await Task.pause(seconds: 12)
             onDismiss()
         }
     }

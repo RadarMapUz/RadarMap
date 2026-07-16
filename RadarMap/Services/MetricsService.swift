@@ -10,17 +10,11 @@
 
 import Foundation
 import MetricKit
+import os
 
 @MainActor
 final class MetricsService: NSObject, MXMetricManagerSubscriber {
-    private static let deviceKey = "metricsDeviceID"
-
-    private static var deviceID: String {
-        if let existing = UserDefaults.standard.string(forKey: deviceKey) { return existing }
-        let fresh = UUID().uuidString
-        UserDefaults.standard.set(fresh, forKey: deviceKey)
-        return fresh
-    }
+    private static var deviceID: String { Storage.anonymousID(.metricsDeviceID) }
 
     private var started = false
 
@@ -42,12 +36,16 @@ final class MetricsService: NSObject, MXMetricManagerSubscriber {
     nonisolated private func upload(_ payloads: [Data], kind: String) {
         Task {
             for data in payloads {
-                guard let parsed = try? JSONSerialization.jsonObject(with: data) else { continue }
+                guard let parsed = try? JSONSerialization.jsonObject(with: data) else {
+                    Log.network.error("MetricKit-пакет \(kind, privacy: .public) не распарсился")
+                    continue
+                }
                 let body: [String: Any] = [
                     "device": await Self.deviceID,
                     "kind": kind,
                     "payload": parsed,
                 ]
+                // Словарь из уже валидного JSON — сериализация не падает.
                 guard let encoded = try? JSONSerialization.data(withJSONObject: body) else { continue }
                 var request = URLRequest(
                     url: AppConfig.syncBaseURL.appendingPathComponent("api/metrics"),

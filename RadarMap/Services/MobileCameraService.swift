@@ -25,13 +25,7 @@ final class MobileCameraService {
     @ObservationIgnored private var pollTask: Task<Void, Never>?
 
     /// Анонимный идентификатор устройства для защиты от спама.
-    @ObservationIgnored private let deviceID: String = {
-        let key = "mobileDeviceID"
-        if let existing = UserDefaults.standard.string(forKey: key) { return existing }
-        let fresh = UUID().uuidString
-        UserDefaults.standard.set(fresh, forKey: key)
-        return fresh
-    }()
+    @ObservationIgnored private let deviceID = Storage.anonymousID(.mobileDeviceID)
 
     /// Смещение id, чтобы передвижные не пересекались с базой (1…) и своими (1 000 001…).
     static let idOffset = 2_000_000
@@ -50,7 +44,7 @@ final class MobileCameraService {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()
-                try? await Task.sleep(for: .seconds(AppConfig.mobilePollInterval))
+                await Task.pause(seconds: AppConfig.mobilePollInterval)
             }
         }
     }
@@ -116,6 +110,7 @@ final class MobileCameraService {
         struct Response: Decodable { let ok: Bool }
         let payload = ["id": cameraID - Self.idOffset, "device": deviceID,
                        "value": stillThere ? 1 : -1] as [String: Any]
+        // Голос — best-effort: не дошёл — не страшно, сервер дедуплицирует повторы.
         let _: Response? = try? await post(path: "api/vote", payload: payload)
         await refresh()
     }

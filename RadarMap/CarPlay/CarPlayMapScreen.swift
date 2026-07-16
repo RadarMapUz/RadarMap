@@ -82,7 +82,8 @@ struct CarPlayMapScreen: View {
             }
             if !env.location.isApproachingCamera,
                let camera = env.location.nearestCamera,
-               let distance = env.location.distanceToNearest, distance <= 3000 {
+               let distance = env.location.distanceToNearest,
+               distance <= AppConfig.carPlayNearestCameraMeters {
                 nearestCameraRow(camera: camera, distance: distance)
             }
         }

@@ -107,14 +107,14 @@ struct CarPlayMapView: UIViewRepresentable {
 
         func reloadCameras(on map: MKMapView) {
             // На обзорном зуме камеры не показываем — это уровень «вся страна».
-            guard map.region.span.latitudeDelta < 0.6 else {
+            guard map.region.span.latitudeDelta < AppConfig.carPlayCameraZoomThreshold else {
                 if !shown.isEmpty {
                     map.removeAnnotations(Array(shown.values))
                     shown.removeAll()
                 }
                 return
             }
-            let fresh = repository.cameras(in: map.region, limit: 120)
+            let fresh = repository.cameras(in: map.region, limit: AppConfig.carPlayMaxCameraMarkers)
             let freshIDs = Set(fresh.map(\.id))
 
             let outdated = shown.filter { !freshIDs.contains($0.key) }

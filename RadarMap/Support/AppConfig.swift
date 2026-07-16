@@ -124,4 +124,14 @@ enum AppConfig {
     static let rerouteCooldownSeconds: TimeInterval = 20
     /// Радиус прибытия: ближе этого до финиша — маршрут выполнен.
     static let arrivalRadiusMeters: CLLocationDistance = 60
+
+    // MARK: - CarPlay
+
+    /// До какого расстояния показывать ближайшую камеру в HUD машины.
+    static let carPlayNearestCameraMeters: CLLocationDistance = 3000
+    /// Обзорный зум карты CarPlay (широта, градусы): дальше камеры не рисуем —
+    /// это уровень «вся область», маркеры сливаются.
+    static let carPlayCameraZoomThreshold = 0.6
+    /// Максимум маркеров камер на экране машины — водителю нужен обзор, не свалка.
+    static let carPlayMaxCameraMarkers = 120
 }

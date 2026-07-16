@@ -45,22 +45,31 @@
 
 ## Архитектура
 
+Паттерн — **MV (Model–View)**, без ViewModel-прослоек. Правила и карта
+модулей — в [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ```
 RadarMap/
 ├── App/            AppEnvironment (DI), AppSettings, RootView
-├── Models/         Camera, TripStats
-├── Services/       LocationService (2 режима GPS), RouteService (Apple→OSRM),
+├── Models/         Camera, TripRecord (данные), TripHistory (аналитика),
+│                   TripStats (живая запись), DrivingScore
+├── Services/       LocationService (тонкий GPS-фасад), AlertEngine + PassTracking
+│                   (чистые движки алертов/проездов), RouteService (Apple→OSRM),
 │                   SpeedLimitService, CameraRepository, MobileCameraService,
 │                   RemoteSyncService, MotionService, AlertPlayer, LiveActivityService
 ├── Features/       Map / Search / Trip / Settings / Onboarding — по фичам
-├── DesignSystem/   Theme, компоненты
-└── Resources/      cameras.json (встроенная база v3)
+├── CarPlay/        Сцена CarPlay (переиспользует те же модели)
+├── DesignSystem/   Theme, SpeedLimitSign, StatTile, ShareCardShell, компоненты
+└── Support/        AppConfig (все константы), Log (os.Logger), Storage
+                    (типизированный UserDefaults), APIClient (единая сеть),
+                    JSONFile, Formatting, GeoMath
 RadarMapWidgets/    Live Activity + домашний виджет
 Shared/             Localizable.xcstrings (ru/uz), общие типы
 ```
 
 - **SwiftUI + Observation** (`@Observable`/`@Environment`), default MainActor isolation
-- Только нативные фреймворки: MapKit, CoreLocation, CoreMotion, AVFoundation, ActivityKit, WidgetKit
+- Только нативные фреймворки: MapKit, CoreLocation, CoreMotion, AVFoundation, ActivityKit, WidgetKit, CarPlay
+- Вся математика (рейтинг, штрафы, пороги алертов, учёт проездов, аналитика истории) — в `nonisolated`-функциях под юнит-тестами (50 тестов)
 
 ### Сервер (VPS, изолированно от других проектов)
 - **nginx :8090** — статика (база камер, лимиты) + прокси
@@ -73,7 +82,7 @@ Shared/             Localizable.xcstrings (ru/uz), общие типы
 ## Дорожная карта
 - [ ] Домен + HTTPS (Let's Encrypt) — требование App Store
 - [ ] TestFlight (платный Apple Developer аккаунт), App Groups для виджета
-- [ ] CarPlay (по заявке на entitlement)
+- [x] CarPlay-сцена (карта, камеры, HUD, алерты) — готова; в машине по заявке на entitlement ([docs/appstore/carplay-application.md](docs/appstore/carplay-application.md))
 - [ ] Учёт пробок в ETA
 
 ---

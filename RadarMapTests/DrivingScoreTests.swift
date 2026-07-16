@@ -159,6 +159,21 @@ final class HistoryPruneTests: XCTestCase {
     }
 }
 
+// MARK: - Скорость проезда: зона измерения
+
+final class PassSpeedTests: XCTestCase {
+    func testMeasuredSpeedIsMinimumOfApproachZone() {
+        // Притормозил у камеры (57), газанул после — разгон не должен попасть в оценку.
+        let zone: [(dist: Double, speed: Double)] = [(72, 64), (45, 57), (12, 61)]
+        XCTAssertEqual(LocationService.measuredSpeed(zone: zone, fallback: 70), 57)
+    }
+
+    func testMeasuredSpeedFallsBackWhenZoneEmpty() {
+        // Редкие GPS-фиксы: ни одного сэмпла в зоне — берём скорость траверза.
+        XCTAssertEqual(LocationService.measuredSpeed(zone: [], fallback: 66), 66)
+    }
+}
+
 // MARK: - Гео-чистка проездов
 
 final class PassCleanupTests: XCTestCase {

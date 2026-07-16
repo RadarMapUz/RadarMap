@@ -1585,18 +1585,18 @@
         }
       }
     },
-    "Каждый проезд камеры с известным лимитом. Штрафные ступени снижают балл сильнее всего.": {
+    "Каждый проезд камеры с известным лимитом: берём минимальную скорость в 80 м перед камерой — разгон после проезда не считается. Штрафные ступени снижают балл сильнее всего.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Каждый проезд камеры с известным лимитом. Штрафные ступени снижают балл сильнее всего."
+            "value": "Каждый проезд камеры с известным лимитом: берём минимальную скорость в 80 м перед камерой — разгон после проезда не считается. Штрафные ступени снижают балл сильнее всего."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Limiti ma’lum har bir kameradan o‘tish. Jarima pog‘onalari balni eng ko‘p tushiradi."
+            "value": "Cheklov ma’lum bo‘lgan har bir kameradan o‘tish: kameradan oldingi 80 m ichidagi eng past tezlik olinadi — o‘tgandan keyingi tezlanish hisobga olinmaydi. Jarima pog‘onalari ballni eng ko‘p tushiradi."
           }
         }
       }

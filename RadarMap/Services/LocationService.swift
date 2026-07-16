@@ -49,8 +49,27 @@ final class LocationService: NSObject {
     @ObservationIgnored private var anchor: CLLocation?
     @ObservationIgnored private var alertedCameraIDs: Set<Int> = []   // фон, дебаунс уведомлений
     @ObservationIgnored private var announcedLevel: [Int: Int] = [:]  // передний план, эскалация
-    /// Отслеживание прохождения: минимальная дистанция и скорость в ней, по каждой камере в зоне.
-    @ObservationIgnored private var passTracking: [Int: (camera: Camera, minDist: Double, speedAtMin: Double, limitAtMin: Int?)] = [:]
+    /// Отслеживание прохождения одной камеры: минимальное сближение + сэмплы
+    /// скорости в зоне измерения (на подходе) — как меряет настоящий радар.
+    struct PassTracker {
+        let camera: Camera
+        var minDist: Double
+        var speedAtMin: Double
+        var limitAtMin: Int?
+        /// (дистанция, скорость) на подходе в пределах зоны измерения.
+        var zone: [(dist: Double, speed: Double)] = []
+    }
+
+    /// Скорость проезда: минимальная из зоны измерения (80 м перед камерой) —
+    /// разгон ПОСЛЕ проезда или смещённая координата камеры в базе не завышают
+    /// оценку. Настоящая камера тоже меряет на подходе к своей линии.
+    nonisolated static func measuredSpeed(zone: [(dist: Double, speed: Double)],
+                                          fallback: Double) -> Double {
+        zone.map(\.speed).min() ?? fallback
+    }
+
+    /// Отслеживание прохождения по каждой камере в зоне.
+    @ObservationIgnored private var passTracking: [Int: PassTracker] = [:]
     @ObservationIgnored private var isForeground = false
 
     var isAuthorized: Bool {
@@ -132,7 +151,9 @@ final class LocationService: NSObject {
         // Зафиксировать камеры, мимо которых ещё «проезжали» в момент остановки, —
         // только те, чей траверз был по-настоящему близким.
         for (_, t) in passTracking where t.minDist <= AppConfig.passTraverseMaxMeters {
-            trip.registerPass(camera: t.camera, speedKmh: t.speedAtMin, limitKmh: t.limitAtMin)
+            trip.registerPass(camera: t.camera,
+                              speedKmh: Self.measuredSpeed(zone: t.zone, fallback: t.speedAtMin),
+                              limitKmh: t.limitAtMin)
         }
         passTracking.removeAll()
         trip.finish()
@@ -327,7 +348,13 @@ final class LocationService: NSObject {
         // Вошли в радиус камеры впереди — начинаем следить.
         if let camera = nearestCamera, let distance = distanceToNearest,
            distance <= radius, passTracking[camera.id] == nil {
-            passTracking[camera.id] = (camera, distance, speedKmh, speedLimits?.currentLimit)
+            var tracker = PassTracker(camera: camera, minDist: distance,
+                                      speedAtMin: speedKmh,
+                                      limitAtMin: speedLimits?.currentLimit)
+            if distance <= AppConfig.passTraverseMaxMeters {
+                tracker.zone.append((distance, speedKmh))
+            }
+            passTracking[camera.id] = tracker
         }
         // Точку сближения обновляем для ВСЕХ отслеживаемых: после проезда камера уходит
         // из «ближайших впереди» (направленный фильтр), но траверз ещё не пройден.
@@ -339,12 +366,19 @@ final class LocationService: NSObject {
                 tracked.minDist = distance
                 tracked.speedAtMin = speedKmh
                 tracked.limitAtMin = speedLimits?.currentLimit ?? tracked.limitAtMin
+                // Пока приближаемся — копим сэмплы зоны измерения.
+                if distance <= AppConfig.passTraverseMaxMeters {
+                    tracked.zone.append((distance, speedKmh))
+                    if tracked.zone.count > 8 { tracked.zone.removeFirst() }
+                }
                 passTracking[id] = tracked
             } else if distance > radius + 120 {
                 // Отъехали. «Пройдено» — только если траверз был действительно рядом:
                 // камера с параллельной улицы (400+ м) не наша, её лимит не про нас.
                 if tracked.minDist <= AppConfig.passTraverseMaxMeters {
-                    trip.registerPass(camera: tracked.camera, speedKmh: tracked.speedAtMin,
+                    trip.registerPass(camera: tracked.camera,
+                                      speedKmh: Self.measuredSpeed(zone: tracked.zone,
+                                                                   fallback: tracked.speedAtMin),
                                       limitKmh: tracked.limitAtMin)
                 }
                 passTracking.removeValue(forKey: id)

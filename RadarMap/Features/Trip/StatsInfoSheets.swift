@@ -93,7 +93,7 @@ struct RatingInfoSheet: View {
         infoCard(title: "Из чего складывается") {
             componentRow(icon: "camera.metering.center.weighted", tint: Theme.accent,
                          title: String(localized: "Скорость у камер"),
-                         text: String(localized: "Каждый проезд камеры с известным лимитом. Штрафные ступени снижают балл сильнее всего."))
+                         text: String(localized: "Каждый проезд камеры с известным лимитом: берём минимальную скорость в 80 м перед камерой — разгон после проезда не считается. Штрафные ступени снижают балл сильнее всего."))
             componentRow(icon: "waveform.path.ecg", tint: Theme.intelligent,
                          title: String(localized: "Плавность езды"),
                          text: String(localized: "Резкие разгоны и торможения по треку поездки снижают балл."))

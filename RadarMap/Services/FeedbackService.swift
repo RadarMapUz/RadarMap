@@ -20,52 +20,31 @@ enum CameraReportReason: String {
 @MainActor
 @Observable
 final class FeedbackService {
-    @ObservationIgnored private let session: URLSession
+    @ObservationIgnored private let api = APIClient()
 
     /// Анонимный идентификатор для защиты от спама (свой, не пересекается с другими сервисами).
     @ObservationIgnored private let deviceID = Storage.anonymousID(.feedbackDeviceID)
 
-    init() {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 10
-        session = URLSession(configuration: config)
-    }
-
     /// Сообщить об ошибке в данных камеры. true — сервер принял.
     func reportCamera(_ camera: Camera, reason: CameraReportReason, dbVersion: Int) async -> Bool {
-        let payload: [String: Any] = [
+        await api.postAccepted("api/camera_report", json: [
             "camera_id": camera.id,
             "reason": reason.rawValue,
             "lat": camera.lat,
             "lon": camera.lon,
             "db_version": dbVersion,
             "device": deviceID,
-        ]
-        return await post(path: "api/camera_report", payload: payload)
+        ])
     }
 
     /// Сообщение разработчику (форма в настройках). true — сервер принял.
     func sendMessage(_ text: String, contact: String) async -> Bool {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-        let payload: [String: Any] = [
+        return await api.postAccepted("api/feedback", json: [
             "message": String(text.prefix(2000)),
             "contact": String(contact.prefix(200)),
             "app_version": version,
             "device": deviceID,
-        ]
-        return await post(path: "api/feedback", payload: payload)
-    }
-
-    private func post(path: String, payload: [String: Any]) async -> Bool {
-        do {
-            var request = URLRequest(url: AppConfig.syncBaseURL.appendingPathComponent(path))
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-            let (_, response) = try await session.data(for: request)
-            return (response as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
-        } catch {
-            return false
-        }
+        ])
     }
 }

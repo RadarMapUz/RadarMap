@@ -9,6 +9,7 @@
 
 import Foundation
 import Observation
+import os
 
 @MainActor
 @Observable
@@ -23,15 +24,10 @@ final class RemoteSyncService {
     private(set) var lastError: String?
 
     @ObservationIgnored private let store: CameraStore
-    @ObservationIgnored private let session: URLSession
-
+    @ObservationIgnored private let api = APIClient(timeout: 15, resourceTimeout: 60)
 
     init(store: CameraStore) {
         self.store = store
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 15
-        config.timeoutIntervalForResource = 60
-        session = URLSession(configuration: config)
     }
 
     var lastCheckDate: Date? {
@@ -55,9 +51,7 @@ final class RemoteSyncService {
         state = .checking
         lastError = nil
         do {
-            let manifestURL = AppConfig.syncBaseURL.appendingPathComponent("version.json")
-            let (data, _) = try await session.data(from: manifestURL)
-            let manifest = try JSONDecoder().decode(Manifest.self, from: data)
+            let manifest = try await api.get("version.json", as: Manifest.self)
 
             guard manifest.version > store.dbVersion else {
                 Storage.set(Date(), for: .lastSyncCheck)
@@ -66,13 +60,13 @@ final class RemoteSyncService {
             }
 
             state = .downloading
-            let dbURL = AppConfig.syncBaseURL.appendingPathComponent("cameras.json")
-            let (payload, _) = try await session.data(from: dbURL)
+            let payload = try await api.getData("cameras.json")
             let count = try await store.applyRemote(data: payload, version: manifest.version)
 
             Storage.set(Date(), for: .lastSyncCheck)
             state = .updated(count: count)
         } catch {
+            Log.network.error("синк базы: \(error.localizedDescription, privacy: .public)")
             lastError = error.localizedDescription
             state = .failed
         }

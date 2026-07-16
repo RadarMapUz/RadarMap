@@ -67,12 +67,10 @@ final class SpeedLimitService {
         let weekAgo = Date().timeIntervalSince1970 - 7 * 24 * 3600
         guard index == nil || lastCheck < weekAgo else { return }
 
-        var request = URLRequest(url: AppConfig.syncBaseURL.appendingPathComponent("speed_limits.json"),
-                                 timeoutInterval: 30)
-        request.cachePolicy = .reloadIgnoringLocalCacheData
         // Недельная фоновая проверка: сбой сети не критичен, попробуем в следующий раз.
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return }
+        let api = APIClient(timeout: 30)
+        guard let data = try? await api.getData("speed_limits.json",
+                                                cachePolicy: .reloadIgnoringLocalCacheData) else { return }
 
         let url = fileURL
         let built = await Task.detached(priority: .utility) { () -> LimitIndex? in

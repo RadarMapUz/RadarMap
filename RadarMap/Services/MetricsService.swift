@@ -35,6 +35,7 @@ final class MetricsService: NSObject, MXMetricManagerSubscriber {
 
     nonisolated private func upload(_ payloads: [Data], kind: String) {
         Task {
+            let api = APIClient(timeout: 20)
             for data in payloads {
                 guard let parsed = try? JSONSerialization.jsonObject(with: data) else {
                     Log.network.error("MetricKit-пакет \(kind, privacy: .public) не распарсился")
@@ -47,15 +48,8 @@ final class MetricsService: NSObject, MXMetricManagerSubscriber {
                 ]
                 // Словарь из уже валидного JSON — сериализация не падает.
                 guard let encoded = try? JSONSerialization.data(withJSONObject: body) else { continue }
-                var request = URLRequest(
-                    url: AppConfig.syncBaseURL.appendingPathComponent("api/metrics"),
-                    timeoutInterval: 20
-                )
-                request.httpMethod = "POST"
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.httpBody = encoded
                 // Потерянный пакет не страшен — придёт со следующим суточным отчётом.
-                _ = try? await URLSession.shared.data(for: request)
+                _ = await api.postAccepted("api/metrics", body: encoded)
             }
         }
     }

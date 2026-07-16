@@ -21,7 +21,7 @@ final class MobileCameraService {
     private(set) var isRefreshing = false
 
     @ObservationIgnored private weak var store: CameraStore?
-    @ObservationIgnored private let session: URLSession
+    @ObservationIgnored private let api = APIClient()
     @ObservationIgnored private var pollTask: Task<Void, Never>?
 
     /// Анонимный идентификатор устройства для защиты от спама.
@@ -32,9 +32,6 @@ final class MobileCameraService {
 
     init(store: CameraStore) {
         self.store = store
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 10
-        session = URLSession(configuration: config)
     }
 
     // MARK: - Опрос
@@ -67,18 +64,16 @@ final class MobileCameraService {
         isRefreshing = true
         defer { isRefreshing = false }
         do {
-            let url = AppConfig.syncBaseURL.appendingPathComponent("api/mobile")
-            let (data, _) = try await session.data(from: url)
-            let decoded = try JSONDecoder().decode(MobileResponse.self, from: data)
-            reports = decoded.reports.map { api in
+            let decoded = try await api.get("api/mobile", as: MobileResponse.self)
+            reports = decoded.reports.map { report in
                 Camera(
-                    id: Self.idOffset + api.id,
+                    id: Self.idOffset + report.id,
                     region: String(localized: "Передвижной радар"),
                     city: "",
                     location: String(format: String(localized: "Отмечен водителями, исчезнет ~%@"),
-                                     Self.expiryText(api.expires)),
-                    lat: api.lat,
-                    lon: api.lon,
+                                     Self.expiryText(report.expires)),
+                    lat: report.lat,
+                    lon: report.lon,
                     type: CameraType.mobileRadar.sourceString,
                     violations: Camera.radarViolations,
                     needsReview: nil
@@ -97,7 +92,7 @@ final class MobileCameraService {
         do {
             let payload = ["lat": coordinate.latitude, "lon": coordinate.longitude,
                            "device": deviceID] as [String: Any]
-            let response: Response = try await post(path: "api/report", payload: payload)
+            let response = try await api.post("api/report", json: payload, as: Response.self)
             await refresh()
             return response.merged ? .confirmed : .created
         } catch {
@@ -111,21 +106,13 @@ final class MobileCameraService {
         let payload = ["id": cameraID - Self.idOffset, "device": deviceID,
                        "value": stillThere ? 1 : -1] as [String: Any]
         // Голос — best-effort: не дошёл — не страшно, сервер дедуплицирует повторы.
-        let _: Response? = try? await post(path: "api/vote", payload: payload)
+        let _: Response? = try? await api.post("api/vote", json: payload, as: Response.self)
         await refresh()
     }
 
     func isMobile(_ camera: Camera) -> Bool { camera.id >= Self.idOffset }
 
     // MARK: - Внутреннее
-
-    private func post<R: Decodable>(path: String, payload: [String: Any]) async throws -> R {
-        var request = URLRequest(url: AppConfig.syncBaseURL.appendingPathComponent(path))
-        request.httpMethod = "POST"
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-        let (data, _) = try await session.data(for: request)
-        return try JSONDecoder().decode(R.self, from: data)
-    }
 
     private static func expiryText(_ expires: TimeInterval) -> String {
         let date = Date(timeIntervalSince1970: expires)

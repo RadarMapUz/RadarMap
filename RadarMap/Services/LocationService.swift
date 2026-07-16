@@ -129,8 +129,9 @@ final class LocationService: NSObject {
     func endTrip() {
         isTripActive = false
         announcedLevel.removeAll()
-        // Зафиксировать камеры, мимо которых ещё «проезжали» в момент остановки.
-        for (_, t) in passTracking {
+        // Зафиксировать камеры, мимо которых ещё «проезжали» в момент остановки, —
+        // только те, чей траверз был по-настоящему близким.
+        for (_, t) in passTracking where t.minDist <= AppConfig.passTraverseMaxMeters {
             trip.registerPass(camera: t.camera, speedKmh: t.speedAtMin, limitKmh: t.limitAtMin)
         }
         passTracking.removeAll()
@@ -340,9 +341,12 @@ final class LocationService: NSObject {
                 tracked.limitAtMin = speedLimits?.currentLimit ?? tracked.limitAtMin
                 passTracking[id] = tracked
             } else if distance > radius + 120 {
-                // Отъехали — «пройдено» со скоростью и лимитом дороги в момент проезда.
-                trip.registerPass(camera: tracked.camera, speedKmh: tracked.speedAtMin,
-                                  limitKmh: tracked.limitAtMin)
+                // Отъехали. «Пройдено» — только если траверз был действительно рядом:
+                // камера с параллельной улицы (400+ м) не наша, её лимит не про нас.
+                if tracked.minDist <= AppConfig.passTraverseMaxMeters {
+                    trip.registerPass(camera: tracked.camera, speedKmh: tracked.speedAtMin,
+                                      limitKmh: tracked.limitAtMin)
+                }
                 passTracking.removeValue(forKey: id)
             }
         }

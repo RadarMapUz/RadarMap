@@ -72,6 +72,11 @@ enum AppConfig {
     /// Потолок динамического радиуса (метры).
     static let maxDynamicRadius: CLLocationDistance = 1000
 
+    /// «Пройденной» камера считается только если траверз был ближе этого порога:
+    /// GPS-шум + ширина проспекта + погрешность базы ≈ 80 м. Камеры с параллельных
+    /// улиц (150+ м) в статистику и штрафные оценки не попадают.
+    static let passTraverseMaxMeters: CLLocationDistance = 80
+
     /// Голос называет текущую скорость, только если едем быстрее этого порога.
     static let speakSpeedThresholdKmh: Double = 20
 

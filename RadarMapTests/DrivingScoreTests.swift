@@ -159,6 +159,61 @@ final class HistoryPruneTests: XCTestCase {
     }
 }
 
+// MARK: - Гео-чистка проездов
+
+final class PassCleanupTests: XCTestCase {
+    /// Прямая ~2 км на восток: после Дугласа-Пекера от неё остаются только концы,
+    /// поэтому расстояние обязано считаться до отрезка, а не до вершин.
+    private let track = [TrackPoint(lat: 41.30, lon: 69.20, speedKmh: 60),
+                         TrackPoint(lat: 41.30, lon: 69.224, speedKmh: 62)]
+
+    private func pass(_ speed: Double, limit: Int?, lat: Double, lon: Double) -> PassedCamera {
+        PassedCamera(id: UUID(), cameraID: Int(lat * 1e4 + lon), typeRaw: "Стационар радар",
+                     location: "", speedKmh: speed, date: Date(),
+                     lat: lat, lon: lon, limitKmh: limit)
+    }
+
+    func testDistanceMeasuredToSegmentNotVertices() {
+        // Точка над серединой отрезка, смещение к северу 0.0005° ≈ 56 м.
+        let d = TripStats.distanceToTrack(lat: 41.3005, lon: 69.212, track: track)
+        XCTAssertEqual(d, 55.7, accuracy: 3)
+        // До ближайшей ВЕРШИНЫ при этом ~1 км — сегментная математика обязательна.
+    }
+
+    func testSanitizedDropsParallelStreetPassAndRescores() {
+        let near = pass(58, limit: 60, lat: 41.3003, lon: 69.21)   // ~33 м от трека
+        let far = pass(73, limit: 60, lat: 41.3040, lon: 69.21)    // ~445 м — чужая улица
+        let record = TripRecord(id: 1, startedAt: Date(),
+                                endedAt: Date().addingTimeInterval(600),
+                                distanceMeters: 2000, maxSpeedKmh: 70,
+                                passed: [near, far], endLat: nil, endLon: nil,
+                                track: [41.30, 69.20, 60, 41.30, 69.224, 62], score: 60)
+
+        let (cleaned, changed) = TripStats.sanitized([record])
+
+        XCTAssertTrue(changed)
+        XCTAssertEqual(cleaned[0].passed.map(\.cameraID), [near.cameraID])
+        // Штрафной вклад ложного проезда ушёл — балл пересчитан вверх.
+        XCTAssertNotNil(cleaned[0].score)
+        XCTAssertGreaterThan(cleaned[0].score!, 60)
+    }
+
+    func testSanitizedLeavesHonestHistoryUntouched() {
+        let record = TripRecord(id: 2, startedAt: Date(),
+                                endedAt: Date().addingTimeInterval(600),
+                                distanceMeters: 2000, maxSpeedKmh: 70,
+                                passed: [pass(61, limit: 60, lat: 41.3001, lon: 69.205)],
+                                endLat: nil, endLon: nil,
+                                track: [41.30, 69.20, 60, 41.30, 69.224, 62], score: 97)
+
+        let (cleaned, changed) = TripStats.sanitized([record])
+
+        XCTAssertFalse(changed)
+        XCTAssertEqual(cleaned[0].passed.count, 1)
+        XCTAssertEqual(cleaned[0].score, 97)   // нетронутые записи не пересчитываются
+    }
+}
+
 // MARK: - Восстановление счётчиков из истории
 
 final class LifetimeRebuildTests: XCTestCase {

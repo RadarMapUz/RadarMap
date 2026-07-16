@@ -340,6 +340,70 @@ final class TripStats {
         return hypot(p.lon - (a.lon + t * dx), p.lat - (a.lat + t * dy))
     }
 
+    // MARK: - Гео-чистка проездов
+
+    /// Расстояние (метры) от точки до ломаной трека — по сегментам, не по вершинам:
+    /// после Дугласа-Пекера прямые участки хранят только концы.
+    nonisolated static func distanceToTrack(lat: Double, lon: Double,
+                                            track: [TrackPoint]) -> Double {
+        guard let first = track.first else { return .greatestFiniteMagnitude }
+        let metersPerLat = 111_320.0
+        let metersPerLon = 111_320.0 * cos(first.lat * .pi / 180)
+        func project(_ plat: Double, _ plon: Double) -> (x: Double, y: Double) {
+            ((plon - first.lon) * metersPerLon, (plat - first.lat) * metersPerLat)
+        }
+        let p = project(lat, lon)
+        guard track.count >= 2 else {
+            let a = project(first.lat, first.lon)
+            return hypot(p.x - a.x, p.y - a.y)
+        }
+        var best = Double.greatestFiniteMagnitude
+        var a = project(track[0].lat, track[0].lon)
+        for i in 1..<track.count {
+            let b = project(track[i].lat, track[i].lon)
+            let dx = b.x - a.x, dy = b.y - a.y
+            let len2 = dx * dx + dy * dy
+            let t = len2 > 0 ? max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0
+            best = min(best, hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy)))
+            a = b
+        }
+        return best
+    }
+
+    /// Порог ретро-чистки: трек упрощён (±22 м) и записан раз в 30 м,
+    /// поэтому допуск шире живого гейта в LocationService.
+    nonisolated static let passCleanupMaxMeters = 120.0
+
+    /// Ретро-чистка истории: убирает «проезды» камер, до которых трек ближе
+    /// 120 м не подходил (раньше засчитывались камеры с параллельных улиц),
+    /// и пересчитывает балл затронутых поездок. Возвращает (история, менялось ли).
+    nonisolated static func sanitized(_ history: [TripRecord]) -> ([TripRecord], Bool) {
+        var changed = false
+        let cleaned = history.map { record -> TripRecord in
+            let track = record.trackPoints
+            guard track.count >= 2, !record.passed.isEmpty else { return record }
+            let kept = record.passed.filter { pass in
+                guard let lat = pass.lat, let lon = pass.lon else { return true }
+                return distanceToTrack(lat: lat, lon: lon, track: track) <= passCleanupMaxMeters
+            }
+            guard kept.count != record.passed.count else { return record }
+            changed = true
+            return TripRecord(id: record.id, startedAt: record.startedAt,
+                              endedAt: record.endedAt,
+                              distanceMeters: record.distanceMeters,
+                              maxSpeedKmh: record.maxSpeedKmh, passed: kept,
+                              endLat: record.endLat, endLon: record.endLon,
+                              track: record.track,
+                              score: DrivingScore.tripScore(
+                                  passes: kept.map {
+                                      DrivingScore.Pass(speedKmh: $0.speedKmh,
+                                                        limitKmh: $0.limitKmh)
+                                  },
+                                  trackSpeeds: track.map(\.speedKmh)))
+        }
+        return (cleaned, changed)
+    }
+
     // MARK: - Хранение
 
     private var storeURL: URL {
@@ -356,6 +420,19 @@ final class TripStats {
         if let data = UserDefaults.standard.data(forKey: Self.lifetimeKey),
            let decoded = try? JSONDecoder().decode(LifetimeStats.self, from: data) {
             lifetime = decoded
+        }
+        // Одноразовая гео-чистка: старые версии засчитывали камеры с параллельных
+        // улиц — выкидываем их из истории и пересчитываем баллы и счётчики.
+        let cleanupKey = "passGeoCleanup1"
+        if !UserDefaults.standard.bool(forKey: cleanupKey) {
+            let (cleaned, changed) = Self.sanitized(history)
+            if changed {
+                history = cleaned
+                lifetime = LifetimeStats.rebuilt(from: history)
+                persist()
+                persistLifetime()
+            }
+            UserDefaults.standard.set(true, forKey: cleanupKey)
         }
         // Обновились с версии без счётчиков, а поездки уже есть — восстанавливаем
         // из истории, чтобы экономия и достижения не начинались с нуля.

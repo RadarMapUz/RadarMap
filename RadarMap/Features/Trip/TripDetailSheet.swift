@@ -14,13 +14,14 @@ import Charts
 // MARK: - Общие помощники стиля проездов
 
 enum PassStyle {
-    /// Цвет скорости: если лимит дороги известен — по реальному превышению,
+    /// Цвет скорости: если лимит дороги известен — по штрафным ступеням КоАО
+    /// (жёлтый — выше лимита, но в допуске; красный — уже штраф),
     /// иначе по универсальным порогам города/трассы.
     static func color(speed: Double, limit: Int?) -> Color {
         if let limit {
             let over = speed - Double(limit)
             if over <= 2 { return Theme.success }
-            if over <= 12 { return Theme.radar }
+            if FineSchedule.fine(overKmh: over) == 0 { return Theme.radar }
             return Theme.danger
         }
         switch speed {

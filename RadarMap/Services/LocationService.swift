@@ -48,28 +48,10 @@ final class LocationService: NSObject {
 
     @ObservationIgnored private var anchor: CLLocation?
     @ObservationIgnored private var alertedCameraIDs: Set<Int> = []   // фон, дебаунс уведомлений
-    @ObservationIgnored private var announcedLevel: [Int: Int] = [:]  // передний план, эскалация
-    /// Отслеживание прохождения одной камеры: минимальное сближение + сэмплы
-    /// скорости в зоне измерения (на подходе) — как меряет настоящий радар.
-    struct PassTracker {
-        let camera: Camera
-        var minDist: Double
-        var speedAtMin: Double
-        var limitAtMin: Int?
-        /// (дистанция, скорость) на подходе в пределах зоны измерения.
-        var zone: [(dist: Double, speed: Double)] = []
-    }
-
-    /// Скорость проезда: минимальная из зоны измерения (80 м перед камерой) —
-    /// разгон ПОСЛЕ проезда или смещённая координата камеры в базе не завышают
-    /// оценку. Настоящая камера тоже меряет на подходе к своей линии.
-    nonisolated static func measuredSpeed(zone: [(dist: Double, speed: Double)],
-                                          fallback: Double) -> Double {
-        zone.map(\.speed).min() ?? fallback
-    }
-
-    /// Отслеживание прохождения по каждой камере в зоне.
-    @ObservationIgnored private var passTracking: [Int: PassTracker] = [:]
+    /// Пороги приближения (передний план): чистый движок, покрыт тестами.
+    @ObservationIgnored private var alertEngine = AlertEngine()
+    /// Учёт прохождения камер (траверз + зона измерения): чистый модуль, покрыт тестами.
+    @ObservationIgnored private var passTracking = PassTracking()
     @ObservationIgnored private var isForeground = false
 
     var isAuthorized: Bool {
@@ -137,8 +119,8 @@ final class LocationService: NSObject {
     func startTrip() {
         guard isAuthorized else { return }
         isTripActive = true
-        announcedLevel.removeAll()
-        passTracking.removeAll()
+        alertEngine.reset()
+        passTracking.reset()
         trip.begin()
         applyLocationMode()
         liveActivity?.startIfNeeded(state: activityState)
@@ -147,20 +129,21 @@ final class LocationService: NSObject {
     /// Завершить поездку: сохранить итоги и вернуться к батареесберегающему фону.
     func endTrip() {
         isTripActive = false
-        announcedLevel.removeAll()
-        // Зафиксировать камеры, мимо которых ещё «проезжали» в момент остановки, —
-        // только те, чей траверз был по-настоящему близким.
-        for (_, t) in passTracking where t.minDist <= AppConfig.passTraverseMaxMeters {
-            trip.registerPass(camera: t.camera,
-                              speedKmh: Self.measuredSpeed(zone: t.zone, fallback: t.speedAtMin),
-                              limitKmh: t.limitAtMin)
-        }
-        passTracking.removeAll()
+        alertEngine.reset()
+        // Камеры, мимо которых ещё «проезжали» в момент остановки.
+        register(passes: passTracking.flush())
         trip.finish()
         // Припарковались у цели — маршрут выполнен, линия не должна висеть на карте.
         route?.finishIfNearDestination(coordinate: currentCoordinate)
         applyLocationMode()
         liveActivity?.end()
+    }
+
+    private func register(passes: [PassTracking.Pass]) {
+        for pass in passes {
+            trip.registerPass(camera: pass.camera, speedKmh: pass.speedKmh,
+                              limitKmh: pass.limitKmh)
+        }
     }
 
     /// Единая точка выбора режима GPS исходя из (поездка, открыто ли приложение, энергосбережение).
@@ -272,7 +255,10 @@ final class LocationService: NSObject {
         // Активные оповещения (звук/голос/экран) — в поездке ИЛИ пока приложение открыто.
         if isTripActive || isForeground {
             trip.update(coordinate: coordinate, speedKmh: speedKmh)
-            updatePassTracking(from: coordinate)
+            register(passes: passTracking.update(
+                nearest: nearestCamera, nearestDistance: distanceToNearest,
+                coordinate: coordinate, speedKmh: speedKmh,
+                roadLimit: speedLimits?.currentLimit, radius: effectiveAlertRadius))
             runAlertEngine()
             // Лимит дороги + превышение; манёвры и прогресс маршрута.
             // Здесь, а не в UI: голос должен работать со свёрнутым приложением.
@@ -341,56 +327,9 @@ final class LocationService: NSObject {
         distanceToNearest = ranked?.1
     }
 
-    /// Фиксация скорости прохождения — как у настоящего радара: скорость в точке
-    /// максимального сближения (траверз камеры), а не на подходе.
-    private func updatePassTracking(from coordinate: CLLocationCoordinate2D) {
-        let radius = effectiveAlertRadius
-        // Вошли в радиус камеры впереди — начинаем следить.
-        if let camera = nearestCamera, let distance = distanceToNearest,
-           distance <= radius, passTracking[camera.id] == nil {
-            var tracker = PassTracker(camera: camera, minDist: distance,
-                                      speedAtMin: speedKmh,
-                                      limitAtMin: speedLimits?.currentLimit)
-            if distance <= AppConfig.passTraverseMaxMeters {
-                tracker.zone.append((distance, speedKmh))
-            }
-            passTracking[camera.id] = tracker
-        }
-        // Точку сближения обновляем для ВСЕХ отслеживаемых: после проезда камера уходит
-        // из «ближайших впереди» (направленный фильтр), но траверз ещё не пройден.
-        for (id, entry) in passTracking {
-            var tracked = entry
-            let distance = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
-                                                tracked.camera.lat, tracked.camera.lon)
-            if distance < tracked.minDist {
-                tracked.minDist = distance
-                tracked.speedAtMin = speedKmh
-                tracked.limitAtMin = speedLimits?.currentLimit ?? tracked.limitAtMin
-                // Пока приближаемся — копим сэмплы зоны измерения.
-                if distance <= AppConfig.passTraverseMaxMeters {
-                    tracked.zone.append((distance, speedKmh))
-                    if tracked.zone.count > 8 { tracked.zone.removeFirst() }
-                }
-                passTracking[id] = tracked
-            } else if distance > radius + 120 {
-                // Отъехали. «Пройдено» — только если траверз был действительно рядом:
-                // камера с параллельной улицы (400+ м) не наша, её лимит не про нас.
-                if tracked.minDist <= AppConfig.passTraverseMaxMeters {
-                    trip.registerPass(camera: tracked.camera,
-                                      speedKmh: Self.measuredSpeed(zone: tracked.zone,
-                                                                   fallback: tracked.speedAtMin),
-                                      limitKmh: tracked.limitAtMin)
-                }
-                passTracking.removeValue(forKey: id)
-            }
-        }
-    }
-
-    /// Умный радиус: предупреждаем за `alertLeadTimeSeconds` до камеры.
-    /// Радиус растёт со скоростью (на трассе — раньше), но не опускается ниже базового из настроек.
+    /// Умный радиус оповещения — растёт со скоростью (см. AlertEngine).
     private var effectiveAlertRadius: CLLocationDistance {
-        let bySpeed = (speedKmh / 3.6) * AppConfig.alertLeadTimeSeconds
-        return min(AppConfig.maxDynamicRadius, max(settings.alertRadius, bySpeed))
+        AlertEngine.effectiveRadius(speedKmh: speedKmh, baseRadius: settings.alertRadius)
     }
 
     /// Показывать полноэкранное предупреждение: движемся и ближайшая камера в радиусе оповещения.
@@ -399,25 +338,17 @@ final class LocationService: NSObject {
         return d <= effectiveAlertRadius
     }
 
-    /// Пороги приближения (передний план): чем ближе — тем больше сигналов; голос — на первом пороге.
+    /// Оповещения о приближении: решение принимает AlertEngine (чистый, тестируемый),
+    /// здесь — только исполнение: звук, хаптика, голос, уведомление.
     /// nearestCamera уже отфильтрована по курсу: о камерах позади и на встречных
     /// перпендикулярных улицах не предупреждаем (начатая серия порогов не обрывается).
     private func runAlertEngine() {
         guard let camera = nearestCamera, let distance = distanceToNearest else { return }
-        let radius = effectiveAlertRadius
-        let thresholds = [radius, radius * 0.6, radius * 0.3]   // по убыванию
-        let level = thresholds.filter { distance <= $0 }.count
-        let previous = announcedLevel[camera.id] ?? 0
+        guard let decision = alertEngine.evaluate(cameraID: camera.id, distance: distance,
+                                                  radius: effectiveAlertRadius) else { return }
 
-        if distance > radius + 80 {          // вышли из зоны (с гистерезисом)
-            announcedLevel[camera.id] = 0
-            return
-        }
-        guard level > previous else { return }
-        announcedLevel[camera.id] = level
-
-        if settings.soundEnabled { alerts.beep(count: level) }
-        if level == 1 {
+        if settings.soundEnabled { alerts.beep(count: decision.level) }
+        if decision.level == 1 {
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
             // В свёрнутом виде (поездка в фоне) — уведомление зажигает экран и вибрирует.
             if !isForeground { notifier.notifyApproaching(camera) }

@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import CoreLocation
 @testable import RadarMap
 
 final class DrivingScoreTests: XCTestCase {
@@ -165,12 +166,119 @@ final class PassSpeedTests: XCTestCase {
     func testMeasuredSpeedIsMinimumOfApproachZone() {
         // Притормозил у камеры (57), газанул после — разгон не должен попасть в оценку.
         let zone: [(dist: Double, speed: Double)] = [(72, 64), (45, 57), (12, 61)]
-        XCTAssertEqual(LocationService.measuredSpeed(zone: zone, fallback: 70), 57)
+        XCTAssertEqual(PassTracking.measuredSpeed(zone: zone, fallback: 70), 57)
     }
 
     func testMeasuredSpeedFallsBackWhenZoneEmpty() {
         // Редкие GPS-фиксы: ни одного сэмпла в зоне — берём скорость траверза.
-        XCTAssertEqual(LocationService.measuredSpeed(zone: [], fallback: 66), 66)
+        XCTAssertEqual(PassTracking.measuredSpeed(zone: [], fallback: 66), 66)
+    }
+}
+
+// MARK: - Движок порогов оповещения
+
+final class AlertEngineTests: XCTestCase {
+    func testEscalatesThroughThreeLevels() {
+        var engine = AlertEngine()
+        // Радиус 600 → пороги 600 / 360 / 180.
+        XCTAssertNil(engine.evaluate(cameraID: 1, distance: 700, radius: 600))
+        XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 590, radius: 600)?.level, 1)
+        XCTAssertNil(engine.evaluate(cameraID: 1, distance: 500, radius: 600))   // уровень не вырос
+        XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 350, radius: 600)?.level, 2)
+        XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 170, radius: 600)?.level, 3)
+        XCTAssertNil(engine.evaluate(cameraID: 1, distance: 40, radius: 600))    // выше некуда
+    }
+
+    func testFastApproachSkipsToHigherLevel() {
+        // Влетели сразу за второй порог — сигналим один раз, но уровнем 2.
+        var engine = AlertEngine()
+        XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 300, radius: 600)?.level, 2)
+    }
+
+    func testExitWithHysteresisResetsSeries() {
+        var engine = AlertEngine()
+        XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 200, radius: 600)?.level, 2)
+        // Отошли чуть за радиус (внутри гистерезиса) — серия держится, дребезга нет.
+        XCTAssertNil(engine.evaluate(cameraID: 1, distance: 650, radius: 600))
+        XCTAssertNil(engine.evaluate(cameraID: 1, distance: 550, radius: 600))
+        // Ушли за радиус+гистерезис — сброс; возврат в зону сигналит заново.
+        XCTAssertNil(engine.evaluate(cameraID: 1, distance: 700, radius: 600))
+        XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 550, radius: 600)?.level, 1)
+    }
+
+    func testCamerasTrackedIndependently() {
+        var engine = AlertEngine()
+        XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 550, radius: 600)?.level, 1)
+        XCTAssertEqual(engine.evaluate(cameraID: 2, distance: 550, radius: 600)?.level, 1)
+    }
+
+    func testEffectiveRadiusGrowsWithSpeedAndClamps() {
+        // Город: базовый радиус побеждает скоростной.
+        XCTAssertEqual(AlertEngine.effectiveRadius(speedKmh: 40, baseRadius: 500), 500)
+        // Трасса 110 км/ч: 30.6 м/с × 22 с ≈ 672 м.
+        XCTAssertEqual(AlertEngine.effectiveRadius(speedKmh: 110, baseRadius: 500), 672, accuracy: 1)
+        // Потолок динамического радиуса.
+        XCTAssertEqual(AlertEngine.effectiveRadius(speedKmh: 250, baseRadius: 500), 1000)
+    }
+}
+
+// MARK: - Учёт прохождения камер
+
+final class PassTrackingTests: XCTestCase {
+    private func camera(id: Int = 1, lat: Double, lon: Double) -> Camera {
+        Camera(id: id, region: "", city: "", location: "тест", lat: lat, lon: lon,
+               type: "Стационар радар", violations: [], needsReview: nil)
+    }
+
+    /// Едем на восток по 41.30°: торможение у камеры, разгон после проезда.
+    func testCloseTraverseUsesMinimumZoneSpeed() {
+        var tracking = PassTracking()
+        let cam = camera(lat: 41.30, lon: 69.21)
+        func tick(_ lon: Double, _ speed: Double) -> [PassTracking.Pass] {
+            let d = GeoMath.fastDistance(41.30, lon, cam.lat, cam.lon)
+            return tracking.update(nearest: cam, nearestDistance: d,
+                                   coordinate: CLLocationCoordinate2D(latitude: 41.30, longitude: lon),
+                                   speedKmh: speed, roadLimit: 60, radius: 500)
+        }
+        XCTAssertTrue(tick(69.205, 70).isEmpty)     // ~420 м — вошли в радиус
+        XCTAssertTrue(tick(69.2095, 62).isEmpty)    // ~42 м — зона измерения
+        XCTAssertTrue(tick(69.2100, 57).isEmpty)    // траверз
+        XCTAssertTrue(tick(69.2105, 66).isEmpty)    // разгон после проезда
+        let passes = tick(69.2180, 90)              // ушли за радиус + гистерезис
+        XCTAssertEqual(passes.count, 1)
+        XCTAssertEqual(passes[0].speedKmh, 57)      // минимум зоны, разгон не в счёт
+        XCTAssertEqual(passes[0].limitKmh, 60)
+        XCTAssertTrue(tracking.tracked.isEmpty)
+    }
+
+    func testParallelStreetPassIsDropped() {
+        var tracking = PassTracking()
+        let cam = camera(lat: 41.304, lon: 69.21)   // ~445 м севернее нашей дороги
+        func tick(_ lon: Double, _ speed: Double) -> [PassTracking.Pass] {
+            let d = GeoMath.fastDistance(41.30, lon, cam.lat, cam.lon)
+            return tracking.update(nearest: cam, nearestDistance: d,
+                                   coordinate: CLLocationCoordinate2D(latitude: 41.30, longitude: lon),
+                                   speedKmh: speed, roadLimit: 60, radius: 500)
+        }
+        _ = tick(69.206, 70)
+        _ = tick(69.210, 72)                        // максимальное сближение ~445 м
+        let passes = tick(69.222, 74)
+        XCTAssertTrue(passes.isEmpty, "камера с параллельной улицы не засчитывается")
+        XCTAssertTrue(tracking.tracked.isEmpty)
+    }
+
+    func testFlushKeepsOnlyCloseTraverses() {
+        var tracking = PassTracking()
+        let close = camera(id: 1, lat: 41.30, lon: 69.2101)
+        let coord = CLLocationCoordinate2D(latitude: 41.30, longitude: 69.21)
+        _ = tracking.update(nearest: close, nearestDistance: 9, coordinate: coord,
+                            speedKmh: 55, roadLimit: 60, radius: 500)
+        let far = camera(id: 2, lat: 41.302, lon: 69.21)   // ~220 м — в радиусе, но траверз далёкий
+        _ = tracking.update(nearest: far, nearestDistance: 220, coordinate: coord,
+                            speedKmh: 55, roadLimit: 60, radius: 500)
+        let passes = tracking.flush()
+        XCTAssertEqual(passes.map(\.camera.id), [1])
+        XCTAssertTrue(tracking.tracked.isEmpty)
     }
 }
 

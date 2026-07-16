@@ -77,6 +77,14 @@ enum AppConfig {
     /// улиц (150+ м) в статистику и штрафные оценки не попадают.
     static let passTraverseMaxMeters: CLLocationDistance = 80
 
+    /// Гистерезис выхода из зоны оповещения: серия порогов сбрасывается только
+    /// когда камера ушла заметно дальше радиуса — анти-дребезг на границе.
+    static let alertExitHysteresisMeters: CLLocationDistance = 80
+
+    /// Проезд считается завершённым, когда камера ушла дальше радиуса на этот запас
+    /// (гарантирует, что траверз точно пройден, а не GPS-скачок).
+    static let passReleaseHysteresisMeters: CLLocationDistance = 120
+
     /// Голос называет текущую скорость, только если едем быстрее этого порога.
     static let speakSpeedThresholdKmh: Double = 20
 

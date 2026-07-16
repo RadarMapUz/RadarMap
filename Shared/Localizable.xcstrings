@@ -2577,6 +2577,22 @@
         }
       }
     },
+    "Перезапустите приложение, чтобы язык применился полностью.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перезапустите приложение, чтобы язык применился полностью."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Til to'liq qo'llanishi uchun ilovani qayta ishga tushiring."
+          }
+        }
+      }
+    },
     "Плавность езды": {
       "localizations": {
         "ru": {
@@ -3217,6 +3233,22 @@
         }
       }
     },
+    "Системный": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Системный"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tizim tili"
+          }
+        }
+      }
+    },
     "Скорость по маршруту": {
       "localizations": {
         "ru": {
@@ -3677,6 +3709,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jarimalardan tejash"
+          }
+        }
+      }
+    },
+    "Язык": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Язык"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Til"
+          }
+        }
+      }
+    },
+    "Язык изменён": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Язык изменён"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Til o'zgartirildi"
+          }
+        }
+      }
+    },
+    "Язык приложения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Язык приложения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ilova tili"
           }
         }
       }

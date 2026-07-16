@@ -56,6 +56,33 @@ enum PlaceSlot: String, CaseIterable, Identifiable {
     }
 }
 
+/// Язык интерфейса. `.system` — как в настройках телефона; ru/uz форсируют язык
+/// через ключ `AppleLanguages` (применяется при следующем запуске — так весь
+/// текст, включая `String(localized:)`, переключается разом, без «каши» языков).
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case system, ru, uz
+    var id: String { rawValue }
+
+    /// Название в списке. Родные названия — эндонимы (всегда на своём языке),
+    /// «Системный» переводится под текущий язык интерфейса.
+    var title: String {
+        switch self {
+        case .system: return String(localized: "Системный")
+        case .ru:     return "Русский"
+        case .uz:     return "O'zbekcha"
+        }
+    }
+
+    /// Значение для UserDefaults «AppleLanguages» (nil = следовать системе).
+    var appleLanguages: [String]? {
+        switch self {
+        case .system: return nil
+        case .ru:     return ["ru"]
+        case .uz:     return ["uz"]
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class AppSettings {
@@ -78,6 +105,14 @@ final class AppSettings {
     var weeklyDigest: Bool { didSet { store.set(weeklyDigest, forKey: Keys.digest) } }
     var recentPlaces: [SavedPlace] { didSet { saveRecents() } }
 
+    /// Выбранный язык интерфейса (применяется при следующем запуске — см. AppLanguage).
+    var appLanguage: AppLanguage {
+        didSet {
+            store.set(appLanguage.rawValue, forKey: Keys.language)
+            applyLanguage()
+        }
+    }
+
     @ObservationIgnored private let store = UserDefaults.standard
 
     private enum Keys {
@@ -97,6 +132,17 @@ final class AppSettings {
         static let nextCamera = "showNextCamera"
         static let digest = "weeklyDigest"
         static let recents = "recentPlaces"
+        static let language = "appLanguage"
+    }
+
+    /// Пишем/снимаем override языка приложения. iOS читает «AppleLanguages» из
+    /// нашего же UserDefaults при старте и выбирает нужную локализацию бандла.
+    private func applyLanguage() {
+        if let langs = appLanguage.appleLanguages {
+            store.set(langs, forKey: "AppleLanguages")
+        } else {
+            store.removeObject(forKey: "AppleLanguages")
+        }
     }
 
     init() {
@@ -129,6 +175,7 @@ final class AppSettings {
         adaptiveGPS = store.bool(forKey: Keys.adaptive)
         showNextCamera = store.bool(forKey: Keys.nextCamera)
         weeklyDigest = store.bool(forKey: Keys.digest)
+        appLanguage = AppLanguage(rawValue: store.string(forKey: Keys.language) ?? "") ?? .system
         do {
             let data = store.data(forKey: Keys.recents)
             recentPlaces = try data.map { try JSONDecoder().decode([SavedPlace].self, from: $0) } ?? []

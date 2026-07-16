@@ -12,12 +12,24 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var assignSlot: PlaceSlot?
     @State private var showFeedback = false
+    @State private var showLanguageRestart = false
 
     var body: some View {
         @Bindable var settings = env.settings
 
         NavigationStack {
             Form {
+                Section {
+                    Picker("Язык приложения", selection: $settings.appLanguage) {
+                        ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
+                    }
+                    .onChange(of: settings.appLanguage) { _, _ in
+                        showLanguageRestart = true
+                    }
+                } header: {
+                    Text("Язык")
+                }
+
                 Section("Оповещения") {
                     Toggle("Звук", isOn: $settings.soundEnabled)
                     if settings.soundEnabled {
@@ -155,6 +167,11 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showFeedback) {
                 FeedbackFormView()
+            }
+            .alert("Язык изменён", isPresented: $showLanguageRestart) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Перезапустите приложение, чтобы язык применился полностью.")
             }
         }
     }

@@ -1,0 +1,78 @@
+{
+  "sourceLanguage" : "ru",
+  "strings" : {
+    "CameraAlerts" : {
+      "comment" : "Временная точная геопозиция (requestTemporaryFullAccuracyAuthorization purposeKey: CameraAlerts)",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Точная геопозиция нужна, чтобы вовремя предупреждать о камерах именно на вашей дороге."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aynan siz yurgan yo'ldagi kameralar haqida o'z vaqtida ogohlantirish uchun aniq geojoylashuv kerak."
+          }
+        }
+      }
+    },
+    "NSLocationAlwaysAndWhenInUseUsageDescription" : {
+      "comment" : "Запрос гео «Всегда» — фоновые оповещения о камерах",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чтобы предупреждать о камерах во время движения даже когда приложение свёрнуто, RadarMap использует геолокацию в фоновом режиме. Данные о местоположении обрабатываются только на вашем устройстве."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ilova yig'ilgan bo'lsa ham harakat paytida kameralar haqida ogohlantirish uchun RadarMap fonda geolokatsiyadan foydalanadi. Joylashuv ma'lumotlari faqat qurilmangizda qayta ishlanadi."
+          }
+        }
+      }
+    },
+    "NSLocationWhenInUseUsageDescription" : {
+      "comment" : "Запрос гео «При использовании» — карта камер и оповещения",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RadarMap показывает камеры видеофиксации на карте рядом с вами и определяет ваше положение, чтобы предупреждать о ближайших камерах."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RadarMap yaqin atrofdagi video qayd kameralarini xaritada ko'rsatadi va eng yaqin kameralar haqida ogohlantirish uchun joylashuvingizni aniqlaydi."
+          }
+        }
+      }
+    },
+    "NSMotionUsageDescription" : {
+      "comment" : "Датчик движения — автостарт/стоп поездки",
+      "extractionState" : "manual",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RadarMap определяет начало и конец поездки, чтобы автоматически включать оповещения за рулём и не тратить заряд, когда вы не едете."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RadarMap safar boshlanishi va tugashini aniqlaydi — bu haydash paytida ogohlantirishlarni avtomatik yoqish va yurmaganda quvvatni tejash uchun."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

@@ -28,6 +28,9 @@ struct StatTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        // VoiceOver: «128 км, дистанция» одной фразой, а не три отдельных элемента.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(value), ") + Text(label))
     }
 }
 

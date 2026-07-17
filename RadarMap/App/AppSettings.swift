@@ -56,6 +56,33 @@ enum PlaceSlot: String, CaseIterable, Identifiable {
     }
 }
 
+/// Фоновые баннеры о камерах: о чём предупреждать, когда приложение свёрнуто.
+/// Звук/голос в поездке живут отдельно — это только про уведомления в фоне.
+enum BackgroundAlertMode: String, CaseIterable, Identifiable {
+    case all, radarsOnly, off
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all:        return String(localized: "Все камеры")
+        case .radarsOnly: return String(localized: "Только радары")
+        case .off:        return String(localized: "Выключены")
+        }
+    }
+
+    /// Пропускает ли режим уведомление об этой камере.
+    func allows(_ camera: Camera) -> Bool {
+        switch self {
+        case .all: return true
+        case .radarsOnly:
+            // Радары меряют скорость — самое важное; «обычные» камеры не будят.
+            return camera.kind == .stationaryRadar || camera.kind == .intelligentRadar
+                || camera.kind == .mobileRadar
+        case .off: return false
+        }
+    }
+}
+
 /// Язык интерфейса. `.system` — как в настройках телефона; ru/uz форсируют язык
 /// через ключ `AppleLanguages` (применяется при следующем запуске — так весь
 /// текст, включая `String(localized:)`, переключается разом, без «каши» языков).
@@ -105,6 +132,11 @@ final class AppSettings {
     var weeklyDigest: Bool { didSet { store.set(weeklyDigest, forKey: Keys.digest) } }
     var recentPlaces: [SavedPlace] { didSet { saveRecents() } }
 
+    /// Фоновые баннеры о камерах (Центр уведомлений). Звука в поездке не касается.
+    var backgroundAlerts: BackgroundAlertMode {
+        didSet { store.set(backgroundAlerts.rawValue, forKey: Keys.backgroundAlerts) }
+    }
+
     /// Выбранный язык интерфейса (применяется при следующем запуске — см. AppLanguage).
     var appLanguage: AppLanguage {
         didSet {
@@ -133,6 +165,7 @@ final class AppSettings {
         static let digest = "weeklyDigest"
         static let recents = "recentPlaces"
         static let language = "appLanguage"
+        static let backgroundAlerts = "backgroundAlerts"
     }
 
     /// Пишем/снимаем override языка приложения. iOS читает «AppleLanguages» из
@@ -176,6 +209,7 @@ final class AppSettings {
         showNextCamera = store.bool(forKey: Keys.nextCamera)
         weeklyDigest = store.bool(forKey: Keys.digest)
         appLanguage = AppLanguage(rawValue: store.string(forKey: Keys.language) ?? "") ?? .system
+        backgroundAlerts = BackgroundAlertMode(rawValue: store.string(forKey: Keys.backgroundAlerts) ?? "") ?? .all
         do {
             let data = store.data(forKey: Keys.recents)
             recentPlaces = try data.map { try JSONDecoder().decode([SavedPlace].self, from: $0) } ?? []

@@ -207,6 +207,11 @@ struct CameraDetailSheet: View {
                 .padding(.vertical, 14)
             case .idle, .failed:
                 HStack(spacing: 10) {
+                    // Краудсорс в обе стороны: подтверждение «на месте» гасит ложные
+                    // gone-репорты — база чистится голосами водителей, а не только жалобами.
+                    reportButton(title: "Камера на месте", icon: "checkmark.seal.fill") {
+                        sendReport(.stillHere)
+                    }
                     reportButton(title: "Камеры больше нет", icon: "camera.slash.fill") {
                         sendReport(.gone)
                     }

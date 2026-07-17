@@ -117,6 +117,10 @@ enum AppConfig {
     /// Через сколько секунд устойчивой остановки авто-завершать поездку (не гасим на светофоре).
     static let autoStopAfterSeconds: Double = 180
 
+    /// Сколько секунд подряд активность «за рулём» (medium) должна держаться до автостарта.
+    /// Отсекает ложные срабатывания пешком/в автобусе; high-уверенность стартует сразу.
+    static let autoStartConfirmSeconds: Double = 8
+
     /// Коридор (метры) от линии маршрута — камеры ближе этого считаются «на маршруте».
     static let routeCorridorMeters: CLLocationDistance = 90
 

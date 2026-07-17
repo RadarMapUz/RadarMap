@@ -15,6 +15,7 @@ import Observation
 enum CameraReportReason: String {
     case gone = "gone"                    // камеры больше нет
     case wrongLocation = "wrong_location" // стоит не там
+    case stillHere = "still_here"         // подтверждение: камера на месте (гасит ложные gone)
 }
 
 @MainActor

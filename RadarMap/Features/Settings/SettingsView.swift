@@ -30,7 +30,7 @@ struct SettingsView: View {
                     Text("Язык")
                 }
 
-                Section("Оповещения") {
+                Section {
                     Toggle("Звук", isOn: $settings.soundEnabled)
                     if settings.soundEnabled {
                         HStack(spacing: 10) {
@@ -40,10 +40,17 @@ struct SettingsView: View {
                         }
                     }
                     Toggle("Голосовое предупреждение", isOn: $settings.voiceEnabled)
+                    Picker("Баннеры в фоне", selection: $settings.backgroundAlerts) {
+                        ForEach(BackgroundAlertMode.allCases) { Text($0.title).tag($0) }
+                    }
                     Toggle("Итоги недели по воскресеньям", isOn: $settings.weeklyDigest)
                         .onChange(of: settings.weeklyDigest) { _, enabled in
                             if !enabled { env.notifications.cancelWeeklyDigest() }
                         }
+                } header: {
+                    Text("Оповещения")
+                } footer: {
+                    Text("«Баннеры в фоне» — уведомления о камерах, когда приложение свёрнуто. «Только радары» будит лишь камерами, которые меряют скорость.")
                 }
 
                 Section {

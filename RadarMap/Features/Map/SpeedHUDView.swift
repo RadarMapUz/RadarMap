@@ -36,6 +36,24 @@ struct SpeedHUDView: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .animation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
+        // VoiceOver: весь HUD — одна связная фраза, а не россыпь цифр.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+    }
+
+    /// «Скорость 47 км/ч. Лимит 60. Радар через 360 метров» — для VoiceOver.
+    private var accessibilitySummary: String {
+        var parts = [String(format: String(localized: "Скорость %lld км/ч"),
+                            Int(env.location.speedKmh.rounded()))]
+        if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
+            parts.append(String(format: String(localized: "Лимит %lld"), limit))
+        }
+        if let camera = env.location.nearestCamera, let distance = env.location.distanceToNearest {
+            parts.append("\(camera.kind.displayName) — \(Formatting.distance(distance))")
+        } else {
+            parts.append(String(localized: "Камер рядом нет"))
+        }
+        return parts.joined(separator: ". ")
     }
 
     /// Круглый знак «ограничение скорости»; при превышении пульсирует красным.
@@ -52,8 +70,10 @@ struct SpeedHUDView: View {
 
     private func speedBlock(_ speed: Double) -> some View {
         VStack(spacing: 0) {
+            // Крупно: за рулём HUD читается взглядом <1 сек.
             Text("\(Int(speed.rounded()))")
-                .font(.rounded(30, .bold))
+                .font(.rounded(34, .bold))
+                .monospacedDigit()
                 .foregroundStyle(env.speedLimits.isOverspeeding ? Theme.danger : Theme.textPrimary)
                 .contentTransition(.numericText(value: speed))
                 .animation(.easeOut(duration: 0.3), value: Int(speed.rounded()))
@@ -99,7 +119,8 @@ struct SpeedHUDView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Formatting.distance(distance))
-                        .font(.rounded(20, .bold))
+                        .font(.rounded(23, .bold))
+                        .monospacedDigit()
                         .foregroundStyle(distance < AppConfig.alertRadius ? Theme.danger : Theme.textPrimary)
                         .contentTransition(.numericText(value: distance))
                         .animation(.easeOut(duration: 0.3), value: Int(distance))

@@ -396,7 +396,10 @@ final class LocationService: NSObject {
         alerts.haptic(level: decision.level)
         if decision.level == 1 {
             // В свёрнутом виде (поездка в фоне) — уведомление зажигает экран и вибрирует.
-            if !isForeground { notifier.notifyApproaching(camera) }
+            // Пользователь управляет: все камеры / только радары / выключено.
+            if !isForeground, settings.backgroundAlerts.allows(camera) {
+                notifier.notifyApproaching(camera)
+            }
             // Голос — самая дорогая часть оповещения, в энергосбережении пропускаем.
             if settings.voiceEnabled && !isLowPowerMode {
                 var phrase = "\(camera.kind.displayName) \(directionPhrase). \(Int(distance)) метров"
@@ -413,7 +416,8 @@ final class LocationService: NSObject {
         guard !isTripActive else { return }
         guard let id = Self.cameraID(from: regionID),
               !alertedCameraIDs.contains(id),
-              let camera = repository.cameras.first(where: { $0.id == id }) else { return }
+              let camera = repository.cameras.first(where: { $0.id == id }),
+              settings.backgroundAlerts.allows(camera) else { return }
         alertedCameraIDs.insert(id)
         notifier.notifyApproaching(camera)
         if !isForeground {

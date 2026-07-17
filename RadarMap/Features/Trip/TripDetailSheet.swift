@@ -226,6 +226,7 @@ struct TripDetailSheet: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
                 ToolbarItem(placement: .primaryAction) {
                     Button { share() } label: { Image(systemName: "square.and.arrow.up") }
+                        .accessibilityLabel(Text("Поделиться поездкой"))
                 }
             }
         }

@@ -123,7 +123,7 @@ struct OnboardingView: View {
                 permissionRow(
                     icon: "location.fill",
                     title: "Геолокация «Всегда»",
-                    subtitle: "Чтобы оповещать о камерах во время движения в фоне.",
+                    subtitle: "Предупреждаем о камерах, даже когда телефон в кармане, а приложение свёрнуто.",
                     state: locationState,
                     action: { env.location.bootstrap() }
                 )
@@ -136,6 +136,16 @@ struct OnboardingView: View {
                 )
             }
             .padding(.horizontal, 20)
+
+            // Прайминг приватности: объясняем ДО системного диалога — больше доверия
+            // и согласий, App Review видит обоснование фоновой геолокации.
+            Label("Маршруты и местоположение обрабатываются только на этом iPhone — на сервер не уходят.",
+                  systemImage: "lock.shield.fill")
+                .font(.rounded(12, .medium))
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, 28)
+                .padding(.top, 14)
             Spacer(minLength: 24)
         }
     }

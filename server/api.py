@@ -165,7 +165,8 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(200, {"ok": True})
 
     def _camera_report(self):
-        """Репорт об ошибке в базе камер: «камеры больше нет» / «неверное место».
+        """Репорт по базе камер: «больше нет» / «неверное место» / «на месте»
+        (still_here — краудсорс-подтверждение, гасит ложные gone-репорты).
         Разбирается вручную (см. запросы модерации в шапке файла)."""
         data = self._body()
         if not data:
@@ -179,7 +180,7 @@ class Handler(BaseHTTPRequestHandler):
             db_version = int(data.get("db_version") or 0) or None
         except (KeyError, TypeError, ValueError):
             return self._json(400, {"error": "bad fields"})
-        if reason not in ("gone", "wrong_location") or not device or camera_id <= 0:
+        if reason not in ("gone", "wrong_location", "still_here") or not device or camera_id <= 0:
             return self._json(400, {"error": "bad fields"})
 
         now = time.time()

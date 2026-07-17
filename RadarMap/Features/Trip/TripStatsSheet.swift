@@ -86,11 +86,13 @@ struct TripStatsSheet: View {
                                 trip.clearHistory()
                             }
                         } label: { Image(systemName: "ellipsis.circle") }
+                            .accessibilityLabel(Text("Ещё"))
                         // Похвастаться итогами: рейтинг + экономия одной картинкой.
                         if trip.rating != nil {
                             Button { share(trip: trip) } label: {
                                 Image(systemName: "square.and.arrow.up")
                             }
+                            .accessibilityLabel(Text("Поделиться итогами"))
                         }
                     }
                 }

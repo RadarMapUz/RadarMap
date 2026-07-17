@@ -28,6 +28,8 @@ struct GlassCard<Content: View>: View {
 struct CircleControl: View {
     let systemName: String
     var tint: Color = Theme.textPrimary
+    /// Что читает VoiceOver (иконка без текста сама по себе нема).
+    var accessibilityLabel: LocalizedStringKey = ""
     let action: () -> Void
 
     var body: some View {
@@ -38,6 +40,7 @@ struct CircleControl: View {
                 .frame(width: 46, height: 46)
                 .background(.ultraThinMaterial, in: Circle())
                 .overlay(Circle().stroke(Theme.stroke, lineWidth: 1))
+                .accessibilityLabel(Text(accessibilityLabel))
         }
         .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
     }

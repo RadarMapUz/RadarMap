@@ -96,6 +96,19 @@ struct ApproachAlertView: View {
         .onTapGesture { onDismiss() }
         .onAppear { pulse = true }
         .transition(.opacity.combined(with: .scale(scale: 1.05)))
+        // VoiceOver: алерт — одна фраза + кнопка-жест «скрыть».
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint(Text("Нажмите, чтобы скрыть"))
+    }
+
+    /// «Радар через 220 метров, прямо. Скорость 47 км/ч» — для VoiceOver.
+    private var accessibilitySummary: String {
+        var text = "\(camera.kind.displayName) — \(Formatting.distance(distance))"
+        if let rel = relativeBearing { text += ", \(directionText(rel))" }
+        text += ". " + String(format: String(localized: "Скорость %lld км/ч"), Int(speedKmh))
+        return text
     }
 
     private func label(icon: String, value: String, rotate: Double?) -> some View {

@@ -117,11 +117,9 @@ struct FeedbackFormView: View {
         messageFocused = false
         state = .sending
         Task {
-            let ok = await env.feedback.sendMessage(message, contact: contact)
-            withAnimation(.spring(duration: 0.35)) {
-                state = ok ? .sent : .failed
-            }
-            guard ok else { return }
+            // Очередь не теряет сообщение: нет связи → уйдёт при следующем запуске.
+            _ = await env.feedback.sendMessage(message, contact: contact)
+            withAnimation(.spring(duration: 0.35)) { state = .sent }
             await Task.pause(seconds: 1.6)
             dismiss()
         }

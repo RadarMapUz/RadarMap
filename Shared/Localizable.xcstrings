@@ -1025,6 +1025,22 @@
         }
       }
     },
+    "Выезд на встречную полосу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выезд на встречную полосу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qarama-qarshi yo'nalishga chiqish"
+          }
+        }
+      }
+    },
     "Выключены": {
       "localizations": {
         "ru": {
@@ -1361,6 +1377,22 @@
         }
       }
     },
+    "Дорожные знаки и разметка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дорожные знаки и разметка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo'l belgilari va chiziqlar"
+          }
+        }
+      }
+    },
     "Достижения": {
       "localizations": {
         "ru": {
@@ -1453,6 +1485,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Belgilash"
+          }
+        }
+      }
+    },
+    "Заезд за стоп-линию": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заезд за стоп-линию"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop chizig'idan o'tib ketish"
           }
         }
       }
@@ -1921,6 +1969,22 @@
         }
       }
     },
+    "Камера №%@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера №%@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera №%@"
+          }
+        }
+      }
+    },
     "Камера №%lld": {
       "localizations": {
         "ru": {
@@ -2381,6 +2445,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dasturchiga yozish"
+          }
+        }
+      }
+    },
+    "Нарушение правил остановки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нарушение правил остановки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To'xtash qoidalarini buzish"
+          }
+        }
+      }
+    },
+    "Нарушение правил стоянки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нарушение правил стоянки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To'xtab turish qoidalarini buzish"
           }
         }
       }
@@ -3265,6 +3361,22 @@
         }
       }
     },
+    "Проезд на красный": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проезд на красный"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qizil chiroqda o'tish"
+          }
+        }
+      }
+    },
     "Проезжайте камеры не выше лимита — уже +6 км/ч попадает в штрафную ступень.": {
       "localizations": {
         "ru": {
@@ -3537,6 +3649,22 @@
         }
       }
     },
+    "Ремень безопасности": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ремень безопасности"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xavfsizlik kamari"
+          }
+        }
+      }
+    },
     "Рискованный стиль": {
       "localizations": {
         "ru": {
@@ -3741,6 +3869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rahmat! Har bir xabarni o‘qiymiz."
+          }
+        }
+      }
+    },
+    "Спасибо! Отправим, когда появится связь.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Спасибо! Отправим, когда появится связь."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rahmat! Aloqa paydo bo'lganda yuboramiz."
           }
         }
       }

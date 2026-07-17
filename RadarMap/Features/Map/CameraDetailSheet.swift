@@ -15,7 +15,7 @@ struct CameraDetailSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
 
-    private enum ReportState: Equatable { case idle, sending, sent, failed }
+    private enum ReportState: Equatable { case idle, sending, sent, queued }
     @State private var reportState: ReportState = .idle
 
     var body: some View {
@@ -34,7 +34,8 @@ struct CameraDetailSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(Theme.background)
-            .navigationTitle("Камера №\(camera.id)")
+            // String(id), не интерполяция Int: та форматирует с группировкой («№2,331»).
+            .navigationTitle(String(format: String(localized: "Камера №%@"), String(camera.id)))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -68,6 +69,11 @@ struct CameraDetailSheet: View {
                 }
             }
             Spacer(minLength: 0)
+            // Лимит дороги, на которой стоит камера (данные OSM) — сразу видно,
+            // сколько можно на этом участке.
+            if let limit = env.speedLimits.limit(near: camera.coordinate) {
+                SpeedLimitSign(limit: limit, diameter: 46)
+            }
         }
     }
 
@@ -93,7 +99,8 @@ struct CameraDetailSheet: View {
             Text("Фиксирует нарушения")
                 .font(.rounded(14, .semibold))
                 .foregroundStyle(Theme.textSecondary)
-            ForEach(camera.violations, id: \.self) { violation in
+            // На языке интерфейса (в базе — узбекская кириллица из egov).
+            ForEach(camera.localizedViolations, id: \.self) { violation in
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "checkmark.seal.fill")
                         .font(.rounded(13))
@@ -187,8 +194,11 @@ struct CameraDetailSheet: View {
                 .foregroundStyle(Theme.textSecondary)
 
             switch reportState {
-            case .sent:
-                Label("Спасибо! Проверим и обновим базу.", systemImage: "checkmark.circle.fill")
+            case .sent, .queued:
+                Label(reportState == .sent
+                      ? "Спасибо! Проверим и обновим базу."
+                      : "Спасибо! Отправим, когда появится связь.",
+                      systemImage: "checkmark.circle.fill")
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.success)
                     .frame(maxWidth: .infinity)
@@ -205,24 +215,22 @@ struct CameraDetailSheet: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-            case .idle, .failed:
-                HStack(spacing: 10) {
+            case .idle:
+                HStack(spacing: 8) {
                     // Краудсорс в обе стороны: подтверждение «на месте» гасит ложные
                     // gone-репорты — база чистится голосами водителей, а не только жалобами.
-                    reportButton(title: "Камера на месте", icon: "checkmark.seal.fill") {
+                    reportButton(title: "Камера на месте", icon: "checkmark.seal.fill",
+                                 tint: Theme.success) {
                         sendReport(.stillHere)
                     }
-                    reportButton(title: "Камеры больше нет", icon: "camera.slash.fill") {
+                    reportButton(title: "Камеры больше нет", icon: "camera.slash.fill",
+                                 tint: Theme.radar) {
                         sendReport(.gone)
                     }
-                    reportButton(title: "Неверное место", icon: "mappin.slash.circle.fill") {
+                    reportButton(title: "Неверное место", icon: "mappin.slash.circle.fill",
+                                 tint: Theme.radar) {
                         sendReport(.wrongLocation)
                     }
-                }
-                if reportState == .failed {
-                    Label("Не удалось отправить — проверьте сеть.", systemImage: "wifi.slash")
-                        .font(.rounded(12))
-                        .foregroundStyle(Theme.danger)
                 }
                 Button {
                     env.cameras.hide(camera)
@@ -239,17 +247,24 @@ struct CameraDetailSheet: View {
         .animation(.spring(duration: 0.35), value: reportState)
     }
 
-    private func reportButton(title: LocalizedStringKey, icon: String, action: @escaping () -> Void) -> some View {
+    /// Плитка репорта: фиксированная высота и две строки текста — три плитки в ряду
+    /// всегда ровные, ничего не расползается.
+    private func reportButton(title: LocalizedStringKey, icon: String, tint: Color,
+                              action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: icon).font(.rounded(17, .semibold))
-                Text(title).font(.rounded(13, .semibold))
+            VStack(spacing: 7) {
+                Image(systemName: icon).font(.rounded(18, .semibold))
+                Text(title)
+                    .font(.rounded(12, .semibold))
                     .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .frame(height: 30)          // ровно две строки у всех плиток
             }
-            .foregroundStyle(Theme.radar)
+            .foregroundStyle(tint)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(Theme.radar.opacity(0.10),
+            .background(tint.opacity(0.10),
                         in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         }
     }
@@ -257,18 +272,15 @@ struct CameraDetailSheet: View {
     private func sendReport(_ reason: CameraReportReason) {
         reportState = .sending
         Task {
-            let ok = await env.feedback.reportCamera(camera, reason: reason,
-                                                     dbVersion: env.cameras.dbVersion)
-            guard ok else {
-                reportState = .failed
-                return
-            }
-            reportState = .sent
+            // Очередь никогда не теряет репорт: сервер недоступен → дошлём позже.
+            let outcome = await env.feedback.reportCamera(camera, reason: reason,
+                                                          dbVersion: env.cameras.dbVersion)
+            reportState = outcome == .sent ? .sent : .queued
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             if reason == .gone {
                 env.cameras.hide(camera)   // убрали у себя сразу, база поправится после модерации
             }
-            await Task.pause(seconds: 1.2)
+            await Task.pause(seconds: 1.4)
             dismiss()
         }
     }

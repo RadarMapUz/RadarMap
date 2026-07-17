@@ -121,6 +121,34 @@ struct Camera: Identifiable, Codable, Hashable {
     ]
     static let radarViolations = ["тезликни ошириш"]
 
+    /// Сырые строки нарушений в базе — узбекская кириллица из egov; в UI показываем
+    /// на языке интерфейса. Неизвестные строки оставляем как есть (лучше сырое, чем ничего).
+    nonisolated static func localizedViolation(_ raw: String) -> String {
+        switch raw.lowercased() {
+        case "тезликни ошириш":
+            return String(localized: "Превышение скорости")
+        case "йўл белгилари":
+            return String(localized: "Дорожные знаки и разметка")
+        case "хавфсизлик камаридан фойдаланиш":
+            return String(localized: "Ремень безопасности")
+        case "қизил чироқда бўйсунмасдан ўтиш":
+            return String(localized: "Проезд на красный")
+        case "қарама қарши йўналишда ҳаракатланиш":
+            return String(localized: "Выезд на встречную полосу")
+        case "тўхташ қоидаларини бузиш":
+            return String(localized: "Нарушение правил остановки")
+        case "тўхтаб туриш қоидаларини бузиш":
+            return String(localized: "Нарушение правил стоянки")
+        case "қизил чироқда тўхташ чизиғини босиб кириш":
+            return String(localized: "Заезд за стоп-линию")
+        default:
+            return raw
+        }
+    }
+
+    /// Нарушения на языке интерфейса — для карточки камеры и уведомлений.
+    var localizedViolations: [String] { violations.map(Self.localizedViolation) }
+
     static func defaultViolations(forType type: String) -> [String] {
         switch CameraType(raw: type) {
         case .stationaryCamera, .intelligentRadar: return standardViolations

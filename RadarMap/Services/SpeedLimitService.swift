@@ -39,6 +39,11 @@ final class SpeedLimitService {
         self.settings = settings
     }
 
+    /// Лимит дороги у произвольной точки (карточка камеры). nil — данных нет.
+    func limit(near coordinate: CLLocationCoordinate2D) -> Int? {
+        index?.limit(near: coordinate)
+    }
+
     // MARK: - Загрузка базы
 
     /// Вызывается при старте приложения: локальный файл сразу, сервер — раз в 7 дней.
@@ -228,6 +233,38 @@ struct LimitIndex: Sendable {
                 guard min(diff, 180 - diff) <= 40 else { continue }
                 bestDistance = d
                 bestLimit = segment.limit
+            }
+        }
+        return bestLimit
+    }
+
+    /// Лимит ближайшей дороги без учёта курса — для карточки камеры
+    /// (камера стоит, курса нет; берём просто ближайшую дорогу до 45 м).
+    nonisolated func limit(near coordinate: CLLocationCoordinate2D) -> Int? {
+        let p = MKMapPoint(coordinate)
+        var bestDistance = 45.0
+        var bestLimit: Int?
+        var candidates = Set<Int32>()
+        for dLat in -1...1 {
+            for dLon in -1...1 {
+                let key = Self.cellKey(lat: coordinate.latitude + Double(dLat) * 0.01,
+                                       lon: coordinate.longitude + Double(dLon) * 0.01)
+                if let list = grid[key] { candidates.formUnion(list) }
+            }
+        }
+        for candidate in candidates {
+            let pts = segments[Int(candidate)].pts
+            for i in 0..<(pts.count - 1) {
+                let a = pts[i], b = pts[i + 1]
+                let dx = b.x - a.x, dy = b.y - a.y
+                let len2 = dx * dx + dy * dy
+                guard len2 > 0 else { continue }
+                let t = max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2))
+                let d = p.distance(to: MKMapPoint(x: a.x + t * dx, y: a.y + t * dy))
+                if d < bestDistance {
+                    bestDistance = d
+                    bestLimit = segments[Int(candidate)].limit
+                }
             }
         }
         return bestLimit

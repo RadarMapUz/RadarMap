@@ -148,6 +148,7 @@ final class LocationService: NSObject {
     /// Единая точка выбора режима GPS исходя из (поездка, открыто ли приложение, энергосбережение).
     private func applyLocationMode() {
         guard isAuthorized else { return }
+        accuracyTier = -1   // режим сменился — адаптивная точность переоценится на след. тике
         guard isTripActive || isForeground else {
             // Тихий фон: непрерывный GPS выключен, работают SLC + геозоны (будят на уведомление).
             manager.stopUpdatingLocation()
@@ -170,20 +171,35 @@ final class LocationService: NSObject {
         manager.startUpdatingLocation()
     }
 
-    /// Адаптивный GPS в поездке: далеко от камер и манёвров сантиметровая точность не нужна —
-    /// чип GPS работает мягче, батарея живёт дольше. Ближе 3 км всё возвращается к максимуму.
+    /// Тир точности GPS в поездке. Переключаем только на границах (гистерезис по тиру),
+    /// а не каждый тик — реконфигурация CLLocationManager не бесплатна.
+    @ObservationIgnored private var accuracyTier = -1
+
+    /// Адаптивный GPS в поездке: максимум только в ФИНАЛЬНОМ подходе к камере/манёвру,
+    /// где важен точный отсчёт и учёт проезда. На крейсере — 10 м и больший distanceFilter:
+    /// GPS-чип работает мягче И весь пайплайн (+ следование карты) тикает реже — меньше нагрев.
+    /// В плотном городе, где камера почти всегда «где-то рядом», это ключевая экономия:
+    /// бинарный порог 3 км там не срабатывал и точность держалась на максимуме весь путь.
     private func tuneAdaptiveAccuracy() {
         guard isTripActive, settings.adaptiveGPS, !isLowPowerMode else { return }
         let cameraDistance = distanceToNearest ?? .greatestFiniteMagnitude
         let stepDistance = (route?.isActive == true && route?.nextStep != nil)
             ? (route?.nextStepDistance ?? .greatestFiniteMagnitude)
             : .greatestFiniteMagnitude
-        if min(cameraDistance, stepDistance) > 3000 {
-            manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-            manager.distanceFilter = 30
-        } else {
-            manager.desiredAccuracy = kCLLocationAccuracyBest
-            manager.distanceFilter = 5
+        let nearest = min(cameraDistance, stepDistance)
+
+        // 0 — финал (Best, частые фиксы), 1 — подъезд (10 м), 2 — крейсер (мягче всего).
+        let tier = nearest < AppConfig.gpsPreciseApproachMeters ? 0
+                 : nearest < AppConfig.gpsMidApproachMeters ? 1 : 2
+        guard tier != accuracyTier else { return }
+        accuracyTier = tier
+        switch tier {
+        case 0:  manager.desiredAccuracy = kCLLocationAccuracyBest
+                 manager.distanceFilter = 6
+        case 1:  manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+                 manager.distanceFilter = 15
+        default: manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+                 manager.distanceFilter = 25
         }
     }
 

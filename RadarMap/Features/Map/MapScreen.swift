@@ -271,14 +271,19 @@ struct MapScreen: View {
 
     private var controlColumn: some View {
         VStack(spacing: 12) {
-            CircleControl(systemName: headingUp ? "location.north.line.fill" : "location.north.line",
-                          tint: headingUp ? Theme.accent : Theme.textPrimary,
-                          accessibilityLabel: "Карта по ходу движения") {
-                headingUp.toggle()
-                if headingUp {
-                    map.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
+            // Тумблер «по ходу движения» нужен только в движении: вне поездки/маршрута
+            // он висел в углу без дела и налезал на маркеры камер.
+            if env.location.isTripActive || env.route.isActive {
+                CircleControl(systemName: headingUp ? "location.north.line.fill" : "location.north.line",
+                              tint: headingUp ? Theme.accent : Theme.textPrimary,
+                              accessibilityLabel: "Карта по ходу движения") {
+                    headingUp.toggle()
+                    if headingUp {
+                        map.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
+                    }
+                    revealControls()
                 }
-                revealControls()
+                .transition(.scale.combined(with: .opacity))
             }
             CircleControl(systemName: "location.fill", tint: Theme.accent,
                           accessibilityLabel: "Моё местоположение") {
@@ -287,6 +292,7 @@ struct MapScreen: View {
             }
             // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
+        .animation(.spring(duration: 0.3), value: env.location.isTripActive || env.route.isActive)
     }
 
     // MARK: - Низ: панель действий / режим добавления

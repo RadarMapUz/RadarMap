@@ -41,7 +41,7 @@ struct TripStatsSheet: View {
                         .entrance(1, appeared)
                     statsGrid(trip: trip, last: lastRecord)
                         .entrance(2, appeared)
-                    savedCard(trip: trip)
+                    finesCard(trip: trip)
                         .entrance(3, appeared)
 
                     achievementsSection(trip: trip)
@@ -202,40 +202,59 @@ struct TripStatsSheet: View {
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
     }
 
-    // MARK: - Сэкономлено на штрафах
+    // MARK: - Штрафы за 30 дней
 
+    /// Честный счёт вместо виртуальной «экономии»: 0 штрафов — гордость,
+    /// есть превышения — реальный риск по штрафным ступеням + где чаще всего.
     @ViewBuilder
-    private func savedCard(trip: TripStats) -> some View {
-        // Тап — таблица штрафных ступеней и как считаем экономию.
+    private func finesCard(trip: TripStats) -> some View {
+        let month = trip.month30
+        let total = month.clean + month.over
+        let ok = month.over == 0
+        // Тап — таблица штрафных ступеней (как считаем).
         Button {
             showSavingsInfo = true
         } label: {
             HStack(spacing: 14) {
-                Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                Image(systemName: ok ? "shield.lefthalf.filled.badge.checkmark"
+                                     : "exclamationmark.shield.fill")
                     .font(.rounded(22, .bold))
-                    .foregroundStyle(Theme.success)
+                    .foregroundStyle(ok ? Theme.success : Theme.danger)
                     .frame(width: 48, height: 48)
-                    .background(Theme.success.opacity(0.12), in: Circle())
+                    .background((ok ? Theme.success : Theme.danger).opacity(0.12), in: Circle())
                 VStack(alignment: .leading, spacing: 3) {
-                    if trip.lifetime.savedFinesSum > 0 {
-                        Text("Сэкономлено на штрафах")
-                            .font(.rounded(13, .medium))
-                            .foregroundStyle(Theme.textSecondary)
-                        Text("≈ \(Formatting.money(trip.lifetime.savedFinesSum))")
-                            .font(.rounded(24, .heavy))
-                            .foregroundStyle(Theme.success)
-                            .contentTransition(.numericText())
-                        Text("за 30 дней: ≈ \(Formatting.money(trip.monthSaved)) · как считаем?")
-                            .font(.rounded(11))
-                            .foregroundStyle(Theme.textTertiary)
-                    } else {
-                        Text("Сэкономлено на штрафах")
-                            .font(.rounded(15, .bold))
-                            .foregroundStyle(Theme.textPrimary)
-                        Text("Каждая камера, пройденная в лимите, — несостоявшийся штраф. Посчитаем и покажем.")
+                    Text("Штрафы за 30 дней")
+                        .font(.rounded(13, .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                    if total == 0 {
+                        Text("Проезжайте камеры — посчитаем проезды в лимите и риск штрафов.")
                             .font(.rounded(12))
                             .foregroundStyle(Theme.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
+                    } else if ok {
+                        Text("0 штрафов")
+                            .font(.rounded(24, .heavy))
+                            .foregroundStyle(Theme.success)
+                        Text(String(format: String(localized: "%lld проездов камер — все в лимите"), total))
+                            .font(.rounded(11))
+                            .foregroundStyle(Theme.textTertiary)
+                    } else {
+                        Text("риск ≈ \(Formatting.money(month.risk))")
+                            .font(.rounded(24, .heavy))
+                            .foregroundStyle(Theme.danger)
+                            .contentTransition(.numericText())
+                        Text(String(format: String(localized: "%lld превышений из %lld проездов"),
+                                    month.over, total))
+                            .font(.rounded(11))
+                            .foregroundStyle(Theme.textTertiary)
+                        // «Зона риска»: камера, где превышаете чаще всего, — ясно, где сбавлять.
+                        if let top = month.topOverLocation {
+                            Label(String(format: String(localized: "Чаще всего: %@"), top),
+                                  systemImage: "mappin.circle.fill")
+                                .font(.rounded(11, .medium))
+                                .foregroundStyle(Theme.radar)
+                                .lineLimit(1)
+                        }
                     }
                 }
                 Spacer(minLength: 0)
@@ -279,34 +298,25 @@ struct TripStatsSheet: View {
 
     @ViewBuilder
     private func statusHeader(active: Bool, trip: TripStats, last: TripRecord?) -> some View {
+        // Компактный заголовок секции вместо прежней крупной карточки-дубля:
+        // цифры и так в сетке ниже, тап по заголовку открывает деталку.
         if let last {
-            // Живых метрик нет (перезапуск) — последняя поездка из истории, тап — деталка.
             Button {
                 selectedRecord = last
             } label: {
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle().fill(Theme.textTertiary.opacity(0.15))
-                            .frame(width: 46, height: 46)
-                        Image(systemName: "flag.checkered")
-                            .font(.rounded(20, .bold))
-                            .foregroundStyle(Theme.textSecondary)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Последняя поездка")
-                            .font(.rounded(17, .bold))
-                            .foregroundStyle(Theme.textPrimary)
-                        Text("\(last.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(Formatting.duration(last.duration))")
-                            .font(.rounded(14, .medium))
-                            .foregroundStyle(Theme.textSecondary)
-                    }
+                HStack(spacing: 6) {
+                    Text("Последняя поездка")
+                        .font(.rounded(14, .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                    Text("· \(last.startedAt.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.rounded(13))
+                        .foregroundStyle(Theme.textTertiary)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.rounded(13, .semibold))
+                        .font(.rounded(12, .semibold))
                         .foregroundStyle(Theme.textTertiary)
                 }
-                .padding(16)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         } else {

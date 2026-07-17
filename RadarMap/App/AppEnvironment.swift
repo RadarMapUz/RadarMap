@@ -79,7 +79,7 @@ final class AppEnvironment {
                 distance: week.distance,
                 cameras: week.cameras,
                 rating: trip.rating,
-                saved: trip.monthSaved
+                cleanMonth: trip.month30.over == 0
             )
         }
 

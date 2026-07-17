@@ -71,14 +71,16 @@ struct StatsShareCard: View {
                 }
             }
 
-            if trip.lifetime.savedFinesSum > 0 {
+            // Хвастаемся честным: «0 штрафов за 30 дней» звучит сильнее выдуманной суммы.
+            if case let month = TripHistory.month30(trip.history), month.clean + month.over > 0 {
                 VStack(spacing: 4) {
-                    Text("Сэкономлено на штрафах")
+                    Text("Штрафы за 30 дней")
                         .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.55))
-                    Text("≈ \(Formatting.money(trip.lifetime.savedFinesSum))")
+                    Text(month.over == 0 ? String(localized: "0 штрафов")
+                                         : "риск ≈ \(Formatting.money(month.risk))")
                         .font(.system(size: 34, weight: .heavy, design: .rounded))
-                        .foregroundStyle(Theme.success)
+                        .foregroundStyle(month.over == 0 ? Theme.success : Theme.danger)
                 }
                 .padding(.top, 26)
             }

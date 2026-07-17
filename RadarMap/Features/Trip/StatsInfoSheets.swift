@@ -156,7 +156,7 @@ struct SavingsInfoSheet: View {
                 .padding(20)
             }
             .background(Theme.background)
-            .navigationTitle("Экономия на штрафах")
+            .navigationTitle("Штрафы и лимиты")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
@@ -167,24 +167,28 @@ struct SavingsInfoSheet: View {
     }
 
     private var header: some View {
-        let lifetime = env.trip.lifetime
+        // Честные цифры за 30 дней: проезды в лимите, превышения, реальный риск.
+        let month = env.trip.month30
+        let ok = month.over == 0
         return VStack(spacing: 12) {
-            Text("≈ \(Formatting.money(lifetime.savedFinesSum))")
+            Text(ok ? String(localized: "0 штрафов")
+                    : "риск ≈ \(Formatting.money(month.risk))")
                 .font(.rounded(34, .heavy))
-                .foregroundStyle(Theme.success)
+                .foregroundStyle(ok ? Theme.success : Theme.danger)
             HStack(spacing: 0) {
-                headerMetric(Formatting.money(env.trip.monthSaved), String(localized: "за 30 дней"))
+                headerMetric("\(month.clean)", String(localized: "в лимите"))
                 divider
-                headerMetric("\(lifetime.camerasInLimit)", String(localized: "камер в лимите"))
+                headerMetric("\(month.over)", String(localized: "превышений"))
                 divider
-                headerMetric("\(lifetime.trips)", String(localized: "поездок всего"))
+                headerMetric("\(env.trip.lifetime.trips)", String(localized: "поездок всего"))
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 18)
-        .background(Theme.success.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        .background((ok ? Theme.success : Theme.danger).opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
-            .stroke(Theme.success.opacity(0.25), lineWidth: 1))
+            .stroke((ok ? Theme.success : Theme.danger).opacity(0.25), lineWidth: 1))
     }
 
     private func headerMetric(_ value: String, _ label: String) -> some View {

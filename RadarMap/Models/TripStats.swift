@@ -162,7 +162,9 @@ final class TripStats {
     }
 
     /// «Сэкономлено на штрафах» за последние 30 дней (по истории; пожизненное — в lifetime).
-    var monthSaved: Double { TripHistory.monthSaved(history) }
+    var month30: (clean: Int, over: Int, risk: Double, topOverLocation: String?) {
+        TripHistory.month30(history)
+    }
 
     // MARK: - Трек: упаковка и упрощение (Дуглас-Пекер)
 

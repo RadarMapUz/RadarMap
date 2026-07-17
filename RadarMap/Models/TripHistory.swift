@@ -57,18 +57,34 @@ nonisolated enum TripHistory {
     }
 
     /// «Сэкономлено на штрафах» за последние 30 дней.
-    static func monthSaved(_ history: [TripRecord], now: Date = Date()) -> Double {
+    /// Честная сводка проездов за 30 дней: сколько в лимите, сколько с превышением,
+    /// риск по РЕАЛЬНЫМ штрафным ступеням и камера, где превышали чаще всего
+    /// («зона риска» — водителю ясно, где сбавлять). Никакой виртуальной «экономии»:
+    /// старая метрика начисляла минимальный штраф за каждый чистый проезд и за месяц
+    /// раздувалась до десятков миллионов — неправдоподобно.
+    static func month30(_ history: [TripRecord], now: Date = Date())
+        -> (clean: Int, over: Int, risk: Double, topOverLocation: String?) {
         let from = now.addingTimeInterval(-30 * 86400)
-        var sum = 0.0
+        var clean = 0, over = 0
+        var risk = 0.0
+        var overByLocation: [String: Int] = [:]
         for record in history where record.startedAt > from {
             for pass in record.passed {
                 guard let limit = pass.limitKmh else { continue }
-                if FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) == 0 {
-                    sum += FineSchedule.minimumFine
+                let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
+                if fine > 0 {
+                    over += 1
+                    risk += fine
+                    if !pass.location.isEmpty {
+                        overByLocation[pass.location, default: 0] += 1
+                    }
+                } else {
+                    clean += 1
                 }
             }
         }
-        return sum
+        let top = overByLocation.max { $0.value < $1.value }?.key
+        return (clean, over, risk, top)
     }
 
     /// «Возможные штрафы» поездки/записи — красная строка в деталке.

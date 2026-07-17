@@ -273,6 +273,38 @@
         }
       }
     },
+    "%lld превышений из %lld проездов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld превышений из %lld проездов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ta oshirish, jami %lld o'tish"
+          }
+        }
+      }
+    },
+    "%lld проездов камер — все в лимите": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld проездов камер — все в лимите"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld kamera o'tishi — barchasi cheklov ichida"
+          }
+        }
+      }
+    },
     "+10 км/ч": {
       "localizations": {
         "ru": {
@@ -317,6 +349,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "0 km/soat"
+          }
+        }
+      }
+    },
+    "0 штрафов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 штрафов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 jarima"
+          }
+        }
+      }
+    },
+    "0 штрафов за месяц": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 штрафов за месяц"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oyda 0 jarima"
           }
         }
       }
@@ -509,6 +573,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "«Fonda bannerlar» — ilova yig'ilganda kameralar haqidagi bildirishnomalar. «Faqat radarlar» faqat tezlik o'lchaydigan kameralar bilan uyg'otadi."
+          }
+        }
+      }
+    },
+    "· %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "· %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "· %@"
           }
         }
       }
@@ -3201,6 +3281,22 @@
         }
       }
     },
+    "Проезжайте камеры — посчитаем проезды в лимите и риск штрафов.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проезжайте камеры — посчитаем проезды в лимите и риск штрафов."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar yonidan o'ting — cheklov ichidagi o'tishlar va jarima xavfini hisoblaymiz."
+          }
+        }
+      }
+    },
     "Проехать столько камер с известным лимитом — без штрафной скорости.": {
       "localizations": {
         "ru": {
@@ -3953,6 +4049,22 @@
         }
       }
     },
+    "Чаще всего: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чаще всего: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ko'pincha: %@"
+          }
+        }
+      }
+    },
     "Через %lld метров — %@": {
       "localizations": {
         "ru": {
@@ -4017,6 +4129,22 @@
         }
       }
     },
+    "Штрафы за 30 дней": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Штрафы за 30 дней"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 kundagi jarimalar"
+          }
+        }
+      }
+    },
     "Штрафы за превышение — ст. 128-3 КоАО": {
       "localizations": {
         "ru": {
@@ -4029,6 +4157,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tezlikni oshirish jarimalari — MJtK 128-3-modda"
+          }
+        }
+      }
+    },
+    "Штрафы и лимиты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Штрафы и лимиты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimalar va cheklovlar"
           }
         }
       }
@@ -4637,6 +4781,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "oshirilgan"
+          }
+        }
+      }
+    },
+    "превышений": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "превышений"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oshirishlar"
           }
         }
       }

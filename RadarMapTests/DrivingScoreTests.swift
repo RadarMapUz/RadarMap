@@ -216,18 +216,32 @@ final class TripAnalyticsTests: XCTestCase {
                                                   liveDistance: 0)?.id, last.id)
     }
 
-    func testMonthSavedCountsCleanLimitedPassesOnly() {
+    func testMonth30CountsCleanOverRiskAndTopLocation() {
         let clean = PassedCamera(id: UUID(), cameraID: 1, typeRaw: "Стационар радар", location: "",
                                  speedKmh: 55, date: Date(), lat: nil, lon: nil, limitKmh: 60)
-        let fined = PassedCamera(id: UUID(), cameraID: 2, typeRaw: "Стационар радар", location: "",
+        let fined = PassedCamera(id: UUID(), cameraID: 2, typeRaw: "Стационар радар",
+                                 location: "Navoiy ko'chasi",
                                  speedKmh: 80, date: Date(), lat: nil, lon: nil, limitKmh: 60)
         let noLimit = PassedCamera(id: UUID(), cameraID: 3, typeRaw: "Стационар радар", location: "",
                                    speedKmh: 90, date: Date(), lat: nil, lon: nil, limitKmh: nil)
         let history = [record(daysAgo: 1, km: 10, passes: [clean, fined, noLimit])]
 
-        XCTAssertEqual(TripHistory.monthSaved(history), FineSchedule.minimumFine)
+        let month = TripHistory.month30(history)
+        XCTAssertEqual(month.clean, 1)                       // без лимита — не считается
+        XCTAssertEqual(month.over, 1)
         // +20 км/ч — верхняя граница первой ступени: 1 БРВ.
+        XCTAssertEqual(month.risk, FineSchedule.brv)
+        XCTAssertEqual(month.topOverLocation, "Navoiy ko'chasi")
         XCTAssertEqual(TripHistory.fineRisk(of: [clean, fined, noLimit]), FineSchedule.brv)
+    }
+
+    func testMonth30IgnoresOldRecords() {
+        let fined = PassedCamera(id: UUID(), cameraID: 2, typeRaw: "Стационар радар", location: "",
+                                 speedKmh: 80, date: Date(), lat: nil, lon: nil, limitKmh: 60)
+        let history = [record(daysAgo: 40, km: 10, passes: [fined])]
+        let month = TripHistory.month30(history)
+        XCTAssertEqual(month.over, 0)
+        XCTAssertEqual(month.risk, 0)
     }
 }
 

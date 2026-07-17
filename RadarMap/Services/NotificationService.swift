@@ -44,7 +44,7 @@ final class NotificationService: NSObject {
 
     /// Пуш «Итоги недели» в воскресенье 19:00. Перепланируется после каждой поездки
     /// со свежими цифрами; без поездок на неделе дайджест сам не появится (не спамим).
-    func scheduleWeeklyDigest(distance: Double, cameras: Int, rating: Int?, saved: Double) {
+    func scheduleWeeklyDigest(distance: Double, cameras: Int, rating: Int?, cleanMonth: Bool) {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [Self.digestID])
         guard settings.weeklyDigest else { return }
@@ -56,8 +56,8 @@ final class NotificationService: NSObject {
         if let rating {
             parts.append(String(format: String(localized: "рейтинг %lld"), rating))
         }
-        if saved > 0 {
-            parts.append(String(format: String(localized: "сэкономлено ~%@"), Formatting.money(saved)))
+        if cleanMonth {
+            parts.append(String(localized: "0 штрафов за месяц"))
         }
         content.body = parts.joined(separator: " · ")
         content.sound = .default

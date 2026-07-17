@@ -27,6 +27,7 @@ final class LocationService: NSObject {
     private let trip: TripStats
     /// Live Activity на локскрине (подключается после инициализации, см. AppEnvironment).
     @ObservationIgnored weak var liveActivity: LiveActivityService?
+    @ObservationIgnored weak var watchBridge: WatchBridgeService?
     @ObservationIgnored weak var route: RouteService?
     @ObservationIgnored weak var speedLimits: SpeedLimitService?
 
@@ -139,6 +140,9 @@ final class LocationService: NSObject {
         applyLocationMode()
         liveActivity?.end()
         notifier.clearApproaching()   // конец поездки — убрать висящий баннер камеры
+        // Часы сразу в «ожидание», не дожидаясь следующего GPS-тика.
+        watchBridge?.update(isTripActive: false, speedKmh: 0, cameraTitle: nil,
+                            distanceMeters: nil, alertLevel: 0)
     }
 
     private func register(passes: [PassTracking.Pass]) {
@@ -289,6 +293,18 @@ final class LocationService: NSObject {
         }
         // Live Activity живёт только в поездке; update — no-op, если она не запущена.
         liveActivity?.update(state: activityState)
+        // Часы: то же состояние (мост квантует и дедупит — без изменений радио молчит).
+        watchBridge?.update(isTripActive: isTripActive, speedKmh: speedKmh,
+                            cameraTitle: nearestCamera?.displayTitle,
+                            distanceMeters: distanceToNearest,
+                            alertLevel: currentAlertLevel)
+    }
+
+    /// Непрерывный уровень тревоги для часов (та же лестница порогов, что в AlertEngine).
+    private var currentAlertLevel: Int {
+        guard isTripActive, let d = distanceToNearest else { return 0 }
+        let r = effectiveAlertRadius
+        return [r, r * 0.6, r * 0.3].filter { d <= $0 }.count
     }
 
     /// Текущее состояние для Live Activity.

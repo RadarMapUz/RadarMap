@@ -6,6 +6,7 @@
 //
 
 import Foundation
+#if canImport(ActivityKit)
 import ActivityKit
 
 struct CameraActivityAttributes: ActivityAttributes {
@@ -20,3 +21,4 @@ struct CameraActivityAttributes: ActivityAttributes {
         var camerasNearby: Int
     }
 }
+#endif

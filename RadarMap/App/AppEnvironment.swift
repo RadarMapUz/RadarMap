@@ -27,6 +27,8 @@ final class AppEnvironment {
     let route = RouteService()
     let speedLimits: SpeedLimitService
     let liveActivity = LiveActivityService()
+    /// Мост на Apple Watch: HUD поездки + тук на запястье.
+    let watchBridge = WatchBridgeService()
     let metrics = MetricsService()
     let feedback = FeedbackService()
 
@@ -56,6 +58,7 @@ final class AppEnvironment {
         self.location.liveActivity = liveActivity
         self.location.route = route
         self.location.speedLimits = speedLimits
+        self.location.watchBridge = watchBridge
 
         // Автостарт/стоп поездки по движению (если включено в настройках).
         let location = self.location

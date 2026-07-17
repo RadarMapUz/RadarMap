@@ -111,6 +111,8 @@ final class LocationService: NSObject {
     /// Приложение открыто/свёрнуто. Точный GPS для HUD держим, только пока открыто и НЕ в поездке.
     func setForeground(_ foreground: Bool) {
         isForeground = foreground
+        // Открыли приложение — «камерный» баннер из фона больше не нужен (внутри есть свой алерт).
+        if foreground { notifier.clearApproaching() }
         applyLocationMode()
     }
 
@@ -136,6 +138,7 @@ final class LocationService: NSObject {
         route?.finishIfNearDestination(coordinate: currentCoordinate)
         applyLocationMode()
         liveActivity?.end()
+        notifier.clearApproaching()   // конец поездки — убрать висящий баннер камеры
     }
 
     private func register(passes: [PassTracking.Pass]) {

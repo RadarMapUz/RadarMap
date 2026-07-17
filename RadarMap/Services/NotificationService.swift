@@ -74,7 +74,13 @@ final class NotificationService: NSObject {
             .removePendingNotificationRequests(withIdentifiers: [Self.digestID])
     }
 
-    /// Оповещение о приближении к камере (фон): баннер + звук.
+    // MARK: - Приближение к камере (фон)
+
+    /// Один переиспользуемый id: новое уведомление ОБНОВЛЯЕТ предыдущее на месте,
+    /// а не копит десяток баннеров за поездку. В Центре всегда ≤1 «камерного».
+    private static let approachingID = "approaching-camera"
+
+    /// Оповещение о приближении к камере (фон): баннер, обновляется на месте.
     func notifyApproaching(_ camera: Camera) {
         let content = UNMutableNotificationContent()
         content.title = "Камера через \(Int(settings.alertRadius)) м"
@@ -87,21 +93,34 @@ final class NotificationService: NSObject {
         content.sound = settings.soundEnabled ? .default : nil
         content.interruptionLevel = .timeSensitive
 
+        // Тот же identifier → iOS заменяет прошлый баннер, а не добавляет новый.
         let request = UNNotificationRequest(
-            identifier: "camera-\(camera.id)",
+            identifier: Self.approachingID,
             content: content,
             trigger: nil
         )
         UNUserNotificationCenter.current().add(request)
     }
+
+    /// Убрать «камерное» уведомление из Центра (выход на передний план / конец поездки) —
+    /// чтобы после проезда баннер не висел.
+    func clearApproaching() {
+        let center = UNUserNotificationCenter.current()
+        center.removeDeliveredNotifications(withIdentifiers: [Self.approachingID])
+        center.removePendingNotificationRequests(withIdentifiers: [Self.approachingID])
+    }
 }
 
 extension NotificationService: UNUserNotificationCenterDelegate {
-    /// На переднем плане показываем только баннер — звук/голос играет AlertPlayer.
+    /// На переднем плане: «камерное» — только мгновенный баннер (не оседает в списке,
+    /// в приложении уже есть полноэкранный алерт); дайджест — баннер + список + звук.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .list]
+        if notification.request.identifier == Self.approachingID {
+            return [.banner]
+        }
+        return [.banner, .list, .sound]
     }
 }

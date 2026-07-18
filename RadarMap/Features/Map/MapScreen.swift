@@ -204,8 +204,12 @@ struct MapScreen: View {
             }
         }
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll, showsTraffic: false))
+        // Системный компас вылезал под статус-бар в правом верхнем углу —
+        // прячем, свой (по повороту карты) живёт в колонке контролов.
+        .mapControls {}
         .onMapCameraChange(frequency: .onEnd) { context in
             map.updateVisible(for: context.region)
+            map.currentHeading = context.camera.heading
         }
         // Любое касание карты будит спрятанные кнопки (не мешая тапам по маркерам).
         .simultaneousGesture(TapGesture().onEnded { revealControls() })
@@ -290,9 +294,28 @@ struct MapScreen: View {
                 recenter()
                 revealControls()
             }
+            // Свой компас: появляется, только когда карта повёрнута (как в Apple Maps),
+            // тап — севером вверх. Системный вылезал под статус-бар.
+            if !headingUp, abs(map.currentHeading) > 5 {
+                Button {
+                    map.resetNorth()
+                    revealControls()
+                } label: {
+                    Image(systemName: "location.north.fill")
+                        .font(.rounded(16, .bold))
+                        .foregroundStyle(Theme.danger)
+                        .rotationEffect(.degrees(-map.currentHeading))
+                        .frame(width: 46, height: 46)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                }
+                .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+                .accessibilityLabel(Text("Севером вверх"))
+                .transition(.scale.combined(with: .opacity))
+            }
             // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
         .animation(.spring(duration: 0.3), value: env.location.isTripActive || env.route.isActive)
+        .animation(.spring(duration: 0.3), value: abs(map.currentHeading) > 5)
     }
 
     // MARK: - Низ: панель действий / режим добавления
@@ -428,8 +451,7 @@ struct MapScreen: View {
             actionButton("Ещё", "gearshape.fill") { map.showSettings = true }
         }
         .padding(8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+        .glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerLarge))
     }
 
     private func actionButton(_ title: LocalizedStringKey, _ icon: String, tint: Color = Theme.textPrimary,

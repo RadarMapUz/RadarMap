@@ -8,19 +8,15 @@
 import SwiftUI
 import UIKit
 
-/// Тёмная «стеклянная» карточка — базовый контейнер интерфейса.
+/// «Стеклянная» карточка — базовый контейнер интерфейса (нативный Liquid Glass).
 struct GlassCard<Content: View>: View {
     var cornerRadius: CGFloat = Theme.cornerLarge
     @ViewBuilder var content: Content
 
     var body: some View {
         content
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Theme.stroke, lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
+            .glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+            .shadow(color: .black.opacity(0.25), radius: 14, y: 6)
     }
 }
 
@@ -38,8 +34,8 @@ struct CircleControl: View {
                 .font(.rounded(17, .semibold))
                 .foregroundStyle(tint)
                 .frame(width: 46, height: 46)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay(Circle().stroke(Theme.stroke, lineWidth: 1))
+                // Интерактивное стекло: подсвечивается и пружинит под пальцем.
+                .glassEffect(.regular.interactive(), in: .circle)
                 .accessibilityLabel(Text(accessibilityLabel))
         }
         .shadow(color: .black.opacity(0.3), radius: 10, y: 4)

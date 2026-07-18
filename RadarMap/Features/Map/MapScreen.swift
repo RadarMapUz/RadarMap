@@ -482,14 +482,17 @@ struct MapScreen: View {
                             .padding(.horizontal, 12).padding(.vertical, 6)
                             .background(.ultraThinMaterial, in: Capsule())
                     }
-                    // Ровная колонка одной ширины: сплит «Домой | На работу»
-                    // над CTA — нижний блок читается единым, без россыпи кнопок.
-                    VStack(spacing: 8) {
-                        PlaceSplitBar(onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
-                                      onAssign: { assignSlot = $0 })
+                    // Одна линия: Дом и Работа компактной парой слева,
+                    // «Начать поездку» занимает остальную ширину справа.
+                    HStack(spacing: 8) {
+                        PlaceCircle(slot: .home,
+                                    onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
+                                    onAssign: { assignSlot = $0 })
+                        PlaceCircle(slot: .work,
+                                    onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
+                                    onAssign: { assignSlot = $0 })
                         tripButton
                     }
-                    .padding(.horizontal, 24)
                 }
                 if !controlsHidden {
                     actionBar

@@ -39,6 +39,13 @@ MAX_LIFE = 6 * 3600
 MERGE_METERS = 300
 UZ_LAT = (37.0, 46.0)
 UZ_LON = (55.0, 74.0)
+# Глобальные капы — потолок ущерба от ротации device (лимиты per-device
+# обходятся новым UUID на каждый запрос). Честные объёмы в разы ниже.
+MAX_ACTIVE_REPORTS = 500     # активных отметок всего (и потолок O(N)-скана дедупликации)
+MAX_METRICS_ROWS = 5000      # строк метрик в БД (по ~200 КБ — потолок диска)
+MAX_DAILY_ROWS = 2000        # camera_reports/feedback суммарно в сутки
+MAX_VOTES_PER_DAY = 30       # голосов с устройства в сутки
+MAX_ID = 2**31               # верхняя граница id: больше — не наш id, а OverflowError в SQLite
 
 def db():
     conn = sqlite3.connect(DB_PATH)
@@ -51,6 +58,10 @@ def db():
     conn.execute("""CREATE TABLE IF NOT EXISTS votes(
         report_id INTEGER, device TEXT, value INTEGER,
         PRIMARY KEY(report_id, device))""")
+    try:  # миграция живой БД: ts нужен для суточного лимита голосов
+        conn.execute("ALTER TABLE votes ADD COLUMN ts REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # колонка уже есть
     conn.execute("""CREATE TABLE IF NOT EXISTS metrics(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         device TEXT NOT NULL, kind TEXT NOT NULL,
@@ -73,6 +84,11 @@ def db():
         received REAL NOT NULL)""")
     return conn
 
+def clean_text(s):
+    """Пользовательский текст идёт в терминал модератора (sqlite3 в консоли) —
+    вырезаем управляющие символы, чтобы ANSI-escape'ами нельзя было рисовать."""
+    return "".join(ch for ch in s if ch.isprintable() or ch == "\n")
+
 def haversine(lat1, lon1, lat2, lon2):
     r = 6371000.0
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -81,7 +97,8 @@ def haversine(lat1, lon1, lat2, lon2):
     return 2 * r * math.asin(math.sqrt(a))
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "RadarMapAPI/1.1"
+    server_version = "RadarMapAPI/1.2"
+    timeout = 10  # slow-POST не должен держать поток вечно
 
     def log_message(self, fmt, *args):
         pass  # keep journald quiet; errors surface via exceptions
@@ -111,6 +128,8 @@ class Handler(BaseHTTPRequestHandler):
             conn = db()
             try:
                 conn.execute("DELETE FROM reports WHERE expires < ?", (now - 86400,))
+                # голоса удалённых отметок — сироты, без чистки таблица растёт вечно
+                conn.execute("DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)")
                 conn.commit()
                 rows = conn.execute(
                     "SELECT id, lat, lon, created, expires, up, down FROM reports "
@@ -143,7 +162,9 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length))
             device = str(data["device"])[:64]
             kind = str(data["kind"])[:16]
-            payload = json.dumps(data["payload"])[:200000]
+            payload = json.dumps(data["payload"])
+            if len(payload) > 200000:  # срез сделал бы JSON невалидным — отказываем целиком
+                return self._json(400, {"error": "payload too big"})
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             return self._json(400, {"error": "bad json"})
         if not device or kind not in ("metric", "diagnostic"):
@@ -157,6 +178,9 @@ class Handler(BaseHTTPRequestHandler):
             if count >= 20:
                 return self._json(429, {"error": "too many"})
             conn.execute("DELETE FROM metrics WHERE received < ?", (now - 30 * 86400,))
+            total = conn.execute("SELECT COUNT(*) FROM metrics").fetchone()[0]
+            if total >= MAX_METRICS_ROWS:  # ротация device не должна заливать диск
+                return self._json(429, {"error": "too many"})
             conn.execute("INSERT INTO metrics(device, kind, received, payload) VALUES(?,?,?,?)",
                          (device, kind, now, payload))
             conn.commit()
@@ -180,7 +204,8 @@ class Handler(BaseHTTPRequestHandler):
             db_version = int(data.get("db_version") or 0) or None
         except (KeyError, TypeError, ValueError):
             return self._json(400, {"error": "bad fields"})
-        if reason not in ("gone", "wrong_location", "still_here") or not device or camera_id <= 0:
+        if reason not in ("gone", "wrong_location", "still_here") or not device \
+                or not 0 < camera_id < MAX_ID:
             return self._json(400, {"error": "bad fields"})
 
         now = time.time()
@@ -190,6 +215,11 @@ class Handler(BaseHTTPRequestHandler):
                 "SELECT COUNT(*) FROM camera_reports WHERE device = ? AND received > ?",
                 (device, now - 86400)).fetchone()[0]
             if count >= 20:
+                return self._json(429, {"error": "too many"})
+            daily = conn.execute(
+                "SELECT COUNT(*) FROM camera_reports WHERE received > ?",
+                (now - 86400,)).fetchone()[0]
+            if daily >= MAX_DAILY_ROWS:  # глобальный кап против ротации device
                 return self._json(429, {"error": "too many"})
             # Повтор того же репорта с того же устройства не плодим — сигнал
             # считаем по числу РАЗНЫХ устройств на камеру.
@@ -214,8 +244,8 @@ class Handler(BaseHTTPRequestHandler):
         if not data:
             return self._json(400, {"error": "bad json"})
         try:
-            message = str(data["message"]).strip()[:2000]
-            contact = str(data.get("contact") or "")[:200]
+            message = clean_text(str(data["message"]).strip()[:2000])
+            contact = clean_text(str(data.get("contact") or "")[:200])
             app_version = str(data.get("app_version") or "")[:32]
             device = str(data["device"])[:64]
         except (KeyError, TypeError, ValueError):
@@ -230,6 +260,11 @@ class Handler(BaseHTTPRequestHandler):
                 "SELECT COUNT(*) FROM feedback WHERE device = ? AND received > ?",
                 (device, now - 86400)).fetchone()[0]
             if count >= 10:
+                return self._json(429, {"error": "too many"})
+            daily = conn.execute(
+                "SELECT COUNT(*) FROM feedback WHERE received > ?",
+                (now - 86400,)).fetchone()[0]
+            if daily >= MAX_DAILY_ROWS:  # глобальный кап против ротации device
                 return self._json(429, {"error": "too many"})
             conn.execute(
                 "INSERT INTO feedback(message, contact, app_version, device, received) "
@@ -265,16 +300,30 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(429, {"error": "too fast"})
 
             # dedupe: nearby active report -> treat as confirmation
-            for r in conn.execute(
-                    "SELECT id, lat, lon, created, expires FROM reports WHERE active = 1 AND expires > ?",
-                    (now,)).fetchall():
+            active_rows = conn.execute(
+                "SELECT id, lat, lon, created, expires FROM reports WHERE active = 1 AND expires > ?",
+                (now,)).fetchall()
+            for r in active_rows:
                 if haversine(lat, lon, r[1], r[2]) <= MERGE_METERS:
                     new_exp = min(r[3] + MAX_LIFE, max(r[4], now) + EXTEND)
-                    conn.execute("UPDATE reports SET up = up + 1, expires = ? WHERE id = ?",
-                                 (new_exp, r[0]))
+                    # Подтверждение — через votes, как обычный лайк: _vote
+                    # пересчитывает up/down только из votes, инкремент в
+                    # reports первый же голос стёр бы.
+                    conn.execute(
+                        "INSERT OR REPLACE INTO votes(report_id, device, value, ts) VALUES(?,?,1,?)",
+                        (r[0], device, now))
+                    up = conn.execute(
+                        "SELECT COUNT(*) FROM votes WHERE report_id = ? AND value = 1",
+                        (r[0],)).fetchone()[0]
+                    conn.execute("UPDATE reports SET up = ?, expires = ? WHERE id = ?",
+                                 (up, new_exp, r[0]))
                     conn.commit()
                     return self._json(200, {"id": r[0], "merged": True})
 
+            # Глобальный кап: ротация device не должна ни заваливать карту
+            # фейками, ни раздувать O(N)-скан дедупликации выше.
+            if len(active_rows) >= MAX_ACTIVE_REPORTS:
+                return self._json(429, {"error": "too many active"})
             cur = conn.execute(
                 "INSERT INTO reports(lat, lon, created, expires, device) VALUES(?,?,?,?,?)",
                 (lat, lon, now, now + TTL, device))
@@ -293,18 +342,23 @@ class Handler(BaseHTTPRequestHandler):
             value = int(data["value"])
         except (KeyError, TypeError, ValueError):
             return self._json(400, {"error": "bad fields"})
-        if value not in (1, -1) or not device:
+        if value not in (1, -1) or not device or not 0 < rid < MAX_ID:
             return self._json(400, {"error": "bad value"})
 
         now = time.time()
         conn = db()
         try:
+            voted = conn.execute(
+                "SELECT COUNT(*) FROM votes WHERE device = ? AND ts > ?",
+                (device, now - 86400)).fetchone()[0]
+            if voted >= MAX_VOTES_PER_DAY:
+                return self._json(429, {"error": "too many"})
             row = conn.execute("SELECT created, expires FROM reports WHERE id = ? AND active = 1",
                                (rid,)).fetchone()
             if not row:
                 return self._json(404, {"error": "no report"})
-            conn.execute("INSERT OR REPLACE INTO votes(report_id, device, value) VALUES(?,?,?)",
-                         (rid, device, value))
+            conn.execute("INSERT OR REPLACE INTO votes(report_id, device, value, ts) VALUES(?,?,?,?)",
+                         (rid, device, value, now))
             up, down = conn.execute(
                 "SELECT COALESCE(SUM(value = 1), 0), COALESCE(SUM(value = -1), 0) "
                 "FROM votes WHERE report_id = ?", (rid,)).fetchone()

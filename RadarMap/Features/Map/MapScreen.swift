@@ -265,6 +265,16 @@ struct MapScreen: View {
                 }
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
+            // Компас — ВНЕ прячущейся колонки: та удаляется из иерархии по таймауту
+            // бездействия, и компас пропадал вместе с ней. Здесь он в иерархии всегда,
+            // а видимостью рулит iOS: появляется только при повёрнутой карте.
+            if !map.isAddingCamera {
+                HStack {
+                    Spacer()
+                    MapCompass(scope: mapScope)
+                        .mapControlVisibility(.automatic)
+                }
+            }
             Spacer()
         }
         .padding(.horizontal, 16)
@@ -297,10 +307,6 @@ struct MapScreen: View {
                 recenter()
                 revealControls()
             }
-            // Системный компас, но в нашей колонке (не под статус-баром): появляется
-            // сам при повороте карты, тап — севером вверх. Поведение гарантирует iOS.
-            MapCompass(scope: mapScope)
-                .mapControlVisibility(.automatic)
             // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
         .animation(.spring(duration: 0.3), value: env.location.isTripActive || env.route.isActive)
@@ -602,6 +608,17 @@ struct MapScreen: View {
         // Детерминированный тест навигации: строим маршрут к фиксированной точке
         // Ташкента (просп. Амира Темура) от текущей позиции. С -driveDemo сразу
         // стартуем поездку (как «Поехали») — для прогонки движения по маршруту.
+        // Повернуть карту (компас должен появиться): жестов у simctl нет.
+        if args.contains("-rotateMap") {
+            Task {
+                await Task.pause(seconds: 2.5)
+                guard let center = env.location.currentCoordinate else { return }
+                withAnimation(.easeInOut(duration: 0.6)) {
+                    map.position = .camera(MapCamera(centerCoordinate: center,
+                                                     distance: 1200, heading: 45))
+                }
+            }
+        }
         if args.contains("-demoRoute") {
             Task {
                 await Task.pause(seconds: 2)

@@ -31,6 +31,9 @@ final class MapState {
     var isAddingCamera = false
     var filter: CameraFilter = .all
     var position: MapCameraPosition = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
+    /// Режим «по компасу устройства»: карта крутится сама за телефоном
+    /// (второй тап по кнопке локации, как в Apple Maps).
+    var followsDeviceHeading = false
 
     private var repository: CameraRepository?
     private var currentRegion: MKCoordinateRegion?

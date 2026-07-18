@@ -240,6 +240,8 @@ struct MapScreen: View {
         .mapControls {}
         .onMapCameraChange(frequency: .onEnd) { context in
             map.updateVisible(for: context.region)
+            // Потянул карту рукой — слежение за компасом устройства снимается.
+            if !map.position.followsUserLocation { map.followsDeviceHeading = false }
         }
         // Любое касание карты будит спрятанные кнопки (не мешая тапам по маркерам).
         .simultaneousGesture(TapGesture().onEnded { revealControls() })
@@ -331,7 +333,9 @@ struct MapScreen: View {
                 }
                 .transition(.scale.combined(with: .opacity))
             }
-            CircleControl(systemName: "location.fill", tint: Theme.accent,
+            CircleControl(systemName: map.followsDeviceHeading ? "location.north.circle.fill"
+                                                              : "location.fill",
+                          tint: Theme.accent,
                           accessibilityLabel: "Моё местоположение") {
                 recenter()
                 revealControls()
@@ -591,14 +595,25 @@ struct MapScreen: View {
     private func recenter() {
         if headingUp {
             map.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
+            return
+        }
+        // Как в Apple Maps: первый тап — центр на себе; второй — карта крутится
+        // сама за компасом устройства (куда повернул телефон, туда и карта).
+        if map.position.followsUserLocation && !map.followsDeviceHeading {
+            map.followsDeviceHeading = true
+            withAnimation(.easeInOut(duration: 0.35)) {
+                map.position = .userLocation(followsHeading: true,
+                                             fallback: .region(AppConfig.uzbekistanRegion))
+            }
         } else {
+            map.followsDeviceHeading = false
             withAnimation(.easeInOut(duration: 0.35)) {
                 map.position = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
             }
-            // Целевой регион известен только когда есть геопозиция — подгружаем окрестности сами.
-            if let coordinate = env.location.currentCoordinate {
-                map.refreshVisible(around: coordinate, widthMeters: 3000)
-            }
+        }
+        // Целевой регион известен только когда есть геопозиция — подгружаем окрестности сами.
+        if let coordinate = env.location.currentCoordinate {
+            map.refreshVisible(around: coordinate, widthMeters: 3000)
         }
     }
 

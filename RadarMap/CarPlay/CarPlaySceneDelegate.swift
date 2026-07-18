@@ -27,8 +27,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         window.rootViewController = host
 
         let template = CPMapTemplate()
-        template.automaticallyHidesNavigationBar = true
-        template.mapButtons = [recenterButton, zoomInButton, zoomOutButton]
+        // Бар НЕ прячем: «Поездка» и «Куда» должны быть на виду всегда —
+        // кнопка, которую нужно искать, за рулём бесполезна.
+        template.automaticallyHidesNavigationBar = false
+        template.mapButtons = [recenterButton, zoomInButton, zoomOutButton, routeButton]
         mapTemplate = template
         interfaceController.setRootTemplate(template, animated: true) { _, _ in }
 
@@ -70,6 +72,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold))
     }
 
+    /// Быстрый маршрут прямо с карты: круглая кнопка → список Дом/Работа/Недавние.
+    private var routeButton: CPMapButton {
+        let button = CPMapButton { [weak self] _ in self?.presentDestinations() }
+        button.image = Self.buttonImage("arrow.triangle.turn.up.right.circle.fill")
+        return button
+    }
+
     /// Кнопка «Поездка/Завершить» в баре шаблона — следит за состоянием поездки.
     private func syncTripButton() {
         guard let mapTemplate else { return }
@@ -94,10 +103,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     /// Кнопка «Куда»: Дом/Работа/Недавние — строим маршрут, не доставая телефон.
     private var destinationsButton: CPBarButton? {
-        let env = AppEnvironment.shared
-        let places = Self.destinations(env: env)
-        guard !places.isEmpty else { return nil }   // мест ещё нет — кнопка не нужна
-        return CPBarButton(title: String(localized: "Куда")) { [weak self] _ in
+        CPBarButton(title: String(localized: "Куда")) { [weak self] _ in
             self?.presentDestinations()
         }
     }
@@ -114,7 +120,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func presentDestinations() {
         let env = AppEnvironment.shared
-        let items = Self.destinations(env: env).map { title, place in
+        let places = Self.destinations(env: env)
+        // Мест пока нет — подсказываем, где их завести (список не может быть пустым).
+        guard !places.isEmpty else {
+            let hint = CPListItem(text: String(localized: "Пока нет сохранённых мест"),
+                                  detailText: String(localized: "Задайте Дом и Работу в настройках RadarMap на iPhone."))
+            let list = CPListTemplate(title: String(localized: "Куда"),
+                                      sections: [CPListSection(items: [hint])])
+            interfaceController?.pushTemplate(list, animated: true) { _, _ in }
+            return
+        }
+        let items = places.map { title, place in
             let item = CPListItem(text: title,
                                   detailText: title == place.title ? nil : place.title)
             item.handler = { [weak self] _, completion in

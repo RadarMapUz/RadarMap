@@ -1521,6 +1521,22 @@
         }
       }
     },
+    "Задайте Дом и Работу в настройках RadarMap на iPhone.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задайте Дом и Работу в настройках RadarMap на iPhone."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone'dagi RadarMap sozlamalarida Uy va Ishni belgilang."
+          }
+        }
+      }
+    },
     "Задать": {
       "localizations": {
         "ru": {
@@ -3325,6 +3341,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Joy qidirish"
+          }
+        }
+      }
+    },
+    "Пока нет сохранённых мест": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пока нет сохранённых мест"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozircha saqlangan joylar yo'q"
           }
         }
       }

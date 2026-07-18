@@ -74,33 +74,45 @@ struct MapPointBar: View {
     }
 }
 
-/// Круглая кнопка Дом/Работа по бокам «Начать поездку»: маршрут в один тап,
-/// стиль и размер — как у колонки контролов (CircleControl). Слот пуст —
-/// приглушённый круг с плюс-бейджем, тап открывает назначение адреса
-/// (иначе про «Мои места» в недрах Настроек никто не узнаёт, и «Куда»
-/// в CarPlay остаётся пустым).
-struct PlaceCircle: View {
+/// Сплит-капсула «Домой | На работу» над кнопкой поездки: одной ширины с ней —
+/// нижний блок читается единой колонкой, а не россыпью кнопок. Слот пуст —
+/// половинка приглушена и предлагает задать адрес (иначе про «Мои места»
+/// в недрах Настроек никто не узнаёт, и «Куда» в CarPlay остаётся пустым).
+struct PlaceSplitBar: View {
     @Environment(AppEnvironment.self) private var env
-    let slot: PlaceSlot
     let onRoute: (CLLocationCoordinate2D, String) -> Void
     let onAssign: (PlaceSlot) -> Void
 
     var body: some View {
+        HStack(spacing: 0) {
+            half(.home)
+            Rectangle()
+                .fill(Theme.stroke)
+                .frame(width: 1, height: 24)
+            half(.work)
+        }
+        .frame(height: 46)
+        .glassEffect(.regular, in: .capsule)
+    }
+
+    @ViewBuilder private func half(_ slot: PlaceSlot) -> some View {
         let place = env.settings.place(for: slot)
         let noGPS = env.location.currentCoordinate == nil
-        ZStack(alignment: .topTrailing) {
-            CircleControl(systemName: slot.symbol,
-                          tint: place == nil ? Theme.textTertiary : Theme.accent,
-                          accessibilityLabel: accessibilityLabel(assigned: place != nil)) {
-                if let place { onRoute(place.coordinate, slot.name) } else { onAssign(slot) }
+        Button {
+            if let place { onRoute(place.coordinate, slot.name) } else { onAssign(slot) }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: slot.symbol)
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(place == nil ? Theme.textTertiary : Theme.accent)
+                Text(title(slot, assigned: place != nil))
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(place == nil ? Theme.textSecondary : Theme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            if place == nil {
-                Image(systemName: "plus.circle.fill")
-                    .font(.rounded(13, .bold))
-                    .foregroundStyle(Theme.background, Theme.accent)
-                    .offset(x: 3, y: -3)
-                    .allowsHitTesting(false)
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
         }
         // Задано, но геопозиции нет — маршрут строить не из чего.
         .opacity(place != nil && noGPS ? 0.4 : 1)
@@ -112,12 +124,12 @@ struct PlaceCircle: View {
         }
     }
 
-    private func accessibilityLabel(assigned: Bool) -> LocalizedStringKey {
+    private func title(_ slot: PlaceSlot, assigned: Bool) -> LocalizedStringKey {
         switch (slot, assigned) {
-        case (.home, true):  return "Маршрут домой"
-        case (.home, false): return "Задать Дом"
-        case (.work, true):  return "Маршрут на работу"
-        case (.work, false): return "Задать Работу"
+        case (.home, true):  return "Домой"
+        case (.home, false): return "Задать дом"
+        case (.work, true):  return "На работу"
+        case (.work, false): return "Задать работу"
         }
     }
 }

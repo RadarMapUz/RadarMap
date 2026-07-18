@@ -482,17 +482,14 @@ struct MapScreen: View {
                             .padding(.horizontal, 12).padding(.vertical, 6)
                             .background(.ultraThinMaterial, in: Capsule())
                     }
-                    // Одна строка вместо этажерки: Дом и Работа — круглые кнопки
-                    // по бокам главной, симметрично и в стиле колонки контролов.
-                    HStack(spacing: 12) {
-                        PlaceCircle(slot: .home,
-                                    onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
-                                    onAssign: { assignSlot = $0 })
+                    // Ровная колонка одной ширины: сплит «Домой | На работу»
+                    // над CTA — нижний блок читается единым, без россыпи кнопок.
+                    VStack(spacing: 8) {
+                        PlaceSplitBar(onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
+                                      onAssign: { assignSlot = $0 })
                         tripButton
-                        PlaceCircle(slot: .work,
-                                    onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
-                                    onAssign: { assignSlot = $0 })
                     }
+                    .padding(.horizontal, 24)
                 }
                 if !controlsHidden {
                     actionBar
@@ -550,7 +547,7 @@ struct MapScreen: View {
         }
     }
 
-    /// Компактная капсула: при автостарте кнопка почти не нужна — не даём ей кричать.
+    /// CTA во всю ширину блока — одной ширины со сплитом Дом/Работа над ней.
     private var tripButton: some View {
         Button {
             toggleTrip()
@@ -561,8 +558,8 @@ struct MapScreen: View {
             }
             .font(.rounded(15, .bold))
             .foregroundStyle(Theme.background)
-            .padding(.horizontal, 26)
-            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
             .background(Theme.success.gradient, in: Capsule())
             .shadow(color: Theme.success.opacity(0.4), radius: 10, y: 3)
         }

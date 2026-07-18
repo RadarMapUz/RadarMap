@@ -1489,6 +1489,22 @@
         }
       }
     },
+    "Домой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Домой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga"
+          }
+        }
+      }
+    },
     "Допуск превышения": {
       "localizations": {
         "ru": {
@@ -1671,6 +1687,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Задать Работу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishni belgilash"
+          }
+        }
+      }
+    },
+    "Задать дом": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задать дом"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyni belgilash"
+          }
+        }
+      }
+    },
+    "Задать работу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задать работу"
           }
         },
         "uz": {
@@ -2589,6 +2637,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mening joylashuvim"
+          }
+        }
+      }
+    },
+    "На работу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На работу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga"
           }
         }
       }

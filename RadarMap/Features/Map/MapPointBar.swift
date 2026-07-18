@@ -74,48 +74,50 @@ struct MapPointBar: View {
     }
 }
 
-/// Быстрые чипы «Дом»/«Работа» у панели действий: маршрут в один тап.
-/// Слоты пусты — один чип-приглашение их задать (иначе про «Мои места»
-/// в недрах Настроек никто не узнаёт, и список «Куда» в CarPlay пуст).
-struct PlaceChips: View {
+/// Круглая кнопка Дом/Работа по бокам «Начать поездку»: маршрут в один тап,
+/// стиль и размер — как у колонки контролов (CircleControl). Слот пуст —
+/// приглушённый круг с плюс-бейджем, тап открывает назначение адреса
+/// (иначе про «Мои места» в недрах Настроек никто не узнаёт, и «Куда»
+/// в CarPlay остаётся пустым).
+struct PlaceCircle: View {
     @Environment(AppEnvironment.self) private var env
+    let slot: PlaceSlot
     let onRoute: (CLLocationCoordinate2D, String) -> Void
     let onAssign: (PlaceSlot) -> Void
 
     var body: some View {
-        let home = env.settings.place(for: .home)
-        let work = env.settings.place(for: .work)
-        HStack(spacing: 8) {
-            if home == nil && work == nil {
-                chip(String(localized: "Задать Дом и Работу"), "house.fill") { onAssign(.home) }
-            } else {
-                if let home { placeChip(.home, home) }
-                if let work { placeChip(.work, work) }
+        let place = env.settings.place(for: slot)
+        let noGPS = env.location.currentCoordinate == nil
+        ZStack(alignment: .topTrailing) {
+            CircleControl(systemName: slot.symbol,
+                          tint: place == nil ? Theme.textTertiary : Theme.accent,
+                          accessibilityLabel: accessibilityLabel(assigned: place != nil)) {
+                if let place { onRoute(place.coordinate, slot.name) } else { onAssign(slot) }
+            }
+            if place == nil {
+                Image(systemName: "plus.circle.fill")
+                    .font(.rounded(13, .bold))
+                    .foregroundStyle(Theme.background, Theme.accent)
+                    .offset(x: 3, y: -3)
+                    .allowsHitTesting(false)
+            }
+        }
+        // Задано, но геопозиции нет — маршрут строить не из чего.
+        .opacity(place != nil && noGPS ? 0.4 : 1)
+        .disabled(place != nil && noGPS)
+        .contextMenu {
+            Button { onAssign(slot) } label: {
+                Label("Изменить адрес", systemImage: "pencil")
             }
         }
     }
 
-    @ViewBuilder private func placeChip(_ slot: PlaceSlot, _ place: SavedPlace) -> some View {
-        // Без геопозиции маршрут строить не из чего — чип не показываем
-        // (мёртвая кнопка хуже отсутствия кнопки).
-        if env.location.currentCoordinate != nil {
-            chip(slot.name, slot.symbol) {
-                onRoute(place.coordinate, slot.name)
-            }
-        }
-    }
-
-    private func chip(_ title: String, _ icon: String,
-                      action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: icon).font(.rounded(12, .semibold))
-                Text(title).font(.rounded(12, .semibold))
-            }
-            .foregroundStyle(Theme.textPrimary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .glassEffect(.regular.interactive(), in: .capsule)
+    private func accessibilityLabel(assigned: Bool) -> LocalizedStringKey {
+        switch (slot, assigned) {
+        case (.home, true):  return "Маршрут домой"
+        case (.home, false): return "Задать Дом"
+        case (.work, true):  return "Маршрут на работу"
+        case (.work, false): return "Задать Работу"
         }
     }
 }

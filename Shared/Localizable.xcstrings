@@ -1633,6 +1633,22 @@
         }
       }
     },
+    "Задать Дом": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задать Дом"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyni belgilash"
+          }
+        }
+      }
+    },
     "Задать Дом и Работу": {
       "localizations": {
         "ru": {
@@ -1645,6 +1661,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Uy va Ishni belgilash"
+          }
+        }
+      }
+    },
+    "Задать Работу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задать Работу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishni belgilash"
           }
         }
       }
@@ -2385,6 +2417,22 @@
         }
       }
     },
+    "Маршрут домой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут домой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga marshrut"
+          }
+        }
+      }
+    },
     "Маршрут и скорость": {
       "localizations": {
         "ru": {
@@ -2397,6 +2445,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrut va tezlik"
+          }
+        }
+      }
+    },
+    "Маршрут на работу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут на работу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga marshrut"
           }
         }
       }

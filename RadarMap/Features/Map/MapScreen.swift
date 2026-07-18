@@ -482,9 +482,17 @@ struct MapScreen: View {
                             .padding(.horizontal, 12).padding(.vertical, 6)
                             .background(.ultraThinMaterial, in: Capsule())
                     }
-                    PlaceChips(onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
-                               onAssign: { assignSlot = $0 })
-                    tripButton
+                    // Одна строка вместо этажерки: Дом и Работа — круглые кнопки
+                    // по бокам главной, симметрично и в стиле колонки контролов.
+                    HStack(spacing: 12) {
+                        PlaceCircle(slot: .home,
+                                    onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
+                                    onAssign: { assignSlot = $0 })
+                        tripButton
+                        PlaceCircle(slot: .work,
+                                    onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
+                                    onAssign: { assignSlot = $0 })
+                    }
                 }
                 if !controlsHidden {
                     actionBar

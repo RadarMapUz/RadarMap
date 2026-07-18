@@ -27,9 +27,10 @@ struct TripStatsSheet: View {
     var body: some View {
         let trip = env.trip
         let active = env.location.isTripActive
-        // После перезапуска приложения живых метрик нет — показываем последнюю
-        // поездку из истории, а не нули.
-        let lastRecord = trip.fallbackRecord(isTripActive: active)
+        // Вне активной поездки показываем ПОСЛЕДНЮЮ ЗАПИСЬ истории, а не «тёплую»
+        // live-сессию: после endTrip GPS на открытом приложении продолжает тикать,
+        // и живые крохи (50 м «новой» дистанции) затирали реальную поездку.
+        let lastRecord = active ? nil : trip.history.first
 
         NavigationStack {
             ScrollView {
@@ -298,9 +299,12 @@ struct TripStatsSheet: View {
 
     @ViewBuilder
     private func statusHeader(active: Bool, trip: TripStats, last: TripRecord?) -> some View {
-        // Компактный заголовок секции вместо прежней крупной карточки-дубля:
-        // цифры и так в сетке ниже, тап по заголовку открывает деталку.
-        if let last {
+        // В поездке — живой заголовок с таймером и скоростью; вне поездки —
+        // компактная строка последней записи (крупная карточка дублировала сетку).
+        // Истории нет — ничего: пустое состояние объяснит emptyHint ниже.
+        if active {
+            liveHeader(active: true, trip: trip)
+        } else if let last {
             Button {
                 selectedRecord = last
             } label: {
@@ -319,8 +323,6 @@ struct TripStatsSheet: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-        } else {
-            liveHeader(active: active, trip: trip)
         }
     }
 

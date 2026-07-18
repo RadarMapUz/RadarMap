@@ -31,8 +31,6 @@ final class MapState {
     var isAddingCamera = false
     var filter: CameraFilter = .all
     var position: MapCameraPosition = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
-    /// Азимут карты (0 = север сверху) — для своего компаса (системный прятался за статус-бар).
-    var currentHeading: Double = 0
 
     private var repository: CameraRepository?
     private var currentRegion: MKCoordinateRegion?
@@ -40,13 +38,6 @@ final class MapState {
 
     /// Координата центра карты (для добавления камеры «здесь»).
     var mapCenter: CLLocationCoordinate2D? { currentRegion?.center }
-
-    /// Вернуть карту «севером вверх» (тап по компасу), не трогая центр и зум.
-    func resetNorth() {
-        guard let region = currentRegion else { return }
-        withAnimation(.easeInOut(duration: 0.35)) { position = .region(region) }
-        currentHeading = 0
-    }
 
     func configure(_ repository: CameraRepository) {
         if self.repository == nil { self.repository = repository }

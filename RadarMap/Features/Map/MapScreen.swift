@@ -21,6 +21,9 @@ struct MapScreen: View {
     @State private var hideControlsTask: Task<Void, Never>?
     @State private var legendExpanded = false
     @State private var legendCollapseTask: Task<Void, Never>?
+    /// Связывает карту с внешним MapCompass: системный компас, но в нашей колонке
+    /// контролов, а не под статус-баром.
+    @Namespace private var mapScope
 
     var body: some View {
         @Bindable var map = map
@@ -43,6 +46,7 @@ struct MapScreen: View {
             topLayer
             bottomLayer
         }
+        .mapScope(mapScope)
         .task {
             map.configure(env.cameras)
             map.filter = env.settings.filter
@@ -141,7 +145,7 @@ struct MapScreen: View {
     // MARK: - Карта
 
     private var mapLayer: some View {
-        Map(position: $map.position) {
+        Map(position: $map.position, scope: mapScope) {
             UserAnnotation()
 
             // Маршрут: сперва тусклые альтернативы, поверх — выбранный вариант
@@ -209,7 +213,6 @@ struct MapScreen: View {
         .mapControls {}
         .onMapCameraChange(frequency: .onEnd) { context in
             map.updateVisible(for: context.region)
-            map.currentHeading = context.camera.heading
         }
         // Любое касание карты будит спрятанные кнопки (не мешая тапам по маркерам).
         .simultaneousGesture(TapGesture().onEnded { revealControls() })
@@ -294,28 +297,13 @@ struct MapScreen: View {
                 recenter()
                 revealControls()
             }
-            // Свой компас: появляется, только когда карта повёрнута (как в Apple Maps),
-            // тап — севером вверх. Системный вылезал под статус-бар.
-            if !headingUp, abs(map.currentHeading) > 5 {
-                Button {
-                    map.resetNorth()
-                    revealControls()
-                } label: {
-                    Image(systemName: "location.north.fill")
-                        .font(.rounded(16, .bold))
-                        .foregroundStyle(Theme.danger)
-                        .rotationEffect(.degrees(-map.currentHeading))
-                        .frame(width: 46, height: 46)
-                        .glassEffect(.regular.interactive(), in: .circle)
-                }
-                .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
-                .accessibilityLabel(Text("Севером вверх"))
-                .transition(.scale.combined(with: .opacity))
-            }
+            // Системный компас, но в нашей колонке (не под статус-баром): появляется
+            // сам при повороте карты, тап — севером вверх. Поведение гарантирует iOS.
+            MapCompass(scope: mapScope)
+                .mapControlVisibility(.automatic)
             // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
         .animation(.spring(duration: 0.3), value: env.location.isTripActive || env.route.isActive)
-        .animation(.spring(duration: 0.3), value: abs(map.currentHeading) > 5)
     }
 
     // MARK: - Низ: панель действий / режим добавления
@@ -624,6 +612,15 @@ struct MapScreen: View {
                     if env.route.isActive {
                         headingUp = true
                         env.location.startTrip()
+                    }
+                    // Автозавершение поездки через N секунд: на симуляторе нет
+                    // CoreMotion (автостоп не сработает) и нет тапов — а для
+                    // проверки Итогов/шеринга нужна завершённая запись в истории.
+                    if let idx = args.firstIndex(of: "-endTripAfter"),
+                       let seconds = args.dropFirst(idx + 1).first.flatMap(Double.init) {
+                        await Task.pause(seconds: seconds)
+                        env.location.endTrip()
+                        headingUp = false
                     }
                 }
             }

@@ -92,7 +92,15 @@ final class LocationService: NSObject {
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse:
+            #if DEBUG
+            // Скриншот-автоматизация: симулятор показывает диалог апгрейда «Всегда»
+            // на каждом запуске и перекрывает экран — в тестовых прогонах не просим.
+            if !ProcessInfo.processInfo.arguments.contains("-skipAlwaysPrompt") {
+                manager.requestAlwaysAuthorization()
+            }
+            #else
             manager.requestAlwaysAuthorization()
+            #endif
             startBackgroundMonitoring()
         case .authorizedAlways:
             startBackgroundMonitoring()
@@ -456,7 +464,14 @@ final class LocationService: NSObject {
         hasFullAccuracy = manager.accuracyAuthorization == .fullAccuracy
         switch status {
         case .authorizedWhenInUse:
+            #if DEBUG
+            // См. bootstrap(): в скриншот-прогонах симулятора диалог не показываем.
+            if !ProcessInfo.processInfo.arguments.contains("-skipAlwaysPrompt") {
+                manager.requestAlwaysAuthorization()
+            }
+            #else
             manager.requestAlwaysAuthorization()
+            #endif
             startBackgroundMonitoring()
             applyLocationMode()
         case .authorizedAlways:

@@ -49,7 +49,8 @@ struct RadarStatsWidget: Widget {
         }
         .configurationDisplayName("RadarMap")
         .description("База камер и статистика поездки")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium,
+                            .accessoryCircular, .accessoryRectangular])
     }
 }
 
@@ -60,8 +61,40 @@ private struct RadarStatsView: View {
     var body: some View {
         switch family {
         case .systemMedium: medium
+        // Локскрин: старт поездки одним тапом (диплинк), не доставая телефон из держателя.
+        case .accessoryCircular: lockCircular
+        case .accessoryRectangular: lockRectangular
         default: small
         }
+    }
+
+    private var lockCircular: some View {
+        ZStack {
+            AccessoryWidgetBackground()
+            VStack(spacing: 1) {
+                Image(systemName: "car.fill")
+                    .font(.system(size: 18, weight: .bold))
+                Text("Старт")
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+            }
+        }
+        .widgetURL(URL(string: "radarmap://start-trip"))
+    }
+
+    private var lockRectangular: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "camera.metering.center.weighted")
+                .font(.system(size: 16, weight: .bold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("RadarMap")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                Text("Начать поездку")
+                    .font(.system(size: 11, design: .rounded))
+                    .opacity(0.75)
+            }
+            Spacer(minLength: 0)
+        }
+        .widgetURL(URL(string: "radarmap://start-trip"))
     }
 
     private var small: some View {

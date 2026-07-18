@@ -52,6 +52,14 @@ struct TripRecord: Codable, Identifiable {
 
     var camerasPassed: Int { passed.count }
     var duration: TimeInterval { max(0, endedAt.timeIntervalSince(startedAt)) }
+    /// «Чистая» поездка: ни одного проезда со штрафуемым превышением
+    /// (проезды без известного лимита не считаем нарушением — как в month30).
+    var isClean: Bool {
+        passed.allSatisfy { pass in
+            guard let limit = pass.limitKmh else { return true }
+            return FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) == 0
+        }
+    }
     var averageSpeedKmh: Double { duration > 0 ? distanceMeters / duration * 3.6 : 0 }
     var endCoordinate: CLLocationCoordinate2D? {
         guard let endLat, let endLon else { return nil }

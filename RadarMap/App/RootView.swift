@@ -25,6 +25,7 @@ struct RootView: View {
             if hasCompletedOnboarding {
                 MapScreen()
                     .transition(.opacity)
+                    .modifier(ReviewPromptModifier())   // оценка App Store после 3-й чистой поездки
             } else {
                 OnboardingView {
                     env.location.bootstrap()
@@ -32,6 +33,13 @@ struct RootView: View {
                 }
                 .transition(.opacity)
             }
+        }
+        // Виджет локскрина: radarmap://start-trip — поездка одним тапом с
+        // заблокированного экрана. Активную поездку диплинк никогда не трогает.
+        .onOpenURL { url in
+            guard url.scheme == "radarmap", url.host() == "start-trip",
+                  !env.location.isTripActive else { return }
+            env.location.startTrip()
         }
         #if DEBUG
         .fullScreenCover(isPresented: $carPlayPreview) {

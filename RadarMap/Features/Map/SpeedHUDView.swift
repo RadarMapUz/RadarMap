@@ -130,6 +130,11 @@ struct SpeedHUDView: View {
                         .font(.rounded(11, .medium))
                         .foregroundStyle(Theme.textSecondary)
                         .lineLimit(1)
+                    // Полоска приближения: заполняется к камере и «греется» —
+                    // боковым зрением читается быстрее цифр.
+                    if let progress = env.location.approachProgress {
+                        approachBar(progress)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -147,5 +152,21 @@ struct SpeedHUDView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 6)
         }
+    }
+
+    private func approachBar(_ progress: Double) -> some View {
+        let tint: Color = progress > 0.66 ? Theme.danger
+                        : progress > 0.33 ? .orange : .yellow
+        return Capsule()
+            .fill(Theme.stroke)
+            .overlay(alignment: .leading) {
+                Capsule()
+                    .fill(tint)
+                    .scaleEffect(x: max(progress, 0.04), y: 1, anchor: .leading)
+            }
+            .clipShape(Capsule())
+            .frame(height: 3)
+            .padding(.top, 3)
+            .animation(.easeOut(duration: 0.3), value: progress)
     }
 }

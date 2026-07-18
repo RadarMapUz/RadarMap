@@ -20,6 +20,7 @@ enum Storage {
         case cameraDBVersion        // версия локальной базы камер
         case speedLimitsLastCheck   // дата последней проверки базы лимитов
         case hasCompletedOnboarding // онбординг пройден (@AppStorage)
+        case reviewAskedVersion     // версия, в которой уже просили оценку App Store
     }
 
     private static var defaults: UserDefaults { .standard }

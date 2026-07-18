@@ -161,6 +161,7 @@ final class LocationService: NSObject {
     func startTrip() {
         guard isAuthorized else { return }
         isTripActive = true
+        lastMovementAt = Date()   // не проваливаться в тир «стоянка» со старым штампом
         alertEngine.reset()
         passTracking.reset()
         trip.begin()
@@ -235,9 +236,15 @@ final class LocationService: NSObject {
             : .greatestFiniteMagnitude
         let nearest = min(cameraDistance, stepDistance)
 
-        // 0 — финал (Best, частые фиксы), 1 — подъезд (10 м), 2 — крейсер (мягче всего).
-        let tier = nearest < AppConfig.gpsPreciseApproachMeters ? 0
+        // 0 — финал (Best, частые фиксы), 1 — подъезд (10 м), 2 — крейсер,
+        // 3 — стоянка (пробка/светофор >минуты ВДАЛИ от камер: тир 2 гарантирует,
+        // что до ближайшей камеры/манёвра больше 1.5 км — грубые фиксы безопасны).
+        var tier = nearest < AppConfig.gpsPreciseApproachMeters ? 0
                  : nearest < AppConfig.gpsMidApproachMeters ? 1 : 2
+        if tier == 2, speedKmh < 3,
+           Date().timeIntervalSince(lastMovementAt) > AppConfig.gpsIdleAfterSeconds {
+            tier = 3
+        }
         guard tier != accuracyTier else { return }
         accuracyTier = tier
         switch tier {
@@ -245,8 +252,11 @@ final class LocationService: NSObject {
                  manager.distanceFilter = 6
         case 1:  manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
                  manager.distanceFilter = 15
-        default: manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+        case 2:  manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
                  manager.distanceFilter = 25
+        default: // стоянка: GPS-чип отдыхает; тронулись — первый тик вернёт тир
+                 manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+                 manager.distanceFilter = 30
         }
     }
 
@@ -298,6 +308,8 @@ final class LocationService: NSObject {
     /// Растёт на каждое обновление локации — карта в режиме следования подписывается на это.
     private(set) var locationTick = 0
     @ObservationIgnored private var lastSpeedTickAt: Date?
+    /// Когда машина в последний раз реально двигалась (для тира «стоянка»).
+    @ObservationIgnored private var lastMovementAt = Date()
 
     private func handleLocation(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed, course: CLLocationDirection) {
         currentCoordinate = coordinate
@@ -316,6 +328,7 @@ final class LocationService: NSObject {
             }
             lastSpeedTickAt = Date()
         }
+        if speedKmh >= 3 { lastMovementAt = Date() }
         currentCourse = course
         locationTick &+= 1
         retileIfNeeded(around: coordinate)
@@ -436,6 +449,13 @@ final class LocationService: NSObject {
     /// Умный радиус оповещения — растёт со скоростью (см. AlertEngine).
     private var effectiveAlertRadius: CLLocationDistance {
         AlertEngine.effectiveRadius(speedKmh: speedKmh, baseRadius: settings.alertRadius)
+    }
+
+    /// 0…1 — насколько глубоко вошли в радиус оповещения (полоска приближения в HUD).
+    /// nil — ближайшая камера ещё вне радиуса, полоска не нужна.
+    var approachProgress: Double? {
+        guard let distance = distanceToNearest, distance < effectiveAlertRadius else { return nil }
+        return 1 - distance / max(effectiveAlertRadius, 1)
     }
 
     /// Показывать полноэкранное предупреждение: движемся и ближайшая камера в радиусе оповещения.

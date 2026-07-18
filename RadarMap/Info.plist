@@ -4,6 +4,18 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>ru</string>
+	<!-- Диплинки из виджетов локскрина: radarmap://start-trip -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>uz.rasul.radarmap</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>radarmap</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSMotionUsageDescription</key>
 	<string>RadarMap определяет начало и конец поездки, чтобы автоматически включать оповещения за рулём и не тратить заряд, когда вы не едете.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

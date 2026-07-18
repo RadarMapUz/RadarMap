@@ -402,22 +402,54 @@ struct TripShareCard: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 12)
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.white.opacity(0.08), lineWidth: 1))
+            // Рейтинг — бейджем на карте: главная цифра поездки видна сразу.
+            .overlay(alignment: .topTrailing) {
+                if let score = record.score { scoreBadge(Int(score)) }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
+            .padding(.bottom, 14)
 
             HStack(spacing: 0) {
-                if let score = record.score {
-                    ShareMetric(value: "\(Int(score))", label: String(localized: "рейтинг"))
-                    ShareMetricDivider()
-                }
-                ShareMetric(value: Formatting.duration(record.duration), label: String(localized: "в пути"))
+                ShareMetric(value: Formatting.duration(record.duration),
+                            label: String(localized: "в пути"),
+                            icon: "clock.fill", tint: Theme.accent)
                 ShareMetricDivider()
-                ShareMetric(value: Formatting.distance(record.distanceMeters), label: String(localized: "путь"))
+                ShareMetric(value: Formatting.distance(record.distanceMeters),
+                            label: String(localized: "путь"),
+                            icon: "point.topleft.down.to.point.bottomright.curvepath",
+                            tint: Theme.success)
                 ShareMetricDivider()
-                ShareMetric(value: "\(record.camerasPassed)", label: String(localized: "камер"))
+                ShareMetric(value: "\(record.camerasPassed)",
+                            label: String(localized: "камер"),
+                            icon: "camera.fill", tint: Theme.camera)
                 ShareMetricDivider()
-                ShareMetric(value: "\(Int(record.maxSpeedKmh))", label: String(localized: "макс. км/ч"))
+                ShareMetric(value: "\(Int(record.maxSpeedKmh))",
+                            label: String(localized: "макс. км/ч"),
+                            icon: "gauge.with.dots.needle.67percent", tint: Theme.radar)
             }
-            .shareMetricsRow()
+            .shareMetricsTile()
+            .padding(.bottom, 4)
         }
+    }
+
+    /// Круглый бейдж рейтинга в углу карты (зелёный/жёлтый/красный по величине).
+    private func scoreBadge(_ score: Int) -> some View {
+        let tint: Color = score >= 80 ? Theme.success : score >= 55 ? Theme.radar : Theme.danger
+        return VStack(spacing: 0) {
+            Text("\(score)")
+                .font(.system(size: 24, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+            Text("рейтинг")
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.75))
+        }
+        .frame(width: 64, height: 64)
+        .background(tint.opacity(0.92), in: Circle())
+        .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 1.5))
+        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+        .padding(12)
     }
 }

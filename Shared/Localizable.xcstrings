@@ -385,6 +385,22 @@
         }
       }
     },
+    "%lld чистых подряд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld чистых подряд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ketma-ket %lld toza"
+          }
+        }
+      }
+    },
     "+10 км/ч": {
       "localizations": {
         "ru": {
@@ -445,6 +461,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "0 jarima"
+          }
+        }
+      }
+    },
+    "0 штрафов за 30 дней": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 штрафов за 30 дней"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 kunda 0 jarima"
           }
         }
       }
@@ -4109,6 +4141,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trek bo‘ylab keskin tezlanish va tormozlash balni tushiradi."
+          }
+        }
+      }
+    },
+    "Рейтинг водителя": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рейтинг водителя"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydovchi reytingi"
           }
         }
       }

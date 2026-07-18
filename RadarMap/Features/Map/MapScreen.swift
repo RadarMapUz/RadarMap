@@ -765,6 +765,31 @@ struct MapScreen: View {
                 }
             }
         }
+        // Шеринг-карточки в PNG (Documents) — визуальная проверка без share-шита.
+        if args.contains("-dumpShareCards") {
+            Task {
+                await Task.pause(seconds: 2)
+                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let last = env.trip.fallbackRecord(isTripActive: env.location.isTripActive)
+                    ?? env.trip.history.first
+                let map = await TripMapSnapshot.render(track: last?.trackPoints ?? [],
+                                                       passes: last?.passed ?? [],
+                                                       size: CGSize(width: 1032, height: 420))
+                let stats = ImageRenderer(content: StatsShareCard(trip: env.trip, mapImage: map))
+                stats.scale = 2
+                stats.proposedSize = ProposedViewSize(width: 540, height: 675)
+                try? stats.uiImage?.pngData()?.write(to: docs.appendingPathComponent("share_stats.png"))
+                if let record = last {
+                    let tripMap = await TripMapSnapshot.render(track: record.trackPoints,
+                                                               passes: record.passed,
+                                                               size: CGSize(width: 1032, height: 840))
+                    let card = ImageRenderer(content: TripShareCard(record: record, mapImage: tripMap))
+                    card.scale = 2
+                    card.proposedSize = ProposedViewSize(width: 540, height: 675)
+                    try? card.uiImage?.pngData()?.write(to: docs.appendingPathComponent("share_trip.png"))
+                }
+            }
+        }
         // Бар точки долгого тапа: жест на симуляторе из CLI не сымитировать.
         if args.contains("-mapMenu") {
             Task {

@@ -54,4 +54,15 @@ extension View {
     func shareMetricsRow() -> some View {
         self.padding(.vertical, 20).background(.white.opacity(0.06))
     }
+
+    /// Метрики скруглённой плиткой в полях карточки (материалы в ImageRenderer
+    /// не рендерятся — только простые заливки).
+    func shareMetricsTile() -> some View {
+        self.padding(.vertical, 16)
+            .background(.white.opacity(0.06),
+                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.white.opacity(0.08), lineWidth: 1))
+            .padding(.horizontal, 16)
+    }
 }

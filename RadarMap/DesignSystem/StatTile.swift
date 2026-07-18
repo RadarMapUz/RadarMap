@@ -51,9 +51,17 @@ private struct NumericTransition: ViewModifier {
 struct ShareMetric: View {
     let value: String
     let label: String
+    /// Иконка над числом — метрика читается без чтения подписи.
+    var icon: String? = nil
+    var tint: Color = Theme.accent
 
     var body: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 4) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(tint)
+            }
             Text(value)
                 .font(.system(size: 22, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white)
@@ -67,6 +75,6 @@ struct ShareMetric: View {
 
 struct ShareMetricDivider: View {
     var body: some View {
-        Rectangle().fill(.white.opacity(0.12)).frame(width: 1, height: 34)
+        Rectangle().fill(.white.opacity(0.12)).frame(width: 1, height: 44)
     }
 }

@@ -12,6 +12,9 @@ struct CameraAnnotationView: View {
     var selected: Bool = false
     /// Средний зум: маленькая точка вместо полного пина — экран не забит кружками.
     var compact: Bool = false
+    /// Лимит дороги у камеры: на близком зуме маркер = мини-знак «60» —
+    /// сколько можно, видно с одного взгляда, без тапа в карточку.
+    var limit: Int? = nil
 
     var body: some View {
         if compact && !selected {
@@ -21,9 +24,35 @@ struct CameraAnnotationView: View {
                 .overlay(Circle().stroke(.white.opacity(0.75), lineWidth: 1))
                 .frame(width: 30, height: 30)       // тап-мишень больше самой точки
                 .contentShape(Circle())
+        } else if let limit, !selected {
+            limitPin(limit)
         } else {
             fullPin
         }
+    }
+
+    /// Мини-знак ограничения: белый круг, красная кайма, число. Цветная точка
+    /// снизу сохраняет тип камеры (радар/камера/интеллектуал).
+    private func limitPin(_ limit: Int) -> some View {
+        ZStack(alignment: .bottom) {
+            ZStack {
+                Circle().fill(.white)
+                Circle().strokeBorder(Color(red: 0.85, green: 0.1, blue: 0.1), lineWidth: 4.5)
+                Text("\(limit)")
+                    .font(.system(size: limit >= 100 ? 10 : 12, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.black)
+                    .minimumScaleFactor(0.7)
+            }
+            .frame(width: 30, height: 30)
+
+            Circle()
+                .fill(camera.kind.tint)
+                .frame(width: 9, height: 9)
+                .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                .offset(y: 3)
+        }
+        .frame(width: 34, height: 36)
+        .contentShape(Circle())
     }
 
     private var fullPin: some View {

@@ -64,6 +64,27 @@ struct PrimaryButton: View {
     }
 }
 
+/// Красное свечение по краям экрана: превышение у камеры. Видно периферийным
+/// зрением — на телефон смотреть не нужно. Один слой с пульсом, тапы пропускает.
+struct OverspeedVignette: View {
+    @State private var pulse = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 44, style: .continuous)
+            .strokeBorder(Theme.danger.opacity(pulse ? 0.55 : 0.25), lineWidth: 22)
+            .blur(radius: 24)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                    pulse = true
+                }
+            }
+            .transition(.opacity)
+            .accessibilityHidden(true)   // VoiceOver уже читает алерт приближения
+    }
+}
+
 /// Чип-легенда типа камеры.
 struct LegendChip: View {
     let color: Color

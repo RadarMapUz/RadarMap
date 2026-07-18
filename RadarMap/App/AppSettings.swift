@@ -83,6 +83,21 @@ enum BackgroundAlertMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// Тема карты. Интерфейс всегда тёмный («радар-детектор»), но тёмная карта
+/// днём на солнце бликует — авто-режим переключает подложку по времени суток.
+enum MapAppearance: String, CaseIterable, Identifiable {
+    case dark, auto, light
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .dark:  return String(localized: "Тёмная")
+        case .auto:  return String(localized: "Авто (день/ночь)")
+        case .light: return String(localized: "Светлая")
+        }
+    }
+}
+
 /// Язык интерфейса. `.system` — как в настройках телефона; ru/uz форсируют язык
 /// через ключ `AppleLanguages` (применяется при следующем запуске — так весь
 /// текст, включая `String(localized:)`, переключается разом, без «каши» языков).
@@ -137,6 +152,14 @@ final class AppSettings {
         didSet { store.set(backgroundAlerts.rawValue, forKey: Keys.backgroundAlerts) }
     }
 
+    /// Тактильные сигналы при приближении к камере.
+    var hapticsEnabled: Bool { didSet { store.set(hapticsEnabled, forKey: Keys.haptics) } }
+
+    /// Подложка карты: тёмная / светлая / авто по времени суток.
+    var mapAppearance: MapAppearance {
+        didSet { store.set(mapAppearance.rawValue, forKey: Keys.mapAppearance) }
+    }
+
     /// Выбранный язык интерфейса (применяется при следующем запуске — см. AppLanguage).
     var appLanguage: AppLanguage {
         didSet {
@@ -166,6 +189,8 @@ final class AppSettings {
         static let recents = "recentPlaces"
         static let language = "appLanguage"
         static let backgroundAlerts = "backgroundAlerts"
+        static let haptics = "hapticsEnabled"
+        static let mapAppearance = "mapAppearance"
     }
 
     /// Пишем/снимаем override языка приложения. iOS читает «AppleLanguages» из
@@ -192,6 +217,7 @@ final class AppSettings {
             Keys.adaptive: true,
             Keys.nextCamera: true,
             Keys.digest: true,
+            Keys.haptics: true,
         ])
         soundEnabled = store.bool(forKey: Keys.sound)
         voiceEnabled = store.bool(forKey: Keys.voice)
@@ -210,6 +236,8 @@ final class AppSettings {
         weeklyDigest = store.bool(forKey: Keys.digest)
         appLanguage = AppLanguage(rawValue: store.string(forKey: Keys.language) ?? "") ?? .system
         backgroundAlerts = BackgroundAlertMode(rawValue: store.string(forKey: Keys.backgroundAlerts) ?? "") ?? .all
+        hapticsEnabled = store.bool(forKey: Keys.haptics)
+        mapAppearance = MapAppearance(rawValue: store.string(forKey: Keys.mapAppearance) ?? "") ?? .dark
         do {
             let data = store.data(forKey: Keys.recents)
             recentPlaces = try data.map { try JSONDecoder().decode([SavedPlace].self, from: $0) } ?? []

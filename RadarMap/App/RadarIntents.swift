@@ -49,6 +49,28 @@ struct EndTripIntent: AppIntent {
     }
 }
 
+struct ReportRadarIntent: AppIntent {
+    static let title: LocalizedStringResource = "Радар здесь"
+    static let description = IntentDescription(
+        "Отмечает передвижной радар в текущей точке — другие водители увидят его на карте.")
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let env = AppEnvironment.shared
+        guard let coordinate = env.location.currentCoordinate else {
+            return .result(dialog: IntentDialog("Не вижу геопозицию — попробуйте ещё раз."))
+        }
+        switch await env.mobile.report(at: coordinate) {
+        case .created:
+            return .result(dialog: IntentDialog("Радар отмечен. Спасибо, что предупредили!"))
+        case .confirmed:
+            return .result(dialog: IntentDialog("Радар здесь уже отмечен — подтвердили."))
+        case .failed:
+            return .result(dialog: IntentDialog("Не получилось отправить — нет связи."))
+        }
+    }
+}
+
 /// Фразы для Siri без настройки: «Начать поездку в RadarMap» и т.п.
 struct RadarShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
@@ -71,6 +93,16 @@ struct RadarShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Завершить поездку",
             systemImageName: "flag.checkered"
+        )
+        AppShortcut(
+            intent: ReportRadarIntent(),
+            phrases: [
+                "Радар здесь в \(.applicationName)",
+                "Отметь радар в \(.applicationName)",
+                "Radar here in \(.applicationName)",
+            ],
+            shortTitle: "Радар здесь",
+            systemImageName: "dot.radiowaves.left.and.right"
         )
     }
 }

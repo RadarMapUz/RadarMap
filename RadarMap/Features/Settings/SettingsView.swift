@@ -40,6 +40,7 @@ struct SettingsView: View {
                         }
                     }
                     Toggle("Голосовое предупреждение", isOn: $settings.voiceEnabled)
+                    Toggle("Вибрация у камер", isOn: $settings.hapticsEnabled)
                     Picker("Баннеры в фоне", selection: $settings.backgroundAlerts) {
                         ForEach(BackgroundAlertMode.allCases) { Text($0.title).tag($0) }
                     }
@@ -110,11 +111,18 @@ struct SettingsView: View {
                     Text("Маршрут в один тап из «Поиска» — домой или на работу.")
                 }
 
-                Section("Показывать на карте") {
+                Section {
                     Picker("Тип камер", selection: $settings.filter) {
                         ForEach(CameraFilter.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
+                    Picker("Тема карты", selection: $settings.mapAppearance) {
+                        ForEach(MapAppearance.allCases) { Text($0.title).tag($0) }
+                    }
+                } header: {
+                    Text("Карта")
+                } footer: {
+                    Text("«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.")
                 }
 
                 Section {

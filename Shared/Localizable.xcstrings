@@ -561,6 +561,22 @@
         }
       }
     },
+    "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Avto» — kunduzi yorug' xarita (qorong'i xarita quyoshda yaltiraydi), kechasi doim qorong'i. Interfeys qorong'iligicha qoladi."
+          }
+        }
+      }
+    },
     "«Баннеры в фоне» — уведомления о камерах, когда приложение свёрнуто. «Только радары» будит лишь камерами, которые меряют скорость.": {
       "localizations": {
         "ru": {
@@ -589,6 +605,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "· %@"
+          }
+        }
+      }
+    },
+    "Авто (день/ночь)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Авто (день/ночь)"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avto (kun/tun)"
           }
         }
       }
@@ -845,6 +877,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Baza versiyasi"
+          }
+        }
+      }
+    },
+    "Вибрация у камер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вибрация у камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar oldida tebranish"
           }
         }
       }
@@ -2081,6 +2129,22 @@
         }
       }
     },
+    "Карта": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita"
+          }
+        }
+      }
+    },
     "Карта камер и навигатор Узбекистана": {
       "localizations": {
         "ru": {
@@ -2141,6 +2205,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Koordinatalar taxminiy — manba ma'lumotlarida ular buzilgan edi."
+          }
+        }
+      }
+    },
+    "Куда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Куда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qayerga"
           }
         }
       }
@@ -2385,6 +2465,22 @@
         }
       }
     },
+    "Нажмите, чтобы вернуться к карте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нажмите, чтобы вернуться к карте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xaritaga qaytish uchun bosing"
+          }
+        }
+      }
+    },
     "Нажмите, чтобы скрыть": {
       "localizations": {
         "ru": {
@@ -2545,6 +2641,22 @@
         }
       }
     },
+    "Не вижу геопозицию — попробуйте ещё раз.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не вижу геопозицию — попробуйте ещё раз."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joylashuv aniqlanmadi — yana urinib ko'ring."
+          }
+        }
+      }
+    },
     "Не задано — нажмите, чтобы настроить": {
       "localizations": {
         "ru": {
@@ -2557,6 +2669,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Belgilanmagan — sozlash uchun bosing"
+          }
+        }
+      }
+    },
+    "Не получилось отправить — нет связи.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не получилось отправить — нет связи."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuborib bo'lmadi — aloqa yo'q."
           }
         }
       }
@@ -2813,6 +2941,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Belgi barcha haydovchilarga ~3 soat ko'rinadi"
+          }
+        }
+      }
+    },
+    "Отмечает передвижной радар в текущей точке — другие водители увидят его на карте.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмечает передвижной радар в текущей точке — другие водители увидят его на карте."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joriy nuqtada ko'chma radarni belgilaydi — boshqa haydovchilar uni xaritada ko'radi."
           }
         }
       }
@@ -3521,6 +3665,38 @@
         }
       }
     },
+    "Радар здесь": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Радар здесь"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar shu yerda"
+          }
+        }
+      }
+    },
+    "Радар здесь уже отмечен — подтвердили.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Радар здесь уже отмечен — подтвердили."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yerda radar allaqachon belgilangan — tasdiqladik."
+          }
+        }
+      }
+    },
     "Радар здесь!": {
       "localizations": {
         "ru": {
@@ -3549,6 +3725,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Radar joyida"
+          }
+        }
+      }
+    },
+    "Радар отмечен. Спасибо, что предупредили!": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Радар отмечен. Спасибо, что предупредили!"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar belgilandi. Ogohlantirganingiz uchun rahmat!"
           }
         }
       }
@@ -3709,6 +3901,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safarni nollash"
+          }
+        }
+      }
+    },
+    "Светлая": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Светлая"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yorug'"
           }
         }
       }
@@ -3905,6 +4113,22 @@
         }
       }
     },
+    "Спидометр": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Спидометр"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spidometr"
+          }
+        }
+      }
+    },
     "Средний балл поездок за 30 дней. Длинные поездки весят больше коротких.": {
       "localizations": {
         "ru": {
@@ -3985,6 +4209,22 @@
         }
       }
     },
+    "Тема карты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тема карты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita mavzusi"
+          }
+        }
+      }
+    },
     "Тип": {
       "localizations": {
         "ru": {
@@ -4061,6 +4301,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trek yozilmagan — yangi safarlarda paydo bo‘ladi"
+          }
+        }
+      }
+    },
+    "Тёмная": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тёмная"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qorong'i"
           }
         }
       }

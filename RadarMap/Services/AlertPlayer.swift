@@ -62,6 +62,7 @@ final class AlertPlayer: NSObject {
     /// 2 — средний (чётче), 3 — вплотную (резкий тройной). На симуляторе и
     /// старом железе — откат на системный генератор.
     func haptic(level: Int) {
+        guard settings.hapticsEnabled else { return }
         guard supportsHaptics, let engine = hapticEngine else {
             hapticFallback(level: level)
             return

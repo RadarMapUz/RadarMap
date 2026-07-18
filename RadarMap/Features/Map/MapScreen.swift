@@ -19,6 +19,8 @@ struct MapScreen: View {
     // Умные кнопки: в поездке через 5 с бездействия интерфейс прячется, тап по карте возвращает.
     @State private var controlsHidden = false
     @State private var hideControlsTask: Task<Void, Never>?
+    /// Режим «Спидометр» — тап по HUD (телефон в держателе).
+    @State private var showDashboard = false
     @State private var legendExpanded = false
     @State private var legendCollapseTask: Task<Void, Never>?
     /// Связывает карту с внешним MapCompass: системный компас, но в нашей колонке
@@ -29,7 +31,11 @@ struct MapScreen: View {
         @Bindable var map = map
 
         ZStack {
-            mapLayer.ignoresSafeArea()
+            // Тема только у карты: интерфейс остаётся тёмным «радар-детектором»,
+            // а подложка днём может быть светлой (тёмная на солнце бликует).
+            mapLayer
+                .ignoresSafeArea()
+                .environment(\.colorScheme, mapColorScheme)
 
             // Затемнение под статус-баром: часы и батарея не тонут в карте.
             VStack(spacing: 0) {
@@ -45,8 +51,15 @@ struct MapScreen: View {
 
             topLayer
             bottomLayer
+
+            // Превышение у камеры: мягкое красное свечение по краям — видно
+            // периферийным зрением, на телефон смотреть не нужно.
+            if env.location.isApproachingCamera && env.speedLimits.isOverspeeding {
+                OverspeedVignette()
+            }
         }
         .mapScope(mapScope)
+        .fullScreenCover(isPresented: $showDashboard) { DashboardView() }
         .task {
             map.configure(env.cameras)
             map.filter = env.settings.filter
@@ -144,6 +157,17 @@ struct MapScreen: View {
 
     // MARK: - Карта
 
+    /// Тема подложки: авто — светлая днём (6–19), тёмная ночью.
+    private var mapColorScheme: ColorScheme {
+        switch env.settings.mapAppearance {
+        case .dark:  return .dark
+        case .light: return .light
+        case .auto:
+            let hour = Calendar.current.component(.hour, from: Date())
+            return (6..<19).contains(hour) ? .light : .dark
+        }
+    }
+
     private var mapLayer: some View {
         Map(position: $map.position, scope: mapScope) {
             UserAnnotation()
@@ -188,12 +212,15 @@ struct MapScreen: View {
 
             ForEach(map.visibleCameras) { camera in
                 Annotation(camera.displayTitle, coordinate: camera.coordinate, anchor: .center) {
-                    // Средний зум: точки; полный пин — у выбранной и ближайшей по курсу.
+                    // Средний зум: точки; близкий — мини-знак лимита («60»);
+                    // полный пин — у выбранной и ближайшей по курсу.
                     CameraAnnotationView(
                         camera: camera,
                         selected: map.highlightedID == camera.id,
                         compact: map.isDotZoom
-                            && camera.id != env.location.nearestCamera?.id
+                            && camera.id != env.location.nearestCamera?.id,
+                        limit: map.isDotZoom ? nil
+                             : env.speedLimits.limit(near: camera.coordinate)
                     )
                     .onTapGesture { map.select(camera) }
                 }
@@ -252,7 +279,9 @@ struct MapScreen: View {
 
     private var topLayer: some View {
         VStack(spacing: 10) {
+            // Тап по HUD — режим «Спидометр» (приборка на весь экран для держателя).
             SpeedHUDView()
+                .onTapGesture { showDashboard = true }
             // Turn-by-turn: ближайший манёвр — в поездке по маршруту.
             if env.location.isTripActive, let step = env.route.nextStep {
                 ManeuverBanner(step: step, distance: env.route.nextStepDistance)
@@ -306,6 +335,17 @@ struct MapScreen: View {
                           accessibilityLabel: "Моё местоположение") {
                 recenter()
                 revealControls()
+            }
+            // В поездке: «Радар здесь!» одним тапом — отметить передвижной радар
+            // для других водителей (то же самое умеет Siri голосом).
+            if env.location.isTripActive {
+                CircleControl(systemName: "dot.radiowaves.left.and.right", tint: Theme.radar,
+                              accessibilityLabel: "Радар здесь") {
+                    guard let coordinate = env.location.currentCoordinate else { return }
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    Task { await env.mobile.report(at: coordinate) }
+                    revealControls()
+                }
             }
             // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
@@ -611,7 +651,8 @@ struct MapScreen: View {
         // Повернуть карту (компас должен появиться): жестов у simctl нет.
         if args.contains("-rotateMap") {
             Task {
-                await Task.pause(seconds: 2.5)
+                // После snapToUserOnce (тот перебил бы позицию своим регионом).
+                await Task.pause(seconds: 6)
                 guard let center = env.location.currentCoordinate else { return }
                 withAnimation(.easeInOut(duration: 0.6)) {
                     map.position = .camera(MapCamera(centerCoordinate: center,

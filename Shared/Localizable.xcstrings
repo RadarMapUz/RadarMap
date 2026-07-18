@@ -1633,6 +1633,22 @@
         }
       }
     },
+    "Задать Дом и Работу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задать Дом и Работу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uy va Ishni belgilash"
+          }
+        }
+      }
+    },
     "Заезд за стоп-линию": {
       "localizations": {
         "ru": {
@@ -4081,6 +4097,22 @@
         }
       }
     },
+    "Своя камера": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Своя камера"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O'z kameram"
+          }
+        }
+      }
+    },
     "Сегодня": {
       "localizations": {
         "ru": {
@@ -4429,6 +4461,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Faqat radarlar"
+          }
+        }
+      }
+    },
+    "Точка на карте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Точка на карте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xaritadagi nuqta"
           }
         }
       }

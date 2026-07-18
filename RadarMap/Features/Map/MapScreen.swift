@@ -23,6 +23,8 @@ struct MapScreen: View {
     @State private var showDashboard = false
     @State private var legendExpanded = false
     @State private var legendCollapseTask: Task<Void, Never>?
+    /// Чип «Задать Дом и Работу» → поиск сразу в режиме назначения слота.
+    @State private var assignSlot: PlaceSlot?
     /// Связывает карту с внешним MapCompass: системный компас, но в нашей колонке
     /// контролов, а не под статус-баром.
     @Namespace private var mapScope
@@ -102,6 +104,9 @@ struct MapScreen: View {
         .sheet(isPresented: $showRouteCameras) {
             RouteCamerasSheet(onSelect: { map.focus(on: $0) })
         }
+        .sheet(item: $assignSlot) { slot in
+            SearchView(initialAssign: slot)
+        }
         .sheet(isPresented: $map.showSettings) { SettingsView() }
         .sheet(isPresented: $map.showStats) {
             TripStatsSheet(onRoute: env.location.currentCoordinate == nil ? nil : { coord, name in
@@ -172,6 +177,24 @@ struct MapScreen: View {
     }
 
     private var mapLayer: some View {
+        MapReader { proxy in
+            mapContent
+                // Долгий тап → точка с баром действий. Sequenced-хак: LongPress
+                // не отдаёт координату, добираем её нулевым DragGesture.
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.45)
+                        .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .local))
+                        .onEnded { value in
+                            guard case .second(true, let drag) = value,
+                                  let location = drag?.location,
+                                  let coordinate = proxy.convert(location, from: .local) else { return }
+                            selectPoint(at: coordinate)
+                        }
+                )
+        }
+    }
+
+    private var mapContent: some View {
         Map(position: $map.position, scope: mapScope) {
             UserAnnotation()
 
@@ -236,6 +259,17 @@ struct MapScreen: View {
                 }
                 .annotationTitles(.hidden)
             }
+
+            // Точка долгого тапа — пульсирующий маркер, пока открыт бар действий.
+            if let point = map.pressedPoint {
+                Annotation("", coordinate: point.coordinate, anchor: .center) {
+                    Image(systemName: "mappin.circle.fill")
+                        .font(.rounded(26, .bold))
+                        .foregroundStyle(Theme.background, Theme.accent)
+                        .shadow(color: Theme.accent.opacity(0.6), radius: 8)
+                }
+                .annotationTitles(.hidden)
+            }
         }
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll, showsTraffic: false))
         // Системный компас вылезал под статус-бар в правом верхнем углу —
@@ -246,8 +280,14 @@ struct MapScreen: View {
             // Потянул карту рукой — слежение за компасом устройства снимается.
             if !map.position.followsUserLocation { map.followsDeviceHeading = false }
         }
-        // Любое касание карты будит спрятанные кнопки (не мешая тапам по маркерам).
-        .simultaneousGesture(TapGesture().onEnded { revealControls() })
+        // Любое касание карты будит спрятанные кнопки (не мешая тапам по маркерам)
+        // и закрывает бар точки долгого тапа.
+        .simultaneousGesture(TapGesture().onEnded {
+            revealControls()
+            if map.pressedPoint != nil {
+                withAnimation(.spring(duration: 0.3)) { map.pressedPoint = nil }
+            }
+        })
         .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in revealControls() })
     }
 
@@ -370,6 +410,32 @@ struct MapScreen: View {
                     onAdd: { kind, name in addCamera(kind: kind, name: name) }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if let point = map.pressedPoint {
+                MapPointBar(
+                    onRoute: env.location.currentCoordinate == nil ? nil : {
+                        buildRoute(to: point.coordinate, name: String(localized: "Точка на карте"))
+                        withAnimation { map.pressedPoint = nil }
+                    },
+                    onRadar: {
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        Task { await env.mobile.report(at: point.coordinate) }
+                        withAnimation { map.pressedPoint = nil }
+                    },
+                    onOwnCamera: {
+                        // Крестик режима добавления встаёт на выбранную точку —
+                        // пользователь при желании доводит позицию вручную.
+                        withAnimation {
+                            map.pressedPoint = nil
+                            map.position = .region(MKCoordinateRegion(
+                                center: point.coordinate,
+                                latitudinalMeters: 500, longitudinalMeters: 500))
+                            map.isAddingCamera = true
+                        }
+                    },
+                    onCancel: {
+                        withAnimation { map.pressedPoint = nil }
+                    }
+                )
             } else {
                 permissionBanner
                 if !controlsHidden {
@@ -416,6 +482,8 @@ struct MapScreen: View {
                             .padding(.horizontal, 12).padding(.vertical, 6)
                             .background(.ultraThinMaterial, in: Capsule())
                     }
+                    PlaceChips(onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
+                               onAssign: { assignSlot = $0 })
                     tripButton
                 }
                 if !controlsHidden {
@@ -428,7 +496,18 @@ struct MapScreen: View {
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .animation(.spring(duration: 0.3), value: map.isAddingCamera)
+        .animation(.spring(duration: 0.3), value: map.pressedPoint)
         .animation(.easeInOut(duration: 0.3), value: controlsHidden)
+    }
+
+    /// Долгий тап: маркер + бар действий (кроме режима прицела добавления камеры).
+    private func selectPoint(at coordinate: CLLocationCoordinate2D) {
+        guard !map.isAddingCamera else { return }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withAnimation(.spring(duration: 0.3)) {
+            map.pressedPoint = MapPoint(coordinate: coordinate)
+        }
+        revealControls()
     }
 
     private func toggleTrip() {
@@ -675,6 +754,15 @@ struct MapScreen: View {
                 withAnimation(.easeInOut(duration: 0.6)) {
                     map.position = .camera(MapCamera(centerCoordinate: center,
                                                      distance: 1200, heading: 45))
+                }
+            }
+        }
+        // Бар точки долгого тапа: жест на симуляторе из CLI не сымитировать.
+        if args.contains("-mapMenu") {
+            Task {
+                await Task.pause(seconds: 3)
+                if let center = map.mapCenter ?? env.location.currentCoordinate {
+                    selectPoint(at: center)
                 }
             }
         }

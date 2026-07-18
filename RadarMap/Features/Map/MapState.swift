@@ -29,6 +29,8 @@ final class MapState {
     var showSettings = false
     var showStats = false
     var isAddingCamera = false
+    /// Точка долгого тапа: маркер + бар действий «Маршрут сюда / Радар / Своя камера».
+    var pressedPoint: MapPoint?
     var filter: CameraFilter = .all
     var position: MapCameraPosition = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
     /// Режим «по компасу устройства»: карта крутится сама за телефоном

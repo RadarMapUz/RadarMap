@@ -366,25 +366,43 @@ struct TripDetailSheet: View {
     // MARK: Шеринг-карточка
 
     /// Рендерим карточку в момент тапа — данные всегда свежие, открытие не тормозим.
+    /// Сначала асинхронно снимаем карту с треком (информативно: виден район и улицы),
+    /// затем карточку в картинку. Карта не загрузилась (офлайн) — фолбэк на неоновый трек.
     private func share() {
-        let renderer = ImageRenderer(content: TripShareCard(record: record))
-        renderer.scale = 2
-        renderer.proposedSize = ProposedViewSize(width: 540, height: 675)
-        if let uiImage = renderer.uiImage {
-            sharePayload = ShareImagePayload(image: uiImage)
+        Task {
+            let map = await TripMapSnapshot.render(track: record.trackPoints,
+                                                   passes: record.passed,
+                                                   size: CGSize(width: 1032, height: 840))
+            let renderer = ImageRenderer(content: TripShareCard(record: record, mapImage: map))
+            renderer.scale = 2
+            renderer.proposedSize = ProposedViewSize(width: 540, height: 675)
+            if let uiImage = renderer.uiImage {
+                sharePayload = ShareImagePayload(image: uiImage)
+            }
         }
     }
 }
 
-/// Карточка для шеринга (рендерится в картинку 1080×1350): неоновый трек на тёмном фоне.
+/// Карточка для шеринга (рендерится в картинку 1080×1350): настоящая карта с треком,
+/// при офлайне — неоновый трек на тёмном фоне.
 struct TripShareCard: View {
     let record: TripRecord
+    var mapImage: UIImage? = nil
 
     var body: some View {
         ShareCardShell(subtitle: record.startedAt.formatted(date: .abbreviated, time: .shortened)) {
-            TrackCanvas(points: record.trackPoints, passes: record.passed, lineWidth: 5)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 12)
+            Group {
+                if let mapImage {
+                    Image(uiImage: mapImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                } else {
+                    TrackCanvas(points: record.trackPoints, passes: record.passed, lineWidth: 5)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 12)
 
             HStack(spacing: 0) {
                 if let score = record.score {

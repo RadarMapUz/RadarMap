@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 // MARK: - Бейдж достижения
 
@@ -49,14 +50,27 @@ struct AchievementBadge: View {
 
 struct StatsShareCard: View {
     let trip: TripStats
+    /// Карта последней поездки (район + трек) — шеринг информативнее сухих цифр.
+    var mapImage: UIImage? = nil
 
     var body: some View {
         ShareCardShell(subtitle: String(localized: "Мои итоги")) {
             Spacer()
 
+            if let mapImage {
+                Image(uiImage: mapImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 210)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 14)
+            }
+
             if let rating = trip.rating {
                 RatingRing(rating: rating, animated: false)
-                    .frame(width: 170, height: 170)
+                    .frame(width: mapImage == nil ? 170 : 120,
+                           height: mapImage == nil ? 170 : 120)
                 Text(DrivingScore.level(for: rating))
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)

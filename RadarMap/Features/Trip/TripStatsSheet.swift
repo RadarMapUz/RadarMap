@@ -403,13 +403,21 @@ struct TripStatsSheet: View {
     // MARK: - Шеринг итогов
 
     /// Рендерим карточку в момент тапа — данные всегда свежие, открытие не тормозим.
+    /// Сверху — карта последней поездки (район + трек): шеринг информативнее цифр.
     private func share(trip: TripStats) {
         guard trip.rating != nil else { return }   // хвастаться пока нечем
-        let renderer = ImageRenderer(content: StatsShareCard(trip: trip))
-        renderer.scale = 2
-        renderer.proposedSize = ProposedViewSize(width: 540, height: 675)
-        if let uiImage = renderer.uiImage {
-            sharePayload = ShareImagePayload(image: uiImage)
+        Task {
+            let last = trip.fallbackRecord(isTripActive: env.location.isTripActive)
+                ?? trip.history.first
+            let map = await TripMapSnapshot.render(track: last?.trackPoints ?? [],
+                                                   passes: last?.passed ?? [],
+                                                   size: CGSize(width: 1032, height: 420))
+            let renderer = ImageRenderer(content: StatsShareCard(trip: trip, mapImage: map))
+            renderer.scale = 2
+            renderer.proposedSize = ProposedViewSize(width: 540, height: 675)
+            if let uiImage = renderer.uiImage {
+                sharePayload = ShareImagePayload(image: uiImage)
+            }
         }
     }
 

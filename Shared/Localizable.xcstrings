@@ -2721,6 +2721,22 @@
         }
       }
     },
+    "Начните поездку на iPhone — скорость и камеры появятся здесь.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начните поездку на iPhone — скорость и камеры появятся здесь."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone'da safarni boshlang — tezlik va kameralar shu yerda ko'rinadi."
+          }
+        }
+      }
+    },
     "Нашли ошибку или есть идея? Мы читаем каждое сообщение.": {
       "localizations": {
         "ru": {
@@ -2989,6 +3005,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yozuvni to'xtatadi va safar natijalarini saqlaydi."
+          }
+        }
+      }
+    },
+    "Откройте RadarMap на iPhone.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Откройте RadarMap на iPhone."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhone'da RadarMap'ni oching."
           }
         }
       }

@@ -27,6 +27,17 @@ final class WatchSession: NSObject {
 
     @ObservationIgnored private var lastHapticLevel = 0
 
+    #if DEBUG
+    /// `-demo`: живой HUD без телефона — для скриншотов и превью на симуляторе.
+    func seedDemo() {
+        isTripActive = true
+        speedKmh = 84
+        cameraTitle = String(localized: "Стационарная камера")
+        distanceMeters = 350
+        alertLevel = 2
+    }
+    #endif
+
     override init() {
         super.init()
         guard WCSession.isSupported() else { return }

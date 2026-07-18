@@ -17,6 +17,11 @@ struct RadarWatchApp: App {
         WindowGroup {
             WatchHUDView()
                 .environment(session)
+            #if DEBUG
+                .onAppear {
+                    if CommandLine.arguments.contains("-demo") { session.seedDemo() }
+                }
+            #endif
         }
     }
 }

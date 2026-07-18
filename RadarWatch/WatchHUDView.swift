@@ -98,6 +98,10 @@ struct WatchHUDView: View {
     }
 
     private func distanceText(_ meters: Int) -> String {
-        meters >= 1000 ? String(format: "%.1f км", Double(meters) / 1000) : "\(meters) м"
+        if meters >= 1000 {
+            let km = String(format: "%.1f", locale: .current, Double(meters) / 1000)
+            return String(format: String(localized: "%@ км"), km)
+        }
+        return String(format: String(localized: "%@ м"), String(meters))
     }
 }

@@ -8,7 +8,9 @@
 
 import os
 
-enum Log {
+// nonisolated: Logger потокобезопасен, логировать нужно и из @concurrent-кода
+// (декодирование базы) без прыжка на главный актор.
+nonisolated enum Log {
     private static let subsystem = "uz.rasul.radarmap"
 
     /// GPS, поездки, проезды камер.

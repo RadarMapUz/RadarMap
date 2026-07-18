@@ -92,7 +92,8 @@ struct StatsShareCard: View {
                         .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.55))
                     Text(month.over == 0 ? String(localized: "0 штрафов")
-                                         : "риск ≈ \(Formatting.money(month.risk))")
+                                         : String(format: String(localized: "риск ≈ %@"),
+                                                  Formatting.money(month.risk)))
                         .font(.system(size: 34, weight: .heavy, design: .rounded))
                         .foregroundStyle(month.over == 0 ? Theme.success : Theme.danger)
                 }

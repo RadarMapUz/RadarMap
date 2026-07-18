@@ -12,7 +12,7 @@ struct FeedbackFormView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
 
-    private enum SendState: Equatable { case idle, sending, sent, failed }
+    private enum SendState: Equatable { case idle, sending, sent, queued }
     @State private var message = ""
     @State private var contact = ""
     @State private var state: SendState = .idle
@@ -22,7 +22,7 @@ struct FeedbackFormView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if state == .sent {
+                    if state == .sent || state == .queued {
                         sentCard
                     } else {
                         editor
@@ -75,12 +75,6 @@ struct FeedbackFormView: View {
             .padding(14)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
 
-        if state == .failed {
-            Label("Не удалось отправить — проверьте сеть.", systemImage: "wifi.slash")
-                .font(.rounded(13))
-                .foregroundStyle(Theme.danger)
-        }
-
         if state == .sending {
             HStack(spacing: 10) {
                 ProgressView().controlSize(.small)
@@ -97,13 +91,16 @@ struct FeedbackFormView: View {
         }
     }
 
+    /// Честный итог: «отправлено» либо «сохранено в очередь» — не врём про сеть.
     private var sentCard: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill")
+        let queued = state == .queued
+        return VStack(spacing: 12) {
+            Image(systemName: queued ? "tray.full.fill" : "checkmark.circle.fill")
                 .font(.rounded(44, .bold))
-                .foregroundStyle(Theme.success)
-                .shadow(color: Theme.success.opacity(0.5), radius: 12)
-            Text("Спасибо! Мы читаем каждое сообщение.")
+                .foregroundStyle(queued ? Theme.accent : Theme.success)
+                .shadow(color: (queued ? Theme.accent : Theme.success).opacity(0.5), radius: 12)
+            Text(queued ? String(localized: "Спасибо! Отправим, когда появится связь.")
+                        : String(localized: "Спасибо! Мы читаем каждое сообщение."))
                 .font(.rounded(16, .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .multilineTextAlignment(.center)
@@ -118,8 +115,10 @@ struct FeedbackFormView: View {
         state = .sending
         Task {
             // Очередь не теряет сообщение: нет связи → уйдёт при следующем запуске.
-            _ = await env.feedback.sendMessage(message, contact: contact)
-            withAnimation(.spring(duration: 0.35)) { state = .sent }
+            let outcome = await env.feedback.sendMessage(message, contact: contact)
+            withAnimation(.spring(duration: 0.35)) {
+                state = outcome == .queued ? .queued : .sent
+            }
             await Task.pause(seconds: 1.6)
             dismiss()
         }

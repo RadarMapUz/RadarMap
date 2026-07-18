@@ -82,6 +82,10 @@ final class RouteService {
     @ObservationIgnored private var lastSplitAlong: CLLocationDistance = -1
     @ObservationIgnored private var lastRebuildAt: Date = .distantPast
     @ObservationIgnored private var isRebuilding = false
+    /// Поколение маршрута: растёт при build/clear. Фоновое перестроение (OSRM, до 12 с)
+    /// сверяется с ним — иначе доехавший rebuild «воскрешал» бы сброшенный маршрут
+    /// или перетирал свежепостроенный к новой цели.
+    @ObservationIgnored private var generation = 0
     @ObservationIgnored private var announcedStage: [Int: Int] = [:]   // индекс шага → стадия (2 далеко, 1 близко, 0 сейчас)
     @ObservationIgnored private var segmentHint = 0                    // ускоряет проекцию точки на маршрут
 
@@ -112,10 +116,13 @@ final class RouteService {
         isBuilding = true
         errorMessage = nil
         defer { isBuilding = false }
+        generation += 1
+        let gen = generation
 
         lastArrival = nil   // новый маршрут — карточка прошлого прибытия неактуальна
         do {
             let built = try await calculate(from: source, to: destination, alternatives: alternatives)
+            guard gen == generation else { return }   // пока считали — маршрут сбросили/заменили
             await apply(built, name: name, destination: destination, cameras: cameras)
         } catch RouteError.serverUnreachable {
             errorMessage = String(localized: "Нет связи с сервером маршрутов — проверьте интернет")
@@ -131,6 +138,7 @@ final class RouteService {
     }
 
     func clear() {
+        generation += 1   // rebuild в полёте не должен вернуть линию на карту
         variants = []
         selectedID = 0
         destinationName = ""
@@ -219,6 +227,7 @@ final class RouteService {
         lastRebuildAt = Date()
         isRebuilding = true
         let name = destinationName
+        let gen = generation
         Task {
             defer { isRebuilding = false }
             // Перестраиваем без альтернатив — быстрее, и в движении выбор не нужен.
@@ -226,6 +235,7 @@ final class RouteService {
                 Log.route.error("перестроение маршрута не удалось — остаёмся на старой линии")
                 return
             }
+            guard gen == generation else { return }   // маршрут успели сбросить/заменить
             await apply(built, name: name, destination: destination, cameras: cameras)
             onRerouted?()
         }
@@ -318,12 +328,21 @@ final class RouteService {
             URLQueryItem(name: "steps", value: "true"),
         ]
 
+        // Сторонний OSRM, не наш бэкенд — единственное осознанное исключение из
+        // правила «сеть только через APIClient» (свой формат URL и ошибок).
         let data: Data
+        let response: URLResponse
         do {
             var request = URLRequest(url: components.url!, timeoutInterval: 12)
             request.cachePolicy = .reloadIgnoringLocalCacheData
-            (data, _) = try await URLSession.shared.data(for: request)
+            (data, response) = try await URLSession.shared.data(for: request)
         } catch {
+            throw RouteError.serverUnreachable
+        }
+        // 5xx/4xx без валидного тела — это «сервер недоступен», а не «маршрута нет»:
+        // пользователь должен видеть проблему сети, а не думать, что дороги не существует.
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            Log.route.error("OSRM HTTP \(http.statusCode, privacy: .public)")
             throw RouteError.serverUnreachable
         }
 

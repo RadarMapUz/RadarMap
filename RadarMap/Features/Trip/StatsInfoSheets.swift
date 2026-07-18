@@ -172,7 +172,8 @@ struct SavingsInfoSheet: View {
         let ok = month.over == 0
         return VStack(spacing: 12) {
             Text(ok ? String(localized: "0 штрафов")
-                    : "риск ≈ \(Formatting.money(month.risk))")
+                    : String(format: String(localized: "риск ≈ %@"),
+                             Formatting.money(month.risk)))
                 .font(.rounded(34, .heavy))
                 .foregroundStyle(ok ? Theme.success : Theme.danger)
             HStack(spacing: 0) {

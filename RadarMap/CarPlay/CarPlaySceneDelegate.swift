@@ -14,6 +14,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private var interfaceController: CPInterfaceController?
     private var mapTemplate: CPMapTemplate?
     private let model = CarPlayMapModel()
+    /// Поколение сессии CarPlay: подписки withObservationTracking из прошлых
+    /// подключений сверяются с ним и не пересобирают кнопки повторно.
+    private var session = 0
 
     func templateApplicationScene(_ scene: CPTemplateApplicationScene,
                                   didConnect interfaceController: CPInterfaceController,
@@ -34,8 +37,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         mapTemplate = template
         interfaceController.setRootTemplate(template, animated: true) { _, _ in }
 
-        // В машине приложение «на переднем плане», даже если телефон в кармане.
-        env.location.setForeground(true)
+        // В машине приложение «на переднем плане», даже если телефон заблокирован
+        // в кармане — у CarPlay свой флаг, телефонная сцена его не затирает.
+        env.location.setCarPlayConnected(true)
+        session += 1
         syncTripButton()
     }
 
@@ -44,7 +49,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                                   from window: CPWindow) {
         self.interfaceController = nil
         mapTemplate = nil
-        // GPS-режимом дальше управляет телефонная сцена (scenePhase в RootView).
+        session += 1   // гасим подписки syncTripButton этой сессии
+        // Вышли из машины: телефон мог всё это время быть в фоне, события
+        // scenePhase не будет — снимаем «передний план» сами.
+        AppEnvironment.shared.location.setCarPlayConnected(false)
     }
 
     // MARK: Кнопки карты
@@ -83,6 +91,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private func syncTripButton() {
         guard let mapTemplate else { return }
         let location = AppEnvironment.shared.location
+        let session = session   // подписка живёт до первого изменения — привязываем к сессии
 
         withObservationTracking {
             let active = location.isTripActive
@@ -95,7 +104,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             mapTemplate.leadingNavigationBarButtons = [button]
             mapTemplate.trailingNavigationBarButtons = [self.destinationsButton].compactMap { $0 }
         } onChange: { [weak self] in
-            Task { @MainActor [weak self] in self?.syncTripButton() }
+            Task { @MainActor [weak self] in
+                guard let self, self.session == session else { return }
+                self.syncTripButton()
+            }
         }
     }
 
@@ -140,7 +152,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                         await env.route.build(from: from, to: place.coordinate,
                                               name: place.title, cameras: env.cameras.cameras,
                                               alternatives: false)
-                        env.location.startTrip()
+                        // Едем уже с активной поездкой — не обнулять её накат.
+                        if !env.location.isTripActive { env.location.startTrip() }
                     }
                     completion()
                     self?.interfaceController?.popToRootTemplate(animated: true) { _, _ in }

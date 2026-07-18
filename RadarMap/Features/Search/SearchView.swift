@@ -272,6 +272,7 @@ struct SearchView: View {
                         .foregroundStyle(Theme.accent)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(Text("Маршрут сюда"))
             }
         }
     }

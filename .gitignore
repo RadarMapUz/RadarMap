@@ -1,7 +1,5 @@
-# Xcode
-build/
-build_device/
-build_sim/
+# Xcode — любые локальные каталоги сборки (build, build_device, build_sim, build_watch…)
+build*/
 DerivedData/
 *.xcuserstate
 xcuserdata/

@@ -52,7 +52,12 @@ final class LocationService: NSObject {
     @ObservationIgnored private var alertEngine = AlertEngine()
     /// Учёт прохождения камер (траверз + зона измерения): чистый модуль, покрыт тестами.
     @ObservationIgnored private var passTracking = PassTracking()
-    @ObservationIgnored private var isForeground = false
+    // Два независимых «передних плана»: телефонная сцена и CarPlay. Один флаг
+    // они затирали друг другу (блокировка телефона в машине замораживала HUD CarPlay,
+    // а отключение CarPlay в фоне навсегда оставляло «передний» режим GPS).
+    @ObservationIgnored private var isPhoneForeground = false
+    @ObservationIgnored private var isCarPlayConnected = false
+    private var isForeground: Bool { isPhoneForeground || isCarPlayConnected }
 
     var isAuthorized: Bool {
         authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse
@@ -117,11 +122,38 @@ final class LocationService: NSObject {
 
     // MARK: - Режимы геолокации
 
-    /// Приложение открыто/свёрнуто. Точный GPS для HUD держим, только пока открыто и НЕ в поездке.
+    /// Координата для интентов (холодный старт из Siri: bootstrap не выполнялся,
+    /// currentCoordinate пуст) — просим одноразовый фикс и ждём его до `timeout`.
+    func awaitCoordinate(timeout: TimeInterval = 5) async -> CLLocationCoordinate2D? {
+        if let currentCoordinate { return currentCoordinate }
+        guard isAuthorized else { return nil }
+        manager.requestLocation()
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let currentCoordinate { return currentCoordinate }
+            await Task.pause(seconds: 0.2)
+        }
+        return currentCoordinate
+    }
+
+    /// Телефонная сцена открыта/свёрнута. Точный GPS для HUD держим, только пока открыто и НЕ в поездке.
     func setForeground(_ foreground: Bool) {
-        isForeground = foreground
+        isPhoneForeground = foreground
         // Открыли приложение — «камерный» баннер из фона больше не нужен (внутри есть свой алерт).
         if foreground { notifier.clearApproaching() }
+        applyLocationMode()
+    }
+
+    /// Экран в машине подключён/отключён — самостоятельный «передний план»,
+    /// не зависящий от того, заблокирован ли телефон в кармане.
+    func setCarPlayConnected(_ connected: Bool) {
+        isCarPlayConnected = connected
+        applyLocationMode()
+    }
+
+    /// Настройки сменили GPS-политику (например, тумблер адаптивности) — применить сразу,
+    /// не дожидаясь следующей смены состояния поездки.
+    func refreshLocationMode() {
         applyLocationMode()
     }
 
@@ -236,11 +268,13 @@ final class LocationService: NSObject {
         // Пустой nearbyCameras = данные ещё не загрузились на прошлом тайлинге — пробуем снова.
         if let anchor, !nearbyCameras.isEmpty,
            anchor.distance(from: location) < AppConfig.retileDistance { return }
-        anchor = location
         retile(around: coordinate)
     }
 
     private func retile(around coordinate: CLLocationCoordinate2D) {
+        // Якорь ставим здесь, а не только в retileIfNeeded: refreshMonitoring
+        // зовёт retile напрямую, и без якоря следующий тик перетайлил бы повторно.
+        anchor = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
         manager.monitoredRegions.forEach { manager.stopMonitoring(for: $0) }
 
         let nearest = repository.nearest(to: coordinate, limit: AppConfig.maxMonitoredRegions)
@@ -269,14 +303,19 @@ final class LocationService: NSObject {
         currentCoordinate = coordinate
         // Спидометр без дёрганья: GPS-скорость шумит (68→71→69) — лёгкое экспоненциальное
         // сглаживание, но только по свежим точкам (после паузы берём сырое значение).
-        let rawKmh = max(0, speed) * 3.6
-        if let lastAt = lastSpeedTickAt, Date().timeIntervalSince(lastAt) < 5 {
-            let smoothed = speedKmh * 0.6 + rawKmh * 0.4
-            speedKmh = smoothed < 1 ? 0 : smoothed
-        } else {
-            speedKmh = rawKmh
+        // speed < 0 — фикс без скорости (туннель, плохая геометрия спутников): держим
+        // прошлое значение, нулём считать нельзя — PassTracking берёт МИНИМУМ по зоне
+        // проезда, и один такой фикс занизил бы записанную скорость у камеры.
+        if speed >= 0 {
+            let rawKmh = speed * 3.6
+            if let lastAt = lastSpeedTickAt, Date().timeIntervalSince(lastAt) < 5 {
+                let smoothed = speedKmh * 0.6 + rawKmh * 0.4
+                speedKmh = smoothed < 1 ? 0 : smoothed
+            } else {
+                speedKmh = rawKmh
+            }
+            lastSpeedTickAt = Date()
         }
-        lastSpeedTickAt = Date()
         currentCourse = course
         locationTick &+= 1
         retileIfNeeded(around: coordinate)
@@ -422,7 +461,7 @@ final class LocationService: NSObject {
             // В свёрнутом виде (поездка в фоне) — уведомление зажигает экран и вибрирует.
             // Пользователь управляет: все камеры / только радары / выключено.
             if !isForeground, settings.backgroundAlerts.allows(camera) {
-                notifier.notifyApproaching(camera)
+                notifier.notifyApproaching(camera, distanceMeters: distance)
             }
             // Голос — самая дорогая часть оповещения, в энергосбережении пропускаем.
             if settings.voiceEnabled && !isLowPowerMode {

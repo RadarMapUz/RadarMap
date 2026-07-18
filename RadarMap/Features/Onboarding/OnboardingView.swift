@@ -58,7 +58,7 @@ struct OnboardingView: View {
     private var heroPage: some View {
         VStack(spacing: 0) {
             Spacer()
-            RadarHero()
+            RadarHero(active: page == 0)
                 .frame(width: 170, height: 170)
                 .padding(.bottom, 28)
             Text("RadarMap")
@@ -265,8 +265,11 @@ struct OnboardingView: View {
     }
 }
 
-/// Анимированный радар для героя онбординга.
+/// Анимированный радар для героя онбординга. `active` — крутиться только пока
+/// страница на виду: в TabView(.page) соседние страницы остаются в иерархии,
+/// и вечная анимация гоняла бы GPU, пока пользователь читает про разрешения.
 private struct RadarHero: View {
+    let active: Bool
     @State private var sweep = false
 
     var body: some View {
@@ -285,13 +288,15 @@ private struct RadarHero: View {
             )
             .mask(Circle())
             .rotationEffect(.degrees(sweep ? 360 : 0))
-            .animation(.linear(duration: 3).repeatForever(autoreverses: false), value: sweep)
+            .animation(sweep ? .linear(duration: 3).repeatForever(autoreverses: false)
+                             : .default, value: sweep)
 
             Image(systemName: "camera.metering.center.weighted")
                 .font(.rounded(34, .bold))
                 .foregroundStyle(Theme.accent)
                 .shadow(color: Theme.accent.opacity(0.6), radius: 12)
         }
-        .onAppear { sweep = true }
+        .onAppear { sweep = active }
+        .onChange(of: active) { _, nowActive in sweep = nowActive }
     }
 }

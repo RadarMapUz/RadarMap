@@ -57,7 +57,8 @@ struct ReportRadarIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let env = AppEnvironment.shared
-        guard let coordinate = env.location.currentCoordinate else {
+        // Холодный старт из Siri: GPS ещё не тикал — просим одноразовый фикс и ждём.
+        guard let coordinate = await env.location.awaitCoordinate() else {
             return .result(dialog: IntentDialog("Не вижу геопозицию — попробуйте ещё раз."))
         }
         switch await env.mobile.report(at: coordinate) {

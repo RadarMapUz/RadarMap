@@ -14,12 +14,13 @@ enum Formatting {
         return day.formatted(.dateTime.day().month(.wide))
     }
 
-    /// «850 м» / «1.4 км»
+    /// «850 м» / «1.4 км» (uz: m/km — единицы тоже локализуются)
     static func distance(_ meters: CLLocationDistance) -> String {
         if meters < 1000 {
-            return "\(Int(meters.rounded())) м"
+            return String(format: String(localized: "%@ м"), String(Int(meters.rounded())))
         }
-        return String(format: "%.1f км", meters / 1000)
+        let km = String(format: "%.1f", locale: .current, meters / 1000)
+        return String(format: String(localized: "%@ км"), km)
     }
 
     /// «440 000 сум» / «1,2 млн сум» — суммы штрафов и экономии.
@@ -41,13 +42,13 @@ enum Formatting {
         return f
     }()
 
-    /// «5 мин» / «1 ч 23 мин»
+    /// «5 мин» / «1 ч 23 мин» (uz: daq/soat)
     static func duration(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
         let h = total / 3600
         let m = (total % 3600) / 60
-        if h > 0 { return "\(h) ч \(m) мин" }
-        if m > 0 { return "\(m) мин" }
-        return "\(total) сек"
+        if h > 0 { return String(format: String(localized: "%1$@ ч %2$@ мин"), String(h), String(m)) }
+        if m > 0 { return String(format: String(localized: "%@ мин"), String(m)) }
+        return String(format: String(localized: "%@ сек"), String(total))
     }
 }

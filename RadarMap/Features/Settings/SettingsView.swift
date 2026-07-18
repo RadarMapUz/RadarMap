@@ -95,6 +95,10 @@ struct SettingsView: View {
                     Toggle("Варианты маршрута", isOn: $settings.routeAlternatives)
                     Toggle("Следующая камера в панели", isOn: $settings.showNextCamera)
                     Toggle("Адаптивный GPS (батарея)", isOn: $settings.adaptiveGPS)
+                        .onChange(of: settings.adaptiveGPS) { _, _ in
+                            // Иначе выключение в поездке залипало бы на последнем тире.
+                            env.location.refreshLocationMode()
+                        }
                 } header: {
                     Text("Маршрут и скорость")
                 } footer: {

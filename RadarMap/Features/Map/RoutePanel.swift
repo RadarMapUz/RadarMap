@@ -49,6 +49,7 @@ struct RoutePanel: View {
                                 .font(.rounded(22))
                                 .foregroundStyle(Theme.textTertiary)
                         }
+                        .accessibilityLabel(Text("Сбросить маршрут"))
                     }
 
                     // В поездке панель заменяется компактной TripLiveBar — здесь всегда «до старта».
@@ -179,6 +180,8 @@ struct TripLiveBar: View {
                         .background(Theme.surface, in: Capsule())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Камеры на маршруте"))
+                    .accessibilityValue(Text(Formatting.distance(route.nextCameraDistance)))
                 }
             } else {
                 // Свободная поездка без маршрута: таймер + путь.
@@ -202,6 +205,7 @@ struct TripLiveBar: View {
                     .frame(width: 44, height: 44)
                     .background(Theme.danger.gradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
+            .accessibilityLabel(Text("Завершить поездку"))
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))

@@ -93,8 +93,11 @@ struct MapScreen: View {
             NearbyCamerasSheet(onSelect: { map.focus(on: $0) })
         }
         .sheet(isPresented: $map.showSearch) {
+            // Без геопозиции кнопки маршрута прячем, как в соседних шитах:
+            // мёртвая кнопка, молча закрывающая поиск, хуже её отсутствия.
             SearchView(onSelect: { map.move(to: $0) },
-                       onRoute: { coord, name in buildRoute(to: coord, name: name) })
+                       onRoute: env.location.currentCoordinate == nil ? nil
+                           : { coord, name in buildRoute(to: coord, name: name) })
         }
         .sheet(isPresented: $showRouteCameras) {
             RouteCamerasSheet(onSelect: { map.focus(on: $0) })

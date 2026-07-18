@@ -36,6 +36,9 @@ final class WatchBridgeService: NSObject {
             "speed": Int((speedKmh / 2).rounded()) * 2,
             "dist": distanceMeters.map { Int(($0 / 25).rounded()) * 25 } ?? -1,
             "level": alertLevel,
+            // Смена ближайшей камеры при совпавших квантах — тоже повод отправить:
+            // иначе на часах висело бы название прошлой камеры со свежей дистанцией.
+            "title": cameraTitle?.hashValue ?? 0,
         ]
         guard quantized != lastSent else { return }
         lastSent = quantized

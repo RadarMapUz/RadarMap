@@ -40,11 +40,18 @@ final class MobileCameraService {
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refresh()
+                // Частые пары inactive→active (Face ID, шторка, переключатель
+                // приложений) перезапускают цикл — интервал держим и между ними,
+                // иначе каждый возврат в приложение будил бы радио лишним GET.
+                if let self, Date().timeIntervalSince(self.lastRefreshAt) >= AppConfig.mobilePollInterval {
+                    await self.refresh()
+                }
                 await Task.pause(seconds: AppConfig.mobilePollInterval)
             }
         }
     }
+
+    @ObservationIgnored private var lastRefreshAt: Date = .distantPast
 
     func stopPolling() {
         pollTask?.cancel()
@@ -63,6 +70,7 @@ final class MobileCameraService {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
+        lastRefreshAt = Date()   // считаем попытку, не успех — при ошибке сети не долбим сервер
         do {
             let decoded = try await api.get("api/mobile", as: MobileResponse.self)
             reports = decoded.reports.map { report in

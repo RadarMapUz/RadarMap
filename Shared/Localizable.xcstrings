@@ -49,6 +49,22 @@
         }
       }
     },
+    "%1$@ ч %2$@ мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ ч %2$@ мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ soat %2$@ daq"
+          }
+        }
+      }
+    },
     "%@ · %@": {
       "localizations": {
         "ru": {
@@ -97,6 +113,54 @@
         }
       }
     },
+    "%@ км": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ км"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ km"
+          }
+        }
+      }
+    },
+    "%@ м": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ м"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ m"
+          }
+        }
+      }
+    },
+    "%@ мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ daq"
+          }
+        }
+      }
+    },
     "%@ млн сум": {
       "localizations": {
         "ru": {
@@ -141,6 +205,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ yo'nalish bo'yicha"
+          }
+        }
+      }
+    },
+    "%@ сек": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ сек"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ soniya"
           }
         }
       }
@@ -4477,6 +4557,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qayd etadigan qoidabuzarliklar"
+          }
+        }
+      }
+    },
+    "Фиксирует: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фиксирует: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qayd etadi: %@"
           }
         }
       }

@@ -81,13 +81,17 @@ final class NotificationService: NSObject {
     private static let approachingID = "approaching-camera"
 
     /// Оповещение о приближении к камере (фон): баннер, обновляется на месте.
-    func notifyApproaching(_ camera: Camera) {
+    /// `distanceMeters` — фактическая дистанция срабатывания (движок растягивает
+    /// радиус по скорости до 1000 м); без неё — базовый радиус из настроек.
+    func notifyApproaching(_ camera: Camera, distanceMeters: Double? = nil) {
         let content = UNMutableNotificationContent()
-        content.title = "Камера через \(Int(settings.alertRadius)) м"
+        let distance = Formatting.distance(distanceMeters ?? settings.alertRadius)
+        content.title = String(format: String(localized: "Камера через %@"), distance)
 
         var body = camera.displayTitle
         if !camera.violations.isEmpty {
-            body += "\nФиксирует: " + camera.violations.joined(separator: ", ")
+            body += "\n" + String(format: String(localized: "Фиксирует: %@"),
+                                  camera.localizedViolations.joined(separator: ", "))
         }
         content.body = body
         content.sound = settings.soundEnabled ? .default : nil

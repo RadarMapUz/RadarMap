@@ -106,7 +106,9 @@ final class CameraStore: CameraRepository {
             .appendingPathComponent("cameras_remote.json")
     }
 
-    nonisolated private static func decodeDatabase() async -> (cameras: [Camera], error: String?, usedRemote: Bool) {
+    // @concurrent обязателен: при NonisolatedNonsendingByDefault обычный nonisolated async
+    // исполнялся бы на акторе вызывающего — то есть декодировал 3341 камеру на главном потоке.
+    @concurrent private static func decodeDatabase() async -> (cameras: [Camera], error: String?, usedRemote: Bool) {
         // 1) скачанная с сервера копия (если валидна)
         if let decoded = JSONFile.load([Camera].self, from: remoteFileURL, log: Log.cameras),
            decoded.count >= 100 {

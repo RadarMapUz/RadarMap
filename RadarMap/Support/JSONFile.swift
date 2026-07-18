@@ -10,7 +10,9 @@
 import Foundation
 import os
 
-enum JSONFile {
+// nonisolated: чистые файловые операции без состояния — зовутся и из
+// @concurrent-кода (декодирование базы камер вне главного потока).
+nonisolated enum JSONFile {
     static func load<T: Decodable>(_ type: T.Type, from url: URL, log: Logger) -> T? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         do {

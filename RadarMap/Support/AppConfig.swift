@@ -130,7 +130,7 @@ enum AppConfig {
 
     /// Версия базы, вшитой в приложение (Resources/cameras.json).
     /// v3 = данные портала data.egov.uz (1-008-0027) от 2026-07-10, 3341 точка.
-    static let bundledDBVersion = 3
+    static let bundledDBVersion = 4   // +22 камеры из реестра 37-ИЛОВА (15.07.2025)
 
     /// Как часто опрашивать сервер о передвижных радарах (сек), пока приложение открыто.
     static let mobilePollInterval: TimeInterval = 180

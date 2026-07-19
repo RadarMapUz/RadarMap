@@ -9,7 +9,11 @@ DEST="${2:-/opt/radarmap/backups}"
 mkdir -p "$DEST"
 
 STAMP=$(date +%Y%m%d)
-sqlite3 "$DB" ".backup '$DEST/reports-$STAMP.db'"
+python3 - "$DB" "$DEST/reports-$STAMP.db" <<'PY'
+import sqlite3, sys
+src = sqlite3.connect(sys.argv[1]); dst = sqlite3.connect(sys.argv[2])
+src.backup(dst); dst.close(); src.close()
+PY
 gzip -f "$DEST/reports-$STAMP.db"
-ls -1t "$DEST"/reports-*.db.gz | tail -n +8 | xargs -r rm --
+ls -1t "$DEST"/reports-*.db.gz | tail -n +8 | xargs rm -f --
 echo "бэкап: $DEST/reports-$STAMP.db.gz"

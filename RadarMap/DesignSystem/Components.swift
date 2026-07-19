@@ -15,7 +15,7 @@ struct GlassCard<Content: View>: View {
 
     var body: some View {
         content
-            .glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+            .backport.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
             .shadow(color: .black.opacity(0.25), radius: 14, y: 6)
     }
 }
@@ -34,8 +34,7 @@ struct CircleControl: View {
                 .font(.rounded(17, .semibold))
                 .foregroundStyle(tint)
                 .frame(width: 46, height: 46)
-                // Интерактивное стекло: подсвечивается и пружинит под пальцем.
-                .glassEffect(.regular.interactive(), in: .circle)
+                .backport.glassEffect(.interactive(isEnabled: true), in: .circle)
                 .accessibilityLabel(Text(accessibilityLabel))
         }
         .shadow(color: .black.opacity(0.3), radius: 10, y: 4)

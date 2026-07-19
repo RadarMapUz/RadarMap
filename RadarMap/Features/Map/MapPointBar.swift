@@ -51,7 +51,7 @@ struct MapPointBar: View {
             }
         }
         .padding(12)
-        .glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerLarge))
+        .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerLarge))
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 

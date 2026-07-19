@@ -602,8 +602,10 @@ struct MapScreen: View {
         .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
     }
 
+    /// Док действий: стекло со световой кромкой и глубокая тень — в одном
+    /// языке с CTA и кругами (премиальный низ экрана без разнобоя).
     private var actionBar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             actionButton("Поиск", "magnifyingglass") { map.showSearch = true }
             actionButton("Добавить", "plus.circle.fill") {
                 withAnimation { map.isAddingCamera = true }
@@ -612,21 +614,31 @@ struct MapScreen: View {
             actionButton("Итоги", "chart.bar.fill") { map.showStats = true }
             actionButton("Ещё", "gearshape.fill") { map.showSettings = true }
         }
-        .padding(8)
-        .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerLarge))
+        .padding(.horizontal, 6)
+        .padding(.vertical, 7)
+        .backport.glassEffect(.regular, in: .rect(cornerRadius: 26))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
+            .strokeBorder(LinearGradient(colors: [.white.opacity(0.16), .white.opacity(0.02)],
+                                         startPoint: .top, endPoint: .bottom), lineWidth: 1))
+        .shadow(color: .black.opacity(0.3), radius: 14, y: 6)
     }
 
     private func actionButton(_ title: LocalizedStringKey, _ icon: String, tint: Color = Theme.textPrimary,
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: icon).font(.rounded(18, .semibold))
-                Text(title).font(.rounded(10, .medium))
+            VStack(spacing: 5) {
+                Image(systemName: icon).font(.rounded(19, .semibold))
+                Text(title)
+                    .font(.rounded(10, .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(PressableStyle())
     }
 
     /// Легенда-кнопка: свёрнута в компактный кружок, тап раскрывает на 6 секунд.
@@ -644,15 +656,9 @@ struct MapScreen: View {
             .onTapGesture { toggleLegend() }
             .transition(.scale(scale: 0.7, anchor: .bottomLeading).combined(with: .opacity))
         } else {
-            Button {
+            CircleControl(systemName: "square.3.layers.3d", size: 44,
+                          accessibilityLabel: "Легенда камер") {
                 toggleLegend()
-            } label: {
-                Image(systemName: "square.3.layers.3d")
-                    .font(.rounded(16, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .frame(width: 40, height: 40)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .overlay(Circle().stroke(Theme.stroke, lineWidth: 1))
             }
             .transition(.scale(scale: 0.7, anchor: .bottomLeading).combined(with: .opacity))
         }

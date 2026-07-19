@@ -16,6 +16,10 @@ struct GlassCard<Content: View>: View {
     var body: some View {
         content
             .backport.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+            // Световая кромка сверху — единый премиальный язык стекла в приложении.
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(LinearGradient(colors: [.white.opacity(0.16), .white.opacity(0.02)],
+                                             startPoint: .top, endPoint: .bottom), lineWidth: 1))
             .shadow(color: .black.opacity(0.25), radius: 14, y: 6)
     }
 }

@@ -36,6 +36,8 @@ DB_PATH = "/opt/radarmap/api/reports.db"
 TTL = 3 * 3600
 EXTEND = 30 * 60
 MAX_LIFE = 6 * 3600
+# Время жизни по типам отметки: пост стоит долго, ДТП рассасывается за час.
+REPORT_TTLS = {"radar": TTL, "tripod": TTL, "post": 6 * 3600, "accident": 3600}
 MERGE_METERS = 300
 UZ_LAT = (37.0, 46.0)
 UZ_LON = (55.0, 74.0)
@@ -62,6 +64,10 @@ def db():
         conn.execute("ALTER TABLE votes ADD COLUMN ts REAL DEFAULT 0")
     except sqlite3.OperationalError:
         pass  # колонка уже есть
+    try:  # миграция: тип отметки (radar/tripod/post/accident)
+        conn.execute("ALTER TABLE reports ADD COLUMN type TEXT DEFAULT 'radar'")
+    except sqlite3.OperationalError:
+        pass
     conn.execute("""CREATE TABLE IF NOT EXISTS metrics(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         device TEXT NOT NULL, kind TEXT NOT NULL,
@@ -132,13 +138,13 @@ class Handler(BaseHTTPRequestHandler):
                 conn.execute("DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)")
                 conn.commit()
                 rows = conn.execute(
-                    "SELECT id, lat, lon, created, expires, up, down FROM reports "
+                    "SELECT id, lat, lon, created, expires, up, down, type FROM reports "
                     "WHERE active = 1 AND expires > ?", (now,)).fetchall()
             finally:
                 conn.close()
             return self._json(200, {"reports": [
                 {"id": r[0], "lat": r[1], "lon": r[2], "created": r[3],
-                 "expires": r[4], "up": r[5], "down": r[6]} for r in rows]})
+                 "expires": r[4], "up": r[5], "down": r[6], "type": r[7]} for r in rows]})
         self._json(404, {"error": "not found"})
 
     def do_POST(self):
@@ -282,10 +288,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             lat, lon = float(data["lat"]), float(data["lon"])
             device = str(data["device"])[:64]
+            rtype = str(data.get("type") or "radar")
         except (KeyError, TypeError, ValueError):
             return self._json(400, {"error": "bad fields"})
         if not (UZ_LAT[0] <= lat <= UZ_LAT[1] and UZ_LON[0] <= lon <= UZ_LON[1]) or not device:
             return self._json(400, {"error": "out of bounds"})
+        if rtype not in REPORT_TTLS:
+            return self._json(400, {"error": "bad type"})
 
         now = time.time()
         conn = db()
@@ -299,12 +308,13 @@ class Handler(BaseHTTPRequestHandler):
             if recent[1] and now - recent[1] < 120:
                 return self._json(429, {"error": "too fast"})
 
-            # dedupe: nearby active report -> treat as confirmation
+            # dedupe: nearby active report of the SAME type -> treat as confirmation
+            # (пост ДПС и радар в 100 м друг от друга — разные сущности)
             active_rows = conn.execute(
-                "SELECT id, lat, lon, created, expires FROM reports WHERE active = 1 AND expires > ?",
-                (now,)).fetchall()
+                "SELECT id, lat, lon, created, expires, type FROM reports "
+                "WHERE active = 1 AND expires > ?", (now,)).fetchall()
             for r in active_rows:
-                if haversine(lat, lon, r[1], r[2]) <= MERGE_METERS:
+                if r[5] == rtype and haversine(lat, lon, r[1], r[2]) <= MERGE_METERS:
                     new_exp = min(r[3] + MAX_LIFE, max(r[4], now) + EXTEND)
                     # Подтверждение — через votes, как обычный лайк: _vote
                     # пересчитывает up/down только из votes, инкремент в
@@ -325,8 +335,8 @@ class Handler(BaseHTTPRequestHandler):
             if len(active_rows) >= MAX_ACTIVE_REPORTS:
                 return self._json(429, {"error": "too many active"})
             cur = conn.execute(
-                "INSERT INTO reports(lat, lon, created, expires, device) VALUES(?,?,?,?,?)",
-                (lat, lon, now, now + TTL, device))
+                "INSERT INTO reports(lat, lon, created, expires, device, type) VALUES(?,?,?,?,?,?)",
+                (lat, lon, now, now + REPORT_TTLS[rtype], device, rtype))
             conn.commit()
             return self._json(200, {"id": cur.lastrowid, "merged": False})
         finally:

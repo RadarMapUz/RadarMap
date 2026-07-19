@@ -48,6 +48,9 @@ extension CameraType {
         case .stationaryRadar:  return Theme.radar
         case .intelligentRadar: return Theme.intelligent
         case .mobileRadar:      return Theme.mobile
+        case .tripod:           return Theme.radar
+        case .dpsPost:          return Theme.accent
+        case .accident:         return Theme.danger
         case .other:            return Theme.textSecondary
         }
     }

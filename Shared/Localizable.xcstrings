@@ -673,6 +673,22 @@
         }
       }
     },
+    "«Авто» сам различает город и трассу: в городе голос только про передвижные радары и превышение, на трассе — про каждую камеру. «Баннеры в фоне» — уведомления, когда приложение свёрнуто.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Авто» сам различает город и трассу: в городе голос только про передвижные радары и превышение, на трассе — про каждую камеру. «Баннеры в фоне» — уведомления, когда приложение свёрнуто."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Avto» shahar va trassani o'zi ajratadi: shaharda ovoz faqat ko'chma radarlar va tezlik oshirilganda, trassada — har bir kamera haqida. «Fonda bannerlar» — ilova yig'ilganda bildirishnomalar."
+          }
+        }
+      }
+    },
     "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.": {
       "localizations": {
         "ru": {
@@ -717,6 +733,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "· %@"
+          }
+        }
+      }
+    },
+    "Авто": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Авто"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avto"
           }
         }
       }
@@ -1009,6 +1041,22 @@
         }
       }
     },
+    "Вибро": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вибро"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vibro"
+          }
+        }
+      }
+    },
     "Включает оповещения о камерах и запись поездки.": {
       "localizations": {
         "ru": {
@@ -1249,6 +1297,22 @@
         }
       }
     },
+    "Голос": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovoz"
+          }
+        }
+      }
+    },
     "Голос за 22 секунды до камеры — с учётом вашей скорости": {
       "localizations": {
         "ru": {
@@ -1313,6 +1377,22 @@
         }
       }
     },
+    "Город": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Город"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shahar"
+          }
+        }
+      }
+    },
     "Город, улица, место": {
       "localizations": {
         "ru": {
@@ -1357,6 +1437,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tayyor: %@, kameralar — %lld. Natijalar ilovada."
+          }
+        }
+      }
+    },
+    "ДТП": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ДТП"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YTH"
           }
         }
       }
@@ -1581,6 +1677,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yutuqlar"
+          }
+        }
+      }
+    },
+    "Едете с Яндексом?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Едете с Яндексом?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yandex bilan yurasizmi?"
           }
         }
       }
@@ -2945,6 +3057,22 @@
         }
       }
     },
+    "Не гасить экран в поездке": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не гасить экран в поездке"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarda ekranni o'chirmaslik"
+          }
+        }
+      }
+    },
     "Не задано — нажмите, чтобы настроить": {
       "localizations": {
         "ru": {
@@ -3165,6 +3293,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ogohlantirishlar harakatlanganda o'zi yoqiladi va to'xtagach o'chadi — tugma bosish shart emas."
+          }
+        }
+      }
+    },
+    "Оповещения включаются сами, когда вы едете, и гаснут после остановки — без нажатия кнопки. Экран в поездке не засыпает, как у навигаторов.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оповещения включаются сами, когда вы едете, и гаснут после остановки — без нажатия кнопки. Экран в поездке не засыпает, как у навигаторов."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogohlantirishlar harakatlanganingizda o'zi yoqiladi va to'xtagach o'chadi. Safarda ekran navigatorlardagidek uxlamaydi."
           }
         }
       }
@@ -3489,6 +3633,22 @@
         }
       }
     },
+    "Подтвердили: %@ водит.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подтвердили: %@ водит."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ haydovchi tasdiqladi"
+          }
+        }
+      }
+    },
     "Поездка": {
       "localizations": {
         "ru": {
@@ -3501,6 +3661,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safar"
+          }
+        }
+      }
+    },
+    "Поездка включилась сама. Пассажир? Нажмите — сбережём заряд.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездка включилась сама. Пассажир? Нажмите — сбережём заряд."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar o'zi yoqildi. Yo'lovchimisiz? Bosing — quvvatni tejaymiz."
           }
         }
       }
@@ -3713,6 +3889,38 @@
         }
       }
     },
+    "Пост ДПС": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пост ДПС"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YPX posti"
+          }
+        }
+      }
+    },
+    "Похоже, вы в пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Похоже, вы в пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo'ldasiz shekilli"
+          }
+        }
+      }
+    },
     "Похоже, вы едете — включите оповещения": {
       "localizations": {
         "ru": {
@@ -3789,6 +3997,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Telefon cho'ntakda, ilova yig'ilgan bo'lsa ham kameralar haqida ogohlantiramiz."
+          }
+        }
+      }
+    },
+    "Пробки смотрите где угодно, о камерах предупредим мы": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пробки смотрите где угодно, о камерах предупредим мы"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tirbandlikni istalgan joyda ko'ring, kameralar haqida biz ogohlantiramiz"
           }
         }
       }
@@ -3917,6 +4141,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "O'tilgan kameralar"
+          }
+        }
+      }
+    },
+    "Просто сверните RadarMap — голос и баннеры о камерах продолжат работать": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Просто сверните RadarMap — голос и баннеры о камерах продолжат работать"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap'ni shunchaki yig'ing — ovoz va kamera bannerlari ishlashda davom etadi"
           }
         }
       }
@@ -4125,6 +4365,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ruxsat berish"
+          }
+        }
+      }
+    },
+    "Режим оповещений": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Режим оповещений"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogohlantirish rejimi"
           }
         }
       }
@@ -4657,6 +4913,22 @@
         }
       }
     },
+    "Трасса": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Трасса"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trassa"
+          }
+        }
+      }
+    },
     "Трек не записан — появится у новых поездок": {
       "localizations": {
         "ru": {
@@ -4669,6 +4941,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trek yozilmagan — yangi safarlarda paydo bo‘ladi"
+          }
+        }
+      }
+    },
+    "Тренога": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тренога"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trenoga"
           }
         }
       }
@@ -4833,6 +5121,22 @@
         }
       }
     },
+    "Фон почти не тратит заряд: точный GPS включается только у камер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фон почти не тратит заряд: точный GPS включается только у камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fon deyarli quvvat sarflamaydi: aniq GPS faqat kameralar yonida yoqiladi"
+          }
+        }
+      }
+    },
     "Чаще всего: %@": {
       "localizations": {
         "ru": {
@@ -4861,6 +5165,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld metrdan so‘ng — %@"
+          }
+        }
+      }
+    },
+    "Что впереди?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что впереди?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda nima?"
           }
         }
       }
@@ -4973,6 +5293,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jarimalardan tejash"
+          }
+        }
+      }
+    },
+    "Я за рулём": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Я за рулём"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Men haydayapman"
+          }
+        }
+      }
+    },
+    "Я пассажир": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Я пассажир"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Men yo'lovchiman"
+          }
+        }
+      }
+    },
+    "Я пассажир — завершить без записи": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Я пассажир — завершить без записи"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Men yo'lovchiman — yozuvsiz yakunlash"
           }
         }
       }
@@ -5153,6 +5521,22 @@
         }
       }
     },
+    "до ДТП": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "до ДТП"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YTHgacha"
+          }
+        }
+      }
+    },
     "до камеры": {
       "localizations": {
         "ru": {
@@ -5185,6 +5569,22 @@
         }
       }
     },
+    "до поста ДПС": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "до поста ДПС"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YPX postigacha"
+          }
+        }
+      }
+    },
     "до радара": {
       "localizations": {
         "ru": {
@@ -5213,6 +5613,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "nuqtagacha"
+          }
+        }
+      }
+    },
+    "до треноги": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "до треноги"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "trenogagacha"
           }
         }
       }

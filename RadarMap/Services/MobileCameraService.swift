@@ -63,8 +63,20 @@ final class MobileCameraService {
         let lat: Double
         let lon: Double
         let expires: Double
+        let type: String?      // старый сервер поля не шлёт — трактуем как радар
+        let up: Int?
+        let created: Double?
     }
     private struct MobileResponse: Decodable { let reports: [APIReport] }
+
+    /// Подтверждения по отметке (для бейджа доверия в карточке).
+    struct Confirmation {
+        let upvotes: Int
+        let created: Date
+    }
+    @ObservationIgnored private var confirmations: [Int: Confirmation] = [:]
+
+    func confirmation(for cameraID: Int) -> Confirmation? { confirmations[cameraID] }
 
     func refresh() async {
         guard !isRefreshing else { return }
@@ -73,20 +85,26 @@ final class MobileCameraService {
         lastRefreshAt = Date()   // считаем попытку, не успех — при ошибке сети не долбим сервер
         do {
             let decoded = try await api.get("api/mobile", as: MobileResponse.self)
+            var fresh: [Int: Confirmation] = [:]
             reports = decoded.reports.map { report in
-                Camera(
-                    id: Self.idOffset + report.id,
-                    region: String(localized: "Передвижной радар"),
+                let kind = ReportKind(rawValue: report.type ?? "") ?? .radar
+                let id = Self.idOffset + report.id
+                fresh[id] = Confirmation(upvotes: report.up ?? 0,
+                                         created: Date(timeIntervalSince1970: report.created ?? 0))
+                return Camera(
+                    id: id,
+                    region: kind.cameraType.displayName,
                     city: "",
                     location: String(format: String(localized: "Отмечен водителями, исчезнет ~%@"),
                                      Self.expiryText(report.expires)),
                     lat: report.lat,
                     lon: report.lon,
-                    type: CameraType.mobileRadar.sourceString,
-                    violations: Camera.radarViolations,
+                    type: kind.cameraType.sourceString,
+                    violations: Camera.defaultViolations(forType: kind.cameraType.sourceString),
                     needsReview: nil
                 )
             }
+            confirmations = fresh
             store?.setMobileCameras(reports)
         } catch {
             // сети нет — молча живём на последнем известном списке
@@ -95,11 +113,12 @@ final class MobileCameraService {
 
     // MARK: - Отметка и голосование
 
-    func report(at coordinate: CLLocationCoordinate2D) async -> ReportResult {
+    func report(at coordinate: CLLocationCoordinate2D,
+                kind: ReportKind = .radar) async -> ReportResult {
         struct Response: Decodable { let id: Int; let merged: Bool }
         do {
             let payload = ["lat": coordinate.latitude, "lon": coordinate.longitude,
-                           "device": deviceID] as [String: Any]
+                           "device": deviceID, "type": kind.rawValue] as [String: Any]
             let response = try await api.post("api/report", json: payload, as: Response.self)
             await refresh()
             return response.merged ? .confirmed : .created
@@ -126,4 +145,22 @@ final class MobileCameraService {
         let date = Date(timeIntervalSince1970: expires)
         return date.formatted(date: .omitted, time: .shortened)
     }
+}
+
+/// Тип отметки водителя: у каждого свой вид на карте и время жизни на сервере
+/// (радар/тренога — часы, пост стоит дольше, ДТП рассасывается за час).
+enum ReportKind: String, CaseIterable, Identifiable {
+    case radar, tripod, post, accident
+    var id: String { rawValue }
+
+    var cameraType: CameraType {
+        switch self {
+        case .radar:    return .mobileRadar
+        case .tripod:   return .tripod
+        case .post:     return .dpsPost
+        case .accident: return .accident
+        }
+    }
+    var title: String { cameraType.displayName }
+    var symbol: String { cameraType.symbolName }
 }

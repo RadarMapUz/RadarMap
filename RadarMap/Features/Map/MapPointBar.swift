@@ -122,3 +122,51 @@ struct PlaceCircle: View {
         }
     }
 }
+
+/// Пикер типа отметки: что впереди — радар, тренога, пост ДПС или ДТП.
+/// Больше типов → живее карта: этим живут Waze и водительские чаты.
+struct ReportPickerBar: View {
+    let onPick: (ReportKind) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Label("Что впереди?", systemImage: "eye.fill")
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                Spacer()
+                Button(action: onCancel) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.rounded(20))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                .accessibilityLabel(Text("Закрыть"))
+            }
+            HStack(spacing: 8) {
+                ForEach(ReportKind.allCases) { kind in
+                    Button {
+                        onPick(kind)
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: kind.symbol).font(.rounded(18, .semibold))
+                            Text(kind.title)
+                                .font(.rounded(10, .medium))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
+                        .foregroundStyle(kind.cameraType.tint)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Theme.surface.opacity(0.6),
+                                    in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+                    }
+                    .buttonStyle(PressableStyle())
+                }
+            }
+        }
+        .padding(12)
+        .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerLarge))
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+}

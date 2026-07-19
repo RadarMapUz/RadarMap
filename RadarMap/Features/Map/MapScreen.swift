@@ -27,6 +27,8 @@ struct MapScreen: View {
     @State private var assignSlot: PlaceSlot?
     /// Быстрые тумблеры оповещений (долгий тап по HUD).
     @State private var showQuickToggles = false
+    /// Пикер типа отметки (радар/тренога/пост/ДТП) для выбранной точки.
+    @State private var reportPoint: MapPoint?
     /// Связывает карту с внешним MapCompass: системный компас, но в нашей колонке
     /// контролов, а не под статус-баром.
     @Namespace private var mapScope
@@ -400,8 +402,10 @@ struct MapScreen: View {
                 CircleControl(systemName: "dot.radiowaves.left.and.right", tint: Theme.radar,
                               accessibilityLabel: "Радар здесь") {
                     guard let coordinate = env.location.currentCoordinate else { return }
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    Task { await env.mobile.report(at: coordinate) }
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    withAnimation(.spring(duration: 0.3)) {
+                        reportPoint = MapPoint(coordinate: coordinate)   // выбор типа отметки
+                    }
                     revealControls()
                 }
             }
@@ -428,9 +432,10 @@ struct MapScreen: View {
                         withAnimation { map.pressedPoint = nil }
                     },
                     onRadar: {
-                        UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        Task { await env.mobile.report(at: point.coordinate) }
-                        withAnimation { map.pressedPoint = nil }
+                        withAnimation {
+                            map.pressedPoint = nil
+                            reportPoint = point   // дальше — выбор типа отметки
+                        }
                     },
                     onOwnCamera: {
                         // Крестик режима добавления встаёт на выбранную точку —
@@ -446,6 +451,15 @@ struct MapScreen: View {
                     onCancel: {
                         withAnimation { map.pressedPoint = nil }
                     }
+                )
+            } else if let report = reportPoint {
+                ReportPickerBar(
+                    onPick: { kind in
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        Task { await env.mobile.report(at: report.coordinate, kind: kind) }
+                        withAnimation { reportPoint = nil }
+                    },
+                    onCancel: { withAnimation { reportPoint = nil } }
                 )
             } else {
                 permissionBanner
@@ -516,6 +530,7 @@ struct MapScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .animation(.spring(duration: 0.3), value: map.isAddingCamera)
         .animation(.spring(duration: 0.3), value: map.pressedPoint)
+        .animation(.spring(duration: 0.3), value: reportPoint)
         .animation(.easeInOut(duration: 0.3), value: controlsHidden)
     }
 
@@ -807,6 +822,27 @@ struct MapScreen: View {
                     card.proposedSize = ProposedViewSize(width: 540, height: 675)
                     try? card.uiImage?.pngData()?.write(to: docs.appendingPathComponent("share_trip.png"))
                 }
+            }
+        }
+        // Пикер типа отметки / тумблеры / вопрос «вы за рулём?» — для скриншотов.
+        if args.contains("-reportPicker") {
+            Task {
+                await Task.pause(seconds: 3)
+                if let coordinate = env.location.currentCoordinate ?? map.mapCenter {
+                    withAnimation { reportPoint = MapPoint(coordinate: coordinate) }
+                }
+            }
+        }
+        if args.contains("-quickToggles") {
+            Task {
+                await Task.pause(seconds: 2)
+                withAnimation { showQuickToggles = true }
+            }
+        }
+        if args.contains("-askDriver") {
+            Task {
+                await Task.pause(seconds: 2)
+                env.notifications.askDriverCheck()
             }
         }
         // Бар точки долгого тапа: жест на симуляторе из CLI не сымитировать.

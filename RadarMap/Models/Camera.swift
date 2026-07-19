@@ -15,6 +15,9 @@ enum CameraType: Hashable {
     case stationaryRadar    // «Стационар радар» — только превышение скорости
     case intelligentRadar   // «Интеллектуал + радар» — новое поколение, фиксирует всё + скорость
     case mobileRadar        // «Передвижной радар» — краудсорсинг, живёт несколько часов
+    case tripod             // «Тренога» — переносная камера на обочине (краудсорсинг)
+    case dpsPost            // «Пост ДПС» (краудсорсинг)
+    case accident           // «ДТП» (краудсорсинг, живёт ~час)
     case other(String)
 
     init(raw: String) {
@@ -23,6 +26,9 @@ enum CameraType: Hashable {
         case "Стационар радар", "Statsionar radar":     self = .stationaryRadar
         case "Интеллектуал + радар", "Intellektual + radar": self = .intelligentRadar
         case "Передвижной радар":                        self = .mobileRadar
+        case "Тренога":                                  self = .tripod
+        case "Пост ДПС":                                 self = .dpsPost
+        case "ДТП":                                      self = .accident
         default:                                         self = .other(raw)
         }
     }
@@ -34,6 +40,9 @@ enum CameraType: Hashable {
         case .stationaryRadar:  return String(localized: "Стационарный радар")
         case .intelligentRadar: return String(localized: "Интеллектуальная камера + радар")
         case .mobileRadar:      return String(localized: "Передвижной радар")
+        case .tripod:           return String(localized: "Тренога")
+        case .dpsPost:          return String(localized: "Пост ДПС")
+        case .accident:         return String(localized: "ДТП")
         case .other(let raw):   return raw
         }
     }
@@ -45,6 +54,9 @@ enum CameraType: Hashable {
         case .stationaryRadar:  return String(localized: "до радара")
         case .intelligentRadar: return String(localized: "до камеры")
         case .mobileRadar:      return String(localized: "до передв. радара")
+        case .tripod:           return String(localized: "до треноги")
+        case .dpsPost:          return String(localized: "до поста ДПС")
+        case .accident:         return String(localized: "до ДТП")
         case .other:            return String(localized: "до точки")
         }
     }
@@ -56,6 +68,9 @@ enum CameraType: Hashable {
         case .stationaryRadar:  return "Стационар радар"
         case .intelligentRadar: return "Интеллектуал + радар"
         case .mobileRadar:      return "Передвижной радар"
+        case .tripod:           return "Тренога"
+        case .dpsPost:          return "Пост ДПС"
+        case .accident:         return "ДТП"
         case .other(let raw):   return raw
         }
     }
@@ -67,6 +82,9 @@ enum CameraType: Hashable {
         case .stationaryRadar:  return "speedometer"
         case .intelligentRadar: return "camera.metering.matrix"
         case .mobileRadar:      return "dot.radiowaves.left.and.right"
+        case .tripod:           return "camera.metering.spot"
+        case .dpsPost:          return "shield.lefthalf.filled"
+        case .accident:         return "exclamationmark.triangle.fill"
         case .other:            return "mappin"
         }
     }
@@ -152,8 +170,8 @@ struct Camera: Identifiable, Codable, Hashable {
     static func defaultViolations(forType type: String) -> [String] {
         switch CameraType(raw: type) {
         case .stationaryCamera, .intelligentRadar: return standardViolations
-        case .stationaryRadar, .mobileRadar:       return radarViolations
-        case .other:                               return []
+        case .stationaryRadar, .mobileRadar, .tripod: return radarViolations
+        case .dpsPost, .accident, .other:          return []
         }
     }
 

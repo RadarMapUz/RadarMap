@@ -14,7 +14,7 @@ struct OnboardingView: View {
     let onFinish: () -> Void
 
     @State private var page = 0
-    private let lastPage = 3
+    private let lastPage = 4
 
     var body: some View {
         ZStack {
@@ -25,7 +25,8 @@ struct OnboardingView: View {
                     heroPage.tag(0)
                     alertsPage.tag(1)
                     navigatorPage.tag(2)
-                    permissionsPage.tag(3)
+                    companionPage.tag(3)
+                    permissionsPage.tag(4)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(.easeInOut(duration: 0.3), value: page)
@@ -104,7 +105,21 @@ struct OnboardingView: View {
         )
     }
 
-    // MARK: - Страница 4: разрешения
+    // MARK: - Страница 4: работаем поверх любого навигатора
+
+    private var companionPage: some View {
+        featurePage(
+            icon: "square.2.layers.3d.top.filled",
+            title: "Едете с Яндексом?",
+            rows: [
+                ("arrow.down.right.circle", "Просто сверните RadarMap — голос и баннеры о камерах продолжат работать"),
+                ("map", "Пробки смотрите где угодно, о камерах предупредим мы"),
+                ("bolt.fill", "Фон почти не тратит заряд: точный GPS включается только у камер"),
+            ]
+        )
+    }
+
+    // MARK: - Страница 5: разрешения
 
     private var permissionsPage: some View {
         VStack(spacing: 0) {

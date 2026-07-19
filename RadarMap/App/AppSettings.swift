@@ -99,7 +99,7 @@ enum BackgroundAlertMode: String, CaseIterable, Identifiable {
         case .radarsOnly:
             // Радары меряют скорость — самое важное; «обычные» камеры не будят.
             return camera.kind == .stationaryRadar || camera.kind == .intelligentRadar
-                || camera.kind == .mobileRadar
+                || camera.kind == .mobileRadar || camera.kind == .tripod
         case .off: return false
         }
     }

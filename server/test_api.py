@@ -74,6 +74,27 @@ class APITest(unittest.TestCase):
                                  {"id": rid, "device": device, "value": -1})
         self.assertFalse(body["active"], "3 дизлайка без лайков должны скрыть")
 
+    def test_report_types_ttl_and_no_cross_merge(self):
+        """ДТП живёт час; пост рядом с радаром не сливается (разные сущности)."""
+        import time as t
+        now = t.time()
+        _, accident = _call(self.port, "POST", "/api/report",
+                            {"lat": 41.4, "lon": 69.4, "device": "a", "type": "accident"})
+        conn = sqlite3.connect(api.DB_PATH)
+        expires, rtype = conn.execute("SELECT expires, type FROM reports WHERE id = ?",
+                                      (accident["id"],)).fetchone()
+        conn.close()
+        self.assertEqual(rtype, "accident")
+        self.assertLess(expires - now, 3700, "ДТП должно жить ~час")
+        status, post = _call(self.port, "POST", "/api/report",
+                             {"lat": 41.4001, "lon": 69.4001, "device": "b", "type": "post"})
+        self.assertFalse(post["merged"], "пост не должен сливаться с ДТП рядом")
+
+    def test_report_bad_type(self):
+        status, _ = _call(self.port, "POST", "/api/report",
+                          {"lat": 41.4, "lon": 69.4, "device": "x", "type": "ufo"})
+        self.assertEqual(status, 400)
+
     def test_report_out_of_bounds(self):
         status, _ = _call(self.port, "POST", "/api/report",
                           {"lat": 55.75, "lon": 37.61, "device": "moscow"})

@@ -547,7 +547,8 @@ final class LocationService: NSObject {
         // или при превышении; на трассе — полная эскалация. Вибрация — всегда.
         let policy = AlertPolicy.decision(
             mode: settings.alertMode, detected: alertContext,
-            isSuddenCamera: camera.kind == .mobileRadar,
+            isSuddenCamera: camera.kind == .mobileRadar || camera.kind == .tripod
+                || camera.kind == .accident,
             isOverspeeding: speedLimits?.isOverspeeding == true)
 
         if settings.soundEnabled && policy.sound { alerts.beep(count: decision.level) }

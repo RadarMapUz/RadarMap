@@ -67,6 +67,14 @@ struct CameraDetailSheet: View {
                         .font(.rounded(13))
                         .foregroundStyle(Theme.accent)
                 }
+                // Бейдж доверия: сколько водителей подтвердило краудсорс-отметку.
+                if let trust = env.mobile.confirmation(for: camera.id) {
+                    Label(String(format: String(localized: "Подтвердили: %@ водит."),
+                                 String(trust.upvotes + 1)),
+                          systemImage: "person.2.fill")
+                        .font(.rounded(12, .semibold))
+                        .foregroundStyle(Theme.success)
+                }
             }
             Spacer(minLength: 0)
             // Лимит дороги, на которой стоит камера (данные OSM) — сразу видно,

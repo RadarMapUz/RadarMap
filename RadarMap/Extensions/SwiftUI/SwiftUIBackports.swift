@@ -190,7 +190,11 @@ extension Backport where Content: View {
         if #available(iOS 26.0, macOS 26, *) {
             content.glassEffect(backportGlass.toGlass, in: shape)
         } else {
-            content.clipShape(shape)
+            // Без фона контент лёг бы голым текстом на карту: на iOS 18 стекло
+            // эмулирует ultraThinMaterial + тонкая кайма (та же читаемость).
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .overlay(shape.stroke(.white.opacity(0.08), lineWidth: 1))
         }
     }
 

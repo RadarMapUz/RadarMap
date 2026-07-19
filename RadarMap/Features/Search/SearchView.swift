@@ -34,7 +34,7 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
         let request = MKLocalSearch.Request(completion: completion)
         // Поиск/сеть подвели — вернём nil, UI покажет пустой результат.
         guard let response = try? await MKLocalSearch(request: request).start() else { return nil }
-        return response.mapItems.first?.location.coordinate
+        return response.mapItems.first?.placemark.coordinate
     }
 }
 
@@ -298,9 +298,11 @@ struct SearchView: View {
             var title = String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)
             let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
             // Обратный геокодинг — украшение заголовка; сбой оставит координаты.
-            if let request = MKReverseGeocodingRequest(location: location),
-               let item = try? await request.mapItems.first {
-                title = item.name ?? title
+            if #available(iOS 26.0, *) {
+                if let request = MKReverseGeocodingRequest(location: location),
+                   let item = try? await request.mapItems.first {
+                    title = item.name ?? title
+                }
             }
             assign(slot, coordinate: coordinate, title: title)
         }

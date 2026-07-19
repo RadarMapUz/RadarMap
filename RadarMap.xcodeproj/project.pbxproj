@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 100;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -38,25 +38,21 @@
 /* Begin PBXCopyFilesBuildPhase section */
 		4B1546CC300649860097B8CA /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
 			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstSubfolder = PlugIns;
 			files = (
 				4B1546CB300649860097B8CA /* RadarMapWidgets.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		4BFACE0A300649860097B8CA /* Embed Watch Content */ = {
 			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
-			dstSubfolderSpec = 16;
+			dstSubfolder = Product;
 			files = (
 				4BFACE0B300649860097B8CA /* RadarWatch.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
@@ -121,31 +117,23 @@
 /* Begin PBXFrameworksBuildPhase section */
 		4B154692300649860097B8CA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		4B1546C3300649860097B8CA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		4B1546D3300649860097B8CA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		4BFACE07300649860097B8CA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -197,8 +185,6 @@
 				4B1546C6300649860097B8CA /* Shared */,
 			);
 			name = RadarMap;
-			packageProductDependencies = (
-			);
 			productName = RadarMap;
 			productReference = 4B154695300649860097B8CA /* RadarMap.app */;
 			productType = "com.apple.product-type.application";
@@ -213,15 +199,11 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
 			fileSystemSynchronizedGroups = (
 				4B1546C5300649860097B8CA /* RadarMapWidgets */,
 				4B1546C6300649860097B8CA /* Shared */,
 			);
 			name = RadarMapWidgets;
-			packageProductDependencies = (
-			);
 			productName = RadarMapWidgets;
 			productReference = 4B1546C0300649860097B8CA /* RadarMapWidgets.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -242,8 +224,6 @@
 				4B1546D4300649860097B8CA /* RadarMapTests */,
 			);
 			name = RadarMapTests;
-			packageProductDependencies = (
-			);
 			productName = RadarMapTests;
 			productReference = 4B1546D0300649860097B8CA /* RadarMapTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -258,15 +238,11 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
 			fileSystemSynchronizedGroups = (
 				4B1546C6300649860097B8CA /* Shared */,
 				4BFACE09300649860097B8CA /* RadarWatch */,
 			);
 			name = RadarWatch;
-			packageProductDependencies = (
-			);
 			productName = RadarWatch;
 			productReference = 4BFACE01300649860097B8CA /* RadarWatch.app */;
 			productType = "com.apple.product-type.application";
@@ -279,7 +255,8 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2620;
-				LastUpgradeCheck = 2620;
+				LastUpgradeCheck = 2660;
+				ORGANIZATIONNAME = RadarMap;
 				TargetAttributes = {
 					4B154694300649860097B8CA = {
 						CreatedOnToolsVersion = 26.2;
@@ -304,7 +281,7 @@
 			);
 			mainGroup = 4B15468C300649860097B8CA;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
+			preferredProjectObjectVersion = 100;
 			productRefGroup = 4B154696300649860097B8CA /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -320,55 +297,41 @@
 /* Begin PBXResourcesBuildPhase section */
 		4B154693300649860097B8CA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		4B1546C4300649860097B8CA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		4BFACE08300649860097B8CA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4B154691300649860097B8CA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		4B1546C2300649860097B8CA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		4B1546D2300649860097B8CA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 		4BFACE06300649860097B8CA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
@@ -391,7 +354,7 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		4B15469E300649870097B8CA /* Debug */ = {
+		4B15469E300649870097B8CA /* Debug configuration for PBXProject "RadarMap" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -454,7 +417,7 @@
 			};
 			name = Debug;
 		};
-		4B15469F300649870097B8CA /* Release */ = {
+		4B15469F300649870097B8CA /* Release configuration for PBXProject "RadarMap" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -510,30 +473,34 @@
 			};
 			name = Release;
 		};
-		4B1546A1300649870097B8CA /* Debug */ = {
+		4B1546A1300649870097B8CA /* Debug configuration for PBXNativeTarget "RadarMap" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = RadarMap/RadarMap.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = RadarMap/RadarMapCarPlay.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = AT27NPXG3V;
+				DEVELOPMENT_TEAM = RL7M4Z58CJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RadarMap/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RadarMap;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = uz.rasul.radarmap;
+				PRODUCT_BUNDLE_IDENTIFIER = uz.radarmap.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -544,30 +511,34 @@
 			};
 			name = Debug;
 		};
-		4B1546A2300649870097B8CA /* Release */ = {
+		4B1546A2300649870097B8CA /* Release configuration for PBXNativeTarget "RadarMap" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = RadarMap/RadarMap.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = RadarMap/RadarMapCarPlay.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = AT27NPXG3V;
+				DEVELOPMENT_TEAM = RL7M4Z58CJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RadarMap/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RadarMap;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = uz.rasul.radarmap;
+				PRODUCT_BUNDLE_IDENTIFIER = uz.radarmap.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -578,7 +549,7 @@
 			};
 			name = Release;
 		};
-		4B1546C9300649860097B8CA /* Debug */ = {
+		4B1546C9300649860097B8CA /* Debug configuration for PBXNativeTarget "RadarMapWidgets" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = RadarMapWidgets/RadarMapWidgets.entitlements;
@@ -588,7 +559,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RadarMapWidgets/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = RadarMap;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -606,7 +577,7 @@
 			};
 			name = Debug;
 		};
-		4B1546CA300649860097B8CA /* Release */ = {
+		4B1546CA300649860097B8CA /* Release configuration for PBXNativeTarget "RadarMapWidgets" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = RadarMapWidgets/RadarMapWidgets.entitlements;
@@ -616,7 +587,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RadarMapWidgets/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = RadarMap;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -634,7 +605,7 @@
 			};
 			name = Release;
 		};
-		4B1546D6300649860097B8CA /* Debug */ = {
+		4B1546D6300649860097B8CA /* Debug configuration for PBXNativeTarget "RadarMapTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -655,7 +626,7 @@
 			};
 			name = Debug;
 		};
-		4B1546D7300649860097B8CA /* Release */ = {
+		4B1546D7300649860097B8CA /* Release configuration for PBXNativeTarget "RadarMapTests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -676,24 +647,24 @@
 			};
 			name = Release;
 		};
-		4BFACE04300649860097B8CA /* Debug */ = {
+		4BFACE04300649860097B8CA /* Debug configuration for PBXNativeTarget "RadarWatch" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = AT27NPXG3V;
+				DEVELOPMENT_TEAM = RL7M4Z58CJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = RadarMap;
 				INFOPLIST_KEY_WKApplication = YES;
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = uz.rasul.radarmap;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = uz.radarmap.ios;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = uz.rasul.radarmap.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = uz.radarmap.ios.watch;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -706,24 +677,24 @@
 			};
 			name = Debug;
 		};
-		4BFACE05300649860097B8CA /* Release */ = {
+		4BFACE05300649860097B8CA /* Release configuration for PBXNativeTarget "RadarWatch" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = AT27NPXG3V;
+				DEVELOPMENT_TEAM = RL7M4Z58CJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = RadarMap;
 				INFOPLIST_KEY_WKApplication = YES;
-				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = uz.rasul.radarmap;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = uz.radarmap.ios;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = uz.rasul.radarmap.watchkitapp;
+				PRODUCT_BUNDLE_IDENTIFIER = uz.radarmap.ios.watch;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -742,46 +713,41 @@
 		4B154690300649860097B8CA /* Build configuration list for PBXProject "RadarMap" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				4B15469E300649870097B8CA /* Debug */,
-				4B15469F300649870097B8CA /* Release */,
+				4B15469E300649870097B8CA /* Debug configuration for PBXProject "RadarMap" */,
+				4B15469F300649870097B8CA /* Release configuration for PBXProject "RadarMap" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		4B1546A0300649870097B8CA /* Build configuration list for PBXNativeTarget "RadarMap" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				4B1546A1300649870097B8CA /* Debug */,
-				4B1546A2300649870097B8CA /* Release */,
+				4B1546A1300649870097B8CA /* Debug configuration for PBXNativeTarget "RadarMap" */,
+				4B1546A2300649870097B8CA /* Release configuration for PBXNativeTarget "RadarMap" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		4B1546C8300649860097B8CA /* Build configuration list for PBXNativeTarget "RadarMapWidgets" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				4B1546C9300649860097B8CA /* Debug */,
-				4B1546CA300649860097B8CA /* Release */,
+				4B1546C9300649860097B8CA /* Debug configuration for PBXNativeTarget "RadarMapWidgets" */,
+				4B1546CA300649860097B8CA /* Release configuration for PBXNativeTarget "RadarMapWidgets" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		4B1546D5300649860097B8CA /* Build configuration list for PBXNativeTarget "RadarMapTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				4B1546D6300649860097B8CA /* Debug */,
-				4B1546D7300649860097B8CA /* Release */,
+				4B1546D6300649860097B8CA /* Debug configuration for PBXNativeTarget "RadarMapTests" */,
+				4B1546D7300649860097B8CA /* Release configuration for PBXNativeTarget "RadarMapTests" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		4BFACE03300649860097B8CA /* Build configuration list for PBXNativeTarget "RadarWatch" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				4BFACE04300649860097B8CA /* Debug */,
-				4BFACE05300649860097B8CA /* Release */,
+				4BFACE04300649860097B8CA /* Debug configuration for PBXNativeTarget "RadarWatch" */,
+				4BFACE05300649860097B8CA /* Release configuration for PBXNativeTarget "RadarWatch" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */

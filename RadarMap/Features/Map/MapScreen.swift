@@ -579,7 +579,7 @@ struct MapScreen: View {
             actionButton("Ещё", "gearshape.fill") { map.showSettings = true }
         }
         .padding(8)
-        .glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerLarge))
+        .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerLarge))
     }
 
     private func actionButton(_ title: LocalizedStringKey, _ icon: String, tint: Color = Theme.textPrimary,

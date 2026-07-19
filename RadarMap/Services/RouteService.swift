@@ -290,8 +290,8 @@ final class RouteService {
                             to destination: CLLocationCoordinate2D,
                             alternatives: Bool) async throws -> [BuiltVariant] {
         let request = MKDirections.Request()
-        request.source = MKMapItem(location: CLLocation(latitude: source.latitude, longitude: source.longitude), address: nil)
-        request.destination = MKMapItem(location: CLLocation(latitude: destination.latitude, longitude: destination.longitude), address: nil)
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: source))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: destination))
         request.transportType = .automobile
         request.requestsAlternateRoutes = alternatives
 

@@ -128,6 +128,11 @@ enum AppConfig {
     /// Как часто автоматически проверять обновления базы.
     static let syncCheckInterval: TimeInterval = 24 * 60 * 60
 
+    /// Публичный ключ Ed25519 для проверки подписи OTA-базы (сырые 32 байта, base64).
+    /// Пара к нему живёт ТОЛЬКО на машине владельца (~/.radarmap/ota_signing.pem)
+    /// и подписывает cameras.json при деплое (server/sign_db.sh).
+    nonisolated static let otaPublicKeyB64 = "hVUkkufZ7JEFX1RUS9gOYVOpZVYdjywZZW43rUMZYqs="
+
     /// Версия базы, вшитой в приложение (Resources/cameras.json).
     /// v3 = данные портала data.egov.uz (1-008-0027) от 2026-07-10, 3341 точка.
     static let bundledDBVersion = 5   // типы 67 камер уточнены по свежему реестру egov (10.07.2026)

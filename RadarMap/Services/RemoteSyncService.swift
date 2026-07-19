@@ -44,6 +44,8 @@ final class RemoteSyncService {
     private struct Manifest: Decodable {
         let version: Int
         let count: Int
+        /// Ed25519-подпись cameras.json (base64). Нет подписи — базу не применяем.
+        let sig: String?
     }
 
     func check() async {
@@ -61,6 +63,14 @@ final class RemoteSyncService {
 
             state = .downloading
             let payload = try await api.getData("cameras.json")
+            // Подпись обязательна: неподписанная/подменённая база не применяется
+            // (защита от MITM на HTTP и от компрометации сервера).
+            guard OTASignature.isValid(data: payload, signatureB64: manifest.sig) else {
+                Log.network.error("синк базы: подпись не сошлась — обновление отклонено")
+                lastError = String(localized: "Подпись базы не прошла проверку")
+                state = .failed
+                return
+            }
             let count = try await store.applyRemote(data: payload, version: manifest.version)
 
             Storage.set(Date(), for: .lastSyncCheck)

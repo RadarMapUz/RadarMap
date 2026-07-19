@@ -3633,6 +3633,22 @@
         }
       }
     },
+    "Подпись базы не прошла проверку": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подпись базы не прошла проверку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baza imzosi tekshiruvdan o'tmadi"
+          }
+        }
+      }
+    },
     "Подтвердили: %@ водит.": {
       "localizations": {
         "ru": {

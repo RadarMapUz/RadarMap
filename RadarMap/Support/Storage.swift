@@ -44,10 +44,19 @@ enum Storage {
 
     /// Анонимный идентификатор устройства: создаётся при первом обращении,
     /// дальше стабилен. Не связан с Apple ID/рекламными идентификаторами.
+    /// Анонимный идентификатор с ротацией раз в 30 дней: анти-спам-лимиты
+    /// суточные и не страдают, а связать перемещения/репорты одного устройства
+    /// дольше месяца становится невозможно (privacy by design).
     static func anonymousID(_ key: Key) -> String {
-        if let existing = string(key) { return existing }
+        let stampRaw = key.rawValue + ".rotatedAt"
+        let rotatedAt = defaults.object(forKey: stampRaw) as? Date
+        if let existing = string(key), let rotatedAt,
+           Date().timeIntervalSince(rotatedAt) < 30 * 86400 {
+            return existing
+        }
         let fresh = UUID().uuidString
         set(fresh, for: key)
+        defaults.set(Date(), forKey: stampRaw)
         return fresh
     }
 }

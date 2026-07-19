@@ -93,6 +93,17 @@ final class TripStats {
         ))
     }
 
+    /// Сбросить поездку без записи в историю: пассажирский старт («я в такси»)
+    /// не должен портить статистику и рейтинг.
+    func cancel() {
+        startedAt = nil
+        finishedDuration = 0
+        distanceMeters = 0
+        maxSpeedKmh = 0
+        passed = []
+        trackBuffer = []
+    }
+
     func finish() {
         finishedDuration = durationSeconds
         defer { startedAt = nil }

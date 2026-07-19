@@ -36,6 +36,22 @@ enum AppConfig {
     /// он приходит через пару секунд после старта — камеры дальше 1.5 км, успеваем.
     static let gpsIdleAfterSeconds: TimeInterval = 60
 
+    // MARK: - Умный режим оповещений (город/трасса) — пороги детектора.
+    // nonisolated: читаются из чистого AlertPolicy (и его тестов) без прыжка на main.
+
+    /// Лимит дороги ≥ этого — голос за трассу (самый сильный сигнал).
+    nonisolated static let highwayLimitKmh = 90
+    /// Лимит ≤ этого — голос за город.
+    nonisolated static let cityLimitKmh = 60
+    /// Средняя скорость (EMA ~2 мин) выше — похоже на трассу.
+    nonisolated static let highwayAvgSpeedKmh: Double = 78
+    /// Средняя ниже — городской ритм со светофорами.
+    nonisolated static let cityAvgSpeedKmh: Double = 55
+    /// Камер в радиусе 3 км не меньше этого — плотная городская сетка.
+    nonisolated static let cityCameraDensity = 6
+    /// Контекст не переключается чаще: светофор на трассе — ещё не город.
+    nonisolated static let alertContextSwitchSeconds: TimeInterval = 180
+
     // MARK: - Карта
 
     /// Центр Узбекистана — запасная позиция карты, пока нет геопозиции пользователя.

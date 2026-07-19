@@ -35,6 +35,10 @@ struct SpeedHUDView: View {
             .padding(.vertical, 12)
         }
         .fixedSize(horizontal: false, vertical: true)
+        // Чип режима оповещений: видно, почему тихо (город) или голосисто (трасса).
+        .overlay(alignment: .topTrailing) {
+            if env.location.isTripActive { modeChip }
+        }
         .animation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
         // VoiceOver: весь HUD — одна связная фраза, а не россыпь цифр.
         .accessibilityElement(children: .ignore)
@@ -152,6 +156,21 @@ struct SpeedHUDView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 6)
         }
+    }
+
+    /// Эффективный режим: при «Авто» — что определил детектор.
+    private var modeChip: some View {
+        let mode = env.settings.alertMode
+        let symbol = mode == .auto
+            ? (env.location.alertContext == .highway ? AlertMode.highway.symbol : AlertMode.city.symbol)
+            : mode.symbol
+        return Image(systemName: symbol)
+            .font(.rounded(10, .bold))
+            .foregroundStyle(Theme.accent)
+            .padding(5)
+            .background(Theme.surface.opacity(0.85), in: Circle())
+            .padding(6)
+            .allowsHitTesting(false)
     }
 
     private func approachBar(_ progress: Double) -> some View {

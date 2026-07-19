@@ -13,8 +13,10 @@
 //
 
 import Foundation
+import AVFAudio
 import CoreLocation
 import Observation
+import UIKit
 
 @MainActor
 @Observable
@@ -52,6 +54,12 @@ final class LocationService: NSObject {
     @ObservationIgnored private var alertEngine = AlertEngine()
     /// Учёт прохождения камер (траверз + зона измерения): чистый модуль, покрыт тестами.
     @ObservationIgnored private var passTracking = PassTracking()
+    /// Детектор «город/трасса» для умного режима оповещений (чистый, покрыт тестами).
+    @ObservationIgnored private var contextDetector = AlertPolicy.Detector()
+    /// Камер в радиусе 3 км — сигнал плотности для детектора (пересчёт на ретайле).
+    @ObservationIgnored private var cameraDensity3km = 0
+    /// Текущий контекст для чипа на HUD (в режиме «Авто»).
+    private(set) var alertContext: AlertPolicy.Context = .city
     // Два независимых «передних плана»: телефонная сцена и CarPlay. Один флаг
     // они затирали друг другу (блокировка телефона в машине замораживала HUD CarPlay,
     // а отключение CarPlay в фоне навсегда оставляло «передний» режим GPS).
@@ -157,27 +165,78 @@ final class LocationService: NSObject {
         applyLocationMode()
     }
 
-    /// Начать поездку: непрерывная геолокация + активные оповещения даже в свёрнутом виде.
-    func startTrip() {
+    /// Пассажирская сессия («я в такси»): автостарт молчит до конца этой езды.
+    private(set) var isPassengerSession = false
+
+    /// Начать поездку. `auto` — старт от CoreMotion: в незнакомой машине зададим
+    /// вопрос «вы за рулём?» (в своей — CarPlay/знакомая магнитола — молча).
+    func startTrip(auto: Bool = false) {
         guard isAuthorized else { return }
+        if auto, isPassengerSession { return }   // пассажир уже сказал своё слово
+        if !auto { isPassengerSession = false }  // ручной старт — точно за рулём
         isTripActive = true
         lastMovementAt = Date()   // не проваливаться в тир «стоянка» со старым штампом
+        // Телефон в держателе — экран не гаснет всю поездку (как у навигаторов).
+        UIApplication.shared.isIdleTimerDisabled = settings.keepScreenOn
         alertEngine.reset()
         passTracking.reset()
         trip.begin()
         applyLocationMode()
         liveActivity?.startIfNeeded(state: activityState)
+        if auto, !isDriverRecognized { notifier.askDriverCheck() }
+    }
+
+    /// Своя машина: CarPlay подключён или знакомая автомобильная магнитола (BT).
+    private var isDriverRecognized: Bool {
+        if isCarPlayConnected { return true }
+        return AVAudioSession.sharedInstance().currentRoute.outputs.contains { output in
+            output.portType == .carAudio
+                || ((output.portType == .bluetoothA2DP || output.portType == .bluetoothHFP)
+                    && settings.knownCarAudio.contains(output.portName))
+        }
+    }
+
+    /// «Я за рулём» (кнопка или тап по вопросу): запоминаем магнитолу этой машины —
+    /// в следующий раз не переспросим.
+    func confirmDriver() {
+        notifier.clearDriverCheck()
+        for output in AVAudioSession.sharedInstance().currentRoute.outputs
+        where output.portType == .bluetoothA2DP || output.portType == .bluetoothHFP {
+            if !settings.knownCarAudio.contains(output.portName) {
+                settings.knownCarAudio.append(output.portName)
+            }
+        }
+    }
+
+    /// «Я пассажир»: свернуть поездку без следа в истории и молчать до конца езды.
+    func markPassenger() {
+        notifier.clearDriverCheck()
+        isPassengerSession = true
+        if isTripActive { endTrip(asPassenger: true) }
+    }
+
+    /// Езда закончилась (CoreMotion): следующая поездка — с чистого листа.
+    func endPassengerSession() {
+        isPassengerSession = false
     }
 
     /// Завершить поездку: сохранить итоги и вернуться к батареесберегающему фону.
-    func endTrip() {
+    /// `asPassenger` — «я в такси»: короткий кусок не пишем в историю вовсе.
+    func endTrip(asPassenger: Bool = false) {
         isTripActive = false
+        UIApplication.shared.isIdleTimerDisabled = false
         alertEngine.reset()
-        // Камеры, мимо которых ещё «проезжали» в момент остановки.
-        register(passes: passTracking.flush())
-        trip.finish()
-        // Припарковались у цели — маршрут выполнен, линия не должна висеть на карте.
-        route?.finishIfNearDestination(coordinate: currentCoordinate)
+        notifier.clearDriverCheck()   // вопрос «вы за рулём?» больше не актуален
+        if asPassenger {
+            _ = passTracking.flush()   // пассажирские «проезды» не считаем
+            if trip.distanceMeters < 500 { trip.cancel() } else { trip.finish() }
+        } else {
+            // Камеры, мимо которых ещё «проезжали» в момент остановки.
+            register(passes: passTracking.flush())
+            trip.finish()
+            // Припарковались у цели — маршрут выполнен, линия не должна висеть на карте.
+            route?.finishIfNearDestination(coordinate: currentCoordinate)
+        }
         applyLocationMode()
         liveActivity?.end()
         notifier.clearApproaching()   // конец поездки — убрать висящий баннер камеры
@@ -290,6 +349,12 @@ final class LocationService: NSObject {
         let nearest = repository.nearest(to: coordinate, limit: AppConfig.maxMonitoredRegions)
         nearbyCameras = nearest
         alertedCameraIDs.formIntersection(Set(nearest.map(\.id)))
+        // Плотность камер вокруг — сигнал «город» для умного режима оповещений.
+        let here = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        cameraDensity3km = nearest.count { camera in
+            here.distance(from: CLLocation(latitude: camera.coordinate.latitude,
+                                           longitude: camera.coordinate.longitude)) <= 3000
+        }
 
         for camera in nearest {
             let region = CLCircularRegion(
@@ -350,6 +415,11 @@ final class LocationService: NSObject {
             route?.updateProgress(coordinate: coordinate, cameras: repository.cameras,
                                   announce: isTripActive)
             tuneAdaptiveAccuracy()
+            // Умный режим: детектор города/трассы (дёшево — пара сравнений).
+            contextDetector.update(roadLimitKmh: speedLimits?.currentLimit,
+                                   camerasWithin3km: cameraDensity3km,
+                                   speedKmh: speedKmh)
+            if contextDetector.context != alertContext { alertContext = contextDetector.context }
         }
         // Live Activity живёт только в поездке; update — no-op, если она не запущена.
         liveActivity?.update(state: activityState)
@@ -473,7 +543,14 @@ final class LocationService: NSObject {
         guard let decision = alertEngine.evaluate(cameraID: camera.id, distance: distance,
                                                   radius: effectiveAlertRadius) else { return }
 
-        if settings.soundEnabled { alerts.beep(count: decision.level) }
+        // Умный режим: в городе звук/голос — только про внезапное (передвижной)
+        // или при превышении; на трассе — полная эскалация. Вибрация — всегда.
+        let policy = AlertPolicy.decision(
+            mode: settings.alertMode, detected: alertContext,
+            isSuddenCamera: camera.kind == .mobileRadar,
+            isOverspeeding: speedLimits?.isOverspeeding == true)
+
+        if settings.soundEnabled && policy.sound { alerts.beep(count: decision.level) }
         // Тактильная эскалация: мягкий «тук» на дальнем пороге → резкий у камеры.
         // Отдельно от звука — работает и в беззвучном режиме, и в энергосбережении.
         alerts.haptic(level: decision.level)
@@ -484,7 +561,7 @@ final class LocationService: NSObject {
                 notifier.notifyApproaching(camera, distanceMeters: distance)
             }
             // Голос — самая дорогая часть оповещения, в энергосбережении пропускаем.
-            if settings.voiceEnabled && !isLowPowerMode {
+            if settings.voiceEnabled && policy.voice && !isLowPowerMode {
                 var phrase = "\(camera.kind.displayName) \(directionPhrase). \(Int(distance)) метров"
                 if speedKmh >= AppConfig.speakSpeedThresholdKmh {
                     phrase += ". Ваша скорость \(Int(speedKmh.rounded()))"

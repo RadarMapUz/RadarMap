@@ -89,7 +89,11 @@ struct DashboardView: View {
         .statusBarHidden()
         // Приборка должна светиться всю поездку — не даём экрану погаснуть.
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        .onDisappear {
+            // Закрыли спидометр в активной поездке — экран продолжает держать поездка.
+            UIApplication.shared.isIdleTimerDisabled =
+                env.location.isTripActive && env.settings.keepScreenOn
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Спидометр"))
         .accessibilityHint(Text("Нажмите, чтобы вернуться к карте"))

@@ -17,11 +17,52 @@ final class NotificationService: NSObject {
 
     @ObservationIgnored private let settings: AppSettings
 
+    /// Решение «за рулём / пассажир» — вешает AppEnvironment.
+    @ObservationIgnored var onPassengerConfirmed: (() -> Void)?
+    @ObservationIgnored var onDriverConfirmed: (() -> Void)?
+
     init(settings: AppSettings) {
         self.settings = settings
         super.init()
         UNUserNotificationCenter.current().delegate = self
+        registerCategories()
         Task { await refreshStatus() }
+    }
+
+    // MARK: - «Вы за рулём?» (пассажир-детектор при автостарте)
+
+    static let driverCheckID = "driver-check"
+    private static let driverCheckCategory = "driver-check-category"
+    private static let actionPassenger = "passenger"
+    private static let actionDriver = "driver"
+
+    private func registerCategories() {
+        let driver = UNNotificationAction(identifier: Self.actionDriver,
+                                          title: String(localized: "Я за рулём"))
+        let passenger = UNNotificationAction(identifier: Self.actionPassenger,
+                                             title: String(localized: "Я пассажир"))
+        let category = UNNotificationCategory(identifier: Self.driverCheckCategory,
+                                              actions: [driver, passenger],
+                                              intentIdentifiers: [])
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+    }
+
+    /// Автостарт в незнакомой машине: спрашиваем ненавязчиво. Молчание = за рулём
+    /// (безопасный дефолт), «Я пассажир» — гасим поездку и не тратим заряд.
+    func askDriverCheck() {
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Похоже, вы в пути")
+        content.body = String(localized: "Поездка включилась сама. Пассажир? Нажмите — сбережём заряд.")
+        content.categoryIdentifier = Self.driverCheckCategory
+        content.interruptionLevel = .timeSensitive
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: Self.driverCheckID, content: content, trigger: nil))
+    }
+
+    func clearDriverCheck() {
+        let center = UNUserNotificationCenter.current()
+        center.removeDeliveredNotifications(withIdentifiers: [Self.driverCheckID])
+        center.removePendingNotificationRequests(withIdentifiers: [Self.driverCheckID])
     }
 
     func requestAuthorization() {
@@ -126,5 +167,19 @@ extension NotificationService: UNUserNotificationCenterDelegate {
             return [.banner]
         }
         return [.banner, .list, .sound]
+    }
+
+    /// Ответ на «Вы за рулём?»: кнопки — явное решение, тап по баннеру
+    /// (открытие приложения) считаем «за рулём» — открыл, значит смотрит.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard response.notification.request.identifier == Self.driverCheckID else { return }
+        let isPassenger = response.actionIdentifier == Self.actionPassenger
+        await MainActor.run {
+            if isPassenger { self.onPassengerConfirmed?() }
+            else { self.onDriverConfirmed?() }
+        }
     }
 }

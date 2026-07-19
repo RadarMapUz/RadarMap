@@ -56,6 +56,28 @@ enum PlaceSlot: String, CaseIterable, Identifiable {
     }
 }
 
+/// Режим оповещений. «Авто» сам различает контекст: в городе камер сотни —
+/// голос только при превышении; на трассе камер мало и штрафы дорогие —
+/// голосом о каждой. Вручную можно зафиксировать город/трассу.
+enum AlertMode: String, CaseIterable, Identifiable {
+    case auto, city, highway
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .auto: return String(localized: "Авто")
+        case .city: return String(localized: "Город")
+        case .highway: return String(localized: "Трасса")
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .auto: return "wand.and.stars"
+        case .city: return "building.2.fill"
+        case .highway: return "road.lanes"
+        }
+    }
+}
+
 /// Фоновые баннеры о камерах: о чём предупреждать, когда приложение свёрнуто.
 /// Звук/голос в поездке живут отдельно — это только про уведомления в фоне.
 enum BackgroundAlertMode: String, CaseIterable, Identifiable {
@@ -154,6 +176,15 @@ final class AppSettings {
 
     /// Тактильные сигналы при приближении к камере.
     var hapticsEnabled: Bool { didSet { store.set(hapticsEnabled, forKey: Keys.haptics) } }
+    /// Не гасить экран в активной поездке (телефон в держателе — как у навигаторов).
+    var keepScreenOn: Bool { didSet { store.set(keepScreenOn, forKey: Keys.keepScreenOn) } }
+    /// Имена знакомых автомобильных магнитол (BT): подключены к своей машине —
+    /// автостарт не переспрашивает «вы за рулём?».
+    var knownCarAudio: [String] { didSet { store.set(knownCarAudio, forKey: Keys.knownCarAudio) } }
+    /// Режим оповещений: «Авто» сам различает город/трассу, вручную можно зафиксировать.
+    var alertMode: AlertMode {
+        didSet { store.set(alertMode.rawValue, forKey: Keys.alertMode) }
+    }
 
     /// Подложка карты: тёмная / светлая / авто по времени суток.
     var mapAppearance: MapAppearance {
@@ -191,6 +222,9 @@ final class AppSettings {
         static let backgroundAlerts = "backgroundAlerts"
         static let haptics = "hapticsEnabled"
         static let mapAppearance = "mapAppearance"
+        static let keepScreenOn = "keepScreenOn"
+        static let alertMode = "alertMode"
+        static let knownCarAudio = "knownCarAudio"
     }
 
     /// Пишем/снимаем override языка приложения. iOS читает «AppleLanguages» из
@@ -218,6 +252,7 @@ final class AppSettings {
             Keys.nextCamera: true,
             Keys.digest: true,
             Keys.haptics: true,
+            Keys.keepScreenOn: true,
         ])
         soundEnabled = store.bool(forKey: Keys.sound)
         voiceEnabled = store.bool(forKey: Keys.voice)
@@ -233,6 +268,9 @@ final class AppSettings {
         overspeedTolerance = store.double(forKey: Keys.overspeed)
         adaptiveGPS = store.bool(forKey: Keys.adaptive)
         showNextCamera = store.bool(forKey: Keys.nextCamera)
+        keepScreenOn = store.bool(forKey: Keys.keepScreenOn)
+        alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto
+        knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []
         weeklyDigest = store.bool(forKey: Keys.digest)
         appLanguage = AppLanguage(rawValue: store.string(forKey: Keys.language) ?? "") ?? .system
         backgroundAlerts = BackgroundAlertMode(rawValue: store.string(forKey: Keys.backgroundAlerts) ?? "") ?? .all

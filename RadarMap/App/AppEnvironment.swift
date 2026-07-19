@@ -64,12 +64,18 @@ final class AppEnvironment {
         let location = self.location
         motion.onDrivingStart = { [weak location] in
             guard settings.autoStartTrip, let location, !location.isTripActive else { return }
-            location.startTrip()
+            location.startTrip(auto: true)   // незнакомая машина → вопрос «вы за рулём?»
         }
         motion.onDrivingStop = { [weak location] in
-            guard let location, location.isTripActive else { return }
+            guard let location else { return }
+            location.endPassengerSession()   // «я в такси» действует до конца езды
+            guard location.isTripActive else { return }
             location.endTrip()
         }
+        // Ответ на «Вы за рулём?»: пассажир — гасим поездку без следа,
+        // водитель — запоминаем магнитолу машины, чтобы не переспрашивать.
+        notifications.onPassengerConfirmed = { [weak location] in location?.markPassenger() }
+        notifications.onDriverConfirmed = { [weak location] in location?.confirmDriver() }
 
         // Недельный дайджест: после каждой поездки перепланируем пуш со свежими цифрами.
         trip.onTripFinished = { [weak trip, weak notifications] in

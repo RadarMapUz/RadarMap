@@ -24,6 +24,7 @@ struct GlassCard<Content: View>: View {
 struct CircleControl: View {
     let systemName: String
     var tint: Color = Theme.textPrimary
+    var size: CGFloat = 46
     /// Что читает VoiceOver (иконка без текста сама по себе нема).
     var accessibilityLabel: LocalizedStringKey = ""
     let action: () -> Void
@@ -31,13 +32,27 @@ struct CircleControl: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.rounded(17, .semibold))
+                .font(.rounded(size > 48 ? 19 : 17, .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 46, height: 46)
+                .frame(width: size, height: size)
                 .backport.glassEffect(.interactive(isEnabled: true), in: .circle)
+                // Тонкая световая кромка сверху — стекло ловит свет, как у системных кнопок.
+                .overlay(Circle().strokeBorder(
+                    LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.04)],
+                                   startPoint: .top, endPoint: .bottom), lineWidth: 1))
                 .accessibilityLabel(Text(accessibilityLabel))
         }
+        .buttonStyle(PressableStyle())
         .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+    }
+}
+
+/// Премиальный отклик: кнопка мягко пружинит под пальцем.
+struct PressableStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.spring(duration: 0.25), value: configuration.isPressed)
     }
 }
 

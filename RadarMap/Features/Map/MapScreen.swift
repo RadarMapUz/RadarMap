@@ -25,6 +25,8 @@ struct MapScreen: View {
     @State private var legendCollapseTask: Task<Void, Never>?
     /// Чип «Задать Дом и Работу» → поиск сразу в режиме назначения слота.
     @State private var assignSlot: PlaceSlot?
+    /// Быстрые тумблеры оповещений (долгий тап по HUD).
+    @State private var showQuickToggles = false
     /// Связывает карту с внешним MapCompass: системный компас, но в нашей колонке
     /// контролов, а не под статус-баром.
     @Namespace private var mapScope
@@ -324,9 +326,18 @@ struct MapScreen: View {
 
     private var topLayer: some View {
         VStack(spacing: 10) {
-            // Тап по HUD — режим «Спидометр» (приборка на весь экран для держателя).
+            // Тап по HUD — «Спидометр»; долгий тап — быстрые тумблеры оповещений.
             SpeedHUDView()
                 .onTapGesture { showDashboard = true }
+                .onLongPressGesture(minimumDuration: 0.4) {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    withAnimation(.spring(duration: 0.3)) { showQuickToggles.toggle() }
+                }
+            if showQuickToggles {
+                QuickTogglesBar {
+                    withAnimation(.spring(duration: 0.3)) { showQuickToggles = false }
+                }
+            }
             // Turn-by-turn: ближайший манёвр — в поездке по маршруту.
             if env.location.isTripActive, let step = env.route.nextStep {
                 ManeuverBanner(step: step, distance: env.route.nextStepDistance)
@@ -484,7 +495,7 @@ struct MapScreen: View {
                     }
                     // Одна линия: Дом и Работа компактной парой слева,
                     // «Начать поездку» занимает остальную ширину справа.
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         PlaceCircle(slot: .home,
                                     onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
                                     onAssign: { assignSlot = $0 })
@@ -550,7 +561,8 @@ struct MapScreen: View {
         }
     }
 
-    /// CTA во всю ширину блока — одной ширины со сплитом Дом/Работа над ней.
+    /// CTA: градиент со световой кромкой сверху и двойной тенью — премиальный
+    /// объём, высота 52 в линию с кругами Дом/Работа.
     private var tripButton: some View {
         Button {
             toggleTrip()
@@ -559,13 +571,20 @@ struct MapScreen: View {
                 Image(systemName: "play.fill")
                 Text("Начать поездку")
             }
-            .font(.rounded(15, .bold))
+            .font(.rounded(16, .bold))
             .foregroundStyle(Theme.background)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 13)
-            .background(Theme.success.gradient, in: Capsule())
-            .shadow(color: Theme.success.opacity(0.4), radius: 10, y: 3)
+            .frame(height: 52)
+            .background(
+                LinearGradient(colors: [Theme.success.opacity(0.98), Theme.success.opacity(0.72)],
+                               startPoint: .top, endPoint: .bottom), in: Capsule())
+            .overlay(Capsule().strokeBorder(
+                LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.03)],
+                               startPoint: .top, endPoint: .bottom), lineWidth: 1))
         }
+        .buttonStyle(PressableStyle())
+        .shadow(color: Theme.success.opacity(0.35), radius: 14, y: 5)
+        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
     }
 
     private var actionBar: some View {

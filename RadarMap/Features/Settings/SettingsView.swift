@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
@@ -41,6 +42,9 @@ struct SettingsView: View {
                     }
                     Toggle("Голосовое предупреждение", isOn: $settings.voiceEnabled)
                     Toggle("Вибрация у камер", isOn: $settings.hapticsEnabled)
+                    Picker("Режим оповещений", selection: $settings.alertMode) {
+                        ForEach(AlertMode.allCases) { Text($0.title).tag($0) }
+                    }
                     Picker("Баннеры в фоне", selection: $settings.backgroundAlerts) {
                         ForEach(BackgroundAlertMode.allCases) { Text($0.title).tag($0) }
                     }
@@ -51,14 +55,20 @@ struct SettingsView: View {
                 } header: {
                     Text("Оповещения")
                 } footer: {
-                    Text("«Баннеры в фоне» — уведомления о камерах, когда приложение свёрнуто. «Только радары» будит лишь камерами, которые меряют скорость.")
+                    Text("«Авто» сам различает город и трассу: в городе голос только про передвижные радары и превышение, на трассе — про каждую камеру. «Баннеры в фоне» — уведомления, когда приложение свёрнуто.")
                 }
 
                 Section {
                     Toggle("Автостарт поездки за рулём", isOn: $settings.autoStartTrip)
                         .onChange(of: settings.autoStartTrip) { _, _ in env.motion.syncEnabled() }
+                    Toggle("Не гасить экран в поездке", isOn: $settings.keepScreenOn)
+                        .onChange(of: settings.keepScreenOn) { _, keepOn in
+                            if env.location.isTripActive {
+                                UIApplication.shared.isIdleTimerDisabled = keepOn
+                            }
+                        }
                 } footer: {
-                    Text("Оповещения включаются сами, когда вы едете, и гаснут после остановки — без нажатия кнопки.")
+                    Text("Оповещения включаются сами, когда вы едете, и гаснут после остановки — без нажатия кнопки. Экран в поездке не засыпает, как у навигаторов.")
                 }
 
                 Section {

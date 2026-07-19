@@ -91,6 +91,7 @@ struct PlaceCircle: View {
         ZStack(alignment: .topTrailing) {
             CircleControl(systemName: slot.symbol,
                           tint: place == nil ? Theme.textTertiary : Theme.accent,
+                          size: 52,
                           accessibilityLabel: accessibilityLabel(assigned: place != nil)) {
                 if let place { onRoute(place.coordinate, slot.name) } else { onAssign(slot) }
             }

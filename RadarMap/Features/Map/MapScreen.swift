@@ -152,6 +152,20 @@ struct MapScreen: View {
     }
 
     @ViewBuilder private var approachOverlay: some View {
+        #if DEBUG
+        // -hideCameraAlert: снимаем чистые кадры turn-by-turn (алерт камеры
+        // полноэкранный и перекрывает баннер манёвра).
+        if ProcessInfo.processInfo.arguments.contains("-hideCameraAlert") {
+            EmptyView()
+        } else {
+            approachAlertIfNeeded
+        }
+        #else
+        approachAlertIfNeeded
+        #endif
+    }
+
+    @ViewBuilder private var approachAlertIfNeeded: some View {
         if env.location.isApproachingCamera,
            let camera = env.location.nearestCamera,
            let distance = env.location.distanceToNearest,

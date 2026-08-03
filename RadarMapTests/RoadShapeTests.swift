@@ -60,25 +60,51 @@ final class RoadShapeTests: XCTestCase {
         XCTAssertNil(RoadShape(camera: broken))
     }
 
-    // MARK: - Расстояние до дороги
+    // MARK: - Боковое отклонение от дороги
 
     /// Смысл всей затеи: параллельная проезжая часть в 20 м — это другая дорога.
-    func testDistanceSeparatesParallelCarriageway() throws {
+    func testLateralOffsetSeparatesParallelCarriageway() throws {
         let shape = try XCTUnwrap(RoadShape(camera: camera(bearing: 90)))
         let onRoad = GeoMath.destination(from: base, bearing: 90, distanceMeters: 40)
         let parallel = GeoMath.destination(from: base, bearing: 0, distanceMeters: 20)
 
-        XCTAssertLessThan(shape.distance(from: onRoad), 3, "мы на этой дороге")
-        XCTAssertEqual(shape.distance(from: parallel), 20, accuracy: 2,
+        let onRoadOffset = try XCTUnwrap(shape.lateralOffset(from: onRoad))
+        let parallelOffset = try XCTUnwrap(shape.lateralOffset(from: parallel))
+        XCTAssertLessThan(onRoadOffset, 3, "мы на этой дороге")
+        XCTAssertEqual(parallelOffset, 20, accuracy: 2,
                        "соседняя проезжая часть — 20 м от ломаной")
     }
 
-    func testDistanceIsMeasuredToSegmentNotVertex() throws {
+    func testLateralOffsetIsMeasuredToSegmentNotVertex() throws {
         // Кусок из двух далёких вершин: точка между ними лежит НА дороге,
         // хотя до каждой вершины далеко.
         let shape = try XCTUnwrap(RoadShape(camera: camera(bearing: 90, spanMeters: 100,
                                                            points: 2)))
-        XCTAssertLessThan(shape.distance(from: base), 2)
+        let offset = try XCTUnwrap(shape.lateralOffset(from: base))
+        XCTAssertLessThan(offset, 2)
+    }
+
+    /// Главный источник пропусков: кусок дороги короткий (сотня метров, а на
+    /// перекрёстке меньше — в OSM дорога там разрезана), и на подходе к камере мы
+    /// ЗА его концом. Продольный разрыв нельзя путать с боковым отклонением —
+    /// иначе камера, к которой мы едем по её же дороге, считается «не нашей»
+    /// ровно на подъезде, когда о ней и надо предупреждать.
+    func testLateralOffsetAbstainsBeyondStub() throws {
+        // Кусок ±50 м вокруг камеры, мы подъезжаем по той же дороге со 150 м.
+        let shape = try XCTUnwrap(RoadShape(camera: camera(bearing: 90, spanMeters: 50)))
+        let approaching = GeoMath.destination(from: base, bearing: 270, distanceMeters: 150)
+        XCTAssertNil(shape.lateralOffset(from: approaching),
+                     "кусок кончился раньше нас — мерить нечего, а не «другая дорога»")
+    }
+
+    /// Внутри куска отклонение считается как обычно: воздержание только за концом
+    /// ломаной, иначе фильтр перестал бы работать вовсе.
+    func testLateralOffsetWorksInsideStub() throws {
+        let shape = try XCTUnwrap(RoadShape(camera: camera(bearing: 90, spanMeters: 100,
+                                                           points: 5)))
+        let inside = GeoMath.destination(from: base, bearing: 270, distanceMeters: 80)
+        let offset = try XCTUnwrap(shape.lateralOffset(from: inside))
+        XCTAssertLessThan(offset, 3)
     }
 
     // MARK: - Ось на кривой
@@ -164,7 +190,48 @@ final class RoadShapeTests: XCTestCase {
         XCTAssertFalse(directional(dir: nil, split: true, twin: true).allowsDirectionGate)
     }
 
+    /// Та же политика управляет и проверкой по куску дороги, а она работает без
+    /// направления: на разделённой дороге без парной камеры геометрия не вправе
+    /// глушить камеру за то, что мы едем по обратной проезжей части.
+    func testSidesProvenPolicyIsIndependentOfDirection() {
+        XCTAssertFalse(directional(dir: nil, split: true, twin: nil).sidesAreProven,
+                       "может снимать обе стороны — геометрия не глушит")
+        XCTAssertTrue(directional(dir: nil, split: false, twin: nil).sidesAreProven)
+        XCTAssertTrue(directional(dir: nil, split: true, twin: true).sidesAreProven)
+        XCTAssertFalse(directional(dir: nil, split: nil, twin: nil).sidesAreProven,
+                       "старая база без признаков — неизвестность в пользу предупреждения")
+    }
+
+    /// Разнос проезжих частей на разделённой дороге по замеру базы: медиана 13 м,
+    /// девятый дециль 44 м. Допуск камеры, снимающей обе стороны, обязан их
+    /// накрывать — иначе мы едем по обратной полосе и молчим о камере, которая
+    /// нас как раз и снимает.
+    func testBothSidesToleranceCoversMeasuredCarriagewaySpread() {
+        let own = RoadGeometry.halfWidth(lanes: 2, roadClass: .primary)
+            + AppConfig.roadShapeMinToleranceMeters
+        XCTAssertLessThan(own, 44, "своей полосы на обратную сторону не хватает")
+        XCTAssertGreaterThan(own + AppConfig.dividedRoadSpanMeters, 44)
+    }
+
     // MARK: - Класс дороги
+
+    /// Снап иногда сажает камеру на тротуар, переход или платформу (34 «footway»
+    /// в базе v10). Верить такому профилю нельзя: переход идёт поперёк дороги, и
+    /// гейт оси заглушил бы камеру, стоящую над проезжей частью.
+    func testPedestrianProfileIsNotTrusted() {
+        XCTAssertFalse(RoadClass(raw: "footway").isVehicleRoad)
+        XCTAssertFalse(RoadClass(raw: "platform").isVehicleRoad)
+        XCTAssertTrue(RoadClass(raw: "service").isVehicleRoad, "служебный проезд — всё же дорога")
+        XCTAssertTrue(RoadClass(raw: nil).isVehicleRoad, "старая база без класса — не повод глушить")
+
+        let footway = Camera(id: 6, region: "Т", city: "", location: "к",
+                             lat: base.latitude, lon: base.longitude,
+                             type: "Стационар радар", violations: [], needsReview: false,
+                             axis: 90, dir: 90, cls: "footway", split: false)
+        XCTAssertFalse(footway.hasTrustedRoadProfile)
+        XCTAssertFalse(footway.sidesAreProven, "тротуар не доказывает раздел сторон")
+        XCTAssertFalse(footway.allowsDirectionGate, "направление тротуара — не направление дороги")
+    }
 
     func testRoadClassParsingAndContext() {
         XCTAssertTrue(RoadClass(raw: "trunk").isHighway)

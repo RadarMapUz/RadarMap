@@ -39,7 +39,16 @@ final class LocationService: NSObject {
     private(set) var speedKmh: Double = 0
     /// GPS-курс движения (0–360°, −1 = недостоверен: стоим или нет сигнала).
     private(set) var currentCourse: CLLocationDegrees = -1
+    /// 20 ближайших камер — для списка «рядом» и Live Activity (столько же
+    /// геозон, сколько разрешает iOS).
     private(set) var nearbyCameras: [Camera] = []
+    /// Окно кандидатов на оповещение: шире двадцатки геозон, потому что в
+    /// плотном городе 20-я камера бывает ближе, чем мы успеваем проехать до
+    /// следующего пересчёта, — и камера впереди выпадала из кандидатов.
+    @ObservationIgnored private var trackedCameras: [Camera] = []
+    /// Радиус окна кандидатов (до самой дальней камеры в нём) — по нему
+    /// решается, когда пересчёт обязателен.
+    @ObservationIgnored private var trackedRadius: CLLocationDistance = 0
     private(set) var nearestCamera: Camera?
     private(set) var distanceToNearest: CLLocationDistance?
     /// false = пользователь дал только «приблизительную» геолокацию — оповещения ненадёжны.
@@ -406,9 +415,15 @@ final class LocationService: NSObject {
 
     private func retileIfNeeded(around coordinate: CLLocationCoordinate2D) {
         let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        // Пустой nearbyCameras = данные ещё не загрузились на прошлом тайлинге — пробуем снова.
-        if let anchor, !nearbyCameras.isEmpty,
-           anchor.distance(from: location) < AppConfig.retileDistance { return }
+        // Пустое окно = данные ещё не загрузились на прошлом тайлинге — пробуем снова.
+        guard let anchor, !trackedCameras.isEmpty else { return retile(around: coordinate) }
+        // Окно обязано покрывать всё, до чего мы доедем до следующего пересчёта:
+        // иначе камера впереди не попадёт в кандидаты и мы о ней промолчим. В
+        // плотном городе радиус окна маленький в метрах — там пересчитываем чаще.
+        let reach = max(AppConfig.retileMinDistance,
+                        min(AppConfig.retileDistance,
+                            trackedRadius - AppConfig.trackedCoverageMeters))
+        if anchor.distance(from: location) < reach { return }
         retile(around: coordinate)
     }
 
@@ -418,15 +433,25 @@ final class LocationService: NSObject {
         anchor = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
         manager.monitoredRegions.forEach { manager.stopMonitoring(for: $0) }
 
-        let nearest = repository.nearest(to: coordinate, limit: AppConfig.maxMonitoredRegions)
+        // Окно кандидатов на оповещение — широкое; геозоны — только 20 ближайших
+        // из него (жёсткий лимит iOS). Раньше это был один список на двоих, и
+        // движок алертов видел ровно те 20 камер, что и геозоны.
+        let tracked = repository.nearest(to: coordinate, limit: AppConfig.trackedCamerasLimit)
+        trackedCameras = tracked
+        // fastDistance, а не CLLocation: окно из 150 камер — это 300 объектов на
+        // каждый пересчёт, а погрешность приближения тут доли процента.
+        func distance(to camera: Camera) -> CLLocationDistance {
+            GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
+                                 camera.lat, camera.lon)
+        }
+        // Радиус окна — до самой дальней камеры в нём (список отсортирован).
+        trackedRadius = tracked.last.map(distance(to:)) ?? .greatestFiniteMagnitude
+        let nearest = Array(tracked.prefix(AppConfig.maxMonitoredRegions))
         nearbyCameras = nearest
         alertedCameraIDs.formIntersection(Set(nearest.map(\.id)))
         // Плотность камер вокруг — сигнал «город» для умного режима оповещений.
-        let here = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        cameraDensity3km = nearest.count { camera in
-            here.distance(from: CLLocation(latitude: camera.coordinate.latitude,
-                                           longitude: camera.coordinate.longitude)) <= 3000
-        }
+        // Считаем по всему окну: по двадцатке цифра упиралась в потолок.
+        cameraDensity3km = tracked.count { distance(to: $0) <= 3000 }
 
         for camera in nearest {
             let region = CLCircularRegion(
@@ -581,27 +606,39 @@ final class LocationService: NSObject {
         currentCourse >= 0 && speedKmh >= AppConfig.directionalMinSpeedKmh
     }
 
-    /// Камера «наша»: лежит в коридоре нашей дороги впереди — либо подтверждена
-    /// активным маршрутом. Коридор (RoadCorridor) считает боковое отклонение в
-    /// метрах и отсекает параллельные улицы, дублёры и эстакады, которые прежний
-    /// угловой фильтр пропускал (±70° на дистанции 400 м — это 375 м вбок). Маршрут —
-    /// обход: там камера на нашем пути по определению, даже если её координата в
-    /// базе смещена вбок от полосы.
+    /// Камера «наша»: подтверждена маршрутом, либо мы на её проезжей части, либо
+    /// она лежит в коридоре нашей дороги впереди. Коридор (RoadCorridor) считает
+    /// боковое отклонение в метрах и отсекает параллельные улицы, дублёры и
+    /// эстакады, которые прежний угловой фильтр пропускал (±70° на дистанции
+    /// 400 м — это 375 м вбок).
+    ///
+    /// Порядок здесь и есть политика: сначала прямые доказательства «наша», и
+    /// только потом эвристики, которые вправе глушить. Каждый гейт глушит лишь
+    /// при доказательстве, что камера НЕ наша, — молчание про настоящую камеру
+    /// хуже лишнего предупреждения.
     private func isOnOurRoad(_ camera: Camera, from coordinate: CLLocationCoordinate2D) -> Bool {
         guard isDirectionalFilteringActive else { return true }   // стоим/курс неизвестен → не фильтруем
+
+        // 1. Камера на активном маршруте — она на нашем пути по определению, и
+        // никакая геометрия этого не отменяет: координата в реестре бывает
+        // смещена вбок от полосы. Раньше проверка стояла ПОСЛЕ геометрии, и та
+        // успевала заглушить камеру на собственном маршруте пользователя.
+        if isCameraOnRoute(camera) { return true }
+
         let shape = RoadShape(camera: camera)
 
-        // 1. НАПРАВЛЕНИЕ проезжей части — самый однозначный признак, но применять
+        // 2. НАПРАВЛЕНИЕ проезжей части — самый однозначный признак, но применять
         // его можно не везде: часть камер снимает И обратную сторону дороги, и
         // для них молчание опаснее лишнего предупреждения. Гейт включается
         // только там, где стороны заведомо поделены между двумя камерами или
-        // дорога не разделена вовсе (см. Camera.allowsDirectionGate).
+        // дорога не разделена вовсе (см. Camera.sidesAreProven).
         if camera.allowsDirectionGate, let direction = camera.dir {
             if GeoMath.angleDifference(currentCourse, Double(direction))
                 > AppConfig.cameraDirectionMaxAngle {
                 return false
             }
-        } else if let axis = shape?.axis(near: coordinate) ?? camera.axis.map(Double.init) {
+        } else if camera.hasTrustedRoadProfile,
+                  let axis = shape?.axis(near: coordinate) ?? camera.axis.map(Double.init) {
             // Ось дороги камеры против курса: едем поперёк — это мост НАД камерой
             // или перпендикулярная улица развязки. Боковое отклонение тут ноль,
             // коридор бессилен — различает только направление. Ось берём с куска
@@ -612,19 +649,28 @@ final class LocationService: NSObject {
             }
         }
 
-        // 2. Кусок проезжей части у камеры: вблизи это честная проверка «я на
-        // этой дороге» вместо эвристики — различает даже параллельные полосы
-        // разделённой дороги в 20 м друг от друга. Дальше куска мы физически не
-        // рядом с ним, там решает коридор. Допуск включает погрешность фикса:
-        // на плохом GPS проверка обязана молчать, а не глушить камеру.
-        if let shape, camera.distance(from: coordinate) <= AppConfig.roadShapeCheckMeters {
-            let allowed = RoadGeometry.halfWidth(lanes: camera.lanes,
+        // 3. Кусок проезжей части камеры — единственные твёрдые данные о её
+        // дороге, поэтому он решает в ОБЕ стороны: попали в её ширину — камера
+        // наша (осталось убедиться, что она впереди), не попали — не наша.
+        // Допуск включает погрешность фикса: на плохом GPS проверка обязана
+        // воздержаться, а не глушить камеру.
+        if let shape, let lateral = shape.lateralOffset(from: coordinate) {
+            var allowed = RoadGeometry.halfWidth(lanes: camera.lanes,
                                                  roadClass: camera.roadClass)
                 + max(AppConfig.roadShapeMinToleranceMeters, horizontalAccuracy)
-            if shape.distance(from: coordinate) > allowed { return false }
+            // Камера может снимать обе стороны разделённой дороги — тогда «своей»
+            // для неё считается и обратная проезжая часть. В OSM каждая сторона
+            // отдельная линия, и без этого запаса мы едем в 10–40 м от её куска
+            // дороги и глушим камеру, которая нас как раз и снимает.
+            if !camera.sidesAreProven { allowed += AppConfig.dividedRoadSpanMeters }
+            if lateral <= allowed { return isAhead(camera, from: coordinate) }
+            // Мы не на дороге камеры — но глушить вправе только там, где стороны
+            // доказанно поделены. Иначе решает коридор.
+            if camera.sidesAreProven { return false }
         }
 
-        if isCameraOnRoute(camera) { return true }
+        // 4. Коридор — эвристика для всего остального: куска дороги нет (старая
+        // база, снап не нашёл дорогу) или он кончился раньше нас.
         // Внезапным точкам (краудсорс) — коридор трассы: их координату ставил
         // человек на ходу. Камерам с непроверенной позицией (needsReview: снап
         // не нашёл её дорогу) — тоже: лучше предупредить с запасом, чем
@@ -633,14 +679,25 @@ final class LocationService: NSObject {
         let context: AlertPolicy.Context = generous ? .highway : alertContext
         // Ширина ближней зоны коридора — от реальной дороги, если она известна.
         // Пол по константе: коридор мерится от линии НАШЕГО курса, а её точность
-        // ограничена GPS, поэтому уже 10 м делать нельзя.
+        // ограничена GPS, поэтому уже 10 м делать нельзя. Узкую ширину даём
+        // только доказанным сторонам: у камеры, снимающей обе, обратная полоса
+        // сама по себе шире этой ширины.
         let knowsRoad = camera.cls != nil || camera.lanes != nil
-        let nearWidth: CLLocationDistance? = (generous || !knowsRoad) ? nil
-            : max(AppConfig.corridorMinNearMeters,
+        let narrow = knowsRoad && !generous && camera.sidesAreProven
+        let nearWidth: CLLocationDistance? = narrow
+            ? max(AppConfig.corridorMinNearMeters,
                   RoadGeometry.halfWidth(lanes: camera.lanes, roadClass: camera.roadClass))
+            : nil
         return RoadCorridor.contains(camera: camera.coordinate, from: coordinate,
                                      course: currentCourse, context: context,
                                      nearWidth: nearWidth)
+    }
+
+    /// Камера впереди по курсу (с тем же запасом «немного позади», что у
+    /// коридора: на самом траверзе продольная составляющая шумит вокруг нуля).
+    private func isAhead(_ camera: Camera, from coordinate: CLLocationCoordinate2D) -> Bool {
+        RoadCorridor.fix(from: coordinate, course: currentCourse, to: camera.coordinate)
+            .along >= -AppConfig.corridorBehindToleranceMeters
     }
 
     /// Сглаженный азимут камеры относительно курса (0 = прямо по ходу, растёт по часовой).
@@ -688,24 +745,33 @@ final class LocationService: NSObject {
     }
 
     private func recomputeNearest(from coordinate: CLLocationCoordinate2D) {
-        guard !nearbyCameras.isEmpty else {
+        guard !trackedCameras.isEmpty else {
             nearestCamera = nil; distanceToNearest = nil; return
         }
+        // Сначала дешёвая дистанция по всему окну, и только потом дорогая проверка
+        // «наша ли это дорога» — по возрастанию, до первой подходящей. Результат
+        // тот же, что у минимума по отфильтрованному списку, но геометрию камеры
+        // (кусок дороги, ось, коридор) считаем раз-два на тик, а не 150 раз.
+        // fastDistance вместо CLLocation: без аллокаций, и PassTracking меряет
+        // траверз тем же способом — цифры на HUD и в проездах сходятся.
+        var candidates: [(camera: Camera, distance: CLLocationDistance)] = []
+        candidates.reserveCapacity(trackedCameras.count)
+        for camera in trackedCameras {
+            guard let remaining = routeRemaining(to: camera) else {
+                candidates.append((camera, GeoMath.fastDistance(
+                    coordinate.latitude, coordinate.longitude, camera.lat, camera.lon)))
+                continue
+            }
+            // Камера уехала назад по маршруту — уже проехали, не пугаем.
+            guard remaining > -AppConfig.routePassedToleranceMeters else { continue }
+            candidates.append((camera, max(0, remaining)))
+        }
+        candidates.sort { $0.distance < $1.distance }
         // В движении HUD показывает ближайшую камеру НА НАШЕЙ ДОРОГЕ впереди;
         // камеры позади и с соседних улиц не пугают зря.
-        let ranked = nearbyCameras
-            .compactMap { camera -> (Camera, CLLocationDistance)? in
-                guard isOnOurRoad(camera, from: coordinate) else { return nil }
-                guard let remaining = routeRemaining(to: camera) else {
-                    return (camera, camera.distance(from: coordinate))
-                }
-                // Камера уехала назад по маршруту — уже проехали, не пугаем.
-                guard remaining > -AppConfig.routePassedToleranceMeters else { return nil }
-                return (camera, max(0, remaining))
-            }
-            .min { $0.1 < $1.1 }
-        nearestCamera = ranked?.0
-        distanceToNearest = ranked?.1
+        let found = candidates.first { isOnOurRoad($0.camera, from: coordinate) }
+        nearestCamera = found?.camera
+        distanceToNearest = found?.distance
     }
 
     /// Остаток до камеры ПО МАРШРУТУ; nil — камера не на активном маршруте.
@@ -765,11 +831,15 @@ final class LocationService: NSObject {
         // «мягкий тук → резкий у камеры» — только в срочном, иначе один тук на входе.
         if policy.escalates {
             alerts.haptic(level: decision.level)
-        } else if decision.level == 1 {
-            alerts.haptic(level: 1)
+        } else if decision.isFirst {
+            alerts.haptic(level: 1)   // спокойный режим: один тук на камеру
         }
 
-        guard decision.level == 1 else { return }   // баннер и голос — один раз на камеру
+        // Баннер и голос — один раз на камеру, на ПЕРВОМ оповещении о ней. Раньше
+        // условием был level == 1, но камеру бывает видно поздно (поворот прямо
+        // перед ней, возврат сигнала, соседняя была ближе) — она входит сразу на
+        // втором-третьем уровне, и приложение молчало о ней совсем.
+        guard decision.isFirst else { return }
         // В свёрнутом виде (поездка в фоне) — уведомление зажигает экран и вибрирует.
         // Пользователь управляет: все камеры / только радары / выключено.
         if !isForeground, settings.backgroundAlerts.allows(camera) {

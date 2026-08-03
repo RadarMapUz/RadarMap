@@ -316,6 +316,34 @@ final class AlertEngineTests: XCTestCase {
         XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 300, radius: 600)?.level, 2)
     }
 
+    /// Камеру бывает видно поздно: повернули на улицу прямо перед ней, вернулся
+    /// сигнал, соседняя камера была ближе. Тогда первое оповещение приходит сразу
+    /// третьим уровнем — и оно обязано быть помечено первым, иначе голос и баннер
+    /// (они привязаны к первому) промолчат о камере совсем.
+    func testLateNoticeIsStillFirstAnnouncement() {
+        var engine = AlertEngine()
+        let decision = engine.evaluate(cameraID: 1, distance: 100, radius: 600)
+        XCTAssertEqual(decision?.level, 3)
+        XCTAssertEqual(decision?.isFirst, true, "первое оповещение об этой камере")
+    }
+
+    func testEscalationAfterFirstIsNotFirst() {
+        var engine = AlertEngine()
+        XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 590, radius: 600)?.isFirst, true)
+        // Эскалация — уже не первое: голос повторно не звучит.
+        XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 350, radius: 600)?.isFirst, false)
+        XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 170, radius: 600)?.isFirst, false)
+    }
+
+    /// После выхода за радиус с гистерезисом серия сбрасывается — возврат в зону
+    /// снова считается первым оповещением (после туннеля предупредить надо).
+    func testReturnAfterResetAnnouncesAgain() {
+        var engine = AlertEngine()
+        XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 200, radius: 600)?.isFirst, true)
+        XCTAssertNil(engine.evaluate(cameraID: 1, distance: 700, radius: 600))
+        XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 550, radius: 600)?.isFirst, true)
+    }
+
     func testExitWithHysteresisResetsSeries() {
         var engine = AlertEngine()
         XCTAssertEqual(engine.evaluate(cameraID: 1, distance: 200, radius: 600)?.level, 2)

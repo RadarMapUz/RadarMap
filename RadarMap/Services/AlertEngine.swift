@@ -12,8 +12,14 @@ import CoreLocation
 nonisolated struct AlertEngine {
     /// «Пора сигналить»: уровень эскалации вырос.
     struct Decision: Equatable {
-        /// 1 — вошли в радиус (голос/хаптика/уведомление), 2–3 — эскалация сигналов.
+        /// 1 — вошли в радиус, 2–3 — эскалация сигналов по мере приближения.
         let level: Int
+        /// Первое оповещение об этой камере. Уровень может начаться и со второго,
+        /// и с третьего: камеру бывает видно поздно — повернули на улицу прямо
+        /// перед ней, вернулся сигнал после туннеля, соседняя камера была ближе.
+        /// Голос и баннер привязаны к этому флагу, а не к `level == 1`, иначе о
+        /// поздно замеченной камере приложение молчит совсем.
+        let isFirst: Bool
     }
 
     /// Достигнутый уровень по каждой камере — повторно на том же уровне не сигналим.
@@ -39,7 +45,7 @@ nonisolated struct AlertEngine {
         let previous = announcedLevel[cameraID] ?? 0
         guard level > previous else { return nil }
         announcedLevel[cameraID] = level
-        return Decision(level: level)
+        return Decision(level: level, isFirst: previous == 0)
     }
 
     mutating func reset() {

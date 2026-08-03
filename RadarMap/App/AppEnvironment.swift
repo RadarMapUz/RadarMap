@@ -60,17 +60,20 @@ final class AppEnvironment {
         self.location.speedLimits = speedLimits
         self.location.watchBridge = watchBridge
 
-        // Автостарт/стоп поездки по движению (если включено в настройках).
+        // Автостарт/стоп поездки по движению (режим старта — в настройках).
         let location = self.location
         motion.onDrivingStart = { [weak location] in
-            guard settings.autoStartTrip, let location, !location.isTripActive else { return }
+            guard settings.tripStartMode.usesMotion, let location,
+                  !location.isTripActive else { return }
             location.startTrip(auto: true)   // незнакомая машина → вопрос «вы за рулём?»
         }
         motion.onDrivingStop = { [weak location] in
             guard let location else { return }
             location.endPassengerSession()   // «я в такси» действует до конца езды
             guard location.isTripActive else { return }
-            location.endTrip()
+            // auto: поездку закрыла автоматика, а не человек — значит её ещё можно
+            // продолжить как заезд по пути (TripMerge).
+            location.endTrip(auto: true)
         }
         // Ответ на «Вы за рулём?»: пассажир — гасим поездку без следа,
         // водитель — запоминаем магнитолу машины, чтобы не переспрашивать.

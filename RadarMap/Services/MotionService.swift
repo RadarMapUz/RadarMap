@@ -31,7 +31,7 @@ final class MotionService {
     init(settings: AppSettings) { self.settings = settings }
 
     func start() {
-        guard Self.isAvailable, !isMonitoring, settings.autoStartTrip else { return }
+        guard Self.isAvailable, !isMonitoring, settings.tripStartMode.usesMotion else { return }
         isMonitoring = true
         manager.startActivityUpdates(to: .main) { [weak self] activity in
             guard let self, let activity else { return }
@@ -47,9 +47,9 @@ final class MotionService {
         manager.stopActivityUpdates()
     }
 
-    /// Перечитать настройку (включили/выключили автостарт).
+    /// Перечитать настройку (сменили режим старта поездки).
     func syncEnabled() {
-        settings.autoStartTrip ? start() : stop()
+        settings.tripStartMode.usesMotion ? start() : stop()
     }
 
     private func beginDriving() {

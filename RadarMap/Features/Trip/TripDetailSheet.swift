@@ -184,6 +184,8 @@ struct TripDetailSheet: View {
                         .entrance(1, appeared)
                     statsGrid
                         .entrance(2, appeared)
+                    TripStopsSection(record: record) { dismiss() }
+                        .entrance(3, appeared)
                     SpeedProfileChart(record: record)
                         .entrance(3, appeared)
                         .id("chart")

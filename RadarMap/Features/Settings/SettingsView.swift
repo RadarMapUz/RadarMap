@@ -60,8 +60,10 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle("Автостарт поездки за рулём", isOn: $settings.autoStartTrip)
-                        .onChange(of: settings.autoStartTrip) { _, _ in env.motion.syncEnabled() }
+                    Picker("Старт поездки", selection: $settings.tripStartMode) {
+                        ForEach(TripStartMode.allCases) { Text($0.title).tag($0) }
+                    }
+                    .onChange(of: settings.tripStartMode) { _, _ in env.motion.syncEnabled() }
                     Toggle("Не гасить экран в поездке", isOn: $settings.keepScreenOn)
                         .onChange(of: settings.keepScreenOn) { _, keepOn in
                             if env.location.isTripActive {
@@ -69,7 +71,7 @@ struct SettingsView: View {
                             }
                         }
                 } footer: {
-                    Text("Оповещения включаются сами, когда вы едете, и гаснут после остановки — без нажатия кнопки. Экран в поездке не засыпает, как у навигаторов.")
+                    Text("«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов.")
                 }
 
                 Section {

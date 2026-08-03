@@ -173,6 +173,13 @@ final class LocationService: NSObject {
     func startTrip(auto: Bool = false) {
         guard isAuthorized else { return }
         if auto, isPassengerSession { return }   // пассажир уже сказал своё слово
+        // Режим «Умный»: сама поездка стартует только в знакомой машине, иначе
+        // ждём подтверждения — но вопрос всё равно задаём (ниже), чтобы человек
+        // мог включить оповещения одним тапом с локскрина.
+        if auto, settings.tripStartMode == .smart, !isDriverRecognized {
+            notifier.askDriverCheck()
+            return
+        }
         if !auto { isPassengerSession = false }  // ручной старт — точно за рулём
         isTripActive = true
         lastMovementAt = Date()   // не проваливаться в тир «стоянка» со старым штампом
@@ -180,10 +187,41 @@ final class LocationService: NSObject {
         UIApplication.shared.isIdleTimerDisabled = settings.keepScreenOn
         alertEngine.reset()
         passTracking.reset()
-        trip.begin()
+        // Заезд по пути — не новая поездка: если пауза похожа на «забежал в
+        // магазин», поднимаем прошлую запись обратно в живую сессию.
+        if !resumePreviousTripIfMerged() { trip.begin() }
         applyLocationMode()
         liveActivity?.startIfNeeded(state: activityState)
         if auto, !isDriverRecognized { notifier.askDriverCheck() }
+    }
+
+    /// Продолжить прошлую поездку вместо новой. Решение принимает чистый
+    /// TripMerge; здесь только собираем факты. true — склеили.
+    private func resumePreviousTripIfMerged() -> Bool {
+        guard let previous = trip.history.first,
+              let previousEnd = previous.endCoordinate else { return false }
+        let now = Date()
+        // Пока GPS не дал первую точку, берём точку финиша прошлой поездки:
+        // автостарт срабатывает раньше первого фикса, и иначе склейка не
+        // случилась бы никогда именно в самом частом сценарии.
+        let here = currentCoordinate ?? previousEnd
+        let context = TripMerge.Context(
+            stopDuration: now.timeIntervalSince(previous.endedAt),
+            metersFromPreviousEnd: GeoMath.fastDistance(here.latitude, here.longitude,
+                                                        previousEnd.latitude,
+                                                        previousEnd.longitude),
+            endedManually: previous.endedManually ?? false,
+            stopNearSavedPlace: TripMerge.isNearSavedPlace(previousEnd, places: savedPlaces),
+            crossesDay: !Calendar.current.isDate(previous.endedAt, inSameDayAs: now),
+            existingStops: previous.stops?.count ?? 0,
+            previousDuration: previous.duration)
+        guard TripMerge.shouldMerge(context) else { return false }
+        trip.resume(previous, stoppedUntil: now)
+        return true
+    }
+
+    private var savedPlaces: [CLLocationCoordinate2D] {
+        [settings.homePlace?.coordinate, settings.workPlace?.coordinate].compactMap(\.self)
     }
 
     /// Своя машина: CarPlay подключён или знакомая автомобильная магнитола (BT).
@@ -222,7 +260,9 @@ final class LocationService: NSObject {
 
     /// Завершить поездку: сохранить итоги и вернуться к батареесберегающему фону.
     /// `asPassenger` — «я в такси»: короткий кусок не пишем в историю вовсе.
-    func endTrip(asPassenger: Bool = false) {
+    /// `auto` — автостоп по CoreMotion (а не кнопка): только такую поездку можно
+    /// потом продолжить как заезд по пути.
+    func endTrip(asPassenger: Bool = false, auto: Bool = false) {
         isTripActive = false
         UIApplication.shared.isIdleTimerDisabled = false
         alertEngine.reset()
@@ -233,7 +273,7 @@ final class LocationService: NSObject {
         } else {
             // Камеры, мимо которых ещё «проезжали» в момент остановки.
             register(passes: passTracking.flush())
-            trip.finish()
+            trip.finish(endedManually: !auto)
             // Припарковались у цели — маршрут выполнен, линия не должна висеть на карте.
             route?.finishIfNearDestination(coordinate: currentCoordinate)
         }

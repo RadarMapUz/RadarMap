@@ -34,6 +34,24 @@ struct PassedCamera: Codable, Identifiable {
     }
 }
 
+/// Остановка внутри склеенной поездки: заехал в магазин, на заправку, за человеком.
+/// Из «в пути» и средней скорости исключается — иначе сорок минут в «Корзинке»
+/// обнуляют цифры всей поездки.
+struct TripStop: Codable, Identifiable {
+    let id: UUID
+    let lat: Double
+    let lon: Double
+    let from: Date
+    let to: Date
+    /// Название места: подтягивается ленивым геокодингом при открытии деталки.
+    var title: String?
+
+    var duration: TimeInterval { max(0, to.timeIntervalSince(from)) }
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: lat, longitude: lon)
+    }
+}
+
 /// Одна завершённая поездка.
 struct TripRecord: Codable, Identifiable {
     let id: Double
@@ -49,9 +67,22 @@ struct TripRecord: Codable, Identifiable {
     var track: [Double]?
     /// Рейтинг поездки 0–100 (у старых записей отсутствует).
     var score: Double?
+    /// Остановки склеенной поездки (у одноногих и старых записей отсутствуют).
+    var stops: [TripStop]?
+    /// Поездку завершил пользователь кнопкой, а не автостоп. Хранится в записи,
+    /// а не в памяти сервиса: приложение могло вылететь на стоянке, а намерение
+    /// «я закончил» переигрывать нельзя (см. TripMerge).
+    var endedManually: Bool?
 
     var camerasPassed: Int { passed.count }
+    /// Общее время от старта до финиша — включая стоянки: столько поездка заняла.
     var duration: TimeInterval { max(0, endedAt.timeIntervalSince(startedAt)) }
+    /// Сумма стоянок склеенной поездки.
+    var stoppedDuration: TimeInterval {
+        (stops ?? []).reduce(0) { $0 + $1.duration }
+    }
+    /// Время в движении — база для средней скорости.
+    var movingDuration: TimeInterval { max(0, duration - stoppedDuration) }
     /// «Чистая» поездка: ни одного проезда со штрафуемым превышением
     /// (проезды без известного лимита не считаем нарушением — как в month30).
     var isClean: Bool {
@@ -60,7 +91,10 @@ struct TripRecord: Codable, Identifiable {
             return FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) == 0
         }
     }
-    var averageSpeedKmh: Double { duration > 0 ? distanceMeters / duration * 3.6 : 0 }
+    /// Средняя — по времени В ДВИЖЕНИИ: стоянка в поездке не «средняя скорость 12».
+    var averageSpeedKmh: Double {
+        movingDuration > 0 ? distanceMeters / movingDuration * 3.6 : 0
+    }
     var endCoordinate: CLLocationCoordinate2D? {
         guard let endLat, let endLon else { return nil }
         return CLLocationCoordinate2D(latitude: endLat, longitude: endLon)

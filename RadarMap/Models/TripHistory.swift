@@ -207,8 +207,79 @@ nonisolated enum TripHistory {
                                       DrivingScore.Pass(speedKmh: $0.speedKmh,
                                                         limitKmh: $0.limitKmh)
                                   },
-                                  trackSpeeds: track.map(\.speedKmh)))
+                                  trackSpeeds: track.map(\.speedKmh)),
+                              stops: record.stops,
+                              endedManually: record.endedManually)
         }
         return (cleaned, changed)
+    }
+
+    // MARK: - Ручное разделение склеенной поездки
+
+    /// Разделить поездку на две по остановке — страховка на случай, когда
+    /// автоматика (TripMerge) склеила лишнее: «заехал на час к другу» она видит
+    /// как обед по пути. Возвращает две записи в порядке «новее → старше»,
+    /// как их хранит история.
+    ///
+    /// Проезды камер делим по времени (у PassedCamera есть дата), трек — по
+    /// точке, ближайшей к месту остановки: временных меток у точек трека нет,
+    /// а координата стоянки известна точно. Дистанцию раскладываем по длине
+    /// своей части трека, чтобы сумма осталась равна накопленной по GPS.
+    static func split(_ record: TripRecord, at stop: TripStop) -> [TripRecord] {
+        let track = record.trackPoints
+        guard track.count >= 4 else { return [record] }
+
+        // Индекс разреза: ближайшая к стоянке точка трека, но не на самом краю.
+        let cut = (1..<(track.count - 1)).min {
+            GeoMath.fastDistance(track[$0].lat, track[$0].lon, stop.lat, stop.lon)
+                < GeoMath.fastDistance(track[$1].lat, track[$1].lon, stop.lat, stop.lon)
+        } ?? track.count / 2
+        let head = Array(track[0...cut])
+        let tail = Array(track[cut...])
+
+        let headLength = polylineLength(head)
+        let tailLength = polylineLength(tail)
+        let total = headLength + tailLength
+        let headShare = total > 0 ? headLength / total : 0.5
+
+        let remaining = (record.stops ?? []).filter { $0.id != stop.id }
+        let first = leg(of: record, track: head, stops: remaining.filter { $0.to <= stop.from },
+                        from: record.startedAt, to: stop.from,
+                        distance: record.distanceMeters * headShare,
+                        passes: record.passed.filter { $0.date <= stop.from })
+        let second = leg(of: record, track: tail, stops: remaining.filter { $0.from >= stop.to },
+                         from: stop.to, to: record.endedAt,
+                         distance: record.distanceMeters * (1 - headShare),
+                         passes: record.passed.filter { $0.date > stop.from })
+        return [second, first]   // история идёт от новых к старым
+    }
+
+    private static func leg(of record: TripRecord, track: [TrackPoint], stops: [TripStop],
+                            from: Date, to: Date, distance: CLLocationDistance,
+                            passes: [PassedCamera]) -> TripRecord {
+        let speeds = track.map(\.speedKmh)
+        return TripRecord(
+            id: from.timeIntervalSince1970,
+            startedAt: from, endedAt: to,
+            distanceMeters: distance,
+            maxSpeedKmh: speeds.max() ?? record.maxSpeedKmh,
+            passed: passes,
+            endLat: track.last?.lat, endLon: track.last?.lon,
+            track: track.count >= 2 ? track.flatMap { [$0.lat, $0.lon, $0.speedKmh] } : nil,
+            score: DrivingScore.tripScore(
+                passes: passes.map {
+                    DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh)
+                },
+                trackSpeeds: speeds),
+            stops: stops.isEmpty ? nil : stops,
+            endedManually: record.endedManually)
+    }
+
+    private static func polylineLength(_ points: [TrackPoint]) -> Double {
+        guard points.count >= 2 else { return 0 }
+        return (1..<points.count).reduce(0.0) { sum, i in
+            sum + GeoMath.fastDistance(points[i - 1].lat, points[i - 1].lon,
+                                       points[i].lat, points[i].lon)
+        }
     }
 }

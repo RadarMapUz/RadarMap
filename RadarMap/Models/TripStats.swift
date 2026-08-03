@@ -20,6 +20,8 @@ final class TripStats {
     private(set) var lastPointAt: Date?
     /// Пройденные камеры текущей/последней поездки (со скоростью прохождения).
     private(set) var passed: [PassedCamera] = []
+    /// Заезды по пути, склеенные в эту поездку (см. resume и TripMerge).
+    private(set) var stops: [TripStop] = []
 
     private(set) var history: [TripRecord] = []
     /// Пожизненные счётчики — живут отдельно от истории (она обрезается до 50 поездок).
@@ -42,12 +44,17 @@ final class TripStats {
     /// иначе «средняя км/ч» и «в пути» на экране Итогов превращаются в нули.
     private var finishedDuration: TimeInterval = 0
 
+    /// Полное время поездки — со стоянками: столько она заняла по часам.
     var durationSeconds: TimeInterval {
         guard let startedAt, let lastPointAt else { return finishedDuration }
         return max(0, lastPointAt.timeIntervalSince(startedAt))
     }
+    /// Время в движении: стоянки склеенной поездки не должны топить среднюю скорость.
+    var movingSeconds: TimeInterval {
+        max(0, durationSeconds - stops.reduce(0) { $0 + $1.duration })
+    }
     var averageSpeedKmh: Double {
-        durationSeconds > 0 ? distanceMeters / durationSeconds * 3.6 : 0
+        movingSeconds > 0 ? distanceMeters / movingSeconds * 3.6 : 0
     }
 
     func begin() {
@@ -55,10 +62,37 @@ final class TripStats {
         distanceMeters = 0
         lastCoordinate = nil
         passed = []
+        stops = []
         trackBuffer = []
         finishedDuration = 0
         startedAt = Date()
         lastPointAt = startedAt
+    }
+
+    /// Продолжить прошлую поездку вместо новой: запись вынимается из истории
+    /// обратно в живую сессию, а пауза между ними становится остановкой.
+    /// Так заезд в магазин остаётся одной поездкой (решает TripMerge).
+    /// Трек поднимаем уже упрощённым — сырых точек прошлой ноги нет, и это
+    /// нормально: следующее упрощение при финише всё равно прошло бы по ним.
+    func resume(_ record: TripRecord, stoppedUntil resumedAt: Date = Date()) {
+        history.removeAll { $0.id == record.id }
+        startedAt = record.startedAt
+        lastPointAt = resumedAt
+        finishedDuration = 0
+        distanceMeters = record.distanceMeters
+        maxSpeedKmh = record.maxSpeedKmh
+        passed = record.passed
+        trackBuffer = record.trackPoints
+        lastCoordinate = record.endCoordinate
+        stops = (record.stops ?? []) + [
+            TripStop(id: UUID(),
+                     lat: record.endLat ?? record.trackPoints.last?.lat ?? 0,
+                     lon: record.endLon ?? record.trackPoints.last?.lon ?? 0,
+                     from: record.endedAt, to: resumedAt)
+        ]
+        persist()   // история уже без этой записи — не потерять её при вылете
+        let stopSeconds = Int(self.stops.last?.duration ?? 0)
+        Log.trips.info("поездка продолжена: остановка \(stopSeconds, privacy: .public) с")
     }
 
     func update(coordinate: CLLocationCoordinate2D, speedKmh: Double) {
@@ -101,10 +135,13 @@ final class TripStats {
         distanceMeters = 0
         maxSpeedKmh = 0
         passed = []
+        stops = []
         trackBuffer = []
     }
 
-    func finish() {
+    /// `endedManually` — нажали «Завершить» (а не автостоп по CoreMotion).
+    /// Флаг едет в запись: он запрещает склейку следующей поездки (см. TripMerge).
+    func finish(endedManually: Bool = true) {
         finishedDuration = durationSeconds
         defer { startedAt = nil }
         guard let startedAt, distanceMeters >= 100 else { return }
@@ -124,7 +161,9 @@ final class TripStats {
             track: Self.packTrack(Self.simplify(trackBuffer,
                                                 tolerance: Self.trackTolerance,
                                                 maxPoints: Self.trackMaxPoints)),
-            score: score
+            score: score,
+            stops: stops.isEmpty ? nil : stops,
+            endedManually: endedManually
         )
         history.insert(record, at: 0)
         history = TripHistory.pruned(history)
@@ -132,6 +171,17 @@ final class TripStats {
         persist()
         persistLifetime()
         onTripFinished?()
+    }
+
+    /// Разделить склеенную поездку по остановке («Разделить здесь» в деталке) —
+    /// страховка, если автоматика склеила лишнее.
+    func splitRecord(id: Double, at stop: TripStop) {
+        guard let index = history.firstIndex(where: { $0.id == id }) else { return }
+        let legs = TripHistory.split(history[index], at: stop)
+        guard legs.count == 2 else { return }
+        history.replaceSubrange(index...index, with: legs)
+        history = TripHistory.pruned(history)
+        persist()
     }
 
     func deleteRecord(id: Double) {

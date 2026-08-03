@@ -45,6 +45,11 @@ struct TripHistorySection: View {
         }
     }
 
+    /// «1 остановка» / «3 остановки» — русские формы через словарь каталога.
+    private func stopsLabel(_ count: Int) -> String {
+        String(format: String(localized: "Остановок в пути: %lld"), count)
+    }
+
     private func row(_ record: TripRecord) -> some View {
         Button {
             onSelect(record)   // тап — деталка: карта трека, проезды, шеринг
@@ -58,6 +63,12 @@ struct TripHistorySection: View {
                     Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration)) · \(Int(record.averageSpeedKmh)) км/ч сред.")
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textSecondary)
+                    // Склеенная поездка: сразу видно, что внутри был заезд по пути.
+                    if let stops = record.stops, !stops.isEmpty {
+                        Label(stopsLabel(stops.count), systemImage: "pause.circle.fill")
+                            .font(.rounded(11, .medium))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
                 }
                 Spacer(minLength: 8)
                 // Балл поездки — цвет по зоне, поездки сравниваешь с одного взгляда.

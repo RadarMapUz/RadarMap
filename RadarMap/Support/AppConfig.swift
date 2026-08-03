@@ -146,6 +146,24 @@ enum AppConfig {
     /// спокойный анонс о камере в срочный крик.
     static let overspeedSustainSeconds: TimeInterval = 2.5
 
+    // MARK: - Склейка поездок (заезд по пути ≠ новая поездка)
+    // nonisolated: читаются из чистого TripMerge (и его тестов) без прыжка на main.
+
+    /// Новый старт дальше этого от финиша прошлой — точно другая поездка
+    /// (телефон приехал сюда не за рулём).
+    nonisolated static let tripMergeMaxMeters: CLLocationDistance = 400
+    /// Пауза короче — склеиваем без вопросов: магазин, заправка, забрал человека.
+    nonisolated static let tripMergeShortStopSeconds: TimeInterval = 15 * 60
+    /// Пауза дольше — новая поездка при любых обстоятельствах.
+    nonisolated static let tripMergeMaxStopSeconds: TimeInterval = 60 * 60
+    /// В серой зоне (15–60 мин) решает место: настолько близко к Дому/Работе
+    /// считаем, что приехали.
+    nonisolated static let tripMergeSavedPlaceMeters: CLLocationDistance = 250
+    /// Больше заездов в одну поездку не склеиваем.
+    nonisolated static let tripMergeMaxStops = 6
+    /// И не даём поездке растянуться на весь день.
+    nonisolated static let tripMergeMaxTotalSeconds: TimeInterval = 12 * 3600
+
     // MARK: - Обновление базы камер (OTA)
 
     /// Сервер с актуальной базой. TODO: перейти на домен + HTTPS перед публикацией в App Store.

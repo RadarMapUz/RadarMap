@@ -80,6 +80,41 @@ enum AlertMode: String, CaseIterable, Identifiable {
 
 /// Фоновые баннеры о камерах: о чём предупреждать, когда приложение свёрнуто.
 /// Звук/голос в поездке живут отдельно — это только про уведомления в фоне.
+/// Как включается поездка. «Умный» — компромисс, ради которого этот переключатель
+/// и появился: полный автостарт срабатывает и когда ты пассажир в такси (жжёт
+/// заряд, портит статистику), а полностью ручной режим требуют не забыть нажать
+/// кнопку — и о камерах узнаёшь уже по штрафу.
+enum TripStartMode: String, CaseIterable, Identifiable {
+    /// Всегда сама, как только CoreMotion увидел автомобиль.
+    case auto
+    /// Сама — только в знакомой машине (CarPlay или своя магнитола по Bluetooth).
+    /// В чужой машине не стартует, а спрашивает «вы за рулём?».
+    case smart
+    /// Только кнопкой. CoreMotion не работает вовсе — ещё и экономия заряда.
+    case manual
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .auto:   return String(localized: "Авто")
+        case .smart:  return String(localized: "Умный")
+        case .manual: return String(localized: "Ручной")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .auto:   return "bolt.fill"
+        case .smart:  return "wand.and.stars"
+        case .manual: return "hand.tap.fill"
+        }
+    }
+
+    /// Слежение CoreMotion нужно только если поездка может стартовать сама.
+    var usesMotion: Bool { self != .manual }
+}
+
 enum BackgroundAlertMode: String, CaseIterable, Identifiable {
     case all, radarsOnly, off
     var id: String { rawValue }
@@ -154,7 +189,10 @@ final class AppSettings {
     var voiceEnabled: Bool { didSet { store.set(voiceEnabled, forKey: Keys.voice) } }
     var alertRadius: CLLocationDistance { didSet { store.set(alertRadius, forKey: Keys.radius) } }
     var filter: CameraFilter { didSet { store.set(filter.rawValue, forKey: Keys.filter) } }
-    var autoStartTrip: Bool { didSet { store.set(autoStartTrip, forKey: Keys.autoStart) } }
+    /// Режим старта поездки (заменил тумблер «Автостарт», см. миграцию в init).
+    var tripStartMode: TripStartMode {
+        didSet { store.set(tripStartMode.rawValue, forKey: Keys.tripStartMode) }
+    }
     var alertVolume: Double { didSet { store.set(alertVolume, forKey: Keys.volume) } }
     var homePlace: SavedPlace? { didSet { save(homePlace, forKey: Keys.home) } }
     var workPlace: SavedPlace? { didSet { save(workPlace, forKey: Keys.work) } }
@@ -211,7 +249,8 @@ final class AppSettings {
         static let voice = "voiceEnabled"
         static let radius = "alertRadius"
         static let filter = "cameraFilter"
-        static let autoStart = "autoStartTrip"
+        static let autoStart = "autoStartTrip"        // legacy, только для миграции
+        static let tripStartMode = "tripStartMode"
         static let volume = "alertVolume"
         static let home = "homePlace"
         static let work = "workPlace"
@@ -264,7 +303,14 @@ final class AppSettings {
         voiceEnabled = store.bool(forKey: Keys.voice)
         alertRadius = store.double(forKey: Keys.radius)
         filter = CameraFilter(rawValue: store.string(forKey: Keys.filter) ?? "") ?? .all
-        autoStartTrip = store.bool(forKey: Keys.autoStart)
+        // Миграция с тумблера «Автостарт»: включён → «Умный» (новый разумный
+        // дефолт — сама стартует только в своей машине), выключен → «Ручной».
+        if let raw = store.string(forKey: Keys.tripStartMode),
+           let mode = TripStartMode(rawValue: raw) {
+            tripStartMode = mode
+        } else {
+            tripStartMode = store.bool(forKey: Keys.autoStart) ? .smart : .manual
+        }
         alertVolume = store.double(forKey: Keys.volume)
         homePlace = Self.load(store, Keys.home)
         workPlace = Self.load(store, Keys.work)

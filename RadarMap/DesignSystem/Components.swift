@@ -15,6 +15,10 @@ struct GlassCard<Content: View>: View {
 
     var body: some View {
         content
+            // Тёмная подложка под стеклом: на светлой карте (спутник, светлая
+            // тема системы) чистое стекло белеет, и белый текст по нему исчезает.
+            .background(Theme.background.opacity(0.32),
+                        in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .backport.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
             // Световая кромка сверху — единый премиальный язык стекла в приложении.
             .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -94,6 +98,9 @@ struct CircleControl: View {
                 .font(.rounded(size > 48 ? 19 : 17, .semibold))
                 .foregroundStyle(tint)
                 .frame(width: size, height: size)
+                // Та же тёмная подложка: кнопки поверх карты обязаны читаться и
+                // на светлом фоне — иначе белая иконка на белом стекле пропадает.
+                .background(Theme.background.opacity(0.42), in: Circle())
                 .backport.glassEffect(.interactive(isEnabled: true), in: .circle)
                 // Тонкая световая кромка сверху — стекло ловит свет, как у системных кнопок.
                 .overlay(Circle().strokeBorder(

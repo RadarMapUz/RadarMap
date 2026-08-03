@@ -15,7 +15,14 @@ struct RadarMapApp: App {
         WindowGroup {
             RootView()
                 .environment(env)
-                .preferredColorScheme(.dark)   // тёмный «радар-детектор» стиль (в т.ч. тёмная карта)
+                // Тёмный «радар-детектор» стиль. Двумя модификаторами намеренно:
+                // preferredColorScheme просит систему о тёмном окне (статус-бар),
+                // а environment ЗАДАЁТ схему нашему дереву — материалы, стекло и
+                // карта берут её оттуда. Одного первого мало: если вид приложения
+                // переопределён в настройках iOS, окно остаётся светлым, стекло
+                // становится белёсым и белые иконки на нём пропадают.
+                .preferredColorScheme(.dark)
+                .environment(\.colorScheme, .dark)
                 .tint(Theme.accent)
         }
     }

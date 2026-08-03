@@ -26,8 +26,12 @@ nonisolated enum AlertPolicy {
         /// Средняя скорость: EMA с окном в пару минут на секундных тиках.
         private(set) var avgSpeedKmh: Double = 0
 
+        /// `roadClass` — класс дороги камеры впереди (из базы). Сигнал мгновенный:
+        /// средней скорости нужно около трёх минут, чтобы устояться, а «trunk»
+        /// или «residential» известны сразу.
         mutating func update(roadLimitKmh: Int?, camerasWithin3km: Int,
-                             speedKmh: Double, now: Date = Date()) {
+                             speedKmh: Double, roadClass: RoadClass = .unknown,
+                             now: Date = Date()) {
             avgSpeedKmh = avgSpeedKmh == 0 ? speedKmh : avgSpeedKmh * 0.985 + speedKmh * 0.015
 
             var votes = 0
@@ -35,6 +39,8 @@ nonisolated enum AlertPolicy {
                 if roadLimitKmh >= AppConfig.highwayLimitKmh { votes += 2 }      // лимит — самый сильный сигнал
                 else if roadLimitKmh <= AppConfig.cityLimitKmh { votes -= 2 }
             }
+            if roadClass.isHighway { votes += 2 }
+            else if roadClass.isCityStreet { votes -= 2 }
             if avgSpeedKmh >= AppConfig.highwayAvgSpeedKmh { votes += 1 }
             else if avgSpeedKmh > 0, avgSpeedKmh <= AppConfig.cityAvgSpeedKmh { votes -= 1 }
             if camerasWithin3km >= AppConfig.cityCameraDensity { votes -= 1 }    // плотная сетка камер = город

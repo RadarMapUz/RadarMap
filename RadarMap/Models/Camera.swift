@@ -116,10 +116,36 @@ struct Camera: Identifiable, Codable, Hashable {
     /// Курс поперёк оси = едем НАД камерой (мост) или по перпендикулярной
     /// улице развязки — такую камеру не алертим и проезд не считаем.
     let axis: Int?
+    /// Направление проезжей части (0–359°) — ТОЛЬКО у односторонних дорог, где
+    /// OSM знает его однозначно (у разделённой дороги каждая сторона — своя
+    /// линия). Есть направление — камера обратной стороны перестаёт быть нашей.
+    /// У двусторонней улицы его нет: куда смотрит камера, не знает никто.
+    let dir: Int?
+    /// Полос на дороге по тегу OSM — из них считается ширина коридора вместо
+    /// одной константы на весь город.
+    let lanes: Int?
+    /// Класс дороги OSM («primary», «residential», …): мгновенный контекст
+    /// «город или трасса», не дожидаясь трёх минут детектора.
+    let cls: String?
+    /// Камера на мосту или эстакаде — второй признак к эвристике по оси.
+    let bridge: Bool?
+    /// Кусок проезжей части вокруг камеры: пары дельт (lat, lon) в 1e-6°
+    /// от координаты камеры. По нему считается настоящее «я на этой дороге».
+    let road: [Int]?
+
+    /// Класс дороги в разобранном виде.
+    var roadClass: RoadClass { RoadClass(raw: cls) }
 
     init(id: Int, region: String, city: String, location: String,
          lat: Double, lon: Double, type: String, violations: [String],
-         needsReview: Bool?, axis: Int? = nil) {
+         needsReview: Bool?, axis: Int? = nil, dir: Int? = nil,
+         lanes: Int? = nil, cls: String? = nil, bridge: Bool? = nil,
+         road: [Int]? = nil) {
+        self.dir = dir
+        self.lanes = lanes
+        self.cls = cls
+        self.bridge = bridge
+        self.road = road
         self.id = id
         self.region = region
         self.city = city
@@ -145,6 +171,11 @@ struct Camera: Identifiable, Codable, Hashable {
         type = try c.decode(String.self, forKey: .type)
         needsReview = try c.decodeIfPresent(Bool.self, forKey: .needsReview)
         axis = try c.decodeIfPresent(Int.self, forKey: .axis)
+        dir = try c.decodeIfPresent(Int.self, forKey: .dir)
+        lanes = try c.decodeIfPresent(Int.self, forKey: .lanes)
+        cls = try c.decodeIfPresent(String.self, forKey: .cls)
+        bridge = try c.decodeIfPresent(Bool.self, forKey: .bridge)
+        road = try c.decodeIfPresent([Int].self, forKey: .road)
         violations = try c.decodeIfPresent([String].self, forKey: .violations)
             ?? Self.defaultViolations(forType: type)
     }

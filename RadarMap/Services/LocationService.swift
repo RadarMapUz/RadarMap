@@ -57,6 +57,9 @@ final class LocationService: NSObject {
     @ObservationIgnored private var fixSequence = 0
     /// true — фиксов нет дольше gpsStaleSeconds: данные на экране устарели.
     private(set) var isSignalStale = false
+    /// Погрешность последнего принятого фикса (метры): на ней смягчаются
+    /// геометрические проверки — на плохом фиксе они не должны ничего отбрасывать.
+    private(set) var horizontalAccuracy: Double = -1
     /// Пороги приближения (передний план): чистый движок, покрыт тестами.
     @ObservationIgnored private var alertEngine = AlertEngine()
     /// Учёт прохождения камер (траверз + зона измерения): чистый модуль, покрыт тестами.
@@ -451,13 +454,30 @@ final class LocationService: NSObject {
         switch locationFilter.accept(fix) {
         case .rejected(let reason):
             Log.location.debug("фикс отброшен: \(reason.rawValue, privacy: .public), точность \(fix.horizontalAccuracy, privacy: .public) м")
+            // Первый фикс после запуска почти всегда кэшированный. Для алертов и
+            // проездов он не годится (на этом и построен гейт), но для карты и
+            // списка «рядом» он лучше пустоты: район тот же, и человек сразу
+            // видит окрестности, не глядя на «камер рядом нет».
+            if reason == .stale, currentCoordinate == nil, fix.horizontalAccuracy > 0 {
+                seedContext(from: CLLocationCoordinate2D(latitude: fix.lat,
+                                                         longitude: fix.lon))
+            }
         case .accepted(let good):
             if isSignalStale { isSignalStale = false }
+            horizontalAccuracy = good.accuracy
             handleLocation(coordinate: CLLocationCoordinate2D(latitude: good.lat,
                                                               longitude: good.lon),
                            speed: good.speed ?? -1, course: good.course)
             armStaleWatchdog()
         }
+    }
+
+    /// Окрестности по кэшированной точке: камеры вокруг и ближайшая для HUD.
+    /// Ни алертов, ни трека, ни зачёта проездов — только контекст на экране.
+    private func seedContext(from coordinate: CLLocationCoordinate2D) {
+        currentCoordinate = coordinate
+        retileIfNeeded(around: coordinate)
+        recomputeNearest(from: coordinate)
     }
 
     /// Сторож потери сигнала: перезаряжается на каждом принятом фиксе, поэтому
@@ -526,7 +546,8 @@ final class LocationService: NSObject {
             // Умный режим: детектор города/трассы (дёшево — пара сравнений).
             contextDetector.update(roadLimitKmh: speedLimits?.currentLimit,
                                    camerasWithin3km: cameraDensity3km,
-                                   speedKmh: speedKmh)
+                                   speedKmh: speedKmh,
+                                   roadClass: nearestCamera?.roadClass ?? .unknown)
             if contextDetector.context != alertContext { alertContext = contextDetector.context }
         }
         // Live Activity живёт только в поездке; update — no-op, если она не запущена.
@@ -568,15 +589,41 @@ final class LocationService: NSObject {
     /// базе смещена вбок от полосы.
     private func isOnOurRoad(_ camera: Camera, from coordinate: CLLocationCoordinate2D) -> Bool {
         guard isDirectionalFilteringActive else { return true }   // стоим/курс неизвестен → не фильтруем
-        // Ось дороги камеры против курса: едем поперёк — это мост НАД камерой
-        // или перпендикулярная улица развязки. Боковое отклонение тут ноль,
-        // коридор бессилен — различает только направление. Проверка идёт ДО
-        // маршрутной: маршрут может вести по мосту над собственной камерой.
-        if let axis = camera.axis,
-           GeoMath.axisDifference(course: currentCourse, axis: Double(axis))
-               > AppConfig.cameraAxisMaxAngle {
-            return false
+        let shape = RoadShape(camera: camera)
+
+        // 1. НАПРАВЛЕНИЕ проезжей части — самый однозначный признак, но он есть
+        // только у односторонних дорог: на разделённой трассе каждая сторона в
+        // OSM своя линия. Едем против направления — это камера обратной стороны,
+        // и она не наша. У двусторонней улицы направления нет: куда смотрит
+        // камера, не знает ни OSM, ни реестр, поэтому там работает ось.
+        if let direction = camera.dir {
+            if GeoMath.angleDifference(currentCourse, Double(direction))
+                > AppConfig.cameraDirectionMaxAngle {
+                return false
+            }
+        } else if let axis = shape?.axis(near: coordinate) ?? camera.axis.map(Double.init) {
+            // Ось дороги камеры против курса: едем поперёк — это мост НАД камерой
+            // или перпендикулярная улица развязки. Боковое отклонение тут ноль,
+            // коридор бессилен — различает только направление. Ось берём с куска
+            // дороги, если он есть: на кривой единственная ось всей дороги врёт.
+            if GeoMath.axisDifference(course: currentCourse, axis: axis)
+                > AppConfig.cameraAxisMaxAngle {
+                return false
+            }
         }
+
+        // 2. Кусок проезжей части у камеры: вблизи это честная проверка «я на
+        // этой дороге» вместо эвристики — различает даже параллельные полосы
+        // разделённой дороги в 20 м друг от друга. Дальше куска мы физически не
+        // рядом с ним, там решает коридор. Допуск включает погрешность фикса:
+        // на плохом GPS проверка обязана молчать, а не глушить камеру.
+        if let shape, camera.distance(from: coordinate) <= AppConfig.roadShapeCheckMeters {
+            let allowed = RoadGeometry.halfWidth(lanes: camera.lanes,
+                                                 roadClass: camera.roadClass)
+                + max(AppConfig.roadShapeMinToleranceMeters, horizontalAccuracy)
+            if shape.distance(from: coordinate) > allowed { return false }
+        }
+
         if isCameraOnRoute(camera) { return true }
         // Внезапным точкам (краудсорс) — коридор трассы: их координату ставил
         // человек на ходу. Камерам с непроверенной позицией (needsReview: снап
@@ -584,8 +631,16 @@ final class LocationService: NSObject {
         // промолчать из-за смещённой координаты в реестре.
         let generous = camera.kind.isSudden || camera.needsReview == true
         let context: AlertPolicy.Context = generous ? .highway : alertContext
+        // Ширина ближней зоны коридора — от реальной дороги, если она известна.
+        // Пол по константе: коридор мерится от линии НАШЕГО курса, а её точность
+        // ограничена GPS, поэтому уже 10 м делать нельзя.
+        let knowsRoad = camera.cls != nil || camera.lanes != nil
+        let nearWidth: CLLocationDistance? = (generous || !knowsRoad) ? nil
+            : max(AppConfig.corridorMinNearMeters,
+                  RoadGeometry.halfWidth(lanes: camera.lanes, roadClass: camera.roadClass))
         return RoadCorridor.contains(camera: camera.coordinate, from: coordinate,
-                                     course: currentCourse, context: context)
+                                     course: currentCourse, context: context,
+                                     nearWidth: nearWidth)
     }
 
     /// Сглаженный азимут камеры относительно курса (0 = прямо по ходу, растёт по часовой).

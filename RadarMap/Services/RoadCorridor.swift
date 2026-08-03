@@ -47,27 +47,35 @@ nonisolated struct RoadCorridor {
     }
 
     /// Допуск бокового отклонения на заданном удалении.
+    /// `nearWidth` — ширина ближней зоны: если про дорогу камеры известны полосы
+    /// и класс, берём её оттуда (жилая улица — 7 м, четырёхполосный проспект —
+    /// 22 м) вместо одной константы на весь город.
     static func allowedAcross(along: CLLocationDistance,
-                              context: AlertPolicy.Context) -> CLLocationDistance {
-        let base = context == .highway
+                              context: AlertPolicy.Context,
+                              nearWidth: CLLocationDistance? = nil) -> CLLocationDistance {
+        let base = nearWidth ?? (context == .highway
             ? AppConfig.corridorHighwayMeters
-            : AppConfig.corridorCityMeters
+            : AppConfig.corridorCityMeters)
         let ahead = max(0, along)
         guard ahead > AppConfig.corridorNearFieldMeters else { return base }
         return base + (ahead - AppConfig.corridorNearFieldMeters) * AppConfig.corridorFarSlope
     }
 
     /// Камера лежит на нашей дороге впереди?
-    static func contains(_ fix: Fix, context: AlertPolicy.Context) -> Bool {
+    static func contains(_ fix: Fix, context: AlertPolicy.Context,
+                         nearWidth: CLLocationDistance? = nil) -> Bool {
         guard fix.along >= -AppConfig.corridorBehindToleranceMeters else { return false }
-        return fix.across <= allowedAcross(along: fix.along, context: context)
+        return fix.across <= allowedAcross(along: fix.along, context: context,
+                                           nearWidth: nearWidth)
     }
 
     /// Полная проверка одной камеры от точки и курса — то, что вызывает LocationService.
     static func contains(camera: CLLocationCoordinate2D,
                          from coordinate: CLLocationCoordinate2D,
                          course: CLLocationDegrees,
-                         context: AlertPolicy.Context) -> Bool {
-        contains(fix(from: coordinate, course: course, to: camera), context: context)
+                         context: AlertPolicy.Context,
+                         nearWidth: CLLocationDistance? = nil) -> Bool {
+        contains(fix(from: coordinate, course: course, to: camera), context: context,
+                 nearWidth: nearWidth)
     }
 }

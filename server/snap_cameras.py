@@ -48,6 +48,7 @@ LineString'ы с тегами name*/ref*/highway (geojsonseq или FeatureColle
     python3 snap_cameras.py --selftest
 """
 import argparse
+import collections
 import csv
 import json
 import math
@@ -241,6 +242,62 @@ def segment_axis(lat1, lon1, lat2, lon2):
     return int(round(deg % 180.0)) % 180
 
 
+RoadAttrs = collections.namedtuple("RoadAttrs", "oneway reverse lanes cls bridge layer")
+_NO_ATTRS = RoadAttrs(False, False, None, None, False, 0)
+
+#: Кандидат снапа. namedtuple, а не растущий кортеж: полей стало девять.
+Candidate = collections.namedtuple(
+    "Candidate", "dist plat plon tokens refs rank axis way vertex")
+
+
+def _parse_lanes(value):
+    """Тег lanes: «4», «2;3», «1|2», мусор. Берём первое целое в разумных рамках."""
+    if value is None:
+        return None
+    try:
+        first = str(value).split(";")[0].split("|")[0].strip()
+        n = int(float(first))
+    except (TypeError, ValueError):
+        return None
+    return n if 1 <= n <= 12 else None
+
+
+def _parse_layer(value):
+    try:
+        return int(float(str(value).split(";")[0]))
+    except (TypeError, ValueError):
+        return 0
+
+
+def road_attrs_from_props(props):
+    """Атрибуты дороги, которые раньше просто выбрасывались.
+
+    oneway важнее всего: на разделённой дороге каждая проезжая часть — отдельная
+    линия с oneway, значит НАПРАВЛЕНИЕ известно однозначно, и камера обратного
+    направления перестаёт быть «нашей». У двусторонней улицы направления нет —
+    ни OSM, ни реестр не говорят, куда смотрит камера, и остаётся ось.
+    """
+    raw = str(props.get("oneway", "")).strip().lower()
+    oneway = raw in ("yes", "1", "true", "-1")
+    return RoadAttrs(
+        oneway=oneway,
+        reverse=(raw == "-1"),   # геометрия нарисована против движения
+        lanes=_parse_lanes(props.get("lanes")),
+        cls=props.get("highway") or None,
+        bridge=str(props.get("bridge", "")).strip().lower() in ("yes", "viaduct", "true"),
+        layer=_parse_layer(props.get("layer")),
+    )
+
+
+def _bearing(lat1, lon1, lat2, lon2):
+    """Азимут 0–359° из первой точки во вторую (плоская аппроксимация: участки
+    дороги короткие, сферическая формула тут ничего не добавляет)."""
+    kx = _M_PER_DEG_LON * math.cos(math.radians((lat1 + lat2) / 2))
+    dx = (lon2 - lon1) * kx
+    dy = (lat2 - lat1) * _M_PER_DEG_LAT
+    return math.degrees(math.atan2(dx, dy)) % 360
+
+
 class RoadIndex:
     """Сеточный индекс отрезков дорог для запросов «что рядом».
 
@@ -254,7 +311,11 @@ class RoadIndex:
     SPLIT_M = 200.0  # максимальная длина индексируемого куска
 
     def __init__(self):
-        self.grid = {}   # (ci, cj) -> [ (lat1, lon1, lat2, lon2, tokens, refs, rank) ]
+        self.grid = {}   # (ci, cj) -> [ сегменты ]
+        # Геометрия путей целиком и их атрибуты: по ним строится короткий кусок
+        # проезжей части вокруг камеры и определяется направление движения.
+        self.ways = []   # [ [ (lat, lon), ... ] ]
+        self.attrs = []  # [ RoadAttrs ]
         self.count = 0
 
     @staticmethod
@@ -262,9 +323,9 @@ class RoadIndex:
         return (int(math.floor(lat / RoadIndex.CELL)),
                 int(math.floor(lon / RoadIndex.CELL)))
 
-    def _add_segment(self, lat1, lon1, lat2, lon2, tokens, refs, rank):
+    def _add_segment(self, lat1, lon1, lat2, lon2, tokens, refs, rank, way, vertex):
         seg = (lat1, lon1, lat2, lon2, tokens, refs, rank,
-               segment_axis(lat1, lon1, lat2, lon2))
+               segment_axis(lat1, lon1, lat2, lon2), way, vertex)
         c1i, c1j = self._cell(lat1, lon1)
         c2i, c2j = self._cell(lat2, lon2)
         for ci in range(min(c1i, c2i), max(c1i, c2i) + 1):
@@ -272,9 +333,12 @@ class RoadIndex:
                 self.grid.setdefault((ci, cj), []).append(seg)
         self.count += 1
 
-    def add_linestring(self, coords, tokens, refs, rank):
+    def add_linestring(self, coords, tokens, refs, rank, attrs=_NO_ATTRS):
         """coords: [[lon, lat], ...] (порядок GeoJSON)."""
-        for (lon1, lat1), (lon2, lat2) in zip(coords, coords[1:]):
+        way = len(self.ways)
+        self.ways.append([(lat, lon) for lon, lat in coords])
+        self.attrs.append(attrs)
+        for vertex, ((lon1, lat1), (lon2, lat2)) in enumerate(zip(coords, coords[1:])):
             # Длину меряем грубо (по широте средней точки) — для нарезки хватает.
             kx = _M_PER_DEG_LON * math.cos(math.radians((lat1 + lat2) / 2))
             length = math.hypot((lat2 - lat1) * _M_PER_DEG_LAT, (lon2 - lon1) * kx)
@@ -283,7 +347,7 @@ class RoadIndex:
                 t0, t1 = k / pieces, (k + 1) / pieces
                 self._add_segment(lat1 + (lat2 - lat1) * t0, lon1 + (lon2 - lon1) * t0,
                                   lat1 + (lat2 - lat1) * t1, lon1 + (lon2 - lon1) * t1,
-                                  tokens, refs, rank)
+                                  tokens, refs, rank, way, vertex)
 
     def nearby(self, lat, lon, radius):
         """Отрезки в пределах radius метров: (dist, plat, plon, tokens, refs, rank)."""
@@ -300,7 +364,7 @@ class RoadIndex:
                     if key in seen:
                         continue
                     seen.add(key)
-                    lat1, lon1, lat2, lon2, tokens, refs, rank, axis = seg
+                    lat1, lon1, lat2, lon2, tokens, refs, rank, axis, way, vertex = seg
                     ax = (lon1 - lon) * kx
                     ay = (lat1 - lat) * _M_PER_DEG_LAT
                     bx = (lon2 - lon) * kx
@@ -310,7 +374,8 @@ class RoadIndex:
                     if dist <= radius:
                         plat = lat + qy / _M_PER_DEG_LAT
                         plon = lon + qx / kx
-                        out.append((dist, plat, plon, tokens, refs, rank, axis))
+                        out.append(Candidate(dist, plat, plon, tokens, refs,
+                                             rank, axis, way, vertex))
         out.sort(key=lambda c: c[0])
         return out
 
@@ -367,8 +432,135 @@ def load_roads(path):
             named += 1
         if refs:
             withref += 1
-        index.add_linestring(coords, tokens, refs, rank)
+        index.add_linestring(coords, tokens, refs, rank, road_attrs_from_props(props))
     return index, named, withref
+
+
+# --- Профиль дороги камеры ---------------------------------------------------
+
+#: Кусок проезжей части: по столько метров в каждую сторону от камеры.
+STUB_SPAN_M = 100.0
+#: Допуск упрощения куска (Дуглас-Пекер): 2 м мельче любой полосы.
+STUB_EPS_M = 2.0
+#: Потолок точек, чтобы база не пухла: 9 точек хватает на любую городскую кривую.
+STUB_MAX_POINTS = 9
+
+
+def road_direction(index, cand):
+    """Азимут проезжей части 0–359° — только для ОДНОСТОРОННЕЙ дороги, где
+    направление известно однозначно. У двусторонней возвращаем None: в какую
+    сторону смотрит камера, не знает ни OSM, ни реестр, и приложение остаётся
+    на оси (0–179°), предупреждая в обе стороны."""
+    attrs = index.attrs[cand.way]
+    if not attrs.oneway:
+        return None
+    coords = index.ways[cand.way]
+    if len(coords) < 2:
+        return None
+    i = min(cand.vertex, len(coords) - 2)
+    (lat1, lon1), (lat2, lon2) = coords[i], coords[i + 1]
+    if attrs.reverse:   # oneway=-1: геометрия нарисована против движения
+        lat1, lon1, lat2, lon2 = lat2, lon2, lat1, lon1
+    return int(round(_bearing(lat1, lon1, lat2, lon2))) % 360
+
+
+def _meters(lat1, lon1, lat2, lon2):
+    kx = _M_PER_DEG_LON * math.cos(math.radians((lat1 + lat2) / 2))
+    return math.hypot((lat2 - lat1) * _M_PER_DEG_LAT, (lon2 - lon1) * kx)
+
+
+def _simplify(points, eps):
+    """Дуглас-Пекер по хорде в метрах: убирает вершины, которые ничего не
+    добавляют к форме дороги."""
+    if len(points) <= 2:
+        return points
+    (alat, alon), (blat, blon) = points[0], points[-1]
+    kx = _M_PER_DEG_LON * math.cos(math.radians(alat))
+    ax, ay = 0.0, 0.0
+    bx, by = (blon - alon) * kx, (blat - alat) * _M_PER_DEG_LAT
+    worst, index = 0.0, 0
+    for i in range(1, len(points) - 1):
+        plat, plon = points[i]
+        px, py = (plon - alon) * kx, (plat - alat) * _M_PER_DEG_LAT
+        qx, qy = _project_point_to_segment(px, py, ax, ay, bx, by)
+        d = math.hypot(px - qx, py - qy)
+        if d > worst:
+            worst, index = d, i
+    if worst <= eps:
+        return [points[0], points[-1]]
+    return _simplify(points[:index + 1], eps)[:-1] + _simplify(points[index:], eps)
+
+
+def road_stub(index, cand, cam_lat, cam_lon, *, span=STUB_SPAN_M):
+    """Короткий кусок проезжей части вокруг камеры — дельты 1e-6° от её
+    координаты (плоский список lat, lon, lat, lon…).
+
+    Зачем: по нему приложение проверяет «я на этой дороге» настоящим расстоянием
+    до ломаной вместо эвристического коридора и берёт истинный курс дороги в
+    точке камеры — на кривой одна ось врёт, а ломаная нет.
+    """
+    coords = index.ways[cand.way]
+    if len(coords) < 2:
+        return []
+    i = min(cand.vertex, len(coords) - 2)
+    point = (cand.plat, cand.plon)
+
+    def walk(indices):
+        """Идём по вершинам, пока не набрали span. Если следующая вершина дальше
+        границы — ставим точку РОВНО на границе: на длинной прямой (в OSM это
+        обычная вещь) иначе не набралось бы ни одной точки и куска не было бы.
+        """
+        out, walked, prev = [], 0.0, point
+        for j in indices:
+            nxt = coords[j]
+            step = _meters(prev[0], prev[1], nxt[0], nxt[1])
+            if step <= 0:
+                continue
+            if walked + step > span:
+                ratio = (span - walked) / step
+                out.append((prev[0] + (nxt[0] - prev[0]) * ratio,
+                            prev[1] + (nxt[1] - prev[1]) * ratio))
+                break
+            walked += step
+            out.append(nxt)
+            prev = nxt
+        return out
+
+    back = walk(range(i, -1, -1))
+    forward = walk(range(i + 1, len(coords)))
+
+    points = list(reversed(back)) + [point] + forward
+    if len(points) < 2:
+        return []
+    points = _simplify(points, STUB_EPS_M)
+    if len(points) > STUB_MAX_POINTS:
+        step = (len(points) - 1) / (STUB_MAX_POINTS - 1)
+        points = [points[min(len(points) - 1, int(round(k * step)))]
+                  for k in range(STUB_MAX_POINTS)]
+    out = []
+    for lat, lon in points:
+        out.append(int(round((lat - cam_lat) * 1e6)))
+        out.append(int(round((lon - cam_lon) * 1e6)))
+    return out
+
+
+def apply_road_profile(out, index, cand):
+    """Записать профиль дороги в камеру. Пишем только известное: старые базы
+    этих полей не содержали, приложение к их отсутствию готово."""
+    attrs = index.attrs[cand.way]
+    direction = road_direction(index, cand)
+    if direction is not None:
+        out["dir"] = direction
+    if attrs.lanes:
+        out["lanes"] = attrs.lanes
+    if attrs.cls:
+        out["cls"] = attrs.cls
+    # Мост/эстакада: второй независимый признак к эвристике по оси.
+    if attrs.bridge or attrs.layer > 0:
+        out["bridge"] = True
+    stub = road_stub(index, cand, out["lat"], out["lon"])
+    if len(stub) >= 4:
+        out["road"] = stub
 
 
 # --- Выбор точки переноса ----------------------------------------------------
@@ -383,7 +575,7 @@ def _trust_for_rank(rank, base):
 
 
 def choose_snap(cam, index, *, radius, max_shift, max_shift_ref, trust_geom):
-    """→ (lat, lon, reason, shift, axis) либо None (оставить + needsReview).
+    """→ (lat, lon, reason, shift, axis, cand) либо None (оставить + needsReview).
 
     Каскад: ref трассы → имя улицы → геометрия (см. шапку файла).
     axis — ось дороги камеры (0–179°): по ней приложение отбрасывает «проезды»
@@ -401,26 +593,30 @@ def choose_snap(cam, index, *, radius, max_shift, max_shift_ref, trust_geom):
     if addr_refs:
         matched = [c for c in cands if addr_refs & c[4]]
         if matched:
-            dist, plat, plon, _t, refs, _rank, axis = matched[0]
-            if dist <= max_shift_ref:
-                return (plat, plon,
-                        f"ref-match «{'/'.join(sorted(addr_refs & refs))}» ({dist:.0f} м)",
-                        dist, axis)
+            cand = matched[0]
+            if cand.dist <= max_shift_ref:
+                matched_refs = '/'.join(sorted(addr_refs & cand.refs))
+                return (cand.plat, cand.plon,
+                        f"ref-match «{matched_refs}» ({cand.dist:.0f} м)",
+                        cand.dist, cand.axis, cand)
 
     # 2) Имя улицы: даже если чужая дорога физически ближе.
     named = [c for c in cands if tokens_match(addr, c[3])]
     if named:
-        dist, plat, plon, tokens, _r, _rank, axis = named[0]
-        if dist <= max_shift:
-            road = " ".join(sorted(tokens))
-            return (plat, plon, f"name-match «{road}» ({dist:.0f} м)", dist, axis)
+        cand = named[0]
+        if cand.dist <= max_shift:
+            road = " ".join(sorted(cand.tokens))
+            return (cand.plat, cand.plon, f"name-match «{road}» ({cand.dist:.0f} м)",
+                    cand.dist, cand.axis, cand)
         return None  # имя нашли, но слишком далеко — подозрительно, не двигаем
 
     # 3) Геометрия: имя не совпало (адрес без улицы / улицы нет в OSM), но камера
     #    и так почти на дороге — смещение мало и безопасно.
-    dist, plat, plon, _t, _r, rank, axis = cands[0]
-    if dist <= _trust_for_rank(rank, trust_geom):
-        return (plat, plon, f"already-on-road ({dist:.0f} м, rank {rank})", dist, axis)
+    cand = cands[0]
+    if cand.dist <= _trust_for_rank(cand.rank, trust_geom):
+        return (cand.plat, cand.plon,
+                f"already-on-road ({cand.dist:.0f} м, rank {cand.rank})",
+                cand.dist, cand.axis, cand)
     return None
 
 
@@ -434,8 +630,9 @@ def annotate_axes(cameras, index, *, radius=60.0):
     for cam in cameras:
         out = dict(cam)
         cands = index.nearby(cam["lat"], cam["lon"], radius)
-        if cands and cands[0][6] is not None:
-            out["axis"] = cands[0][6]
+        if cands and cands[0].axis is not None:
+            out["axis"] = cands[0].axis
+            apply_road_profile(out, index, cands[0])
             annotated += 1
         result.append(out)
     return result, annotated
@@ -492,10 +689,11 @@ def snap_all(cameras, index, *, radius, max_shift, max_shift_ref, trust_geom):
         choice = choose_snap(cam, index, radius=radius, max_shift=max_shift,
                              max_shift_ref=max_shift_ref, trust_geom=trust_geom)
         if choice:
-            lat, lon, reason, shift, axis = choice
+            lat, lon, reason, shift, axis, cand = choice
             out["lat"], out["lon"] = round(lat, 6), round(lon, 6)
             if axis is not None:
                 out["axis"] = axis
+            apply_road_profile(out, index, cand)
             out.pop("needsReview", None)
             snapped += 1
             total_shift += shift
@@ -635,6 +833,72 @@ def selftest():
     ])
     check(len(dups) == 1 and {dups[0][0], dups[0][1]} == {10, 11},
           "пара-дубль найдена, дальняя камера не зацеплена")
+
+    # 8) Профиль дороги: направление у односторонней, ось у двусторонней.
+    oneway_index = RoadIndex()
+    W = 41.4000
+    oneway_index.add_linestring([[69.1000, W], [69.1050, W]],   # запад → восток
+                                street_tokens("Katta kocha"), set(), 5,
+                                road_attrs_from_props({"oneway": "yes", "lanes": "3",
+                                                       "highway": "primary"}))
+    cam_ow = {"id": 20, "lat": W - _round_lat(6), "lon": 69.1020,
+              "location": "Katta kocha"}
+    res_ow = choose_snap(cam_ow, oneway_index, **kwargs)
+    check(res_ow is not None, "камера на односторонней снапится")
+    if res_ow:
+        out = {"lat": round(res_ow[0], 6), "lon": round(res_ow[1], 6)}
+        apply_road_profile(out, oneway_index, res_ow[5])
+        check(out.get("dir") == 90,
+              f"направление односторонней = 90° (получили {out.get('dir')})")
+        check(out.get("lanes") == 3, "полосы сохранены")
+        check(out.get("cls") == "primary", "класс дороги сохранён")
+        check("bridge" not in out, "обычная дорога не помечена мостом")
+        check(len(out.get("road", [])) >= 4, "кусок дороги записан")
+        check(all(abs(d) < 3000 for d in out.get("road", [])),
+              "дельты куска дороги в разумных пределах")
+
+    # 8а) Двусторонняя: направления нет — приложение остаётся на оси.
+    two_way = RoadIndex()
+    two_way.add_linestring([[69.1000, W], [69.1050, W]],
+                           street_tokens("Katta kocha"), set(), 5,
+                           road_attrs_from_props({"highway": "secondary", "lanes": "2"}))
+    res_tw = choose_snap(cam_ow, two_way, **kwargs)
+    if res_tw:
+        out_tw = {"lat": round(res_tw[0], 6), "lon": round(res_tw[1], 6)}
+        apply_road_profile(out_tw, two_way, res_tw[5])
+        check("dir" not in out_tw, "у двусторонней дороги направления нет")
+        check(res_tw[4] == 90, "ось двусторонней = 90°")
+
+    # 8б) oneway=-1: геометрия нарисована против движения — азимут разворачиваем.
+    rev = RoadIndex()
+    rev.add_linestring([[69.1000, W], [69.1050, W]], set(), set(), 5,
+                       road_attrs_from_props({"oneway": "-1", "highway": "primary"}))
+    check(road_direction(rev, rev.nearby(W, 69.1020, 30)[0]) == 270,
+          "oneway=-1 → азимут 270°")
+
+    # 8в) Мост: флаг ставится по bridge/layer — второй признак к оси.
+    bridge_index = RoadIndex()
+    bridge_index.add_linestring([[69.1000, W], [69.1050, W]], set(), set(), 5,
+                                road_attrs_from_props({"bridge": "yes", "layer": "1",
+                                                       "highway": "trunk"}))
+    out_br = {"lat": W, "lon": 69.1020}
+    apply_road_profile(out_br, bridge_index, bridge_index.nearby(W, 69.1020, 30)[0])
+    check(out_br.get("bridge") is True, "камера на мосту помечена")
+
+    # 8г) Кусок дороги на кривой сохраняет форму (упрощение не срезает поворот).
+    curve = RoadIndex()
+    pts = [[69.2000 + 0.0004 * k, 41.5000 + 0.0004 * (k * k) / 8] for k in range(12)]
+    curve.add_linestring(pts, set(), set(), 4,
+                         road_attrs_from_props({"highway": "secondary"}))
+    stub = road_stub(curve, curve.nearby(pts[6][1], pts[6][0], 40)[0],
+                     pts[6][1], pts[6][0])
+    check(4 <= len(stub) <= STUB_MAX_POINTS * 2, f"кусок кривой: {len(stub) // 2} точек")
+    check(len(stub) // 2 >= 3, "на кривой больше двух точек — форма сохранена")
+
+    # 8д) Битые теги дают пустой профиль, а не падение.
+    junk = road_attrs_from_props({"lanes": "куда", "layer": "нет", "oneway": "reversible"})
+    check(junk.lanes is None and junk.layer == 0 and junk.oneway is False,
+          "мусорные теги разбираются без падения")
 
     print("selftest:", "PASSED" if ok else "FAILED")
     return 0 if ok else 1

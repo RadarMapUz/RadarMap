@@ -55,6 +55,9 @@ nonisolated struct LocationFilter {
         let course: CLLocationDirection
         /// м/с или nil — скорость держим прошлую, нулём считать нельзя.
         let speed: CLLocationSpeed?
+        /// Погрешность координаты: геометрические проверки обязаны смягчаться
+        /// на плохом фиксе, иначе отбросят камеру на нашей же дороге.
+        let accuracy: Double
     }
 
     enum Outcome: Equatable {
@@ -78,7 +81,8 @@ nonisolated struct LocationFilter {
         let course = trustedCourse(fix)
         let speed = trustedSpeed(fix)
         lastAccepted = (fix.lat, fix.lon, fix.timestamp)
-        return .accepted(Accepted(lat: fix.lat, lon: fix.lon, course: course, speed: speed))
+        return .accepted(Accepted(lat: fix.lat, lon: fix.lon, course: course,
+                                  speed: speed, accuracy: fix.horizontalAccuracy))
     }
 
     /// Смена режима GPS/новая поездка: прошлая точка больше не опора для курса.

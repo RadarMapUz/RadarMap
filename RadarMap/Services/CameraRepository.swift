@@ -85,14 +85,16 @@ final class CameraStore: CameraRepository {
 
     init() {
         loadUserData()
+        let downloadedVersion = Storage.intIfPresent(.cameraDBVersion) ?? 0
         // Декодируем JSON вне главного потока — не блокируем первый кадр.
         Task { [weak self] in
-            let result = await Self.decodeDatabase()
+            let result = await Self.decodeDatabase(downloadedVersion: downloadedVersion)
             guard let self else { return }
             self.bundled = result.cameras
             self.loadError = result.error
             if !result.usedRemote && self.dbVersion != AppConfig.bundledDBVersion {
-                // Скачанная копия испорчена/удалена — честно откатываемся на встроенную версию.
+                // Скачанная копия испорчена, удалена или устарела относительно
+                // встроенной — честно откатываемся на версию из бандла.
                 self.dbVersion = AppConfig.bundledDBVersion
                 Storage.remove(.cameraDBVersion)
             }
@@ -108,11 +110,20 @@ final class CameraStore: CameraRepository {
 
     // @concurrent обязателен: при NonisolatedNonsendingByDefault обычный nonisolated async
     // исполнялся бы на акторе вызывающего — то есть декодировал 3341 камеру на главном потоке.
-    @concurrent private static func decodeDatabase() async -> (cameras: [Camera], error: String?, usedRemote: Bool) {
-        // 1) скачанная с сервера копия (если валидна)
-        if let decoded = JSONFile.load([Camera].self, from: remoteFileURL, log: Log.cameras),
+    @concurrent private static func decodeDatabase(downloadedVersion: Int) async
+        -> (cameras: [Camera], error: String?, usedRemote: Bool) {
+        // 1) Скачанная с сервера копия — но только если она НЕ старше встроенной.
+        // Иначе после обновления приложения телефон навсегда оставался бы на
+        // данных, скачанных до апдейта: свежая база из бандла просто игнорировалась
+        // (а в ней могут быть новые поля — направление дороги, полосы, класс).
+        if downloadedVersion >= AppConfig.bundledDBVersion,
+           let decoded = JSONFile.load([Camera].self, from: remoteFileURL, log: Log.cameras),
            decoded.count >= 100 {
             return (decoded, nil, true)
+        }
+        if downloadedVersion > 0, downloadedVersion < AppConfig.bundledDBVersion {
+            Log.cameras.notice("скачанная база v\(downloadedVersion, privacy: .public) старше встроенной v\(AppConfig.bundledDBVersion, privacy: .public) — берём встроенную")
+            try? FileManager.default.removeItem(at: remoteFileURL)
         }
         // 2) встроенная база — её отсутствие означает битую сборку, кричим громко
         guard let url = Bundle.main.url(forResource: "cameras", withExtension: "json"),

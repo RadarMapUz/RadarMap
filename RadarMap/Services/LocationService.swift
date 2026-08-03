@@ -16,6 +16,7 @@ import Foundation
 import AVFAudio
 import CoreLocation
 import Observation
+import os
 import UIKit
 
 @MainActor
@@ -50,6 +51,12 @@ final class LocationService: NSObject {
 
     @ObservationIgnored private var anchor: CLLocation?
     @ObservationIgnored private var alertedCameraIDs: Set<Int> = []   // фон, дебаунс уведомлений
+    /// Гейт качества фикса и доверенный курс (чистый модуль, покрыт тестами).
+    @ObservationIgnored private var locationFilter = LocationFilter()
+    /// Номер последнего принятого фикса — по нему сторож определяет, что новых нет.
+    @ObservationIgnored private var fixSequence = 0
+    /// true — фиксов нет дольше gpsStaleSeconds: данные на экране устарели.
+    private(set) var isSignalStale = false
     /// Пороги приближения (передний план): чистый движок, покрыт тестами.
     @ObservationIgnored private var alertEngine = AlertEngine()
     /// Учёт прохождения камер (траверз + зона измерения): чистый модуль, покрыт тестами.
@@ -81,6 +88,9 @@ final class LocationService: NSObject {
         self.authorizationStatus = manager.authorizationStatus
         super.init()
         manager.delegate = self
+        // Авто-пауза включается только вне поездки (см. applyLocationMode): в
+        // поездке iOS вправе приостановить обновления и возобновить их «когда
+        // сочтёт нужным» — поездка молча осталась бы без алертов и трека.
         manager.pausesLocationUpdatesAutomatically = true
         manager.activityType = .automotiveNavigation
         hasFullAccuracy = manager.accuracyAuthorization == .fullAccuracy
@@ -187,6 +197,7 @@ final class LocationService: NSObject {
         UIApplication.shared.isIdleTimerDisabled = settings.keepScreenOn
         alertEngine.reset()
         passTracking.reset()
+        locationFilter.reset()
         // Заезд по пути — не новая поездка: если пауза похожа на «забежал в
         // магазин», поднимаем прошлую запись обратно в живую сессию.
         if !resumePreviousTripIfMerged() { trip.begin() }
@@ -313,8 +324,13 @@ final class LocationService: NSObject {
             // Тихий фон: непрерывный GPS выключен, работают SLC + геозоны (будят на уведомление).
             manager.stopUpdatingLocation()
             manager.allowsBackgroundLocationUpdates = false
+            manager.pausesLocationUpdatesAutomatically = true
+            isSignalStale = false   // без непрерывного GPS «нет сигнала» не про нас
+            locationFilter.reset()
             return
         }
+        // В поездке паузу отдавать системе нельзя — она может не возобновить.
+        manager.pausesLocationUpdatesAutomatically = !isTripActive
         if isTripActive {
             // Поездка: высокая точность, разрешаем работу в фоне (нужен доступ «Всегда»).
             manager.desiredAccuracy = isLowPowerMode ? kCLLocationAccuracyNearestTenMeters : kCLLocationAccuracyBest
@@ -428,6 +444,45 @@ final class LocationService: NSObject {
     @ObservationIgnored private var lastSpeedTickAt: Date?
     /// Когда машина в последний раз реально двигалась (для тира «стоянка»).
     @ObservationIgnored private var lastMovementAt = Date()
+
+    /// Единственная точка входа фиксов: сначала гейт качества, потом обработка.
+    /// Отброшенный фикс не двигает ни трек, ни алерты, ни спидометр.
+    private func handleFix(_ fix: LocationFilter.Fix) {
+        switch locationFilter.accept(fix) {
+        case .rejected(let reason):
+            Log.location.debug("фикс отброшен: \(reason.rawValue, privacy: .public), точность \(fix.horizontalAccuracy, privacy: .public) м")
+        case .accepted(let good):
+            if isSignalStale { isSignalStale = false }
+            handleLocation(coordinate: CLLocationCoordinate2D(latitude: good.lat,
+                                                              longitude: good.lon),
+                           speed: good.speed ?? -1, course: good.course)
+            armStaleWatchdog()
+        }
+    }
+
+    /// Сторож потери сигнала: перезаряжается на каждом принятом фиксе, поэтому
+    /// срабатывает только если новых фиксов действительно не пришло (лишних
+    /// пробуждений нет — обычный тик GPS его гасит).
+    ///
+    /// Заряжается ТОЛЬКО в движении и с окном по ожидаемому интервалу фиксов:
+    /// на стоянке и в пробке фиксы не приходят из-за distanceFilter, а не из-за
+    /// спутников, и «нет сигнала» было бы прямой ложью водителю.
+    private func armStaleWatchdog() {
+        fixSequence &+= 1   // прошлый сторож обесценен даже если новый не ставим
+        guard speedKmh >= AppConfig.staleWatchdogMinSpeedKmh else { return }
+        let speedMps = speedKmh / 3.6
+        let expected = speedMps > 0 ? manager.distanceFilter / speedMps : .infinity
+        let window = max(AppConfig.gpsStaleSeconds,
+                         min(AppConfig.staleWatchdogMaxSeconds,
+                             expected * AppConfig.staleWatchdogSlack))
+        let sequence = fixSequence
+        DispatchQueue.main.asyncAfter(deadline: .now() + window) { [weak self] in
+            guard let self, self.fixSequence == sequence,
+                  self.isTripActive || self.isForeground else { return }
+            self.isSignalStale = true
+            Log.location.notice("нет фиксов \(window, format: .fixed(precision: 1), privacy: .public) с — сигнал потерян")
+        }
+    }
 
     private func handleLocation(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed, course: CLLocationDirection) {
         currentCoordinate = coordinate
@@ -583,12 +638,29 @@ final class LocationService: NSObject {
         }
         // В движении HUD показывает ближайшую камеру НА НАШЕЙ ДОРОГЕ впереди;
         // камеры позади и с соседних улиц не пугают зря.
-        let candidates = nearbyCameras.filter { isOnOurRoad($0, from: coordinate) }
-        let ranked = candidates
-            .map { ($0, $0.distance(from: coordinate)) }
+        let ranked = nearbyCameras
+            .compactMap { camera -> (Camera, CLLocationDistance)? in
+                guard isOnOurRoad(camera, from: coordinate) else { return nil }
+                guard let remaining = routeRemaining(to: camera) else {
+                    return (camera, camera.distance(from: coordinate))
+                }
+                // Камера уехала назад по маршруту — уже проехали, не пугаем.
+                guard remaining > -AppConfig.routePassedToleranceMeters else { return nil }
+                return (camera, max(0, remaining))
+            }
             .min { $0.1 < $1.1 }
         nearestCamera = ranked?.0
         distanceToNearest = ranked?.1
+    }
+
+    /// Остаток до камеры ПО МАРШРУТУ; nil — камера не на активном маршруте.
+    /// По прямой петля развязки или объезд дают 300 м там, где по дороге 2 км, —
+    /// и приложение предупреждало о камере, до которой ещё ехать и ехать.
+    private func routeRemaining(to camera: Camera) -> CLLocationDistance? {
+        guard let route, route.isActive,
+              let onRoute = route.camerasOnRoute.first(where: { $0.camera.id == camera.id })
+        else { return nil }
+        return onRoute.distanceAlong - route.progressAlong
     }
 
     /// Умный радиус оповещения — растёт со скоростью (см. AlertEngine).
@@ -599,13 +671,17 @@ final class LocationService: NSObject {
     /// 0…1 — насколько глубоко вошли в радиус оповещения (полоска приближения в HUD).
     /// nil — ближайшая камера ещё вне радиуса, полоска не нужна.
     var approachProgress: Double? {
-        guard let distance = distanceToNearest, distance < effectiveAlertRadius else { return nil }
+        guard !isSignalStale, let distance = distanceToNearest,
+              distance < effectiveAlertRadius else { return nil }
         return 1 - distance / max(effectiveAlertRadius, 1)
     }
 
-    /// Показывать полноэкранное предупреждение: движемся и ближайшая камера в радиусе оповещения.
+    /// Показывать полноэкранное предупреждение: движемся и ближайшая камера в радиусе
+    /// оповещения. Без свежего фикса расстояние на экране — вчерашняя правда: панель
+    /// прячем, но состояние эскалации не трогаем (иначе после туннеля заорём заново).
     var isApproachingCamera: Bool {
-        guard let d = distanceToNearest, speedKmh >= AppConfig.directionalMinSpeedKmh else { return false }
+        guard !isSignalStale, let d = distanceToNearest,
+              speedKmh >= AppConfig.directionalMinSpeedKmh else { return false }
         return d <= effectiveAlertRadius
     }
 
@@ -737,10 +813,8 @@ final class LocationService: NSObject {
 extension LocationService: CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
-        let coordinate = location.coordinate
-        let speed = location.speed
-        let course = location.course
-        Task { @MainActor in self.handleLocation(coordinate: coordinate, speed: speed, course: course) }
+        let fix = LocationFilter.Fix(location)
+        Task { @MainActor in self.handleFix(fix) }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
@@ -758,6 +832,28 @@ extension LocationService: CLLocationManagerDelegate {
         Task { @MainActor in self.handleAuthChange(status) }
     }
 
+    /// Система всё-таки приостановила обновления (вне поездки это нормально).
+    /// В поездке паузы быть не должно — если случилась, поднимаем GPS сами.
+    nonisolated func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
+        Task { @MainActor in
+            Log.location.notice("система приостановила обновления геолокации")
+            guard self.isTripActive else { return }
+            self.manager.startUpdatingLocation()
+            Log.location.error("пауза во время поездки — обновления перезапущены")
+        }
+    }
+
+    nonisolated func locationManagerDidResumeLocationUpdates(_ manager: CLLocationManager) {
+        Log.location.notice("обновления геолокации возобновлены")
+    }
+
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        let code = (error as? CLError)?.code
+        Task { @MainActor in
+            Log.location.error("геолокация: \(error.localizedDescription, privacy: .public)")
+            // Доступ отозвали в настройках на ходу — обновляем состояние, чтобы UI
+            // показал экран разрешений вместо мёртвого HUD.
+            if code == .denied { self.handleAuthChange(self.manager.authorizationStatus) }
+        }
     }
 }

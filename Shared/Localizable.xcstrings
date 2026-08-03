@@ -6608,6 +6608,38 @@
           }
         }
       }
+    },
+    "Нет сигнала GPS": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет сигнала GPS"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPS signali yo'q"
+          }
+        }
+      }
+    },
+    "Оповещения ждут спутники": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оповещения ждут спутники"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogohlantirishlar sun'iy yo'ldoshni kutmoqda"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

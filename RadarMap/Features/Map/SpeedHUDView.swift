@@ -52,7 +52,10 @@ struct SpeedHUDView: View {
         if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
             parts.append(String(format: String(localized: "Лимит %lld"), limit))
         }
-        if let camera = env.location.nearestCamera, let distance = env.location.distanceToNearest {
+        if env.location.isSignalStale {
+            parts.append(String(localized: "Нет сигнала GPS"))
+        } else if let camera = env.location.nearestCamera,
+                  let distance = env.location.distanceToNearest {
             parts.append("\(camera.kind.displayName) — \(Formatting.distance(distance))")
         } else {
             parts.append(String(localized: "Камер рядом нет"))
@@ -98,7 +101,26 @@ struct SpeedHUDView: View {
 
     @ViewBuilder
     private func nearestBlock(camera: Camera?, distance: Double?) -> some View {
-        if let camera, let distance {
+        if env.location.isSignalStale {
+            // Фиксов нет: показывать старое расстояние как живое — врать водителю.
+            HStack(spacing: 10) {
+                Image(systemName: "location.slash.fill")
+                    .font(.rounded(16, .semibold))
+                    .foregroundStyle(Theme.radar)
+                    .symbolEffect(.pulse, options: .repeating, isActive: true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Нет сигнала GPS")
+                        .font(.rounded(14, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("Оповещения ждут спутники")
+                        .font(.rounded(11))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 6)
+        } else if let camera, let distance {
             HStack(spacing: 12) {
                 ZStack {
                     Image(systemName: camera.kind.symbolName)

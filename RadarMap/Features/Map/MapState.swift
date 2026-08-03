@@ -10,13 +10,6 @@ import MapKit
 import Observation
 import CoreLocation
 
-/// Кластер камер на широком зуме: центроид + количество.
-struct CameraCluster: Identifiable {
-    let id: String
-    let coordinate: CLLocationCoordinate2D
-    let count: Int
-}
-
 @MainActor
 @Observable
 final class MapState {
@@ -110,6 +103,10 @@ final class MapState {
     /// Средний зум: камеры рисуются точками, полный пин — у ближайшей/выбранной.
     private(set) var isDotZoom = false
 
+    /// Область, для которой уже построен слой (с буфером), и её центр — по нему
+    /// работает предзагрузка: буфер обновляем заранее, а не когда точки кончились.
+    @ObservationIgnored private var layerGeneration = 0
+
     func updateVisible(for region: MKCoordinateRegion) {
         currentRegion = region
         let dotZoom = region.span.latitudeDelta > AppConfig.dotModeSpanDegrees
@@ -117,69 +114,48 @@ final class MapState {
         // База декодируется асинхронно: пока камер нет, регион не кэшируем —
         // иначе пустой результат «прилипнет» и карта останется без точек.
         guard let repository, !repository.cameras.isEmpty else { return }
-
-        if region.span.latitudeDelta > AppConfig.maxVisibleSpanDegrees {
-            loadedRegion = nil
-            buildClusters(for: region.scaled(by: 1.3), from: repository)
-            return
-        }
-        if !clusters.isEmpty { clusters = [] }
-
-        // Всё ещё внутри загруженного буфера → точки уже отрисованы, пересчёт не нужен.
-        if let loaded = loadedRegion, loaded.contains(region) { return }
+        guard needsRecompute(for: region) else { return }
 
         let buffered = region.scaled(by: AppConfig.annotationBufferFactor)
-        let found = repository.cameras(in: buffered, limit: AppConfig.maxVisibleAnnotations)
-            .filter { filter.matches($0) }
-        withAnimation(.easeInOut(duration: 0.25)) {
-            visibleCameras = found
-        }
         loadedRegion = buffered
+        layerGeneration &+= 1
+        let generation = layerGeneration
+        let cameras = repository.cameras
+        let filter = self.filter
+        Task {
+            let layer = await CameraMapContent.layer(
+                cameras: cameras, region: buffered, filter: filter,
+                budget: AppConfig.maxVisibleAnnotations)
+            // Пока считали, пользователь мог уехать дальше — старый ответ выбрасываем.
+            guard generation == layerGeneration else { return }
+            apply(layer)
+        }
     }
 
-    /// Сетка span/N × span/N; ячейки с одной камерой рисуются как обычный маркер.
-    private func buildClusters(for area: MKCoordinateRegion, from repository: CameraRepository) {
-        let cellLat = area.span.latitudeDelta / AppConfig.clusterGridDivisions
-        let cellLon = area.span.longitudeDelta / AppConfig.clusterGridDivisions
-        let latMin = area.center.latitude - area.span.latitudeDelta / 2
-        let latMax = area.center.latitude + area.span.latitudeDelta / 2
-        let lonMin = area.center.longitude - area.span.longitudeDelta / 2
-        let lonMax = area.center.longitude + area.span.longitudeDelta / 2
+    /// Пересчитывать ли слой. Кроме выхода за буфер — предзагрузка по
+    /// `recomputeThreshold`: центр уполз далеко внутри буфера (значит, палец
+    /// тащит карту в одну сторону) → готовим следующую порцию заранее.
+    private func needsRecompute(for region: MKCoordinateRegion) -> Bool {
+        guard let loaded = loadedRegion else { return true }
+        if !loaded.contains(region) { return true }
+        let movedLat = abs(region.center.latitude - loaded.center.latitude)
+        let movedLon = abs(region.center.longitude - loaded.center.longitude)
+        return movedLat > loaded.span.latitudeDelta / 2 * AppConfig.recomputeThreshold
+            || movedLon > loaded.span.longitudeDelta / 2 * AppConfig.recomputeThreshold
+    }
 
-        struct Bucket { var sumLat = 0.0; var sumLon = 0.0; var count = 0; var single: Camera? }
-        var buckets: [String: Bucket] = [:]
-
-        for camera in repository.cameras where filter.matches(camera) {
-            guard camera.lat >= latMin, camera.lat <= latMax,
-                  camera.lon >= lonMin, camera.lon <= lonMax else { continue }
-            let key = "\(Int((camera.lat - latMin) / cellLat))_\(Int((camera.lon - lonMin) / cellLon))"
-            var bucket = buckets[key] ?? Bucket()
-            bucket.sumLat += camera.lat
-            bucket.sumLon += camera.lon
-            bucket.count += 1
-            bucket.single = bucket.count == 1 ? camera : nil
-            buckets[key] = bucket
-        }
-
-        var newClusters: [CameraCluster] = []
-        var singles: [Camera] = []
-        for (key, bucket) in buckets {
-            if let single = bucket.single {
-                singles.append(single)
-            } else {
-                newClusters.append(CameraCluster(
-                    id: key,
-                    coordinate: CLLocationCoordinate2D(
-                        latitude: bucket.sumLat / Double(bucket.count),
-                        longitude: bucket.sumLon / Double(bucket.count)
-                    ),
-                    count: bucket.count
-                ))
+    /// Применить готовый слой. Анимируем только небольшие наборы: на сотнях
+    /// аннотаций анимированная перестройка представлений сама по себе — рывок.
+    private func apply(_ layer: CameraMapContent.Layer) {
+        let animates = layer.cameras.count + layer.clusters.count <= 80
+        if animates {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                visibleCameras = layer.cameras
+                clusters = layer.clusters
             }
-        }
-        withAnimation(.easeInOut(duration: 0.25)) {
-            clusters = newClusters
-            visibleCameras = Array(singles.prefix(60))
+        } else {
+            visibleCameras = layer.cameras
+            clusters = layer.clusters
         }
     }
 

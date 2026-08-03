@@ -88,6 +88,7 @@ final class MapState {
     /// бывает после программных перемещений), считаем от заданной позиции или всей страны.
     func invalidateVisible() {
         loadedRegion = nil
+        loadedSpan = 0
         if let region = currentRegion ?? position.region {
             updateVisible(for: region)
         } else {
@@ -103,9 +104,10 @@ final class MapState {
     /// Средний зум: камеры рисуются точками, полный пин — у ближайшей/выбранной.
     private(set) var isDotZoom = false
 
-    /// Область, для которой уже построен слой (с буфером), и её центр — по нему
-    /// работает предзагрузка: буфер обновляем заранее, а не когда точки кончились.
     @ObservationIgnored private var layerGeneration = 0
+    /// Масштаб, для которого построен текущий слой: решение «точки или кластеры»
+    /// зависит от области, поэтому при заметной смене зума слой надо пересобрать.
+    @ObservationIgnored private var loadedSpan: CLLocationDegrees = 0
 
     func updateVisible(for region: MKCoordinateRegion) {
         currentRegion = region
@@ -117,27 +119,37 @@ final class MapState {
         guard needsRecompute(for: region) else { return }
 
         let buffered = region.scaled(by: AppConfig.annotationBufferFactor)
-        loadedRegion = buffered
         layerGeneration &+= 1
         let generation = layerGeneration
         let cameras = repository.cameras
         let filter = self.filter
+        let span = region.span.latitudeDelta
         Task {
             let layer = await CameraMapContent.layer(
                 cameras: cameras, region: buffered, filter: filter,
                 budget: AppConfig.maxVisibleAnnotations)
-            // Пока считали, пользователь мог уехать дальше — старый ответ выбрасываем.
+            // Пока считали, карту могли увезти дальше — этот ответ уже не про то,
+            // что на экране. Область «загруженной» при этом НЕ помечаем: иначе
+            // после быстрой прокрутки туда-сюда кэш говорил бы «тут всё есть»,
+            // а слой для неё так и не применился — камеры просто не появлялись.
             guard generation == layerGeneration else { return }
+            loadedRegion = buffered
+            loadedSpan = span
             apply(layer)
         }
     }
 
-    /// Пересчитывать ли слой. Кроме выхода за буфер — предзагрузка по
-    /// `recomputeThreshold`: центр уполз далеко внутри буфера (значит, палец
-    /// тащит карту в одну сторону) → готовим следующую порцию заранее.
+    /// Пересчитывать ли слой: выход за буфер, заметная смена масштаба или
+    /// предзагрузка по `recomputeThreshold` (центр уполз далеко внутри буфера —
+    /// палец тащит карту в одну сторону, готовим следующую порцию заранее).
     private func needsRecompute(for region: MKCoordinateRegion) -> Bool {
-        guard let loaded = loadedRegion else { return true }
+        guard let loaded = loadedRegion, loadedSpan > 0 else { return true }
         if !loaded.contains(region) { return true }
+        // Зум внутрь: набор строился для широкой области и мог быть
+        // кластеризован — без пересчёта кластеры так и остались бы на месте
+        // отдельных камер.
+        let ratio = region.span.latitudeDelta / loadedSpan
+        if ratio < 0.6 || ratio > 1.6 { return true }
         let movedLat = abs(region.center.latitude - loaded.center.latitude)
         let movedLon = abs(region.center.longitude - loaded.center.longitude)
         return movedLat > loaded.span.latitudeDelta / 2 * AppConfig.recomputeThreshold

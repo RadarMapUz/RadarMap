@@ -591,12 +591,12 @@ final class LocationService: NSObject {
         guard isDirectionalFilteringActive else { return true }   // стоим/курс неизвестен → не фильтруем
         let shape = RoadShape(camera: camera)
 
-        // 1. НАПРАВЛЕНИЕ проезжей части — самый однозначный признак, но он есть
-        // только у односторонних дорог: на разделённой трассе каждая сторона в
-        // OSM своя линия. Едем против направления — это камера обратной стороны,
-        // и она не наша. У двусторонней улицы направления нет: куда смотрит
-        // камера, не знает ни OSM, ни реестр, поэтому там работает ось.
-        if let direction = camera.dir {
+        // 1. НАПРАВЛЕНИЕ проезжей части — самый однозначный признак, но применять
+        // его можно не везде: часть камер снимает И обратную сторону дороги, и
+        // для них молчание опаснее лишнего предупреждения. Гейт включается
+        // только там, где стороны заведомо поделены между двумя камерами или
+        // дорога не разделена вовсе (см. Camera.allowsDirectionGate).
+        if camera.allowsDirectionGate, let direction = camera.dir {
             if GeoMath.angleDifference(currentCourse, Double(direction))
                 > AppConfig.cameraDirectionMaxAngle {
                 return false

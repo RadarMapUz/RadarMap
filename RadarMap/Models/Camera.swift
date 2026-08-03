@@ -132,6 +132,30 @@ struct Camera: Identifiable, Codable, Hashable {
     /// Кусок проезжей части вокруг камеры: пары дельт (lat, lon) в 1e-6°
     /// от координаты камеры. По нему считается настоящее «я на этой дороге».
     let road: [Int]?
+    /// Дорога разделённая: рядом идёт параллельная проезжая часть обратного
+    /// направления. Значит по обратной стороне реально едут — и одиночная
+    /// камера может снимать её тоже.
+    let split: Bool?
+    /// Рядом стоит камера обратного направления: стороны дороги поделены между
+    /// двумя камерами, каждая смотрит свою.
+    let twin: Bool?
+
+    /// Можно ли отбрасывать камеру по НАПРАВЛЕНИЮ движения.
+    ///
+    /// Часть камер снимает И обратную сторону дороги, поэтому глушить по
+    /// направлению можно только при ЯВНОМ доказательстве, что это безопасно:
+    /// либо рядом стоит парная камера обратного направления (стороны поделены
+    /// между ними), либо дорога заведомо не разделена — на настоящей
+    /// односторонней улице обратного направления просто не существует.
+    ///
+    /// Отсутствие признаков (старая база без них) означает «не глушить»: молчание
+    /// про настоящую камеру хуже лишнего предупреждения, поэтому неизвестность
+    /// трактуется в пользу предупреждения, а работает ось.
+    var allowsDirectionGate: Bool {
+        guard dir != nil else { return false }
+        if twin == true { return true }
+        return split == false
+    }
 
     /// Класс дороги в разобранном виде.
     var roadClass: RoadClass { RoadClass(raw: cls) }
@@ -140,12 +164,14 @@ struct Camera: Identifiable, Codable, Hashable {
          lat: Double, lon: Double, type: String, violations: [String],
          needsReview: Bool?, axis: Int? = nil, dir: Int? = nil,
          lanes: Int? = nil, cls: String? = nil, bridge: Bool? = nil,
-         road: [Int]? = nil) {
+         road: [Int]? = nil, split: Bool? = nil, twin: Bool? = nil) {
         self.dir = dir
         self.lanes = lanes
         self.cls = cls
         self.bridge = bridge
         self.road = road
+        self.split = split
+        self.twin = twin
         self.id = id
         self.region = region
         self.city = city
@@ -176,6 +202,8 @@ struct Camera: Identifiable, Codable, Hashable {
         cls = try c.decodeIfPresent(String.self, forKey: .cls)
         bridge = try c.decodeIfPresent(Bool.self, forKey: .bridge)
         road = try c.decodeIfPresent([Int].self, forKey: .road)
+        split = try c.decodeIfPresent(Bool.self, forKey: .split)
+        twin = try c.decodeIfPresent(Bool.self, forKey: .twin)
         violations = try c.decodeIfPresent([String].self, forKey: .violations)
             ?? Self.defaultViolations(forType: type)
     }

@@ -125,6 +125,45 @@ final class RoadShapeTests: XCTestCase {
                              RoadGeometry.halfWidth(lanes: nil, roadClass: .residential))
     }
 
+    // MARK: - Когда направление применять НЕЛЬЗЯ
+
+    private func directional(dir: Int?, split: Bool?, twin: Bool?) -> Camera {
+        Camera(id: 5, region: "Т", city: "", location: "к",
+               lat: base.latitude, lon: base.longitude, type: "Стационар радар",
+               violations: [], needsReview: false, axis: 90, dir: dir,
+               split: split, twin: twin)
+    }
+
+    /// Разделённая дорога без парной камеры: такая камера часто снимает и
+    /// обратную сторону — глушить по направлению нельзя, иначе промолчим о
+    /// настоящей камере, а это хуже лишнего предупреждения.
+    func testLoneCameraOnDividedRoadIsNotGatedByDirection() {
+        XCTAssertFalse(directional(dir: 90, split: true, twin: nil).allowsDirectionGate)
+    }
+
+    /// Есть парная камера обратного направления — стороны поделены, гейт безопасен.
+    func testPairedCameraOnDividedRoadIsGated() {
+        XCTAssertTrue(directional(dir: 90, split: true, twin: true).allowsDirectionGate)
+    }
+
+    /// Настоящая односторонняя улица (дорога явно НЕ разделена): обратного
+    /// направления не существует, гейт безопасен.
+    func testOneWayStreetIsGated() {
+        XCTAssertTrue(directional(dir: 90, split: false, twin: nil).allowsDirectionGate)
+    }
+
+    /// Признаков нет (база старой версии) — неизвестность трактуется в пользу
+    /// предупреждения: направление не применяем, работает ось.
+    func testUnknownSplitDisablesDirectionGate() {
+        XCTAssertFalse(directional(dir: 90, split: nil, twin: nil).allowsDirectionGate,
+                       "без данных о дороге глушить по направлению нельзя")
+    }
+
+    func testCameraWithoutDirectionIsNeverGated() {
+        XCTAssertFalse(directional(dir: nil, split: nil, twin: nil).allowsDirectionGate)
+        XCTAssertFalse(directional(dir: nil, split: true, twin: true).allowsDirectionGate)
+    }
+
     // MARK: - Класс дороги
 
     func testRoadClassParsingAndContext() {

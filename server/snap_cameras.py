@@ -544,6 +544,67 @@ def road_stub(index, cand, cam_lat, cam_lon, *, span=STUB_SPAN_M):
     return out
 
 
+def opposite_carriageway(index, cand, *, radius=60.0, min_angle=120.0):
+    """Разделённая ли дорога: идёт ли рядом параллельная проезжая часть ОБРАТНОГО
+    направления.
+
+    Это ключ к безопасности гейта направления. Если дорога разделённая, а парной
+    камеры на обратной стороне в реестре нет, то эта одиночная камера вполне может
+    снимать и обратную сторону — глушить её по направлению нельзя, молчание
+    опаснее лишнего предупреждения. А на настоящей односторонней улице обратного
+    направления просто не существует, и гейт там безвреден.
+    """
+    own = road_direction(index, cand)
+    if own is None:
+        return False
+    for other in index.nearby(cand.plat, cand.plon, radius):
+        if other.way == cand.way:
+            continue
+        direction = road_direction(index, other)
+        if direction is None:
+            continue
+        delta = abs(direction - own) % 360
+        if min(delta, 360 - delta) > min_angle:
+            return True
+    return False
+
+
+def mark_direction_twins(cameras, *, max_meters=100.0, min_angle=120.0):
+    """Пометить камеры, у которых рядом стоит камера ОБРАТНОГО направления.
+
+    Такая пара означает, что стороны дороги поделены между двумя камерами: каждая
+    смотрит свою, и глушить по направлению безопасно. Возвращает число помеченных.
+    """
+    cell = 0.001   # ~110 м
+    grid = {}
+    for i, cam in enumerate(cameras):
+        if cam.get("dir") is None:
+            continue
+        grid.setdefault((int(cam["lat"] / cell), int(cam["lon"] / cell)), []).append(i)
+    marked = 0
+    for (ci, cj), indices in grid.items():
+        neighbours = []
+        for di in (-1, 0, 1):
+            for dj in (-1, 0, 1):
+                neighbours.extend(grid.get((ci + di, cj + dj), ()))
+        for i in indices:
+            a = cameras[i]
+            kx = _M_PER_DEG_LON * math.cos(math.radians(a["lat"]))
+            for j in neighbours:
+                if i == j:
+                    continue
+                b = cameras[j]
+                delta = abs(a["dir"] - b["dir"]) % 360
+                if min(delta, 360 - delta) <= min_angle:
+                    continue
+                if math.hypot((a["lat"] - b["lat"]) * _M_PER_DEG_LAT,
+                              (a["lon"] - b["lon"]) * kx) <= max_meters:
+                    a["twin"] = True
+                    marked += 1
+                    break
+    return marked
+
+
 def apply_road_profile(out, index, cand):
     """Записать профиль дороги в камеру. Пишем только известное: старые базы
     этих полей не содержали, приложение к их отсутствию готово."""
@@ -551,6 +612,10 @@ def apply_road_profile(out, index, cand):
     direction = road_direction(index, cand)
     if direction is not None:
         out["dir"] = direction
+        # Разделённая дорога или нет — пишем ЯВНО, оба значения. Приложение должно
+        # отличать «дорога не разделена» (гейт безопасен) от «мы не знаем» (гейт
+        # запрещён): при неизвестности предупреждаем в обе стороны.
+        out["split"] = bool(opposite_carriageway(index, cand))
     if attrs.lanes:
         out["lanes"] = attrs.lanes
     if attrs.cls:
@@ -712,6 +777,7 @@ def snap_all(cameras, index, *, radius, max_shift, max_shift_ref, trust_geom):
             out["needsReview"] = True
             kept += 1
         result.append(out)
+    mark_direction_twins(result)
     return result, snapped, kept, total_shift, moves, report, reasons
 
 
@@ -895,6 +961,39 @@ def selftest():
     check(4 <= len(stub) <= STUB_MAX_POINTS * 2, f"кусок кривой: {len(stub) // 2} точек")
     check(len(stub) // 2 >= 3, "на кривой больше двух точек — форма сохранена")
 
+    # 8е) Разделённая дорога: рядом параллельная проезжая часть обратного
+    #     направления → одиночную камеру глушить по направлению нельзя.
+    divided = RoadIndex()
+    D = 41.4500
+    divided.add_linestring([[69.3000, D], [69.3060, D]], set(), set(), 6,
+                           road_attrs_from_props({"oneway": "yes", "highway": "trunk"}))
+    divided.add_linestring([[69.3060, D - _round_lat(20)], [69.3000, D - _round_lat(20)]],
+                           set(), set(), 6,
+                           road_attrs_from_props({"oneway": "yes", "highway": "trunk"}))
+    out_div = {"lat": D, "lon": 69.3030}
+    apply_road_profile(out_div, divided, divided.nearby(D, 69.3030, 30)[0])
+    check(out_div.get("split") is True, "разделённая дорога распознана")
+
+    # 8ж) Настоящая односторонняя улица: параллельной обратной нет — гейт безвреден.
+    single = RoadIndex()
+    single.add_linestring([[69.3000, D], [69.3060, D]], set(), set(), 3,
+                          road_attrs_from_props({"oneway": "yes", "highway": "tertiary"}))
+    out_sng = {"lat": D, "lon": 69.3030}
+    apply_road_profile(out_sng, single, single.nearby(D, 69.3030, 30)[0])
+    check(out_sng.get("split") is False,
+          "односторонняя улица помечена как НЕ разделённая (явное false, не пропуск)")
+
+    # 8з) Парная камера обратной стороны: обе помечаются twin.
+    pair_cams = [
+        {"id": 30, "lat": D, "lon": 69.3030, "dir": 90},
+        {"id": 31, "lat": D - _round_lat(20), "lon": 69.3030, "dir": 270},
+        {"id": 32, "lat": D, "lon": 69.3300, "dir": 90},   # далеко, без пары
+    ]
+    marked = mark_direction_twins(pair_cams)
+    check(marked == 2 and pair_cams[0].get("twin") and pair_cams[1].get("twin"),
+          "парные камеры обратных направлений помечены")
+    check("twin" not in pair_cams[2], "одиночная камера парной не считается")
+
     # 8д) Битые теги дают пустой профиль, а не падение.
     junk = road_attrs_from_props({"lanes": "куда", "layer": "нет", "oneway": "reversible"})
     check(junk.lanes is None and junk.layer == 0 and junk.oneway is False,
@@ -940,9 +1039,18 @@ def main():
 
     if args.annotate:
         result, annotated = annotate_axes(cameras, index)
+        twins = mark_direction_twins(result)
         json.dump(result, open(args.out, "w", encoding="utf-8"),
                   ensure_ascii=False, separators=(",", ":"))
-        print(f"annotate: осей проставлено {annotated} из {len(cameras)} → {args.out}")
+        with_dir = sum(1 for c in result if c.get("dir") is not None)
+        split = sum(1 for c in result if c.get("split"))
+        gated = sum(1 for c in result if c.get("dir") is not None
+                    and (c.get("twin") or not c.get("split")))
+        print(f"annotate: осей {annotated} из {len(cameras)} → {args.out}")
+        print(f"  направление: {with_dir} · разделённая дорога: {split} · "
+              f"парных камер: {twins}")
+        print(f"  гейт по направлению применим к {gated} камерам "
+              f"(остальные могут снимать обе стороны — предупреждаем в обе)")
         return 0
 
     print(f"камер: {len(cameras)} · radius {args.radius:.0f} м · "

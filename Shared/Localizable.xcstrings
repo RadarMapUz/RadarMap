@@ -65,6 +65,22 @@
         }
       }
     },
+    "%@ %@, %lld метров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@, %lld метров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@, %lld metr"
+          }
+        }
+      }
+    },
     "%@ · %@": {
       "localizations": {
         "ru": {
@@ -417,6 +433,38 @@
         }
       }
     },
+    "+15 км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+15 км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+15 km/soat"
+          }
+        }
+      }
+    },
+    "+20 км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+20 км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+20 km/soat"
+          }
+        }
+      }
+    },
     "+5 км/ч": {
       "localizations": {
         "ru": {
@@ -429,6 +477,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "+5 km/soat"
+          }
+        }
+      }
+    },
+    ". Ваша скорость %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ". Ваша скорость %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ". Tezligingiz %lld"
+          }
+        }
+      }
+    },
+    ". Ваша скорость %lld, лимит %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ". Ваша скорость %lld, лимит %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ". Tezligingiz %lld, cheklov %lld"
           }
         }
       }
@@ -685,6 +765,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "«Avto» shahar va trassani o'zi ajratadi: shaharda ovoz faqat ko'chma radarlar va tezlik oshirilganda, trassada — har bir kamera haqida. «Fonda bannerlar» — ilova yig'ilganda bildirishnomalar."
+          }
+        }
+      }
+    },
+    "«Авто» сам различает город и трассу: в городе о камерах молча предупреждает панель, на трассе приложение спокойно называет каждую. Голос повышается только когда вы реально превышаете или впереди передвижной радар. «Голос только при превышении» — полная тишина, пока едете в лимите.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Авто» сам различает город и трассу: в городе о камерах молча предупреждает панель, на трассе приложение спокойно называет каждую. Голос повышается только когда вы реально превышаете или впереди передвижной радар. «Голос только при превышении» — полная тишина, пока едете в лимите."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Avto» shahar va trassani o‘zi ajratadi: shaharda kameralar haqida panel jimgina ogohlantiradi, trassada ilova har birini xotirjam aytadi. Ovoz faqat siz haqiqatan tezlikni oshirganda yoki oldinda ko‘chma radar bo‘lganda kuchayadi. «Ovoz faqat tezlik oshganda» — cheklov ichida ketayotganingizda to‘liq jimlik."
           }
         }
       }
@@ -1325,6 +1421,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameraga 22 soniya qolganda ovoz — tezligingiz hisobga olinadi"
+          }
+        }
+      }
+    },
+    "Голос только при превышении": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос только при превышении"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovoz faqat tezlik oshganda"
           }
         }
       }
@@ -2753,6 +2865,22 @@
         }
       }
     },
+    "Молчать, пока не превышаю": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Молчать, пока не превышаю"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cheklov ichida — jim tur"
+          }
+        }
+      }
+    },
     "Моя камера": {
       "localizations": {
         "ru": {
@@ -3581,6 +3709,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Haydash ravonligi"
+          }
+        }
+      }
+    },
+    "По маршруту %@ через %lld метров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По маршруту %@ через %lld метров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrutda %@ %lld metrdan so‘ng"
           }
         }
       }
@@ -5485,6 +5629,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "ehtimoliy jarimalar ≈ %@"
+          }
+        }
+      }
+    },
+    "впереди": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "впереди"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oldinda"
+          }
+        }
+      }
+    },
+    "впереди слева": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "впереди слева"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oldinda chapda"
+          }
+        }
+      }
+    },
+    "впереди справа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "впереди справа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oldinda o‘ngda"
           }
         }
       }

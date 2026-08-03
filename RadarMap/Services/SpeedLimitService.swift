@@ -18,7 +18,13 @@ import os
 final class SpeedLimitService {
     /// Лимит дороги, по которой сейчас едем (nil — дорога без данных).
     private(set) var currentLimit: Int?
+    /// Мгновенное превышение — только для подсветки цифры на HUD: флаг щёлкает
+    /// на одном GPS-фиксе, а GPS шумит (68 → 71 → 66 при лимите 60).
     private(set) var isOverspeeding = false
+    /// Превышаем УСТОЙЧИВО (дольше overspeedSustainSeconds). Именно этот флаг
+    /// решает, кричать ли о камере: иначе один шумный фикс на «превысил на 1 км»
+    /// поднимал спокойный анонс до сирены.
+    private(set) var isOverspeedingSustained = false
 
     /// Голос «Превышение скорости» — подключается в AppEnvironment.
     @ObservationIgnored var onOverspeed: (() -> Void)?
@@ -97,7 +103,7 @@ final class SpeedLimitService {
     func update(coordinate: CLLocationCoordinate2D, course: CLLocationDirection,
                 speedKmh: Double, announce: Bool) {
         guard settings.speedLimitsEnabled, let index else {
-            currentLimit = nil; isOverspeeding = false
+            currentLimit = nil; clearOverspeed()
             return
         }
 
@@ -114,23 +120,31 @@ final class SpeedLimitService {
         }
 
         guard let limit = currentLimit else {
-            isOverspeeding = false; overspeedSince = nil
+            clearOverspeed()
             return
         }
         let over = speedKmh > Double(limit) + settings.overspeedTolerance
         if over != isOverspeeding { isOverspeeding = over }
-        if over {
-            if overspeedSince == nil { overspeedSince = Date() }
-            // Голос: превышаем дольше 2.5с (не пик GPS), не чаще раза в 30с.
-            if announce,
-               let since = overspeedSince, Date().timeIntervalSince(since) > 2.5,
-               Date().timeIntervalSince(lastWarnAt) > 30 {
-                lastWarnAt = Date()
-                onOverspeed?()
-            }
-        } else {
-            overspeedSince = nil
+        overspeedSince = over ? (overspeedSince ?? Date()) : nil
+
+        // Устойчивость считаем один раз и здесь: и голос, и градус алерта о камере
+        // должны опираться на одно и то же «превышаем по-настоящему».
+        let sustained = overspeedSince.map {
+            Date().timeIntervalSince($0) >= AppConfig.overspeedSustainSeconds
+        } ?? false
+        if sustained != isOverspeedingSustained { isOverspeedingSustained = sustained }
+
+        // Голос про само превышение: не чаще раза в 30 с.
+        if sustained, announce, Date().timeIntervalSince(lastWarnAt) > 30 {
+            lastWarnAt = Date()
+            onOverspeed?()
         }
+    }
+
+    private func clearOverspeed() {
+        isOverspeeding = false
+        isOverspeedingSustained = false
+        overspeedSince = nil
     }
 }
 

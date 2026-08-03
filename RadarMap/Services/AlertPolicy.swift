@@ -49,24 +49,48 @@ nonisolated enum AlertPolicy {
         }
     }
 
-    /// Чем исполнять уровень приближения. Вибрация — всегда (не мешает никому);
-    /// звук и голос — по контексту.
-    struct Decision: Equatable {
-        let sound: Bool
-        let voice: Bool
+    /// Насколько громко исполнять сработавший уровень AlertEngine.
+    /// Три градуса вместо прежнего «да/нет»: сплошной крик о каждой камере
+    /// одинаково громко — то же самое, что не предупреждать вовсе, потому что
+    /// водитель перестаёт различать важное.
+    enum Style: Equatable {
+        /// Ни звука, ни голоса: камеру показывают HUD, полоска приближения и
+        /// один мягкий тук. Городская сетка камер, едем в лимите.
+        case silent
+        /// Один спокойный анонс на входе в радиус — без бипов и без эскалации.
+        case calm
+        /// Полная эскалация: бипы по уровням, голос, резкая вибрация.
+        case urgent
     }
 
-    /// Город: голос только про внезапное (передвижной/тренога) или при превышении —
-    /// остальное показывают HUD, полоска и лёгкий тук. Трасса: полная эскалация.
+    struct Decision: Equatable {
+        let style: Style
+        /// Пищать ли сиреной — только в срочном режиме.
+        var beeps: Bool { style == .urgent }
+        /// Говорить ли голосом — спокойно или срочно, но не в тишине.
+        var voice: Bool { style != .silent }
+        /// Наращивать ли сигналы по мере приближения (иначе один раз на входе).
+        var escalates: Bool { style == .urgent }
+    }
+
+    /// Матрица решений. Приоритет сверху вниз:
+    /// 1. Внезапная точка (передвижной, тренога, ДТП) — всегда срочно: водитель
+    ///    не может её знать заранее, и это ровно тот случай, ради которого
+    ///    оповещения вообще нужны.
+    /// 2. Устойчивое превышение у камеры — срочно: сейчас будет штраф.
+    /// 3. Тумблер «голос только при превышении» — тишина, раз не превышаем.
+    /// 4. Трасса — спокойный анонс: камер мало, знать о каждой полезно.
+    /// 5. Город — тишина: камер сотни, крик о каждой превращается в белый шум.
     static func decision(mode: AlertMode, detected: Context,
-                         isSuddenCamera: Bool, isOverspeeding: Bool) -> Decision {
+                         isSuddenCamera: Bool, isOverspeeding: Bool,
+                         voiceOnlyWhenOverspeeding: Bool) -> Decision {
+        if isSuddenCamera || isOverspeeding { return Decision(style: .urgent) }
+        if voiceOnlyWhenOverspeeding { return Decision(style: .silent) }
         let context: Context = switch mode {
         case .auto: detected
         case .city: .city
         case .highway: .highway
         }
-        if context == .highway { return Decision(sound: true, voice: true) }
-        let audible = isSuddenCamera || isOverspeeding
-        return Decision(sound: audible, voice: audible)
+        return Decision(style: context == .highway ? .calm : .silent)
     }
 }

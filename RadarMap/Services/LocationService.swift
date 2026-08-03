@@ -452,11 +452,20 @@ final class LocationService: NSObject {
         currentCourse >= 0 && speedKmh >= AppConfig.directionalMinSpeedKmh
     }
 
-    /// Камера «по курсу» — в секторе ±directionalMaxAngle относительно направления движения.
-    private func isAhead(_ camera: Camera, from coordinate: CLLocationCoordinate2D) -> Bool {
+    /// Камера «наша»: лежит в коридоре нашей дороги впереди — либо подтверждена
+    /// активным маршрутом. Коридор (RoadCorridor) считает боковое отклонение в
+    /// метрах и отсекает параллельные улицы, дублёры и эстакады, которые прежний
+    /// угловой фильтр пропускал (±70° на дистанции 400 м — это 375 м вбок). Маршрут —
+    /// обход: там камера на нашем пути по определению, даже если её координата в
+    /// базе смещена вбок от полосы.
+    private func isOnOurRoad(_ camera: Camera, from coordinate: CLLocationCoordinate2D) -> Bool {
         guard isDirectionalFilteringActive else { return true }   // стоим/курс неизвестен → не фильтруем
-        let bearing = GeoMath.bearing(from: coordinate, to: camera.coordinate)
-        return GeoMath.angleDifference(bearing, currentCourse) <= AppConfig.directionalMaxAngle
+        if isCameraOnRoute(camera) { return true }
+        // Внезапным точкам (краудсорс) — коридор трассы: их координату ставил
+        // человек на ходу, требовать от неё городской точности нельзя.
+        let context: AlertPolicy.Context = camera.kind.isSudden ? .highway : alertContext
+        return RoadCorridor.contains(camera: camera.coordinate, from: coordinate,
+                                     course: currentCourse, context: context)
     }
 
     /// Сглаженный азимут камеры относительно курса (0 = прямо по ходу, растёт по часовой).
@@ -497,9 +506,9 @@ final class LocationService: NSObject {
     /// «впереди» / «впереди справа» / «впереди слева» — для голосового предупреждения.
     private var directionPhrase: String {
         switch nearestDirection {
-        case .right, .behindRight: return "впереди справа"
-        case .left, .behindLeft:   return "впереди слева"
-        default:                   return "впереди"
+        case .right, .behindRight: return String(localized: "впереди справа")
+        case .left, .behindLeft:   return String(localized: "впереди слева")
+        default:                   return String(localized: "впереди")
         }
     }
 
@@ -507,8 +516,9 @@ final class LocationService: NSObject {
         guard !nearbyCameras.isEmpty else {
             nearestCamera = nil; distanceToNearest = nil; return
         }
-        // В движении HUD показывает ближайшую камеру ВПЕРЕДИ; камеры позади не пугают зря.
-        let candidates = nearbyCameras.filter { isAhead($0, from: coordinate) }
+        // В движении HUD показывает ближайшую камеру НА НАШЕЙ ДОРОГЕ впереди;
+        // камеры позади и с соседних улиц не пугают зря.
+        let candidates = nearbyCameras.filter { isOnOurRoad($0, from: coordinate) }
         let ranked = candidates
             .map { ($0, $0.distance(from: coordinate)) }
             .min { $0.1 < $1.1 }
@@ -536,40 +546,68 @@ final class LocationService: NSObject {
 
     /// Оповещения о приближении: решение принимает AlertEngine (чистый, тестируемый),
     /// здесь — только исполнение: звук, хаптика, голос, уведомление.
-    /// nearestCamera уже отфильтрована по курсу: о камерах позади и на встречных
-    /// перпендикулярных улицах не предупреждаем (начатая серия порогов не обрывается).
+    /// nearestCamera уже отфильтрована коридором дороги (isOnOurRoad): о камерах
+    /// позади, на параллельных и перпендикулярных улицах не предупреждаем.
     private func runAlertEngine() {
         guard let camera = nearestCamera, let distance = distanceToNearest else { return }
         guard let decision = alertEngine.evaluate(cameraID: camera.id, distance: distance,
                                                   radius: effectiveAlertRadius) else { return }
 
-        // Умный режим: в городе звук/голос — только про внезапное (передвижной)
-        // или при превышении; на трассе — полная эскалация. Вибрация — всегда.
+        // Градус оповещения: тишина (город, едем в лимите) → спокойный анонс
+        // (трасса) → крик (устойчивое превышение или внезапная точка).
+        // Именно УСТОЙЧИВОЕ превышение: мгновенный флаг щёлкает от шума GPS, и
+        // «превысил на 1 км/ч» поднимал спокойный анонс до сирены.
         let policy = AlertPolicy.decision(
             mode: settings.alertMode, detected: alertContext,
-            isSuddenCamera: camera.kind == .mobileRadar || camera.kind == .tripod
-                || camera.kind == .accident,
-            isOverspeeding: speedLimits?.isOverspeeding == true)
+            isSuddenCamera: camera.kind.isSudden,
+            isOverspeeding: speedLimits?.isOverspeedingSustained == true,
+            voiceOnlyWhenOverspeeding: settings.voiceOnlyWhenOverspeeding)
 
-        if settings.soundEnabled && policy.sound { alerts.beep(count: decision.level) }
-        // Тактильная эскалация: мягкий «тук» на дальнем пороге → резкий у камеры.
-        // Отдельно от звука — работает и в беззвучном режиме, и в энергосбережении.
-        alerts.haptic(level: decision.level)
-        if decision.level == 1 {
-            // В свёрнутом виде (поездка в фоне) — уведомление зажигает экран и вибрирует.
-            // Пользователь управляет: все камеры / только радары / выключено.
-            if !isForeground, settings.backgroundAlerts.allows(camera) {
-                notifier.notifyApproaching(camera, distanceMeters: distance)
-            }
-            // Голос — самая дорогая часть оповещения, в энергосбережении пропускаем.
-            if settings.voiceEnabled && policy.voice && !isLowPowerMode {
-                var phrase = "\(camera.kind.displayName) \(directionPhrase). \(Int(distance)) метров"
-                if speedKmh >= AppConfig.speakSpeedThresholdKmh {
-                    phrase += ". Ваша скорость \(Int(speedKmh.rounded()))"
-                }
-                alerts.speak(phrase)
-            }
+        // Сирена — только в срочном режиме: спокойный анонс не пищит.
+        if settings.soundEnabled, policy.beeps { alerts.beep(count: decision.level) }
+        // Вибрация никому не мешает и работает в беззвучном режиме: эскалация
+        // «мягкий тук → резкий у камеры» — только в срочном, иначе один тук на входе.
+        if policy.escalates {
+            alerts.haptic(level: decision.level)
+        } else if decision.level == 1 {
+            alerts.haptic(level: 1)
         }
+
+        guard decision.level == 1 else { return }   // баннер и голос — один раз на камеру
+        // В свёрнутом виде (поездка в фоне) — уведомление зажигает экран и вибрирует.
+        // Пользователь управляет: все камеры / только радары / выключено.
+        if !isForeground, settings.backgroundAlerts.allows(camera) {
+            notifier.notifyApproaching(camera, distanceMeters: distance)
+        }
+        // Голос — самая дорогая часть оповещения, в энергосбережении пропускаем.
+        if settings.voiceEnabled, policy.voice, !isLowPowerMode {
+            alerts.speak(announcement(for: camera, distance: distance,
+                                      urgent: policy.escalates))
+        }
+    }
+
+    /// Фраза предупреждения. Спокойная — как у навигатора, только тип и округлённое
+    /// расстояние; про скорость и лимит говорим лишь в срочном режиме, потому что
+    /// именно превышение и есть причина повышать голос.
+    private func announcement(for camera: Camera, distance: CLLocationDistance,
+                              urgent: Bool) -> String {
+        // Округляем как манёвры маршрута: «через 743 метра» звучит по-роботски.
+        let step: Double = distance >= 400 ? 100 : 50
+        let rounded = Int((distance / step).rounded() * step)
+        var phrase = isCameraOnRoute(camera)
+            ? String(format: String(localized: "По маршруту %@ через %lld метров"),
+                     camera.kind.displayName.lowercased(), rounded)
+            : String(format: String(localized: "%@ %@, %lld метров"),
+                     camera.kind.displayName, directionPhrase, rounded)
+        guard urgent else { return phrase }
+        if let limit = speedLimits?.currentLimit {
+            phrase += String(format: String(localized: ". Ваша скорость %lld, лимит %lld"),
+                             Int(speedKmh.rounded()), limit)
+        } else if speedKmh >= AppConfig.speakSpeedThresholdKmh {
+            phrase += String(format: String(localized: ". Ваша скорость %lld"),
+                             Int(speedKmh.rounded()))
+        }
+        return phrase
     }
 
     private func handleEnter(regionID: String) {

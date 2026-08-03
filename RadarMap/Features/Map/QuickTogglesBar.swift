@@ -44,6 +44,11 @@ struct QuickTogglesBar: View {
                 }
             }
 
+            // Полная тишина, пока едем в лимите. Включают её именно в дороге
+            // («хватит болтать»), поэтому место ей здесь, а не только в Настройках.
+            checkRow("Молчать, пока не превышаю",
+                     isOn: $settings.voiceOnlyWhenOverspeeding)
+
             // Сели пассажиром, а поездка уже стартовала — выход в один тап.
             if env.location.isTripActive {
                 Button {
@@ -83,6 +88,29 @@ struct QuickTogglesBar: View {
                     .foregroundStyle(isOn.wrappedValue ? Theme.textPrimary : Theme.textTertiary)
             }
             .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(PressableStyle())
+    }
+
+    /// Строка-галочка на всю ширину: для тумблеров, чьё название не влезает в круг.
+    private func checkRow(_ title: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
+        Button {
+            isOn.wrappedValue.toggle()
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(isOn.wrappedValue ? Theme.accent : Theme.textTertiary)
+                Text(title)
+                    .font(.rounded(13, .semibold))
+                    .foregroundStyle(isOn.wrappedValue ? Theme.textPrimary : Theme.textSecondary)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .background(Theme.surface, in: Capsule())
         }
         .buttonStyle(PressableStyle())
     }

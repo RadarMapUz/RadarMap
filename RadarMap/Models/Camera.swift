@@ -75,6 +75,17 @@ enum CameraType: Hashable {
         }
     }
 
+    /// Внезапная точка: возникла только что, и знать о ней надо всегда —
+    /// стационарную камеру на своей дороге водитель помнит, передвижной радар,
+    /// треногу или ДТП — нет. Такие никогда не глушим и даём им более широкий
+    /// коридор: координата пришла из краудсорса и точна хуже реестровой.
+    var isSudden: Bool {
+        switch self {
+        case .mobileRadar, .tripod, .accident: return true
+        default:                               return false
+        }
+    }
+
     /// SF Symbol для аннотации на карте.
     var symbolName: String {
         switch self {

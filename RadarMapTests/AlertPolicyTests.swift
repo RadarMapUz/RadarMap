@@ -67,38 +67,58 @@ final class AlertPolicyTests: XCTestCase {
 
     // MARK: - Матрица решений
 
-    func testCityQuietInLimit() {
-        let decision = AlertPolicy.decision(mode: .auto, detected: .city,
-                                            isSuddenCamera: false, isOverspeeding: false)
-        XCTAssertFalse(decision.sound, "город, едем в лимите — тихо")
+    /// Короткая обёртка: почти во всех кейсах тумблер «только при превышении» выключен.
+    private func decide(mode: AlertMode = .auto, detected: AlertPolicy.Context,
+                        sudden: Bool = false, over: Bool = false,
+                        onlyWhenOver: Bool = false) -> AlertPolicy.Decision {
+        AlertPolicy.decision(mode: mode, detected: detected, isSuddenCamera: sudden,
+                             isOverspeeding: over, voiceOnlyWhenOverspeeding: onlyWhenOver)
+    }
+
+    func testCitySilentInLimit() {
+        let decision = decide(detected: .city)
+        XCTAssertEqual(decision.style, .silent, "город, едем в лимите — тихо")
+        XCTAssertFalse(decision.beeps)
         XCTAssertFalse(decision.voice)
     }
 
-    func testCitySpeaksWhenOverspeeding() {
-        let decision = AlertPolicy.decision(mode: .auto, detected: .city,
-                                            isSuddenCamera: false, isOverspeeding: true)
-        XCTAssertTrue(decision.voice, "превышение у камеры — говорим и в городе")
+    /// Главное изменение: трасса в лимите больше не кричит, а спокойно сообщает.
+    func testHighwayIsCalmNotUrgentInLimit() {
+        let decision = decide(detected: .highway)
+        XCTAssertEqual(decision.style, .calm)
+        XCTAssertTrue(decision.voice, "на трассе о камере говорим")
+        XCTAssertFalse(decision.beeps, "но без сирены — мы не превышаем")
+        XCTAssertFalse(decision.escalates, "и без эскалации по мере приближения")
     }
 
-    func testCitySpeaksAboutMobileRadar() {
-        let decision = AlertPolicy.decision(mode: .auto, detected: .city,
-                                            isSuddenCamera: true, isOverspeeding: false)
-        XCTAssertTrue(decision.voice, "передвижной — внезапный, о нём всегда")
+    func testOverspeedingIsUrgentEverywhere() {
+        for context in [AlertPolicy.Context.city, .highway] {
+            let decision = decide(detected: context, over: true)
+            XCTAssertEqual(decision.style, .urgent, "превышение у камеры — срочно (\(context))")
+            XCTAssertTrue(decision.beeps)
+            XCTAssertTrue(decision.escalates)
+        }
     }
 
-    func testHighwayAlwaysFull() {
-        let decision = AlertPolicy.decision(mode: .auto, detected: .highway,
-                                            isSuddenCamera: false, isOverspeeding: false)
-        XCTAssertTrue(decision.sound)
-        XCTAssertTrue(decision.voice)
+    func testSuddenCameraIsUrgentEvenInSilentCity() {
+        let decision = decide(detected: .city, sudden: true)
+        XCTAssertEqual(decision.style, .urgent, "передвижной внезапен — о нём всегда громко")
+    }
+
+    /// Тумблер полной тишины не должен заглушать то, ради чего приложение и нужно.
+    func testVoiceOnlyWhenOverspeedingStillShoutsAboutSuddenAndOverspeed() {
+        XCTAssertEqual(decide(detected: .highway, onlyWhenOver: true).style, .silent,
+                       "тумблер включён, в лимите — полная тишина даже на трассе")
+        XCTAssertEqual(decide(detected: .city, sudden: true, onlyWhenOver: true).style, .urgent,
+                       "передвижной радар тумблером не заглушить")
+        XCTAssertEqual(decide(detected: .city, over: true, onlyWhenOver: true).style, .urgent,
+                       "превышение тумблером не заглушить")
     }
 
     func testManualOverrideBeatsDetector() {
-        let decision = AlertPolicy.decision(mode: .highway, detected: .city,
-                                            isSuddenCamera: false, isOverspeeding: false)
-        XCTAssertTrue(decision.voice, "ручная «Трасса» сильнее детектора")
-        let quiet = AlertPolicy.decision(mode: .city, detected: .highway,
-                                         isSuddenCamera: false, isOverspeeding: false)
-        XCTAssertFalse(quiet.voice, "ручной «Город» сильнее детектора")
+        XCTAssertEqual(decide(mode: .highway, detected: .city).style, .calm,
+                       "ручная «Трасса» сильнее детектора")
+        XCTAssertEqual(decide(mode: .city, detected: .highway).style, .silent,
+                       "ручной «Город» сильнее детектора")
     }
 }

@@ -45,6 +45,7 @@ struct SettingsView: View {
                     Picker("Режим оповещений", selection: $settings.alertMode) {
                         ForEach(AlertMode.allCases) { Text($0.title).tag($0) }
                     }
+                    Toggle("Голос только при превышении", isOn: $settings.voiceOnlyWhenOverspeeding)
                     Picker("Баннеры в фоне", selection: $settings.backgroundAlerts) {
                         ForEach(BackgroundAlertMode.allCases) { Text($0.title).tag($0) }
                     }
@@ -55,7 +56,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Оповещения")
                 } footer: {
-                    Text("«Авто» сам различает город и трассу: в городе голос только про передвижные радары и превышение, на трассе — про каждую камеру. «Баннеры в фоне» — уведомления, когда приложение свёрнуто.")
+                    Text("«Авто» сам различает город и трассу: в городе о камерах молча предупреждает панель, на трассе приложение спокойно называет каждую. Голос повышается только когда вы реально превышаете или впереди передвижной радар. «Голос только при превышении» — полная тишина, пока едете в лимите.")
                 }
 
                 Section {
@@ -99,6 +100,8 @@ struct SettingsView: View {
                             Text("0 км/ч").tag(0.0)
                             Text("+5 км/ч").tag(5.0)
                             Text("+10 км/ч").tag(10.0)
+                            Text("+15 км/ч").tag(15.0)
+                            Text("+20 км/ч").tag(20.0)
                         }
                     }
                     Toggle("Голосовая навигация", isOn: $settings.turnByTurnVoice)

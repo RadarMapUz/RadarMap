@@ -6,40 +6,52 @@
 оказывается на боковой «Saqchimon ko'chasi»). Это ломает карту, направление в
 HUD и учёт проездов (одна камера двоится/считается с чужой улицы).
 
-КЛЮЧЕВАЯ ИДЕЯ (умно, без ложных переносов на ЧУЖУЮ дорогу):
-  снапим не на ближайшую дорогу, а на ближайшую дорогу с ПОДХОДЯЩИМ ИМЕНЕМ.
-  Имя улицы берём из адреса камеры и матчим с name/name:ru/name:uz дороги,
-  учитывая кириллицу↔латиницу (Навои ↔ Navoiy, Сақчимон ↔ Saqchimon).
-  Даже если чужая (параллельная) дорога физически ближе — выбираем ту, чьё
-  название совпало с адресом.
+КАСКАД ДОВЕРИЯ (v2) — от самого надёжного сигнала к самому слабому:
+  1. ref-матч: «M-39», «А 373», «4R-87» из адреса ↔ теги ref/int_ref дороги.
+     Параллельной дороги с тем же ref не бывает, поэтому допустимый перенос
+     шире (--max-shift-ref, 150 м): трассы геокодированы хуже улиц.
+  2. name-матч: имя улицы из адреса ↔ name/name:ru/name:uz дороги, с
+     кириллица↔латиница транслитом (Навои ↔ Navoiy) и, для длинных токенов,
+     редакционным допуском 1 (Chilonzor ↔ Chilanzar — разные нормы транслита).
+     Даже если чужая (параллельная) дорога физически ближе — выбираем ту,
+     чьё название совпало с адресом.
+  3. геометрия: имя не совпало, но камера и так почти на дороге — доверяем.
+     Порог зависит от класса дороги: у магистрали ось полосы дальше от точки
+     на обочине, чем у переулка (см. _trust_for_rank).
 
 Почему НЕ OSRM /nearest: в нашей сборке OSRM возвращает пустые имена дорог
 (name=''), поэтому имя не проверить — снап выродился бы в «на ближайшую», то
 есть на параллельную. Здесь берём геометрию именованных дорог прямо из OSM.
 
 БЕЗОПАСНОСТЬ ДАННЫХ (переставить на чужую дорогу хуже, чем оставить как есть):
-  - двигаем только при совпадении имени и не дальше --max-shift;
-  - камера и так <--trust-geom м от дороги → доверяем геометрии (смещение мало);
+  - двигаем только при совпадении ref/имени и не дальше своего лимита;
   - иначе оставляем исходную координату и ставим needsReview=true
-    (в приложении подсветится как «проверить» + отработает краудсорс-репортинг);
+    (приложение даёт таким камерам более широкий коридор оповещения);
   - каждый перенос пишем в отчёт (CSV) и в GeoJSON «старое→новое» для
-    визуальной проверки (geojson.io / QGIS) ПЕРЕД заливкой в прод.
+    визуальной проверки (geojson.io / QGIS) ПЕРЕД заливкой в прод;
+  - отдельный отчёт пар-дублей (та же точка после снапа) — только глазами,
+    автослияния нет: в реестре бывают две камеры по направлениям.
+
+Индекс дорог (v2): сегменты режутся на куски ≤200 м и индексируются по всем
+клеткам куска. Прежний индекс «по концам сегмента» терял длинные прямые
+(2-километровый кусок трассы был невидим для камеры посередине) — из-за этого
+магистральные камеры не снапались вовсе.
 
 Данные дорог готовит snap_cameras.sh через osmium (см. там), формат — GeoJSON
-LineString'ы с тегами name/name:ru/name:uz/highway (geojsonseq или
-FeatureCollection).
+LineString'ы с тегами name*/ref*/highway (geojsonseq или FeatureCollection).
 
 Запуск:
     python3 snap_cameras.py --roads roads.geojsonl --in cameras.json \
         --out cameras.snapped.json --report snap_report.csv --moves snap_moves.geojson
 
-Самотест логики (без данных/сети) — ловушка параллельной улицы + транслит:
+Самотест логики (без данных/сети):
     python3 snap_cameras.py --selftest
 """
 import argparse
 import csv
 import json
 import math
+import re
 import sys
 
 # --- Нормализация и матчинг названий улиц (кириллица ↔ латиница) --------------
@@ -94,8 +106,46 @@ def street_tokens(text):
     return out
 
 
+def _damerau1(a, b):
+    """Расстояние Дамерау-Левенштейна ≤ 1? (замена/вставка/удаление/перестановка).
+    Токены короткие — полный DP не нужен, хватает разбора случаев."""
+    if a == b:
+        return True
+    la, lb = len(a), len(b)
+    if abs(la - lb) > 1:
+        return False
+    if la == lb:
+        # одна замена ИЛИ одна перестановка соседних
+        diff = [i for i in range(la) if a[i] != b[i]]
+        if len(diff) == 1:
+            return True
+        return (len(diff) == 2 and diff[1] == diff[0] + 1
+                and a[diff[0]] == b[diff[1]] and a[diff[1]] == b[diff[0]])
+    # длины отличаются на 1 — одна вставка/удаление
+    if la > lb:
+        a, b, la, lb = b, a, lb, la
+    i = j = used = 0
+    while i < la and j < lb:
+        if a[i] == b[j]:
+            i += 1; j += 1
+        elif used:
+            return False
+        else:
+            used = 1; j += 1
+    return True
+
+
+_VOWELS = set("aeiou")
+
+
+def _skeleton(word):
+    """Скелет согласных: разные нормы узбекского транслита расходятся почти
+    только в гласных (Chilanzar/Chilonzor, Yunusabad/Yunusobod)."""
+    return "".join(ch for ch in word if ch not in _VOWELS)
+
+
 def tokens_match(addr_tokens, road_tokens):
-    """Совпадают ли улицы: общий значимый токен (учёт navoi↔navoiy)."""
+    """Совпадают ли улицы: общий значимый токен (учёт navoi↔navoiy и опечаток)."""
     if not addr_tokens or not road_tokens:
         return False
     for a in addr_tokens:
@@ -111,7 +161,54 @@ def tokens_match(addr_tokens, road_tokens):
                 return True
             if len(b) >= 4 and b in a:
                 return True
+            # Длинные токены (короткие дают ложняк): опечатка геокодера в одну
+            # букву ИЛИ другая норма транслита — совпал скелет согласных при
+            # той же первой букве (chilanzar↔chilonzor: гласные разные, chlnzr общий).
+            if len(a) >= 6 and len(b) >= 6:
+                if _damerau1(a, b):
+                    return True
+                if a[0] == b[0] and abs(len(a) - len(b)) <= 1 \
+                        and len(_skeleton(a)) >= 4 and _skeleton(a) == _skeleton(b):
+                    return True
     return False
+
+
+# --- Ref трасс: «M-39» / «А 373» / «4Р-87» ↔ ref/int_ref дороги ---------------
+
+# Кириллические двойники латинских букв в номерах дорог.
+_REF_CYR2LAT = str.maketrans({"м": "m", "а": "a", "р": "r", "е": "e"})
+# Шаблон номера дороги в адресе: М-39, M 39, A373, 4Р-87, 4R125...
+# Lookbehind исключает и кириллицу: иначе «м» из «дом 39» ловится как М39.
+_REF_IN_TEXT = re.compile(
+    r"(?<![a-zа-яё0-9])(4?[mareмаре])[-\s]?(\d{1,4})(?![0-9])",
+    re.IGNORECASE)
+
+
+def _norm_ref(letters, digits):
+    letters = letters.lower().translate(_REF_CYR2LAT)
+    return f"{letters}{digits}"
+
+
+def ref_tokens_from_text(text):
+    """Номера дорог, упомянутые в адресе камеры: {'m39', '4r87', ...}."""
+    if not text:
+        return set()
+    out = set()
+    for m in _REF_IN_TEXT.finditer(text):
+        out.add(_norm_ref(m.group(1), m.group(2)))
+    return out
+
+
+def ref_tokens_from_tag(value):
+    """Тег ref дороги (бывает списком: 'M39;E40') → {'m39', 'e40'}."""
+    if not value:
+        return set()
+    out = set()
+    for part in re.split(r"[;,]", str(value)):
+        part = translit(part.strip()).replace("-", "").replace(" ", "")
+        if re.fullmatch(r"4?[mare]\d{1,4}", part):
+            out.add(part)
+    return out
 
 
 # --- Геометрия (локальная равнопромежуточная проекция, город ≤ сотни метров) --
@@ -131,12 +228,19 @@ def _project_point_to_segment(px, py, ax, ay, bx, by):
 
 
 class RoadIndex:
-    """Сеточный индекс отрезков именованных дорог для запросов «что рядом»."""
+    """Сеточный индекс отрезков дорог для запросов «что рядом».
 
-    CELL = 0.003  # ≈ 250–330 м
+    v2: длинные отрезки режем на куски ≤ SPLIT_M и кладём кусок во все клетки
+    его bbox. Прежний индекс «по клеткам концов» терял длинные прямые: у
+    2-километрового сегмента трассы концы лежат далеко, и камера посередине
+    его «не видела» — магистральные камеры не снапались вовсе.
+    """
+
+    CELL = 0.003    # ≈ 250–330 м
+    SPLIT_M = 200.0  # максимальная длина индексируемого куска
 
     def __init__(self):
-        self.grid = {}   # (ci, cj) -> [ (lat1, lon1, lat2, lon2, tokens, rank) ]
+        self.grid = {}   # (ci, cj) -> [ (lat1, lon1, lat2, lon2, tokens, refs, rank) ]
         self.count = 0
 
     @staticmethod
@@ -144,30 +248,44 @@ class RoadIndex:
         return (int(math.floor(lat / RoadIndex.CELL)),
                 int(math.floor(lon / RoadIndex.CELL)))
 
-    def add_linestring(self, coords, tokens, rank):
-        """coords: [[lon, lat], ...] (порядок GeoJSON). Режем на короткие отрезки."""
+    def _add_segment(self, lat1, lon1, lat2, lon2, tokens, refs, rank):
+        seg = (lat1, lon1, lat2, lon2, tokens, refs, rank)
+        c1i, c1j = self._cell(lat1, lon1)
+        c2i, c2j = self._cell(lat2, lon2)
+        for ci in range(min(c1i, c2i), max(c1i, c2i) + 1):
+            for cj in range(min(c1j, c2j), max(c1j, c2j) + 1):
+                self.grid.setdefault((ci, cj), []).append(seg)
+        self.count += 1
+
+    def add_linestring(self, coords, tokens, refs, rank):
+        """coords: [[lon, lat], ...] (порядок GeoJSON)."""
         for (lon1, lat1), (lon2, lat2) in zip(coords, coords[1:]):
-            seg = (lat1, lon1, lat2, lon2, tokens, rank)
-            # Индексируем по клеткам обоих концов (городские отрезки короткие).
-            for lat, lon in ((lat1, lon1), (lat2, lon2)):
-                self.grid.setdefault(self._cell(lat, lon), []).append(seg)
-            self.count += 1
+            # Длину меряем грубо (по широте средней точки) — для нарезки хватает.
+            kx = _M_PER_DEG_LON * math.cos(math.radians((lat1 + lat2) / 2))
+            length = math.hypot((lat2 - lat1) * _M_PER_DEG_LAT, (lon2 - lon1) * kx)
+            pieces = max(1, int(math.ceil(length / self.SPLIT_M)))
+            for k in range(pieces):
+                t0, t1 = k / pieces, (k + 1) / pieces
+                self._add_segment(lat1 + (lat2 - lat1) * t0, lon1 + (lon2 - lon1) * t0,
+                                  lat1 + (lat2 - lat1) * t1, lon1 + (lon2 - lon1) * t1,
+                                  tokens, refs, rank)
 
     def nearby(self, lat, lon, radius):
-        """Отрезки в пределах radius метров: (dist, plat, plon, tokens, rank)."""
+        """Отрезки в пределах radius метров: (dist, plat, plon, tokens, refs, rank)."""
         coslat = math.cos(math.radians(lat))
         kx = _M_PER_DEG_LON * coslat
         ci, cj = self._cell(lat, lon)
+        reach = max(1, int(math.ceil(radius / (self.CELL * _M_PER_DEG_LAT))))
         seen = set()
         out = []
-        for di in (-1, 0, 1):
-            for dj in (-1, 0, 1):
+        for di in range(-reach, reach + 1):
+            for dj in range(-reach, reach + 1):
                 for seg in self.grid.get((ci + di, cj + dj), ()):  # noqa
                     key = id(seg)
                     if key in seen:
                         continue
                     seen.add(key)
-                    lat1, lon1, lat2, lon2, tokens, rank = seg
+                    lat1, lon1, lat2, lon2, tokens, refs, rank = seg
                     ax = (lon1 - lon) * kx
                     ay = (lat1 - lat) * _M_PER_DEG_LAT
                     bx = (lon2 - lon) * kx
@@ -177,7 +295,7 @@ class RoadIndex:
                     if dist <= radius:
                         plat = lat + qy / _M_PER_DEG_LAT
                         plon = lon + qx / kx
-                        out.append((dist, plat, plon, tokens, rank))
+                        out.append((dist, plat, plon, tokens, refs, rank))
         out.sort(key=lambda c: c[0])
         return out
 
@@ -213,7 +331,7 @@ def _iter_features(path):
 
 def load_roads(path):
     index = RoadIndex()
-    named = 0
+    named = withref = 0
     for feat in _iter_features(path):
         geom = (feat or {}).get("geometry") or {}
         if geom.get("type") != "LineString":
@@ -226,54 +344,126 @@ def load_roads(path):
         for key in ("name", "name:uz", "name:ru", "name:en", "int_name",
                     "name:uz-Latn", "name:uz-Cyrl", "alt_name", "official_name"):
             tokens |= street_tokens(props.get(key))
+        refs = set()
+        for key in ("ref", "int_ref", "nat_ref", "official_ref"):
+            refs |= ref_tokens_from_tag(props.get(key))
         rank = _HIGHWAY_RANK.get(props.get("highway", ""), 2)
         if tokens:
             named += 1
-        index.add_linestring(coords, tokens, rank)
-    return index, named
+        if refs:
+            withref += 1
+        index.add_linestring(coords, tokens, refs, rank)
+    return index, named, withref
 
 
 # --- Выбор точки переноса ----------------------------------------------------
 
-def choose_snap(cam, index, *, radius, max_shift, trust_geom):
-    """→ (lat, lon, reason, road_tokens, shift) либо None (оставить + needsReview)."""
+def _trust_for_rank(rank, base):
+    """Порог «уже на дороге» по классу: у магистрали ось дальше от обочины."""
+    if rank >= 5:
+        return base * 2.5   # trunk/primary: широкая многополоска
+    if rank >= 3:
+        return base * 1.5   # secondary/tertiary
+    return base
+
+
+def choose_snap(cam, index, *, radius, max_shift, max_shift_ref, trust_geom):
+    """→ (lat, lon, reason, shift) либо None (оставить + needsReview).
+
+    Каскад: ref трассы → имя улицы → геометрия (см. шапку файла).
+    """
     cands = index.nearby(cam["lat"], cam["lon"], radius)
     if not cands:
         return None
-    addr = street_tokens(cam.get("location", ""))
+    location = cam.get("location", "")
+    addr = street_tokens(location)
+    addr_refs = ref_tokens_from_text(location)
 
+    # 1) Ref: однозначнее имени (двух параллельных M39 не бывает) — допускаем
+    #    больший перенос: трассы геокодированы хуже городских улиц.
+    if addr_refs:
+        matched = [c for c in cands if addr_refs & c[4]]
+        if matched:
+            dist, plat, plon, _t, refs, _rank = matched[0]
+            if dist <= max_shift_ref:
+                return (plat, plon,
+                        f"ref-match «{'/'.join(sorted(addr_refs & refs))}» ({dist:.0f} м)",
+                        dist)
+
+    # 2) Имя улицы: даже если чужая дорога физически ближе.
     named = [c for c in cands if tokens_match(addr, c[3])]
     if named:
-        dist, plat, plon, tokens, _rank = named[0]  # ближайшая среди совпавших
+        dist, plat, plon, tokens, _r, _rank = named[0]
         if dist <= max_shift:
             road = " ".join(sorted(tokens))
-            return (plat, plon, f"name-match «{road}» ({dist:.0f} м)", tokens, dist)
+            return (plat, plon, f"name-match «{road}» ({dist:.0f} м)", dist)
         return None  # имя нашли, но слишком далеко — подозрительно, не двигаем
 
-    # Имя не совпало (адрес без улицы / улицы нет рядом в OSM). Доверяем геометрии
-    # только если камера и так почти на дороге — смещение мало и безопасно.
-    dist, plat, plon, tokens, _rank = cands[0]
-    if dist <= trust_geom:
-        return (plat, plon, f"already-on-road ({dist:.0f} м)", tokens, dist)
+    # 3) Геометрия: имя не совпало (адрес без улицы / улицы нет в OSM), но камера
+    #    и так почти на дороге — смещение мало и безопасно.
+    dist, plat, plon, _t, _r, rank = cands[0]
+    if dist <= _trust_for_rank(rank, trust_geom):
+        return (plat, plon, f"already-on-road ({dist:.0f} м, rank {rank})", dist)
     return None
+
+
+# --- Дубли после снапа -------------------------------------------------------
+
+def find_duplicates(cameras, *, max_meters=60.0):
+    """Пары камер одного типа ближе max_meters — кандидаты в дубли реестра.
+    Только отчёт: в реестре бывают две законные камеры по направлениям."""
+    cell = 0.001  # ~110 м
+    grid = {}
+    for i, cam in enumerate(cameras):
+        grid.setdefault((int(cam["lat"] / cell), int(cam["lon"] / cell)), []).append(i)
+    # Полный обход 3×3 соседей + дедуп через (min, max): «форвардные» клетки
+    # ломаются на паре через границу, когда индексы идут не по сетке.
+    seen = set()
+    pairs = []
+    for (ci, cj), members in grid.items():
+        for i in members:
+            a = cameras[i]
+            kx = _M_PER_DEG_LON * math.cos(math.radians(a["lat"]))
+            for di in (-1, 0, 1):
+                for dj in (-1, 0, 1):
+                    for j in grid.get((ci + di, cj + dj), ()):
+                        if j == i:
+                            continue
+                        key = (min(i, j), max(i, j))
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        b = cameras[j]
+                        if a.get("type") != b.get("type"):
+                            continue
+                        d = math.hypot((a["lat"] - b["lat"]) * _M_PER_DEG_LAT,
+                                       (a["lon"] - b["lon"]) * kx)
+                        if d <= max_meters:
+                            pairs.append((a.get("id"), b.get("id"), round(d, 1),
+                                          a.get("type", ""),
+                                          a.get("location", "")[:50],
+                                          b.get("location", "")[:50]))
+    return sorted(pairs, key=lambda p: p[2])
 
 
 # --- Основной проход ---------------------------------------------------------
 
-def snap_all(cameras, index, *, radius, max_shift, trust_geom):
+def snap_all(cameras, index, *, radius, max_shift, max_shift_ref, trust_geom):
     snapped = kept = 0
     total_shift = 0.0
     result, moves, report = [], [], []
+    reasons = {}
     for cam in cameras:
         out = dict(cam)
         choice = choose_snap(cam, index, radius=radius, max_shift=max_shift,
-                             trust_geom=trust_geom)
+                             max_shift_ref=max_shift_ref, trust_geom=trust_geom)
         if choice:
-            lat, lon, reason, _tokens, shift = choice
+            lat, lon, reason, shift = choice
             out["lat"], out["lon"] = round(lat, 6), round(lon, 6)
             out.pop("needsReview", None)
             snapped += 1
             total_shift += shift
+            reasons[reason.split(" ")[0]] = reasons.get(reason.split(" ")[0], 0) + 1
             if shift > 3:
                 report.append((cam.get("id"), round(shift, 1), reason,
                                cam.get("location", "")[:60]))
@@ -288,7 +478,7 @@ def snap_all(cameras, index, *, radius, max_shift, trust_geom):
             out["needsReview"] = True
             kept += 1
         result.append(out)
-    return result, snapped, kept, total_shift, moves, report
+    return result, snapped, kept, total_shift, moves, report, reasons
 
 
 def _round_lat(m):  # метры → доли градуса широты (для самотеста)
@@ -303,6 +493,9 @@ def selftest():
         print(f"  [{'ok ' if cond else 'FAIL'}] {label}")
         ok = ok and cond
 
+    # radius ≥ max_shift_ref: дорога должна попадать в поиск на пределе переноса.
+    kwargs = dict(radius=160, max_shift=80, max_shift_ref=150, trust_geom=10)
+
     # 1) Матчинг имён с транслитом.
     check(tokens_match(street_tokens("A.navoiy ko'chasi 30"),
                        street_tokens("Alisher Navoiy ko'chasi")), "navoiy ~ Navoiy")
@@ -313,15 +506,34 @@ def selftest():
     check(not tokens_match(street_tokens("Istiqlol ko'chasi"),
                            street_tokens("Sharof Rashidov ko'chasi")), "разные улицы не матчатся")
 
-    # 2) Ловушка параллельной улицы: камера ближе к боковой, но адрес — Navoiy.
+    # 1а) Опечатки/нормы транслита: допуск 1 только на длинных токенах.
+    check(tokens_match(street_tokens("Chilanzar ko'chasi"),
+                       street_tokens("Chilonzor ko'chasi")), "Chilanzar ~ Chilonzor (скелет согласных)")
+    check(tokens_match(street_tokens("Юнусабад тумани"),
+                       street_tokens("Yunusobod ko'chasi")), "Юнусабад ~ Yunusobod")
+    check(_damerau1("chilonzor", "chilonzar"), "DL: chilonzor ~ chilonzar")
+    check(_damerau1("beruniy", "beruiny"), "DL: перестановка соседних букв")
+    check(not _damerau1("amir", "emir") or len("amir") < 6, "короткие токены без допуска")
+    check(not tokens_match({"ozod"}, {"obod"}), "ozod ≠ obod (4 буквы, замена не в счёт)")
+
+    # 2) Ref из адреса и тега.
+    check(ref_tokens_from_text("Автодорога М-39, 25-км") == {"m39"}, "кир. М-39 → m39")
+    check(ref_tokens_from_text("A 373 Tashkent-Osh") == {"a373"}, "A 373 → a373")
+    check(ref_tokens_from_text("4Р-87 участок") == {"4r87"}, "4Р-87 → 4r87")
+    check(ref_tokens_from_text("дом 39, кв 5") == set(), "номер дома — не ref")
+    check(ref_tokens_from_tag("M39;E40") == {"m39", "e40"}, "тег 'M39;E40'")
+
+    # 3) Ловушка параллельной улицы: камера ближе к боковой, но адрес — Navoiy.
     index = RoadIndex()
     A = 41.3110      # «Navoiy ko'chasi» (главная)
     B = A - _round_lat(40)   # «Saqchimon ko'chasi» параллельно в 40 м
-    index.add_linestring([[69.2800, A], [69.2820, A]], street_tokens("Navoiy ko'chasi"), 5)
-    index.add_linestring([[69.2800, B], [69.2820, B]], street_tokens("Saqchimon ko'chasi"), 2)
+    index.add_linestring([[69.2800, A], [69.2820, A]],
+                         street_tokens("Navoiy ko'chasi"), set(), 5)
+    index.add_linestring([[69.2800, B], [69.2820, B]],
+                         street_tokens("Saqchimon ko'chasi"), set(), 2)
     cam = {"id": 1, "lat": A - _round_lat(26), "lon": 69.2810,  # 26 м от A, 14 м от B
            "location": "Navoiy ko'chasi 30"}
-    res = choose_snap(cam, index, radius=100, max_shift=80, trust_geom=10)
+    res = choose_snap(cam, index, **kwargs)
     check(res is not None, "камера с адресом Navoiy снапится")
     if res:
         d_to_A = abs(res[0] - A) * _M_PER_DEG_LAT
@@ -329,33 +541,75 @@ def selftest():
         check(d_to_A < 3 and d_to_B > 30,
               f"снап на Navoiy, не на параллельную ({d_to_A:.0f} м до A, {d_to_B:.0f} м до B)")
 
-    # 3) Нет совпадения по имени и далеко от дорог → needsReview (None).
+    # 4) Нет совпадения по имени и далеко от дорог → needsReview (None).
     cam_far = {"id": 2, "lat": A - _round_lat(70), "lon": 69.2810,
                "location": "Nomalum ko'chasi"}
-    check(choose_snap(cam_far, index, radius=100, max_shift=80, trust_geom=10) is None,
+    check(choose_snap(cam_far, index, **kwargs) is None,
           "далёкая камера без совпадения имени → needsReview")
 
-    # 4) Почти на дороге (8 м), имя не совпало → доверяем геометрии.
+    # 5) Почти на дороге (8 м), имя не совпало → доверяем геометрии.
     cam_close = {"id": 3, "lat": A - _round_lat(8), "lon": 69.2810, "location": ""}
-    check(choose_snap(cam_close, index, radius=100, max_shift=80, trust_geom=10) is not None,
+    check(choose_snap(cam_close, index, **kwargs) is not None,
           "камера в 8 м от дороги снапится по геометрии")
+
+    # 5а) Порог геометрии растёт с классом дороги: 20 м от primary — ок,
+    #     20 м от residential — нет.
+    cam20 = {"id": 4, "lat": A - _round_lat(20), "lon": 69.2810, "location": ""}
+    res20 = choose_snap(cam20, index, **kwargs)
+    check(res20 is not None and abs(res20[0] - A) * _M_PER_DEG_LAT < 3,
+          "20 м от primary → снап (trust растёт с рангом)")
+
+    # 6) ДЛИННЫЙ сегмент: камера у середины 2-км прямой (прежний индекс терял).
+    long_index = RoadIndex()
+    L = 41.5000
+    long_index.add_linestring([[69.0000, L], [69.0240, L]],   # ~2 км по долготе
+                              street_tokens("Katta yol"), {"m39"}, 6)
+    cam_mid = {"id": 5, "lat": L - _round_lat(30), "lon": 69.0120,
+               "location": "Katta yol, 12"}
+    res_mid = choose_snap(cam_mid, long_index, **kwargs)
+    check(res_mid is not None and abs(res_mid[0] - L) * _M_PER_DEG_LAT < 3,
+          "камера у середины 2-км сегмента видит дорогу (supercover-индекс)")
+
+    # 7) Ref-матч: адрес «М-39», дорога без имени в 120 м (для name — слишком
+    #    далеко, для ref — норм).
+    cam_ref = {"id": 6, "lat": L - _round_lat(120), "lon": 69.0120,
+               "location": "Автодорога М-39, 25-км"}
+    res_ref = choose_snap(cam_ref, long_index, **kwargs)
+    check(res_ref is not None and "ref-match" in res_ref[2],
+          "трассовая камера снапится по ref на 120 м")
+    cam_far_ref = {"id": 7, "lat": L - _round_lat(200), "lon": 69.0120,
+                   "location": "Автодорога М-39"}
+    check(choose_snap(cam_far_ref, long_index, **kwargs) is None,
+          "200 м — за пределом даже для ref → needsReview")
+
+    # 8) Дубли: две камеры одного типа в 25 м → пара в отчёте.
+    dups = find_duplicates([
+        {"id": 10, "lat": A, "lon": 69.2800, "type": "Стационар радар"},
+        {"id": 11, "lat": A - _round_lat(25), "lon": 69.2800, "type": "Стационар радар"},
+        {"id": 12, "lat": A, "lon": 69.2900, "type": "Стационар радар"},
+    ])
+    check(len(dups) == 1 and {dups[0][0], dups[0][1]} == {10, 11},
+          "пара-дубль найдена, дальняя камера не зацеплена")
 
     print("selftest:", "PASSED" if ok else "FAILED")
     return 0 if ok else 1
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Snap camera coordinates to named OSM roads")
-    ap.add_argument("--roads", help="GeoJSON(seq) именованных дорог (из osmium export)")
+    ap = argparse.ArgumentParser(description="Snap camera coordinates to OSM roads")
+    ap.add_argument("--roads", help="GeoJSON(seq) дорог (из osmium export)")
     ap.add_argument("--in", dest="inp", default="cameras.json")
     ap.add_argument("--out", dest="out", default="cameras.snapped.json")
     ap.add_argument("--report", default="snap_report.csv")
     ap.add_argument("--moves", default="snap_moves.geojson")
-    ap.add_argument("--radius", type=float, default=100.0, help="радиус поиска дорог, м")
+    ap.add_argument("--dups", default="snap_dups.csv")
+    ap.add_argument("--radius", type=float, default=160.0, help="радиус поиска дорог, м")
     ap.add_argument("--max-shift", type=float, default=80.0,
                     help="макс. перенос при совпадении имени, м")
+    ap.add_argument("--max-shift-ref", type=float, default=150.0,
+                    help="макс. перенос при совпадении ref трассы, м")
     ap.add_argument("--trust-geom", type=float, default=10.0,
-                    help="если камера ближе этого к дороге — снап без имени, м")
+                    help="базовый порог «уже на дороге» (растёт с классом), м")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
 
@@ -368,16 +622,17 @@ def main():
         return 2
 
     print(f"загрузка дорог: {args.roads} …")
-    index, named = load_roads(args.roads)
-    print(f"  отрезков: {index.count}, из них с именами: {named}")
+    index, named, withref = load_roads(args.roads)
+    print(f"  кусков: {index.count}, линий с именами: {named}, с ref: {withref}")
 
     cameras = json.load(open(args.inp, encoding="utf-8"))
     print(f"камер: {len(cameras)} · radius {args.radius:.0f} м · "
-          f"max-shift {args.max_shift:.0f} м · trust-geom {args.trust_geom:.0f} м\n")
+          f"max-shift {args.max_shift:.0f}/{args.max_shift_ref:.0f} (имя/ref) м · "
+          f"trust-geom {args.trust_geom:.0f} м\n")
 
-    result, snapped, kept, total_shift, moves, report = snap_all(
+    result, snapped, kept, total_shift, moves, report, reasons = snap_all(
         cameras, index, radius=args.radius, max_shift=args.max_shift,
-        trust_geom=args.trust_geom)
+        max_shift_ref=args.max_shift_ref, trust_geom=args.trust_geom)
 
     json.dump(result, open(args.out, "w", encoding="utf-8"), ensure_ascii=False)
     with open(args.report, "w", encoding="utf-8", newline="") as f:
@@ -387,10 +642,17 @@ def main():
     json.dump({"type": "FeatureCollection", "features": moves},
               open(args.moves, "w", encoding="utf-8"), ensure_ascii=False)
 
+    dups = find_duplicates(result)
+    with open(args.dups, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["id1", "id2", "dist_m", "type", "location1", "location2"])
+        w.writerows(dups)
+
     avg = (total_shift / snapped) if snapped else 0
     print(f"итог: перенесено {snapped}, оставлено+needsReview {kept}")
-    print(f"средний перенос: {avg:.1f} м")
-    print(f"отчёт: {args.report} · переносы (GeoJSON): {args.moves} · база: {args.out}")
+    print(f"по сигналам: {reasons}")
+    print(f"средний перенос: {avg:.1f} м · пар-дублей: {len(dups)}")
+    print(f"отчёты: {args.report} · {args.moves} · {args.dups} · база: {args.out}")
     print("\nдалее: открыть snap_moves.geojson в geojson.io и глазами проверить,")
     print("что камеры не прыгнули на чужие дороги; затем заменить живую базу и")
     print("поднять version.json (OTA раздаст обновление приложению).")

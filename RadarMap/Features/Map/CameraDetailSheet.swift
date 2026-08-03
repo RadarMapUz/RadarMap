@@ -127,7 +127,7 @@ struct CameraDetailSheet: View {
     }
 
     private var approximateBanner: some View {
-        Label("Координаты приблизительные — в исходных данных они были повреждены.",
+        Label("Позиция уточняется: адрес из реестра не удалось привязать к дороге. Предупреждаем о такой камере с запасом.",
               systemImage: "exclamationmark.triangle.fill")
             .font(.rounded(13))
             .foregroundStyle(Theme.radar)

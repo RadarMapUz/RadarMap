@@ -277,6 +277,16 @@ final class LocationService: NSObject {
             // Камеры, мимо которых ещё «проезжали» в момент остановки.
             register(passes: passTracking.flush())
             trip.finish(endedManually: !auto)
+            // Автостоп с телефоном в кармане: короткие итоги на локскрин —
+            // цифры дошли до человека, даже если он не откроет приложение.
+            // Свежесть по endedAt, а не по новому id: у продолженной поездки
+            // (склейка) id остаётся старым.
+            if auto, !isPhoneForeground, let record = trip.history.first,
+               Date().timeIntervalSince(record.endedAt) < 30 {
+                notifier.notifyTripSummary(distance: record.distanceMeters,
+                                           rating: record.score.map { Int($0) },
+                                           fineRisk: TripHistory.fineRisk(of: record.passed))
+            }
             // Припарковались у цели — маршрут выполнен, линия не должна висеть на карте.
             route?.finishIfNearDestination(coordinate: currentCoordinate)
         }
@@ -505,8 +515,11 @@ final class LocationService: NSObject {
         guard isDirectionalFilteringActive else { return true }   // стоим/курс неизвестен → не фильтруем
         if isCameraOnRoute(camera) { return true }
         // Внезапным точкам (краудсорс) — коридор трассы: их координату ставил
-        // человек на ходу, требовать от неё городской точности нельзя.
-        let context: AlertPolicy.Context = camera.kind.isSudden ? .highway : alertContext
+        // человек на ходу. Камерам с непроверенной позицией (needsReview: снап
+        // не нашёл её дорогу) — тоже: лучше предупредить с запасом, чем
+        // промолчать из-за смещённой координаты в реестре.
+        let generous = camera.kind.isSudden || camera.needsReview == true
+        let context: AlertPolicy.Context = generous ? .highway : alertContext
         return RoadCorridor.contains(camera: camera.coordinate, from: coordinate,
                                      course: currentCourse, context: context)
     }

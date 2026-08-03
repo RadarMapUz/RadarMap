@@ -179,8 +179,9 @@ extension TripHistory {
             .filter { $0.count >= 2 }
     }
 
-    /// Проезды камер периода, сгруппированные по точке: сколько раз проезжали и
-    /// было ли превышение. Маркеры карты отчёта.
+    /// Проезды камер периода, сгруппированные по точке: сколько раз проезжали,
+    /// было ли превышение, максимальная скорость проезда. Маркеры карты отчёта
+    /// и карточка по тапу («где я превышал»).
     static func passMarkers(_ history: [TripRecord], period: StatsPeriod,
                             now: Date = Date()) -> [PassMarker] {
         var byCamera: [Int: PassMarker] = [:]
@@ -193,11 +194,14 @@ extension TripHistory {
                 if var existing = byCamera[pass.cameraID] {
                     existing.times += 1
                     existing.overTimes += over ? 1 : 0
+                    existing.maxSpeedKmh = max(existing.maxSpeedKmh, pass.speedKmh)
+                    existing.limitKmh = existing.limitKmh ?? pass.limitKmh
                     byCamera[pass.cameraID] = existing
                 } else {
                     byCamera[pass.cameraID] = PassMarker(
                         cameraID: pass.cameraID, lat: lat, lon: lon,
-                        location: pass.location, times: 1, overTimes: over ? 1 : 0)
+                        location: pass.location, times: 1, overTimes: over ? 1 : 0,
+                        maxSpeedKmh: pass.speedKmh, limitKmh: pass.limitKmh)
                 }
             }
         }
@@ -205,7 +209,8 @@ extension TripHistory {
     }
 }
 
-/// Камера на карте отчёта: сколько раз проезжали и сколько из них с превышением.
+/// Камера на карте отчёта: сколько раз проезжали, сколько из них с превышением
+/// и с какой максимальной скоростью.
 nonisolated struct PassMarker: Identifiable, Equatable {
     let cameraID: Int
     let lat: Double
@@ -213,6 +218,8 @@ nonisolated struct PassMarker: Identifiable, Equatable {
     let location: String
     var times: Int
     var overTimes: Int
+    var maxSpeedKmh: Double
+    var limitKmh: Int?
 
     var id: Int { cameraID }
     var hasViolation: Bool { overTimes > 0 }

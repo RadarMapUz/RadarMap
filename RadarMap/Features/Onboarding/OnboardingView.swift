@@ -14,7 +14,7 @@ struct OnboardingView: View {
     let onFinish: () -> Void
 
     @State private var page = 0
-    private let lastPage = 4
+    private let lastPage = 5
 
     var body: some View {
         ZStack {
@@ -24,9 +24,10 @@ struct OnboardingView: View {
                 TabView(selection: $page) {
                     heroPage.tag(0)
                     alertsPage.tag(1)
-                    navigatorPage.tag(2)
-                    companionPage.tag(3)
-                    permissionsPage.tag(4)
+                    voicePage.tag(2)
+                    navigatorPage.tag(3)
+                    companionPage.tag(4)
+                    permissionsPage.tag(5)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(.easeInOut(duration: 0.3), value: page)
@@ -90,7 +91,22 @@ struct OnboardingView: View {
         )
     }
 
-    // MARK: - Страница 3: навигатор
+    // MARK: - Страница 3: когда я говорю (иначе «почему молчит в городе?» = удаление)
+
+    private var voicePage: some View {
+        featurePage(
+            icon: "waveform.and.mic",
+            title: "Говорю только по делу",
+            rows: [
+                ("building.2.fill", "В городе камер сотни — о них молча предупредит панель, без болтовни"),
+                ("road.lanes", "На трассе спокойно назову каждую: «по маршруту камера через 800 метров»"),
+                ("exclamationmark.triangle.fill", "Громко — только когда реально превышаете или впереди внезапный радар"),
+                ("hand.tap.fill", "Долгое нажатие на спидометр — быстрые переключатели звука"),
+            ]
+        )
+    }
+
+    // MARK: - Страница 4: навигатор
 
     private var navigatorPage: some View {
         featurePage(

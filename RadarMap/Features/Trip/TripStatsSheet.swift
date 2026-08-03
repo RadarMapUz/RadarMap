@@ -2,50 +2,79 @@
 //  TripStatsSheet.swift
 //  RadarMap
 //
-//  «Итоги»: текущая/последняя поездка + история по дням.
-//  Анимации одноразовые (каскад появления, живые цифры) — GPU почти не трогаем,
-//  история ленивая, спарклайны рисуются только у видимых строк.
+//  «Итоги» — единый экран статистики. Фильтр периода (Неделя / Месяц / Всё
+//  время) правит ВСЕМ разделом: герой (рейтинг + километры + дельта к прошлому
+//  периоду), карта проездов, зона риска, плитки метрик и график по дням читают
+//  одну и ту же PeriodSummary. Никаких двух источников правды: раньше экран
+//  показывал «Штрафы за 30 дней» рядом с недельной карточкой истории и
+//  отдельным отчётом — три пересчёта одного и того же в разных местах.
+//
+//  Каждый блок нажимается: герой → как считается рейтинг; карта и зона риска →
+//  полноэкранная карта проездов (зона риска — сразу с фокусом на «своей»
+//  камере); достижение → его условия; поездка в истории → деталка.
+//
+//  Все цифры приходят готовыми из TripHistory/PeriodSummary — вьюха не считает
+//  ничего (ARCHITECTURE.md: данные в модели).
 //
 
 import SwiftUI
-import CoreLocation
 import Charts
+import MapKit
+import CoreLocation
 
 struct TripStatsSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     /// Повторить поездку: маршрут к точке финиша записи из истории.
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
+
+    @State private var period: StatsPeriod = .week
     @State private var selectedRecord: TripRecord?
     /// Каскадное появление секций при открытии (одноразовое).
     @State private var appeared = false
     @State private var sharePayload: ShareImagePayload?
     @State private var showRatingInfo = false
-    @State private var showSavingsInfo = false
+    @State private var showFinesInfo = false
     @State private var selectedBadge: Achievement?
-    /// Полный отчёт за период (Неделя / Месяц / Всё время).
-    @State private var showReport = false
+    /// Полноэкранная карта проездов (item — чтобы передать фокус зоны риска).
+    @State private var mapPayload: PeriodMapPayload?
 
     var body: some View {
         let trip = env.trip
         let active = env.location.isTripActive
-        // Вне активной поездки показываем ПОСЛЕДНЮЮ ЗАПИСЬ истории, а не «тёплую»
-        // live-сессию: после endTrip GPS на открытом приложении продолжает тикать,
-        // и живые крохи (50 м «новой» дистанции) затирали реальную поездку.
-        let lastRecord = active ? nil : trip.history.first
+        let summary = TripHistory.summary(trip.history, period: period)
 
         NavigationStack {
             ScrollView {
                 ScrollViewReader { proxy in
                 LazyVStack(spacing: 16) {
-                    ratingHero(trip: trip)
+                    // Живая поездка — вне периодов: таймер, скорость, живые метрики.
+                    if active {
+                        liveHeader(trip: trip)
+                            .entrance(0, appeared)
+                        liveGrid(trip: trip)
+                            .entrance(1, appeared)
+                    }
+
+                    periodPicker
                         .entrance(0, appeared)
-                    statusHeader(active: active, trip: trip, last: lastRecord)
-                        .entrance(1, appeared)
-                    statsGrid(trip: trip, last: lastRecord)
-                        .entrance(2, appeared)
-                    finesCard(trip: trip)
-                        .entrance(3, appeared)
+
+                    if summary.isEmpty {
+                        if !active { emptyHint.entrance(1, appeared) }
+                    } else {
+                        heroCard(trip: trip, summary: summary)
+                            .entrance(1, appeared)
+                        mapCard
+                            .entrance(2, appeared)
+                        riskCard(summary: summary)
+                            .entrance(3, appeared)
+                        periodTiles(summary: summary)
+                            .entrance(3, appeared)
+                        if let days = period.chartDays {
+                            dailyChart(days: days, summary: summary)
+                                .entrance(4, appeared)
+                        }
+                    }
 
                     achievementsSection(trip: trip)
                         .entrance(4, appeared)
@@ -57,13 +86,9 @@ struct TripStatsSheet: View {
                             onRepeat: onRoute.map { route in
                                 { coord, name in dismiss(); route(coord, name) }
                             },
-                            onDelete: { record in withAnimation { trip.deleteRecord(id: record.id) } },
-                            onOpenReport: { showReport = true })
+                            onDelete: { record in withAnimation { trip.deleteRecord(id: record.id) } })
                             .entrance(5, appeared)
                             .id("history")
-                    } else if !active {
-                        emptyHint
-                            .entrance(4, appeared)
                     }
                 }
                 .padding(20)
@@ -91,9 +116,9 @@ struct TripStatsSheet: View {
                             }
                         } label: { Image(systemName: "ellipsis.circle") }
                             .accessibilityLabel(Text("Ещё"))
-                        // Похвастаться итогами: рейтинг + экономия одной картинкой.
-                        if trip.rating != nil {
-                            Button { share(trip: trip) } label: {
+                        // Похвастаться периодом: карта + рейтинг + зона риска одной картинкой.
+                        if !summary.isEmpty {
+                            Button { share(summary: summary) } label: {
                                 Image(systemName: "square.and.arrow.up")
                             }
                             .accessibilityLabel(Text("Поделиться итогами"))
@@ -110,8 +135,11 @@ struct TripStatsSheet: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
                     if args.contains("-openFirstTrip") { selectedRecord = env.trip.history.first }
                     if args.contains("-showRatingInfo") { showRatingInfo = true }
-                    if args.contains("-showSavingsInfo") { showSavingsInfo = true }
-                    if args.contains("-shareStats") { share(trip: env.trip) }
+                    if args.contains("-showSavingsInfo") { showFinesInfo = true }
+                    if args.contains("-showPeriodMap") { openMap(focus: nil) }
+                    if args.contains("-shareStats") {
+                        share(summary: TripHistory.summary(env.trip.history, period: period))
+                    }
                 }
                 #endif
             }
@@ -126,16 +154,12 @@ struct TripStatsSheet: View {
                 }
             })
         }
-        .sheet(isPresented: $showReport) { PeriodReportSheet() }
-        #if DEBUG
-        // Скриншот-автоматизация: `-showStats -showReport` открывает отчёт сразу.
-        .onAppear {
-            guard ProcessInfo.processInfo.arguments.contains("-showReport") else { return }
-            Task { await Task.pause(seconds: 0.8); showReport = true }
+        .sheet(item: $mapPayload) { payload in
+            PeriodMapSheet(tracks: payload.tracks, markers: payload.markers,
+                           focus: payload.focus)
         }
-        #endif
         .sheet(isPresented: $showRatingInfo) { RatingInfoSheet() }
-        .sheet(isPresented: $showSavingsInfo) { SavingsInfoSheet() }
+        .sheet(isPresented: $showFinesInfo) { SavingsInfoSheet() }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
         .sheet(item: $sharePayload) { payload in
             ActivityShareSheet(image: payload.image)
@@ -144,129 +168,67 @@ struct TripStatsSheet: View {
         }
     }
 
-    // MARK: - Рейтинг вождения (герой)
+    // MARK: - Фильтр периода
 
-    @ViewBuilder
-    private func ratingHero(trip: TripStats) -> some View {
-        HStack(spacing: 18) {
-            if let rating = trip.rating {
-                // Тап — расшифровка: шкала, из чего складывается, как поднять.
+    private var periodPicker: some View {
+        HStack(spacing: 6) {
+            ForEach(StatsPeriod.allCases) { item in
                 Button {
-                    showRatingInfo = true
+                    withAnimation(.snappy(duration: 0.25)) { period = item }
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 } label: {
-                    HStack(spacing: 18) {
-                        RatingRing(rating: rating)
-                            .frame(width: 96, height: 96)
-                        VStack(alignment: .leading, spacing: 7) {
-                            Text(DrivingScore.level(for: rating))
-                                .font(.rounded(17, .bold))
-                                .foregroundStyle(Theme.textPrimary)
-                            if let trend = trip.ratingTrend, trend != 0 {
-                                HStack(spacing: 4) {
-                                    Image(systemName: trend > 0 ? "arrow.up.right" : "arrow.down.right")
-                                        .font(.rounded(11, .bold))
-                                    Text(String(format: String(localized: "%lld за неделю"), abs(trend)))
-                                        .font(.rounded(12, .semibold))
-                                }
-                                .foregroundStyle(trend > 0 ? Theme.success : Theme.danger)
-                                .padding(.horizontal, 9).padding(.vertical, 4)
-                                .background((trend > 0 ? Theme.success : Theme.danger).opacity(0.12),
-                                            in: Capsule())
-                            }
-                            if trip.lifetime.cleanStreak >= 2 {
-                                Label(String(format: String(localized: "чистая серия: %lld подряд"),
-                                             trip.lifetime.cleanStreak),
-                                      systemImage: "flame.fill")
-                                    .font(.rounded(12, .semibold))
-                                    .foregroundStyle(Theme.radar)
-                            }
-                            Text("как считается")
-                                .font(.rounded(11, .medium))
-                                .foregroundStyle(Theme.textTertiary)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.rounded(13, .semibold))
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                    .contentShape(Rectangle())
+                    Text(item.title)
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(period == item ? Theme.background : Theme.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(period == item ? AnyShapeStyle(Theme.accent.gradient)
+                                                   : AnyShapeStyle(Theme.surface), in: Capsule())
                 }
-                .buttonStyle(.plain)
-            } else {
-                Image(systemName: "gauge.with.needle")
-                    .font(.rounded(30))
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 64, height: 64)
-                    .background(Theme.accent.opacity(0.10), in: Circle())
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Рейтинг вождения")
-                        .font(.rounded(16, .bold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text("Появится после первых поездок мимо камер — считаем скорость у каждой и плавность езды.")
-                        .font(.rounded(12))
-                        .foregroundStyle(Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
+                .buttonStyle(PressableStyle())
             }
         }
-        .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
     }
 
-    // MARK: - Штрафы за 30 дней
+    // MARK: - Герой: рейтинг + километры периода
 
-    /// Честный счёт вместо виртуальной «экономии»: 0 штрафов — гордость,
-    /// есть превышения — реальный риск по штрафным ступеням + где чаще всего.
-    @ViewBuilder
-    private func finesCard(trip: TripStats) -> some View {
-        let month = trip.month30
-        let total = month.clean + month.over
-        let ok = month.over == 0
-        // Тап — таблица штрафных ступеней (как считаем).
+    /// Одна карточка вместо двух: кольцо рейтинга (тап — как считается) и
+    /// главная цифра периода с дельтой к прошлому такому же.
+    private func heroCard(trip: TripStats, summary: PeriodSummary) -> some View {
         Button {
-            showSavingsInfo = true
+            showRatingInfo = true
         } label: {
-            HStack(spacing: 14) {
-                Image(systemName: ok ? "shield.lefthalf.filled.badge.checkmark"
-                                     : "exclamationmark.shield.fill")
-                    .font(.rounded(22, .bold))
-                    .foregroundStyle(ok ? Theme.success : Theme.danger)
-                    .frame(width: 48, height: 48)
-                    .background((ok ? Theme.success : Theme.danger).opacity(0.12), in: Circle())
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Штрафы за 30 дней")
-                        .font(.rounded(13, .medium))
-                        .foregroundStyle(Theme.textSecondary)
-                    if total == 0 {
-                        Text("Проезжайте камеры — посчитаем проезды в лимите и риск штрафов.")
-                            .font(.rounded(12))
-                            .foregroundStyle(Theme.textSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else if ok {
-                        Text("0 штрафов")
-                            .font(.rounded(24, .heavy))
-                            .foregroundStyle(Theme.success)
-                        Text(String(format: String(localized: "%lld проездов камер — все в лимите"), total))
-                            .font(.rounded(11))
-                            .foregroundStyle(Theme.textTertiary)
-                    } else {
-                        Text("риск ≈ \(Formatting.money(month.risk))")
-                            .font(.rounded(24, .heavy))
-                            .foregroundStyle(Theme.danger)
+            HStack(spacing: 16) {
+                if let rating = summary.rating {
+                    RatingRing(rating: rating)
+                        .frame(width: 88, height: 88)
+                }
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(Formatting.distance(summary.distance))
+                            .font(.rounded(30, .heavy))
+                            .foregroundStyle(Theme.textPrimary)
                             .contentTransition(.numericText())
-                        Text(String(format: String(localized: "%lld превышений из %lld проездов"),
-                                    month.over, total))
-                            .font(.rounded(11))
-                            .foregroundStyle(Theme.textTertiary)
-                        // «Зона риска»: камера, где превышаете чаще всего, — ясно, где сбавлять.
-                        if let top = month.topOverLocation {
-                            Label(String(format: String(localized: "Чаще всего: %@"), top),
-                                  systemImage: "mappin.circle.fill")
-                                .font(.rounded(11, .medium))
-                                .foregroundStyle(Theme.radar)
-                                .lineLimit(1)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        if let delta = summary.distanceDeltaPercent {
+                            deltaBadge(delta)
                         }
+                    }
+                    if let rating = summary.rating {
+                        Text(DrivingScore.level(for: rating))
+                            .font(.rounded(14, .bold))
+                            .foregroundStyle(Theme.textPrimary)
+                    }
+                    Text(heroSubtitle(summary))
+                        .font(.rounded(12))
+                        .foregroundStyle(Theme.textSecondary)
+                    if trip.lifetime.cleanStreak >= 2 {
+                        Label(String(format: String(localized: "чистая серия: %lld подряд"),
+                                     trip.lifetime.cleanStreak),
+                              systemImage: "flame.fill")
+                            .font(.rounded(11, .semibold))
+                            .foregroundStyle(Theme.radar)
                     }
                 }
                 Spacer(minLength: 0)
@@ -279,6 +241,301 @@ struct TripStatsSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text("Рейтинг и километры за период. Как считается рейтинг"))
+    }
+
+    private func heroSubtitle(_ summary: PeriodSummary) -> String {
+        let trips = String(format: String(localized: "Поездок: %lld"), summary.trips)
+        return "\(trips) · \(Formatting.duration(summary.movingDuration)) "
+            + String(localized: "за рулём")
+    }
+
+    private func deltaBadge(_ delta: Int) -> some View {
+        let up = delta >= 0
+        return Label("\(abs(delta))%", systemImage: up ? "arrow.up.right" : "arrow.down.right")
+            .font(.rounded(11, .bold))
+            .foregroundStyle(up ? Theme.accent : Theme.textSecondary)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background((up ? Theme.accent : Theme.textSecondary).opacity(0.14), in: Capsule())
+            .accessibilityLabel(Text(up ? "Больше, чем в прошлый период"
+                                        : "Меньше, чем в прошлый период"))
+    }
+
+    // MARK: - Карта проездов (превью → полноэкранная)
+
+    private var tracks: [[TrackPoint]] { TripHistory.tracks(env.trip.history, period: period) }
+    private var markers: [PassMarker] { TripHistory.passMarkers(env.trip.history, period: period) }
+
+    @ViewBuilder private var mapCard: some View {
+        let tracks = self.tracks
+        let markers = self.markers
+        if let rect = PeriodMapSheet.boundingRect(tracks: tracks, markers: markers) {
+            Button {
+                openMap(focus: nil)
+            } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Map(initialPosition: .rect(rect)) {
+                        ForEach(Array(tracks.enumerated()), id: \.offset) { _, track in
+                            MapPolyline(coordinates: track.map {
+                                CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+                            })
+                            .stroke(Theme.accent.opacity(0.75),
+                                    style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                        }
+                        ForEach(markers) { marker in
+                            Annotation("", coordinate: marker.coordinate, anchor: .center) {
+                                previewDot(marker)
+                            }
+                            .annotationTitles(.hidden)
+                        }
+                    }
+                    .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll,
+                                        showsTraffic: false))
+                    .frame(height: 230)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
+                        .stroke(Theme.stroke, lineWidth: 1))
+                    .allowsHitTesting(false)   // превью: тап ловит кнопка, жесты — полноэкранная
+                    // Легенда + явная подсказка, что карта нажимается.
+                    HStack(spacing: 14) {
+                        legendItem(Theme.success, "В лимите")
+                        legendItem(Theme.danger, "С превышением")
+                        Spacer()
+                        HStack(spacing: 4) {
+                            Text("Открыть")
+                                .font(.rounded(11, .semibold))
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.rounded(9, .bold))
+                        }
+                        .foregroundStyle(Theme.accent)
+                    }
+                    .padding(.horizontal, 4)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableStyle())
+            .accessibilityLabel(Text("Карта проездов за период. Открыть на весь экран"))
+        }
+    }
+
+    private func previewDot(_ marker: PassMarker) -> some View {
+        let size = min(26.0, 15 + Double(marker.times) * 2)
+        return Circle()
+            .fill(marker.hasViolation ? Theme.danger : Theme.success)
+            .frame(width: size, height: size)
+            .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 1.5))
+    }
+
+    private func legendItem(_ color: Color, _ title: LocalizedStringKey) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(title).font(.rounded(11)).foregroundStyle(Theme.textTertiary)
+        }
+    }
+
+    private func openMap(focus: PassMarker?) {
+        mapPayload = PeriodMapPayload(tracks: tracks, markers: markers, focus: focus)
+    }
+
+    // MARK: - Зона риска (тап — карта с фокусом на камере)
+
+    /// Проезды и штрафные риски ЗА ВЫБРАННЫЙ ПЕРИОД — тот же фильтр, что у всего
+    /// экрана. Тап открывает карту на камере, где превышаете чаще всего;
+    /// маленькая (i) — таблица штрафных ступеней.
+    @ViewBuilder
+    private func riskCard(summary: PeriodSummary) -> some View {
+        let total = summary.cleanPasses + summary.overPasses
+        if total > 0 {
+            let ok = summary.overPasses == 0
+            Button {
+                if ok {
+                    showFinesInfo = true
+                } else {
+                    // Фокус: самая «нарушаемая» камера периода.
+                    openMap(focus: markers.filter(\.hasViolation)
+                        .max { $0.overTimes < $1.overTimes })
+                }
+            } label: {
+                HStack(spacing: 14) {
+                    Image(systemName: ok ? "shield.lefthalf.filled.badge.checkmark"
+                                         : "exclamationmark.shield.fill")
+                        .font(.rounded(22, .bold))
+                        .foregroundStyle(ok ? Theme.success : Theme.danger)
+                        .frame(width: 48, height: 48)
+                        .background((ok ? Theme.success : Theme.danger).opacity(0.12), in: Circle())
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text("Зона риска")
+                                .font(.rounded(13, .medium))
+                                .foregroundStyle(Theme.textSecondary)
+                            // Как считаем штрафы — отдельным маленьким входом,
+                            // основной тап занят картой.
+                            Button {
+                                showFinesInfo = true
+                            } label: {
+                                Image(systemName: "info.circle")
+                                    .font(.rounded(12))
+                                    .foregroundStyle(Theme.textTertiary)
+                            }
+                            .accessibilityLabel(Text("Как считаются штрафы"))
+                        }
+                        if ok {
+                            Text("0 штрафов")
+                                .font(.rounded(24, .heavy))
+                                .foregroundStyle(Theme.success)
+                            Text(String(format: String(localized: "%lld проездов камер — все в лимите"), total))
+                                .font(.rounded(11))
+                                .foregroundStyle(Theme.textTertiary)
+                        } else {
+                            Text("риск ≈ \(Formatting.money(summary.fineRisk))")
+                                .font(.rounded(24, .heavy))
+                                .foregroundStyle(Theme.danger)
+                                .contentTransition(.numericText())
+                            Text(String(format: String(localized: "%lld превышений из %lld проездов"),
+                                        summary.overPasses, total))
+                                .font(.rounded(11))
+                                .foregroundStyle(Theme.textTertiary)
+                            if let top = summary.topOverLocation {
+                                Label(String(format: String(localized: "Чаще всего: %@ — показать"), top),
+                                      systemImage: "mappin.circle.fill")
+                                    .font(.rounded(11, .medium))
+                                    .foregroundStyle(Theme.radar)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: ok ? "chevron.right" : "map.fill")
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(ok ? Theme.textTertiary : Theme.danger)
+                }
+                .padding(16)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: - Плитки периода
+
+    private func periodTiles(summary: PeriodSummary) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            StatTile(value: "\(summary.cameras)", label: "камер пройдено",
+                     icon: "camera.metering.center.weighted", color: Theme.accent)
+            StatTile(value: cleanShareText(summary), label: "проездов в лимите",
+                     icon: "checkmark.shield.fill", color: Theme.success)
+            StatTile(value: "\(Int(summary.maxSpeedKmh))", label: "макс. км/ч",
+                     icon: "gauge.with.dots.needle.100percent", color: Theme.danger)
+            StatTile(value: "\(Int(summary.averageSpeedKmh))", label: "средняя км/ч",
+                     icon: "gauge.with.dots.needle.33percent", color: Theme.radar)
+        }
+    }
+
+    private func cleanShareText(_ summary: PeriodSummary) -> String {
+        guard let share = summary.cleanShare else { return "—" }
+        return "\(Int((share * 100).rounded()))%"
+    }
+
+    // MARK: - График по дням
+
+    private func dailyChart(days: Int, summary: PeriodSummary) -> some View {
+        let daily = TripHistory.dailyKm(TripHistory.records(env.trip.history, period: period),
+                                        days: days)
+        let peak = max(daily.map(\.km).max() ?? 0, 1)
+        let dense = days > 10
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Километры по дням")
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                Spacer()
+                if let busiest = summary.busiestDay, summary.busiestDayKm > 0 {
+                    Text(String(format: String(localized: "Больше всего — %@"),
+                                Formatting.dayTitle(busiest)))
+                        .font(.rounded(12, .semibold))
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+            Chart(daily, id: \.day) { item in
+                BarMark(x: .value("День", item.day, unit: .day),
+                        y: .value("км", item.km),
+                        width: .ratio(dense ? 0.7 : 0.55))
+                .foregroundStyle(LinearGradient(colors: [Theme.accent, Theme.intelligent],
+                                                startPoint: .bottom, endPoint: .top))
+                .opacity(Calendar.current.isDateInToday(item.day) ? 1 : 0.55)
+                .cornerRadius(3)
+            }
+            .chartYScale(domain: 0...peak * 1.15)
+            .chartXAxis {
+                // В месяце подписи каждого дня превращаются в кашу — раз в неделю.
+                AxisMarks(values: .stride(by: .day, count: dense ? 7 : 1)) { _ in
+                    AxisValueLabel(format: dense ? .dateTime.day()
+                                                 : .dateTime.weekday(.abbreviated),
+                                   centered: true)
+                        .foregroundStyle(Theme.textTertiary)
+                        .font(.rounded(9, .medium))
+                }
+            }
+            .chartYAxis(.hidden)
+            .frame(height: 96)
+        }
+        .padding(16)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+    }
+
+    // MARK: - Живая поездка
+
+    private func liveHeader(trip: TripStats) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(Theme.success.opacity(0.15))
+                    .frame(width: 46, height: 46)
+                Image(systemName: "record.circle")
+                    .font(.rounded(20, .bold))
+                    .foregroundStyle(Theme.success)
+                    .symbolEffect(.pulse, options: .repeating, isActive: true)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Поездка идёт")
+                    .font(.rounded(17, .bold))
+                    .foregroundStyle(Theme.textPrimary)
+                if let started = trip.startedAt {
+                    Text(timerInterval: started...Date.distantFuture, countsDown: false)
+                        .font(.rounded(14, .medium).monospacedDigit())
+                        .foregroundStyle(Theme.success)
+                }
+            }
+            Spacer()
+            // Живая скорость — Итоги можно держать открытыми в поездке.
+            VStack(spacing: 0) {
+                Text("\(Int(env.location.speedKmh))")
+                    .font(.rounded(26, .heavy).monospacedDigit())
+                    .foregroundStyle(Theme.textPrimary)
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.35), value: Int(env.location.speedKmh))
+                Text("км/ч")
+                    .font(.rounded(10, .medium))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+    }
+
+    /// Живые метрики текущей поездки — тикают на глазах (numericText).
+    private func liveGrid(trip: TripStats) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            StatTile(value: "\(trip.camerasPassed)", label: "камер пройдено",
+                     icon: "camera.metering.center.weighted", color: Theme.accent, animatesValue: true)
+            StatTile(value: Formatting.distance(trip.distanceMeters), label: "пройдено пути",
+                     icon: "point.topleft.down.to.point.bottomright.curvepath", color: Theme.success, animatesValue: true)
+            StatTile(value: "\(Int(trip.maxSpeedKmh))", label: "макс. км/ч",
+                     icon: "gauge.with.dots.needle.100percent", color: Theme.danger, animatesValue: true)
+            StatTile(value: "\(Int(trip.averageSpeedKmh))", label: "средняя км/ч",
+                     icon: "gauge.with.dots.needle.33percent", color: Theme.radar, animatesValue: true)
+        }
     }
 
     // MARK: - Достижения
@@ -306,126 +563,19 @@ struct TripStatsSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - Заголовок статуса
-
-    @ViewBuilder
-    private func statusHeader(active: Bool, trip: TripStats, last: TripRecord?) -> some View {
-        // В поездке — живой заголовок с таймером и скоростью; вне поездки —
-        // компактная строка последней записи (крупная карточка дублировала сетку).
-        // Истории нет — ничего: пустое состояние объяснит emptyHint ниже.
-        if active {
-            liveHeader(active: true, trip: trip)
-        } else if let last {
-            Button {
-                selectedRecord = last
-            } label: {
-                HStack(spacing: 6) {
-                    Text("Последняя поездка")
-                        .font(.rounded(14, .semibold))
-                        .foregroundStyle(Theme.textSecondary)
-                    Text("· \(last.startedAt.formatted(date: .abbreviated, time: .shortened))")
-                        .font(.rounded(13))
-                        .foregroundStyle(Theme.textTertiary)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.rounded(12, .semibold))
-                        .foregroundStyle(Theme.textTertiary)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    @ViewBuilder
-    private func liveHeader(active: Bool, trip: TripStats) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle().fill((active ? Theme.success : Theme.textTertiary).opacity(0.15))
-                    .frame(width: 46, height: 46)
-                Image(systemName: active ? "record.circle" : "flag.checkered")
-                    .font(.rounded(20, .bold))
-                    .foregroundStyle(active ? Theme.success : Theme.textSecondary)
-                    .symbolEffect(.pulse, options: .repeating, isActive: active)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                // Тернарник из литералов вывелся бы в String и обошёл локализацию.
-                Group {
-                    if active {
-                        Text("Поездка идёт")
-                    } else if trip.startedAt != nil || trip.distanceMeters > 0 {
-                        Text("Последняя поездка")
-                    } else {
-                        Text("Поездка не начата")
-                    }
-                }
-                .font(.rounded(17, .bold))
-                .foregroundStyle(Theme.textPrimary)
-                if active, let started = trip.startedAt {
-                    Text(timerInterval: started...Date.distantFuture, countsDown: false)
-                        .font(.rounded(14, .medium).monospacedDigit())
-                        .foregroundStyle(Theme.success)
-                } else if trip.durationSeconds > 0 {
-                    Text(Formatting.duration(trip.durationSeconds))
-                        .font(.rounded(14, .medium))
-                        .foregroundStyle(Theme.textSecondary)
-                }
-            }
-            Spacer()
-            // Живая скорость — Итоги можно держать открытыми в поездке.
-            if active {
-                VStack(spacing: 0) {
-                    Text("\(Int(env.location.speedKmh))")
-                        .font(.rounded(26, .heavy).monospacedDigit())
-                        .foregroundStyle(Theme.textPrimary)
-                        .contentTransition(.numericText())
-                        .animation(.snappy(duration: 0.35), value: Int(env.location.speedKmh))
-                    Text("км/ч")
-                        .font(.rounded(10, .medium))
-                        .foregroundStyle(Theme.textTertiary)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-    }
-
-    // MARK: - Сетка метрик
-
-    private func statsGrid(trip: TripStats, last: TripRecord?) -> some View {
-        // Живая сессия либо последняя запись из истории (после перезапуска).
-        let cameras = last?.camerasPassed ?? trip.camerasPassed
-        let distance = last?.distanceMeters ?? trip.distanceMeters
-        let maxSpeed = last?.maxSpeedKmh ?? trip.maxSpeedKmh
-        let avgSpeed = last?.averageSpeedKmh ?? trip.averageSpeedKmh
-        // Живые цифры анимируются (numericText) — метрики тикают на глазах в поездке.
-        let cols = [GridItem(.flexible()), GridItem(.flexible())]
-        return LazyVGrid(columns: cols, spacing: 12) {
-            StatTile(value: "\(cameras)", label: "камер пройдено",
-                     icon: "camera.metering.center.weighted", color: Theme.accent, animatesValue: true)
-            StatTile(value: Formatting.distance(distance), label: "пройдено пути",
-                     icon: "point.topleft.down.to.point.bottomright.curvepath", color: Theme.success, animatesValue: true)
-            StatTile(value: "\(Int(maxSpeed))", label: "макс. км/ч",
-                     icon: "gauge.with.dots.needle.100percent", color: Theme.danger, animatesValue: true)
-            StatTile(value: "\(Int(avgSpeed))", label: "средняя км/ч",
-                     icon: "gauge.with.dots.needle.33percent", color: Theme.radar, animatesValue: true)
-        }
-    }
-
-    // MARK: - Шеринг итогов
+    // MARK: - Шеринг периода
 
     /// Рендерим карточку в момент тапа — данные всегда свежие, открытие не тормозим.
-    /// Сверху — карта последней поездки (район + трек): шеринг информативнее цифр.
-    private func share(trip: TripStats) {
-        guard trip.rating != nil else { return }   // хвастаться пока нечем
+    private func share(summary: PeriodSummary) {
+        guard !summary.isEmpty else { return }
+        let periodTitle = period.title
         Task {
-            let last = trip.fallbackRecord(isTripActive: env.location.isTripActive)
-                ?? trip.history.first
-            let map = await TripMapSnapshot.render(track: last?.trackPoints ?? [],
-                                                   passes: last?.passed ?? [],
-                                                   size: CGSize(width: 1032, height: 420))
-            let renderer = ImageRenderer(content: StatsShareCard(trip: trip, mapImage: map))
+            let passes = TripHistory.records(env.trip.history, period: period).flatMap(\.passed)
+            let map = await TripMapSnapshot.render(
+                track: tracks.flatMap { $0 }, passes: passes,
+                size: CGSize(width: 1032, height: 420))
+            let renderer = ImageRenderer(content: PeriodShareCard(
+                summary: summary, periodTitle: periodTitle, mapImage: map))
             renderer.scale = 2
             renderer.proposedSize = ProposedViewSize(width: 540, height: 675)
             if let uiImage = renderer.uiImage {
@@ -454,4 +604,13 @@ struct TripStatsSheet: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 24)
     }
+}
+
+/// Слепок данных для полноэкранной карты: собирается в момент тапа, чтобы sheet
+/// не пересобирался за спиной при изменении периода.
+struct PeriodMapPayload: Identifiable {
+    let id = UUID()
+    let tracks: [[TrackPoint]]
+    let markers: [PassMarker]
+    let focus: PassMarker?
 }

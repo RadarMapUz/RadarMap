@@ -120,6 +120,11 @@ struct MapScreen: View {
         .overlay { loadErrorOverlay }
         .overlay { approachOverlay }
         .overlay { arrivalOverlay }
+        // Пуш «Итоги поездки» и другие диплинки на статистику ведут сюда.
+        .onOpenURL { url in
+            guard url.scheme == "radarmap", url.host() == "trip" else { return }
+            map.showStats = true
+        }
         .onChange(of: env.location.nearestCamera?.id) { _, _ in
             dismissedApproachID = nil   // новая ближайшая камера — снова показываем предупреждение
         }
@@ -354,6 +359,11 @@ struct MapScreen: View {
                     withAnimation(.spring(duration: 0.3)) { showQuickToggles = false }
                 }
             }
+            // «Я в такси»: приложение молчит осознанно — человек должен видеть,
+            // почему нет оповещений, и уметь передумать одним тапом.
+            if env.location.isPassengerSession {
+                passengerChip
+            }
             // Turn-by-turn: ближайший манёвр — в поездке по маршруту.
             if env.location.isTripActive, let step = env.route.nextStep {
                 ManeuverBanner(step: step, distance: env.route.nextStepDistance)
@@ -383,6 +393,32 @@ struct MapScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(.spring(duration: 0.3), value: env.route.nextStep?.distanceAlong)
         .animation(.easeInOut(duration: 0.3), value: controlsHidden)
+    }
+
+    /// Баннер пассажирского режима: молчание — осознанное, выход — один тап.
+    private var passengerChip: some View {
+        Button {
+            // Тот же путь, что «Я за рулём» из уведомления: сброс пассажирского
+            // флага, запоминание магнитолы, старт поездки.
+            env.location.confirmDriver()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "figure.seated.seatbelt")
+                    .font(.rounded(13, .semibold))
+                Text("Вы пассажир — оповещения выключены")
+                    .font(.rounded(12, .semibold))
+                Spacer(minLength: 4)
+                Text("Я за рулём")
+                    .font(.rounded(12, .bold))
+                    .foregroundStyle(Theme.accent)
+            }
+            .foregroundStyle(Theme.textSecondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .backport.glassEffect(.regular, in: .capsule)
+        }
+        .buttonStyle(PressableStyle())
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     // MARK: - Колонка навигации (компас, локация, зум)
@@ -831,7 +867,9 @@ struct MapScreen: View {
                 let map = await TripMapSnapshot.render(track: last?.trackPoints ?? [],
                                                        passes: last?.passed ?? [],
                                                        size: CGSize(width: 1032, height: 420))
-                let stats = ImageRenderer(content: StatsShareCard(trip: env.trip, mapImage: map))
+                let summary = TripHistory.summary(env.trip.history, period: .week)
+                let stats = ImageRenderer(content: PeriodShareCard(
+                    summary: summary, periodTitle: StatsPeriod.week.title, mapImage: map))
                 stats.scale = 2
                 stats.proposedSize = ProposedViewSize(width: 540, height: 675)
                 try? stats.uiImage?.pngData()?.write(to: docs.appendingPathComponent("share_stats.png"))

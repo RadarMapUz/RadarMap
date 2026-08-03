@@ -9,8 +9,8 @@
 #          (pbf — тот же, из которого собран OSRM; если не указать, ищем сами)
 set -euo pipefail
 
-HOST=root@45.130.148.94
-BASE_DIR=/opt/radarmap/static          # где nginx раздаёт cameras.json / version.json
+HOST=radarmap-vps
+BASE_DIR=/opt/radarmap/www          # где nginx раздаёт cameras.json / version.json
 PBF_ARG="${1:-}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 

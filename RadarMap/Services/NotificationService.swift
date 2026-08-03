@@ -9,6 +9,7 @@
 import Foundation
 import UserNotifications
 import Observation
+import UIKit
 
 @MainActor
 @Observable
@@ -63,6 +64,31 @@ final class NotificationService: NSObject {
         let center = UNUserNotificationCenter.current()
         center.removeDeliveredNotifications(withIdentifiers: [Self.driverCheckID])
         center.removePendingNotificationRequests(withIdentifiers: [Self.driverCheckID])
+    }
+
+    // MARK: - Итоги поездки (после автозавершения)
+
+    private static let tripSummaryID = "trip-summary"
+
+    /// Поездка закончилась сама (вышел из машины, телефон в кармане) — короткие
+    /// итоги на локскрин: приложение открывать не обязательно, цифры уже тут.
+    /// Тап ведёт в деталку (deep link разбирает RootView).
+    func notifyTripSummary(distance: Double, rating: Int?, fineRisk: Double) {
+        let content = UNMutableNotificationContent()
+        content.title = String(format: String(localized: "Поездка: %@"),
+                               Formatting.distance(distance))
+        var parts: [String] = []
+        if let rating {
+            parts.append(String(format: String(localized: "рейтинг %lld"), rating))
+        }
+        parts.append(fineRisk > 0
+            ? String(format: String(localized: "риск штрафов %@"), Formatting.money(fineRisk))
+            : String(localized: "без риска штрафов"))
+        content.body = parts.joined(separator: " · ")
+        content.sound = nil   // человек только что вышел из машины — не трезвоним
+        content.userInfo = ["deeplink": "radarmap://trip/last"]
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: Self.tripSummaryID, content: content, trigger: nil))
     }
 
     func requestAuthorization() {
@@ -175,7 +201,16 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        guard response.notification.request.identifier == Self.driverCheckID else { return }
+        let id = response.notification.request.identifier
+        // Итоги поездки: тап → диплинк тем же путём, что и виджеты (onOpenURL).
+        // open() очередится системой и доедет до сцены даже при холодном старте.
+        if id == Self.tripSummaryID,
+           let link = response.notification.request.content.userInfo["deeplink"] as? String,
+           let url = URL(string: link) {
+            await MainActor.run { UIApplication.shared.open(url) }
+            return
+        }
+        guard id == Self.driverCheckID else { return }
         let isPassenger = response.actionIdentifier == Self.actionPassenger
         await MainActor.run {
             if isPassenger { self.onPassengerConfirmed?() }

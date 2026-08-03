@@ -176,7 +176,7 @@ final class TripAnalyticsTests: XCTestCase {
     func testWeekDailyFillsSevenDaysWithZeros() {
         let history = [record(daysAgo: 0, km: 12), record(daysAgo: 0, km: 8),
                        record(daysAgo: 2, km: 30)]
-        let daily = TripHistory.weekDaily(history)
+        let daily = TripHistory.dailyKm(history, days: 7)
 
         XCTAssertEqual(daily.count, 7)                    // нулевые дни не выпадают
         XCTAssertEqual(daily.last?.km ?? 0, 20, accuracy: 0.01)   // сегодня: 12+8

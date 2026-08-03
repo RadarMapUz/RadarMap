@@ -69,6 +69,8 @@ struct TripHistorySection: View {
                     Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration)) · \(Int(record.averageSpeedKmh)) км/ч сред.")
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(1)               // перенос «40 км/ч сред.» на вторую
+                        .minimumScaleFactor(0.85)   // строку рвал ритм списка
                     // Склеенная поездка: сразу видно, что внутри был заезд по пути.
                     if let stops = record.stops, !stops.isEmpty {
                         Label(stopsLabel(stops.count), systemImage: "pause.circle.fill")
@@ -152,7 +154,7 @@ private struct WeekCard: View {
     @State private var chartAppeared = false
 
     var body: some View {
-        let daily = TripHistory.weekDaily(history)
+        let daily = TripHistory.dailyKm(history, days: 7)
         let maxKm = max(daily.map(\.km).max() ?? 0, 1)
         return VStack(spacing: 12) {
             HStack(spacing: 0) {

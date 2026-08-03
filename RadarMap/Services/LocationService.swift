@@ -235,15 +235,18 @@ final class LocationService: NSObject {
     }
 
     /// «Я за рулём» (кнопка или тап по вопросу): запоминаем магнитолу этой машины —
-    /// в следующий раз не переспросим.
+    /// в следующий раз не переспросим. В «Умном» режиме вопрос приходит ДО старта
+    /// поездки (сама она в чужой машине не стартует) — подтверждение и есть старт.
     func confirmDriver() {
         notifier.clearDriverCheck()
+        isPassengerSession = false
         for output in AVAudioSession.sharedInstance().currentRoute.outputs
         where output.portType == .bluetoothA2DP || output.portType == .bluetoothHFP {
             if !settings.knownCarAudio.contains(output.portName) {
                 settings.knownCarAudio.append(output.portName)
             }
         }
+        if !isTripActive { startTrip() }
     }
 
     /// «Я пассажир»: свернуть поездку без следа в истории и молчать до конца езды.

@@ -2049,22 +2049,6 @@
         }
       }
     },
-    "Задать Работу": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Задать Работу"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ishni belgilash"
-          }
-        }
-      }
-    },
     "Задать дом": {
       "localizations": {
         "ru": {
@@ -2433,22 +2417,6 @@
         }
       }
     },
-    "Каждая камера, пройденная в лимите, — несостоявшийся штраф. Посчитаем и покажем.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Каждая камера, пройденная в лимите, — несостоявшийся штраф. Посчитаем и покажем."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Limit ichida o‘tilgan har bir kamera — bo‘lmagan jarima. Hisoblab ko‘rsatamiz."
-          }
-        }
-      }
-    },
     "Каждый проезд камеры с известным лимитом: берём минимальную скорость в 80 м перед камерой — разгон после проезда не считается. Штрафные ступени снижают балл сильнее всего.": {
       "localizations": {
         "ru": {
@@ -2509,22 +2477,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qanday hisoblaymiz"
-          }
-        }
-      }
-    },
-    "Камер впереди нет": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Камер впереди нет"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oldinda kameralar yo‘q"
           }
         }
       }
@@ -2669,22 +2621,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kamera endi yo‘q"
-          }
-        }
-      }
-    },
-    "Камеры видеофиксации Узбекистана — предупредим заранее, даже когда телефон в кармане.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Камеры видеофиксации Узбекистана — предупредим заранее, даже когда телефон в кармане."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O'zbekiston foto-video qayd kameralari — telefon cho'ntakda bo'lsa ham oldindan ogohlantiramiz."
           }
         }
       }
@@ -2897,22 +2833,6 @@
         }
       }
     },
-    "Маршрут домой": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Маршрут домой"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Uyga marshrut"
-          }
-        }
-      }
-    },
     "Маршрут и скорость": {
       "localizations": {
         "ru": {
@@ -2925,22 +2845,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrut va tezlik"
-          }
-        }
-      }
-    },
-    "Маршрут на работу": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Маршрут на работу"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ishga marshrut"
           }
         }
       }
@@ -3457,38 +3361,6 @@
         }
       }
     },
-    "Не удалось отправить — проверьте сеть.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Не удалось отправить — проверьте сеть."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yuborib bo‘lmadi — tarmoqni tekshiring."
-          }
-        }
-      }
-    },
-    "Не удалось построить маршрут": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Не удалось построить маршрут"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Marshrutni qurib bo'lmadi"
-          }
-        }
-      }
-    },
     "Неверное место": {
       "localizations": {
         "ru": {
@@ -3645,22 +3517,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ogohlantirishlar"
-          }
-        }
-      }
-    },
-    "Оповещения включаются сами, когда вы едете, и гаснут после остановки — без нажатия кнопки.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Оповещения включаются сами, когда вы едете, и гаснут после остановки — без нажатия кнопки."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ogohlantirishlar harakatlanganda o'zi yoqiladi va to'xtagach o'chadi — tugma bosish shart emas."
           }
         }
       }
@@ -4317,22 +4173,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hozircha saqlangan joylar yo'q"
-          }
-        }
-      }
-    },
-    "Показывать на карте": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Показывать на карте"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Xaritada ko'rsatish"
           }
         }
       }
@@ -5857,22 +5697,6 @@
         }
       }
     },
-    "Чтобы оповещать о камерах во время движения в фоне.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Чтобы оповещать о камерах во время движения в фоне."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Harakat paytida fonda kameralar haqida ogohlantirish uchun."
-          }
-        }
-      }
-    },
     "Шкала": {
       "localizations": {
         "ru": {
@@ -5933,22 +5757,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jarimalar va cheklovlar"
-          }
-        }
-      }
-    },
-    "Экономия на штрафах": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Экономия на штрафах"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jarimalardan tejash"
           }
         }
       }

@@ -119,20 +119,6 @@ nonisolated enum TripHistory {
                 recent.reduce(0) { $0 + $1.camerasPassed })
     }
 
-    /// Километры по дням последней недели (7 точек, нулевые дни включены) —
-    /// данные недельного графика.
-    static func weekDaily(_ history: [TripRecord], calendar: Calendar = .current,
-                          now: Date = Date()) -> [(day: Date, km: Double)] {
-        let today = calendar.startOfDay(for: now)
-        return (0..<7).reversed().compactMap { offset in
-            guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
-            let km = history
-                .filter { calendar.isDate($0.startedAt, inSameDayAs: day) }
-                .reduce(0.0) { $0 + $1.distanceMeters } / 1000
-            return (day, km)
-        }
-    }
-
     struct DayGroup {
         let day: Date
         let records: [TripRecord]

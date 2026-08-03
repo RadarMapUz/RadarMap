@@ -16,6 +16,8 @@ struct TripHistorySection: View {
     let onSelect: (TripRecord) -> Void
     let onRepeat: ((CLLocationCoordinate2D, String) -> Void)?
     let onDelete: (TripRecord) -> Void
+    /// Тап по недельной карточке — полный отчёт за период.
+    let onOpenReport: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -24,9 +26,13 @@ struct TripHistorySection: View {
                 .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Сводка за 7 дней + мини-график по дням — общая картина одним взглядом.
+            // Сводка за 7 дней + мини-график по дням — общая картина одним взглядом,
+            // тап открывает полный отчёт (карта недели, метрики, зона риска).
             if let week = trip.weekSummary {
-                WeekCard(week: week, history: trip.history)
+                Button(action: onOpenReport) {
+                    WeekCard(week: week, history: trip.history)
+                }
+                .buttonStyle(PressableStyle())
             }
 
             // Показываем только 7 последних — старое хранится лишь для статистики.
@@ -156,6 +162,15 @@ private struct WeekCard: View {
                 divider
                 metric(String(format: String(localized: "%lld камер"), week.cameras), "camera.fill")
             }
+            // Явная подсказка, что карточка нажимается: иначе отчёт никто не найдёт.
+            HStack(spacing: 4) {
+                Text("Подробный отчёт")
+                    .font(.rounded(11, .semibold))
+                Image(systemName: "chevron.right").font(.rounded(9, .bold))
+            }
+            .foregroundStyle(Theme.accent)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.horizontal, 14)
 
             // Километры по дням недели: цифры над столбиками, сегодняшний — ярче.
             Chart(daily, id: \.day) { item in

@@ -793,6 +793,8 @@ struct MapScreen: View {
     /// -showCameraDetail` открывает нужный экран без тапов. В релизную сборку не попадает.
     private func openScreenFromLaunchArguments() {
         let args = ProcessInfo.processInfo.arguments
+        // Демо-история для визуальной проверки Итогов и отчёта за период.
+        if args.contains("-demoHistory") { env.trip.seedDemoHistory() }
         if args.contains("-showStats") { map.showStats = true }
         if args.contains("-showSettings") { map.showSettings = true }
         if args.contains("-showCameraDetail") {

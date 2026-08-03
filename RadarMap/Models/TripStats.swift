@@ -227,6 +227,56 @@ final class TripStats {
         TripHistory.month30(history)
     }
 
+    #if DEBUG
+    /// Демо-история для скриншотов и визуальной проверки отчёта на симуляторе:
+    /// `simctl launch <app> -demoHistory -showStats -showReport`.
+    /// ЗАМЕЩАЕТ историю — только под DEBUG и только по явному флагу запуска,
+    /// в релизную сборку не попадает.
+    func seedDemoHistory() {
+        let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+        let now = Date()
+        var seeded: [TripRecord] = []
+        for (index, daysAgo) in [0.2, 1.1, 2.3, 3.0, 4.5, 5.4].enumerated() {
+            let start = now.addingTimeInterval(-daysAgo * 86400)
+            let km = [12.4, 8.1, 23.7, 5.2, 31.0, 14.8][index]
+            // Веером в пределах города, а не по всем румбам: иначе карта отчёта
+            // на демо-данных уходит в областной зум и по ней нечего проверять.
+            let bearing = [25.0, 40, 210, 195, 65, 230][index]
+            var track: [Double] = []
+            for step in 0...24 {
+                let point = GeoMath.destination(from: base, bearing: bearing,
+                                                distanceMeters: Double(step) * km * 22)
+                track += [point.latitude, point.longitude, 40 + Double(step % 7) * 9]
+            }
+            // Каждая третья поездка — с превышением у камеры, чтобы была зона риска.
+            let over = index % 3 == 0
+            let cam = GeoMath.destination(from: base, bearing: bearing,
+                                          distanceMeters: km * 300)
+            let pass = PassedCamera(id: UUID(), cameraID: 1000 + index,
+                                    typeRaw: "Стационар радар",
+                                    location: ["Юнусабад", "Чиланзар", "Мирзо-Улугбек"][index % 3],
+                                    speedKmh: over ? 88 : 56,
+                                    date: start.addingTimeInterval(400),
+                                    lat: cam.latitude, lon: cam.longitude, limitKmh: 60)
+            // Одна поездка со заездом по пути — проверить блок остановок.
+            let stops: [TripStop]? = index == 2 ? [TripStop(
+                id: UUID(), lat: base.latitude, lon: base.longitude,
+                from: start.addingTimeInterval(900),
+                to: start.addingTimeInterval(900 + 1500))] : nil
+            seeded.append(TripRecord(
+                id: start.timeIntervalSince1970, startedAt: start,
+                endedAt: start.addingTimeInterval(km * 90 + (stops?.first?.duration ?? 0)),
+                distanceMeters: km * 1000, maxSpeedKmh: over ? 104 : 82,
+                passed: [pass], endLat: track[track.count - 3], endLon: track[track.count - 2],
+                track: track, score: over ? 68 : 94, stops: stops, endedManually: true))
+        }
+        history = seeded
+        lifetime = LifetimeStats.rebuilt(from: history)
+        persist()
+        persistLifetime()
+    }
+    #endif
+
     // MARK: - Трек: упаковка и упрощение (Дуглас-Пекер)
 
     nonisolated private static func packTrack(_ points: [TrackPoint]) -> [Double]? {

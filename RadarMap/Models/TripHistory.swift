@@ -18,17 +18,23 @@ nonisolated enum TripHistory {
 
     // MARK: - Чистка хранилища
 
-    /// Список живёт 7 поездками, более старые нужны только статистике
-    /// (рейтинг и экономия за 30 дней) — у них выбрасываем тяжёлый трек,
-    /// а старше 30 дней удаляем совсем (пожизненные цифры давно в lifetime).
+    /// Трек — самая тяжёлая часть записи (до 400 точек). Держим его у последних
+    /// `visibleHistory` поездок И у всего, что попадает в недельный отчёт: карта
+    /// недели обязана рисовать все треки за 7 дней, а не только семь последних
+    /// поездок — иначе в активную неделю отчёт молча врёт. Дальше трек
+    /// выбрасываем (цифры остаются), а старше 30 дней удаляем совсем:
+    /// пожизненные счётчики давно в lifetime.
     static func pruned(_ history: [TripRecord], now: Date = Date()) -> [TripRecord] {
         let monthAgo = now.addingTimeInterval(-30 * 86400)
+        let weekAgo = now.addingTimeInterval(-7 * 86400)
         var result: [TripRecord] = []
         result.reserveCapacity(min(history.count, maxHistory))
         for (index, record) in history.enumerated() {
-            if index < visibleHistory {
+            guard index < visibleHistory || record.startedAt > monthAgo else { continue }
+            guard result.count < maxHistory else { break }
+            if index < visibleHistory || record.startedAt > weekAgo {
                 result.append(record)
-            } else if record.startedAt > monthAgo && result.count < maxHistory {
+            } else {
                 var slim = record
                 slim.track = nil
                 result.append(slim)
@@ -43,7 +49,12 @@ nonisolated enum TripHistory {
     /// (длинная трасса весит больше короткой поездки до магазина).
     static func weightedRating(_ history: [TripRecord],
                                within interval: TimeInterval, now: Date) -> Int? {
-        let from = now.addingTimeInterval(-interval)
+        weightedRating(history, from: now.addingTimeInterval(-interval), now: now)
+    }
+
+    /// То же, но с явной нижней границей: для «всего времени» вычитать
+    /// бесконечный интервал из даты нельзя.
+    static func weightedRating(_ history: [TripRecord], from: Date, now: Date) -> Int? {
         var weightedSum = 0.0
         var weight = 0.0
         for record in history where record.startedAt > from && record.startedAt <= now {

@@ -23,6 +23,8 @@ struct TripStatsSheet: View {
     @State private var showRatingInfo = false
     @State private var showSavingsInfo = false
     @State private var selectedBadge: Achievement?
+    /// Полный отчёт за период (Неделя / Месяц / Всё время).
+    @State private var showReport = false
 
     var body: some View {
         let trip = env.trip
@@ -55,7 +57,8 @@ struct TripStatsSheet: View {
                             onRepeat: onRoute.map { route in
                                 { coord, name in dismiss(); route(coord, name) }
                             },
-                            onDelete: { record in withAnimation { trip.deleteRecord(id: record.id) } })
+                            onDelete: { record in withAnimation { trip.deleteRecord(id: record.id) } },
+                            onOpenReport: { showReport = true })
                             .entrance(5, appeared)
                             .id("history")
                     } else if !active {
@@ -123,6 +126,14 @@ struct TripStatsSheet: View {
                 }
             })
         }
+        .sheet(isPresented: $showReport) { PeriodReportSheet() }
+        #if DEBUG
+        // Скриншот-автоматизация: `-showStats -showReport` открывает отчёт сразу.
+        .onAppear {
+            guard ProcessInfo.processInfo.arguments.contains("-showReport") else { return }
+            Task { await Task.pause(seconds: 0.8); showReport = true }
+        }
+        #endif
         .sheet(isPresented: $showRatingInfo) { RatingInfoSheet() }
         .sheet(isPresented: $showSavingsInfo) { SavingsInfoSheet() }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }

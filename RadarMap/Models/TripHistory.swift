@@ -179,6 +179,67 @@ nonisolated enum TripHistory {
     /// поэтому допуск шире живого гейта (80 м) в PassTracking.
     static let passCleanupMaxMeters = 120.0
 
+    /// Направление трека в ближайшей к точке (lat, lon) вершине — азимут
+    /// сегмента, на который пришёлся минимум расстояния. nil — трека мало.
+    static func trackBearing(nearLat lat: Double, lon: Double,
+                             track: [TrackPoint]) -> Double? {
+        guard track.count >= 2 else { return nil }
+        var best = Double.greatestFiniteMagnitude
+        var index = 0
+        for i in 1..<track.count {
+            // Достаточно вершинной близости: сегменты трека короткие (30 м шаг).
+            let d = GeoMath.fastDistance(lat, lon, track[i].lat, track[i].lon)
+            if d < best { best = d; index = i }
+        }
+        let a = track[max(0, index - 1)]
+        let b = track[min(track.count - 1, index == 0 ? 1 : index)]
+        guard a.lat != b.lat || a.lon != b.lon else { return nil }
+        return GeoMath.bearing(from: CLLocationCoordinate2D(latitude: a.lat, longitude: a.lon),
+                               to: CLLocationCoordinate2D(latitude: b.lat, longitude: b.lon))
+    }
+
+    /// Ретро-порог оси шире живого (55°): упрощённый трек срезает углы.
+    static let passAxisCleanupMaxAngle = 60.0
+
+    /// Ретро-чистка «мостовых» проездов: направление трека у камеры против оси
+    /// её дороги. Ехал поперёк — это был мост/перпендикулярная улица развязки,
+    /// проезд не наш: выкидываем и пересчитываем балл поездки.
+    static func axisSanitized(_ history: [TripRecord],
+                              axisByID: [Int: Int]) -> ([TripRecord], Bool) {
+        var changed = false
+        let cleaned = history.map { record -> TripRecord in
+            let track = record.trackPoints
+            guard track.count >= 2, !record.passed.isEmpty else { return record }
+            let kept = record.passed.filter { pass in
+                guard let axis = axisByID[pass.cameraID],
+                      let lat = pass.lat, let lon = pass.lon,
+                      let bearing = trackBearing(nearLat: lat, lon: lon, track: track)
+                else { return true }   // нет оси/координат — не судим
+                return GeoMath.axisDifference(course: bearing, axis: Double(axis))
+                    <= passAxisCleanupMaxAngle
+            }
+            guard kept.count != record.passed.count else { return record }
+            changed = true
+            var out = record
+            out = TripRecord(id: record.id, startedAt: record.startedAt,
+                             endedAt: record.endedAt,
+                             distanceMeters: record.distanceMeters,
+                             maxSpeedKmh: record.maxSpeedKmh, passed: kept,
+                             endLat: record.endLat, endLon: record.endLon,
+                             track: record.track,
+                             score: DrivingScore.tripScore(
+                                 passes: kept.map {
+                                     DrivingScore.Pass(speedKmh: $0.speedKmh,
+                                                       limitKmh: $0.limitKmh)
+                                 },
+                                 trackSpeeds: track.map(\.speedKmh)),
+                             stops: record.stops,
+                             endedManually: record.endedManually)
+            return out
+        }
+        return (cleaned, changed)
+    }
+
     /// Ретро-чистка истории: убирает «проезды» камер, до которых трек ближе
     /// 120 м не подходил (раньше засчитывались камеры с параллельных улиц),
     /// и пересчитывает балл затронутых поездок. Возвращает (история, менялось ли).

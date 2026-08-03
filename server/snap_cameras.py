@@ -227,6 +227,20 @@ def _project_point_to_segment(px, py, ax, ay, bx, by):
     return ax + t * dx, ay + t * dy
 
 
+def segment_axis(lat1, lon1, lat2, lon2):
+    """Ось сегмента дороги: недирекционный азимут 0–179° (юг = север).
+    Камера меряет скорость вдоль своей дороги — ось позволяет приложению
+    отбрасывать «проезды» поперёк (мост над камерой, перпендикулярный
+    перекрёсток на развязке)."""
+    kx = _M_PER_DEG_LON * math.cos(math.radians((lat1 + lat2) / 2))
+    dx = (lon2 - lon1) * kx
+    dy = (lat2 - lat1) * _M_PER_DEG_LAT
+    if dx == 0.0 and dy == 0.0:
+        return None
+    deg = math.degrees(math.atan2(dx, dy)) % 360.0   # 0 = север, по часовой
+    return int(round(deg % 180.0)) % 180
+
+
 class RoadIndex:
     """Сеточный индекс отрезков дорог для запросов «что рядом».
 
@@ -249,7 +263,8 @@ class RoadIndex:
                 int(math.floor(lon / RoadIndex.CELL)))
 
     def _add_segment(self, lat1, lon1, lat2, lon2, tokens, refs, rank):
-        seg = (lat1, lon1, lat2, lon2, tokens, refs, rank)
+        seg = (lat1, lon1, lat2, lon2, tokens, refs, rank,
+               segment_axis(lat1, lon1, lat2, lon2))
         c1i, c1j = self._cell(lat1, lon1)
         c2i, c2j = self._cell(lat2, lon2)
         for ci in range(min(c1i, c2i), max(c1i, c2i) + 1):
@@ -285,7 +300,7 @@ class RoadIndex:
                     if key in seen:
                         continue
                     seen.add(key)
-                    lat1, lon1, lat2, lon2, tokens, refs, rank = seg
+                    lat1, lon1, lat2, lon2, tokens, refs, rank, axis = seg
                     ax = (lon1 - lon) * kx
                     ay = (lat1 - lat) * _M_PER_DEG_LAT
                     bx = (lon2 - lon) * kx
@@ -295,7 +310,7 @@ class RoadIndex:
                     if dist <= radius:
                         plat = lat + qy / _M_PER_DEG_LAT
                         plon = lon + qx / kx
-                        out.append((dist, plat, plon, tokens, refs, rank))
+                        out.append((dist, plat, plon, tokens, refs, rank, axis))
         out.sort(key=lambda c: c[0])
         return out
 
@@ -368,9 +383,11 @@ def _trust_for_rank(rank, base):
 
 
 def choose_snap(cam, index, *, radius, max_shift, max_shift_ref, trust_geom):
-    """→ (lat, lon, reason, shift) либо None (оставить + needsReview).
+    """→ (lat, lon, reason, shift, axis) либо None (оставить + needsReview).
 
     Каскад: ref трассы → имя улицы → геометрия (см. шапку файла).
+    axis — ось дороги камеры (0–179°): по ней приложение отбрасывает «проезды»
+    поперёк (мост над камерой, перпендикулярный перекрёсток на развязке).
     """
     cands = index.nearby(cam["lat"], cam["lon"], radius)
     if not cands:
@@ -384,27 +401,44 @@ def choose_snap(cam, index, *, radius, max_shift, max_shift_ref, trust_geom):
     if addr_refs:
         matched = [c for c in cands if addr_refs & c[4]]
         if matched:
-            dist, plat, plon, _t, refs, _rank = matched[0]
+            dist, plat, plon, _t, refs, _rank, axis = matched[0]
             if dist <= max_shift_ref:
                 return (plat, plon,
                         f"ref-match «{'/'.join(sorted(addr_refs & refs))}» ({dist:.0f} м)",
-                        dist)
+                        dist, axis)
 
     # 2) Имя улицы: даже если чужая дорога физически ближе.
     named = [c for c in cands if tokens_match(addr, c[3])]
     if named:
-        dist, plat, plon, tokens, _r, _rank = named[0]
+        dist, plat, plon, tokens, _r, _rank, axis = named[0]
         if dist <= max_shift:
             road = " ".join(sorted(tokens))
-            return (plat, plon, f"name-match «{road}» ({dist:.0f} м)", dist)
+            return (plat, plon, f"name-match «{road}» ({dist:.0f} м)", dist, axis)
         return None  # имя нашли, но слишком далеко — подозрительно, не двигаем
 
     # 3) Геометрия: имя не совпало (адрес без улицы / улицы нет в OSM), но камера
     #    и так почти на дороге — смещение мало и безопасно.
-    dist, plat, plon, _t, _r, rank = cands[0]
+    dist, plat, plon, _t, _r, rank, axis = cands[0]
     if dist <= _trust_for_rank(rank, trust_geom):
-        return (plat, plon, f"already-on-road ({dist:.0f} м, rank {rank})", dist)
+        return (plat, plon, f"already-on-road ({dist:.0f} м, rank {rank})", dist, axis)
     return None
+
+
+def annotate_axes(cameras, index, *, radius=60.0):
+    """Только проставить axis по ближайшему сегменту, координаты не трогать.
+    Для базы, которая уже снапнута: камера лежит на своей дороге, ближайший
+    сегмент и есть её дорога. needsReview-камеры без дороги рядом остаются
+    без оси — приложение для них ось не проверяет."""
+    result = []
+    annotated = 0
+    for cam in cameras:
+        out = dict(cam)
+        cands = index.nearby(cam["lat"], cam["lon"], radius)
+        if cands and cands[0][6] is not None:
+            out["axis"] = cands[0][6]
+            annotated += 1
+        result.append(out)
+    return result, annotated
 
 
 # --- Дубли после снапа -------------------------------------------------------
@@ -458,8 +492,10 @@ def snap_all(cameras, index, *, radius, max_shift, max_shift_ref, trust_geom):
         choice = choose_snap(cam, index, radius=radius, max_shift=max_shift,
                              max_shift_ref=max_shift_ref, trust_geom=trust_geom)
         if choice:
-            lat, lon, reason, shift = choice
+            lat, lon, reason, shift, axis = choice
             out["lat"], out["lon"] = round(lat, 6), round(lon, 6)
+            if axis is not None:
+                out["axis"] = axis
             out.pop("needsReview", None)
             snapped += 1
             total_shift += shift
@@ -570,6 +606,15 @@ def selftest():
     check(res_mid is not None and abs(res_mid[0] - L) * _M_PER_DEG_LAT < 3,
           "камера у середины 2-км сегмента видит дорогу (supercover-индекс)")
 
+    # 6а) Ось дороги: сегмент запад→восток = 90°, юг→север = 0°; снап несёт ось.
+    check(segment_axis(L, 69.0000, L, 69.0240) == 90, "ось широтного сегмента = 90°")
+    check(segment_axis(41.30, 69.28, 41.31, 69.28) == 0, "ось меридианного сегмента = 0°")
+    check(res_mid is not None and res_mid[4] == 90, "снап отдаёт ось дороги камеры")
+    ann, n_ann = annotate_axes([{"id": 9, "lat": L - _round_lat(10), "lon": 69.0120}],
+                               long_index)
+    check(n_ann == 1 and ann[0].get("axis") == 90 and "lat" in ann[0],
+          "annotate проставляет ось, не трогая координаты")
+
     # 7) Ref-матч: адрес «М-39», дорога без имени в 120 м (для name — слишком
     #    далеко, для ref — норм).
     cam_ref = {"id": 6, "lat": L - _round_lat(120), "lon": 69.0120,
@@ -611,6 +656,8 @@ def main():
     ap.add_argument("--trust-geom", type=float, default=10.0,
                     help="базовый порог «уже на дороге» (растёт с классом), м")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--annotate", action="store_true",
+                    help="только проставить axis (оси дорог), координаты не трогать")
     args = ap.parse_args()
 
     if args.selftest:
@@ -626,6 +673,14 @@ def main():
     print(f"  кусков: {index.count}, линий с именами: {named}, с ref: {withref}")
 
     cameras = json.load(open(args.inp, encoding="utf-8"))
+
+    if args.annotate:
+        result, annotated = annotate_axes(cameras, index)
+        json.dump(result, open(args.out, "w", encoding="utf-8"),
+                  ensure_ascii=False, separators=(",", ":"))
+        print(f"annotate: осей проставлено {annotated} из {len(cameras)} → {args.out}")
+        return 0
+
     print(f"камер: {len(cameras)} · radius {args.radius:.0f} м · "
           f"max-shift {args.max_shift:.0f}/{args.max_shift_ref:.0f} (имя/ref) м · "
           f"trust-geom {args.trust_geom:.0f} м\n")

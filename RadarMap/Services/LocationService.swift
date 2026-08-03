@@ -513,6 +513,15 @@ final class LocationService: NSObject {
     /// базе смещена вбок от полосы.
     private func isOnOurRoad(_ camera: Camera, from coordinate: CLLocationCoordinate2D) -> Bool {
         guard isDirectionalFilteringActive else { return true }   // стоим/курс неизвестен → не фильтруем
+        // Ось дороги камеры против курса: едем поперёк — это мост НАД камерой
+        // или перпендикулярная улица развязки. Боковое отклонение тут ноль,
+        // коридор бессилен — различает только направление. Проверка идёт ДО
+        // маршрутной: маршрут может вести по мосту над собственной камерой.
+        if let axis = camera.axis,
+           GeoMath.axisDifference(course: currentCourse, axis: Double(axis))
+               > AppConfig.cameraAxisMaxAngle {
+            return false
+        }
         if isCameraOnRoute(camera) { return true }
         // Внезапным точкам (краудсорс) — коридор трассы: их координату ставил
         // человек на ходу. Камерам с непроверенной позицией (needsReview: снап

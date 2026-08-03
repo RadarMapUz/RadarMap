@@ -184,6 +184,22 @@ final class TripStats {
         persist()
     }
 
+    /// Одноразовая чистка «мостовых» проездов: направление трека у камеры против
+    /// оси её дороги (появилась в базе v8). Вызывает AppEnvironment после сборки
+    /// сервисов — оси знает CameraRepository.
+    func axisCleanupIfNeeded(axisByID: [Int: Int]) {
+        guard !Storage.bool(.passAxisCleanup1), !axisByID.isEmpty else { return }
+        let (cleaned, changed) = TripHistory.axisSanitized(history, axisByID: axisByID)
+        if changed {
+            history = cleaned
+            lifetime = LifetimeStats.rebuilt(from: history)
+            persist()
+            persistLifetime()
+            Log.trips.info("чистка мостовых проездов: история пересчитана")
+        }
+        Storage.set(true, for: .passAxisCleanup1)
+    }
+
     func deleteRecord(id: Double) {
         history.removeAll { $0.id == id }
         persist()

@@ -23,6 +23,14 @@ enum GeoMath {
         return d > 180 ? 360 - d : d
     }
 
+    /// Отклонение курса (0–360°) от НЕДИРЕКЦИОННОЙ оси дороги (0–180°): 0–90°.
+    /// Ось не различает «туда/обратно» — камера на дороге ловит оба направления,
+    /// а вот поперёк её оси (мост над камерой) — уже не её движение.
+    static func axisDifference(course: Double, axis: Double) -> Double {
+        let d = abs(course.truncatingRemainder(dividingBy: 180) - axis)
+        return min(d, 180 - d)
+    }
+
     /// Быстрая дистанция (метры) без аллокаций CLLocation — equirectangular-приближение.
     /// Погрешность <0.5% на городских/областных масштабах; для сортировок и фильтров идеальна.
     static func fastDistance(_ aLat: Double, _ aLon: Double,

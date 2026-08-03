@@ -80,6 +80,13 @@ final class AppEnvironment {
         notifications.onPassengerConfirmed = { [weak location] in location?.markPassenger() }
         notifications.onDriverConfirmed = { [weak location] in location?.confirmDriver() }
 
+        // Одноразовая ретро-чистка «мостовых» проездов: оси дорог появились в
+        // базе v8 — старые «проезды» поперёк оси (мост над камерой) выкидываем.
+        trip.axisCleanupIfNeeded(axisByID: Dictionary(
+            uniqueKeysWithValues: cameras.cameras.compactMap { cam in
+                cam.axis.map { (cam.id, $0) }
+            }))
+
         // Недельный дайджест: после каждой поездки перепланируем пуш со свежими цифрами.
         trip.onTripFinished = { [weak trip, weak notifications] in
             guard let trip, let notifications,

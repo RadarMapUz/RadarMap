@@ -112,9 +112,14 @@ struct Camera: Identifiable, Codable, Hashable {
     let violations: [String]
     /// `true`, если координаты восстановлены приблизительно (битые данные в исходном PDF).
     let needsReview: Bool?
+    /// Ось дороги камеры (0–179°, недирекционная), проставляется снапом.
+    /// Курс поперёк оси = едем НАД камерой (мост) или по перпендикулярной
+    /// улице развязки — такую камеру не алертим и проезд не считаем.
+    let axis: Int?
 
     init(id: Int, region: String, city: String, location: String,
-         lat: Double, lon: Double, type: String, violations: [String], needsReview: Bool?) {
+         lat: Double, lon: Double, type: String, violations: [String],
+         needsReview: Bool?, axis: Int? = nil) {
         self.id = id
         self.region = region
         self.city = city
@@ -124,6 +129,7 @@ struct Camera: Identifiable, Codable, Hashable {
         self.type = type
         self.violations = violations
         self.needsReview = needsReview
+        self.axis = axis
     }
 
     /// В bundled-JSON поле `violations` опущено (на 100% определяется типом) —
@@ -138,6 +144,7 @@ struct Camera: Identifiable, Codable, Hashable {
         lon = try c.decode(Double.self, forKey: .lon)
         type = try c.decode(String.self, forKey: .type)
         needsReview = try c.decodeIfPresent(Bool.self, forKey: .needsReview)
+        axis = try c.decodeIfPresent(Int.self, forKey: .axis)
         violations = try c.decodeIfPresent([String].self, forKey: .violations)
             ?? Self.defaultViolations(forType: type)
     }

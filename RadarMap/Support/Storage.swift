@@ -13,6 +13,7 @@ enum Storage {
     enum Key: String {
         case lifetimeStats          // пожизненные счётчики поездок (JSON)
         case passGeoCleanup1        // флаг одноразовой гео-чистки истории
+        case passAxisCleanup1       // флаг одноразовой чистки «мостовых» проездов (ось дороги)
         case metricsDeviceID        // анонимный ID для MetricKit-отчётов
         case mobileDeviceID         // анонимный ID для голосований по камерам
         case feedbackDeviceID       // анонимный ID для обратной связи

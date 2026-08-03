@@ -135,6 +135,57 @@ final class PeriodSummaryTests: XCTestCase {
         XCTAssertTrue(daily[0].day < daily[6].day, "от старых к новым — как рисуется график")
     }
 
+    /// Красный столбик графика: день помечается по штрафуемому превышению, а не
+    /// по любому проезду камеры и не по превышению без известного лимита.
+    func testDailyKmFlagsDaysWithFinableOverspeed() {
+        let overDay = now.addingTimeInterval(-2 * day)
+        let cleanDay = now.addingTimeInterval(-1 * day)
+        let history = [
+            record(daysAgo: 1, km: 10, passes: [pass(1, speed: 58, limit: 60, at: cleanDay)]),
+            record(daysAgo: 2, km: 12, passes: [pass(2, speed: 95, limit: 60, at: overDay),
+                                                pass(3, speed: 61, limit: 60, at: overDay)]),
+            record(daysAgo: 3, km: 8, passes: [pass(4, speed: 140, limit: nil, at: now)]),
+        ]
+        let daily = TripHistory.dailyKm(history, days: 7, now: now)
+
+        XCTAssertEqual(daily.filter(\.hasOverspeed).count, 1, "красный только день превышения")
+        XCTAssertEqual(daily[4].overPasses, 1,
+                       "+1 км/ч в допуске (5) штрафа не даёт — этот проезд не считается")
+        XCTAssertFalse(daily[3].hasOverspeed, "без известного лимита нарушений не выдумываем")
+        XCTAssertFalse(daily[5].hasOverspeed, "58 при лимите 60 — чистый день")
+    }
+
+    // MARK: - Список поездок подчиняется фильтру
+
+    func testHistoryListFollowsPeriod() {
+        let history = [record(daysAgo: 1, km: 10), record(daysAgo: 3, km: 20),
+                       record(daysAgo: 10, km: 30), record(daysAgo: 40, km: 40)]
+        XCTAssertEqual(TripHistory.historyList(history, period: .week, now: now).count, 2)
+        XCTAssertEqual(TripHistory.historyList(history, period: .month, now: now).count, 3)
+        XCTAssertEqual(TripHistory.historyList(history, period: .all, now: now).count, 4)
+    }
+
+    func testHistoryListForAllTimeIsCapped() {
+        let history = (1...20).map { record(daysAgo: Double($0), km: 5) }
+        XCTAssertEqual(TripHistory.historyList(history, period: .all, now: now).count,
+                       TripHistory.visibleHistory,
+                       "«Всё время» — витрина последних поездок, а не вся база")
+    }
+
+    // MARK: - Дни за рулём
+
+    func testActiveDaysCountsCalendarDaysNotTrips() {
+        let history = [record(daysAgo: 1, km: 10), record(daysAgo: 1, km: 5),
+                       record(daysAgo: 4, km: 20)]
+        let week = TripHistory.summary(history, period: .week, now: now)
+        XCTAssertEqual(week.trips, 3)
+        XCTAssertEqual(week.activeDays, 2, "два выезда одного дня — один день за рулём")
+    }
+
+    func testActiveDaysIsZeroWithoutTrips() {
+        XCTAssertEqual(TripHistory.summary([], period: .week, now: now).activeDays, 0)
+    }
+
     // MARK: - Маркеры карты
 
     func testPassMarkersGroupByCameraAndFlagViolations() {

@@ -45,6 +45,24 @@ nonisolated enum StatsPeriod: String, CaseIterable, Identifiable {
         case .all:   return nil
         }
     }
+
+    /// Подпись под главной цифрой: «95,2 км» без периода читается двусмысленно.
+    var caption: String {
+        switch self {
+        case .week:  return String(localized: "за неделю")
+        case .month: return String(localized: "за месяц")
+        case .all:   return String(localized: "за всё время")
+        }
+    }
+
+    /// Заголовок списка поездок — список подчиняется тому же фильтру.
+    var tripsTitle: String {
+        switch self {
+        case .week:  return String(localized: "Поездки за неделю")
+        case .month: return String(localized: "Поездки за месяц")
+        case .all:   return String(localized: "Последние поездки")
+        }
+    }
 }
 
 /// Всё, что показывает отчёт за период.
@@ -67,6 +85,8 @@ nonisolated struct PeriodSummary: Equatable {
     /// Самый активный день периода.
     var busiestDay: Date?
     var busiestDayKm: Double = 0
+    /// Календарных дней, в которые была хоть одна поездка («дней за рулём»).
+    var activeDays = 0
     /// Дистанция за предыдущий такой же период — база для дельты.
     var previousDistance: CLLocationDistance = 0
 
@@ -126,6 +146,7 @@ extension TripHistory {
             result.busiestDay = busiest.key
             result.busiestDayKm = busiest.value
         }
+        result.activeDays = kmByDay.count
         result.rating = weightedRating(
             history,
             from: period.interval.map { now.addingTimeInterval(-$0) } ?? .distantPast,
@@ -154,20 +175,40 @@ extension TripHistory {
     }
 
     /// Километры по дням периода (нулевые дни включены) — данные графика.
+    /// Вместе с километрами считаем штрафуемые превышения дня: красный столбик
+    /// отвечает на вопрос «когда именно я нарушал», а не просто «сколько ездил».
     static func dailyKm(_ history: [TripRecord], days: Int,
                         calendar: Calendar = .current,
-                        now: Date = Date()) -> [(day: Date, km: Double)] {
+                        now: Date = Date()) -> [DayBar] {
         let today = calendar.startOfDay(for: now)
-        var kmByDay: [Date: Double] = [:]
+        var byDay: [Date: DayBar] = [:]
         for record in history {
-            kmByDay[calendar.startOfDay(for: record.startedAt), default: 0]
-                += record.distanceMeters / 1000
+            let day = calendar.startOfDay(for: record.startedAt)
+            var bar = byDay[day] ?? DayBar(day: day)
+            bar.km += record.distanceMeters / 1000
+            bar.overPasses += record.passed.reduce(0) { count, pass in
+                guard let limit = pass.limitKmh,
+                      FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0
+                else { return count }
+                return count + 1
+            }
+            byDay[day] = bar
         }
         return (0..<days).reversed().compactMap { offset in
             guard let day = calendar.date(byAdding: .day, value: -offset, to: today)
             else { return nil }
-            return (day, kmByDay[day] ?? 0)
+            return byDay[day] ?? DayBar(day: day)
         }
+    }
+
+    /// Поездки для списка истории. Список подчиняется тому же фильтру, что и весь
+    /// экран: раньше он всегда показывал «последние 7» — переключаешь «Месяц», а
+    /// список не меняется, и непонятно, чем управляет фильтр. Для «Всего времени»
+    /// показываем последние `visibleHistory`: там записей может быть под сотню.
+    static func historyList(_ history: [TripRecord], period: StatsPeriod,
+                            now: Date = Date()) -> [TripRecord] {
+        guard period.interval != nil else { return Array(history.prefix(visibleHistory)) }
+        return records(history, period: period, now: now)
     }
 
     /// Треки периода для карты отчёта: только те записи, у которых трек ещё жив
@@ -207,6 +248,17 @@ extension TripHistory {
         }
         return byCamera.values.sorted { $0.times > $1.times }
     }
+}
+
+/// Столбик графика «километры по дням».
+nonisolated struct DayBar: Identifiable, Equatable {
+    let day: Date
+    var km: Double = 0
+    /// Штрафуемых превышений за этот день — столбик краснеет.
+    var overPasses = 0
+
+    var id: Date { day }
+    var hasOverspeed: Bool { overPasses > 0 }
 }
 
 /// Камера на карте отчёта: сколько раз проезжали, сколько из них с превышением

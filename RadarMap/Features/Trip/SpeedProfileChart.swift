@@ -70,11 +70,7 @@ struct SpeedProfileChart: View {
         if samples.count >= 8 {
             let topSpeed = samples.map(\.speedKmh).max() ?? 60
             VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Скорость по маршруту")
-                        .font(.rounded(14, .semibold))
-                        .foregroundStyle(Theme.textSecondary)
-                    Spacer()
+                SectionHeader(title: String(localized: "Скорость по маршруту")) {
                     HStack(spacing: 4) {
                         Image(systemName: "hand.tap.fill").font(.rounded(9))
                         Text("коснитесь графика").font(.rounded(10))
@@ -167,8 +163,7 @@ struct SpeedProfileChart: View {
                     Spacer(minLength: 0)
                 }
             }
-            .padding(16)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+            .statCard()
         }
     }
 

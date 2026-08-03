@@ -62,12 +62,11 @@ struct RatingInfoSheet: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        .statCard()
     }
 
     private var scaleSection: some View {
-        infoCard(title: "Шкала") {
+        infoCard(title: String(localized: "Шкала")) {
             scaleRow(Theme.success, "90–100", String(localized: "Идеальный стиль"))
             scaleRow(Theme.success.opacity(0.75), "75–89", String(localized: "Аккуратный водитель"))
             scaleRow(Theme.radar, "60–74", String(localized: "Уверенный, но с риском"))
@@ -90,7 +89,7 @@ struct RatingInfoSheet: View {
     }
 
     private var componentsSection: some View {
-        infoCard(title: "Из чего складывается") {
+        infoCard(title: String(localized: "Из чего складывается")) {
             componentRow(icon: "camera.metering.center.weighted", tint: Theme.accent,
                          title: String(localized: "Скорость у камер"),
                          text: String(localized: "Каждый проезд камеры с известным лимитом: берём минимальную скорость в 80 м перед камерой — разгон после проезда не считается. Штрафные ступени снижают балл сильнее всего."))
@@ -117,7 +116,7 @@ struct RatingInfoSheet: View {
     }
 
     private var tipsSection: some View {
-        infoCard(title: "Как поднять") {
+        infoCard(title: String(localized: "Как поднять")) {
             tipRow(String(localized: "Проезжайте камеры не выше лимита — уже +6 км/ч попадает в штрафную ступень."))
             tipRow(String(localized: "Разгоняйтесь и тормозите плавно."))
             tipRow(String(localized: "Балл записывается за каждую поездку — смотрите его в истории."))
@@ -205,7 +204,7 @@ struct SavingsInfoSheet: View {
     }
 
     private var fineTable: some View {
-        infoCard(title: "Штрафы за превышение — ст. 128-3 КоАО") {
+        infoCard(title: String(localized: "Штрафы за превышение — ст. 128-3 КоАО")) {
             fineRow("+6…20 км/ч", brv: 1)
             fineRow("+21…40 км/ч", brv: 5)
             fineRow(String(localized: "свыше +40 км/ч"), brv: 9)
@@ -234,7 +233,7 @@ struct SavingsInfoSheet: View {
     }
 
     private var method: some View {
-        infoCard(title: "Как считаем") {
+        infoCard(title: String(localized: "Как считаем")) {
             Text("Каждая камера с известным лимитом, пройденная без штрафной скорости, — несостоявшийся минимальный штраф в 1 БРВ. Складываем такие проезды. Это оценка, а не гарантия: повторность и допуски конкретных камер мы знать не можем.")
                 .font(.rounded(13))
                 .foregroundStyle(Theme.textPrimary)
@@ -315,14 +314,11 @@ struct AchievementInfoSheet: View {
 // MARK: - Общий каркас карточки
 
 @ViewBuilder
-private func infoCard(title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
+private func infoCard(title: String, @ViewBuilder content: () -> some View) -> some View {
     VStack(alignment: .leading, spacing: 12) {
-        Text(title)
-            .font(.rounded(14, .semibold))
-            .foregroundStyle(Theme.textSecondary)
+        SectionHeader(title)
         content()
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(16)
-    .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+    .statCard()
 }

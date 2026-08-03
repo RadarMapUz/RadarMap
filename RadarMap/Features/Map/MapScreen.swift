@@ -831,6 +831,8 @@ struct MapScreen: View {
         let args = ProcessInfo.processInfo.arguments
         // Демо-история для визуальной проверки Итогов и отчёта за период.
         if args.contains("-demoHistory") { env.trip.seedDemoHistory() }
+        // Демо-история двухнедельной давности: проверка «в этом периоде поездок нет».
+        if args.contains("-demoHistoryOld") { env.trip.seedDemoHistory(shiftDays: 14) }
         if args.contains("-showStats") { map.showStats = true }
         if args.contains("-showSettings") { map.showSettings = true }
         if args.contains("-showCameraDetail") {

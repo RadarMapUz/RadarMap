@@ -24,6 +24,61 @@ struct GlassCard<Content: View>: View {
     }
 }
 
+/// Единый контейнер карточки статистики: одинаковые отступы, радиус и фон.
+/// Раньше каждый блок Итогов задавал их сам и они расходились на пару пунктов.
+extension View {
+    func statCard(padding: CGFloat = 16, radius: CGFloat = Theme.cornerLarge) -> some View {
+        self.padding(padding)
+            .background(Theme.surface,
+                        in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+    }
+}
+
+/// Заголовок секции: подпись слева, необязательный акцент справа. Один размер и
+/// цвет на все секции — «Километры по дням», «Достижения», список поездок.
+struct SectionHeader<Accessory: View>: View {
+    let title: String
+    @ViewBuilder var accessory: Accessory
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title)
+                .font(.rounded(14, .semibold))
+                .foregroundStyle(Theme.textSecondary)
+            Spacer(minLength: 0)
+            accessory
+        }
+    }
+}
+
+extension SectionHeader where Accessory == EmptyView {
+    init(_ title: String) {
+        self.init(title: title) { EmptyView() }
+    }
+}
+
+/// Разделитель «дальше — пожизненные цифры»: подпись в разрыве линии. Нужен,
+/// чтобы было видно, где кончается власть фильтра периода.
+struct LabeledDivider: View {
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            line
+            Text(title)
+                .font(.rounded(11, .semibold))
+                .foregroundStyle(Theme.textTertiary)
+                .textCase(.uppercase)
+            line
+        }
+        .padding(.top, 8)
+    }
+
+    private var line: some View {
+        Rectangle().fill(Theme.stroke).frame(height: 1)
+    }
+}
+
 /// Круглая кнопка-контрол поверх карты (мой геопоиск, слои и т.п.).
 struct CircleControl: View {
     let systemName: String

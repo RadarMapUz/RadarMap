@@ -23,11 +23,16 @@ struct StatTile: View {
                 .font(.rounded(28, .bold))
                 .foregroundStyle(Theme.textPrimary)
                 .modifier(NumericTransition(active: animatesValue, value: value))
-            Text(label).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
+                .lineLimit(1)               // «5 из 7» и узбекские подписи длиннее
+                .minimumScaleFactor(0.6)    // русских — плитка не должна ломаться
+            Text(label)
+                .font(.rounded(12))
+                .foregroundStyle(Theme.textSecondary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .statCard(radius: Theme.cornerMedium)
         // VoiceOver: «128 км, дистанция» одной фразой, а не три отдельных элемента.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("\(value), ") + Text(label))

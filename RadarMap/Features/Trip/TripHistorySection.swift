@@ -2,16 +2,19 @@
 //  TripHistorySection.swift
 //  RadarMap
 //
-//  Секция «История поездок» экрана Итогов: список последних поездок с баллом и
-//  мини-треком, сгруппированный по дням. Данные считает TripHistory, здесь
-//  только разметка и действия наверх (тап, повтор, удаление).
+//  Список поездок на экране Итогов: записи с баллом и мини-треком,
+//  сгруппированные по дням. Выборку и заголовок задаёт экран (список подчиняется
+//  фильтру периода), здесь только разметка и действия наверх (тап, повтор,
+//  удаление).
 //
 
 import SwiftUI
 import CoreLocation
 
 struct TripHistorySection: View {
-    let trip: TripStats
+    /// «Поездки за неделю» / «за месяц» / «Последние поездки» — приходит сверху.
+    let title: String
+    let records: [TripRecord]
     let onSelect: (TripRecord) -> Void
     let onRepeat: ((CLLocationCoordinate2D, String) -> Void)?
     let onDelete: (TripRecord) -> Void
@@ -20,14 +23,13 @@ struct TripHistorySection: View {
     // герой периода наверху Итогов — двух источников правды быть не должно.
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("История поездок")
-                .font(.rounded(14, .semibold))
-                .foregroundStyle(Theme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            SectionHeader(title: title) {
+                Text(String(format: String(localized: "Всего: %lld"), records.count))
+                    .font(.rounded(12, .medium))
+                    .foregroundStyle(Theme.textTertiary)
+            }
 
-            // Показываем только 7 последних — старое хранится лишь для статистики.
-            ForEach(TripHistory.dayGroups(Array(trip.history.prefix(TripHistory.visibleHistory))),
-                    id: \.day) { group in
+            ForEach(TripHistory.dayGroups(records), id: \.day) { group in
                 Text(Formatting.dayTitle(group.day))
                     .font(.rounded(12, .semibold))
                     .foregroundStyle(Theme.textTertiary)
@@ -56,11 +58,21 @@ struct TripHistorySection: View {
                     Text(record.startedAt.formatted(date: .omitted, time: .shortened))
                         .font(.rounded(14, .semibold))
                         .foregroundStyle(Theme.textPrimary)
-                    Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration)) · \(Int(record.averageSpeedKmh)) км/ч сред.")
-                        .font(.rounded(12))
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)               // перенос «40 км/ч сред.» на вторую
-                        .minimumScaleFactor(0.85)   // строку рвал ритм списка
+                    // Километры, время и камеры одной строкой: справа остаются
+                    // только балл и шеврон — раньше там теснились три элемента.
+                    HStack(spacing: 6) {
+                        Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration))")
+                            .font(.rounded(12))
+                            .foregroundStyle(Theme.textSecondary)
+                        if record.camerasPassed > 0 {
+                            Label("\(record.camerasPassed)", systemImage: "camera.fill")
+                                .font(.rounded(11, .semibold))
+                                .foregroundStyle(Theme.accent)
+                                .labelStyle(.titleAndIcon)
+                        }
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                     // Склеенная поездка: сразу видно, что внутри был заезд по пути.
                     if let stops = record.stops, !stops.isEmpty {
                         Label(stopsLabel(stops.count), systemImage: "pause.circle.fill")
@@ -72,21 +84,16 @@ struct TripHistorySection: View {
                 // Балл поездки — цвет по зоне, поездки сравниваешь с одного взгляда.
                 if let score = record.score {
                     Text("\(Int(score))")
-                        .font(.rounded(13, .heavy).monospacedDigit())
+                        .font(.rounded(14, .heavy).monospacedDigit())
                         .foregroundStyle(Self.scoreColor(Int(score)))
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Self.scoreColor(Int(score)).opacity(0.13), in: Capsule())
-                }
-                VStack(spacing: 2) {
-                    Text("\(record.camerasPassed)").font(.rounded(18, .bold)).foregroundStyle(Theme.accent)
-                    Image(systemName: "camera.fill").font(.system(size: 9)).foregroundStyle(Theme.textTertiary)
+                        .padding(.horizontal, 9).padding(.vertical, 5)
+                        .background(Self.scoreColor(Int(score)).opacity(0.14), in: Capsule())
                 }
                 Image(systemName: "chevron.right")
                     .font(.rounded(12, .semibold))
                     .foregroundStyle(Theme.textTertiary)
             }
-            .padding(14)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            .statCard(padding: 14, radius: Theme.cornerMedium)
         }
         .buttonStyle(.plain)
         // Лёгкое «проявление» строк при прокрутке — живо, но не мешает.

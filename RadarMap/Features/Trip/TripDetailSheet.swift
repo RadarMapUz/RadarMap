@@ -79,8 +79,7 @@ struct PassRow: View {
                     .foregroundStyle(Theme.textTertiary)
             }
         }
-        .padding(12)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .statCard(padding: 12, radius: Theme.cornerMedium)
     }
 }
 
@@ -289,8 +288,7 @@ struct TripDetailSheet: View {
                     .foregroundStyle(Theme.textSecondary)
             }
             .frame(maxWidth: .infinity)
-            .padding(18)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            .statCard(padding: 18, radius: Theme.cornerMedium)
         }
     }
 
@@ -332,8 +330,7 @@ struct TripDetailSheet: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(16)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+            .statCard()
         }
     }
 
@@ -355,10 +352,7 @@ struct TripDetailSheet: View {
 
     private var passesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Пройденные камеры")
-                .font(.rounded(14, .semibold))
-                .foregroundStyle(Theme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            SectionHeader(String(localized: "Пройденные камеры"))
             ForEach(record.passed.reversed()) { pass in
                 PassRowButton(pass: pass) { selectedPass = $0 }
             }

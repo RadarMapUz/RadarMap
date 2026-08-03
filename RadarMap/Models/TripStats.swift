@@ -248,9 +248,11 @@ final class TripStats {
     /// `simctl launch <app> -demoHistory -showStats -showReport`.
     /// ЗАМЕЩАЕТ историю — только под DEBUG и только по явному флагу запуска,
     /// в релизную сборку не попадает.
-    func seedDemoHistory() {
+    /// `shiftDays` сдвигает всю демо-историю в прошлое — так проверяется состояние
+    /// «поездки есть, но не в этом периоде» (открыл Итоги после недели без езды).
+    func seedDemoHistory(shiftDays: Double = 0) {
         let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
-        let now = Date()
+        let now = Date().addingTimeInterval(-shiftDays * 86400)
         var seeded: [TripRecord] = []
         for (index, daysAgo) in [0.2, 1.1, 2.3, 3.0, 4.5, 5.4].enumerated() {
             let start = now.addingTimeInterval(-daysAgo * 86400)

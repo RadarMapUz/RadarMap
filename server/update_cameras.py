@@ -82,6 +82,27 @@ def build(rows):
     return [{"id":c["id"],"region":c["region"],"city":c["city"],"location":c["location"],
              "lat":c["lat"],"lon":c["lon"],"type":c["type"]} for c in cams]
 
+ACCIDENT_GUID = "60fb99752a2e256d868e8259"
+
+def probe_accidents():
+    """Датасет МВД «ДТП без личной идентификации» существует, но ПУСТ (0 строк
+    на 03.08.2026). Если его когда-нибудь наполнят координатами — это готовый
+    слой «аварийно-опасные участки» для карты. Дешёвая проба при каждом
+    ручном прогоне: наполнился — кричим в лог."""
+    try:
+        body = json.dumps({"guidId": ACCIDENT_GUID, "fields": {}, "limit": 1,
+                           "offset": 0}).encode()
+        req = urllib.request.Request(
+            f"https://data.egov.uz/apiClient/Main/GetMainData?GuidId={ACCIDENT_GUID}",
+            data=body, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            count = json.load(r)["result"].get("count", 0)
+        if count:
+            log(f"!!! ДТП-датасет НАПОЛНИЛСЯ: {count} строк — можно делать слой аварийности")
+    except Exception as e:
+        log(f"проба ДТП-датасета не удалась (не страшно): {e}")
+
+
 def main():
     try:
         rows = fetch()
@@ -104,6 +125,7 @@ def main():
         with open(os.path.join(WWW,".camhash")) as f: old_hash=f.read().strip()
     except OSError: pass
 
+    probe_accidents()
     if new_hash == old_hash:
         log(f"UNCHANGED: {len(cams)} cameras, hash {new_hash[:12]}"); return
 

@@ -47,6 +47,17 @@ enum CameraType: Hashable {
         }
     }
 
+    /// Одно слово для короткого городского анонса: в городе камеры идут одна за
+    /// другой, и «Стационарная камера впереди, 300 метров» на каждую — это уже
+    /// не помощь, а болтовня. Тип в городе почти не меняет решение водителя.
+    var shortName: String {
+        switch self {
+        case .stationaryCamera, .intelligentRadar: return String(localized: "Камера")
+        case .stationaryRadar:                     return String(localized: "Радар")
+        default:                                   return displayName
+        }
+    }
+
     /// Короткая фраза в родительном падеже для HUD («до камеры»).
     var genitivePhrase: String {
         switch self {

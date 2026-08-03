@@ -70,16 +70,33 @@ final class AlertPolicyTests: XCTestCase {
     /// Короткая обёртка: почти во всех кейсах тумблер «только при превышении» выключен.
     private func decide(mode: AlertMode = .auto, detected: AlertPolicy.Context,
                         sudden: Bool = false, over: Bool = false,
-                        onlyWhenOver: Bool = false) -> AlertPolicy.Decision {
+                        onlyWhenOver: Bool = false,
+                        crawling: Bool = false) -> AlertPolicy.Decision {
         AlertPolicy.decision(mode: mode, detected: detected, isSuddenCamera: sudden,
-                             isOverspeeding: over, voiceOnlyWhenOverspeeding: onlyWhenOver)
+                             isOverspeeding: over, voiceOnlyWhenOverspeeding: onlyWhenOver,
+                             isCrawling: crawling)
     }
 
-    func testCitySilentInLimit() {
+    /// Раньше город был полной тишиной, и это читалось как поломка: камера на
+    /// карте есть, а голоса нет. Теперь о камере говорим и в городе — коротко.
+    func testCitySpeaksBrieflyInLimit() {
         let decision = decide(detected: .city)
-        XCTAssertEqual(decision.style, .silent, "город, едем в лимите — тихо")
-        XCTAssertFalse(decision.beeps)
-        XCTAssertFalse(decision.voice)
+        XCTAssertEqual(decision.style, .brief, "город, едем в лимите — короткая фраза")
+        XCTAssertTrue(decision.voice, "о камере в городе тоже говорим")
+        XCTAssertTrue(decision.isBrief, "но в два слова, а не полной фразой")
+        XCTAssertFalse(decision.beeps, "без сирены — мы не превышаем")
+        XCTAssertFalse(decision.escalates)
+    }
+
+    /// В пробке и на светофоре камера в 300 м впереди — не решение водителя.
+    func testCrawlingIsSilent() {
+        XCTAssertEqual(decide(detected: .city, crawling: true).style, .silent)
+        XCTAssertEqual(decide(detected: .highway, crawling: true).style, .silent,
+                       "пробка на трассе — та же пробка")
+        XCTAssertEqual(decide(detected: .city, sudden: true, crawling: true).style, .urgent,
+                       "тренога на обочине важна и в пробке")
+        XCTAssertEqual(decide(detected: .city, over: true, crawling: true).style, .urgent,
+                       "превышение важнее любой тишины")
     }
 
     /// Главное изменение: трасса в лимите больше не кричит, а спокойно сообщает.
@@ -118,7 +135,7 @@ final class AlertPolicyTests: XCTestCase {
     func testManualOverrideBeatsDetector() {
         XCTAssertEqual(decide(mode: .highway, detected: .city).style, .calm,
                        "ручная «Трасса» сильнее детектора")
-        XCTAssertEqual(decide(mode: .city, detected: .highway).style, .silent,
+        XCTAssertEqual(decide(mode: .city, detected: .highway).style, .brief,
                        "ручной «Город» сильнее детектора")
     }
 }

@@ -561,22 +561,6 @@
         }
       }
     },
-    "«Авто» сам различает город и трассу: в городе о камерах молча предупреждает панель, на трассе приложение спокойно называет каждую. Голос повышается только когда вы реально превышаете или впереди передвижной радар. «Голос только при превышении» — полная тишина, пока едете в лимите.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Авто» сам различает город и трассу: в городе о камерах молча предупреждает панель, на трассе приложение спокойно называет каждую. Голос повышается только когда вы реально превышаете или впереди передвижной радар. «Голос только при превышении» — полная тишина, пока едете в лимите."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Avto» shahar va trassani o‘zi ajratadi: shaharda kameralar haqida panel jimgina ogohlantiradi, trassada ilova har birini xotirjam aytadi. Ovoz faqat siz haqiqatan tezlikni oshirganda yoki oldinda ko‘chma radar bo‘lganda kuchayadi. «Ovoz faqat tezlik oshganda» — cheklov ichida ketayotganingizda to‘liq jimlik."
-          }
-        }
-      }
-    },
     "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.": {
       "localizations": {
         "ru": {
@@ -829,22 +813,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "O‘tgan davrdagidan ko‘proq"
-          }
-        }
-      }
-    },
-    "В городе камер сотни — о них молча предупредит панель, без болтовни": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "В городе камер сотни — о них молча предупредит панель, без болтовни"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shaharda kameralar yuzlab — ular haqida panel jimgina ogohlantiradi, ortiqcha gap yo‘q"
           }
         }
       }
@@ -1565,22 +1533,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qo'lda qo'shilgan"
-          }
-        }
-      }
-    },
-    "Долгое нажатие на спидометр — быстрые переключатели звука": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Долгое нажатие на спидометр — быстрые переключатели звука"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Spidometrni uzoq bosish — tovushning tezkor tugmalari"
           }
         }
       }
@@ -2733,22 +2685,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ishga"
-          }
-        }
-      }
-    },
-    "На трассе спокойно назову каждую: «по маршруту камера через 800 метров»": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "На трассе спокойно назову каждую: «по маршруту камера через 800 метров»"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Trassada har birini xotirjam aytaman: «marshrutda kamera 800 metrdan so‘ng»"
           }
         }
       }
@@ -6669,6 +6605,102 @@
           "stringUnit": {
             "state": "translated",
             "value": "IIV har bir kamera uchun ro'yxat e'lon qilmaydi — turi imkoniyatlarini ko'rsatamiz"
+          }
+        }
+      }
+    },
+    "%@, %lld метров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %lld метров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %lld metr"
+          }
+        }
+      }
+    },
+    "Камеры впереди, %lld метров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры впереди, %lld метров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda kameralar, %lld metr"
+          }
+        }
+      }
+    },
+    "В городе — коротко: «камера, 300 метров». Камеры на перекрёстке назову одной фразой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В городе — коротко: «камера, 300 метров». Камеры на перекрёстке назову одной фразой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shaharda qisqa: «kamera, 300 metr». Chorrahadagi kameralarni bitta ibora bilan aytaman"
+          }
+        }
+      }
+    },
+    "На трассе полностью: «по маршруту камера через 800 метров»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На трассе полностью: «по маршруту камера через 800 метров»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trassada to‘liq: «marshrut bo‘yicha kamera 800 metrdan keyin»"
+          }
+        }
+      }
+    },
+    "В пробке молчу: скажу, когда поедете": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В пробке молчу: скажу, когда поедете"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tirbandlikda jim turaman: yo‘lga chiqqaningizda aytaman"
+          }
+        }
+      }
+    },
+    "«Авто» сам различает город и трассу: в городе приложение говорит коротко («камера, 300 метров»), на трассе называет камеру полностью. Камеры, стоящие вплотную, объявляются одной фразой, а в пробке голос ждёт, пока вы поедете. Громче — только когда вы реально превышаете или впереди передвижной радар. «Голос только при превышении» — полная тишина, пока едете в лимите.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Авто» сам различает город и трассу: в городе приложение говорит коротко («камера, 300 метров»), на трассе называет камеру полностью. Камеры, стоящие вплотную, объявляются одной фразой, а в пробке голос ждёт, пока вы поедете. Громче — только когда вы реально превышаете или впереди передвижной радар. «Голос только при превышении» — полная тишина, пока едете в лимите."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Avto» shahar va trassani o‘zi ajratadi: shaharda ilova qisqa aytadi («kamera, 300 metr»), trassada kamerani to‘liq nomlaydi. Yonma-yon turgan kameralar bitta ibora bilan aytiladi, tirbandlikda esa ovoz siz yo‘lga chiqishingizni kutadi. Balandroq — faqat siz haqiqatan tezlikni oshirsangiz yoki oldinda ko‘chma radar bo‘lsa. «Ovoz faqat tezlik oshganda» — limitda ketayotganda to‘liq sukunat."
           }
         }
       }

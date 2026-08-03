@@ -61,9 +61,16 @@ nonisolated enum AlertPolicy {
     /// водитель перестаёт различать важное.
     enum Style: Equatable {
         /// Ни звука, ни голоса: камеру показывают HUD, полоска приближения и
-        /// один мягкий тук. Городская сетка камер, едем в лимите.
+        /// один мягкий тук. Осталось для тумблера «только при превышении» и для
+        /// пробки, где камера впереди — не новость.
         case silent
-        /// Один спокойный анонс на входе в радиус — без бипов и без эскалации.
+        /// Короткая фраза («Камера, 300 метров») — город. Без бипов и эскалации.
+        /// Раньше город был полной тишиной, но камеру видно на карте, а голоса
+        /// нет — и приложение выглядит сломанным: о камере надо СКАЗАТЬ, вопрос
+        /// только в том, сколько слов на это тратить.
+        case brief
+        /// Полная фраза с типом и стороной — трасса: камер мало, ехать до
+        /// следующей далеко, лишние полсекунды речи не мешают.
         case calm
         /// Полная эскалация: бипы по уровням, голос, резкая вибрация.
         case urgent
@@ -73,10 +80,12 @@ nonisolated enum AlertPolicy {
         let style: Style
         /// Пищать ли сиреной — только в срочном режиме.
         var beeps: Bool { style == .urgent }
-        /// Говорить ли голосом — спокойно или срочно, но не в тишине.
+        /// Говорить ли голосом — во всём, кроме тишины.
         var voice: Bool { style != .silent }
         /// Наращивать ли сигналы по мере приближения (иначе один раз на входе).
         var escalates: Bool { style == .urgent }
+        /// Короткая фраза вместо полной: в городе камеры идут одна за другой.
+        var isBrief: Bool { style == .brief }
     }
 
     /// Матрица решений. Приоритет сверху вниз:
@@ -85,18 +94,21 @@ nonisolated enum AlertPolicy {
     ///    оповещения вообще нужны.
     /// 2. Устойчивое превышение у камеры — срочно: сейчас будет штраф.
     /// 3. Тумблер «голос только при превышении» — тишина, раз не превышаем.
-    /// 4. Трасса — спокойный анонс: камер мало, знать о каждой полезно.
-    /// 5. Город — тишина: камер сотни, крик о каждой превращается в белый шум.
+    /// 4. Ползём (пробка, светофор) — тишина: камера в 300 м впереди сейчас не
+    ///    решение водителя, а панель и тук её всё равно показывают.
+    /// 5. Трасса — полная фраза, город — короткая.
     static func decision(mode: AlertMode, detected: Context,
                          isSuddenCamera: Bool, isOverspeeding: Bool,
-                         voiceOnlyWhenOverspeeding: Bool) -> Decision {
+                         voiceOnlyWhenOverspeeding: Bool,
+                         isCrawling: Bool = false) -> Decision {
         if isSuddenCamera || isOverspeeding { return Decision(style: .urgent) }
         if voiceOnlyWhenOverspeeding { return Decision(style: .silent) }
+        if isCrawling { return Decision(style: .silent) }
         let context: Context = switch mode {
         case .auto: detected
         case .city: .city
         case .highway: .highway
         }
-        return Decision(style: context == .highway ? .calm : .silent)
+        return Decision(style: context == .highway ? .calm : .brief)
     }
 }

@@ -257,19 +257,16 @@ final class TripStats {
         for (index, daysAgo) in [0.2, 1.1, 2.3, 3.0, 4.5, 5.4].enumerated() {
             let start = now.addingTimeInterval(-daysAgo * 86400)
             let km = [12.4, 8.1, 23.7, 5.2, 31.0, 14.8][index]
-            // Веером в пределах города, а не по всем румбам: иначе карта отчёта
-            // на демо-данных уходит в областной зум и по ней нечего проверять.
-            let bearing = [25.0, 40, 210, 195, 65, 230][index]
-            var track: [Double] = []
-            for step in 0...24 {
-                let point = GeoMath.destination(from: base, bearing: bearing,
-                                                distanceMeters: Double(step) * km * 22)
-                track += [point.latitude, point.longitude, 40 + Double(step % 7) * 9]
-            }
+            // Три поездки идут по одному «рабочему» коридору (общий seed): так на
+            // карте проездов видно градусы частоты, а не шесть равнозначных линий.
+            let seed = [1, 1, 2, 3, 1, 4][index]
+            let track = Self.demoTrack(from: base, seed: seed, km: km)
             // Каждая третья поездка — с превышением у камеры, чтобы была зона риска.
             let over = index % 3 == 0
-            let cam = GeoMath.destination(from: base, bearing: bearing,
-                                          distanceMeters: km * 300)
+            // Камера стоит НА треке (примерно на 40% пути), а не в стороне от него.
+            let camIndex = max(0, (track.count / 3) / 3 * 3)
+            let cam = CLLocationCoordinate2D(latitude: track[camIndex],
+                                             longitude: track[camIndex + 1])
             let pass = PassedCamera(id: UUID(), cameraID: 1000 + index,
                                     typeRaw: "Стационар радар",
                                     location: ["Юнусабад", "Чиланзар", "Мирзо-Улугбек"][index % 3],
@@ -292,6 +289,38 @@ final class TripStats {
         lifetime = LifetimeStats.rebuilt(from: history)
         persist()
         persistLifetime()
+    }
+
+    /// Демо-трек: ломаная «по улицам» — мелкое петляние плюс поворот на каждом
+    /// шестом шаге. Прямой луч из одной точки (как было раньше) на карте
+    /// превращался в звезду, которой у живого пользователя не бывает.
+    /// Одинаковый `seed` даёт одинаковую геометрию, поэтому короткая поездка —
+    /// начало длинной: ровно так выглядит повторяющаяся дорога на работу.
+    private static func demoTrack(from base: CLLocationCoordinate2D,
+                                  seed: Int, km: Double) -> [Double] {
+        let stepMeters = 500.0
+        let steps = max(6, Int((km * 1000 / stepMeters).rounded()))
+        var heading = Double(30 + seed * 47 % 300)
+        var point = base
+        var track: [Double] = [base.latitude, base.longitude, 30]
+        for step in 1...steps {
+            if step % 8 == 0 {
+                heading += (step / 8) % 2 == 0 ? 70 : -76   // перекрёсток
+            } else {
+                heading += Double((step * 37 + seed * 13) % 7) - 3   // петляние
+            }
+            // Дальше 5 км от центра поездка разворачивается: 31 км по городу —
+            // это много поворотов, а не прямая в область.
+            if GeoMath.fastDistance(point.latitude, point.longitude,
+                                    base.latitude, base.longitude) > 5000 {
+                heading = GeoMath.bearing(from: point, to: base)
+                    + Double((step * 17 + seed) % 40) - 20
+            }
+            point = GeoMath.destination(from: point, bearing: heading,
+                                        distanceMeters: stepMeters)
+            track += [point.latitude, point.longitude, 38 + Double(step % 7) * 9]
+        }
+        return track
     }
     #endif
 

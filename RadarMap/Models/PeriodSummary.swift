@@ -220,13 +220,41 @@ extension TripHistory {
             .filter { $0.count >= 2 }
     }
 
+    /// Всё, что рисует карта проездов: треки, маркеры камер и слой частоты.
+    /// Собирается на смену периода, а не на каждый пересчёт вьюхи, и считает
+    /// частоту вне главного потока (десятки тысяч ячеек сетки).
+    static func mapData(_ history: [TripRecord], period: StatsPeriod,
+                        now: Date = Date()) async -> PeriodMapData {
+        let tracks = self.tracks(history, period: period, now: now)
+        return PeriodMapData(tracks: tracks,
+                             markers: passMarkers(history, period: period, now: now),
+                             heat: await heatLines(tracks))
+    }
+
+    /// Данные карты для одной поездки: сам трек и камеры именно этого проезда.
+    /// Слой частоты для одной поездки не имеет смысла — линия рисуется яркой.
+    static func mapData(of record: TripRecord) -> PeriodMapData {
+        let track = record.trackPoints
+        return PeriodMapData(tracks: track.count >= 2 ? [track] : [],
+                             markers: passMarkers(of: record), heat: [])
+    }
+
+    /// Проезды камер одной поездки — маркеры выбранного трека.
+    static func passMarkers(of record: TripRecord) -> [PassMarker] {
+        markers(from: [record])
+    }
+
     /// Проезды камер периода, сгруппированные по точке: сколько раз проезжали,
     /// было ли превышение, максимальная скорость проезда. Маркеры карты отчёта
     /// и карточка по тапу («где я превышал»).
     static func passMarkers(_ history: [TripRecord], period: StatsPeriod,
                             now: Date = Date()) -> [PassMarker] {
+        markers(from: records(history, period: period, now: now))
+    }
+
+    private static func markers(from records: [TripRecord]) -> [PassMarker] {
         var byCamera: [Int: PassMarker] = [:]
-        for record in records(history, period: period, now: now) {
+        for record in records {
             for pass in record.passed {
                 guard let lat = pass.lat, let lon = pass.lon else { continue }
                 let over = pass.limitKmh.map {
@@ -247,6 +275,150 @@ extension TripHistory {
             }
         }
         return byCamera.values.sorted { $0.times > $1.times }
+    }
+}
+
+// MARK: - Слой частоты («тепло») карты проездов
+
+extension TripHistory {
+
+    /// Склеивает треки периода в слой линий с частотой проездов: сколько РАЗНЫХ
+    /// поездок прошло по каждому участку (проезд «туда и обратно» внутри одной
+    /// поездки счётчик не накручивает). Каждый трек затем режется на куски одного
+    /// градуса частоты.
+    ///
+    /// Зачем: десяток наложенных друг на друга линий одной яркости давал паутину,
+    /// в которой ежедневная дорога на работу выглядела так же, как единственная
+    /// поездка на дачу. С частотой постоянный коридор виден сразу, а разовые
+    /// поездки уходят в фон как контекст.
+    ///
+    /// Считаем ячейки ВДОЛЬ СЕГМЕНТОВ, а не только в вершинах: трек хранится
+    /// упрощённым (Дуглас-Пекер ±22 м), поэтому на прямой улице два проезда
+    /// оставляют вершины в разных местах — по вершинам совпадение не нашлось бы
+    /// и коридор никогда не загорелся.
+    @concurrent
+    static func heatLines(_ tracks: [[TrackPoint]],
+                          cellMeters: Double = AppConfig.heatCellMeters) async -> [HeatLine] {
+        guard let reference = tracks.first(where: { $0.count >= 2 })?.first else { return [] }
+        let latStep = cellMeters / 111_320
+        let lonStep = cellMeters / (111_320 * max(0.2, cos(reference.lat * .pi / 180)))
+
+        func cell(lat: Double, lon: Double) -> Int64 {
+            let y = Int64((lat / latStep).rounded())
+            let x = Int64((lon / lonStep).rounded())
+            return y << 32 | (x & 0xFFFF_FFFF)
+        }
+
+        /// Ячейки, которые покрывает участок: шаг полклетки, чтобы не проскакивать.
+        func cells(from a: TrackPoint, to b: TrackPoint) -> [Int64] {
+            let steps = max(1, Int((GeoMath.fastDistance(a.lat, a.lon, b.lat, b.lon)
+                                    / (cellMeters * 0.5)).rounded(.up)))
+            return (0...steps).map { step in
+                let t = Double(step) / Double(steps)
+                return cell(lat: a.lat + (b.lat - a.lat) * t,
+                            lon: a.lon + (b.lon - a.lon) * t)
+            }
+        }
+
+        let drawable = tracks.filter { $0.count >= 2 }
+        var cellsByTrack: [[[Int64]]] = []
+        cellsByTrack.reserveCapacity(drawable.count)
+        var counts: [Int64: Int] = [:]
+        for track in drawable {
+            var perSegment: [[Int64]] = []
+            perSegment.reserveCapacity(track.count - 1)
+            var visited = Set<Int64>()
+            for index in 1..<track.count {
+                let keys = cells(from: track[index - 1], to: track[index])
+                perSegment.append(keys)
+                visited.formUnion(keys)
+            }
+            cellsByTrack.append(perSegment)
+            for key in visited { counts[key, default: 0] += 1 }
+        }
+
+        /// Частота участка — по самой редкой его ячейке: коридор считается общим
+        /// только если поездки шли рядом на всём участке.
+        func times(of keys: [Int64]) -> Int {
+            keys.reduce(Int.max) { min($0, counts[$1] ?? 1) }
+        }
+
+        var result: [HeatLine] = []
+        var id = 0
+        var fallback: [HeatLine] = []
+        for (trackIndex, track) in drawable.enumerated() {
+            let perSegment = cellsByTrack[trackIndex]
+            let smoothed = medianSmoothed(perSegment.map(times(of:)))
+            var run = [track[0]]
+            var runTimes = smoothed[0]
+            for index in 1..<track.count {
+                let segmentTimes = smoothed[index - 1]
+                if HeatLine.tier(times: segmentTimes) == HeatLine.tier(times: runTimes) {
+                    run.append(track[index])
+                } else {
+                    result.append(HeatLine(id: id, points: run, times: runTimes))
+                    id += 1
+                    // Граничная вершина входит в оба куска — линия без разрыва.
+                    run = [track[index - 1], track[index]]
+                    runTimes = segmentTimes
+                }
+            }
+            if run.count >= 2 {
+                result.append(HeatLine(id: id, points: run, times: runTimes))
+                id += 1
+            }
+            fallback.append(HeatLine(id: trackIndex, points: track,
+                                     times: medianSmoothed(smoothed, window: smoothed.count)
+                                         .first ?? 1))
+        }
+        // Страховка от дробления: за потолком рисуем по одной линии на поездку.
+        guard result.count <= AppConfig.heatMaxLines else { return fallback }
+        // Редкие участки рисуются первыми, частый коридор — поверх них.
+        return result.sorted { $0.tier < $1.tier }
+    }
+
+    /// Медиана по окну: одиночные провалы частоты (шум GPS то попадает в ячейку
+    /// соседнего проезда, то нет) иначе резали бы трек на сотни коротких кусков.
+    static func medianSmoothed(_ values: [Int], window: Int = 5) -> [Int] {
+        guard values.count > 2, window > 1 else { return values }
+        let radius = max(1, window / 2)
+        return values.indices.map { index in
+            let from = max(0, index - radius)
+            let to = min(values.count - 1, index + radius)
+            let slice = values[from...to].sorted()
+            return slice[slice.count / 2]
+        }
+    }
+}
+
+/// Готовые данные карты проездов: считаются один раз на смену периода или выбор
+/// поездки, а не на каждый пересчёт вьюхи.
+nonisolated struct PeriodMapData {
+    var tracks: [[TrackPoint]] = []
+    var markers: [PassMarker] = []
+    /// Пусто — рисуем `tracks` в полную яркость (режим одной поездки).
+    var heat: [HeatLine] = []
+
+    var isEmpty: Bool { tracks.isEmpty && markers.isEmpty }
+}
+
+/// Участок карты проездов с частотой: сколько поездок прошло по этому коридору.
+nonisolated struct HeatLine: Identifiable {
+    let id: Int
+    let points: [TrackPoint]
+    let times: Int
+
+    /// 0 — разовый участок, 1 — повторяющийся, 2 — постоянный коридор.
+    var tier: Int { Self.tier(times: times) }
+
+    static func tier(times: Int) -> Int {
+        if times >= AppConfig.heatFrequentTimes { return 2 }
+        if times >= AppConfig.heatRepeatedTimes { return 1 }
+        return 0
+    }
+
+    var coordinates: [CLLocationCoordinate2D] {
+        points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
     }
 }
 

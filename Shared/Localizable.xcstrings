@@ -6576,6 +6576,38 @@
           }
         }
       }
+    },
+    "Все поездки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barcha safarlar"
+          }
+        }
+      }
+    },
+    "Подробнее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подробнее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batafsil"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

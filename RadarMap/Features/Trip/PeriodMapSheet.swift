@@ -18,8 +18,9 @@ import CoreLocation
 
 struct PeriodMapSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let tracks: [[TrackPoint]]
-    let markers: [PassMarker]
+    /// Треки, камеры и слой частоты — ровно то же, что показывает превью Итогов
+    /// (включая режим одной выбранной поездки).
+    let data: PeriodMapData
     /// Открыть сразу с выбранной камерой (тап по зоне риска).
     var focus: PassMarker? = nil
 
@@ -51,7 +52,7 @@ struct PeriodMapSheet: View {
                 position = .region(MKCoordinateRegion(
                     center: focus.coordinate,
                     latitudinalMeters: 1200, longitudinalMeters: 1200))
-            } else if let rect = Self.boundingRect(tracks: tracks, markers: markers) {
+            } else if let rect = Self.boundingRect(tracks: data.tracks, markers: data.markers) {
                 position = .rect(rect)
             }
         }
@@ -59,14 +60,38 @@ struct PeriodMapSheet: View {
 
     private var map: some View {
         Map(position: $position) {
-            ForEach(Array(tracks.enumerated()), id: \.offset) { _, track in
-                MapPolyline(coordinates: track.map {
-                    CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
-                })
-                .stroke(Theme.accent.opacity(0.75),
-                        style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+            // Слой частоты: постоянный коридор ярче и толще разовой поездки.
+            // Пусто (одна выбранная поездка) — рисуем её трек в полную яркость.
+            if data.heat.isEmpty {
+                ForEach(Array(data.tracks.enumerated()), id: \.offset) { _, track in
+                    MapPolyline(coordinates: track.map {
+                        CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+                    })
+                    .stroke(Theme.background.opacity(0.8), style: Self.stroke(width: 9))
+                }
+                ForEach(Array(data.tracks.enumerated()), id: \.offset) { _, track in
+                    MapPolyline(coordinates: track.map {
+                        CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+                    })
+                    .stroke(Theme.accent, style: Self.stroke(width: 4.5))
+                }
+            } else {
+                ForEach(data.heat) { line in
+                    if line.tier > 0 {
+                        MapPolyline(coordinates: line.coordinates)
+                            .stroke(Theme.background.opacity(0.7),
+                                    style: Self.stroke(width: line.tier == 2 ? 9 : 7))
+                    }
+                }
+                ForEach(data.heat) { line in
+                    MapPolyline(coordinates: line.coordinates)
+                        .stroke(Theme.accent.opacity(line.tier == 2 ? 1
+                                                     : line.tier == 1 ? 0.7 : 0.35),
+                                style: Self.stroke(width: line.tier == 2 ? 5.5
+                                                          : line.tier == 1 ? 4 : 2.5))
+                }
             }
-            ForEach(markers) { marker in
+            ForEach(data.markers) { marker in
                 Annotation("", coordinate: marker.coordinate, anchor: .center) {
                     markerDot(marker, isSelected: selected?.id == marker.id)
                         .onTapGesture {
@@ -168,6 +193,10 @@ struct PeriodMapSheet: View {
 
     private func passCount(_ marker: PassMarker) -> String {
         String(format: String(localized: "Проездов за период: %lld"), marker.times)
+    }
+
+    private static func stroke(width: CGFloat) -> StrokeStyle {
+        StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
     }
 
     /// Общая рамка всех треков и маркеров периода. nil — рисовать нечего.

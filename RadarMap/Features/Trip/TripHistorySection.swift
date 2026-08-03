@@ -4,8 +4,13 @@
 //
 //  Список поездок на экране Итогов: записи с баллом и мини-треком,
 //  сгруппированные по дням. Выборку и заголовок задаёт экран (список подчиняется
-//  фильтру периода), здесь только разметка и действия наверх (тап, повтор,
-//  удаление).
+//  фильтру периода), здесь только разметка и действия наверх.
+//
+//  Тап по строке «применяет» поездку к карте выше — это главный жест списка,
+//  поэтому иконка справа у таких строк не шеврон, а карта. Деталка открывается
+//  из шапки карты («Подробнее») и из контекстного меню; поездки, у которых трек
+//  уже не хранится (старше недели), рисовать на карте нечем — они открывают
+//  деталку сразу, как раньше.
 //
 
 import SwiftUI
@@ -15,7 +20,10 @@ struct TripHistorySection: View {
     /// «Поездки за неделю» / «за месяц» / «Последние поездки» — приходит сверху.
     let title: String
     let records: [TripRecord]
-    let onSelect: (TripRecord) -> Void
+    /// Какая поездка сейчас показана на карте.
+    let selectedID: Double?
+    let onShowOnMap: (TripRecord) -> Void
+    let onOpenDetail: (TripRecord) -> Void
     let onRepeat: ((CLLocationCoordinate2D, String) -> Void)?
     let onDelete: (TripRecord) -> Void
 
@@ -49,8 +57,9 @@ struct TripHistorySection: View {
     }
 
     private func row(_ record: TripRecord) -> some View {
-        Button {
-            onSelect(record)   // тап — деталка: карта трека, проезды, шеринг
+        let selected = selectedID == record.id
+        return Button {
+            record.hasTrack ? onShowOnMap(record) : onOpenDetail(record)
         } label: {
             HStack(spacing: 12) {
                 trackThumbnail(record)
@@ -89,11 +98,12 @@ struct TripHistorySection: View {
                         .padding(.horizontal, 9).padding(.vertical, 5)
                         .background(Self.scoreColor(Int(score)).opacity(0.14), in: Capsule())
                 }
-                Image(systemName: "chevron.right")
-                    .font(.rounded(12, .semibold))
-                    .foregroundStyle(Theme.textTertiary)
+                trailingIcon(record, selected: selected)
             }
             .statCard(padding: 14, radius: Theme.cornerMedium)
+            // Выбранная поездка обведена акцентом — видно, что показано на карте.
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
+                .stroke(selected ? Theme.accent : .clear, lineWidth: 1.5))
         }
         .buttonStyle(.plain)
         // Лёгкое «проявление» строк при прокрутке — живо, но не мешает.
@@ -102,7 +112,15 @@ struct TripHistorySection: View {
                 .opacity(phase.isIdentity ? 1 : 0.4)
                 .scaleEffect(phase.isIdentity ? 1 : 0.96)
         }
+        .accessibilityLabel(Text(record.hasTrack
+                                 ? "Поездка. Показать на карте"
+                                 : "Поездка. Открыть подробности"))
         .contextMenu {
+            Button {
+                onOpenDetail(record)
+            } label: {
+                Label("Подробнее", systemImage: "info.circle")
+            }
             if let onRepeat, let end = record.endCoordinate {
                 Button {
                     onRepeat(end, String(localized: "Как в прошлый раз"))
@@ -116,6 +134,17 @@ struct TripHistorySection: View {
                 Label("Удалить запись", systemImage: "trash")
             }
         }
+    }
+
+    /// Иконка справа честно говорит, что сделает тап: трек есть — покажем на
+    /// карте, трека нет — откроем деталку.
+    private func trailingIcon(_ record: TripRecord, selected: Bool) -> some View {
+        Image(systemName: record.hasTrack
+              ? (selected ? "map.fill" : "map")
+              : "chevron.right")
+            .font(.rounded(record.hasTrack ? 14 : 12, .semibold))
+            .foregroundStyle(selected ? Theme.accent : Theme.textTertiary)
+            .frame(width: 20)
     }
 
     /// Мини-силуэт трека — поездку узнаёшь с одного взгляда.

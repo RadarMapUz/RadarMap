@@ -100,6 +100,10 @@ struct TripRecord: Codable, Identifiable {
         return CLLocationCoordinate2D(latitude: endLat, longitude: endLon)
     }
 
+    /// Есть ли что рисовать на карте. Проверка по плоскому массиву — без разбора
+    /// трека в структуры: строки списка спрашивают это на каждый пересчёт.
+    var hasTrack: Bool { (track?.count ?? 0) >= 6 }
+
     /// Точки трека (lat, lon, speed) из плоского хранения.
     var trackPoints: [TrackPoint] {
         guard let track, track.count >= 6 else { return [] }

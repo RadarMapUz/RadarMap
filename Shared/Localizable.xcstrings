@@ -6640,6 +6640,38 @@
           }
         }
       }
+    },
+    "Что умеет такой комплекс": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что умеет такой комплекс"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bunday majmua nimalarni qayd etadi"
+          }
+        }
+      }
+    },
+    "Список по каждой камере МВД не публикует — показываем возможности типа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Список по каждой камере МВД не публикует — показываем возможности типа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IIV har bir kamera uchun ro'yxat e'lon qilmaydi — turi imkoniyatlarini ko'rsatamiz"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

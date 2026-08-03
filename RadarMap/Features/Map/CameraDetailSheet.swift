@@ -102,24 +102,35 @@ struct CameraDetailSheet: View {
         }
     }
 
+    /// Что умеет комплекс ТАКОГО ТИПА — не что фиксирует именно эта камера.
+    /// Реестр МВД содержит всего шесть полей (регион, район, место, тип и две
+    /// координаты) и списка нарушений по камере в нём нет: он выводится из типа.
+    /// Поэтому и заголовок, и галочки не должны выдавать наше предположение за
+    /// проверенный факт — раньше блок назывался «Фиксирует нарушения» и у всех
+    /// стационарных камер показывал один и тот же список из восьми пунктов.
     private var violationsBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Фиксирует нарушения")
+            Text("Что умеет такой комплекс")
                 .font(.rounded(14, .semibold))
                 .foregroundStyle(Theme.textSecondary)
             // На языке интерфейса (в базе — узбекская кириллица из egov).
             ForEach(camera.localizedViolations, id: \.self) { violation in
                 HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.rounded(13))
-                        .foregroundStyle(camera.kind.tint)
-                        .padding(.top, 2)
+                    Circle()
+                        .fill(camera.kind.tint)
+                        .frame(width: 6, height: 6)
+                        .padding(.top, 7)
                     Text(violation.capitalizedFirst)
                         .font(.rounded(15))
                         .foregroundStyle(Theme.textPrimary)
                     Spacer(minLength: 0)
                 }
             }
+            Text("Список по каждой камере МВД не публикует — показываем возможности типа")
+                .font(.rounded(11))
+                .foregroundStyle(Theme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)

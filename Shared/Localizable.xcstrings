@@ -6704,6 +6704,22 @@
           }
         }
       }
+    },
+    "уточняем положение": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "уточняем положение"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "joylashuv aniqlanmoqda"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

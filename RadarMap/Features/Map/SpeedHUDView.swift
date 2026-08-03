@@ -57,6 +57,9 @@ struct SpeedHUDView: View {
         } else if let camera = env.location.nearestCamera,
                   let distance = env.location.distanceToNearest {
             parts.append("\(camera.kind.displayName) — \(Formatting.distance(distance))")
+            if env.location.isPositionCoarse {
+                parts.append(String(localized: "уточняем положение"))
+            }
         } else {
             parts.append(String(localized: "Камер рядом нет"))
         }
@@ -121,14 +124,15 @@ struct SpeedHUDView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 6)
         } else if let camera, let distance {
+            let near = distance <= env.settings.alertRadius
             HStack(spacing: 12) {
                 ZStack {
                     Image(systemName: camera.kind.symbolName)
                         .font(.rounded(16, .bold))
                         .foregroundStyle(.white)
                         .frame(width: 38, height: 38)
-                        .background(camera.kind.tint.gradient, in: Circle())
-                        .shadow(color: camera.kind.tint.opacity(0.6), radius: 6)
+                        .background(proximityTint(distance, camera).gradient, in: Circle())
+                        .shadow(color: near ? camera.kind.tint.opacity(0.6) : .clear, radius: 6)
 
                     // Стрелка направления на камеру относительно курса (вверх = прямо по ходу).
                     // Мёртвая зона: почти по курсу — строго вверх, без дрожи.
@@ -147,14 +151,16 @@ struct SpeedHUDView: View {
                     Text(Formatting.distance(distance))
                         .font(.rounded(23, .bold))
                         .monospacedDigit()
-                        .foregroundStyle(distance < AppConfig.alertRadius ? Theme.danger : Theme.textPrimary)
+                        // Красным — только в зоне оповещения и только по живой
+                        // позиции: цифра от грубого фикса на красный не имеет права.
+                        .foregroundStyle(near && !env.location.isPositionCoarse
+                                         ? Theme.danger : Theme.textPrimary)
                         .contentTransition(.numericText(value: distance))
                         .animation(.easeOut(duration: 0.3), value: Int(distance))
-                    Text(env.location.isDirectionalFilteringActive
-                         ? String(format: String(localized: "%@ по курсу"), camera.kind.genitivePhrase)
-                         : camera.kind.genitivePhrase)
+                    Text(caption(for: camera))
                         .font(.rounded(11, .medium))
-                        .foregroundStyle(Theme.textSecondary)
+                        .foregroundStyle(env.location.isPositionCoarse
+                                         ? Theme.radar : Theme.textSecondary)
                         .lineLimit(1)
                     // Полоска приближения: заполняется к камере и «греется» —
                     // боковым зрением читается быстрее цифр.
@@ -178,6 +184,29 @@ struct SpeedHUDView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 6)
         }
+    }
+
+    /// Цвет значка по БЛИЗОСТИ, а не по типу камеры. Красный кружок при камере в
+    /// десяти километрах читается как тревога, хотя ехать до неё двадцать минут:
+    /// далеко — спокойный серый, на подходе — приглушённый цвет типа, в зоне
+    /// оповещения — полный цвет со свечением.
+    private func proximityTint(_ distance: Double, _ camera: Camera) -> Color {
+        let radius = env.settings.alertRadius
+        if distance <= radius { return camera.kind.tint }
+        if distance <= radius * 3 { return camera.kind.tint.opacity(0.5) }
+        return Theme.textTertiary
+    }
+
+    /// Подпись под расстоянием. Когда позиция грубая (кэш при запуске, слабый
+    /// сигнал в помещении), честно говорим об этом: иначе цифра выглядит живой.
+    private func caption(for camera: Camera) -> String {
+        if env.location.isPositionCoarse {
+            return String(localized: "уточняем положение")
+        }
+        if env.location.isDirectionalFilteringActive {
+            return String(format: String(localized: "%@ по курсу"), camera.kind.genitivePhrase)
+        }
+        return camera.kind.genitivePhrase
     }
 
     /// Эффективный режим: при «Авто» — что определил детектор.

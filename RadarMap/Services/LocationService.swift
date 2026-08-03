@@ -74,6 +74,13 @@ final class LocationService: NSObject {
     @ObservationIgnored private var fixSequence = 0
     /// true — фиксов нет дольше gpsStaleSeconds: данные на экране устарели.
     private(set) var isSignalStale = false
+    /// Позиция получена из фикса, который в алерты не пускается: кэш при запуске
+    /// или слабый сигнал в помещении. Окрестности показать можно, но расстояние
+    /// на панели нельзя подавать как живое.
+    private(set) var isPositionCoarse = false
+    /// Когда последний раз пришёл ГОДНЫЙ фикс — по нему решаем, устарела ли
+    /// позиция настолько, что грубая точка будет лучше.
+    @ObservationIgnored private var lastAcceptedAt: Date?
     /// Погрешность последнего принятого фикса (метры): на ней смягчаются
     /// геометрические проверки — на плохом фиксе они не должны ничего отбрасывать.
     private(set) var horizontalAccuracy: Double = -1
@@ -180,6 +187,11 @@ final class LocationService: NSObject {
         // Открыли приложение — «камерный» баннер из фона больше не нужен (внутри есть свой алерт).
         if foreground { notifier.clearApproaching() }
         applyLocationMode()
+        // Вернулись в приложение — пересчитать по последней известной точке, не
+        // дожидаясь фикса: стоящий телефон может не дать его ещё долго.
+        if foreground, let coordinate = currentCoordinate {
+            recomputeNearest(from: coordinate)
+        }
     }
 
     /// Экран в машине подключён/отключён — самостоятельный «передний план»,
@@ -417,10 +429,19 @@ final class LocationService: NSObject {
         manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: "CameraAlerts")
     }
 
-    /// Пересобрать мониторинг вокруг текущей позиции (после добавления/скрытия камеры или смены радиуса).
+    /// Пересобрать мониторинг вокруг текущей позиции (после добавления/скрытия
+    /// камеры, догрузки базы или смены радиуса).
     func refreshMonitoring() {
         anchor = nil
-        if let coordinate = currentCoordinate { retile(around: coordinate) }
+        guard let coordinate = currentCoordinate else { return }
+        retile(around: coordinate)
+        // Пересчёт ближайшей обязателен, а не «до следующего фикса»: база
+        // догружается асинхронно и часто уже ПОСЛЕ первого фикса, а на стоящем
+        // телефоне следующий фикс может не прийти вовсе (distanceFilter). Панель
+        // тогда навсегда оставалась с «камер рядом нет», хотя камеры на карте
+        // видны — она читает базу напрямую, а оповещения ждали окна.
+        recomputeNearest(from: coordinate)
+        recomputeDirection()
     }
 
     // MARK: - Пере-тайлинг 20 ближайших
@@ -491,16 +512,24 @@ final class LocationService: NSObject {
         switch locationFilter.accept(fix) {
         case .rejected(let reason):
             Log.location.debug("фикс отброшен: \(reason.rawValue, privacy: .public), точность \(fix.horizontalAccuracy, privacy: .public) м")
-            // Первый фикс после запуска почти всегда кэшированный. Для алертов и
-            // проездов он не годится (на этом и построен гейт), но для карты и
-            // списка «рядом» он лучше пустоты: район тот же, и человек сразу
-            // видит окрестности, не глядя на «камер рядом нет».
-            if reason == .stale, currentCoordinate == nil, fix.horizontalAccuracy > 0 {
+            // Фикс не годится для алертов, проездов и трека — на этом и построен
+            // гейт. Но для карты и списка «рядом» он лучше устаревшей точки:
+            // район тот же. Раньше так подхватывался только САМЫЙ первый
+            // кэшированный фикс; если следующие тоже отбрасывались (в помещении
+            // точность легко 70–100 м), панель до конца сессии уверенно
+            // показывала расстояние от места, где телефон был в прошлый раз —
+            // посреди Ташкента это выглядело как «10.4 км до камеры».
+            // Перелёт (jump) не берём: это заведомо мусорная координата.
+            let positionIsOld = currentCoordinate == nil
+                || Date().timeIntervalSince(lastAcceptedAt ?? .distantPast) > AppConfig.gpsStaleSeconds
+            if reason != .jump, fix.horizontalAccuracy > 0, !isTripActive, positionIsOld {
                 seedContext(from: CLLocationCoordinate2D(latitude: fix.lat,
                                                          longitude: fix.lon))
             }
         case .accepted(let good):
             if isSignalStale { isSignalStale = false }
+            if isPositionCoarse { isPositionCoarse = false }
+            lastAcceptedAt = Date()
             horizontalAccuracy = good.accuracy
             handleLocation(coordinate: CLLocationCoordinate2D(latitude: good.lat,
                                                               longitude: good.lon),
@@ -509,10 +538,13 @@ final class LocationService: NSObject {
         }
     }
 
-    /// Окрестности по кэшированной точке: камеры вокруг и ближайшая для HUD.
+    /// Окрестности по грубой точке: камеры вокруг и ближайшая для HUD.
     /// Ни алертов, ни трека, ни зачёта проездов — только контекст на экране.
+    /// Флаг `isPositionCoarse` обязателен: расстояние на панели после этого не
+    /// живое, и выдавать его за живое было бы обманом.
     private func seedContext(from coordinate: CLLocationCoordinate2D) {
         currentCoordinate = coordinate
+        isPositionCoarse = true
         retileIfNeeded(around: coordinate)
         recomputeNearest(from: coordinate)
     }

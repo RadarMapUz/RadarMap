@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-RadarMap (Xcode project name; product name "RadarMap", bundle `uz.rasul.radarmap`) is a native iOS speed-camera map + voice anti-radar navigator for Uzbekistan. SwiftUI, no third-party dependencies — only Apple frameworks (MapKit, CoreLocation, CoreMotion, AVFoundation, CoreHaptics, ActivityKit, WidgetKit, MetricKit, CarPlay, WatchConnectivity, AppIntents). It also ships a CarPlay navigator scene and an Apple Watch companion (`RadarWatch`). Paired with a self-hosted VPS backend (camera DB, OSRM routing, speed limits, crowdsourcing API).
+RadarMap (Xcode project name; product name "RadarMap", bundle `uz.radarmap.ios`) is a native iOS speed-camera map + voice anti-radar navigator for Uzbekistan. SwiftUI, no third-party dependencies — only Apple frameworks (MapKit, CoreLocation, CoreMotion, AVFoundation, CoreHaptics, ActivityKit, WidgetKit, MetricKit, CarPlay, WatchConnectivity, AppIntents). It also ships a CarPlay navigator scene and an Apple Watch companion (`RadarWatch`). Paired with a self-hosted VPS backend (camera DB, OSRM routing, speed limits, crowdsourcing API).
 
 **Language convention:** all code comments, user-facing strings, and git commit messages are in Russian. `README.md` is the fullest overview (in Russian). Match this when writing new code, strings, and commits. User-facing text goes through `String(localized:)` and the `Shared/Localizable.xcstrings` catalog (ru + uz); the app also exposes an in-app RU/UZ language override (`AppSettings`).
 
@@ -91,7 +91,7 @@ Trip analytics live in `Models/`, not in views (ARCHITECTURE.md rule "data in th
 `CarPlay/` (`CarPlaySceneDelegate`, `CarPlayMapScreen`, `CarPlayMapView`) is a full navigator scene — camera map, speed HUD, alerts, quick "where to" routing. The phone scene and CarPlay share one composition root via `AppEnvironment.shared` (CarPlay can connect before the SwiftUI scene comes up). `RadarWatch/` (`RadarWatchApp`, `WatchHUDView`, `WatchSession`) is a watchOS companion showing the trip HUD with escalating wrist haptics, fed by `WatchBridgeService` over `WatchConnectivity`.
 
 ### Widgets & sharing
-`RadarMapWidgets` (Live Activity in Dynamic Island + home stats widget). Shared code lives in `Shared/`: `CameraActivityAttributes` (Live Activity contract) and `SharedDefaults` (App-Group `UserDefaults` snapshot for the home widget). **Gotcha:** App Groups are currently disabled in both `.entitlements` files (free Apple ID limitation), and `SharedDefaults.appGroup` (`group.test.RadarMap`) does not match the commented-out entitlement group (`group.uz.rasul.radarmap`) — the home widget's shared data is effectively inert until a paid account re-enables App Groups and the IDs are reconciled.
+`RadarMapWidgets` (Live Activity in Dynamic Island + home stats widget). Shared code lives in `Shared/`: `CameraActivityAttributes` (Live Activity contract) and `SharedDefaults` (App-Group `UserDefaults` snapshot for the home widget). **Gotcha:** App Groups are currently disabled in both `.entitlements` files (free Apple ID limitation), and `SharedDefaults.appGroup` (`group.test.RadarMap`) does not match the commented-out entitlement group (`group.uz.radarmap.ios`) — the home widget's shared data is effectively inert until a paid account re-enables App Groups and the IDs are reconciled.
 
 ## Backend
 

@@ -95,7 +95,7 @@ EOF
 # UDID актуального сима: xcrun simctl list devices | grep Booted
 # Хуки: -showStats -showSettings -showCameraDetail -demoRoute -driveDemo
 #       -shareStats -carplayPreview -rotateMap -skipAlwaysPrompt -endTripAfter N
-xcrun simctl launch <UDID> uz.rasul.radarmap -demoRoute -skipAlwaysPrompt
+xcrun simctl launch <UDID> uz.radarmap.ios -demoRoute -skipAlwaysPrompt
 xcrun simctl io <UDID> screenshot /tmp/smoke.png
 ```
 

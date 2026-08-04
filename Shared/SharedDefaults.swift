@@ -8,7 +8,7 @@
 import Foundation
 
 enum SharedDefaults {
-    static let appGroup = "group.test.RadarMap"
+    static let appGroup = "group.uz.radarmap.ios"
 
     static var store: UserDefaults? { UserDefaults(suiteName: appGroup) }
 

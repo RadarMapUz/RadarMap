@@ -50,11 +50,6 @@ struct ShareCardShell<Content: View>: View {
 }
 
 extension View {
-    /// Полоса метрик шеринг-карточки на полупрозрачной подложке.
-    func shareMetricsRow() -> some View {
-        self.padding(.vertical, 20).background(.white.opacity(0.06))
-    }
-
     /// Метрики скруглённой плиткой в полях карточки (материалы в ImageRenderer
     /// не рендерятся — только простые заливки).
     func shareMetricsTile() -> some View {

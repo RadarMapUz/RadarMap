@@ -9,7 +9,10 @@ import Foundation
 import CoreLocation
 import MapKit
 
-enum AppConfig {
+/// `nonisolated` — константы читают чистые движки (`AlertEngine`, `PassTracking`,
+/// `CameraDirection`) и `@concurrent`-код; без этого дефолтная изоляция проекта
+/// (`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`) делает их main-actor-only.
+nonisolated enum AppConfig {
 
     // MARK: - Оповещения / геолокация
 

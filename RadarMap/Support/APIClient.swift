@@ -9,7 +9,9 @@
 import Foundation
 import os
 
-struct APIClient {
+/// `nonisolated` — значимый тип над `URLSession`/`URL`: сеть дёргают и фоновые
+/// контексты (MetricKit-делегат, `@concurrent`-загрузка базы), main им не нужен.
+nonisolated struct APIClient {
     enum Failure: Error { case badStatus(Int), transport(Error) }
 
     private let session: URLSession

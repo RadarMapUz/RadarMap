@@ -32,7 +32,7 @@ struct CameraCluster: Identifiable, Equatable {
     }
 }
 
-nonisolated enum CameraMapContent {
+enum CameraMapContent {
 
     /// Готовый слой карты: либо точки, либо кластеры (одновременно — только
     /// одиночки в своих ячейках рядом с кластерами).
@@ -44,10 +44,13 @@ nonisolated enum CameraMapContent {
 
     /// Собрать слой для области. Тяжёлая часть (перебор области и группировка)
     /// уходит с главного потока: на обзорном зуме это тысячи камер.
-    @concurrent
-    static func layer(cameras: [Camera], region: MKCoordinateRegion,
-                      filter: CameraFilter, budget: Int,
-                      divisions: Double = AppConfig.clusterGridDivisions) async -> Layer {
+    static func layer(
+        cameras: [Camera],
+        region: MKCoordinateRegion,
+        filter: CameraFilter,
+        budget: Int,
+        divisions: Double = AppConfig.clusterGridDivisions
+    ) async -> Layer {
         let box = Box(region)
         let inside = cameras.filter { filter.matches($0) && box.contains(lat: $0.lat, lon: $0.lon) }
         guard inside.count > budget else {

@@ -49,7 +49,7 @@ final class CameraStore: CameraRepository {
 
     // MARK: - Пространственный индекс
 
-    private static let gridCellDegrees = 0.05
+    nonisolated private static let gridCellDegrees = 0.05
 
     nonisolated private static func cellKey(latCell: Int, lonCell: Int) -> Int {
         latCell * 8000 + lonCell

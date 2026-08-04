@@ -32,9 +32,11 @@ final class NotificationService: NSObject {
 
     // MARK: - «Вы за рулём?» (пассажир-детектор при автостарте)
 
-    static let driverCheckID = "driver-check"
+    // `nonisolated` — идентификаторы сверяет делегат `UNUserNotificationCenter`,
+    // который вызывается вне main.
+    nonisolated static let driverCheckID = "driver-check"
     private static let driverCheckCategory = "driver-check-category"
-    private static let actionPassenger = "passenger"
+    nonisolated private static let actionPassenger = "passenger"
     private static let actionDriver = "driver"
 
     private func registerCategories() {
@@ -68,7 +70,7 @@ final class NotificationService: NSObject {
 
     // MARK: - Итоги поездки (после автозавершения)
 
-    private static let tripSummaryID = "trip-summary"
+    nonisolated private static let tripSummaryID = "trip-summary"
 
     /// Поездка закончилась сама (вышел из машины, телефон в кармане) — короткие
     /// итоги на локскрин: приложение открывать не обязательно, цифры уже тут.
@@ -145,7 +147,7 @@ final class NotificationService: NSObject {
 
     /// Один переиспользуемый id: новое уведомление ОБНОВЛЯЕТ предыдущее на месте,
     /// а не копит десяток баннеров за поездку. В Центре всегда ≤1 «камерного».
-    private static let approachingID = "approaching-camera"
+    nonisolated private static let approachingID = "approaching-camera"
 
     /// Оповещение о приближении к камере (фон): баннер, обновляется на месте.
     /// `distanceMeters` — фактическая дистанция срабатывания (движок растягивает

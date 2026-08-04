@@ -6,7 +6,9 @@
 import Foundation
 import CoreLocation
 
-enum GeoMath {
+/// `nonisolated` — геометрию считают чистые движки и `@concurrent`-код,
+/// хоп на main для арифметики не нужен.
+nonisolated enum GeoMath {
     /// Азимут (0–360°, 0 = север) из точки `from` в точку `to`.
     static func bearing(from a: CLLocationCoordinate2D, to b: CLLocationCoordinate2D) -> Double {
         let lat1 = a.latitude * .pi / 180

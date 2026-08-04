@@ -101,8 +101,8 @@ struct CarPlayMapView: UIViewRepresentable {
             map.setRegion(region, animated: true)
         }
 
-        nonisolated func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-            MainActor.assumeIsolated { reloadCameras(on: mapView) }
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            reloadCameras(on: mapView)
         }
 
         func reloadCameras(on map: MKMapView) {
@@ -129,15 +129,24 @@ struct CarPlayMapView: UIViewRepresentable {
             }
         }
 
-        nonisolated func mapView(_ mapView: MKMapView,
-                                 viewFor annotation: any MKAnnotation) -> MKAnnotationView? {
+        // MapKit зовёт делегат с главного потока, но требование протокола
+        // `nonisolated` — поэтому изоляцию подтверждаем через `assumeIsolated`,
+        // а не дублируем работу хопом на main (делегат синхронный, ждать нечего).
+        func mapView(
+            _ mapView: MKMapView,
+            viewFor annotation: any MKAnnotation
+        ) -> MKAnnotationView? {
             guard annotation is CameraAnnotation else { return nil }
-            return mapView.dequeueReusableAnnotationView(withIdentifier: CameraMarkerView.reuseID,
-                                                         for: annotation)
+            return mapView.dequeueReusableAnnotationView(
+                withIdentifier: CameraMarkerView.reuseID,
+                for: annotation
+            )
         }
 
-        nonisolated func mapView(_ mapView: MKMapView,
-                                 rendererFor overlay: any MKOverlay) -> MKOverlayRenderer {
+        func mapView(
+            _ mapView: MKMapView,
+            rendererFor overlay: any MKOverlay
+        ) -> MKOverlayRenderer {
             guard let polyline = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
             let renderer = MKPolylineRenderer(polyline: polyline)
             renderer.strokeColor = UIColor(Theme.accent)
@@ -163,7 +172,7 @@ final class CameraAnnotation: NSObject, MKAnnotation {
 
 /// Круглый маркер с глифом типа камеры — иконки кэшируются по типу.
 final class CameraMarkerView: MKAnnotationView {
-    static let reuseID = "camera"
+    nonisolated static let reuseID = "camera"
     private static var cache: [String: UIImage] = [:]
 
     override var annotation: (any MKAnnotation)? {

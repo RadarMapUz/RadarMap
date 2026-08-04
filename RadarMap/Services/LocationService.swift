@@ -124,9 +124,11 @@ final class LocationService: NSObject {
 
         NotificationCenter.default.addObserver(
             forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: nil
-        ) { [weak self] _ in
+        ) { _ in
             let low = ProcessInfo.processInfo.isLowPowerModeEnabled
-            Task { @MainActor in self?.powerModeChanged(low) }
+            // Список захвата на самом `Task`: иначе внутреннее замыкание берёт
+            // `self` из внешнего повторно — гонка на захваченной переменной.
+            Task { @MainActor [weak self] in self?.powerModeChanged(low) }
         }
     }
 
@@ -1048,7 +1050,7 @@ final class LocationService: NSObject {
 // MARK: - CLLocationManagerDelegate
 
 extension LocationService: CLLocationManagerDelegate {
-    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
         let fix = LocationFilter.Fix(location)
         Task { @MainActor in self.handleFix(fix) }

@@ -296,7 +296,6 @@ extension TripHistory {
     /// упрощённым (Дуглас-Пекер ±22 м), поэтому на прямой улице два проезда
     /// оставляют вершины в разных местах — по вершинам совпадение не нашлось бы
     /// и коридор никогда не загорелся.
-    @concurrent
     static func heatLines(_ tracks: [[TrackPoint]],
                           cellMeters: Double = AppConfig.heatCellMeters) async -> [HeatLine] {
         guard let reference = tracks.first(where: { $0.count >= 2 })?.first else { return [] }

@@ -13,7 +13,7 @@ import Foundation
 
 /// Ступени штрафов за превышение скорости. Первая фиксация (повторность нам неизвестна),
 /// поэтому все суммы в UI подписываются как «оценка».
-enum FineSchedule {
+nonisolated enum FineSchedule {
     /// БРВ (базовая расчётная величина) с 01.07.2026. Меняется раз в год — обновлять здесь.
     static let brv: Double = 440_000
     /// Камеры на практике не штрафуют за первые ~5 км/ч сверх лимита.
@@ -99,7 +99,7 @@ enum DrivingScore {
 
 /// Аккумулируются при каждом finish() и живут отдельно от истории
 /// (история обрезается до 50 поездок, эти цифры — навсегда).
-struct LifetimeStats: Codable, Equatable {
+nonisolated struct LifetimeStats: Codable, Equatable {
     var trips = 0
     var distanceMeters = 0.0
     var camerasPassed = 0

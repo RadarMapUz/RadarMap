@@ -10,7 +10,7 @@ import CoreLocation
 
 /// Тип устройства фиксации. Строковое значение из PDF маппится в понятные категории,
 /// неизвестные типы попадают в `.other`, чтобы приложение не падало на новых данных.
-enum CameraType: Hashable {
+nonisolated enum CameraType: Hashable {
     case stationaryCamera   // «Стационар камера» — фиксирует все нарушения
     case stationaryRadar    // «Стационар радар» — только превышение скорости
     case intelligentRadar   // «Интеллектуал + радар» — новое поколение, фиксирует всё + скорость
@@ -112,7 +112,8 @@ enum CameraType: Hashable {
     }
 }
 
-struct Camera: Identifiable, Codable, Hashable {
+/// `nonisolated` — камеры перебирает геометрия маршрута и грид-индекс вне main.
+nonisolated struct Camera: Identifiable, Codable, Hashable {
     let id: Int
     let region: String
     let city: String

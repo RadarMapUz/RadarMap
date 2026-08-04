@@ -10,7 +10,7 @@ import Foundation
 import CoreLocation
 
 /// Факт прохождения камеры: скорость зафиксирована в точке максимального сближения.
-struct PassedCamera: Codable, Identifiable {
+nonisolated struct PassedCamera: Codable, Identifiable {
     let id: UUID
     let cameraID: Int
     let typeRaw: String
@@ -37,7 +37,7 @@ struct PassedCamera: Codable, Identifiable {
 /// Остановка внутри склеенной поездки: заехал в магазин, на заправку, за человеком.
 /// Из «в пути» и средней скорости исключается — иначе сорок минут в «Корзинке»
 /// обнуляют цифры всей поездки.
-struct TripStop: Codable, Identifiable {
+nonisolated struct TripStop: Codable, Identifiable {
     let id: UUID
     let lat: Double
     let lon: Double
@@ -53,7 +53,9 @@ struct TripStop: Codable, Identifiable {
 }
 
 /// Одна завершённая поездка.
-struct TripRecord: Codable, Identifiable {
+/// `nonisolated` — чистая арифметика над историей (`TripHistory`, `PeriodSummary`,
+/// `DrivingScore`) считается вне main.
+nonisolated struct TripRecord: Codable, Identifiable {
     let id: Double
     let startedAt: Date
     let endedAt: Date
@@ -113,7 +115,7 @@ struct TripRecord: Codable, Identifiable {
     }
 }
 
-struct TrackPoint {
+nonisolated struct TrackPoint {
     let lat: Double
     let lon: Double
     let speedKmh: Double

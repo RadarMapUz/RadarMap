@@ -21,18 +21,37 @@ description: Полный проход качества RadarMap — архит�
 
 ## 1. Сборка и тесты (обязательный минимум)
 
-```bash
-# Юнит-тесты (55+ XCTest, чистые функции: гео, скор, треки, лимиты)
-xcodebuild test -project RadarMap.xcodeproj -scheme RadarMap \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -quiet
+Только через `mcp__xcode__*` — они работают с уже открытым Xcode, переиспользуют его
+состояние сборки и потому в разы быстрее на итерациях. **`xcodebuild` и другие CLI не
+использовать.** Если Xcode не запущен — открыть в нём проект, а не уходить в CLI.
 
-# Сборка телефона на симулятор
-xcodebuild -project RadarMap.xcodeproj -scheme RadarMap \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build -quiet
-```
+1. `mcp__xcode__XcodeListWindows` — **один раз в начале прохода**: даёт `tabIdentifier`
+   (и заодно активную схему с destination). Все остальные вызовы принимают его.
+2. `mcp__xcode__BuildProject` — сборка активной схемы, ждёт завершения.
+3. `mcp__xcode__GetBuildLog` — разбор результата. `severity: "error"` — упало ли;
+   потом **обязательно `severity: "warning"`**: предупреждения concurrency/deprecation
+   считаются долгом, а не шумом (последний проход чинил ровно их). `pattern`/`glob`
+   сужают лог до нужного файла вместо чтения всего.
+4. `mcp__xcode__RunAllTests` — весь тест-план (**188 XCTest**: гео, скор, треки, лимиты,
+   алерт-пайплайн, периоды). Разбор падений — `mcp__xcode__GetTestList`
+   (полный grep-friendly список в `fullTestListPath`) + `mcp__xcode__RunSomeTests` по
+   конкретному классу/тесту (таргет `RadarMapTests`, идентификатор `RoadCorridorTests`
+   или `RoadCorridorTests/testHighwayCorridorIsWiderThanCity`).
+5. `mcp__xcode__XcodeListNavigatorIssues` — то, что висит в Issue Navigator (в том числе
+   проблемы workspace/пакетов, которых нет в логе сборки).
 
-**Каверза watch-таргета**: пока в Xcode не выполнен вход в аккаунт, сборка телефона
-падает на подписи RadarWatch. Временно отцепить embed (строки `4BFACE0A… /* Embed Watch
+В цикле «правлю один файл» полная сборка не нужна: `mcp__xcode__XcodeRefreshCodeIssuesInFile`
+даёт живые диагностики компилятора по файлу. Чистую геометрию/стор быстрее проверить
+`mcp__xcode__RunCodeSnippet` (видит `fileprivate` контекста файла), а внешний вид
+экрана — `mcp__xcode__RenderPreview` по `sourceFilePath` + индексу `#Preview`.
+
+Файлы добавлять/двигать/удалять только через `mcp__xcode__Xcode{Write,MV,RM,MakeDir}`:
+они правят `.xcodeproj` и членство в таргетах, чего обычная запись в файл не делает.
+
+**Каверза watch-таргета** (проверить, актуальна ли — `DEVELOPMENT_TEAM` в проекте уже
+прописан, так что при выполненном входе в Xcode её быть не должно): без аккаунта в Xcode
+сборка телефона падает на подписи RadarWatch — в `GetBuildLog` это ошибка подписи
+RadarWatch, а не кода. Обход: временно отцепить embed (строки `4BFACE0A… /* Embed Watch
 Content */,` и `4BFACE0D… /* PBXTargetDependency */,` в `project.pbxproj` удалить через
 python-replace), собрать, затем **обязательно** `git checkout RadarMap.xcodeproj/project.pbxproj`.
 Никогда не коммитить pbxproj без этих строк.
@@ -58,7 +77,9 @@ find RadarMap RadarWatch Shared -name "*.swift" | xargs wc -l | awk '$1>400 {pri
 - `isIdleTimerDisabled = true` всегда парный: `onDisappear`/`endTrip` возвращает false.
 - `CHHapticEngine` — `isAutoShutdownEnabled = true`; таймеры инвалидируются.
 - WatchConnectivity — только квантованные значения (скорость/2, дистанция/25), без спама applicationContext.
-- Замер при сомнении: `xctrace record --template 'Energy Log'` на устройстве.
+- Замер при сомнении: `xctrace record --template 'Energy Log'` на устройстве — Instruments
+  единственное, что не покрыто ни `mcp__xcode__*`, ни `ios-debugger-agent`, поэтому здесь
+  CLI законен.
 
 ## 4. Локализация uz — скрипт полноты
 
@@ -91,20 +112,36 @@ EOF
 
 ## 6. Смоук на симуляторе (DEBUG-хуки)
 
+Запуск и вождение приложения — единственное, чего `mcp__xcode__*` не умеет: для этого
+скилл **`ios-debugger-agent`** (XcodeBuildMCP) — он собирает, ставит на загруженный
+симулятор, запускает **с аргументами**, снимает скриншоты и отдаёт логи. `xcrun simctl`
+руками не нужен.
+
+Экраны открываются DEBUG-хуками из `ProcessInfo.processInfo.arguments` вместо тапов.
+Актуальный список брать из кода (он растёт быстрее этого файла):
+
 ```bash
-# UDID актуального сима: xcrun simctl list devices | grep Booted
-# Хуки: -showStats -showSettings -showCameraDetail -demoRoute -driveDemo
-#       -shareStats -carplayPreview -rotateMap -skipAlwaysPrompt -endTripAfter N
-xcrun simctl launch <UDID> uz.radarmap.ios -demoRoute -skipAlwaysPrompt
-xcrun simctl io <UDID> screenshot /tmp/smoke.png
+grep -rhno '"-[a-zA-Z]*"' RadarMap | grep -o '"-[a-zA-Z]*"' | sort -u | tr -d '"'
 ```
 
-Минимум: главный экран (компас, glass-кнопки), Итоги (`-showStats`), карточка камеры,
-демо-маршрут (баннер манёвра + HUD). Скриншоты смотреть глазами, не только exit code.
+Ключевые: `-skipAlwaysPrompt` (без него висит системный запрос гео и скриншот пустой),
+`-demoHistory` / `-demoHistoryOld` (засеять историю — без неё Итоги пустые),
+`-showStats`, `-showMonth`, `-showPeriodMap`, `-openFirstTrip`, `-showRatingInfo`,
+`-showSavingsInfo`, `-showSettings`, `-showCameraDetail`, `-demoRoute` / `-driveDemo`,
+`-rotateMap`, `-quickToggles`, `-mapMenu`, `-reportPicker`, `-askDriver`,
+`-carplayPreview`, `-endTripAfter N`, `-dumpShareCards` (карточки шеринга в PNG),
+`-hideCameraAlert` (чистые кадры turn-by-turn для заявки CarPlay).
+
+Минимум прохода: главный экран (компас, glass-кнопки), Итоги с историей, отчёт за
+период, карточка камеры, демо-маршрут (баннер манёвра + HUD), CarPlay-превью.
+Скриншоты смотреть глазами, не только exit code: половина регрессий этого раздела —
+«кнопка есть, но белым по белому».
 
 ## 7. Финал
 
-- Каждый фикс из ревью — с тестом, если логика чистая (в `RadarMapTests`, XCTest).
+- Каждый фикс из ревью — с тестом, если логика чистая (в `RadarMapTests`, XCTest);
+  прогонять точечно `mcp__xcode__RunSomeTests`, а перед коммитом — `RunAllTests` целиком.
+- Перед коммитом `GetBuildLog` с `severity: "warning"` должен быть пуст по затронутым файлам.
 - Коммиты небольшие, по-русски, в стиле репо («Компас: …», «CarPlay: …»); пушить в main.
 - Новые правила, всплывшие в ревью, — дописывать в `ARCHITECTURE.md`, а не только чинить точечно.
 - Секреты (VPS-пароль) не писать никуда; SSH на прод не ходить — деплой запускает пользователь.

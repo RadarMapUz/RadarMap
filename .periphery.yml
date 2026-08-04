@@ -1,0 +1,5 @@
+project: RadarMap.xcodeproj
+schemes:
+- RadarMap
+- RadarMapWidgets
+- RadarWatch

@@ -1017,6 +1017,38 @@
         }
       }
     },
+    "Ждём спутники" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ждём спутники"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sun'iy yo'ldoshlarni kutmoqdamiz"
+          }
+        }
+      }
+    },
+    "Задайте «%@» в настройках RadarMap на iPhone." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Задайте «%@» в настройках RadarMap на iPhone."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«%@» manzilini iPhone'dagi RadarMap sozlamalarida belgilang."
+          }
+        }
+      }
+    },
     "Знак лимита дороги на панели и голос при превышении. Допуск — на сколько можно превысить, прежде чем приложение сочтёт это превышением." : {
       "localizations" : {
         "ru" : {
@@ -1113,6 +1145,86 @@
         }
       }
     },
+    "Маршрут" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Маршрут"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marshrut"
+          }
+        }
+      }
+    },
+    "Маршрут не построен" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Маршрут не построен"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marshrut tuzilmadi"
+          }
+        }
+      }
+    },
+    "Место не задано" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Место не задано"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manzil belgilanmagan"
+          }
+        }
+      }
+    },
+    "Не отправилось: нет связи" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не отправилось: нет связи"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yuborilmadi: aloqa yo'q"
+          }
+        }
+      }
+    },
+    "Нет сигнала" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет сигнала"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signal yo'q"
+          }
+        }
+      }
+    },
     "Ни одного штрафуемого превышения. Камер в лимите: %lld" : {
       "localizations" : {
         "ru" : {
@@ -1125,6 +1237,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Jarima soladigan bironta oshirish yo'q. Limitdagi kameralar: %lld"
+          }
+        }
+      }
+    },
+    "ОК" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ОК"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
           }
         }
       }
@@ -1173,6 +1301,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Summa qayerdan"
+          }
+        }
+      }
+    },
+    "Отменить маршрут" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отменить маршрут"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marshrutni bekor qilish"
+          }
+        }
+      }
+    },
+    "Отметка на карте — спасибо!" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отметка на карте — спасибо!"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belgi xaritada — rahmat!"
+          }
+        }
+      }
+    },
+    "Отметку подтвердили — спасибо!" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отметку подтвердили — спасибо!"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belgi tasdiqlandi — rahmat!"
           }
         }
       }
@@ -1237,6 +1413,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ko'rsatish: %@"
+          }
+        }
+      }
+    },
+    "Положение ещё не определено — отметку ставить не по чему." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Положение ещё не определено — отметку ставить не по чему."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Joylashuv hali aniqlanmadi — belgini qo'yadigan nuqta yo'q."
+          }
+        }
+      }
+    },
+    "Положение ещё не определено — попробуйте через несколько секунд." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Положение ещё не определено — попробуйте через несколько секунд."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Joylashuv hali aniqlanmadi — bir necha soniyadan so'ng urinib ko'ring."
+          }
+        }
+      }
+    },
+    "Понятно" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Понятно"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tushunarli"
           }
         }
       }
@@ -1545,6 +1769,22 @@
         }
       }
     },
+    "Стоп" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Стоп"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To'xtatish"
+          }
+        }
+      }
+    },
     "У пройденных камер неизвестен лимит дороги — превышения по ним не считались" : {
       "localizations" : {
         "ru" : {
@@ -1589,6 +1829,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ko'pincha — %1$@: %3$lld tadan %2$lld ta oshirish"
+          }
+        }
+      }
+    },
+    "Чаще всего: %@ — показать" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чаще всего: %@ — показать"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eng ko‘p: %@ — ko‘rsatish"
+          }
+        }
+      }
+    },
+    "Чисто" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чисто"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toza"
           }
         }
       }

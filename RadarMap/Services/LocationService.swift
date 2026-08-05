@@ -628,11 +628,12 @@ final class LocationService: NSObject {
         watchBridge?.update(isTripActive: isTripActive, speedKmh: speedKmh,
                             cameraTitle: nearestCamera?.displayTitle,
                             distanceMeters: distanceToNearest,
-                            alertLevel: currentAlertLevel)
+                            alertLevel: alertLevel)
     }
 
-    /// Непрерывный уровень тревоги для часов (та же лестница порогов, что в AlertEngine).
-    private var currentAlertLevel: Int {
+    /// Непрерывный уровень тревоги (та же лестница порогов, что в AlertEngine):
+    /// 0 — тихо, 1…3 — эскалация. Его показывают часы и приборная панель CarPlay.
+    var alertLevel: Int {
         guard isTripActive, let d = distanceToNearest else { return 0 }
         let r = effectiveAlertRadius
         return [r, r * 0.6, r * 0.3].filter { d <= $0 }.count

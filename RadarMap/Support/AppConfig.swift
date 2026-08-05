@@ -370,4 +370,13 @@ nonisolated enum AppConfig {
     static let carPlayCameraZoomThreshold = 0.6
     /// Максимум маркеров камер на экране машины — водителю нужен обзор, не свалка.
     static let carPlayMaxCameraMarkers = 120
+    /// Высота приборной панели CarPlay. Фиксированная: карта под ней не должна
+    /// прыгать, когда меняется содержимое ячеек.
+    static let carPlayDockHeight: CGFloat = 78
+    /// На столько карта поджимает свои служебные подписи снизу (логотип и
+    /// «Правовые документы») — панель высотой carPlayDockHeight плюс отступы.
+    static let carPlayDockBottomInset: CGFloat = 104
+    /// Шаг обновления «пройденной» части маршрута: перекладывать оверлей на
+    /// каждый фикс GPS — лишняя работа рендера, глазу хватает и таких шагов.
+    static let carPlayTraveledStepMeters: CLLocationDistance = 25
 }

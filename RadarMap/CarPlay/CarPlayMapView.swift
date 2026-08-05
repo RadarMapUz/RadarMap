@@ -4,7 +4,12 @@
 //
 //  Карта CarPlay: MKMapView (тёмная, без POI) с камерами-аннотациями и линией
 //  маршрута. Камеры подгружаются под видимую область из общего репозитория,
-//  иконки кэшируются по типу — движение карты ничего не аллоцирует заново.
+//  иконки кэшируются по типу и лимиту — движение карты ничего не аллоцирует
+//  заново.
+//
+//  Дизайн маркеров тот же, что на телефоне: там, где известен лимит дороги,
+//  камера рисуется мини-знаком «60» — сколько можно, видно без единого тапа.
+//  Камера, к которой приближаемся, крупнее остальных и пульсирует кольцом.
 //
 
 import SwiftUI
@@ -15,6 +20,7 @@ struct CarPlayMapView: UIViewRepresentable {
     let repository: CameraStore
     let route: RouteService
     let location: LocationService
+    let speedLimits: SpeedLimitService
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
@@ -25,8 +31,14 @@ struct CarPlayMapView: UIViewRepresentable {
         map.showsTraffic = false
         map.showsBuildings = false
         map.showsCompass = false
+        map.isPitchEnabled = false          // плоская карта читается за рулём быстрее
         map.showsUserLocation = true
         map.userTrackingMode = .follow
+        // Логотип и «Правовые документы» живут в левом нижнем углу — ровно там,
+        // где приборная панель. Поджимаем поля карты на её высоту, иначе панель
+        // накрывает обязательную атрибуцию Apple.
+        map.directionalLayoutMargins = NSDirectionalEdgeInsets(
+            top: 0, leading: 0, bottom: AppConfig.carPlayDockBottomInset, trailing: 0)
         map.register(CameraMarkerView.self,
                      forAnnotationViewWithReuseIdentifier: CameraMarkerView.reuseID)
 
@@ -45,7 +57,7 @@ struct CarPlayMapView: UIViewRepresentable {
         // Кнопки шаблона: «к себе» и зум (счётчики — обрабатываем дельту).
         if model.recenterRequests != coordinator.recenterHandled {
             coordinator.recenterHandled = model.recenterRequests
-            map.setUserTrackingMode(.follow, animated: true)
+            map.setUserTrackingMode(coordinator.preferredTracking, animated: true)
         }
         if model.zoomInRequests != coordinator.zoomInHandled {
             coordinator.zoomInHandled = model.zoomInRequests
@@ -56,13 +68,15 @@ struct CarPlayMapView: UIViewRepresentable {
             coordinator.zoom(map, factor: 2.0)
         }
 
-        // Линия маршрута: наблюдаемое чтение — SwiftUI дёрнет update при смене.
-        let polyline = route.polyline
-        if polyline !== coordinator.routeOverlay {
-            if let old = coordinator.routeOverlay { map.removeOverlay(old) }
-            if let polyline { map.addOverlay(polyline, level: .aboveRoads) }
-            coordinator.routeOverlay = polyline
+        // В поездке карта разворачивается по ходу движения — так навигатор
+        // читается без мысленного поворота; вне поездки север сверху.
+        let tripActive = location.isTripActive
+        if tripActive != coordinator.tripActiveSeen {
+            coordinator.tripActiveSeen = tripActive
+            map.setUserTrackingMode(coordinator.preferredTracking, animated: true)
         }
+
+        coordinator.applyRoute(route, on: map)
 
         // База камер декодируется асинхронно: первый запрос области мог уйти
         // в пустой репозиторий — перезагружаем маркеры, когда данные пришли.
@@ -71,10 +85,14 @@ struct CarPlayMapView: UIViewRepresentable {
             coordinator.cameraCountSeen = cameraCount
             coordinator.reloadCameras(on: map)
         }
+
+        // Цель оповещения подсвечиваем на карте: крупнее и с пульсом.
+        coordinator.applyTarget(location.isApproachingCamera ? location.nearestCamera?.id : nil,
+                                on: map)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(repository: repository)
+        Coordinator(repository: repository, speedLimits: speedLimits)
     }
 
     // MARK: - Координатор
@@ -82,17 +100,31 @@ struct CarPlayMapView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, MKMapViewDelegate {
         private let repository: CameraStore
-        var routeOverlay: MKPolyline?
+        private let speedLimits: SpeedLimitService
         var recenterHandled = 0
         var zoomInHandled = 0
         var zoomOutHandled = 0
         var cameraCountSeen = -1
+        var tripActiveSeen = false
         /// Показанные камеры по id — обновление области не пересоздаёт аннотации.
         private var shown: [Int: CameraAnnotation] = [:]
+        /// Камера, к которой приближаемся (подсвеченный маркер).
+        private var targetID: Int?
 
-        init(repository: CameraStore) {
+        // Линия маршрута рисуется в три слоя: тёмная подложка (читается на любом
+        // фоне), яркая линия и серая «пройденная» поверх неё.
+        private var routeSource: MKPolyline?
+        private var routeCasing: MKPolyline?
+        private var routeLine: MKPolyline?
+        private var traveledLine: MKPolyline?
+        private var traveledProgress: CLLocationDistance = -1
+
+        init(repository: CameraStore, speedLimits: SpeedLimitService) {
             self.repository = repository
+            self.speedLimits = speedLimits
         }
+
+        var preferredTracking: MKUserTrackingMode { tripActiveSeen ? .followWithHeading : .follow }
 
         func zoom(_ map: MKMapView, factor: Double) {
             var region = map.region
@@ -104,6 +136,48 @@ struct CarPlayMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             reloadCameras(on: mapView)
         }
+
+        // MARK: Маршрут
+
+        /// Наблюдаемые чтения route.* — SwiftUI дёрнет update при их смене.
+        func applyRoute(_ route: RouteService, on map: MKMapView) {
+            let polyline = route.polyline
+            if polyline !== routeSource {
+                [routeCasing, routeLine, traveledLine].compactMap { $0 }.forEach(map.removeOverlay)
+                routeCasing = nil
+                routeLine = nil
+                traveledLine = nil
+                traveledProgress = -1
+                routeSource = polyline
+
+                if let polyline {
+                    // Подложке нужен собственный объект: один MKOverlay нельзя
+                    // добавить на карту дважды.
+                    let casing = Self.copy(of: polyline)
+                    map.addOverlay(casing, level: .aboveRoads)
+                    map.addOverlay(polyline, level: .aboveRoads)
+                    routeCasing = casing
+                    routeLine = polyline
+                }
+            }
+            guard routeLine != nil else { return }
+
+            // Пройденный кусок обновляем не каждым фиксом, а по накату: снимать
+            // и класть оверлей ежесекундно — лишняя работа рендера на ровном месте.
+            let progress = route.progressAlong
+            guard abs(progress - traveledProgress) >= AppConfig.carPlayTraveledStepMeters,
+                  let traveled = route.traveledPolyline else { return }
+            traveledProgress = progress
+            if let old = traveledLine { map.removeOverlay(old) }
+            map.addOverlay(traveled, level: .aboveRoads)
+            traveledLine = traveled
+        }
+
+        private static func copy(of polyline: MKPolyline) -> MKPolyline {
+            MKPolyline(points: polyline.points(), count: polyline.pointCount)
+        }
+
+        // MARK: Камеры
 
         func reloadCameras(on map: MKMapView) {
             // На обзорном зуме камеры не показываем — это уровень «вся страна».
@@ -122,10 +196,27 @@ struct CarPlayMapView: UIViewRepresentable {
                 map.removeAnnotations(Array(outdated.values))
                 outdated.keys.forEach { shown.removeValue(forKey: $0) }
             }
-            let added = fresh.filter { shown[$0.id] == nil }.map(CameraAnnotation.init)
+            // Лимит дороги считаем один раз при создании аннотации: индекс
+            // быстрый, но дёргать его на каждой перерисовке маркера незачем.
+            let added = fresh.filter { shown[$0.id] == nil }.map { camera in
+                CameraAnnotation(camera: camera, limit: speedLimits.limit(near: camera.coordinate))
+            }
             if !added.isEmpty {
                 map.addAnnotations(added)
                 added.forEach { shown[$0.camera.id] = $0 }
+            }
+        }
+
+        /// Подсветка камеры, к которой приближаемся: перерисовываем только два
+        /// маркера — прошлую цель и новую.
+        func applyTarget(_ id: Int?, on map: MKMapView) {
+            guard id != targetID else { return }
+            let previous = targetID
+            targetID = id
+            for cameraID in [previous, id].compactMap({ $0 }) {
+                guard let annotation = shown[cameraID],
+                      let view = map.view(for: annotation) as? CameraMarkerView else { continue }
+                view.setTarget(cameraID == id)
             }
         }
 
@@ -136,11 +227,13 @@ struct CarPlayMapView: UIViewRepresentable {
             _ mapView: MKMapView,
             viewFor annotation: any MKAnnotation
         ) -> MKAnnotationView? {
-            guard annotation is CameraAnnotation else { return nil }
-            return mapView.dequeueReusableAnnotationView(
+            guard let camera = annotation as? CameraAnnotation else { return nil }
+            let view = mapView.dequeueReusableAnnotationView(
                 withIdentifier: CameraMarkerView.reuseID,
                 for: annotation
-            )
+            ) as? CameraMarkerView
+            view?.setTarget(camera.camera.id == targetID)
+            return view
         }
 
         func mapView(
@@ -149,9 +242,18 @@ struct CarPlayMapView: UIViewRepresentable {
         ) -> MKOverlayRenderer {
             guard let polyline = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
             let renderer = MKPolylineRenderer(polyline: polyline)
-            renderer.strokeColor = UIColor(Theme.accent)
-            renderer.lineWidth = 6
             renderer.lineCap = .round
+            renderer.lineJoin = .round
+            if polyline === routeCasing {
+                renderer.strokeColor = UIColor(Theme.background).withAlphaComponent(0.9)
+                renderer.lineWidth = 12
+            } else if polyline === traveledLine {
+                renderer.strokeColor = UIColor.white.withAlphaComponent(0.22)
+                renderer.lineWidth = 7
+            } else {
+                renderer.strokeColor = UIColor(Theme.accent)
+                renderer.lineWidth = 7
+            }
             return renderer
         }
     }
@@ -161,52 +263,143 @@ struct CarPlayMapView: UIViewRepresentable {
 
 final class CameraAnnotation: NSObject, MKAnnotation {
     let camera: Camera
+    /// Лимит дороги у камеры (OSM): есть — маркер рисуется знаком «60».
+    let limit: Int?
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: camera.lat, longitude: camera.lon)
     }
 
-    init(camera: Camera) {
+    init(camera: Camera, limit: Int? = nil) {
         self.camera = camera
+        self.limit = limit
     }
 }
 
-/// Круглый маркер с глифом типа камеры — иконки кэшируются по типу.
+/// Маркер камеры: знак ограничения там, где лимит известен, иначе цветной круг
+/// с глифом типа. Картинки кэшируются по паре «тип + лимит».
 final class CameraMarkerView: MKAnnotationView {
     nonisolated static let reuseID = "camera"
     private static var cache: [String: UIImage] = [:]
+    private var halo: CAShapeLayer?
 
     override var annotation: (any MKAnnotation)? {
         didSet {
-            guard let camera = (annotation as? CameraAnnotation)?.camera else { return }
-            image = Self.marker(for: camera.kind)
-            displayPriority = .defaultHigh
+            guard let annotation = annotation as? CameraAnnotation else { return }
+            image = Self.marker(for: annotation.camera.kind, limit: annotation.limit)
+            centerOffset = .zero
             collisionMode = .circle
+            displayPriority = .defaultHigh
         }
     }
 
-    private static func marker(for kind: CameraType) -> UIImage {
-        let key = String(describing: kind)
-        if let cached = cache[key] { return cached }
-        let size = CGSize(width: 26, height: 26)
-        let rendered = UIGraphicsImageRenderer(size: size).image { context in
-            let rect = CGRect(origin: .zero, size: size)
-            UIColor(kind.tint).setFill()
-            UIBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
-            UIColor.white.withAlphaComponent(0.9).setStroke()
-            let ring = UIBezierPath(ovalIn: rect.insetBy(dx: 1.5, dy: 1.5))
-            ring.lineWidth = 1.5
-            ring.stroke()
-            let config = UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)
-            if let glyph = UIImage(systemName: kind.symbolName, withConfiguration: config)?
-                .withTintColor(.white, renderingMode: .alwaysOriginal) {
-                let glyphSize = glyph.size
-                glyph.draw(in: CGRect(x: (size.width - glyphSize.width) / 2,
-                                      y: (size.height - glyphSize.height) / 2,
-                                      width: glyphSize.width, height: glyphSize.height))
-            }
-            _ = context
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        setTarget(false)
+    }
+
+    /// Цель оповещения: крупнее, поверх соседей и с пульсирующим кольцом —
+    /// на карте сразу видно, о какой именно точке говорит панель.
+    func setTarget(_ isTarget: Bool) {
+        transform = isTarget ? CGAffineTransform(scaleX: 1.3, y: 1.3) : .identity
+        displayPriority = isTarget ? .required : .defaultHigh
+        zPriority = isTarget ? .max : .defaultUnselected
+
+        guard isTarget else {
+            halo?.removeFromSuperlayer()
+            halo = nil
+            return
         }
+        guard halo == nil else { return }
+        let tint = (annotation as? CameraAnnotation)?.camera.kind.tint ?? Theme.danger
+        let ring = CAShapeLayer()
+        let side = max(bounds.width, bounds.height) + 14
+        ring.frame = CGRect(x: bounds.midX - side / 2, y: bounds.midY - side / 2,
+                            width: side, height: side)
+        ring.path = UIBezierPath(ovalIn: CGRect(origin: .zero,
+                                                size: CGSize(width: side, height: side))).cgPath
+        ring.fillColor = UIColor.clear.cgColor
+        ring.strokeColor = UIColor(tint).cgColor
+        ring.lineWidth = 3
+
+        let scale = CABasicAnimation(keyPath: "transform.scale")
+        scale.fromValue = 0.7
+        scale.toValue = 1.35
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0.9
+        fade.toValue = 0
+        let pulse = CAAnimationGroup()
+        pulse.animations = [scale, fade]
+        pulse.duration = 1.5
+        pulse.repeatCount = .infinity
+        pulse.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        ring.add(pulse, forKey: "pulse")
+
+        layer.addSublayer(ring)
+        halo = ring
+    }
+
+    private static func marker(for kind: CameraType, limit: Int?) -> UIImage {
+        let key = "\(kind.sourceString)|\(limit ?? -1)"
+        if let cached = cache[key] { return cached }
+        let rendered = limit.map { limitMarker(kind: kind, limit: $0) } ?? glyphMarker(kind: kind)
         cache[key] = rendered
         return rendered
+    }
+
+    /// Знак «ограничение скорости» с цветной точкой типа внизу — тот же язык,
+    /// что на карте телефона.
+    private static func limitMarker(kind: CameraType, limit: Int) -> UIImage {
+        let size = CGSize(width: 34, height: 40)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            let sign = CGRect(x: 1, y: 0, width: 32, height: 32)
+            UIColor.white.setFill()
+            UIBezierPath(ovalIn: sign).fill()
+            UIColor(red: 0.85, green: 0.1, blue: 0.1, alpha: 1).setStroke()
+            let rim = UIBezierPath(ovalIn: sign.insetBy(dx: 2.4, dy: 2.4))
+            rim.lineWidth = 4.8
+            rim.stroke()
+
+            let text = "\(limit)"
+            let font = UIFont.systemFont(ofSize: limit >= 100 ? 13 : 15, weight: .heavy)
+            let attributes: [NSAttributedString.Key: Any] = [.font: font,
+                                                             .foregroundColor: UIColor.black]
+            let bounds = text.size(withAttributes: attributes)
+            text.draw(at: CGPoint(x: sign.midX - bounds.width / 2,
+                                  y: sign.midY - bounds.height / 2),
+                      withAttributes: attributes)
+
+            let dot = CGRect(x: size.width / 2 - 6, y: 27, width: 12, height: 12)
+            UIColor(kind.tint).setFill()
+            UIBezierPath(ovalIn: dot).fill()
+            UIColor.white.setStroke()
+            let dotRing = UIBezierPath(ovalIn: dot.insetBy(dx: 0.8, dy: 0.8))
+            dotRing.lineWidth = 1.6
+            dotRing.stroke()
+        }
+    }
+
+    /// Лимит неизвестен — цветной круг с глифом типа: тёмная кайма держит
+    /// маркер читаемым и на светлых участках карты.
+    private static func glyphMarker(kind: CameraType) -> UIImage {
+        let size = CGSize(width: 32, height: 32)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            let rect = CGRect(origin: .zero, size: size)
+            UIColor.black.withAlphaComponent(0.55).setFill()
+            UIBezierPath(ovalIn: rect).fill()
+            UIColor(kind.tint).setFill()
+            UIBezierPath(ovalIn: rect.insetBy(dx: 2.5, dy: 2.5)).fill()
+            UIColor.white.withAlphaComponent(0.92).setStroke()
+            let ring = UIBezierPath(ovalIn: rect.insetBy(dx: 3.2, dy: 3.2))
+            ring.lineWidth = 1.6
+            ring.stroke()
+
+            let config = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+            if let glyph = UIImage(systemName: kind.symbolName, withConfiguration: config)?
+                .withTintColor(.white, renderingMode: .alwaysOriginal) {
+                glyph.draw(in: CGRect(x: (size.width - glyph.size.width) / 2,
+                                      y: (size.height - glyph.size.height) / 2,
+                                      width: glyph.size.width, height: glyph.size.height))
+            }
+        }
     }
 }

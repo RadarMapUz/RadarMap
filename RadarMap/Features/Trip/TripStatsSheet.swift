@@ -230,13 +230,18 @@ struct TripStatsSheet: View {
             RatingInfoSheet(summary: TripHistory.summary(days: env.trip.days,
                                                          history: env.trip.history,
                                                          period: period, anchor: anchor),
-                            period: period)
+                            period: period,
+                            interval: period.interval(containing: anchor),
+                            onOpenTrip: { id in
+                                selectedRecord = env.trip.history.first { $0.id == id }
+                            })
         }
         .sheet(isPresented: $showFinesInfo) {
             SavingsInfoSheet(summary: TripHistory.summary(days: env.trip.days,
                                                           history: env.trip.history,
                                                           period: period, anchor: anchor),
-                             period: period)
+                             period: period,
+                             interval: period.interval(containing: anchor))
         }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
         .sheet(isPresented: $showAllTrips) {

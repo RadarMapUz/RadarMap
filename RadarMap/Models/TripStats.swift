@@ -334,8 +334,12 @@ final class TripStats {
                                      seed: item.seed, over: item.over, hour: item.hour))
         }
         history = seeded
+        // Агрегаты пересобираем вместе с историей: иначе экран считает рейтинг
+        // по дням от прошлого запуска, а разложение — по свежим записям.
+        days = TripDayBook.rebuilt(from: history)
         lifetime = LifetimeStats.rebuilt(from: history)
         persist()
+        persistDays()
         persistLifetime()
     }
 

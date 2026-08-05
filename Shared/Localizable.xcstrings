@@ -921,6 +921,38 @@
         }
       }
     },
+    "До уровня «%1$@» — %2$lld балла" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "До уровня «%1$@» — %2$lld балла"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«%1$@» darajasigacha — %2$lld ball"
+          }
+        }
+      }
+    },
+    "Ещё %lld поездок без известных лимитов и трека — в рейтинг они не вошли" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ещё %lld поездок без известных лимитов и трека — в рейтинг они не вошли"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yana %lld ta safar limit va treksiz — ular reytingga kirmadi"
+          }
+        }
+      }
+    },
     "Из чего сложился балл" : {
       "localizations" : {
         "ru" : {
@@ -933,6 +965,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ball nimadan yig'ildi"
+          }
+        }
+      }
+    },
+    "Из чего сложился ваш рейтинг" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Из чего сложился ваш рейтинг"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reytingingiz nimadan tuzildi"
           }
         }
       }
@@ -997,6 +1045,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Jarima soladigan bironta oshirish yo'q. Limitdagi kameralar: %lld"
+          }
+        }
+      }
+    },
+    "Остальные камеры: %lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Остальные камеры: %lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qolgan kameralar: %lld"
+          }
+        }
+      }
+    },
+    "Остальные поездки: %lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Остальные поездки: %lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qolgan safarlar: %lld"
+          }
+        }
+      }
+    },
+    "Откуда сумма" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Откуда сумма"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Summa qayerdan"
           }
         }
       }
@@ -1209,6 +1305,22 @@
         }
       }
     },
+    "Рейтинг по дням" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Рейтинг по дням"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kunlar bo'yicha reyting"
+          }
+        }
+      }
+    },
     "Рейтинг просел: %1$lld → %2$lld (%3$@)" : {
       "localizations" : {
         "ru" : {
@@ -1381,6 +1493,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bu baho, yozilgan jarima emas: takroriylik va aniq kameralarning bag'rikengligi bizga noma'lum."
+          }
+        }
+      }
+    },
+    "балл %lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "балл %lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ball %lld"
           }
         }
       }
@@ -7415,6 +7543,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Til o'zgartirildi"
+          }
+        }
+      }
+    },
+    "штрафуемых проездов: %lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "штрафуемых проездов: %lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "jarimali o'tishlar: %lld"
           }
         }
       }

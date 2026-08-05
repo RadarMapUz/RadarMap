@@ -354,6 +354,12 @@ nonisolated enum AppConfig {
     static let insightRatingStep = 3
     /// Сколько выводов показываем: больше трёх за раз никто не читает.
     static let insightsMaxCount = 3
+    /// Сколько строк разложения рейтинга показываем поимённо: остальное
+    /// сворачивается в «остальные поездки» — список из двадцати строк по
+    /// −0,1 балла ничего не объясняет.
+    static let breakdownVisibleRows = 5
+    /// Столько камер показываем в расшифровке штрафов.
+    static let fineSourcesVisibleRows = 5
 
     // MARK: - CarPlay
 

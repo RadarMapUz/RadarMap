@@ -32,9 +32,10 @@ final class TripStats {
     @ObservationIgnored private var lastCoordinate: CLLocationCoordinate2D?
     /// Сырой трек текущей поездки: точка каждые ≥30 м, упрощается при финише.
     @ObservationIgnored private var trackBuffer: [TrackPoint] = []
-    private static let trackStepMeters = 30.0
-    private static let trackTolerance = 0.00022   // ~22 м — упрощение Дугласа-Пекера
-    private static let trackMaxPoints = 400
+    // nonisolated: их читает и nonisolated-восстановление слепка (record(from:)).
+    nonisolated private static let trackStepMeters = 30.0
+    nonisolated private static let trackTolerance = 0.00022   // ~22 м — упрощение Дугласа-Пекера
+    nonisolated private static let trackMaxPoints = 400
 
     init() { loadHistory() }
 
@@ -116,6 +117,8 @@ final class TripStats {
             trackBuffer.append(TrackPoint(lat: coordinate.latitude,
                                           lon: coordinate.longitude, speedKmh: speedKmh))
         }
+
+        checkpointIfDue()
     }
 
     /// Зафиксировать прохождение камеры (скорость — в точке максимального сближения).
@@ -137,13 +140,15 @@ final class TripStats {
         passed = []
         stops = []
         trackBuffer = []
+        removeCheckpoint()
     }
 
     /// `endedManually` — нажали «Завершить» (а не автостоп по CoreMotion).
     /// Флаг едет в запись: он запрещает склейку следующей поездки (см. TripMerge).
     func finish(endedManually: Bool = true) {
         finishedDuration = durationSeconds
-        defer { startedAt = nil }
+        // Поездка завершена штатно — страховочный слепок больше не нужен.
+        defer { startedAt = nil; removeCheckpoint() }
         guard let startedAt, distanceMeters >= 100 else { return }
         // Рейтинг считаем по сырому треку (упрощённый теряет пики скорости).
         let scorePasses = passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) }
@@ -360,7 +365,7 @@ final class TripStats {
 
     // MARK: - Трек: упаковка и упрощение (Дуглас-Пекер)
 
-    nonisolated private static func packTrack(_ points: [TrackPoint]) -> [Double]? {
+    nonisolated static func packTrack(_ points: [TrackPoint]) -> [Double]? {
         guard points.count >= 2 else { return nil }
         var flat: [Double] = []
         flat.reserveCapacity(points.count * 3)
@@ -430,6 +435,10 @@ final class TripStats {
                 Log.trips.error("lifetimeStats не декодировались: \(error.localizedDescription, privacy: .public)")
             }
         }
+        // Процесс умер в поездке (крэш/вотчдог/джетсэм)? Слепок → запись истории,
+        // пока автозапуск не начал новую поездку. После lifetime: восстановление
+        // добавляет к счётчикам, а не пересобирает их.
+        restoreInflightIfAny()
         // Одноразовая гео-чистка: старые версии засчитывали камеры с параллельных
         // улиц — выкидываем их из истории и пересчитываем баллы и счётчики.
         if !Storage.bool(.passGeoCleanup1) {
@@ -448,6 +457,102 @@ final class TripStats {
             lifetime = LifetimeStats.rebuilt(from: history)
             persistLifetime()
         }
+    }
+
+    // MARK: - Чекпоинт живой поездки
+
+    /// Слепок незавершённой поездки на диске. Живая поездка держалась только в
+    /// памяти — и любая смерть процесса (крэш, вотчдог, джетсэм фонового
+    /// приложения) молча теряла весь накат: «проехал 30 км, зашёл — а там ноль».
+    nonisolated struct InflightTrip: Codable {
+        let startedAt: Date
+        let lastPointAt: Date
+        let distanceMeters: Double
+        let maxSpeedKmh: Double
+        let passed: [PassedCamera]
+        let stops: [TripStop]
+        /// Сырой трек плоским массивом [lat, lon, speed, …] — как в TripRecord.
+        let track: [Double]
+        let endLat: Double?
+        let endLon: Double?
+    }
+
+    /// Не чаще раза в checkpointInterval: слепок пишется на каждый интервал
+    /// движения, а не на каждый GPS-тик.
+    private static let checkpointInterval: TimeInterval = 20
+    @ObservationIgnored private var lastCheckpointAt: Date = .distantPast
+
+    private var inflightURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("trip_inflight.json")
+    }
+
+    private func checkpointIfDue() {
+        guard let startedAt,
+              Date().timeIntervalSince(lastCheckpointAt) >= Self.checkpointInterval else { return }
+        lastCheckpointAt = Date()
+        let snapshot = InflightTrip(
+            startedAt: startedAt, lastPointAt: lastPointAt ?? Date(),
+            distanceMeters: distanceMeters, maxSpeedKmh: maxSpeedKmh,
+            passed: passed, stops: stops,
+            track: Self.packTrack(trackBuffer) ?? [],
+            endLat: lastCoordinate?.latitude, endLon: lastCoordinate?.longitude)
+        // Единицы килобайт атомарной записи раз в 20 секунд — дешевле любого
+        // хоп-танца; потерянная запись не страшна, придёт следующая.
+        JSONFile.save(snapshot, to: inflightURL, log: Log.trips)
+    }
+
+    private func removeCheckpoint() {
+        lastCheckpointAt = .distantPast
+        // Отсутствие файла — норма (поездка без чекпоинта короче интервала).
+        try? FileManager.default.removeItem(at: inflightURL)
+    }
+
+    /// Восстановление после смерти процесса: слепок превращается в обычную
+    /// запись истории «поездка закончилась на последней точке». Следующий
+    /// автозапуск пройдёт через TripMerge — короткая пауза склеится, и
+    /// дистанция продолжится, как будто вылета не было.
+    private func restoreInflightIfAny() {
+        guard let snapshot = JSONFile.load(InflightTrip.self, from: inflightURL, log: Log.trips)
+        else { return }
+        defer { removeCheckpoint() }
+        guard let record = Self.record(from: snapshot) else { return }
+        history.insert(record, at: 0)
+        history = TripHistory.pruned(history)
+        lifetime = LifetimeStats.updated(
+            lifetime,
+            passes: record.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+            distanceMeters: record.distanceMeters)
+        persist()
+        persistLifetime()
+        Log.trips.info("восстановлена незавершённая поездка: \(Int(record.distanceMeters), privacy: .public) м")
+    }
+
+    /// Слепок → запись истории. Та же логика, что в finish(): порог 100 м,
+    /// балл по сырому треку, упрощение Дугласом-Пекером. Чистая — покрыта тестами.
+    nonisolated static func record(from snapshot: InflightTrip) -> TripRecord? {
+        guard snapshot.distanceMeters >= 100 else { return nil }
+        let raw = stride(from: 0, to: max(0, snapshot.track.count - 2), by: 3).map {
+            TrackPoint(lat: snapshot.track[$0], lon: snapshot.track[$0 + 1],
+                       speedKmh: snapshot.track[$0 + 2])
+        }
+        let score = DrivingScore.tripScore(
+            passes: snapshot.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+            trackSpeeds: raw.map(\.speedKmh))
+        return TripRecord(
+            id: snapshot.startedAt.timeIntervalSince1970,
+            startedAt: snapshot.startedAt,
+            endedAt: snapshot.lastPointAt,
+            distanceMeters: snapshot.distanceMeters,
+            maxSpeedKmh: snapshot.maxSpeedKmh,
+            passed: snapshot.passed,
+            endLat: snapshot.endLat, endLon: snapshot.endLon,
+            track: packTrack(simplify(raw, tolerance: trackTolerance, maxPoints: trackMaxPoints)),
+            score: score,
+            stops: snapshot.stops.isEmpty ? nil : snapshot.stops,
+            // Пользователь «Завершить» не нажимал — склейку не запрещаем.
+            endedManually: false
+        )
     }
 
     private func persistLifetime() {

@@ -2,11 +2,18 @@
 //  TripStatsSheet.swift
 //  RadarMap
 //
-//  «Итоги» — единый экран статистики. Фильтр периода (Неделя / Месяц / Всё
-//  время) правит ВСЕМ разделом до разделителя «За всё время»: герой, зона риска,
-//  карта, плитки, график и список поездок читают одну и ту же PeriodSummary.
+//  «Итоги» — единый экран статистики. Фильтр периода (День / Неделя / Месяц)
+//  правит ВСЕМ разделом до разделителя «За всё время»: герой, разбор, зона
+//  риска, карта, KPI, график и список поездок читают одну и ту же PeriodSummary.
 //  Никаких двух источников правды: раньше рядом жили «Штрафы за 30 дней»,
-//  недельная карточка истории и отдельный отчёт — три пересчёта одного и того же.
+//  недельная карточка истории и отдельный отчёт — три пересчёта одного и того же,
+//  а расшифровки по тапу показывали своё окно (85 в шапке против 82 внутри).
+//
+//  Периоды КАЛЕНДАРНЫЕ и листаются стрелками (см. anchor и StatsPeriod):
+//  «5–11 августа», а не «последние 168 часов», которые менялись сами по себе.
+//  Сегмента «Всё время» нет: он врал — история чистится, и «всё время»
+//  показывало последние записи. Пожизненная правда живёт в блоке «За всё время»
+//  (LifetimeStats) плюс отдельный экран «Все поездки».
 //
 //  Порядок блоков отвечает на вопросы в том порядке, в каком их задаёт водитель:
 //  «как я езжу» (герой) → «сколько рискую и где» (зона риска) → «покажи на
@@ -33,6 +40,9 @@ struct TripStatsSheet: View {
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
 
     @State private var period: StatsPeriod = .week
+    /// Какое именно окно показываем: любая дата внутри него. Стрелки листают
+    /// якорь, а не «сдвигают окно на N дней» — периоды календарные.
+    @State private var anchor = Date()
     @State private var selectedRecord: TripRecord?
     /// Каскадное появление секций при открытии (одноразовое).
     @State private var appeared = false
@@ -40,6 +50,9 @@ struct TripStatsSheet: View {
     @State private var showRatingInfo = false
     @State private var showFinesInfo = false
     @State private var selectedBadge: Achievement?
+    /// Вся сохранённая история отдельным экраном — вместо сегмента «Всё время»,
+    /// который обещал показать всё, а показывал последние записи.
+    @State private var showAllTrips = false
     /// Полноэкранная карта проездов (item — чтобы передать фокус зоны риска).
     @State private var mapPayload: PeriodMapPayload?
     /// Треки, маркеры и слой частоты — считаются на смену периода, а не в body.
@@ -53,6 +66,7 @@ struct TripStatsSheet: View {
     /// Ключ пересчёта данных карты: период и состав истории.
     private struct MapDataKey: Equatable {
         let period: StatsPeriod
+        let anchor: Date
         let count: Int
         let latest: Double?
     }
@@ -60,7 +74,8 @@ struct TripStatsSheet: View {
     var body: some View {
         let trip = env.trip
         let active = env.location.isTripActive
-        let summary = TripHistory.summary(trip.history, period: period)
+        let summary = TripHistory.summary(days: trip.days, history: trip.history,
+                                          period: period, anchor: anchor)
 
         NavigationStack {
             ScrollView {
@@ -76,6 +91,8 @@ struct TripStatsSheet: View {
                     }
 
                     periodPicker
+                        .entrance(0, appeared)
+                    periodNavigator
                         .entrance(0, appeared)
 
                     if summary.isEmpty {
@@ -100,7 +117,7 @@ struct TripStatsSheet: View {
                             .id("map")
                         kpiStrip(summary: summary)
                             .entrance(3, appeared)
-                        if let days = period.chartDays {
+                        if let days = period.chartDays(containing: anchor) {
                             dailyChart(days: days, summary: summary)
                                 .entrance(4, appeared)
                         }
@@ -113,6 +130,8 @@ struct TripStatsSheet: View {
 
                     if !trip.lifetime.isEmpty {
                         LabeledDivider(title: String(localized: "За всё время"))
+                            .entrance(5, appeared)
+                        lifetimeStrip(trip: trip)
                             .entrance(5, appeared)
                         achievementsSection(trip: trip)
                             .entrance(5, appeared)
@@ -159,13 +178,16 @@ struct TripStatsSheet: View {
             }
             // Треки и слой частоты — один пересчёт на смену периода/истории.
             // В body это делать нельзя: пересчёт шёл бы на каждый кадр прокрутки.
-            .task(id: MapDataKey(period: period, count: trip.history.count,
+            .task(id: MapDataKey(period: period, anchor: anchor, count: trip.history.count,
                                  latest: trip.history.first?.id)) {
-                mapData = await TripHistory.mapData(trip.history, period: period)
+                mapData = await TripHistory.mapData(trip.history, period: period, anchor: anchor)
                 if mapSelection == nil { framePeriod() }
             }
             .onChange(of: period) {
                 // Выбранная поездка могла не попасть в новый период.
+                withAnimation(.snappy(duration: 0.3)) { clearMapSelection() }
+            }
+            .onChange(of: anchor) {
                 withAnimation(.snappy(duration: 0.3)) { clearMapSelection() }
             }
             .onAppear {
@@ -181,7 +203,9 @@ struct TripStatsSheet: View {
                     if args.contains("-showSavingsInfo") { showFinesInfo = true }
                     if args.contains("-showPeriodMap") { openMap(focus: nil) }
                     if args.contains("-shareStats") {
-                        share(summary: TripHistory.summary(env.trip.history, period: period))
+                        share(summary: TripHistory.summary(days: env.trip.days,
+                                                          history: env.trip.history,
+                                                          period: period, anchor: anchor))
                     }
                 }
                 #endif
@@ -200,9 +224,29 @@ struct TripStatsSheet: View {
         .sheet(item: $mapPayload) { payload in
             PeriodMapSheet(data: payload.data, focus: payload.focus)
         }
-        .sheet(isPresented: $showRatingInfo) { RatingInfoSheet() }
-        .sheet(isPresented: $showFinesInfo) { SavingsInfoSheet() }
+        // Шиты получают ТУ ЖЕ сводку, что показала карточка: расшифровка
+        // обязана объяснять именно то число, по которому тапнули.
+        .sheet(isPresented: $showRatingInfo) {
+            RatingInfoSheet(summary: TripHistory.summary(days: env.trip.days,
+                                                         history: env.trip.history,
+                                                         period: period, anchor: anchor),
+                            period: period)
+        }
+        .sheet(isPresented: $showFinesInfo) {
+            SavingsInfoSheet(summary: TripHistory.summary(days: env.trip.days,
+                                                          history: env.trip.history,
+                                                          period: period, anchor: anchor),
+                             period: period)
+        }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
+        .sheet(isPresented: $showAllTrips) {
+            AllTripsSheet(onOpenDetail: { record in
+                showAllTrips = false
+                selectedRecord = record
+            }, onRepeat: onRoute.map { route in
+                { coord, name in dismiss(); route(coord, name) }
+            })
+        }
         .sheet(item: $sharePayload) { payload in
             ActivityShareSheet(image: payload.image)
                 .presentationDetents([.medium, .large])
@@ -241,6 +285,45 @@ struct TripStatsSheet: View {
         }
         .padding(4)
         .background(Theme.surface, in: Capsule())
+    }
+
+    /// Строка периода со стрелками: «‹ 5–11 августа ›». Без неё календарные
+    /// периоды бессмысленны — непонятно, какое окно на экране и что листаешь.
+    private var periodNavigator: some View {
+        HStack(spacing: 8) {
+            navArrow("chevron.left", enabled: true) { step(-1) }
+            Text(period.rangeTitle(containing: anchor))
+                .font(.rounded(14, .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .frame(maxWidth: .infinity)
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.25), value: anchor)
+            // Вперёд из текущего периода некуда: будущего в статистике нет.
+            navArrow("chevron.right", enabled: period.canGoForward(from: anchor)) { step(1) }
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private func navArrow(_ symbol: String, enabled: Bool,
+                          action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.rounded(13, .bold))
+                .foregroundStyle(enabled ? Theme.accent : Theme.textTertiary.opacity(0.4))
+                .frame(width: 36, height: 32)
+                .background(Theme.surface, in: Capsule())
+        }
+        .buttonStyle(PressableStyle())
+        .disabled(!enabled)
+        .accessibilityLabel(Text(symbol == "chevron.left" ? "Предыдущий период"
+                                                          : "Следующий период"))
+    }
+
+    private func step(_ direction: Int) {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        withAnimation(.snappy(duration: 0.3)) {
+            anchor = period.shifted(anchor, by: direction)
+        }
     }
 
     // MARK: - Герой: рейтинг + километры периода
@@ -673,12 +756,14 @@ struct TripStatsSheet: View {
             }
         } else {
             HStack(spacing: 14) {
+                // На карте — точки, то есть УНИКАЛЬНЫЕ камеры; повторные
+                // проезды одной камеры складываются в один маркер.
                 legendItem(Theme.success,
-                           String(format: String(localized: "В лимите: %lld"),
+                           String(format: String(localized: "Камер в лимите: %lld"),
                                   mapData.markers.filter { !$0.hasViolation }.count))
                 if mapData.markers.contains(where: \.hasViolation) {
                     legendItem(Theme.danger,
-                               String(format: String(localized: "С превышением: %lld"),
+                               String(format: String(localized: "Камер с превышением: %lld"),
                                       mapData.markers.filter(\.hasViolation).count))
                 }
                 Spacer(minLength: 0)
@@ -753,7 +838,9 @@ struct TripStatsSheet: View {
     /// (зона риска, рейтинг), а справочные числа спокойные.
     private func kpiStrip(summary: PeriodSummary) -> some View {
         HStack(spacing: 0) {
-            kpiCell(value: "\(summary.cameras)", label: "камер",
+            // Именно ПРОЕЗДЫ: одна камера, пройденная дважды, — это два.
+            // Легенда карты считает уникальные точки — слово должно отличаться.
+            kpiCell(value: "\(summary.cameras)", label: "проездов камер",
                     icon: "camera.metering.center.weighted")
             kpiDivider
             kpiCell(value: activeDaysText(summary), label: "дней за рулём",
@@ -844,15 +931,18 @@ struct TripStatsSheet: View {
 
     /// «5 из 7» — в окне периода видно, насколько плотно катаешься.
     private func activeDaysText(_ summary: PeriodSummary) -> String {
-        guard let window = period.chartDays else { return "\(summary.activeDays)" }
+        guard let window = period.chartDays(containing: anchor) else {
+            return "\(summary.activeDays)"
+        }
         return String(format: String(localized: "%1$lld из %2$lld"), summary.activeDays, window)
     }
 
     // MARK: - График по дням
 
     private func dailyChart(days: Int, summary: PeriodSummary) -> some View {
-        let daily = TripHistory.dailyKm(TripHistory.records(env.trip.history, period: period),
-                                        days: days)
+        let daily = TripHistory.dailyKm(
+            TripHistory.records(env.trip.history, period: period, anchor: anchor),
+            days: days, now: period.interval(containing: anchor).end.addingTimeInterval(-1))
         let peak = max(daily.map(\.km).max() ?? 0, 1)
         let dense = days > 10
         let hasOverspeed = daily.contains(where: \.hasOverspeed)
@@ -904,7 +994,7 @@ struct TripStatsSheet: View {
     private func tripsSection(trip: TripStats, proxy: ScrollViewProxy) -> some View {
         TripHistorySection(
             title: period.tripsTitle,
-            records: TripHistory.historyList(trip.history, period: period),
+            records: TripHistory.historyList(trip.history, period: period, anchor: anchor),
             selectedID: mapSelection?.id,
             onShowOnMap: { showOnMap($0, proxy: proxy) },
             onOpenDetail: { selectedRecord = $0 },
@@ -917,6 +1007,41 @@ struct TripStatsSheet: View {
                     trip.deleteRecord(id: record.id)
                 }
             })
+    }
+
+    /// Пожизненные цифры — единственная честная правда «за всё время»:
+    /// история чистится, а эти счётчики нет. Отсюда же вход во все поездки.
+    private func lifetimeStrip(trip: TripStats) -> some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 0) {
+                kpiCell(value: "\(trip.lifetime.trips)", label: "поездок",
+                        icon: "car.side")
+                kpiDivider
+                kpiCell(value: Formatting.distance(trip.lifetime.distanceMeters),
+                        label: "пройдено", icon: "point.topleft.down.to.point.bottomright.curvepath")
+                kpiDivider
+                kpiCell(value: "\(trip.lifetime.camerasInLimit)", label: "камер в лимите",
+                        icon: "checkmark.shield")
+                kpiDivider
+                kpiCell(value: "\(trip.lifetime.bestStreak)", label: "лучшая серия",
+                        icon: "flame")
+            }
+            Button {
+                showAllTrips = true
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Все поездки")
+                        .font(.rounded(13, .semibold))
+                    Image(systemName: "chevron.right")
+                        .font(.rounded(10, .bold))
+                }
+                .foregroundStyle(Theme.accent)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableStyle())
+        }
+        .statCard(padding: 14)
     }
 
     // MARK: - Достижения
@@ -1039,6 +1164,8 @@ struct TripStatsSheet: View {
 
     /// Поездки есть, но не в этом окне: не оставляем экран пустым — сразу даём
     /// уйти туда, где данные есть.
+    /// Пустое окно — не тупик: сразу предлагаем ближайший период, где поездки
+    /// есть, одной кнопкой (искать его стрелками вслепую — работа для водителя).
     private var emptyPeriodHint: some View {
         VStack(spacing: 10) {
             Image(systemName: "calendar.badge.clock")
@@ -1047,19 +1174,37 @@ struct TripStatsSheet: View {
             Text("В этом периоде поездок не было")
                 .font(.rounded(15, .bold))
                 .foregroundStyle(Theme.textPrimary)
-            Button {
-                withAnimation(.snappy(duration: 0.3)) { period = .all }
-            } label: {
-                Text("Показать всё время")
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(Theme.accent)
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Theme.accent.opacity(0.12), in: Capsule())
+            if let nearest = nearestNonEmptyAnchor() {
+                Button {
+                    withAnimation(.snappy(duration: 0.3)) { anchor = nearest }
+                } label: {
+                    Text(String(format: String(localized: "Показать: %@"),
+                                period.rangeTitle(containing: nearest)))
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Theme.accent.opacity(0.12), in: Capsule())
+                }
+                .buttonStyle(PressableStyle())
             }
-            .buttonStyle(PressableStyle())
         }
         .frame(maxWidth: .infinity)
         .statCard(padding: 24)
+    }
+
+    /// Ближайшее к текущему окно с поездками: ищем по дневным агрегатам —
+    /// они переживают чистку истории, значит найдут и старый период.
+    private func nearestNonEmptyAnchor() -> Date? {
+        let calendar = Calendar.current
+        let current = period.interval(containing: anchor)
+        // Ближайший день с поездками — по разнице с текущим окном.
+        return env.trip.days
+            .filter { !current.contains($0.day) }
+            .min { lhs, rhs in
+                abs(lhs.day.timeIntervalSince(current.start))
+                    < abs(rhs.day.timeIntervalSince(current.start))
+            }
+            .map { calendar.startOfDay(for: $0.day) }
     }
 }
 

@@ -2,9 +2,14 @@
 //  StatsInfoSheets.swift
 //  RadarMap
 //
-//  Расшифровки Итогов: как считается рейтинг, из чего складывается экономия,
+//  Расшифровки Итогов: как считается рейтинг, из чего складываются штрафы,
 //  детали достижений. Открываются тапом по карточкам — цифрам можно доверять,
 //  только когда понятно, откуда они берутся.
+//
+//  Шиты получают ТУ ЖЕ сводку, которую показала карточка, и подпись её окна.
+//  Раньше они читали собственные агрегаты с зашитыми 30 днями: в шапке было
+//  «85 за неделю», по тапу открывалось «82 за 30 дней» — пользователь нажимал
+//  на цифру и получал другую.
 //
 
 import SwiftUI
@@ -12,7 +17,8 @@ import SwiftUI
 // MARK: - Как считается рейтинг
 
 struct RatingInfoSheet: View {
-    @Environment(AppEnvironment.self) private var env
+    let summary: PeriodSummary
+    let period: StatsPeriod
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -39,7 +45,7 @@ struct RatingInfoSheet: View {
 
     private var header: some View {
         HStack(spacing: 16) {
-            if let rating = env.trip.rating {
+            if let rating = summary.rating {
                 RatingRing(rating: rating)
                     .frame(width: 84, height: 84)
             } else {
@@ -50,15 +56,22 @@ struct RatingInfoSheet: View {
                     .background(Theme.accent.opacity(0.10), in: Circle())
             }
             VStack(alignment: .leading, spacing: 4) {
-                if let rating = env.trip.rating {
+                if let rating = summary.rating {
                     Text(DrivingScore.level(for: rating))
                         .font(.rounded(17, .bold))
                         .foregroundStyle(Theme.textPrimary)
                 }
-                Text("Средний балл поездок за 30 дней. Длинные поездки весят больше коротких.")
+                // Окно называем явно: это ровно та цифра, по которой тапнули.
+                Text(String(format: String(localized: "Средний балл поездок %@. Длинные поездки весят больше коротких."),
+                            period.caption))
                     .font(.rounded(12))
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let previous = summary.previousRating {
+                    Text(String(format: String(localized: "Прошлый период: %lld"), previous))
+                        .font(.rounded(11, .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -141,7 +154,8 @@ struct RatingInfoSheet: View {
 // MARK: - Как считаем экономию
 
 struct SavingsInfoSheet: View {
-    @Environment(AppEnvironment.self) private var env
+    let summary: PeriodSummary
+    let period: StatsPeriod
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -155,7 +169,7 @@ struct SavingsInfoSheet: View {
                 .padding(20)
             }
             .background(Theme.background)
-            .navigationTitle("Штрафы и лимиты")
+            .navigationTitle("Возможные штрафы")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
@@ -166,21 +180,23 @@ struct SavingsInfoSheet: View {
     }
 
     private var header: some View {
-        // Честные цифры за 30 дней: проезды в лимите, превышения, реальный риск.
-        let month = env.trip.month30
-        let ok = month.over == 0
+        // Ровно те цифры, что на карточке: то же окно, тот же расчёт.
+        let ok = summary.overPasses == 0
         return VStack(spacing: 12) {
+            Text(period.caption)
+                .font(.rounded(11, .medium))
+                .foregroundStyle(Theme.textTertiary)
             Text(ok ? String(localized: "0 штрафов")
                     : String(format: String(localized: "риск ≈ %@"),
-                             Formatting.money(month.risk)))
+                             Formatting.money(summary.fineRisk)))
                 .font(.rounded(34, .heavy))
                 .foregroundStyle(ok ? Theme.success : Theme.danger)
             HStack(spacing: 0) {
-                headerMetric("\(month.clean)", String(localized: "в лимите"))
+                headerMetric("\(summary.cleanPasses)", String(localized: "в лимите"))
                 divider
-                headerMetric("\(month.over)", String(localized: "превышений"))
+                headerMetric("\(summary.overPasses)", String(localized: "превышений"))
                 divider
-                headerMetric("\(env.trip.lifetime.trips)", String(localized: "поездок всего"))
+                headerMetric("\(summary.trips)", String(localized: "поездок"))
             }
         }
         .frame(maxWidth: .infinity)
@@ -234,9 +250,13 @@ struct SavingsInfoSheet: View {
 
     private var method: some View {
         infoCard(title: String(localized: "Как считаем")) {
-            Text("Каждая камера с известным лимитом, пройденная без штрафной скорости, — несостоявшийся минимальный штраф в 1 БРВ. Складываем такие проезды. Это оценка, а не гарантия: повторность и допуски конкретных камер мы знать не можем.")
+            Text("Берём каждый проезд камеры, у которой известен лимит дороги, и сравниваем с ним скорость в точке фиксации. Попал в штрафную ступень — прибавляем её сумму к риску. Проезды камер без известного лимита не считаем нарушением: выдумывать превышение мы не вправе.")
                 .font(.rounded(13))
                 .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Это оценка, а не выписанные штрафы: повторность нарушений и допуски конкретных камер нам неизвестны.")
+                .font(.rounded(11))
+                .foregroundStyle(Theme.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

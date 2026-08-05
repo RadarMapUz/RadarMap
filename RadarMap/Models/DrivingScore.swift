@@ -79,6 +79,74 @@ enum DrivingScore {
         return max(0, 100 - cameraPenalty - smoothPenalty)
     }
 
+    /// Одна строка разложения балла: за что и сколько снято.
+    struct Penalty: Identifiable, Equatable {
+        let id: String
+        let icon: String
+        let title: String
+        let detail: String?
+        let points: Int      // снято баллов (положительное число)
+    }
+
+    /// Из чего сложился балл поездки — та же арифметика, что в tripScore,
+    /// но по строкам: «почему 68?» — самый частый вопрос к деталке.
+    /// Пустой список — балл не считался (нет ни лимитных проездов, ни трека).
+    nonisolated static func breakdown(passed: [PassedCamera],
+                                      trackSpeeds: [Double]) -> [Penalty] {
+        var items: [Penalty] = []
+        var cameraPenalty = 0.0
+        var limitedPasses = 0
+        for pass in passed {
+            guard let limit = pass.limitKmh else { continue }
+            limitedPasses += 1
+            let over = pass.speedKmh - Double(limit)
+            let points: Double
+            switch over {
+            case ..<2:    points = 0
+            case 2..<5:   points = 2
+            case 5..<12:  points = 8
+            case 12..<20: points = 14
+            case 20..<40: points = 25
+            default:      points = 40
+            }
+            cameraPenalty += points
+            guard points > 0 else { continue }
+            let place = pass.location.isEmpty ? pass.kind.displayName : pass.location
+            items.append(Penalty(
+                id: pass.id.uuidString, icon: pass.kind.symbolName, title: place,
+                detail: String(format: String(localized: "%1$lld км/ч при лимите %2$lld"),
+                               Int(pass.speedKmh), limit),
+                points: Int(points)))
+        }
+        // Штраф за камеры ограничен потолком: одна ужасная поездка не должна
+        // обнулять балл (см. tripScore). Показываем это честной строкой.
+        if cameraPenalty > 70 {
+            items.append(Penalty(
+                id: "cap", icon: "arrow.down.to.line",
+                title: String(localized: "Потолок штрафа за камеры"),
+                detail: String(localized: "больше 70 баллов за камеры не снимаем"),
+                points: -Int(cameraPenalty - 70)))
+        }
+
+        if trackSpeeds.count >= 10 {
+            var delta = 0.0
+            for index in 1..<trackSpeeds.count {
+                delta += abs(trackSpeeds[index] - trackSpeeds[index - 1])
+            }
+            let mean = delta / Double(trackSpeeds.count - 1)
+            let smooth = Int(min(max((mean - 3.5) * 5, 0), 20).rounded())
+            if smooth > 0 {
+                items.append(Penalty(
+                    id: "smooth", icon: "waveform.path.ecg",
+                    title: String(localized: "Резкие разгоны и торможения"),
+                    detail: String(localized: "по треку поездки"), points: smooth))
+            }
+        } else if limitedPasses == 0 {
+            return []   // балла нет — раскладывать нечего
+        }
+        return items
+    }
+
     /// Уровень по баллу — для шапки Итогов.
     nonisolated static func level(for rating: Int) -> String {
         switch rating {

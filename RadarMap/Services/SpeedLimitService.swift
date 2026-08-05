@@ -29,8 +29,13 @@ final class SpeedLimitService {
     /// Голос «Превышение скорости» — подключается в AppEnvironment.
     @ObservationIgnored var onOverspeed: (() -> Void)?
 
+    /// Поколение индекса: растёт при загрузке/обновлении базы лимитов. Карта
+    /// по нему пересобирает слой маркеров — индекс приезжает с диска и с сервера
+    /// позже первого слоя, и без сигнала мини-знаки «60» не появились бы до
+    /// первого движения карты.
+    private(set) var indexRevision = 0
     private let settings: AppSettings
-    @ObservationIgnored private var index: LimitIndex?
+    @ObservationIgnored private var index: LimitIndex? { didSet { indexRevision += 1 } }
     @ObservationIgnored private var missCount = 0
     @ObservationIgnored private var overspeedSince: Date?
     @ObservationIgnored private var lastWarnAt: Date = .distantPast
@@ -49,6 +54,10 @@ final class SpeedLimitService {
     func limit(near coordinate: CLLocationCoordinate2D) -> Int? {
         index?.limit(near: coordinate)
     }
+
+    /// Сам индекс — для пакетных запросов вне main (слой маркеров карты
+    /// спрашивает лимиты двух сотен камер разом; LimitIndex — Sendable).
+    var limitIndex: LimitIndex? { index }
 
     // MARK: - Загрузка базы
 

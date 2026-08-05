@@ -20,6 +20,22 @@
         }
       }
     },
+    "%1$lld км/ч при лимите %2$lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld км/ч при лимите %2$lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "limit %2$lld bo'lganda %1$lld km/soat"
+          }
+        }
+      }
+    },
     ". Ваша скорость %lld" : {
       "localizations" : {
         "ru" : {
@@ -889,6 +905,22 @@
         }
       }
     },
+    "Из чего сложился балл" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Из чего сложился балл"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ball nimadan yig'ildi"
+          }
+        }
+      }
+    },
     "Когда рискуете" : {
       "localizations" : {
         "ru" : {
@@ -937,6 +969,22 @@
         }
       }
     },
+    "Потолок штрафа за камеры" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Потолок штрафа за камеры"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kameralar jarimasining chegarasi"
+          }
+        }
+      }
+    },
     "Разбор за всё время" : {
       "localizations" : {
         "ru" : {
@@ -981,6 +1029,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hafta tahlili"
+          }
+        }
+      }
+    },
+    "Резкие разгоны и торможения" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Резкие разгоны и торможения"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keskin tezlanish va tormozlash"
           }
         }
       }
@@ -1205,6 +1269,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "O‘tgan davrdagidan ko‘proq"
+          }
+        }
+      }
+    },
+    "больше 70 баллов за камеры не снимаем" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "больше 70 баллов за камеры не снимаем"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kameralar uchun 70 balldan ortiq olib tashlamaymiz"
           }
         }
       }
@@ -4679,6 +4759,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Marshrutda %@ %lld metrdan so‘ng"
+          }
+        }
+      }
+    },
+    "по треку поездки" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "по треку поездки"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "safar treki bo'yicha"
           }
         }
       }

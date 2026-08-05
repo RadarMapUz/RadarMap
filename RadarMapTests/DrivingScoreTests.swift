@@ -49,6 +49,47 @@ final class DrivingScoreTests: XCTestCase {
         XCTAssertLessThanOrEqual(score!, 40)
     }
 
+    // MARK: - Разложение балла (деталка «почему 68?»)
+
+    private func passed(_ speed: Double, limit: Int?, location: String = "Юнусабад") -> PassedCamera {
+        PassedCamera(id: UUID(), cameraID: 1, typeRaw: "Стационар радар",
+                     location: location, speedKmh: speed, date: Date(),
+                     lat: 41.31, lon: 69.28, limitKmh: limit)
+    }
+
+    /// Сумма строк разложения обязана сходиться с tripScore — иначе деталка врёт.
+    func testBreakdownMatchesTripScore() {
+        let passedList = [passed(88, limit: 60), passed(66, limit: 60), passed(55, limit: 60)]
+        let jerky = (0..<60).map { $0 % 2 == 0 ? 48.0 : 60.0 }
+        let items = DrivingScore.breakdown(passed: passedList, trackSpeeds: jerky)
+        let score = DrivingScore.tripScore(
+            passes: passedList.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+            trackSpeeds: jerky)
+
+        let totalPenalty = items.reduce(0) { $0 + $1.points }
+        XCTAssertEqual(100 - Double(totalPenalty), score ?? -1, accuracy: 0.5)
+        // Чистый проезд (55 при 60) строки не создаёт.
+        XCTAssertEqual(items.filter { $0.icon != "waveform.path.ecg" }.count, 2)
+    }
+
+    /// Потолок −70 за камеры отображается «возвратной» строкой, сумма сходится.
+    func testBreakdownShowsCameraCap() {
+        let passedList = (0..<3).map { _ in passed(115, limit: 60) }   // 3 × 40 = 120 > 70
+        let items = DrivingScore.breakdown(passed: passedList, trackSpeeds: smoothSpeeds())
+        XCTAssertTrue(items.contains { $0.id == "cap" && $0.points == -50 })
+        let total = items.reduce(0) { $0 + $1.points }
+        let score = DrivingScore.tripScore(
+            passes: passedList.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+            trackSpeeds: smoothSpeeds())
+        XCTAssertEqual(100 - Double(total), score ?? -1, accuracy: 0.5)
+    }
+
+    /// Нет ни лимитных проездов, ни трека — балла нет, раскладывать нечего.
+    func testBreakdownEmptyWithoutData() {
+        XCTAssertTrue(DrivingScore.breakdown(passed: [passed(80, limit: nil)],
+                                             trackSpeeds: []).isEmpty)
+    }
+
     func testHarshDrivingPenalized() {
         // Рваный темп: перепады по 12 км/ч на каждом шаге.
         let jerky = (0..<60).map { $0 % 2 == 0 ? 48.0 : 60.0 }

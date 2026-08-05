@@ -791,10 +791,15 @@ final class LocationService: NSObject {
         }
     }
 
+    /// Обнулить «ближайшую» без лишних оповещений наблюдателям (см. setNearest).
+    private func clearNearest() {
+        if nearestCamera != nil { nearestCamera = nil }
+        distanceToNearest = nil
+        if !clusteredCameras.isEmpty { clusteredCameras = [] }
+    }
+
     private func recomputeNearest(from coordinate: CLLocationCoordinate2D) {
-        guard !trackedCameras.isEmpty else {
-            nearestCamera = nil; distanceToNearest = nil; clusteredCameras = []; return
-        }
+        guard !trackedCameras.isEmpty else { clearNearest(); return }
         // Сначала дешёвая дистанция по всему окну, и только потом дорогая проверка
         // «наша ли это дорога» — по возрастанию, до первой подходящей. Результат
         // тот же, что у минимума по отфильтрованному списку, но геометрию камеры
@@ -817,11 +822,12 @@ final class LocationService: NSObject {
         // В движении HUD показывает ближайшую камеру НА НАШЕЙ ДОРОГЕ впереди;
         // камеры позади и с соседних улиц не пугают зря.
         guard let index = candidates.firstIndex(where: { isOnOurRoad($0.camera, from: coordinate) })
-        else {
-            nearestCamera = nil; distanceToNearest = nil; clusteredCameras = []; return
-        }
+        else { clearNearest(); return }
         let found = candidates[index]
-        nearestCamera = found.camera
+        // Камера чаще всего ТА ЖЕ, что тик назад: перезапись тем же значением
+        // всё равно будит всех наблюдателей @Observable, и до этой проверки
+        // карта с двумя сотнями маркеров перерисовывалась каждую секунду.
+        if nearestCamera != found.camera { nearestCamera = found.camera }
         distanceToNearest = found.distance
         // Камеры, стоящие вплотную за ближайшей: на перекрёстке их две-три, и
         // сказать о них надо одной фразой. Проверяем только тех, кто попал в

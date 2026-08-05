@@ -307,10 +307,11 @@ extension TripHistory {
     }
 
     /// Всё, что рисует карта проездов: треки, маркеры камер и слой частоты.
-    /// Собирается на смену периода, а не на каждый пересчёт вьюхи, и считает
-    /// частоту вне главного потока (десятки тысяч ячеек сетки).
-    static func mapData(_ history: [TripRecord], period: StatsPeriod,
-                        now: Date = Date()) async -> PeriodMapData {
+    /// Собирается на смену периода, а не на каждый пересчёт вьюхи.
+    /// @concurrent обязателен: `nonisolated async` при NonisolatedNonsendingByDefault
+    /// бежит на акторе вызывающего — расчёт шёл на main и дёргал открытие Итогов.
+    @concurrent static func mapData(_ history: [TripRecord], period: StatsPeriod,
+                                    now: Date = Date()) async -> PeriodMapData {
         let tracks = self.tracks(history, period: period, now: now)
         return PeriodMapData(tracks: tracks,
                              markers: passMarkers(history, period: period, now: now),
@@ -382,8 +383,9 @@ extension TripHistory {
     /// упрощённым (Дуглас-Пекер ±22 м), поэтому на прямой улице два проезда
     /// оставляют вершины в разных местах — по вершинам совпадение не нашлось бы
     /// и коридор никогда не загорелся.
-    static func heatLines(_ tracks: [[TrackPoint]],
-                          cellMeters: Double = AppConfig.heatCellMeters) async -> [HeatLine] {
+    /// @concurrent: десятки тысяч ячеек сетки — этому не место на main.
+    @concurrent static func heatLines(_ tracks: [[TrackPoint]],
+                                      cellMeters: Double = AppConfig.heatCellMeters) async -> [HeatLine] {
         guard let reference = tracks.first(where: { $0.count >= 2 })?.first else { return [] }
         let latStep = cellMeters / 111_320
         let lonStep = cellMeters / (111_320 * max(0.2, cos(reference.lat * .pi / 180)))

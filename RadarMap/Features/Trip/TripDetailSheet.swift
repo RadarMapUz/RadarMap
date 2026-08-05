@@ -181,6 +181,8 @@ struct TripDetailSheet: View {
                         .entrance(0, appeared)
                     scoreRow
                         .entrance(1, appeared)
+                    scoreBreakdown
+                        .entrance(1, appeared)
                     statsGrid
                         .entrance(2, appeared)
                     TripStopsSection(record: record) { dismiss() }
@@ -335,6 +337,54 @@ struct TripDetailSheet: View {
             }
             .statCard()
         }
+    }
+
+    // MARK: Из чего сложился балл
+
+    /// «Почему 68?» — самый частый вопрос к деталке. Раскладываем балл по
+    /// строкам: каждая камера со снятыми баллами, потолок, плавность.
+    @ViewBuilder private var scoreBreakdown: some View {
+        let items = DrivingScore.breakdown(passed: record.passed,
+                                           trackSpeeds: record.trackPoints.map(\.speedKmh))
+        if record.score != nil, !items.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(String(localized: "Из чего сложился балл"))
+                ForEach(items) { item in
+                    penaltyRow(item)
+                }
+            }
+            .statCard()
+        }
+    }
+
+    private func penaltyRow(_ item: DrivingScore.Penalty) -> some View {
+        // Отрицательные баллы = «вернули» (потолок штрафа) — зелёный плюс.
+        let returned = item.points < 0
+        return HStack(spacing: 12) {
+            Image(systemName: item.icon)
+                .font(.rounded(12, .bold))
+                .foregroundStyle(returned ? Theme.success : Theme.danger)
+                .frame(width: 30, height: 30)
+                .background((returned ? Theme.success : Theme.danger).opacity(0.12),
+                            in: Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.title)
+                    .font(.rounded(13, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                if let detail = item.detail {
+                    Text(detail)
+                        .font(.rounded(11))
+                        .foregroundStyle(Theme.textTertiary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            Text(returned ? "+\(-item.points)" : "−\(item.points)")
+                .font(.rounded(15, .heavy).monospacedDigit())
+                .foregroundStyle(returned ? Theme.success : Theme.danger)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: Метрики

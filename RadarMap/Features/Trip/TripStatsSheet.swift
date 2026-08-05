@@ -67,8 +67,11 @@ struct TripStatsSheet: View {
                 ScrollViewReader { proxy in
                 LazyVStack(spacing: 16) {
                     // Живая поездка — вне периодов: таймер, скорость, живые метрики.
+                    // Отдельная вью: она читает скорость (меняется каждый тик GPS),
+                    // и пока жила в body листа, каждый тик пересчитывал сводку
+                    // всего периода по всей истории.
                     if active {
-                        liveCard(trip: trip)
+                        LiveTripCard()
                             .entrance(0, appeared)
                     }
 
@@ -896,75 +899,6 @@ struct TripStatsSheet: View {
         .statCard()
     }
 
-    // MARK: - Живая поездка
-
-    /// Одна карточка на всю живую поездку: раньше шапка и сетка из четырёх плиток
-    /// занимали пол-экрана до фильтра периода.
-    private func liveCard(trip: TripStats) -> some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle().fill(Theme.success.opacity(0.15))
-                        .frame(width: 46, height: 46)
-                    Image(systemName: "record.circle")
-                        .font(.rounded(20, .bold))
-                        .foregroundStyle(Theme.success)
-                        .symbolEffect(.pulse, options: .repeating, isActive: true)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Поездка идёт")
-                        .font(.rounded(17, .bold))
-                        .foregroundStyle(Theme.textPrimary)
-                    if let started = trip.startedAt {
-                        Text(timerInterval: started...Date.distantFuture, countsDown: false)
-                            .font(.rounded(14, .medium).monospacedDigit())
-                            .foregroundStyle(Theme.success)
-                    }
-                }
-                Spacer(minLength: 0)
-                // Живая скорость — Итоги можно держать открытыми в поездке.
-                VStack(spacing: 0) {
-                    Text("\(Int(env.location.speedKmh))")
-                        .font(.rounded(26, .heavy).monospacedDigit())
-                        .foregroundStyle(Theme.textPrimary)
-                        .contentTransition(.numericText())
-                        .animation(.snappy(duration: 0.35), value: Int(env.location.speedKmh))
-                    Text("км/ч")
-                        .font(.rounded(10, .medium))
-                        .foregroundStyle(Theme.textTertiary)
-                }
-            }
-            Divider().overlay(Theme.stroke)
-            HStack(spacing: 0) {
-                liveMetric(Formatting.distance(trip.distanceMeters), "пройдено", Theme.success)
-                liveMetric("\(trip.camerasPassed)", "камер", Theme.accent)
-                liveMetric("\(Int(trip.maxSpeedKmh))", "макс. км/ч", Theme.danger)
-                liveMetric("\(Int(trip.averageSpeedKmh))", "средняя", Theme.radar)
-            }
-        }
-        .statCard()
-    }
-
-    private func liveMetric(_ value: String, _ label: LocalizedStringKey,
-                            _ color: Color) -> some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .font(.rounded(18, .heavy).monospacedDigit())
-                .foregroundStyle(color)
-                .contentTransition(.numericText())
-                .animation(.snappy(duration: 0.4), value: value)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(label)
-                .font(.rounded(10, .medium))
-                .foregroundStyle(Theme.textTertiary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
-    }
-
     // MARK: - Список поездок периода
 
     private func tripsSection(trip: TripStats, proxy: ScrollViewProxy) -> some View {
@@ -1135,4 +1069,79 @@ struct PeriodMapPayload: Identifiable {
     let id = UUID()
     let data: PeriodMapData
     let focus: PassMarker?
+}
+
+// MARK: - Живая поездка
+
+/// Одна карточка на всю живую поездку. Отдельная вью не для красоты: она
+/// единственная в Итогах читает скорость и метрики, меняющиеся каждый тик GPS, —
+/// в body листа это чтение пересчитывало сводку периода по всей истории ежесекундно.
+private struct LiveTripCard: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        let trip = env.trip
+        VStack(spacing: 14) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(Theme.success.opacity(0.15))
+                        .frame(width: 46, height: 46)
+                    Image(systemName: "record.circle")
+                        .font(.rounded(20, .bold))
+                        .foregroundStyle(Theme.success)
+                        .symbolEffect(.pulse, options: .repeating, isActive: true)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Поездка идёт")
+                        .font(.rounded(17, .bold))
+                        .foregroundStyle(Theme.textPrimary)
+                    if let started = trip.startedAt {
+                        Text(timerInterval: started...Date.distantFuture, countsDown: false)
+                            .font(.rounded(14, .medium).monospacedDigit())
+                            .foregroundStyle(Theme.success)
+                    }
+                }
+                Spacer(minLength: 0)
+                // Живая скорость — Итоги можно держать открытыми в поездке.
+                VStack(spacing: 0) {
+                    Text("\(Int(env.location.speedKmh))")
+                        .font(.rounded(26, .heavy).monospacedDigit())
+                        .foregroundStyle(Theme.textPrimary)
+                        .contentTransition(.numericText())
+                        .animation(.snappy(duration: 0.35), value: Int(env.location.speedKmh))
+                    Text("км/ч")
+                        .font(.rounded(10, .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+            }
+            Divider().overlay(Theme.stroke)
+            HStack(spacing: 0) {
+                metric(Formatting.distance(trip.distanceMeters), "пройдено", Theme.success)
+                metric("\(trip.camerasPassed)", "камер", Theme.accent)
+                metric("\(Int(trip.maxSpeedKmh))", "макс. км/ч", Theme.danger)
+                metric("\(Int(trip.averageSpeedKmh))", "средняя", Theme.radar)
+            }
+        }
+        .statCard()
+    }
+
+    private func metric(_ value: String, _ label: LocalizedStringKey,
+                        _ color: Color) -> some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(.rounded(18, .heavy).monospacedDigit())
+                .foregroundStyle(color)
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.4), value: value)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(label)
+                .font(.rounded(10, .medium))
+                .foregroundStyle(Theme.textTertiary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
 }

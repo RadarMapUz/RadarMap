@@ -280,12 +280,18 @@ final class TripStats {
                 id: UUID(), lat: base.latitude, lon: base.longitude,
                 from: start.addingTimeInterval(900),
                 to: start.addingTimeInterval(900 + 1500))] : nil
+            // Балл считаем той же арифметикой, что у живых поездок: захардкоженный
+            // рассыпался бы с разложением «из чего сложился балл» в деталке.
+            let speeds = stride(from: 2, to: track.count, by: 3).map { track[$0] }
+            let score = DrivingScore.tripScore(
+                passes: [DrivingScore.Pass(speedKmh: pass.speedKmh, limitKmh: pass.limitKmh)],
+                trackSpeeds: speeds)
             return TripRecord(
                 id: start.timeIntervalSince1970, startedAt: start,
                 endedAt: start.addingTimeInterval(km * 90 + (stops?.first?.duration ?? 0)),
                 distanceMeters: km * 1000, maxSpeedKmh: over ? 104 : 82,
                 passed: [pass], endLat: track[track.count - 3], endLon: track[track.count - 2],
-                track: track, score: over ? 68 : 94, stops: stops, endedManually: true)
+                track: track, score: score, stops: stops, endedManually: true)
         }
 
         var seeded: [TripRecord] = []

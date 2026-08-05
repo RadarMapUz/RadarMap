@@ -857,6 +857,262 @@
         }
       }
     },
+    "Ждём спутники" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ждём спутники"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sun'iy yo'ldoshlarni kutmoqdamiz"
+          }
+        }
+      }
+    },
+    "Задайте «%@» в настройках RadarMap на iPhone." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Задайте «%@» в настройках RadarMap на iPhone."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«%@» manzilini iPhone'dagi RadarMap sozlamalarida belgilang."
+          }
+        }
+      }
+    },
+    "Маршрут" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Маршрут"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marshrut"
+          }
+        }
+      }
+    },
+    "Маршрут не построен" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Маршрут не построен"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marshrut tuzilmadi"
+          }
+        }
+      }
+    },
+    "Место не задано" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Место не задано"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manzil belgilanmagan"
+          }
+        }
+      }
+    },
+    "Не отправилось: нет связи" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не отправилось: нет связи"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yuborilmadi: aloqa yo'q"
+          }
+        }
+      }
+    },
+    "Нет сигнала" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет сигнала"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signal yo'q"
+          }
+        }
+      }
+    },
+    "ОК" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ОК"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+    "Отменить маршрут" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отменить маршрут"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marshrutni bekor qilish"
+          }
+        }
+      }
+    },
+    "Отметка на карте — спасибо!" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отметка на карте — спасибо!"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belgi xaritada — rahmat!"
+          }
+        }
+      }
+    },
+    "Отметку подтвердили — спасибо!" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отметку подтвердили — спасибо!"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belgi tasdiqlandi — rahmat!"
+          }
+        }
+      }
+    },
+    "Положение ещё не определено — отметку ставить не по чему." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Положение ещё не определено — отметку ставить не по чему."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Joylashuv hali aniqlanmadi — belgini qo'yadigan nuqta yo'q."
+          }
+        }
+      }
+    },
+    "Положение ещё не определено — попробуйте через несколько секунд." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Положение ещё не определено — попробуйте через несколько секунд."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Joylashuv hali aniqlanmadi — bir necha soniyadan so'ng urinib ko'ring."
+          }
+        }
+      }
+    },
+    "Понятно" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Понятно"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tushunarli"
+          }
+        }
+      }
+    },
+    "Стоп" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Стоп"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To'xtatish"
+          }
+        }
+      }
+    },
+    "Чисто" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чисто"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toza"
+          }
+        }
+      }
+    },
     "без риска штрафов" : {
       "localizations" : {
         "ru" : {
@@ -2328,22 +2584,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Safarni yakunlash"
-          }
-        }
-      }
-    },
-    "Задайте Дом и Работу в настройках RadarMap на iPhone." : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Задайте Дом и Работу в настройках RadarMap на iPhone."
-          }
-        },
-        "uz" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "iPhone'dagi RadarMap sozlamalarida Uy va Ishni belgilang."
           }
         }
       }
@@ -4781,22 +5021,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Qidiruv"
-          }
-        }
-      }
-    },
-    "Пока нет сохранённых мест" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Пока нет сохранённых мест"
-          }
-        },
-        "uz" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hozircha saqlangan joylar yo'q"
           }
         }
       }

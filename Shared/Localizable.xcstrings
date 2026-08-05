@@ -969,6 +969,38 @@
         }
       }
     },
+    "Говорит о каждой камере: в городе коротко, на трассе полной фразой." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Говорит о каждой камере: в городе коротко, на трассе полной фразой."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Har bir kamera haqida aytadi: shaharda qisqa, trassada to'liq jumla bilan."
+          }
+        }
+      }
+    },
+    "Голос о камерах" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Голос о камерах"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kameralar haqida ovoz"
+          }
+        }
+      }
+    },
     "До уровня «%1$@» — %2$lld балла" : {
       "localizations" : {
         "ru" : {
@@ -1045,6 +1077,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "«%@» manzilini iPhone'dagi RadarMap sozlamalarida belgilang."
+          }
+        }
+      }
+    },
+    "Звук и вибрация предупреждают о камере всегда — голос отдельно. «Умно» молчит, пока вы едете в лимите: камеру видно на панели, музыка не прерывается. Заговорит, только если превышаете или впереди внезапная точка (передвижной радар, тренога, ДТП) — о таких вы знать заранее не можете. «Обо всех» возвращает прежнее поведение: в городе короткая фраза, на трассе полная." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Звук и вибрация предупреждают о камере всегда — голос отдельно. «Умно» молчит, пока вы едете в лимите: камеру видно на панели, музыка не прерывается. Заговорит, только если превышаете или впереди внезапная точка (передвижной радар, тренога, ДТП) — о таких вы знать заранее не можете. «Обо всех» возвращает прежнее поведение: в городе короткая фраза, на трассе полная."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tovush va tebranish kamera haqida doim ogohlantiradi — ovoz alohida. «Aqlli» limitda ketayotganingizda jim: kamera panelda ko'rinadi, musiqa to'xtamaydi. Faqat tezlikni oshirsangiz yoki oldinda kutilmagan nuqta bo'lsa gapiradi. «Barchasi haqida» avvalgi xatti-harakatni qaytaradi."
           }
         }
       }
@@ -1129,6 +1177,22 @@
         }
       }
     },
+    "Камеру показывает панель, предупреждает вибрация. Музыка не прерывается." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Камеру показывает панель, предупреждает вибрация. Музыка не прерывается."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamerani panel ko'rsatadi, tebranish ogohlantiradi. Musiqa to'xtamaydi."
+          }
+        }
+      }
+    },
     "Когда рискуете" : {
       "localizations" : {
         "ru" : {
@@ -1193,6 +1257,38 @@
         }
       }
     },
+    "Молча" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Молча"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jim"
+          }
+        }
+      }
+    },
+    "Молчит, пока едете в лимите. Голос — только когда превышаете и о внезапных точках: передвижной радар, тренога, ДТП." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Молчит, пока едете в лимите. Голос — только когда превышаете и о внезапных точках: передвижной радар, тренога, ДТП."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limitda ketayotganingizda jim turadi. Ovoz — faqat oshirganda va kutilmagan nuqtalar haqida: ko'chma radar, trenoga, YTH."
+          }
+        }
+      }
+    },
     "Не отправилось: нет связи" : {
       "localizations" : {
         "ru" : {
@@ -1253,6 +1349,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "OK"
+          }
+        }
+      }
+    },
+    "Обо всех" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обо всех"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barchasi haqida"
           }
         }
       }
@@ -1797,6 +1909,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "O'tilgan kameralarda yo'l limiti noma'lum — ular bo'yicha oshirishlar hisoblanmadi"
+          }
+        }
+      }
+    },
+    "Умно" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Умно"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aqlli"
           }
         }
       }

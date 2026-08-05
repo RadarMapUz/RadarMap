@@ -30,24 +30,23 @@ struct QuickTogglesBar: View {
 
             HStack(spacing: 10) {
                 toggle("Звук", "speaker.wave.2.fill", isOn: $settings.soundEnabled)
-                toggle("Голос", "waveform", isOn: $settings.voiceEnabled)
                 toggle("Вибро", "iphone.gen3.radiowaves.left.and.right",
                        isOn: $settings.hapticsEnabled)
             }
 
-            // Режим: Авто сам различает город/трассу, вручную можно зафиксировать.
+            // Голос — одна шкала «молча → умно → обо всех». Переключают её
+            // именно в дороге («хватит болтать»), поэтому место ей здесь.
             HStack(spacing: 6) {
-                ForEach(AlertMode.allCases) { mode in
-                    modeChip(mode, selected: settings.alertMode == mode) {
-                        settings.alertMode = mode
+                ForEach(VoiceMode.allCases) { mode in
+                    voiceChip(mode, selected: settings.voiceMode == mode) {
+                        settings.voiceMode = mode
                     }
                 }
             }
-
-            // Полная тишина, пока едем в лимите. Включают её именно в дороге
-            // («хватит болтать»), поэтому место ей здесь, а не только в Настройках.
-            checkRow("Молчать, пока не превышаю",
-                     isOn: $settings.voiceOnlyWhenOverspeeding)
+            Text(settings.voiceMode.detail)
+                .font(.rounded(10))
+                .foregroundStyle(Theme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
 
             // Сели пассажиром, а поездка уже стартовала — выход в один тап.
             if env.location.isTripActive {
@@ -111,6 +110,24 @@ struct QuickTogglesBar: View {
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity)
             .background(Theme.surface, in: Capsule())
+        }
+        .buttonStyle(PressableStyle())
+    }
+
+    /// Чип режима голоса — та же форма, что была у города/трассы.
+    private func voiceChip(_ mode: VoiceMode, selected: Bool,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: mode.symbol).font(.rounded(11, .semibold))
+                Text(mode.title).font(.rounded(12, .semibold))
+            }
+            .foregroundStyle(selected ? Theme.background : Theme.textSecondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(selected ? AnyShapeStyle(Theme.accent.gradient)
+                                 : AnyShapeStyle(Theme.surface), in: Capsule())
         }
         .buttonStyle(PressableStyle())
     }

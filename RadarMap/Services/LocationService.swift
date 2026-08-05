@@ -881,10 +881,10 @@ final class LocationService: NSObject {
     /// «превысил на 1 км/ч» поднимал спокойный анонс до сирены.
     private func alertPolicy(for camera: Camera, crawling: Bool) -> AlertPolicy.Decision {
         AlertPolicy.decision(
+            voice: settings.voiceMode,
             mode: settings.alertMode, detected: alertContext,
             isSuddenCamera: camera.kind.isSudden,
             isOverspeeding: speedLimits?.isOverspeedingSustained == true,
-            voiceOnlyWhenOverspeeding: settings.voiceOnlyWhenOverspeeding,
             isCrawling: crawling)
     }
 
@@ -925,7 +925,9 @@ final class LocationService: NSObject {
             // Промолчали из-за пробки — это ОТСРОЧКА, а не отмена: камера,
             // вошедшая в радиус пока мы разгоняемся от светофора, иначе осталась
             // бы без голоса совсем (уровень уже зачтён, второй раз не придёт).
-            if isCrawling, !settings.voiceOnlyWhenOverspeeding { postponedVoice = camera.id }
+            // Отложить фразу «поедем — скажу» имеет смысл только там, где она
+            // вообще прозвучала бы: в «Умно» и «Молча» голоса нет по замыслу.
+            if isCrawling, settings.voiceMode == .always { postponedVoice = camera.id }
             return
         }
         speak(about: camera, distance: distance, policy: policy)

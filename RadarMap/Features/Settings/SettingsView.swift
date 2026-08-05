@@ -40,12 +40,24 @@ struct SettingsView: View {
                             Image(systemName: "speaker.wave.3.fill").foregroundStyle(Theme.textSecondary)
                         }
                     }
-                    Toggle("Голосовое предупреждение", isOn: $settings.voiceEnabled)
                     Toggle("Вибрация у камер", isOn: $settings.hapticsEnabled)
-                    Picker("Режим оповещений", selection: $settings.alertMode) {
-                        ForEach(AlertMode.allCases) { Text($0.title).tag($0) }
+                    // Один выбор вместо трёх переключателей: раньше тумблер
+                    // голоса, «только при превышении» и режим город/трасса
+                    // отвечали на один вопрос и противоречили друг другу.
+                    Picker("Голос о камерах", selection: $settings.voiceMode) {
+                        ForEach(VoiceMode.allCases) { Text($0.title).tag($0) }
                     }
-                    Toggle("Голос только при превышении", isOn: $settings.voiceOnlyWhenOverspeeding)
+                    Text(settings.voiceMode.detail)
+                        .font(.rounded(11))
+                        .foregroundStyle(Theme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    // Город/трасса меняет только длину фразы — и нужен лишь
+                    // тому, кто просит говорить обо всех камерах.
+                    if settings.voiceMode == .always {
+                        Picker("Режим оповещений", selection: $settings.alertMode) {
+                            ForEach(AlertMode.allCases) { Text($0.title).tag($0) }
+                        }
+                    }
                     Picker("Баннеры в фоне", selection: $settings.backgroundAlerts) {
                         ForEach(BackgroundAlertMode.allCases) { Text($0.title).tag($0) }
                     }
@@ -56,7 +68,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Оповещения")
                 } footer: {
-                    Text("«Авто» сам различает город и трассу: в городе приложение говорит коротко («камера, 300 метров»), на трассе называет камеру полностью. Камеры, стоящие вплотную, объявляются одной фразой, а в пробке голос ждёт, пока вы поедете. Громче — только когда вы реально превышаете или впереди передвижной радар. «Голос только при превышении» — полная тишина, пока едете в лимите.")
+                    Text("Звук и вибрация предупреждают о камере всегда — голос отдельно. «Умно» молчит, пока вы едете в лимите: камеру видно на панели, музыка не прерывается. Заговорит, только если превышаете или впереди внезапная точка (передвижной радар, тренога, ДТП) — о таких вы знать заранее не можете. «Обо всех» возвращает прежнее поведение: в городе короткая фраза, на трассе полная.")
                         .fixedSize(horizontal: false, vertical: true)
                 }
 

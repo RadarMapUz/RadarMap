@@ -68,12 +68,14 @@ final class AlertPolicyTests: XCTestCase {
     // MARK: - Матрица решений
 
     /// Короткая обёртка: почти во всех кейсах тумблер «только при превышении» выключен.
-    private func decide(mode: AlertMode = .auto, detected: AlertPolicy.Context,
+    /// По умолчанию проверяем «Обо всех» — там сохраняется прежняя матрица
+    /// город/трасса. Режим «Умно» (боевой дефолт) проверяется отдельно.
+    private func decide(voice: VoiceMode = .always,
+                        mode: AlertMode = .auto, detected: AlertPolicy.Context,
                         sudden: Bool = false, over: Bool = false,
-                        onlyWhenOver: Bool = false,
                         crawling: Bool = false) -> AlertPolicy.Decision {
-        AlertPolicy.decision(mode: mode, detected: detected, isSuddenCamera: sudden,
-                             isOverspeeding: over, voiceOnlyWhenOverspeeding: onlyWhenOver,
+        AlertPolicy.decision(voice: voice, mode: mode, detected: detected,
+                             isSuddenCamera: sudden, isOverspeeding: over,
                              isCrawling: crawling)
     }
 
@@ -122,14 +124,35 @@ final class AlertPolicyTests: XCTestCase {
         XCTAssertEqual(decision.style, .urgent, "передвижной внезапен — о нём всегда громко")
     }
 
-    /// Тумблер полной тишины не должен заглушать то, ради чего приложение и нужно.
-    func testVoiceOnlyWhenOverspeedingStillShoutsAboutSuddenAndOverspeed() {
-        XCTAssertEqual(decide(detected: .highway, onlyWhenOver: true).style, .silent,
-                       "тумблер включён, в лимите — полная тишина даже на трассе")
-        XCTAssertEqual(decide(detected: .city, sudden: true, onlyWhenOver: true).style, .urgent,
-                       "передвижной радар тумблером не заглушить")
-        XCTAssertEqual(decide(detected: .city, over: true, onlyWhenOver: true).style, .urgent,
-                       "превышение тумблером не заглушить")
+    // MARK: - «Умно» — боевой режим по умолчанию
+
+    /// Главная жалоба: в городе фраза на каждую камеру звучала поверх музыки.
+    /// В «Умно» голоса нет, пока едем в лимите, — камеру показывает панель.
+    func testSmartIsSilentInLimitEverywhere() {
+        for context in [AlertPolicy.Context.city, .highway] {
+            let decision = decide(voice: .smart, detected: context)
+            XCTAssertEqual(decision.style, .silent, "в лимите молчим (\(context))")
+            XCTAssertFalse(decision.voice, "музыка не должна нырять на каждую камеру")
+            XCTAssertFalse(decision.beeps)
+        }
+    }
+
+    /// Но ради чего приложение и нужно — говорит.
+    func testSmartSpeaksOnOverspeedAndSuddenPoints() {
+        XCTAssertEqual(decide(voice: .smart, detected: .highway, over: true).style, .urgent,
+                       "превысил на трассе — сказать про камеру")
+        XCTAssertEqual(decide(voice: .smart, detected: .city, over: true).style, .urgent,
+                       "превысил в городе — тоже сказать")
+        XCTAssertEqual(decide(voice: .smart, detected: .city, sudden: true).style, .urgent,
+                       "передвижной радар нельзя знать заранее — говорим всегда")
+    }
+
+    /// «Молча» — это действительно молча: ни слова, что бы ни случилось.
+    func testOffIsSilentEvenOnOverspeed() {
+        XCTAssertEqual(decide(voice: .off, detected: .highway, over: true).style, .silent)
+        XCTAssertEqual(decide(voice: .off, detected: .city, sudden: true).style, .silent)
+        XCTAssertFalse(decide(voice: .off, detected: .city, over: true).voice,
+                       "пользователь попросил тишину — она безусловная")
     }
 
     func testManualOverrideBeatsDetector() {

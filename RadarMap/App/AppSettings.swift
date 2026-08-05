@@ -79,6 +79,50 @@ enum AlertMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// Когда приложение говорит о камерах голосом. Раньше на этот вопрос отвечали
+/// три независимых переключателя (тумблер голоса, «только при превышении» и
+/// режим город/трасса), и в городе всё равно звучала фраза на каждую камеру —
+/// поверх музыки. Теперь один выбор из трёх понятных вариантов.
+enum VoiceMode: String, CaseIterable, Identifiable {
+    /// Ни слова: камеру показывает панель, предупреждает вибрация.
+    case off
+    /// По умолчанию. Молчит, пока едешь в лимите; голос — при превышении
+    /// и о внезапных точках (передвижной радар, тренога, ДТП), которые
+    /// водитель знать заранее не может.
+    case smart
+    /// О каждой камере: в городе коротко, на трассе полной фразой.
+    case always
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .off:    return String(localized: "Молча")
+        case .smart:  return String(localized: "Умно")
+        case .always: return String(localized: "Обо всех")
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .off:
+            return String(localized: "Камеру показывает панель, предупреждает вибрация. Музыка не прерывается.")
+        case .smart:
+            return String(localized: "Молчит, пока едете в лимите. Голос — только когда превышаете и о внезапных точках: передвижной радар, тренога, ДТП.")
+        case .always:
+            return String(localized: "Говорит о каждой камере: в городе коротко, на трассе полной фразой.")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .off:    return "speaker.slash.fill"
+        case .smart:  return "wand.and.stars"
+        case .always: return "speaker.wave.2.fill"
+        }
+    }
+}
+
 /// Фоновые баннеры о камерах: о чём предупреждать, когда приложение свёрнуто.
 /// Звук/голос в поездке живут отдельно — это только про уведомления в фоне.
 /// Как включается поездка. «Умный» — компромисс, ради которого этот переключатель
@@ -187,7 +231,13 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 @Observable
 final class AppSettings {
     var soundEnabled: Bool { didSet { store.set(soundEnabled, forKey: Keys.sound) } }
-    var voiceEnabled: Bool { didSet { store.set(voiceEnabled, forKey: Keys.voice) } }
+    /// Голос о камерах — единственная настройка на этот счёт.
+    var voiceMode: VoiceMode { didSet { store.set(voiceMode.rawValue, forKey: Keys.voiceMode) } }
+    /// Фасад для «тишины» целиком: кнопка глушилки в CarPlay и голос маршрута.
+    var voiceEnabled: Bool {
+        get { voiceMode != .off }
+        set { voiceMode = newValue ? .smart : .off }
+    }
     var alertRadius: CLLocationDistance { didSet { store.set(alertRadius, forKey: Keys.radius) } }
     var filter: CameraFilter { didSet { store.set(filter.rawValue, forKey: Keys.filter) } }
     /// Режим старта поездки (заменил тумблер «Автостарт», см. миграцию в init).
@@ -248,6 +298,7 @@ final class AppSettings {
     private enum Keys {
         static let sound = "soundEnabled"
         static let voice = "voiceEnabled"
+        static let voiceMode = "voiceMode"
         static let radius = "alertRadius"
         static let filter = "cameraFilter"
         static let autoStart = "autoStartTrip"        // legacy, только для миграции
@@ -301,7 +352,18 @@ final class AppSettings {
             Keys.keepScreenOn: true,
         ])
         soundEnabled = store.bool(forKey: Keys.sound)
-        voiceEnabled = store.bool(forKey: Keys.voice)
+        // Миграция с трёх переключателей на один. Голос был выключен — «Молча»;
+        // стоял тумблер «только при превышении» — это ровно «Умно»; иначе
+        // «Умно» же: город на каждой камере говорить перестаёт, и это новый
+        // разумный дефолт (голос поверх музыки надоедает за две недели).
+        if let raw = store.string(forKey: Keys.voiceMode),
+           let mode = VoiceMode(rawValue: raw) {
+            voiceMode = mode
+        } else if !store.bool(forKey: Keys.voice) {
+            voiceMode = .off
+        } else {
+            voiceMode = .smart
+        }
         alertRadius = store.double(forKey: Keys.radius)
         filter = CameraFilter(rawValue: store.string(forKey: Keys.filter) ?? "") ?? .all
         // Миграция с тумблера «Автостарт»: включён → «Умный» (новый разумный

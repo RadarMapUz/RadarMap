@@ -761,6 +761,22 @@
         }
       }
     },
+    "Адаптивный GPS" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Адаптивный GPS"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moslashuvchan GPS"
+          }
+        }
+      }
+    },
     "Адаптивный GPS (батарея)" : {
       "localizations" : {
         "ru" : {
@@ -873,6 +889,22 @@
         }
       }
     },
+    "Батарея" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Батарея"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Batareya"
+          }
+        }
+      }
+    },
     "Берём каждый проезд камеры, у которой известен лимит дороги, и сравниваем с ним скорость в точке фиксации. Попал в штрафную ступень — прибавляем её сумму к риску. Проезды камер без известного лимита не считаем нарушением: выдумывать превышение мы не вправе." : {
       "localizations" : {
         "ru" : {
@@ -901,6 +933,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Eng yaqin maqsad"
+          }
+        }
+      }
+    },
+    "Вдали от камер и манёвров точность GPS снижается, у самой камеры возвращается к максимальной. Выключать стоит, только если кажется, что оповещения запаздывают." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вдали от камер и манёвров точность GPS снижается, у самой камеры возвращается к максимальной. Выключать стоит, только если кажется, что оповещения запаздывают."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kameralar va manevrlardan uzoqda GPS aniqligi pasayadi, kamera yonida maksimalga qaytadi. Faqat ogohlantirishlar kechikayotgandek tuyulsa o'chiring."
           }
         }
       }
@@ -937,6 +985,22 @@
         }
       }
     },
+    "Добавить камеру" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Добавить камеру"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamera qo'shish"
+          }
+        }
+      }
+    },
     "Ещё %lld поездок без известных лимитов и трека — в рейтинг они не вошли" : {
       "localizations" : {
         "ru" : {
@@ -949,6 +1013,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Yana %lld ta safar limit va treksiz — ular reytingga kirmadi"
+          }
+        }
+      }
+    },
+    "Знак лимита дороги на панели и голос при превышении. Допуск — на сколько можно превысить, прежде чем приложение сочтёт это превышением." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Знак лимита дороги на панели и голос при превышении. Допуск — на сколько можно превысить, прежде чем приложение сочтёт это превышением."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Panelda yo'l limiti belgisi va oshirilganda ovoz. Bag'rikenglik — ilova buni oshirish deb hisoblagunga qadar qancha oshirish mumkinligi."
           }
         }
       }
@@ -1093,6 +1173,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Summa qayerdan"
+          }
+        }
+      }
+    },
+    "Подсказки манёвров «через 300 м направо» и выбор из нескольких вариантов при построении. Панель маршрута может показывать ближайшую камеру по курсу." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подсказки манёвров «через 300 м направо» и выбор из нескольких вариантов при построении. Панель маршрута может показывать ближайшую камеру по курсу."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«300 m dan keyin o'ngga» manevr maslahatlari va bir nechta variantdan tanlash. Marshrut paneli yo'nalishdagi eng yaqin kamerani ko'rsatishi mumkin."
           }
         }
       }
@@ -1381,6 +1477,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$02d dan %2$02d gacha: %3$lld ta oshirish"
+          }
+        }
+      }
+    },
+    "Скорость" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Скорость"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tezlik"
           }
         }
       }

@@ -57,6 +57,7 @@ struct SettingsView: View {
                     Text("Оповещения")
                 } footer: {
                     Text("«Авто» сам различает город и трассу: в городе приложение говорит коротко («камера, 300 метров»), на трассе называет камеру полностью. Камеры, стоящие вплотную, объявляются одной фразой, а в пробке голос ждёт, пока вы поедете. Громче — только когда вы реально превышаете или впереди передвижной радар. «Голос только при превышении» — полная тишина, пока едете в лимите.")
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Section {
@@ -72,6 +73,7 @@ struct SettingsView: View {
                         }
                 } footer: {
                     Text("«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов.")
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Section {
@@ -93,6 +95,7 @@ struct SettingsView: View {
                     Text("Дистанция")
                 } footer: {
                     Text("За сколько метров до камеры предупреждать. Голос отсчитывает пороги по мере приближения.")
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Section {
@@ -106,18 +109,35 @@ struct SettingsView: View {
                             Text("+20 км/ч").tag(20.0)
                         }
                     }
+                } header: {
+                    Text("Скорость")
+                } footer: {
+                    Text("Знак лимита дороги на панели и голос при превышении. Допуск — на сколько можно превысить, прежде чем приложение сочтёт это превышением.")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Section {
                     Toggle("Голосовая навигация", isOn: $settings.turnByTurnVoice)
                     Toggle("Варианты маршрута", isOn: $settings.routeAlternatives)
                     Toggle("Следующая камера в панели", isOn: $settings.showNextCamera)
-                    Toggle("Адаптивный GPS (батарея)", isOn: $settings.adaptiveGPS)
+                } header: {
+                    Text("Маршрут")
+                } footer: {
+                    Text("Подсказки манёвров «через 300 м направо» и выбор из нескольких вариантов при построении. Панель маршрута может показывать ближайшую камеру по курсу.")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Section {
+                    Toggle("Адаптивный GPS", isOn: $settings.adaptiveGPS)
                         .onChange(of: settings.adaptiveGPS) { _, _ in
                             // Иначе выключение в поездке залипало бы на последнем тире.
                             env.location.refreshLocationMode()
                         }
                 } header: {
-                    Text("Маршрут и скорость")
+                    Text("Батарея")
                 } footer: {
-                    Text("Знак лимита дороги и голос при превышении, подсказки манёвров «через 300 м направо», выбор из нескольких вариантов маршрута. Адаптивный GPS снижает точность вдали от камер — батарея живёт дольше.")
+                    Text("Вдали от камер и манёвров точность GPS снижается, у самой камеры возвращается к максимальной. Выключать стоит, только если кажется, что оповещения запаздывают.")
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Section {
@@ -128,6 +148,7 @@ struct SettingsView: View {
                     Text("Мои места")
                 } footer: {
                     Text("Маршрут в один тап из «Поиска» — домой или на работу.")
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Section {
@@ -142,6 +163,7 @@ struct SettingsView: View {
                     Text("Карта")
                 } footer: {
                     Text("«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.")
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Section {
@@ -185,10 +207,12 @@ struct SettingsView: View {
                     Text("Обратная связь")
                 } footer: {
                     Text("Ошибки, идеи, неточные камеры — мы читаем каждое сообщение и правим базу.")
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .scrollContentBackground(.hidden)
             .background(Theme.background)
+            .backport.scrollEdgeEffectStyle(.hard, for: .top)
             .navigationTitle("Настройки")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

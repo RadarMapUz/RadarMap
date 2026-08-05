@@ -646,15 +646,27 @@ struct MapScreen: View {
 
     /// Док действий: стекло со световой кромкой и глубокая тень — в одном
     /// языке с CTA и кругами (премиальный низ экрана без разнобоя).
+    /// Четыре постоянных действия — больше глазу не нужно. Редкое «добавить
+    /// свою камеру» живёт в меню «Ещё»: оно нужно раз в месяц, а место в баре
+    /// занимало всегда (plan_main_screen.md, шаг 4).
     private var actionBar: some View {
         HStack(spacing: 4) {
             actionButton("Поиск", "magnifyingglass") { map.showSearch = true }
-            actionButton("Добавить", "plus.circle.fill") {
-                withAnimation { map.isAddingCamera = true }
-            }
             actionButton("Рядом", "list.bullet") { map.showNearbySheet = true }
             actionButton("Итоги", "chart.bar.fill") { map.showStats = true }
-            actionButton("Ещё", "gearshape.fill") { map.showSettings = true }
+            Menu {
+                Button {
+                    withAnimation { map.isAddingCamera = true }
+                } label: {
+                    Label("Добавить камеру", systemImage: "plus.circle.fill")
+                }
+                Button { map.showSettings = true } label: {
+                    Label("Настройки", systemImage: "gearshape.fill")
+                }
+            } label: {
+                actionLabel("Ещё", "ellipsis.circle.fill")
+            }
+            .accessibilityLabel(Text("Ещё"))
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 7)
@@ -668,7 +680,15 @@ struct MapScreen: View {
     private func actionButton(_ title: LocalizedStringKey, _ icon: String, tint: Color = Theme.textPrimary,
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 5) {
+            actionLabel(title, icon, tint: tint)
+        }
+        .buttonStyle(PressableStyle())
+    }
+
+    /// Общая разметка кнопки бара — её же носит меню «Ещё».
+    private func actionLabel(_ title: LocalizedStringKey, _ icon: String,
+                             tint: Color = Theme.textPrimary) -> some View {
+        VStack(spacing: 5) {
                 Image(systemName: icon).font(.rounded(19, .semibold))
                 Text(title)
                     .font(.rounded(10, .medium))
@@ -679,8 +699,6 @@ struct MapScreen: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .contentShape(Rectangle())
-        }
-        .buttonStyle(PressableStyle())
     }
 
     /// Легенда-кнопка: свёрнута в компактный кружок, тап раскрывает на 6 секунд.

@@ -15,6 +15,14 @@ final class PeriodSummaryTests: XCTestCase {
     /// Фиксированное «сейчас»: тесты не должны зависеть от часов.
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
     private var day: TimeInterval { 86400 }
+    /// Календарь UTC: границы календарных периодов не должны зависеть от того,
+    /// в какой зоне запускают тесты.
+    private var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        calendar.firstWeekday = 2   // неделя с понедельника
+        return calendar
+    }
 
     private func pass(_ id: Int, speed: Double, limit: Int?, at date: Date,
                       location: String = "Юнусабад") -> PassedCamera {
@@ -35,15 +43,18 @@ final class PeriodSummaryTests: XCTestCase {
 
     // MARK: - Базовые цифры
 
-    func testWeekSummaryCountsOnlyLastSevenDays() {
+    func testWeekSummaryCountsOnlyCurrentCalendarWeek() {
+        // Календарная неделя, а не «последние 168 часов»: now — четверг 15.01.2027,
+        // поэтому в окно попадают поездки не старше начала этой недели.
         let history = [record(daysAgo: 1, km: 10), record(daysAgo: 3, km: 20),
                        record(daysAgo: 10, km: 100)]
-        let week = TripHistory.summary(history, period: .week, now: now)
+        let week = TripHistory.summary(history, period: .week, calendar: utc, now: now)
         XCTAssertEqual(week.trips, 2)
         XCTAssertEqual(week.distance, 30_000, accuracy: 1)
-        let all = TripHistory.summary(history, period: .all, now: now)
-        XCTAssertEqual(all.trips, 3)
-        XCTAssertEqual(all.distance, 130_000, accuracy: 1)
+        // Месяц шире — в него попадают все три.
+        let month = TripHistory.summary(history, period: .month, calendar: utc, now: now)
+        XCTAssertEqual(month.trips, 3)
+        XCTAssertEqual(month.distance, 130_000, accuracy: 1)
     }
 
     func testEmptyPeriodIsEmpty() {
@@ -160,16 +171,23 @@ final class PeriodSummaryTests: XCTestCase {
     func testHistoryListFollowsPeriod() {
         let history = [record(daysAgo: 1, km: 10), record(daysAgo: 3, km: 20),
                        record(daysAgo: 10, km: 30), record(daysAgo: 40, km: 40)]
-        XCTAssertEqual(TripHistory.historyList(history, period: .week, now: now).count, 2)
-        XCTAssertEqual(TripHistory.historyList(history, period: .month, now: now).count, 3)
-        XCTAssertEqual(TripHistory.historyList(history, period: .all, now: now).count, 4)
+        XCTAssertEqual(TripHistory.historyList(history, period: .week,
+                                               anchor: now, calendar: utc).count, 2)
+        XCTAssertEqual(TripHistory.historyList(history, period: .month,
+                                               anchor: now, calendar: utc).count, 3)
+        // День — только сегодняшние: список подчиняется тому же окну, что цифры.
+        XCTAssertEqual(TripHistory.historyList(history, period: .day,
+                                               anchor: now, calendar: utc).count, 0)
     }
 
-    func testHistoryListForAllTimeIsCapped() {
-        let history = (1...20).map { record(daysAgo: Double($0), km: 5) }
-        XCTAssertEqual(TripHistory.historyList(history, period: .all, now: now).count,
-                       TripHistory.visibleHistory,
-                       "«Всё время» — витрина последних поездок, а не вся база")
+    /// Листание назад показывает именно прошлое окно, а не «последние N дней».
+    func testAnchorSelectsPastWindow() {
+        let history = [record(daysAgo: 1, km: 10), record(daysAgo: 10, km: 30)]
+        let previousWeek = StatsPeriod.week.shifted(now, by: -1, calendar: utc)
+        let list = TripHistory.historyList(history, period: .week,
+                                           anchor: previousWeek, calendar: utc)
+        XCTAssertEqual(list.count, 1)
+        XCTAssertEqual(list.first?.distanceMeters ?? 0, 30_000, accuracy: 1)
     }
 
     // MARK: - Дни за рулём
@@ -196,7 +214,7 @@ final class PeriodSummaryTests: XCTestCase {
             record(daysAgo: 2, km: 10, passes: [pass(7, speed: 55, limit: 60, at: d2),
                                                 pass(8, speed: 55, limit: 60, at: d2)]),
         ]
-        let markers = TripHistory.passMarkers(history, period: .week, now: now)
+        let markers = TripHistory.passMarkers(history, period: .week, anchor: now, calendar: utc)
         XCTAssertEqual(markers.count, 2)
         let seven = markers.first { $0.cameraID == 7 }
         XCTAssertEqual(seven?.times, 2, "одна камера — один маркер, проезды складываются")
@@ -211,7 +229,7 @@ final class PeriodSummaryTests: XCTestCase {
         noCoords.lat = nil
         noCoords.lon = nil
         let markers = TripHistory.passMarkers([record(daysAgo: 1, km: 10, passes: [noCoords])],
-                                              period: .week, now: now)
+                                              period: .week, anchor: now, calendar: utc)
         XCTAssertTrue(markers.isEmpty, "старые записи без координат на карту не поставить")
     }
 
@@ -229,7 +247,7 @@ final class PeriodSummaryTests: XCTestCase {
         XCTAssertEqual(pruned.count, 15)
         XCTAssertEqual(pruned.filter { $0.track != nil }.count, 15,
                        "все треки недели должны выжить — иначе карта отчёта неполная")
-        XCTAssertEqual(TripHistory.tracks(pruned, period: .week, now: now).count, 15)
+        XCTAssertEqual(TripHistory.tracks(pruned, period: .week, anchor: now, calendar: utc).count, 15)
     }
 
     func testPrunedStripsTracksOlderThanWeekButKeepsNumbers() {
@@ -242,8 +260,12 @@ final class PeriodSummaryTests: XCTestCase {
         XCTAssertEqual(pruned.prefix(7).filter { $0.track != nil }.count, 7)
         XCTAssertEqual(pruned.suffix(5).filter { $0.track == nil }.count, 5,
                        "трек старше недели выброшен")
-        XCTAssertEqual(TripHistory.summary(pruned, period: .month, now: now).trips, 12,
-                       "цифры месяца не пострадали")
+        // Месяц теперь КАЛЕНДАРНЫЙ: часть старых записей уезжает в прошлый
+        // месяц — считаем ожидание по тем же границам, а не «последние 30 дней».
+        let january = StatsPeriod.month.interval(containing: now, calendar: utc)
+        let inMonth = pruned.filter { january.contains($0.startedAt) }.count
+        XCTAssertEqual(TripHistory.summary(pruned, period: .month, calendar: utc, now: now).trips,
+                       inMonth, "цифры месяца не пострадали")
     }
 
     func testPrunedDropsRecordsOlderThanMonth() {

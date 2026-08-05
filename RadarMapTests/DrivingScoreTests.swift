@@ -49,6 +49,47 @@ final class DrivingScoreTests: XCTestCase {
         XCTAssertLessThanOrEqual(score!, 40)
     }
 
+    // MARK: - Разложение балла (деталка «почему 68?»)
+
+    private func passed(_ speed: Double, limit: Int?, location: String = "Юнусабад") -> PassedCamera {
+        PassedCamera(id: UUID(), cameraID: 1, typeRaw: "Стационар радар",
+                     location: location, speedKmh: speed, date: Date(),
+                     lat: 41.31, lon: 69.28, limitKmh: limit)
+    }
+
+    /// Сумма строк разложения обязана сходиться с tripScore — иначе деталка врёт.
+    func testBreakdownMatchesTripScore() {
+        let passedList = [passed(88, limit: 60), passed(66, limit: 60), passed(55, limit: 60)]
+        let jerky = (0..<60).map { $0 % 2 == 0 ? 48.0 : 60.0 }
+        let items = DrivingScore.breakdown(passed: passedList, trackSpeeds: jerky)
+        let score = DrivingScore.tripScore(
+            passes: passedList.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+            trackSpeeds: jerky)
+
+        let totalPenalty = items.reduce(0) { $0 + $1.points }
+        XCTAssertEqual(100 - Double(totalPenalty), score ?? -1, accuracy: 0.5)
+        // Чистый проезд (55 при 60) строки не создаёт.
+        XCTAssertEqual(items.filter { $0.icon != "waveform.path.ecg" }.count, 2)
+    }
+
+    /// Потолок −70 за камеры отображается «возвратной» строкой, сумма сходится.
+    func testBreakdownShowsCameraCap() {
+        let passedList = (0..<3).map { _ in passed(115, limit: 60) }   // 3 × 40 = 120 > 70
+        let items = DrivingScore.breakdown(passed: passedList, trackSpeeds: smoothSpeeds())
+        XCTAssertTrue(items.contains { $0.id == "cap" && $0.points == -50 })
+        let total = items.reduce(0) { $0 + $1.points }
+        let score = DrivingScore.tripScore(
+            passes: passedList.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+            trackSpeeds: smoothSpeeds())
+        XCTAssertEqual(100 - Double(total), score ?? -1, accuracy: 0.5)
+    }
+
+    /// Нет ни лимитных проездов, ни трека — балла нет, раскладывать нечего.
+    func testBreakdownEmptyWithoutData() {
+        XCTAssertTrue(DrivingScore.breakdown(passed: [passed(80, limit: nil)],
+                                             trackSpeeds: []).isEmpty)
+    }
+
     func testHarshDrivingPenalized() {
         // Рваный темп: перепады по 12 км/ч на каждом шаге.
         let jerky = (0..<60).map { $0 % 2 == 0 ? 48.0 : 60.0 }
@@ -198,11 +239,13 @@ final class TripAnalyticsTests: XCTestCase {
 
     func testWeekSummaryCountsOnlyRecentTrips() {
         let history = [record(daysAgo: 1, km: 10), record(daysAgo: 20, km: 99)]
-        let week = TripHistory.weekSummary(history)
+        // Единый источник вместо снятого weekSummary: пуш-дайджест берёт те же
+        // цифры, что экран Итогов.
+        let week = TripHistory.summary(history, period: .week)
 
-        XCTAssertEqual(week?.trips, 1)
-        XCTAssertEqual(week?.distance ?? 0, 10_000, accuracy: 0.01)
-        XCTAssertNil(TripHistory.weekSummary([record(daysAgo: 20, km: 99)]))
+        XCTAssertEqual(week.trips, 1)
+        XCTAssertEqual(week.distance, 10_000, accuracy: 0.01)
+        XCTAssertTrue(TripHistory.summary([record(daysAgo: 20, km: 99)], period: .week).isEmpty)
     }
 
     func testFallbackRecordOnlyWhenSessionIsCold() {
@@ -216,7 +259,7 @@ final class TripAnalyticsTests: XCTestCase {
                                                   liveDistance: 0)?.id, last.id)
     }
 
-    func testMonth30CountsCleanOverRiskAndTopLocation() {
+    func testMonthSummaryCountsCleanOverRiskAndTopLocation() {
         let clean = PassedCamera(id: UUID(), cameraID: 1, typeRaw: "Стационар радар", location: "",
                                  speedKmh: 55, date: Date(), lat: nil, lon: nil, limitKmh: 60)
         let fined = PassedCamera(id: UUID(), cameraID: 2, typeRaw: "Стационар радар",
@@ -226,22 +269,22 @@ final class TripAnalyticsTests: XCTestCase {
                                    speedKmh: 90, date: Date(), lat: nil, lon: nil, limitKmh: nil)
         let history = [record(daysAgo: 1, km: 10, passes: [clean, fined, noLimit])]
 
-        let month = TripHistory.month30(history)
-        XCTAssertEqual(month.clean, 1)                       // без лимита — не считается
-        XCTAssertEqual(month.over, 1)
+        let month = TripHistory.summary(history, period: .month)
+        XCTAssertEqual(month.cleanPasses, 1)                 // без лимита — не считается
+        XCTAssertEqual(month.overPasses, 1)
         // +20 км/ч — верхняя граница первой ступени: 1 БРВ.
-        XCTAssertEqual(month.risk, FineSchedule.brv)
+        XCTAssertEqual(month.fineRisk, FineSchedule.brv)
         XCTAssertEqual(month.topOverLocation, "Navoiy ko'chasi")
         XCTAssertEqual(TripHistory.fineRisk(of: [clean, fined, noLimit]), FineSchedule.brv)
     }
 
-    func testMonth30IgnoresOldRecords() {
+    func testMonthSummaryIgnoresOldRecords() {
         let fined = PassedCamera(id: UUID(), cameraID: 2, typeRaw: "Стационар радар", location: "",
                                  speedKmh: 80, date: Date(), lat: nil, lon: nil, limitKmh: 60)
         let history = [record(daysAgo: 40, km: 10, passes: [fined])]
-        let month = TripHistory.month30(history)
-        XCTAssertEqual(month.over, 0)
-        XCTAssertEqual(month.risk, 0)
+        let month = TripHistory.summary(history, period: .month)
+        XCTAssertEqual(month.overPasses, 0)
+        XCTAssertEqual(month.fineRisk, 0)
     }
 }
 

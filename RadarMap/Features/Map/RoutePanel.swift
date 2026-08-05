@@ -122,7 +122,7 @@ struct RoutePanel: View {
             HStack(spacing: 10) {
                 Image(systemName: "camera.metering.center.weighted")
                     .font(.rounded(15, .bold))
-                    .foregroundStyle(route.camerasOnRoute.isEmpty ? Theme.success : Theme.camera)
+                    .foregroundStyle(route.camerasOnRoute.isEmpty ? Theme.success : Theme.Types.camera)
                 Text("\(route.camerasOnRoute.count) камер на маршруте")
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)

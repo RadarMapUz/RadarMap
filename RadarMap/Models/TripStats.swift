@@ -24,6 +24,10 @@ final class TripStats {
     private(set) var stops: [TripStop] = []
 
     private(set) var history: [TripRecord] = []
+    /// Дневные агрегаты — живут вечно, в отличие от записей (чистка режет треки
+    /// через неделю и записи через 30 дней). По ним считается статистика за
+    /// месяц и дальше, поэтому она не «худеет» вместе с историей.
+    private(set) var days: [TripDay] = []
     /// Пожизненные счётчики — живут отдельно от истории (она обрезается до 50 поездок).
     private(set) var lifetime = LifetimeStats()
     /// Вызывается после сохранения поездки (AppEnvironment вешает сюда недельный дайджест).
@@ -32,9 +36,10 @@ final class TripStats {
     @ObservationIgnored private var lastCoordinate: CLLocationCoordinate2D?
     /// Сырой трек текущей поездки: точка каждые ≥30 м, упрощается при финише.
     @ObservationIgnored private var trackBuffer: [TrackPoint] = []
-    private static let trackStepMeters = 30.0
-    private static let trackTolerance = 0.00022   // ~22 м — упрощение Дугласа-Пекера
-    private static let trackMaxPoints = 400
+    // nonisolated: их читает и nonisolated-восстановление слепка (record(from:)).
+    nonisolated private static let trackStepMeters = 30.0
+    nonisolated private static let trackTolerance = 0.00022   // ~22 м — упрощение Дугласа-Пекера
+    nonisolated private static let trackMaxPoints = 400
 
     init() { loadHistory() }
 
@@ -76,6 +81,9 @@ final class TripStats {
     /// нормально: следующее упрощение при финише всё равно прошло бы по ним.
     func resume(_ record: TripRecord, stoppedUntil resumedAt: Date = Date()) {
         history.removeAll { $0.id == record.id }
+        // Запись возвращается в живую сессию — вычитаем её из дневного агрегата,
+        // иначе после финиша склеенной поездки день посчитает её дважды.
+        days = TripDayBook.unfolded(record, from: days)
         startedAt = record.startedAt
         lastPointAt = resumedAt
         finishedDuration = 0
@@ -91,6 +99,7 @@ final class TripStats {
                      from: record.endedAt, to: resumedAt)
         ]
         persist()   // история уже без этой записи — не потерять её при вылете
+        persistDays()
         let stopSeconds = Int(self.stops.last?.duration ?? 0)
         Log.trips.info("поездка продолжена: остановка \(stopSeconds, privacy: .public) с")
     }
@@ -116,6 +125,8 @@ final class TripStats {
             trackBuffer.append(TrackPoint(lat: coordinate.latitude,
                                           lon: coordinate.longitude, speedKmh: speedKmh))
         }
+
+        checkpointIfDue()
     }
 
     /// Зафиксировать прохождение камеры (скорость — в точке максимального сближения).
@@ -137,13 +148,15 @@ final class TripStats {
         passed = []
         stops = []
         trackBuffer = []
+        removeCheckpoint()
     }
 
     /// `endedManually` — нажали «Завершить» (а не автостоп по CoreMotion).
     /// Флаг едет в запись: он запрещает склейку следующей поездки (см. TripMerge).
     func finish(endedManually: Bool = true) {
         finishedDuration = durationSeconds
-        defer { startedAt = nil }
+        // Поездка завершена штатно — страховочный слепок больше не нужен.
+        defer { startedAt = nil; removeCheckpoint() }
         guard let startedAt, distanceMeters >= 100 else { return }
         // Рейтинг считаем по сырому треку (упрощённый теряет пики скорости).
         let scorePasses = passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) }
@@ -167,8 +180,12 @@ final class TripStats {
         )
         history.insert(record, at: 0)
         history = TripHistory.pruned(history)
+        // Дневной агрегат — до чистки истории по смыслу и после по коду:
+        // запись может уехать из истории, день останется навсегда.
+        days = TripDayBook.folded(record, into: days)
         lifetime = LifetimeStats.updated(lifetime, passes: scorePasses, distanceMeters: distanceMeters)
         persist()
+        persistDays()
         persistLifetime()
         onTripFinished?()
     }
@@ -177,11 +194,17 @@ final class TripStats {
     /// страховка, если автоматика склеила лишнее.
     func splitRecord(id: Double, at stop: TripStop) {
         guard let index = history.firstIndex(where: { $0.id == id }) else { return }
-        let legs = TripHistory.split(history[index], at: stop)
+        let original = history[index]
+        let legs = TripHistory.split(original, at: stop)
         guard legs.count == 2 else { return }
         history.replaceSubrange(index...index, with: legs)
         history = TripHistory.pruned(history)
+        // В цифрах дня та же поездка, но двумя записями: снимаем исходную,
+        // кладём обе ноги — иначе «поездок» в отчёте разойдётся со списком.
+        days = TripDayBook.unfolded(original, from: days)
+        for leg in legs { days = TripDayBook.folded(leg, into: days) }
         persist()
+        persistDays()
     }
 
     /// Одноразовая чистка «мостовых» проездов: направление трека у камеры против
@@ -200,47 +223,38 @@ final class TripStats {
         Storage.set(true, for: .passAxisCleanup1)
     }
 
+    /// Удаление записи убирает её и из дневных агрегатов: иначе поездка
+    /// исчезает из списка, но продолжает жить в километрах и рейтинге отчёта.
     func deleteRecord(id: Double) {
+        if let record = history.first(where: { $0.id == id }) {
+            days = TripDayBook.unfolded(record, from: days)
+            persistDays()
+        }
         history.removeAll { $0.id == id }
         persist()
     }
 
+    /// «Очистить историю» стирает и дневные агрегаты: пользователь просит
+    /// убрать статистику, а не спрятать список при живых цифрах в отчёте.
     func clearHistory() {
         history = []
+        days = []
         persist()
+        persistDays()
     }
 
-    // MARK: - Рейтинг и экономия
-
-    /// Текущий рейтинг: средний балл поездок за 30 дней, взвешенный по дистанции.
-    var rating: Int? {
-        TripHistory.weightedRating(history, within: 30 * 86400, now: Date())
-    }
-
-    /// Тренд к прошлой неделе — для стрелки у кольца рейтинга.
-    var ratingTrend: Int? {
-        let now = Date()
-        guard let current = TripHistory.weightedRating(history, within: 7 * 86400, now: now),
-              let previous = TripHistory.weightedRating(history, within: 7 * 86400,
-                                                        now: now.addingTimeInterval(-7 * 86400))
-        else { return nil }
-        return current - previous
-    }
-
-    /// Сводка за последние 7 дней — заголовок истории.
-    var weekSummary: (trips: Int, distance: CLLocationDistance, cameras: Int)? {
-        TripHistory.weekSummary(history)
-    }
+    // MARK: - Сводки
+    //
+    // Собственных агрегатов с зашитыми окнами здесь больше нет: рейтинг за
+    // 30 дней, сводка за 7 и «месяц30» жили параллельно с PeriodSummary и
+    // расходились с экраном (карточка показывала 85 за неделю, её же
+    // расшифровка — 82 за 30 дней). Единственный способ посчитать —
+    // TripHistory.summary(history, period:).
 
     /// Что показывать в шапке Итогов: живую сессию (nil) или последнюю поездку.
     func fallbackRecord(isTripActive: Bool) -> TripRecord? {
         TripHistory.fallbackRecord(history: history, isTripActive: isTripActive,
                                    liveDistance: distanceMeters)
-    }
-
-    /// «Сэкономлено на штрафах» за последние 30 дней (по истории; пожизненное — в lifetime).
-    var month30: (clean: Int, over: Int, risk: Double, topOverLocation: String?) {
-        TripHistory.month30(history)
     }
 
     #if DEBUG
@@ -253,16 +267,18 @@ final class TripStats {
     func seedDemoHistory(shiftDays: Double = 0) {
         let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
         let now = Date().addingTimeInterval(-shiftDays * 86400)
-        var seeded: [TripRecord] = []
-        for (index, daysAgo) in [0.2, 1.1, 2.3, 3.0, 4.5, 5.4].enumerated() {
-            let start = now.addingTimeInterval(-daysAgo * 86400)
-            let km = [12.4, 8.1, 23.7, 5.2, 31.0, 14.8][index]
-            // Три поездки идут по одному «рабочему» коридору (общий seed): так на
-            // карте проездов видно градусы частоты, а не шесть равнозначных линий.
-            let seed = [1, 1, 2, 3, 1, 4][index]
+
+        /// Одна демо-поездка. `hour` задаёт время суток проезда камеры — от него
+        /// зависит полоса «когда рискуете».
+        func makeRecord(index: Int, daysAgo: Double, km: Double, seed: Int,
+                        over: Bool, hour: Int, withStop: Bool = false) -> TripRecord {
+            let day = Calendar.current.startOfDay(for: now.addingTimeInterval(-daysAgo * 86400))
+            var start = day.addingTimeInterval(Double(hour) * 3600)
+            // Заданный час мог оказаться позже «сейчас» (вечер ещё не наступил):
+            // такая запись уезжает в будущее и в период не попадает — сдвигаем её
+            // на сутки назад.
+            if start > now { start.addTimeInterval(-86400) }
             let track = Self.demoTrack(from: base, seed: seed, km: km)
-            // Каждая третья поездка — с превышением у камеры, чтобы была зона риска.
-            let over = index % 3 == 0
             // Камера стоит НА треке (примерно на 40% пути), а не в стороне от него.
             let camIndex = max(0, (track.count / 3) / 3 * 3)
             let cam = CLLocationCoordinate2D(latitude: track[camIndex],
@@ -273,21 +289,57 @@ final class TripStats {
                                     speedKmh: over ? 88 : 56,
                                     date: start.addingTimeInterval(400),
                                     lat: cam.latitude, lon: cam.longitude, limitKmh: 60)
-            // Одна поездка со заездом по пути — проверить блок остановок.
-            let stops: [TripStop]? = index == 2 ? [TripStop(
+            // Одна поездка с заездом по пути — проверить блок остановок.
+            let stops: [TripStop]? = withStop ? [TripStop(
                 id: UUID(), lat: base.latitude, lon: base.longitude,
                 from: start.addingTimeInterval(900),
                 to: start.addingTimeInterval(900 + 1500))] : nil
-            seeded.append(TripRecord(
+            // Балл считаем той же арифметикой, что у живых поездок: захардкоженный
+            // рассыпался бы с разложением «из чего сложился балл» в деталке.
+            let speeds = stride(from: 2, to: track.count, by: 3).map { track[$0] }
+            let score = DrivingScore.tripScore(
+                passes: [DrivingScore.Pass(speedKmh: pass.speedKmh, limitKmh: pass.limitKmh)],
+                trackSpeeds: speeds)
+            return TripRecord(
                 id: start.timeIntervalSince1970, startedAt: start,
                 endedAt: start.addingTimeInterval(km * 90 + (stops?.first?.duration ?? 0)),
                 distanceMeters: km * 1000, maxSpeedKmh: over ? 104 : 82,
                 passed: [pass], endLat: track[track.count - 3], endLon: track[track.count - 2],
-                track: track, score: over ? 68 : 94, stops: stops, endedManually: true))
+                track: track, score: score, stops: stops, endedManually: true)
+        }
+
+        var seeded: [TripRecord] = []
+        // Эта неделя: три поездки идут по одному «рабочему» коридору (общий seed) —
+        // на карте видно градусы частоты, а не шесть равнозначных линий. Три
+        // проезда с превышением дают зону риска и полосу часов.
+        let week: [(daysAgo: Double, km: Double, seed: Int, over: Bool, hour: Int)] = [
+            (0.2, 12.4, 1, true,  19), (1.1, 8.1,  1, false, 9),
+            (2.3, 23.7, 2, false, 14), (3.0, 5.2,  3, true,  20),
+            (4.5, 31.0, 1, false, 8),  (5.4, 14.8, 4, true,  18),
+        ]
+        for (index, item) in week.enumerated() {
+            seeded.append(makeRecord(index: index, daysAgo: item.daysAgo, km: item.km,
+                                     seed: item.seed, over: item.over, hour: item.hour,
+                                     withStop: index == 2))
+        }
+        // Прошлая неделя — база сравнения. Без неё «стало лучше/хуже», дельта
+        // километров и движение рейтинга сравнивать не с чем, и половина разбора
+        // периода на экране просто не появляется.
+        let previous: [(daysAgo: Double, km: Double, seed: Int, over: Bool, hour: Int)] = [
+            (8.3, 9.6, 1, true, 19), (9.6, 11.2, 1, true, 20),
+            (11.2, 7.4, 2, true, 18), (12.7, 6.1, 3, false, 10),
+        ]
+        for (index, item) in previous.enumerated() {
+            seeded.append(makeRecord(index: 6 + index, daysAgo: item.daysAgo, km: item.km,
+                                     seed: item.seed, over: item.over, hour: item.hour))
         }
         history = seeded
+        // Агрегаты пересобираем вместе с историей: иначе экран считает рейтинг
+        // по дням от прошлого запуска, а разложение — по свежим записям.
+        days = TripDayBook.rebuilt(from: history)
         lifetime = LifetimeStats.rebuilt(from: history)
         persist()
+        persistDays()
         persistLifetime()
     }
 
@@ -326,7 +378,7 @@ final class TripStats {
 
     // MARK: - Трек: упаковка и упрощение (Дуглас-Пекер)
 
-    nonisolated private static func packTrack(_ points: [TrackPoint]) -> [Double]? {
+    nonisolated static func packTrack(_ points: [TrackPoint]) -> [Double]? {
         guard points.count >= 2 else { return nil }
         var flat: [Double] = []
         flat.reserveCapacity(points.count * 3)
@@ -396,6 +448,20 @@ final class TripStats {
                 Log.trips.error("lifetimeStats не декодировались: \(error.localizedDescription, privacy: .public)")
             }
         }
+        if let decoded = JSONFile.load([TripDay].self, from: daysURL, log: Log.trips) {
+            days = decoded
+        }
+        // Обновились с версии без дневных агрегатов — собираем из того, что
+        // ещё осталось в истории. Полнее уже не будет: удалённые записи не
+        // воскресить, зато дальше история копится честно.
+        if days.isEmpty && !history.isEmpty {
+            days = TripDayBook.rebuilt(from: history)
+            persistDays()
+        }
+        // Процесс умер в поездке (крэш/вотчдог/джетсэм)? Слепок → запись истории,
+        // пока автозапуск не начал новую поездку. После lifetime: восстановление
+        // добавляет к счётчикам, а не пересобирает их.
+        restoreInflightIfAny()
         // Одноразовая гео-чистка: старые версии засчитывали камеры с параллельных
         // улиц — выкидываем их из истории и пересчитываем баллы и счётчики.
         if !Storage.bool(.passGeoCleanup1) {
@@ -414,6 +480,113 @@ final class TripStats {
             lifetime = LifetimeStats.rebuilt(from: history)
             persistLifetime()
         }
+    }
+
+    // MARK: - Чекпоинт живой поездки
+
+    /// Слепок незавершённой поездки на диске. Живая поездка держалась только в
+    /// памяти — и любая смерть процесса (крэш, вотчдог, джетсэм фонового
+    /// приложения) молча теряла весь накат: «проехал 30 км, зашёл — а там ноль».
+    nonisolated struct InflightTrip: Codable {
+        let startedAt: Date
+        let lastPointAt: Date
+        let distanceMeters: Double
+        let maxSpeedKmh: Double
+        let passed: [PassedCamera]
+        let stops: [TripStop]
+        /// Сырой трек плоским массивом [lat, lon, speed, …] — как в TripRecord.
+        let track: [Double]
+        let endLat: Double?
+        let endLon: Double?
+    }
+
+    /// Не чаще раза в checkpointInterval: слепок пишется на каждый интервал
+    /// движения, а не на каждый GPS-тик.
+    private static let checkpointInterval: TimeInterval = 20
+    @ObservationIgnored private var lastCheckpointAt: Date = .distantPast
+
+    private var inflightURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("trip_inflight.json")
+    }
+
+    private func checkpointIfDue() {
+        guard let startedAt,
+              Date().timeIntervalSince(lastCheckpointAt) >= Self.checkpointInterval else { return }
+        lastCheckpointAt = Date()
+        let snapshot = InflightTrip(
+            startedAt: startedAt, lastPointAt: lastPointAt ?? Date(),
+            distanceMeters: distanceMeters, maxSpeedKmh: maxSpeedKmh,
+            passed: passed, stops: stops,
+            track: Self.packTrack(trackBuffer) ?? [],
+            endLat: lastCoordinate?.latitude, endLon: lastCoordinate?.longitude)
+        // Единицы килобайт атомарной записи раз в 20 секунд — дешевле любого
+        // хоп-танца; потерянная запись не страшна, придёт следующая.
+        JSONFile.save(snapshot, to: inflightURL, log: Log.trips)
+    }
+
+    private func removeCheckpoint() {
+        lastCheckpointAt = .distantPast
+        // Отсутствие файла — норма (поездка без чекпоинта короче интервала).
+        try? FileManager.default.removeItem(at: inflightURL)
+    }
+
+    /// Восстановление после смерти процесса: слепок превращается в обычную
+    /// запись истории «поездка закончилась на последней точке». Следующий
+    /// автозапуск пройдёт через TripMerge — короткая пауза склеится, и
+    /// дистанция продолжится, как будто вылета не было.
+    private func restoreInflightIfAny() {
+        guard let snapshot = JSONFile.load(InflightTrip.self, from: inflightURL, log: Log.trips)
+        else { return }
+        defer { removeCheckpoint() }
+        guard let record = Self.record(from: snapshot) else { return }
+        history.insert(record, at: 0)
+        history = TripHistory.pruned(history)
+        days = TripDayBook.folded(record, into: days)
+        lifetime = LifetimeStats.updated(
+            lifetime,
+            passes: record.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+            distanceMeters: record.distanceMeters)
+        persist()
+        persistDays()
+        persistLifetime()
+        Log.trips.info("восстановлена незавершённая поездка: \(Int(record.distanceMeters), privacy: .public) м")
+    }
+
+    /// Слепок → запись истории. Та же логика, что в finish(): порог 100 м,
+    /// балл по сырому треку, упрощение Дугласом-Пекером. Чистая — покрыта тестами.
+    nonisolated static func record(from snapshot: InflightTrip) -> TripRecord? {
+        guard snapshot.distanceMeters >= 100 else { return nil }
+        let raw = stride(from: 0, to: max(0, snapshot.track.count - 2), by: 3).map {
+            TrackPoint(lat: snapshot.track[$0], lon: snapshot.track[$0 + 1],
+                       speedKmh: snapshot.track[$0 + 2])
+        }
+        let score = DrivingScore.tripScore(
+            passes: snapshot.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+            trackSpeeds: raw.map(\.speedKmh))
+        return TripRecord(
+            id: snapshot.startedAt.timeIntervalSince1970,
+            startedAt: snapshot.startedAt,
+            endedAt: snapshot.lastPointAt,
+            distanceMeters: snapshot.distanceMeters,
+            maxSpeedKmh: snapshot.maxSpeedKmh,
+            passed: snapshot.passed,
+            endLat: snapshot.endLat, endLon: snapshot.endLon,
+            track: packTrack(simplify(raw, tolerance: trackTolerance, maxPoints: trackMaxPoints)),
+            score: score,
+            stops: snapshot.stops.isEmpty ? nil : snapshot.stops,
+            // Пользователь «Завершить» не нажимал — склейку не запрещаем.
+            endedManually: false
+        )
+    }
+
+    private var daysURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("trip_days.json")
+    }
+
+    private func persistDays() {
+        JSONFile.save(days, to: daysURL, log: Log.trips)
     }
 
     private func persistLifetime() {

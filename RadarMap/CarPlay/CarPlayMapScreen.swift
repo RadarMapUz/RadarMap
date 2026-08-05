@@ -145,7 +145,7 @@ struct CarPlayMapScreen: View {
     @ViewBuilder
     private var cameraCell: some View {
         if env.location.isSignalStale {
-            statusCell(symbol: "location.slash.fill", tint: Theme.radar,
+            statusCell(symbol: "location.slash.fill", tint: Theme.warning,
                        title: String(localized: "Нет сигнала"),
                        subtitle: String(localized: "Ждём спутники"))
         } else if let camera = env.location.nearestCamera,
@@ -243,7 +243,7 @@ struct CarPlayMapScreen: View {
                         Text("\(camerasAhead)")
                             .font(.rounded(12, .semibold).monospacedDigit())
                     }
-                    .foregroundStyle(Theme.camera)
+                    .foregroundStyle(Theme.Types.camera)
                 }
             }
         }
@@ -261,7 +261,7 @@ struct CarPlayMapScreen: View {
     /// Алерт приближения: цвет и размер растут по уровню тревоги (1→3), рядом —
     /// знак лимита на этой дороге, чтобы решение «тормозить или нет» было сразу.
     private func approachBanner(camera: Camera, distance: CLLocationDistance) -> some View {
-        let tint = alertTint ?? Theme.radar
+        let tint = alertTint ?? Theme.warning
         return HStack(spacing: 12) {
             Image(systemName: camera.kind.symbolName)
                 .font(.rounded(20, .bold))
@@ -332,9 +332,9 @@ struct CarPlayMapScreen: View {
     /// nil — тревоги нет, кромка панели остаётся нейтральной.
     private var alertTint: Color? {
         switch env.location.alertLevel {
-        case 1:  return Theme.radar
-        case 2:  return .orange
-        case 3...: return Theme.danger
+        case 1:  return Theme.role(.attention)
+        case 2:  return Theme.warning
+        case 3...: return Theme.role(.alarm)
         default: return nil
         }
     }
@@ -347,10 +347,13 @@ struct CarPlayMapScreen: View {
         guard env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit else {
             return Theme.textPrimary
         }
-        let over = env.location.speedKmh - Double(limit)
-        if over <= env.settings.overspeedTolerance { return Theme.textPrimary }
-        if FineSchedule.fine(overKmh: over) == 0 { return Theme.radar }
-        return Theme.danger
+        // Одно правило на всё приложение: одна ситуация — один цвет.
+        switch Theme.speedLevel(speedKmh: env.location.speedKmh, limitKmh: limit,
+                                tolerance: env.settings.overspeedTolerance) {
+        case .normal, .neutral: return Theme.textPrimary
+        case .attention:        return Theme.warning
+        case .alarm:            return Theme.danger
+        }
     }
 
     /// Цвет значка камеры по БЛИЗОСТИ, а не по типу: красный кружок при камере
@@ -365,8 +368,7 @@ struct CarPlayMapScreen: View {
     /// Полоска приближения: заполняется к камере и «греется» — боковым зрением
     /// читается быстрее цифр.
     private func approachBar(_ progress: Double) -> some View {
-        let tint: Color = progress > 0.66 ? Theme.danger
-                        : progress > 0.33 ? .orange : Theme.radar
+        let tint = Theme.role(progress > 0.66 ? .alarm : progress > 0.33 ? .attention : .neutral)
         return Capsule()
             .fill(Theme.stroke)
             .overlay(alignment: .leading) {

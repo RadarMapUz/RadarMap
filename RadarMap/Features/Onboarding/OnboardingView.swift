@@ -280,7 +280,7 @@ struct OnboardingView: View {
                 .font(.rounded(22)).foregroundStyle(Theme.success)
         case .partial:
             Button("Всегда", action: action)
-                .font(.rounded(13, .semibold)).foregroundStyle(Theme.radar)
+                .font(.rounded(13, .semibold)).foregroundStyle(Theme.warning)
         case .pending:
             Button("Разрешить", action: action)
                 .font(.rounded(13, .semibold)).foregroundStyle(Theme.accent)

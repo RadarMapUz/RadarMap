@@ -33,6 +33,12 @@ struct MapScreen: View {
     /// контролов, а не под статус-баром.
     @Namespace private var mapScope
 
+    /// Что нужно водителю прямо сейчас: правила видимости — в MapMode,
+    /// а не россыпью условий по вёрстке (см. MapMode.swift).
+    private var mode: MapMode {
+        MapMode.current(isTripActive: env.location.isTripActive, hasRoute: env.route.isActive)
+    }
+
     var body: some View {
         @Bindable var map = map
 
@@ -55,19 +61,25 @@ struct MapScreen: View {
 
             if map.isAddingCamera { crosshair }
 
+            // Панели знают, что под ними светлая карта: днём их фон плотнее,
+            // иначе белые цифры на солнце тонут в стекле.
             topLayer
+                .environment(\.onLightMap, mapColorScheme == .light)
             bottomLayer
+                .environment(\.onLightMap, mapColorScheme == .light)
 
-            // Превышение у камеры: мягкое красное свечение по краям — видно
-            // периферийным зрением, на телефон смотреть не нужно.
-            if env.location.isApproachingCamera && env.speedLimits.isOverspeeding {
-                OverspeedVignette()
-            }
+            // Превышение у камеры: свечение по краям. Отдельная вью: условие
+            // читает скорость и дистанцию, меняющиеся каждый тик GPS, — в body
+            // MapScreen это чтение пересобирало весь экран с картой ежесекундно.
+            OverspeedVignetteGate()
+
+            // Следование за GPS: единственный подписчик locationTick.
+            LocationFollowDriver(map: map, headingUp: headingUp)
         }
         .mapScope(mapScope)
         .fullScreenCover(isPresented: $showDashboard) { DashboardView() }
         .task {
-            map.configure(env.cameras)
+            map.configure(env.cameras, speedLimits: env.speedLimits)
             map.filter = env.settings.filter
             // Если карта уже отдала регион до конфигурации (статичный старт без геопозиции) —
             // пересчитываем принудительно, иначе аннотации не появятся до первого движения карты.
@@ -88,6 +100,11 @@ struct MapScreen: View {
             // одна точка обновления карты и region-мониторинга.
             map.invalidateVisible()
             env.location.refreshMonitoring()
+        }
+        .onChange(of: env.speedLimits.indexRevision) { _, _ in
+            // База лимитов приехала позже первого слоя — пересобираем маркеры,
+            // чтобы появились мини-знаки «60».
+            map.invalidateVisible()
         }
         .sheet(item: $map.selectedCamera) { camera in
             CameraDetailSheet(camera: camera,
@@ -136,17 +153,6 @@ struct MapScreen: View {
                 revealControls()
             }
         }
-        .onChange(of: env.location.locationTick) { _, _ in
-            // Прогресс маршрута (прибытие/манёвры/камеры) тикает в LocationService —
-            // здесь только следование карты за курсом.
-            if headingUp {
-                map.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
-            }
-            if let coordinate = env.location.currentCoordinate {
-                map.snapToUserOnce(coordinate)   // первый фикс после запуска → окрестности
-            }
-        }
-        .animation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)
     }
 
     @ViewBuilder private var arrivalOverlay: some View {
@@ -163,27 +169,11 @@ struct MapScreen: View {
         if ProcessInfo.processInfo.arguments.contains("-hideCameraAlert") {
             EmptyView()
         } else {
-            approachAlertIfNeeded
+            ApproachOverlayGate(dismissedID: $dismissedApproachID)
         }
         #else
-        approachAlertIfNeeded
+        ApproachOverlayGate(dismissedID: $dismissedApproachID)
         #endif
-    }
-
-    @ViewBuilder private var approachAlertIfNeeded: some View {
-        if env.location.isApproachingCamera,
-           let camera = env.location.nearestCamera,
-           let distance = env.location.distanceToNearest,
-           dismissedApproachID != camera.id {
-            ApproachAlertView(
-                camera: camera,
-                distance: distance,
-                speedKmh: env.location.speedKmh,
-                relativeBearing: env.location.relativeBearingToNearest,
-                alertRadius: env.settings.alertRadius,
-                onDismiss: { dismissedApproachID = camera.id }
-            )
-        }
     }
 
     // MARK: - Карта
@@ -237,7 +227,7 @@ struct MapScreen: View {
                     .stroke(Theme.background.opacity(0.85),
                             style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
                 MapPolyline(polyline)
-                    .stroke(LinearGradient(colors: [Theme.accent, Theme.intelligent],
+                    .stroke(LinearGradient(colors: [Theme.accent, Theme.Types.intelligent],
                                            startPoint: .topLeading, endPoint: .bottomTrailing),
                             style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
                 // Пройденная часть тускнеет — видно, сколько осталось.
@@ -268,8 +258,9 @@ struct MapScreen: View {
                         selected: map.highlightedID == camera.id,
                         compact: map.isDotZoom
                             && camera.id != env.location.nearestCamera?.id,
-                        limit: map.isDotZoom ? nil
-                             : env.speedLimits.limit(near: camera.coordinate)
+                        // Лимит из слоя, а не из спатиал-индекса: 220 запросов
+                        // на каждую перерисовку карты — это и был один из лагов.
+                        limit: map.isDotZoom ? nil : map.visibleLimits[camera.id]
                     )
                     .onTapGesture { map.select(camera) }
                 }
@@ -348,7 +339,10 @@ struct MapScreen: View {
     private var topLayer: some View {
         VStack(spacing: 10) {
             // Тап по HUD — «Спидометр»; долгий тап — быстрые тумблеры оповещений.
-            SpeedHUDView()
+            // В навигации главный элемент — манёвр, поэтому HUD уходит на
+            // второй план: одного «главного» на экране достаточно, два спорят
+            // за взгляд (MapMode.focus).
+            SpeedHUDView(secondary: mode.focus != .speed)
                 .onTapGesture { showDashboard = true }
                 .onLongPressGesture(minimumDuration: 0.4) {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -365,9 +359,8 @@ struct MapScreen: View {
                 passengerChip
             }
             // Turn-by-turn: ближайший манёвр — в поездке по маршруту.
-            if env.location.isTripActive, let step = env.route.nextStep {
-                ManeuverBanner(step: step, distance: env.route.nextStepDistance)
-            }
+            // Отдельная вью: дистанция до манёвра меняется каждый тик GPS.
+            ManeuverBannerGate()
             // Кнопки навигации — сразу под HUD справа; в поездке сами прячутся.
             if !map.isAddingCamera && !controlsHidden {
                 HStack {
@@ -391,7 +384,6 @@ struct MapScreen: View {
         .padding(.horizontal, 16)
         .padding(.top, 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(.spring(duration: 0.3), value: env.route.nextStep?.distanceAlong)
         .animation(.easeInOut(duration: 0.3), value: controlsHidden)
     }
 
@@ -446,10 +438,10 @@ struct MapScreen: View {
                 recenter()
                 revealControls()
             }
-            // В поездке: «Радар здесь!» одним тапом — отметить передвижной радар
-            // для других водителей (то же самое умеет Siri голосом).
-            if env.location.isTripActive {
-                CircleControl(systemName: "dot.radiowaves.left.and.right", tint: Theme.radar,
+            // «Радар здесь!» одним тапом — отметить передвижной радар для
+            // других водителей (то же самое умеет Siri голосом).
+            if mode.showsReportButton {
+                CircleControl(systemName: "dot.radiowaves.left.and.right", tint: Theme.Types.radar,
                               accessibilityLabel: "Радар здесь") {
                     guard let coordinate = env.location.currentCoordinate else { return }
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -513,21 +505,23 @@ struct MapScreen: View {
                 )
             } else {
                 permissionBanner
-                if !controlsHidden {
+                // Легенда типов — справочная информация: за рулём её место
+                // не на экране (MapMode.showsLegend).
+                if mode.showsLegend, !controlsHidden {
                     HStack(alignment: .bottom) {
                         smartLegend
                         Spacer()
                     }
                     .transition(.move(edge: .leading).combined(with: .opacity))
                 }
-                if env.location.isTripActive {
+                if mode.showsTripBar {
                     // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
                     // максимум экрана отдан карте, и она не прячется вместе с кнопками.
                     TripLiveBar(
                         onShowCameras: { showRouteCameras = true },
                         onStop: { toggleTrip() }
                     )
-                } else if env.route.isActive {
+                } else if mode.showsRoutePanel, env.route.isActive {
                     RoutePanel(
                         onShowCameras: { showRouteCameras = true },
                         onTripToggle: { toggleTrip() }
@@ -550,15 +544,12 @@ struct MapScreen: View {
                             .background(.ultraThinMaterial, in: Capsule())
                             .onTapGesture { env.route.clear() }
                     }
-                    if !env.location.isTripActive && env.location.speedKmh >= AppConfig.speakSpeedThresholdKmh {
-                        Text("Похоже, вы едете — включите оповещения")
-                            .font(.rounded(12, .medium))
-                            .foregroundStyle(Theme.success)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(.ultraThinMaterial, in: Capsule())
-                    }
+                    // Отдельная вью: условие читает скорость (каждый тик GPS).
+                    DrivingHintChip()
                     // Одна линия: Дом и Работа компактной парой слева,
                     // «Начать поездку» занимает остальную ширину справа.
+                    // Только в покое — в движении выбирать цель поздно.
+                    if mode.showsQuickDestinations {
                     HStack(spacing: 10) {
                         PlaceCircle(slot: .home,
                                     onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
@@ -568,8 +559,9 @@ struct MapScreen: View {
                                     onAssign: { assignSlot = $0 })
                         tripButton
                     }
+                    }
                 }
-                if !controlsHidden {
+                if mode.showsActionBar, !controlsHidden {
                     actionBar
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -654,15 +646,27 @@ struct MapScreen: View {
 
     /// Док действий: стекло со световой кромкой и глубокая тень — в одном
     /// языке с CTA и кругами (премиальный низ экрана без разнобоя).
+    /// Четыре постоянных действия — больше глазу не нужно. Редкое «добавить
+    /// свою камеру» живёт в меню «Ещё»: оно нужно раз в месяц, а место в баре
+    /// занимало всегда (plan_main_screen.md, шаг 4).
     private var actionBar: some View {
         HStack(spacing: 4) {
             actionButton("Поиск", "magnifyingglass") { map.showSearch = true }
-            actionButton("Добавить", "plus.circle.fill") {
-                withAnimation { map.isAddingCamera = true }
-            }
             actionButton("Рядом", "list.bullet") { map.showNearbySheet = true }
             actionButton("Итоги", "chart.bar.fill") { map.showStats = true }
-            actionButton("Ещё", "gearshape.fill") { map.showSettings = true }
+            Menu {
+                Button {
+                    withAnimation { map.isAddingCamera = true }
+                } label: {
+                    Label("Добавить камеру", systemImage: "plus.circle.fill")
+                }
+                Button { map.showSettings = true } label: {
+                    Label("Настройки", systemImage: "gearshape.fill")
+                }
+            } label: {
+                actionLabel("Ещё", "ellipsis.circle.fill")
+            }
+            .accessibilityLabel(Text("Ещё"))
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 7)
@@ -676,7 +680,15 @@ struct MapScreen: View {
     private func actionButton(_ title: LocalizedStringKey, _ icon: String, tint: Color = Theme.textPrimary,
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 5) {
+            actionLabel(title, icon, tint: tint)
+        }
+        .buttonStyle(PressableStyle())
+    }
+
+    /// Общая разметка кнопки бара — её же носит меню «Ещё».
+    private func actionLabel(_ title: LocalizedStringKey, _ icon: String,
+                             tint: Color = Theme.textPrimary) -> some View {
+        VStack(spacing: 5) {
                 Image(systemName: icon).font(.rounded(19, .semibold))
                 Text(title)
                     .font(.rounded(10, .medium))
@@ -687,18 +699,16 @@ struct MapScreen: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .contentShape(Rectangle())
-        }
-        .buttonStyle(PressableStyle())
     }
 
     /// Легенда-кнопка: свёрнута в компактный кружок, тап раскрывает на 6 секунд.
     @ViewBuilder private var smartLegend: some View {
         if legendExpanded {
             VStack(alignment: .leading, spacing: 8) {
-                LegendChip(color: Theme.camera, symbol: "camera.fill", text: "Камера")
-                LegendChip(color: Theme.radar, symbol: "speedometer", text: "Радар")
-                LegendChip(color: Theme.intelligent, symbol: "camera.metering.matrix", text: "Интеллект.")
-                LegendChip(color: Theme.mobile, symbol: "dot.radiowaves.left.and.right", text: "Передвижной")
+                LegendChip(color: Theme.Types.camera, symbol: "camera.fill", text: "Камера")
+                LegendChip(color: Theme.Types.radar, symbol: "speedometer", text: "Радар")
+                LegendChip(color: Theme.Types.intelligent, symbol: "camera.metering.matrix", text: "Интеллект.")
+                LegendChip(color: Theme.Types.mobile, symbol: "dot.radiowaves.left.and.right", text: "Передвижной")
             }
             .padding(12)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
@@ -729,7 +739,7 @@ struct MapScreen: View {
     @ViewBuilder private var permissionBanner: some View {
         if let banner = bannerInfo {
             HStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.radar)
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
                 Text(banner.message).font(.rounded(12)).foregroundStyle(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
@@ -941,4 +951,107 @@ struct MapScreen: View {
         }
     }
     #endif
+}
+
+// MARK: - Изоляторы пер-тиковых чтений
+//
+// Эти четыре вью существуют ради одного: они ЕДИНСТВЕННЫЕ читают свойства,
+// которые LocationService/RouteService обновляют каждый GPS-тик (скорость,
+// дистанции). Пока эти чтения жили в body MapScreen, каждый фикс пересобирал
+// весь экран вместе с картой и двумя сотнями маркеров — это и был главный лаг.
+
+/// Красное свечение по краям при превышении у камеры.
+private struct OverspeedVignetteGate: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        ZStack {
+            if env.location.isApproachingCamera && env.speedLimits.isOverspeeding {
+                OverspeedVignette()
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)
+        .allowsHitTesting(false)
+    }
+}
+
+/// Полноэкранное предупреждение о камере (со своим «закрыть до следующей»).
+private struct ApproachOverlayGate: View {
+    @Environment(AppEnvironment.self) private var env
+    @Binding var dismissedID: Int?
+
+    var body: some View {
+        ZStack {
+            if env.location.isApproachingCamera,
+               let camera = env.location.nearestCamera,
+               let distance = env.location.distanceToNearest,
+               dismissedID != camera.id {
+                ApproachAlertView(
+                    camera: camera,
+                    distance: distance,
+                    speedKmh: env.location.speedKmh,
+                    relativeBearing: env.location.relativeBearingToNearest,
+                    alertRadius: env.settings.alertRadius,
+                    onDismiss: { dismissedID = camera.id }
+                )
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)
+    }
+}
+
+/// Баннер ближайшего манёвра: дистанция до него меняется каждый тик.
+private struct ManeuverBannerGate: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        let mode = MapMode.current(isTripActive: env.location.isTripActive,
+                                   hasRoute: env.route.isActive)
+        ZStack {
+            if mode.showsManeuver, let step = env.route.nextStep {
+                ManeuverBanner(step: step, distance: env.route.nextStepDistance)
+            }
+        }
+        .animation(.spring(duration: 0.3), value: env.route.nextStep?.distanceAlong)
+    }
+}
+
+/// «Похоже, вы едете» — подсказка включить оповещения; условие читает скорость.
+private struct DrivingHintChip: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        if !env.location.isTripActive
+            && env.location.speedKmh >= AppConfig.speakSpeedThresholdKmh {
+            Text("Похоже, вы едете — включите оповещения")
+                .font(.rounded(12, .medium))
+                .foregroundStyle(Theme.success)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: Capsule())
+        }
+    }
+}
+
+/// Следование карты за GPS: единственный подписчик locationTick.
+private struct LocationFollowDriver: View {
+    @Environment(AppEnvironment.self) private var env
+    let map: MapState
+    let headingUp: Bool
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .onChange(of: env.location.locationTick) { _, _ in
+                // Прогресс маршрута (прибытие/манёвры) тикает в LocationService —
+                // здесь только следование карты за курсом.
+                if headingUp {
+                    map.follow(coordinate: env.location.currentCoordinate,
+                               course: env.location.currentCourse,
+                               pitched: env.location.isTripActive)
+                }
+                if let coordinate = env.location.currentCoordinate {
+                    map.snapToUserOnce(coordinate)   // первый фикс после запуска → окрестности
+                }
+            }
+    }
 }

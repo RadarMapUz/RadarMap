@@ -77,7 +77,7 @@ struct CameraAnnotationView: View {
             if camera.isApproximate {
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.radar)
+                    .foregroundStyle(Theme.warning)
                     .background(Circle().fill(.black).frame(width: 10, height: 10))
                     .offset(x: 13, y: -13)
             }

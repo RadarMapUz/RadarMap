@@ -32,35 +32,44 @@ struct CameraCluster: Identifiable, Equatable {
     }
 }
 
-enum CameraMapContent {
+nonisolated enum CameraMapContent {
 
     /// Готовый слой карты: либо точки, либо кластеры (одновременно — только
-    /// одиночки в своих ячейках рядом с кластерами).
+    /// одиночки в своих ячейках рядом с кластерами). `limits` — лимит дороги
+    /// каждой одиночки: раньше карта спрашивала его у спатиал-индекса на КАЖДЫЙ
+    /// маркер при КАЖДОЙ перерисовке (220 запросов на кадр) — теперь один раз здесь.
     struct Layer: Equatable {
         var cameras: [Camera] = []
         var clusters: [CameraCluster] = []
         var isClustered = false
+        var limits: [Int: Int] = [:]
     }
 
     /// Собрать слой для области. Тяжёлая часть (перебор области и группировка)
     /// уходит с главного потока: на обзорном зуме это тысячи камер.
-    static func layer(
+    /// @concurrent обязателен: при NonisolatedNonsendingByDefault обычный
+    /// `nonisolated async` бежит на акторе вызывающего — то есть на main.
+    @concurrent static func layer(
         cameras: [Camera],
         region: MKCoordinateRegion,
         filter: CameraFilter,
         budget: Int,
+        limitIndex: LimitIndex? = nil,
         divisions: Double = AppConfig.clusterGridDivisions
     ) async -> Layer {
         let box = Box(region)
         let inside = cameras.filter { filter.matches($0) && box.contains(lat: $0.lat, lon: $0.lon) }
         guard inside.count > budget else {
-            return Layer(cameras: inside, clusters: [], isClustered: false)
+            return Layer(cameras: inside, clusters: [], isClustered: false,
+                         limits: limits(of: inside, in: limitIndex))
         }
 
         let cellLat = region.span.latitudeDelta / divisions
         let cellLon = region.span.longitudeDelta / divisions
         guard cellLat > 0, cellLon > 0 else {
-            return Layer(cameras: Array(inside.prefix(budget)), clusters: [], isClustered: true)
+            let singles = Array(inside.prefix(budget))
+            return Layer(cameras: singles, clusters: [], isClustered: true,
+                         limits: limits(of: singles, in: limitIndex))
         }
 
         struct Bucket {
@@ -101,7 +110,19 @@ enum CameraMapContent {
         if singles.count > budget {
             singles = Array(singles.prefix(budget))
         }
-        return Layer(cameras: singles, clusters: clusters, isClustered: true)
+        return Layer(cameras: singles, clusters: clusters, isClustered: true,
+                     limits: limits(of: singles, in: limitIndex))
+    }
+
+    /// Лимиты дорог одиночных маркеров — считаются здесь же, вне main.
+    private static func limits(of cameras: [Camera], in index: LimitIndex?) -> [Int: Int] {
+        guard let index else { return [:] }
+        var result: [Int: Int] = [:]
+        result.reserveCapacity(cameras.count)
+        for camera in cameras {
+            if let limit = index.limit(near: camera.coordinate) { result[camera.id] = limit }
+        }
+        return result
     }
 
     /// Рамка области в градусах — считается один раз, а не на каждую камеру.

@@ -90,7 +90,7 @@ struct SpeedProfileChart: View {
                             .interpolationMethod(.monotone)
                             .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
                             .foregroundStyle(
-                                LinearGradient(colors: [Theme.accent, Theme.intelligent],
+                                LinearGradient(colors: [Theme.accent, Theme.Types.intelligent],
                                                startPoint: .leading, endPoint: .trailing)
                             )
                     }
@@ -158,7 +158,7 @@ struct SpeedProfileChart: View {
                 // Точки — проезды камер, цвет по честности относительно лимита.
                 HStack(spacing: 12) {
                     chartLegendDot(Theme.success, "в лимите")
-                    chartLegendDot(Theme.radar, "слегка выше")
+                    chartLegendDot(Theme.warning, "слегка выше")
                     chartLegendDot(Theme.danger, "превышение")
                     Spacer(minLength: 0)
                 }

@@ -67,37 +67,6 @@ nonisolated enum TripHistory {
         return Int((weightedSum / weight).rounded())
     }
 
-    /// «Сэкономлено на штрафах» за последние 30 дней.
-    /// Честная сводка проездов за 30 дней: сколько в лимите, сколько с превышением,
-    /// риск по РЕАЛЬНЫМ штрафным ступеням и камера, где превышали чаще всего
-    /// («зона риска» — водителю ясно, где сбавлять). Никакой виртуальной «экономии»:
-    /// старая метрика начисляла минимальный штраф за каждый чистый проезд и за месяц
-    /// раздувалась до десятков миллионов — неправдоподобно.
-    static func month30(_ history: [TripRecord], now: Date = Date())
-        -> (clean: Int, over: Int, risk: Double, topOverLocation: String?) {
-        let from = now.addingTimeInterval(-30 * 86400)
-        var clean = 0, over = 0
-        var risk = 0.0
-        var overByLocation: [String: Int] = [:]
-        for record in history where record.startedAt > from {
-            for pass in record.passed {
-                guard let limit = pass.limitKmh else { continue }
-                let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
-                if fine > 0 {
-                    over += 1
-                    risk += fine
-                    if !pass.location.isEmpty {
-                        overByLocation[pass.location, default: 0] += 1
-                    }
-                } else {
-                    clean += 1
-                }
-            }
-        }
-        let top = overByLocation.max { $0.value < $1.value }?.key
-        return (clean, over, risk, top)
-    }
-
     /// «Возможные штрафы» поездки/записи — красная строка в деталке.
     static func fineRisk(of passes: [PassedCamera]) -> Double {
         passes.reduce(0.0) { total, pass in
@@ -107,17 +76,6 @@ nonisolated enum TripHistory {
     }
 
     // MARK: - Сводки для экрана Итогов
-
-    /// Сводка за последние 7 дней — заголовок истории.
-    static func weekSummary(_ history: [TripRecord], now: Date = Date())
-        -> (trips: Int, distance: CLLocationDistance, cameras: Int)? {
-        let weekAgo = now.addingTimeInterval(-7 * 24 * 3600)
-        let recent = history.filter { $0.startedAt > weekAgo }
-        guard !recent.isEmpty else { return nil }
-        return (recent.count,
-                recent.reduce(0) { $0 + $1.distanceMeters },
-                recent.reduce(0) { $0 + $1.camerasPassed })
-    }
 
     struct DayGroup {
         let day: Date

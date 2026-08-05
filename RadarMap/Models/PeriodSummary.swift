@@ -15,53 +15,124 @@ import Foundation
 import CoreLocation
 
 /// Период отчёта. nonisolated: читается из чистого TripHistory и его тестов.
+///
+/// Периоды КАЛЕНДАРНЫЕ, а не скользящие окна. Раньше «Неделя» означала
+/// «последние 7×86400 секунд»: цифры менялись сами по себе без единой новой
+/// поездки (в 14:00 поездка прошлого понедельника ещё в отчёте, в 15:00 уже
+/// нет), а сравнение «с прошлым периодом» плавало вместе с часами. Водитель
+/// мыслит календарём — «на этой неделе», «в августе», — и теперь получает
+/// именно это, с возможностью листать назад (см. anchor).
+///
+/// Сегмента «Всё время» здесь больше нет: он врал по построению — история
+/// чистится (треки через неделю, записи через 30 дней, потолок 50 штук),
+/// поэтому «всё время» показывало «последние 50 поездок». Пожизненная правда
+/// живёт в LifetimeStats и показывается блоком «За всё время».
 nonisolated enum StatsPeriod: String, CaseIterable, Identifiable {
-    case week, month, all
+    case day, week, month
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .day:   return String(localized: "День")
         case .week:  return String(localized: "Неделя")
         case .month: return String(localized: "Месяц")
-        case .all:   return String(localized: "Всё время")
         }
     }
 
-    /// Длина окна в секундах; nil — без ограничения.
-    var interval: TimeInterval? {
+    /// Календарная единица периода.
+    var component: Calendar.Component {
         switch self {
-        case .week:  return 7 * 86400
-        case .month: return 30 * 86400
-        case .all:   return nil
+        case .day:   return .day
+        case .week:  return .weekOfYear
+        case .month: return .month
         }
     }
 
-    /// Сколько столбиков в графике по дням (для «всего времени» график не нужен).
-    var chartDays: Int? {
-        switch self {
-        case .week:  return 7
-        case .month: return 30
-        case .all:   return nil
-        }
+    /// Календарное окно периода, содержащее `anchor`: сутки, неделя (по локали
+    /// пользователя) или месяц целиком.
+    func interval(containing anchor: Date, calendar: Calendar = .current) -> DateInterval {
+        calendar.dateInterval(of: component, for: anchor)
+            ?? DateInterval(start: calendar.startOfDay(for: anchor), duration: 86400)
     }
 
-    /// Подпись под главной цифрой: «95,2 км» без периода читается двусмысленно.
+    /// Предыдущее такое же календарное окно — база сравнений «стало лучше/хуже».
+    func previousInterval(containing anchor: Date, calendar: Calendar = .current) -> DateInterval? {
+        guard let shifted = calendar.date(byAdding: component, value: -1, to: anchor) else { return nil }
+        return interval(containing: shifted, calendar: calendar)
+    }
+
+    /// Сдвиг якоря на N периодов (листание стрелками).
+    func shifted(_ anchor: Date, by steps: Int, calendar: Calendar = .current) -> Date {
+        calendar.date(byAdding: component, value: steps, to: anchor) ?? anchor
+    }
+
+    /// Сколько столбиков в графике по дням: для суток график не нужен.
+    func chartDays(containing anchor: Date, calendar: Calendar = .current) -> Int? {
+        guard self != .day else { return nil }
+        let interval = interval(containing: anchor, calendar: calendar)
+        return calendar.dateComponents([.day], from: interval.start, to: interval.end).day
+    }
+
+    /// Подпись окна под главной цифрой: «95,2 км» без периода двусмысленно.
     var caption: String {
         switch self {
+        case .day:   return String(localized: "за день")
         case .week:  return String(localized: "за неделю")
         case .month: return String(localized: "за месяц")
-        case .all:   return String(localized: "за всё время")
+        }
+    }
+
+    /// Заголовок блока выводов — разбор всегда о том же окне, что и цифры.
+    var insightsTitle: String {
+        switch self {
+        case .day:   return String(localized: "Разбор дня")
+        case .week:  return String(localized: "Разбор недели")
+        case .month: return String(localized: "Разбор месяца")
         }
     }
 
     /// Заголовок списка поездок — список подчиняется тому же фильтру.
     var tripsTitle: String {
         switch self {
+        case .day:   return String(localized: "Поездки за день")
         case .week:  return String(localized: "Поездки за неделю")
         case .month: return String(localized: "Поездки за месяц")
-        case .all:   return String(localized: "Последние поездки")
         }
+    }
+
+    /// Человеческая подпись конкретного окна: «сегодня», «5–11 августа»,
+    /// «август 2026». Без неё стрелки листания бессмысленны — непонятно, где ты.
+    func rangeTitle(containing anchor: Date, calendar: Calendar = .current,
+                    now: Date = Date()) -> String {
+        let interval = self.interval(containing: anchor, calendar: calendar)
+        switch self {
+        case .day:
+            if calendar.isDate(anchor, inSameDayAs: now) { return String(localized: "Сегодня") }
+            if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+               calendar.isDate(anchor, inSameDayAs: yesterday) {
+                return String(localized: "Вчера")
+            }
+            return anchor.formatted(.dateTime.weekday(.wide).day().month(.wide))
+        case .week:
+            let last = interval.end.addingTimeInterval(-1)
+            if calendar.isDate(interval.start, equalTo: last, toGranularity: .month) {
+                // «5–11 августа»: месяц называем один раз.
+                return "\(interval.start.formatted(.dateTime.day()))–"
+                    + last.formatted(.dateTime.day().month(.wide))
+            }
+            return "\(interval.start.formatted(.dateTime.day().month(.abbreviated)))–"
+                + last.formatted(.dateTime.day().month(.abbreviated))
+        case .month:
+            return anchor.formatted(.dateTime.month(.wide).year())
+        }
+    }
+
+    /// Можно ли листать вперёд: будущее показывать нечего.
+    func canGoForward(from anchor: Date, calendar: Calendar = .current,
+                      now: Date = Date()) -> Bool {
+        interval(containing: anchor, calendar: calendar).end
+            < interval(containing: now, calendar: calendar).end
     }
 }
 
@@ -82,6 +153,9 @@ nonisolated struct PeriodSummary: Equatable {
     var fineRisk: Double = 0
     /// Камера, где превышали чаще всего — «зона риска».
     var topOverLocation: String?
+    /// Сколько превышений пришлось на эту камеру — без числа совет «сбавьте там»
+    /// звучит одинаково и для одного раза, и для пяти.
+    var topOverCount = 0
     /// Самый активный день периода.
     var busiestDay: Date?
     var busiestDayKm: Double = 0
@@ -89,6 +163,13 @@ nonisolated struct PeriodSummary: Equatable {
     var activeDays = 0
     /// Дистанция за предыдущий такой же период — база для дельты.
     var previousDistance: CLLocationDistance = 0
+    /// Штрафуемые превышения за предыдущий такой же период: по ним видно, стал
+    /// водитель ездить чище или наоборот.
+    var previousOverPasses = 0
+    /// Рейтинг за предыдущий период (nil — сравнивать не с чем).
+    var previousRating: Int?
+    /// Штрафуемые превышения по часам суток — «когда именно я рискую».
+    var overByHour = [Int](repeating: 0, count: 24)
 
     var isEmpty: Bool { trips == 0 }
     var averageSpeedKmh: Double {
@@ -105,16 +186,102 @@ nonisolated struct PeriodSummary: Equatable {
         guard previousDistance > 500 else { return nil }
         return Int(((distance / previousDistance - 1) * 100).rounded())
     }
+
+    /// Превышений на 100 км. Сравнивать периоды «в штуках» нечестно: неделя с
+    /// дачей в 600 км всегда проигрывает неделе, когда машина стояла во дворе.
+    /// nil — проехали слишком мало, чтобы нормировать.
+    var overPer100km: Double? {
+        guard distance >= 10_000 else { return nil }
+        return Double(overPasses) / (distance / 100_000)
+    }
+
+    var previousOverPer100km: Double? {
+        guard previousDistance >= 10_000 else { return nil }
+        return Double(previousOverPasses) / (previousDistance / 100_000)
+    }
+
+    /// Изменение рейтинга к прошлому периоду (nil — сравнивать не с чем).
+    var ratingDelta: Int? {
+        guard let rating, let previousRating else { return nil }
+        return rating - previousRating
+    }
+
+    /// Превышения по четырёхчасовым блокам суток (6 корзин) — данные полосы
+    /// «часы риска» и вывода «почти всё — вечером».
+    var overByBlock: [Int] {
+        (0..<6).map { block in
+            (0..<4).reduce(0) { $0 + overByHour[block * 4 + $1] }
+        }
+    }
+
+    /// Блок суток, на который пришлось больше всего превышений, и его доля.
+    var peakBlock: PeakBlock? {
+        let blocks = overByBlock
+        guard let top = blocks.enumerated().max(by: { $0.element < $1.element }),
+              top.element > 0 else { return nil }
+        let total = blocks.reduce(0, +)
+        return PeakBlock(index: top.offset, count: top.element,
+                         share: total > 0 ? Double(top.element) / Double(total) : 0)
+    }
+}
+
+/// Пик риска по времени суток: какой четырёхчасовой блок и какая доля превышений.
+nonisolated struct PeakBlock: Equatable {
+    let index: Int
+    let count: Int
+    let share: Double
+
+    /// «18:00–22:00» — подпись блока.
+    var title: String {
+        String(format: "%02d:00–%02d:00", index * 4, (index * 4 + 4) % 24)
+    }
 }
 
 extension TripHistory {
 
-    /// Сводка за период. `now` параметром — чтобы тесты не зависели от часов.
+    /// Сводка за период по дневным агрегатам — числа переживают чистку истории.
+    /// Зона риска (какая камера и сколько раз) считается по записям: названий
+    /// камер в дневной строке нет, и это осознанный компромисс — за пределами
+    /// хранения записей зона риска просто не показывается, а километры,
+    /// превышения и рейтинг остаются честными.
+    static func summary(days: [TripDay], history: [TripRecord], period: StatsPeriod,
+                        anchor: Date = Date(),
+                        calendar: Calendar = .current) -> PeriodSummary {
+        let interval = period.interval(containing: anchor, calendar: calendar)
+        var result = TripDayBook.summary(days, in: interval)
+        guard !result.isEmpty else { return result }
+
+        // Зона риска — по тем записям, что ещё хранятся.
+        var overByLocation: [String: Int] = [:]
+        for record in records(history, period: period, anchor: anchor, calendar: calendar) {
+            for pass in record.passed {
+                guard let limit = pass.limitKmh, !pass.location.isEmpty,
+                      FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0 else { continue }
+                overByLocation[pass.location, default: 0] += 1
+            }
+        }
+        if let top = overByLocation.max(by: { $0.value < $1.value }) {
+            result.topOverLocation = top.key
+            result.topOverCount = top.value
+        }
+
+        // Предыдущее такое же окно — база сравнений «стало лучше/хуже».
+        if let previous = period.previousInterval(containing: anchor, calendar: calendar) {
+            let before = TripDayBook.summary(days, in: previous)
+            result.previousDistance = before.distance
+            result.previousOverPasses = before.overPasses
+            result.previousRating = before.rating
+        }
+        return result
+    }
+
+    /// Сводка только по записям — для тестов и мест, где агрегатов нет под рукой.
+    /// `now` параметром — чтобы тесты не зависели от часов.
     static func summary(_ history: [TripRecord], period: StatsPeriod,
                         calendar: Calendar = .current,
                         now: Date = Date()) -> PeriodSummary {
         var result = PeriodSummary()
-        let records = self.records(history, period: period, now: now)
+        let records = self.records(history, period: period, anchor: now, calendar: calendar)
         guard !records.isEmpty else { return result }
 
         var overByLocation: [String: Int] = [:]
@@ -135,43 +302,57 @@ extension TripHistory {
                 if fine > 0 {
                     result.overPasses += 1
                     result.fineRisk += fine
+                    result.overByHour[calendar.component(.hour, from: pass.date)] += 1
                     if !pass.location.isEmpty { overByLocation[pass.location, default: 0] += 1 }
                 } else {
                     result.cleanPasses += 1
                 }
             }
         }
-        result.topOverLocation = overByLocation.max { $0.value < $1.value }?.key
+        if let top = overByLocation.max(by: { $0.value < $1.value }) {
+            result.topOverLocation = top.key
+            result.topOverCount = top.value
+        }
         if let busiest = kmByDay.max(by: { $0.value < $1.value }) {
             result.busiestDay = busiest.key
             result.busiestDayKm = busiest.value
         }
         result.activeDays = kmByDay.count
-        result.rating = weightedRating(
-            history,
-            from: period.interval.map { now.addingTimeInterval(-$0) } ?? .distantPast,
-            now: now)
-        result.previousDistance = previousDistance(history, period: period, now: now)
+        let interval = period.interval(containing: now, calendar: calendar)
+        result.rating = weightedRating(history, from: interval.start, now: interval.end)
+
+        // Предыдущее такое же окно — база для всех сравнений «стало лучше/хуже».
+        if let previous = period.previousInterval(containing: now, calendar: calendar) {
+            let before = window(history, from: previous.start, to: previous.end)
+            result.previousDistance = before.distance
+            result.previousOverPasses = before.overPasses
+            result.previousRating = weightedRating(history, from: previous.start, now: previous.end)
+        }
         return result
     }
 
-    /// Записи, попадающие в период.
-    static func records(_ history: [TripRecord], period: StatsPeriod,
-                        now: Date = Date()) -> [TripRecord] {
-        guard let interval = period.interval else { return history }
-        let from = now.addingTimeInterval(-interval)
-        return history.filter { $0.startedAt > from && $0.startedAt <= now }
+    /// Дистанция и штрафуемые превышения в произвольном окне — общая основа
+    /// сравнения с прошлым периодом.
+    private static func window(_ history: [TripRecord], from: Date, to: Date)
+        -> (distance: CLLocationDistance, overPasses: Int) {
+        var distance = 0.0
+        var overPasses = 0
+        for record in history where record.startedAt > from && record.startedAt <= to {
+            distance += record.distanceMeters
+            for pass in record.passed {
+                guard let limit = pass.limitKmh else { continue }
+                if FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0 { overPasses += 1 }
+            }
+        }
+        return (distance, overPasses)
     }
 
-    /// Дистанция за предыдущее такое же окно — для стрелки «больше/меньше».
-    private static func previousDistance(_ history: [TripRecord], period: StatsPeriod,
-                                         now: Date) -> CLLocationDistance {
-        guard let interval = period.interval else { return 0 }
-        let to = now.addingTimeInterval(-interval)
-        let from = to.addingTimeInterval(-interval)
-        return history
-            .filter { $0.startedAt > from && $0.startedAt <= to }
-            .reduce(0) { $0 + $1.distanceMeters }
+    /// Записи, попадающие в календарное окно периода.
+    static func records(_ history: [TripRecord], period: StatsPeriod,
+                        anchor: Date = Date(),
+                        calendar: Calendar = .current) -> [TripRecord] {
+        let interval = period.interval(containing: anchor, calendar: calendar)
+        return history.filter { interval.contains($0.startedAt) }
     }
 
     /// Километры по дням периода (нулевые дни включены) — данные графика.
@@ -206,28 +387,32 @@ extension TripHistory {
     /// список не меняется, и непонятно, чем управляет фильтр. Для «Всего времени»
     /// показываем последние `visibleHistory`: там записей может быть под сотню.
     static func historyList(_ history: [TripRecord], period: StatsPeriod,
-                            now: Date = Date()) -> [TripRecord] {
-        guard period.interval != nil else { return Array(history.prefix(visibleHistory)) }
-        return records(history, period: period, now: now)
+                            anchor: Date = Date(),
+                            calendar: Calendar = .current) -> [TripRecord] {
+        records(history, period: period, anchor: anchor, calendar: calendar)
     }
 
     /// Треки периода для карты отчёта: только те записи, у которых трек ещё жив
     /// (см. pruned — за пределами недели он выброшен).
     static func tracks(_ history: [TripRecord], period: StatsPeriod,
-                       now: Date = Date()) -> [[TrackPoint]] {
-        records(history, period: period, now: now)
+                       anchor: Date = Date(),
+                       calendar: Calendar = .current) -> [[TrackPoint]] {
+        records(history, period: period, anchor: anchor, calendar: calendar)
             .map(\.trackPoints)
             .filter { $0.count >= 2 }
     }
 
     /// Всё, что рисует карта проездов: треки, маркеры камер и слой частоты.
-    /// Собирается на смену периода, а не на каждый пересчёт вьюхи, и считает
-    /// частоту вне главного потока (десятки тысяч ячеек сетки).
-    static func mapData(_ history: [TripRecord], period: StatsPeriod,
-                        now: Date = Date()) async -> PeriodMapData {
-        let tracks = self.tracks(history, period: period, now: now)
+    /// Собирается на смену периода, а не на каждый пересчёт вьюхи.
+    /// @concurrent обязателен: `nonisolated async` при NonisolatedNonsendingByDefault
+    /// бежит на акторе вызывающего — расчёт шёл на main и дёргал открытие Итогов.
+    @concurrent static func mapData(_ history: [TripRecord], period: StatsPeriod,
+                                    anchor: Date = Date(),
+                                    calendar: Calendar = .current) async -> PeriodMapData {
+        let tracks = self.tracks(history, period: period, anchor: anchor, calendar: calendar)
         return PeriodMapData(tracks: tracks,
-                             markers: passMarkers(history, period: period, now: now),
+                             markers: passMarkers(history, period: period,
+                                                  anchor: anchor, calendar: calendar),
                              heat: await heatLines(tracks))
     }
 
@@ -248,8 +433,9 @@ extension TripHistory {
     /// было ли превышение, максимальная скорость проезда. Маркеры карты отчёта
     /// и карточка по тапу («где я превышал»).
     static func passMarkers(_ history: [TripRecord], period: StatsPeriod,
-                            now: Date = Date()) -> [PassMarker] {
-        markers(from: records(history, period: period, now: now))
+                            anchor: Date = Date(),
+                            calendar: Calendar = .current) -> [PassMarker] {
+        markers(from: records(history, period: period, anchor: anchor, calendar: calendar))
     }
 
     private static func markers(from records: [TripRecord]) -> [PassMarker] {
@@ -296,8 +482,9 @@ extension TripHistory {
     /// упрощённым (Дуглас-Пекер ±22 м), поэтому на прямой улице два проезда
     /// оставляют вершины в разных местах — по вершинам совпадение не нашлось бы
     /// и коридор никогда не загорелся.
-    static func heatLines(_ tracks: [[TrackPoint]],
-                          cellMeters: Double = AppConfig.heatCellMeters) async -> [HeatLine] {
+    /// @concurrent: десятки тысяч ячеек сетки — этому не место на main.
+    @concurrent static func heatLines(_ tracks: [[TrackPoint]],
+                                      cellMeters: Double = AppConfig.heatCellMeters) async -> [HeatLine] {
         guard let reference = tracks.first(where: { $0.count >= 2 })?.first else { return [] }
         let latStep = cellMeters / 111_320
         let lonStep = cellMeters / (111_320 * max(0.2, cos(reference.lat * .pi / 180)))

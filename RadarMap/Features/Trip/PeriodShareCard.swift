@@ -91,11 +91,11 @@ struct PeriodShareCard: View {
                 ShareMetricDivider()
                 ShareMetric(value: "\(summary.cameras)",
                             label: String(localized: "камер"),
-                            icon: "camera.fill", tint: Theme.camera)
+                            icon: "camera.fill", tint: Theme.Types.camera)
                 ShareMetricDivider()
                 ShareMetric(value: Formatting.duration(summary.movingDuration),
                             label: String(localized: "за рулём"),
-                            icon: "clock.fill", tint: Theme.intelligent)
+                            icon: "clock.fill", tint: Theme.Types.intelligent)
             }
             .shareMetricsTile()
             .padding(.bottom, 4)

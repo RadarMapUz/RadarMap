@@ -141,10 +141,10 @@ struct CameraDetailSheet: View {
         Label("Позиция уточняется: адрес из реестра не удалось привязать к дороге. Предупреждаем о такой камере с запасом.",
               systemImage: "exclamationmark.triangle.fill")
             .font(.rounded(13))
-            .foregroundStyle(Theme.radar)
+            .foregroundStyle(Theme.warning)
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.radar.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+            .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
     }
 
     @ViewBuilder private var routeButton: some View {
@@ -242,11 +242,11 @@ struct CameraDetailSheet: View {
                         sendReport(.stillHere)
                     }
                     reportButton(title: "Камеры больше нет", icon: "camera.slash.fill",
-                                 tint: Theme.radar) {
+                                 tint: Theme.warning) {
                         sendReport(.gone)
                     }
                     reportButton(title: "Неверное место", icon: "mappin.slash.circle.fill",
-                                 tint: Theme.radar) {
+                                 tint: Theme.warning) {
                         sendReport(.wrongLocation)
                     }
                 }

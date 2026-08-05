@@ -15,6 +15,9 @@ import CoreLocation
 final class MapState {
     var visibleCameras: [Camera] = []
     var clusters: [CameraCluster] = []
+    /// Лимит дороги у видимых камер (id → км/ч): посчитан вместе со слоем вне
+    /// main — маркеры берут его отсюда, а не из спатиал-индекса на каждый кадр.
+    var visibleLimits: [Int: Int] = [:]
     var selectedCamera: Camera?          // открытый попап детали
     var highlightedID: Int?              // подсвеченный маркер на карте
     var showNearbySheet = false
@@ -31,14 +34,16 @@ final class MapState {
     var followsDeviceHeading = false
 
     private var repository: CameraRepository?
+    @ObservationIgnored private weak var speedLimits: SpeedLimitService?
     private var currentRegion: MKCoordinateRegion?
     private var loadedRegion: MKCoordinateRegion?   // область, для которой посчитаны точки (с буфером)
 
     /// Координата центра карты (для добавления камеры «здесь»).
     var mapCenter: CLLocationCoordinate2D? { currentRegion?.center }
 
-    func configure(_ repository: CameraRepository) {
+    func configure(_ repository: CameraRepository, speedLimits: SpeedLimitService? = nil) {
         if self.repository == nil { self.repository = repository }
+        if self.speedLimits == nil { self.speedLimits = speedLimits }
     }
 
     /// Первый GPS-фикс после запуска: показываем окрестности (~2.5 км), а не всю страну —
@@ -124,10 +129,11 @@ final class MapState {
         let cameras = repository.cameras
         let filter = self.filter
         let span = region.span.latitudeDelta
+        let limitIndex = speedLimits?.limitIndex
         Task {
             let layer = await CameraMapContent.layer(
                 cameras: cameras, region: buffered, filter: filter,
-                budget: AppConfig.maxVisibleAnnotations)
+                budget: AppConfig.maxVisibleAnnotations, limitIndex: limitIndex)
             // Пока считали, карту могли увезти дальше — этот ответ уже не про то,
             // что на экране. Область «загруженной» при этом НЕ помечаем: иначе
             // после быстрой прокрутки туда-сюда кэш говорил бы «тут всё есть»,
@@ -159,6 +165,7 @@ final class MapState {
     /// Применить готовый слой. Анимируем только небольшие наборы: на сотнях
     /// аннотаций анимированная перестройка представлений сама по себе — рывок.
     private func apply(_ layer: CameraMapContent.Layer) {
+        visibleLimits = layer.limits
         let animates = layer.cameras.count + layer.clusters.count <= 80
         if animates {
             withAnimation(.easeInOut(duration: 0.25)) {

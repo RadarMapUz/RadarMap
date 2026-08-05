@@ -89,13 +89,16 @@ final class AppEnvironment {
 
         // Недельный дайджест: после каждой поездки перепланируем пуш со свежими цифрами.
         trip.onTripFinished = { [weak trip, weak notifications] in
-            guard let trip, let notifications,
-                  let week = trip.weekSummary else { return }
+            guard let trip, let notifications else { return }
+            // Тот же расчёт, что на экране Итогов: пуш и экран не имеют права
+            // разойтись в цифрах (раньше здесь смешивались окна 7 и 30 дней).
+            let week = TripHistory.summary(days: trip.days, history: trip.history, period: .week)
+            guard !week.isEmpty else { return }
             notifications.scheduleWeeklyDigest(
                 distance: week.distance,
                 cameras: week.cameras,
-                rating: trip.rating,
-                cleanMonth: trip.month30.over == 0
+                rating: week.rating,
+                cleanMonth: week.overPasses == 0
             )
         }
 

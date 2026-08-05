@@ -72,7 +72,7 @@ struct PassMapSheet: View {
                 MapPolyline(coordinates: track.map {
                     CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
                 })
-                .stroke(LinearGradient(colors: [Theme.accent, Theme.intelligent],
+                .stroke(LinearGradient(colors: [Theme.accent, Theme.Types.intelligent],
                                        startPoint: .topLeading, endPoint: .bottomTrailing),
                         style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
             }

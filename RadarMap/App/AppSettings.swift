@@ -10,7 +10,8 @@ import Observation
 import CoreLocation
 import os
 
-enum CameraFilter: String, CaseIterable, Identifiable {
+// nonisolated: matches(_:) зовёт @concurrent-сборка слоя карты вне main.
+nonisolated enum CameraFilter: String, CaseIterable, Identifiable {
     case all, cameras, radars
     var id: String { rawValue }
     var title: String {

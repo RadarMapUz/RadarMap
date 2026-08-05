@@ -8,16 +8,32 @@
 import SwiftUI
 import UIKit
 
+/// Панель стоит над светлой подложкой карты (дневная тема): фон карточек
+/// уплотняется, иначе белые цифры на солнце теряются в полупрозрачном стекле.
+/// Флаг, а не смена colorScheme: интерфейс обязан остаться тёмным, иначе
+/// системные материалы посветлеют вместе с белым текстом на них.
+private struct OnLightMapKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var onLightMap: Bool {
+        get { self[OnLightMapKey.self] }
+        set { self[OnLightMapKey.self] = newValue }
+    }
+}
+
 /// «Стеклянная» карточка — базовый контейнер интерфейса (нативный Liquid Glass).
 struct GlassCard<Content: View>: View {
     var cornerRadius: CGFloat = Theme.cornerLarge
     @ViewBuilder var content: Content
+    @Environment(\.onLightMap) private var onLightMap
 
     var body: some View {
         content
-            // Тёмная подложка под стеклом: на светлой карте (спутник, светлая
-            // тема системы) чистое стекло белеет, и белый текст по нему исчезает.
-            .background(Theme.background.opacity(0.32),
+            // Тёмная подложка под стеклом: на светлой карте чистое стекло
+            // белеет, и белый текст по нему исчезает.
+            .background(Theme.background.opacity(onLightMap ? 0.62 : 0.32),
                         in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .backport.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
             // Световая кромка сверху — единый премиальный язык стекла в приложении.
@@ -224,7 +240,7 @@ struct RatingRing: View {
     private var color: Color {
         switch DrivingScore.tier(for: rating) {
         case 2: return Theme.success
-        case 1: return Theme.radar
+        case 1: return Theme.warning
         default: return Theme.danger
         }
     }

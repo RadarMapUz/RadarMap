@@ -2,16 +2,27 @@
 //  StatsInfoSheets.swift
 //  RadarMap
 //
-//  Расшифровки Итогов: как считается рейтинг, из чего складывается экономия,
+//  Расшифровки Итогов: как считается рейтинг, из чего складываются штрафы,
 //  детали достижений. Открываются тапом по карточкам — цифрам можно доверять,
 //  только когда понятно, откуда они берутся.
 //
+//  Шиты получают ТУ ЖЕ сводку, которую показала карточка, и подпись её окна.
+//  Раньше они читали собственные агрегаты с зашитыми 30 днями: в шапке было
+//  «85 за неделю», по тапу открывалось «82 за 30 дней» — пользователь нажимал
+//  на цифру и получал другую.
+//
 
 import SwiftUI
+import Charts
 
 // MARK: - Как считается рейтинг
 
 struct RatingInfoSheet: View {
+    let summary: PeriodSummary
+    let period: StatsPeriod
+    /// Окно, за которое показан рейтинг: по нему считается разложение.
+    var interval: DateInterval = DateInterval(start: .distantPast, end: Date())
+    var onOpenTrip: ((Double) -> Void)? = nil
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
 
@@ -20,6 +31,8 @@ struct RatingInfoSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header
+                    breakdownSection
+                    trendSection
                     scaleSection
                     componentsSection
                     tipsSection
@@ -39,7 +52,7 @@ struct RatingInfoSheet: View {
 
     private var header: some View {
         HStack(spacing: 16) {
-            if let rating = env.trip.rating {
+            if let rating = summary.rating {
                 RatingRing(rating: rating)
                     .frame(width: 84, height: 84)
             } else {
@@ -50,26 +63,169 @@ struct RatingInfoSheet: View {
                     .background(Theme.accent.opacity(0.10), in: Circle())
             }
             VStack(alignment: .leading, spacing: 4) {
-                if let rating = env.trip.rating {
+                if let rating = summary.rating {
                     Text(DrivingScore.level(for: rating))
                         .font(.rounded(17, .bold))
                         .foregroundStyle(Theme.textPrimary)
                 }
-                Text("Средний балл поездок за 30 дней. Длинные поездки весят больше коротких.")
+                // Окно называем явно: это ровно та цифра, по которой тапнули.
+                Text(String(format: String(localized: "Средний балл поездок %@. Длинные поездки весят больше коротких."),
+                            period.caption))
                     .font(.rounded(12))
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let previous = summary.previousRating {
+                    Text(String(format: String(localized: "Прошлый период: %lld"), previous))
+                        .font(.rounded(11, .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                }
             }
             Spacer(minLength: 0)
         }
         .statCard()
     }
 
+    // MARK: Из чего сложился ВАШ рейтинг
+
+    /// Разложение недобора по поездкам: сумма строк ровно равна 100 − рейтинг,
+    /// поэтому блок можно проверить сложением. Раньше шит объяснял методику и
+    /// молчал о том, что именно съело баллы.
+    @ViewBuilder private var breakdownSection: some View {
+        let items = RatingBreakdown.contributions(records: env.trip.history,
+                                                  days: env.trip.days, in: interval)
+        if let rating = summary.rating, !items.isEmpty {
+            infoCard(title: String(localized: "Из чего сложился ваш рейтинг")) {
+                HStack(spacing: 6) {
+                    Text("100")
+                        .font(.rounded(15, .heavy).monospacedDigit())
+                        .foregroundStyle(Theme.textSecondary)
+                    Text("−\(Int((100 - Double(rating)).rounded()))")
+                        .font(.rounded(15, .heavy).monospacedDigit())
+                        .foregroundStyle(Theme.danger)
+                    Text("=")
+                        .font(.rounded(15, .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                    Text("\(rating)")
+                        .font(.rounded(17, .heavy).monospacedDigit())
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.bottom, 2)
+
+                // Крупные вклады показываем строками, мелочь сворачиваем: список
+                // из двадцати строк по −0,1 балла ничего не объясняет.
+                let shown = Array(items.prefix(AppConfig.breakdownVisibleRows))
+                    .filter { $0.points >= 0.5 }
+                ForEach(shown) { item in
+                    contributionRow(item)
+                }
+                let restCount = items.count - shown.count
+                let restPoints = items.dropFirst(shown.count).reduce(0) { $0 + $1.points }
+                if restCount > 0, restPoints > 0 {
+                    HStack {
+                        Text(String(format: String(localized: "Остальные поездки: %lld"), restCount))
+                            .font(.rounded(12))
+                            .foregroundStyle(Theme.textTertiary)
+                        Spacer(minLength: 0)
+                        Text(pointsText(restPoints))
+                            .font(.rounded(13, .semibold).monospacedDigit())
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                }
+                if let next = DrivingScore.nextLevel(for: rating) {
+                    Text(String(format: String(localized: "До уровня «%1$@» — %2$lld балла"),
+                                next.name, next.threshold - rating))
+                        .font(.rounded(11, .medium))
+                        .foregroundStyle(Theme.accent)
+                        .padding(.top, 2)
+                }
+                // Честная оговорка: часть поездок в рейтинг вообще не входит.
+                let unrated = RatingBreakdown.unratedTrips(records: env.trip.history, in: interval)
+                if unrated > 0 {
+                    Text(String(format: String(localized: "Ещё %lld поездок без известных лимитов и трека — в рейтинг они не вошли"),
+                                unrated))
+                        .font(.rounded(11))
+                        .foregroundStyle(Theme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func contributionRow(_ item: RatingContribution) -> some View {
+        Button {
+            guard item.isTrip, let onOpenTrip else { return }
+            dismiss()
+            onOpenTrip(item.id)
+        } label: {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.date.formatted(date: .abbreviated, time: item.isTrip ? .shortened : .omitted))
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("\(Formatting.distance(item.distanceMeters)) · \(String(format: String(localized: "балл %lld"), item.score))")
+                        .font(.rounded(11))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                Spacer(minLength: 8)
+                Text(pointsText(item.points))
+                    .font(.rounded(15, .heavy).monospacedDigit())
+                    .foregroundStyle(item.points >= 1 ? Theme.danger : Theme.textSecondary)
+                if item.isTrip, onOpenTrip != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.rounded(11, .semibold))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!item.isTrip || onOpenTrip == nil)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func pointsText(_ points: Double) -> String {
+        points < 0.05 ? "0" : "−" + String(format: "%.1f", locale: .current, points)
+    }
+
+    // MARK: Динамика
+
+    /// Стабильный стиль или одна поездка утянула среднее — по дням окна.
+    @ViewBuilder private var trendSection: some View {
+        let points = RatingBreakdown.dailyRatings(days: env.trip.days, in: interval)
+        if points.count >= 2 {
+            infoCard(title: String(localized: "Рейтинг по дням")) {
+                Chart(points, id: \.day) { item in
+                    LineMark(x: .value("День", item.day, unit: .day),
+                             y: .value("Рейтинг", item.rating))
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(Theme.accent)
+                    PointMark(x: .value("День", item.day, unit: .day),
+                              y: .value("Рейтинг", item.rating))
+                        .foregroundStyle(TripHistorySection.scoreColor(item.rating))
+                }
+                .chartYScale(domain: 0...100)
+                .chartYAxis {
+                    AxisMarks(values: [0, 50, 100]) { _ in
+                        AxisValueLabel().font(.rounded(9)).foregroundStyle(Theme.textTertiary)
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                        AxisValueLabel(format: .dateTime.day().month(.abbreviated))
+                            .font(.rounded(9)).foregroundStyle(Theme.textTertiary)
+                    }
+                }
+                .frame(height: 92)
+            }
+        }
+    }
+
     private var scaleSection: some View {
         infoCard(title: String(localized: "Шкала")) {
             scaleRow(Theme.success, "90–100", String(localized: "Идеальный стиль"))
             scaleRow(Theme.success.opacity(0.75), "75–89", String(localized: "Аккуратный водитель"))
-            scaleRow(Theme.radar, "60–74", String(localized: "Уверенный, но с риском"))
+            scaleRow(Theme.warning, "60–74", String(localized: "Уверенный, но с риском"))
             scaleRow(Theme.danger, "0–59", String(localized: "Рискованный стиль"))
         }
     }
@@ -93,7 +249,7 @@ struct RatingInfoSheet: View {
             componentRow(icon: "camera.metering.center.weighted", tint: Theme.accent,
                          title: String(localized: "Скорость у камер"),
                          text: String(localized: "Каждый проезд камеры с известным лимитом: берём минимальную скорость в 80 м перед камерой — разгон после проезда не считается. Штрафные ступени снижают балл сильнее всего."))
-            componentRow(icon: "waveform.path.ecg", tint: Theme.intelligent,
+            componentRow(icon: "waveform.path.ecg", tint: Theme.Types.intelligent,
                          title: String(localized: "Плавность езды"),
                          text: String(localized: "Резкие разгоны и торможения по треку поездки снижают балл."))
         }
@@ -141,6 +297,10 @@ struct RatingInfoSheet: View {
 // MARK: - Как считаем экономию
 
 struct SavingsInfoSheet: View {
+    let summary: PeriodSummary
+    let period: StatsPeriod
+    /// Окно, за которое показана сумма: по нему считаются камеры-источники.
+    var interval: DateInterval = DateInterval(start: .distantPast, end: Date())
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
 
@@ -149,13 +309,14 @@ struct SavingsInfoSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header
+                    sourcesSection
                     fineTable
                     method
                 }
                 .padding(20)
             }
             .background(Theme.background)
-            .navigationTitle("Штрафы и лимиты")
+            .navigationTitle("Возможные штрафы")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
@@ -166,21 +327,23 @@ struct SavingsInfoSheet: View {
     }
 
     private var header: some View {
-        // Честные цифры за 30 дней: проезды в лимите, превышения, реальный риск.
-        let month = env.trip.month30
-        let ok = month.over == 0
+        // Ровно те цифры, что на карточке: то же окно, тот же расчёт.
+        let ok = summary.overPasses == 0
         return VStack(spacing: 12) {
+            Text(period.caption)
+                .font(.rounded(11, .medium))
+                .foregroundStyle(Theme.textTertiary)
             Text(ok ? String(localized: "0 штрафов")
                     : String(format: String(localized: "риск ≈ %@"),
-                             Formatting.money(month.risk)))
+                             Formatting.money(summary.fineRisk)))
                 .font(.rounded(34, .heavy))
                 .foregroundStyle(ok ? Theme.success : Theme.danger)
             HStack(spacing: 0) {
-                headerMetric("\(month.clean)", String(localized: "в лимите"))
+                headerMetric("\(summary.cleanPasses)", String(localized: "в лимите"))
                 divider
-                headerMetric("\(month.over)", String(localized: "превышений"))
+                headerMetric("\(summary.overPasses)", String(localized: "превышений"))
                 divider
-                headerMetric("\(env.trip.lifetime.trips)", String(localized: "поездок всего"))
+                headerMetric("\(summary.trips)", String(localized: "поездок"))
             }
         }
         .frame(maxWidth: .infinity)
@@ -201,6 +364,52 @@ struct SavingsInfoSheet: View {
 
     private var divider: some View {
         Rectangle().fill(Theme.success.opacity(0.2)).frame(width: 1, height: 30)
+    }
+
+    /// Откуда взялась сумма: камеры от дорогих к дешёвым. Сумма строк равна
+    /// общему риску за то же окно — блок можно проверить сложением.
+    @ViewBuilder private var sourcesSection: some View {
+        let sources = RatingBreakdown.fineSources(records: env.trip.history, in: interval)
+        if !sources.isEmpty {
+            infoCard(title: String(localized: "Откуда сумма")) {
+                ForEach(sources.prefix(AppConfig.fineSourcesVisibleRows)) { source in
+                    HStack(spacing: 10) {
+                        Image(systemName: "camera.metering.center.weighted")
+                            .font(.rounded(12, .bold))
+                            .foregroundStyle(Theme.danger)
+                            .frame(width: 28, height: 28)
+                            .background(Theme.danger.opacity(0.12), in: Circle())
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(source.location)
+                                .font(.rounded(13, .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                                .lineLimit(1)
+                            Text(String(format: String(localized: "штрафуемых проездов: %lld"),
+                                        source.times))
+                                .font(.rounded(11))
+                                .foregroundStyle(Theme.textTertiary)
+                        }
+                        Spacer(minLength: 8)
+                        Text(Formatting.money(source.sum))
+                            .font(.rounded(14, .bold).monospacedDigit())
+                            .foregroundStyle(Theme.danger)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                let rest = sources.dropFirst(AppConfig.fineSourcesVisibleRows)
+                if !rest.isEmpty {
+                    HStack {
+                        Text(String(format: String(localized: "Остальные камеры: %lld"), rest.count))
+                            .font(.rounded(12))
+                            .foregroundStyle(Theme.textTertiary)
+                        Spacer(minLength: 0)
+                        Text(Formatting.money(rest.reduce(0) { $0 + $1.sum }))
+                            .font(.rounded(13, .semibold).monospacedDigit())
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                }
+            }
+        }
     }
 
     private var fineTable: some View {
@@ -234,9 +443,13 @@ struct SavingsInfoSheet: View {
 
     private var method: some View {
         infoCard(title: String(localized: "Как считаем")) {
-            Text("Каждая камера с известным лимитом, пройденная без штрафной скорости, — несостоявшийся минимальный штраф в 1 БРВ. Складываем такие проезды. Это оценка, а не гарантия: повторность и допуски конкретных камер мы знать не можем.")
+            Text("Берём каждый проезд камеры, у которой известен лимит дороги, и сравниваем с ним скорость в точке фиксации. Попал в штрафную ступень — прибавляем её сумму к риску. Проезды камер без известного лимита не считаем нарушением: выдумывать превышение мы не вправе.")
                 .font(.rounded(13))
                 .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Это оценка, а не выписанные штрафы: повторность нарушений и допуски конкретных камер нам неизвестны.")
+                .font(.rounded(11))
+                .foregroundStyle(Theme.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

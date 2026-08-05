@@ -99,7 +99,7 @@ struct CarPlayMapScreen: View {
         guard let limit = env.speedLimits.currentLimit else { return Theme.textPrimary }
         let over = env.location.speedKmh - Double(limit)
         if over <= 2 { return Theme.textPrimary }
-        if FineSchedule.fine(overKmh: over) == 0 { return Theme.radar }
+        if FineSchedule.fine(overKmh: over) == 0 { return Theme.warning }
         return Theme.danger
     }
 

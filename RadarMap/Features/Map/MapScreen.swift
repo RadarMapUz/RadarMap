@@ -33,6 +33,12 @@ struct MapScreen: View {
     /// контролов, а не под статус-баром.
     @Namespace private var mapScope
 
+    /// Что нужно водителю прямо сейчас: правила видимости — в MapMode,
+    /// а не россыпью условий по вёрстке (см. MapMode.swift).
+    private var mode: MapMode {
+        MapMode.current(isTripActive: env.location.isTripActive, hasRoute: env.route.isActive)
+    }
+
     var body: some View {
         @Bindable var map = map
 
@@ -55,8 +61,12 @@ struct MapScreen: View {
 
             if map.isAddingCamera { crosshair }
 
+            // Панели знают, что под ними светлая карта: днём их фон плотнее,
+            // иначе белые цифры на солнце тонут в стекле.
             topLayer
+                .environment(\.onLightMap, mapColorScheme == .light)
             bottomLayer
+                .environment(\.onLightMap, mapColorScheme == .light)
 
             // Превышение у камеры: свечение по краям. Отдельная вью: условие
             // читает скорость и дистанцию, меняющиеся каждый тик GPS, — в body
@@ -217,7 +227,7 @@ struct MapScreen: View {
                     .stroke(Theme.background.opacity(0.85),
                             style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
                 MapPolyline(polyline)
-                    .stroke(LinearGradient(colors: [Theme.accent, Theme.intelligent],
+                    .stroke(LinearGradient(colors: [Theme.accent, Theme.Types.intelligent],
                                            startPoint: .topLeading, endPoint: .bottomTrailing),
                             style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
                 // Пройденная часть тускнеет — видно, сколько осталось.
@@ -329,7 +339,10 @@ struct MapScreen: View {
     private var topLayer: some View {
         VStack(spacing: 10) {
             // Тап по HUD — «Спидометр»; долгий тап — быстрые тумблеры оповещений.
-            SpeedHUDView()
+            // В навигации главный элемент — манёвр, поэтому HUD уходит на
+            // второй план: одного «главного» на экране достаточно, два спорят
+            // за взгляд (MapMode.focus).
+            SpeedHUDView(secondary: mode.focus != .speed)
                 .onTapGesture { showDashboard = true }
                 .onLongPressGesture(minimumDuration: 0.4) {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -425,10 +438,10 @@ struct MapScreen: View {
                 recenter()
                 revealControls()
             }
-            // В поездке: «Радар здесь!» одним тапом — отметить передвижной радар
-            // для других водителей (то же самое умеет Siri голосом).
-            if env.location.isTripActive {
-                CircleControl(systemName: "dot.radiowaves.left.and.right", tint: Theme.radar,
+            // «Радар здесь!» одним тапом — отметить передвижной радар для
+            // других водителей (то же самое умеет Siri голосом).
+            if mode.showsReportButton {
+                CircleControl(systemName: "dot.radiowaves.left.and.right", tint: Theme.Types.radar,
                               accessibilityLabel: "Радар здесь") {
                     guard let coordinate = env.location.currentCoordinate else { return }
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -492,21 +505,23 @@ struct MapScreen: View {
                 )
             } else {
                 permissionBanner
-                if !controlsHidden {
+                // Легенда типов — справочная информация: за рулём её место
+                // не на экране (MapMode.showsLegend).
+                if mode.showsLegend, !controlsHidden {
                     HStack(alignment: .bottom) {
                         smartLegend
                         Spacer()
                     }
                     .transition(.move(edge: .leading).combined(with: .opacity))
                 }
-                if env.location.isTripActive {
+                if mode.showsTripBar {
                     // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
                     // максимум экрана отдан карте, и она не прячется вместе с кнопками.
                     TripLiveBar(
                         onShowCameras: { showRouteCameras = true },
                         onStop: { toggleTrip() }
                     )
-                } else if env.route.isActive {
+                } else if mode.showsRoutePanel, env.route.isActive {
                     RoutePanel(
                         onShowCameras: { showRouteCameras = true },
                         onTripToggle: { toggleTrip() }
@@ -533,6 +548,8 @@ struct MapScreen: View {
                     DrivingHintChip()
                     // Одна линия: Дом и Работа компактной парой слева,
                     // «Начать поездку» занимает остальную ширину справа.
+                    // Только в покое — в движении выбирать цель поздно.
+                    if mode.showsQuickDestinations {
                     HStack(spacing: 10) {
                         PlaceCircle(slot: .home,
                                     onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
@@ -542,8 +559,9 @@ struct MapScreen: View {
                                     onAssign: { assignSlot = $0 })
                         tripButton
                     }
+                    }
                 }
-                if !controlsHidden {
+                if mode.showsActionBar, !controlsHidden {
                     actionBar
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -669,10 +687,10 @@ struct MapScreen: View {
     @ViewBuilder private var smartLegend: some View {
         if legendExpanded {
             VStack(alignment: .leading, spacing: 8) {
-                LegendChip(color: Theme.camera, symbol: "camera.fill", text: "Камера")
-                LegendChip(color: Theme.radar, symbol: "speedometer", text: "Радар")
-                LegendChip(color: Theme.intelligent, symbol: "camera.metering.matrix", text: "Интеллект.")
-                LegendChip(color: Theme.mobile, symbol: "dot.radiowaves.left.and.right", text: "Передвижной")
+                LegendChip(color: Theme.Types.camera, symbol: "camera.fill", text: "Камера")
+                LegendChip(color: Theme.Types.radar, symbol: "speedometer", text: "Радар")
+                LegendChip(color: Theme.Types.intelligent, symbol: "camera.metering.matrix", text: "Интеллект.")
+                LegendChip(color: Theme.Types.mobile, symbol: "dot.radiowaves.left.and.right", text: "Передвижной")
             }
             .padding(12)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
@@ -703,7 +721,7 @@ struct MapScreen: View {
     @ViewBuilder private var permissionBanner: some View {
         if let banner = bannerInfo {
             HStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.radar)
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
                 Text(banner.message).font(.rounded(12)).foregroundStyle(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
@@ -969,8 +987,10 @@ private struct ManeuverBannerGate: View {
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
+        let mode = MapMode.current(isTripActive: env.location.isTripActive,
+                                   hasRoute: env.route.isActive)
         ZStack {
-            if env.location.isTripActive, let step = env.route.nextStep {
+            if mode.showsManeuver, let step = env.route.nextStep {
                 ManeuverBanner(step: step, distance: env.route.nextStepDistance)
             }
         }

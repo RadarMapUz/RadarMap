@@ -103,7 +103,7 @@ struct DashboardView: View {
         guard let limit = env.speedLimits.currentLimit else { return .white }
         let over = env.location.speedKmh - Double(limit)
         if over <= 2 { return .white }
-        if FineSchedule.fine(overKmh: over) == 0 { return Theme.radar }
+        if FineSchedule.fine(overKmh: over) == 0 { return Theme.role(.attention) }
         return Theme.danger
     }
 
@@ -112,8 +112,8 @@ struct DashboardView: View {
         let radius = AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
                                                  baseRadius: env.settings.alertRadius)
         if distance <= radius * 0.3 { return Theme.danger }
-        if distance <= radius * 0.6 { return .orange }
-        if distance <= radius { return Theme.radar }
+        if distance <= radius * 0.6 { return Theme.role(.alarm) }
+        if distance <= radius { return Theme.warning }
         return Theme.accent
     }
 }

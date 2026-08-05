@@ -14,20 +14,17 @@ import Charts
 // MARK: - Общие помощники стиля проездов
 
 enum PassStyle {
-    /// Цвет скорости: если лимит дороги известен — по штрафным ступеням КоАО
-    /// (жёлтый — выше лимита, но в допуске; красный — уже штраф),
-    /// иначе по универсальным порогам города/трассы.
+    /// Цвет скорости проезда. Лимит известен — состояние считает Theme.speedLevel
+    /// (одно правило на HUD телефона, панель CarPlay, Итоги и эти строки);
+    /// лимита нет — падаем на универсальные пороги города/трассы.
     static func color(speed: Double, limit: Int?) -> Color {
-        if let limit {
-            let over = speed - Double(limit)
-            if over <= 2 { return Theme.success }
-            if FineSchedule.fine(overKmh: over) == 0 { return Theme.radar }
-            return Theme.danger
+        if limit != nil {
+            return Theme.role(Theme.speedLevel(speedKmh: speed, limitKmh: limit))
         }
         switch speed {
-        case ..<90:    return Theme.success
-        case 90..<110: return Theme.radar
-        default:       return Theme.danger
+        case ..<90:    return Theme.role(.normal)
+        case 90..<110: return Theme.role(.attention)
+        default:       return Theme.role(.alarm)
         }
     }
 }
@@ -134,7 +131,7 @@ struct TrackCanvas: View {
             path.move(to: project(points[0].lat, points[0].lon))
             for p in points.dropFirst() { path.addLine(to: project(p.lat, p.lon)) }
             context.stroke(path, with: .linearGradient(
-                Gradient(colors: [Theme.accent, Theme.intelligent]),
+                Gradient(colors: [Theme.accent, Theme.Types.intelligent]),
                 startPoint: .zero, endPoint: CGPoint(x: size.width, y: size.height)),
                 style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
 
@@ -257,7 +254,7 @@ struct TripDetailSheet: View {
                 MapPolyline(coordinates: points.map {
                     CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
                 })
-                .stroke(LinearGradient(colors: [Theme.accent, Theme.intelligent],
+                .stroke(LinearGradient(colors: [Theme.accent, Theme.Types.intelligent],
                                        startPoint: .topLeading, endPoint: .bottomTrailing),
                         style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
 
@@ -399,7 +396,7 @@ struct TripDetailSheet: View {
             StatTile(value: "\(Int(record.maxSpeedKmh))", label: "макс. км/ч",
                      icon: "gauge.with.dots.needle.100percent", color: Theme.danger)
             StatTile(value: "\(Int(record.averageSpeedKmh))", label: "средняя км/ч",
-                     icon: "gauge.with.dots.needle.33percent", color: Theme.radar)
+                     icon: "gauge.with.dots.needle.33percent", color: Theme.warning)
         }
     }
 
@@ -473,11 +470,11 @@ struct TripShareCard: View {
                 ShareMetricDivider()
                 ShareMetric(value: "\(record.camerasPassed)",
                             label: String(localized: "камер"),
-                            icon: "camera.fill", tint: Theme.camera)
+                            icon: "camera.fill", tint: Theme.Types.camera)
                 ShareMetricDivider()
                 ShareMetric(value: "\(Int(record.maxSpeedKmh))",
                             label: String(localized: "макс. км/ч"),
-                            icon: "gauge.with.dots.needle.67percent", tint: Theme.radar)
+                            icon: "gauge.with.dots.needle.67percent", tint: Theme.warning)
             }
             .shareMetricsTile()
             .padding(.bottom, 4)
@@ -486,7 +483,7 @@ struct TripShareCard: View {
 
     /// Круглый бейдж рейтинга в углу карты (зелёный/жёлтый/красный по величине).
     private func scoreBadge(_ score: Int) -> some View {
-        let tint: Color = score >= 80 ? Theme.success : score >= 55 ? Theme.radar : Theme.danger
+        let tint: Color = score >= 80 ? Theme.success : score >= 55 ? Theme.warning : Theme.danger
         return VStack(spacing: 0) {
             Text("\(score)")
                 .font(.system(size: 24, weight: .heavy, design: .rounded))

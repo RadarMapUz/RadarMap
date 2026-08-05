@@ -225,7 +225,7 @@ struct RatingInfoSheet: View {
         infoCard(title: String(localized: "Шкала")) {
             scaleRow(Theme.success, "90–100", String(localized: "Идеальный стиль"))
             scaleRow(Theme.success.opacity(0.75), "75–89", String(localized: "Аккуратный водитель"))
-            scaleRow(Theme.radar, "60–74", String(localized: "Уверенный, но с риском"))
+            scaleRow(Theme.warning, "60–74", String(localized: "Уверенный, но с риском"))
             scaleRow(Theme.danger, "0–59", String(localized: "Рискованный стиль"))
         }
     }
@@ -249,7 +249,7 @@ struct RatingInfoSheet: View {
             componentRow(icon: "camera.metering.center.weighted", tint: Theme.accent,
                          title: String(localized: "Скорость у камер"),
                          text: String(localized: "Каждый проезд камеры с известным лимитом: берём минимальную скорость в 80 м перед камерой — разгон после проезда не считается. Штрафные ступени снижают балл сильнее всего."))
-            componentRow(icon: "waveform.path.ecg", tint: Theme.intelligent,
+            componentRow(icon: "waveform.path.ecg", tint: Theme.Types.intelligent,
                          title: String(localized: "Плавность езды"),
                          text: String(localized: "Резкие разгоны и торможения по треку поездки снижают балл."))
         }

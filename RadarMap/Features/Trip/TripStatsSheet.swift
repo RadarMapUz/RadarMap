@@ -382,7 +382,7 @@ struct TripStatsSheet: View {
                                      trip.lifetime.cleanStreak),
                               systemImage: "flame.fill")
                             .font(.rounded(11, .semibold))
-                            .foregroundStyle(Theme.radar)
+                            .foregroundStyle(Theme.warning)
                     }
                 }
                 Spacer(minLength: 0)
@@ -454,7 +454,7 @@ struct TripStatsSheet: View {
     private static func insightTint(_ kind: Insight.Kind) -> Color {
         switch kind {
         case .good:    return Theme.success
-        case .warning: return Theme.radar
+        case .warning: return Theme.warning
         case .bad:     return Theme.danger
         case .neutral: return Theme.accent
         }
@@ -518,7 +518,7 @@ struct TripStatsSheet: View {
                                 // здесь остаётся только вход на карту.
                                 Label("Показать на карте", systemImage: "mappin.circle.fill")
                                     .font(.rounded(11, .medium))
-                                    .foregroundStyle(Theme.radar)
+                                    .foregroundStyle(Theme.warning)
                                     .lineLimit(1)
                             }
                         }
@@ -967,9 +967,9 @@ struct TripStatsSheet: View {
                 // Красный столбик = день с превышением: график продолжает
                 // историю «где и когда я нарушал», а не просто про километры.
                 .foregroundStyle(item.hasOverspeed
-                                 ? LinearGradient(colors: [Theme.danger, Theme.radar],
+                                 ? LinearGradient(colors: [Theme.danger, Theme.warning],
                                                   startPoint: .bottom, endPoint: .top)
-                                 : LinearGradient(colors: [Theme.accent, Theme.intelligent],
+                                 : LinearGradient(colors: [Theme.accent, Theme.Types.intelligent],
                                                   startPoint: .bottom, endPoint: .top))
                 .opacity(Calendar.current.isDateInToday(item.day) ? 1 : 0.6)
                 .cornerRadius(3)
@@ -1269,7 +1269,7 @@ private struct LiveTripCard: View {
                 metric(Formatting.distance(trip.distanceMeters), "пройдено", Theme.success)
                 metric("\(trip.camerasPassed)", "камер", Theme.accent)
                 metric("\(Int(trip.maxSpeedKmh))", "макс. км/ч", Theme.danger)
-                metric("\(Int(trip.averageSpeedKmh))", "средняя", Theme.radar)
+                metric("\(Int(trip.averageSpeedKmh))", "средняя", Theme.warning)
             }
         }
         .statCard()

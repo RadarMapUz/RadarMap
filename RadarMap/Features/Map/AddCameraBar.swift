@@ -41,7 +41,7 @@ struct AddCameraBar: View {
                 if kind == .mobile {
                     Label("Отметка видна всем водителям ~3 часа", systemImage: "person.3.fill")
                         .font(.rounded(12))
-                        .foregroundStyle(Theme.mobile)
+                        .foregroundStyle(Theme.Types.mobile)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     TextField("Название (необязательно)", text: $name)
@@ -62,7 +62,7 @@ struct AddCameraBar: View {
                     }
                     PrimaryButton(title: kind == .mobile ? "Радар здесь!" : "Добавить здесь",
                                   systemImage: "plus",
-                                  tint: kind == .mobile ? Theme.mobile : Theme.accent) {
+                                  tint: kind == .mobile ? Theme.Types.mobile : Theme.accent) {
                         onAdd(kind, name)
                     }
                 }

@@ -8,6 +8,9 @@
 import SwiftUI
 
 struct SpeedHUDView: View {
+    /// Второй план: на экране уже есть главный элемент (манёвр в навигации).
+    /// Панель ужимается и приглушается — иерархия внимания важнее симметрии.
+    var secondary = false
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
@@ -34,6 +37,7 @@ struct SpeedHUDView: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
         }
+        .opacity(secondary ? 0.85 : 1)
         .fixedSize(horizontal: false, vertical: true)
         // Чип режима оповещений: видно, почему тихо (город) или голосисто (трасса).
         .overlay(alignment: .topTrailing) {
@@ -80,9 +84,10 @@ struct SpeedHUDView: View {
 
     private func speedBlock(_ speed: Double) -> some View {
         VStack(spacing: 0) {
-            // Крупно: за рулём HUD читается взглядом <1 сек.
+            // Крупно: за рулём HUD читается взглядом <1 сек. На втором плане
+            // цифра меньше — но остаётся читаемой.
             Text("\(Int(speed.rounded()))")
-                .font(.rounded(34, .bold))
+                .font(.rounded(secondary ? 26 : 34, .bold))
                 .monospacedDigit()
                 .foregroundStyle(env.speedLimits.isOverspeeding ? Theme.danger : Theme.textPrimary)
                 .contentTransition(.numericText(value: speed))
@@ -95,7 +100,7 @@ struct SpeedHUDView: View {
                     // Энергосбережение iOS: точность GPS снижена, голос отключён.
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 9))
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(Theme.warning)
                 }
             }
         }
@@ -109,7 +114,7 @@ struct SpeedHUDView: View {
             HStack(spacing: 10) {
                 Image(systemName: "location.slash.fill")
                     .font(.rounded(16, .semibold))
-                    .foregroundStyle(Theme.radar)
+                    .foregroundStyle(Theme.warning)
                     .symbolEffect(.pulse, options: .repeating, isActive: true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Нет сигнала GPS")
@@ -160,7 +165,7 @@ struct SpeedHUDView: View {
                     Text(caption(for: camera))
                         .font(.rounded(11, .medium))
                         .foregroundStyle(env.location.isPositionCoarse
-                                         ? Theme.radar : Theme.textSecondary)
+                                         ? Theme.warning : Theme.textSecondary)
                         .lineLimit(1)
                     // Полоска приближения: заполняется к камере и «греется» —
                     // боковым зрением читается быстрее цифр.
@@ -225,8 +230,9 @@ struct SpeedHUDView: View {
     }
 
     private func approachBar(_ progress: Double) -> some View {
-        let tint: Color = progress > 0.66 ? Theme.danger
-                        : progress > 0.33 ? .orange : .yellow
+        // Полоска приближения «греется» по состоянию, а не произвольными
+        // системными цветами: те же три роли, что и везде.
+        let tint = Theme.role(progress > 0.66 ? .alarm : progress > 0.33 ? .attention : .neutral)
         return Capsule()
             .fill(Theme.stroke)
             .overlay(alignment: .leading) {

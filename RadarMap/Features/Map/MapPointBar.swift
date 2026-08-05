@@ -45,7 +45,7 @@ struct MapPointBar: View {
                            tint: Theme.accent, action: onRoute)
                 }
                 action("Радар здесь", "dot.radiowaves.left.and.right",
-                       tint: Theme.radar, action: onRadar)
+                       tint: Theme.Types.radar, action: onRadar)
                 action("Своя камера", "plus.viewfinder",
                        tint: Theme.textPrimary, action: onOwnCamera)
             }

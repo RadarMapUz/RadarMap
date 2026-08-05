@@ -166,7 +166,7 @@ struct TripHistorySection: View {
     static func scoreColor(_ score: Int) -> Color {
         switch DrivingScore.tier(for: score) {
         case 2: return Theme.success
-        case 1: return Theme.radar
+        case 1: return Theme.warning
         default: return Theme.danger
         }
     }

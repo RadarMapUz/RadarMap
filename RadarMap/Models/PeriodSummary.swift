@@ -55,6 +55,15 @@ nonisolated enum StatsPeriod: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Заголовок блока выводов — разбор всегда о том же окне, что и цифры.
+    var insightsTitle: String {
+        switch self {
+        case .week:  return String(localized: "Разбор недели")
+        case .month: return String(localized: "Разбор месяца")
+        case .all:   return String(localized: "Разбор за всё время")
+        }
+    }
+
     /// Заголовок списка поездок — список подчиняется тому же фильтру.
     var tripsTitle: String {
         switch self {
@@ -82,6 +91,9 @@ nonisolated struct PeriodSummary: Equatable {
     var fineRisk: Double = 0
     /// Камера, где превышали чаще всего — «зона риска».
     var topOverLocation: String?
+    /// Сколько превышений пришлось на эту камеру — без числа совет «сбавьте там»
+    /// звучит одинаково и для одного раза, и для пяти.
+    var topOverCount = 0
     /// Самый активный день периода.
     var busiestDay: Date?
     var busiestDayKm: Double = 0
@@ -89,6 +101,13 @@ nonisolated struct PeriodSummary: Equatable {
     var activeDays = 0
     /// Дистанция за предыдущий такой же период — база для дельты.
     var previousDistance: CLLocationDistance = 0
+    /// Штрафуемые превышения за предыдущий такой же период: по ним видно, стал
+    /// водитель ездить чище или наоборот.
+    var previousOverPasses = 0
+    /// Рейтинг за предыдущий период (nil — сравнивать не с чем).
+    var previousRating: Int?
+    /// Штрафуемые превышения по часам суток — «когда именно я рискую».
+    var overByHour = [Int](repeating: 0, count: 24)
 
     var isEmpty: Bool { trips == 0 }
     var averageSpeedKmh: Double {
@@ -104,6 +123,55 @@ nonisolated struct PeriodSummary: Equatable {
     var distanceDeltaPercent: Int? {
         guard previousDistance > 500 else { return nil }
         return Int(((distance / previousDistance - 1) * 100).rounded())
+    }
+
+    /// Превышений на 100 км. Сравнивать периоды «в штуках» нечестно: неделя с
+    /// дачей в 600 км всегда проигрывает неделе, когда машина стояла во дворе.
+    /// nil — проехали слишком мало, чтобы нормировать.
+    var overPer100km: Double? {
+        guard distance >= 10_000 else { return nil }
+        return Double(overPasses) / (distance / 100_000)
+    }
+
+    var previousOverPer100km: Double? {
+        guard previousDistance >= 10_000 else { return nil }
+        return Double(previousOverPasses) / (previousDistance / 100_000)
+    }
+
+    /// Изменение рейтинга к прошлому периоду (nil — сравнивать не с чем).
+    var ratingDelta: Int? {
+        guard let rating, let previousRating else { return nil }
+        return rating - previousRating
+    }
+
+    /// Превышения по четырёхчасовым блокам суток (6 корзин) — данные полосы
+    /// «часы риска» и вывода «почти всё — вечером».
+    var overByBlock: [Int] {
+        (0..<6).map { block in
+            (0..<4).reduce(0) { $0 + overByHour[block * 4 + $1] }
+        }
+    }
+
+    /// Блок суток, на который пришлось больше всего превышений, и его доля.
+    var peakBlock: PeakBlock? {
+        let blocks = overByBlock
+        guard let top = blocks.enumerated().max(by: { $0.element < $1.element }),
+              top.element > 0 else { return nil }
+        let total = blocks.reduce(0, +)
+        return PeakBlock(index: top.offset, count: top.element,
+                         share: total > 0 ? Double(top.element) / Double(total) : 0)
+    }
+}
+
+/// Пик риска по времени суток: какой четырёхчасовой блок и какая доля превышений.
+nonisolated struct PeakBlock: Equatable {
+    let index: Int
+    let count: Int
+    let share: Double
+
+    /// «18:00–22:00» — подпись блока.
+    var title: String {
+        String(format: "%02d:00–%02d:00", index * 4, (index * 4 + 4) % 24)
     }
 }
 
@@ -135,13 +203,17 @@ extension TripHistory {
                 if fine > 0 {
                     result.overPasses += 1
                     result.fineRisk += fine
+                    result.overByHour[calendar.component(.hour, from: pass.date)] += 1
                     if !pass.location.isEmpty { overByLocation[pass.location, default: 0] += 1 }
                 } else {
                     result.cleanPasses += 1
                 }
             }
         }
-        result.topOverLocation = overByLocation.max { $0.value < $1.value }?.key
+        if let top = overByLocation.max(by: { $0.value < $1.value }) {
+            result.topOverLocation = top.key
+            result.topOverCount = top.value
+        }
         if let busiest = kmByDay.max(by: { $0.value < $1.value }) {
             result.busiestDay = busiest.key
             result.busiestDayKm = busiest.value
@@ -151,8 +223,33 @@ extension TripHistory {
             history,
             from: period.interval.map { now.addingTimeInterval(-$0) } ?? .distantPast,
             now: now)
-        result.previousDistance = previousDistance(history, period: period, now: now)
+
+        // Предыдущее такое же окно — база для всех сравнений «стало лучше/хуже».
+        if let interval = period.interval {
+            let to = now.addingTimeInterval(-interval)
+            let from = to.addingTimeInterval(-interval)
+            let previous = window(history, from: from, to: to)
+            result.previousDistance = previous.distance
+            result.previousOverPasses = previous.overPasses
+            result.previousRating = weightedRating(history, from: from, now: to)
+        }
         return result
+    }
+
+    /// Дистанция и штрафуемые превышения в произвольном окне — общая основа
+    /// сравнения с прошлым периодом.
+    private static func window(_ history: [TripRecord], from: Date, to: Date)
+        -> (distance: CLLocationDistance, overPasses: Int) {
+        var distance = 0.0
+        var overPasses = 0
+        for record in history where record.startedAt > from && record.startedAt <= to {
+            distance += record.distanceMeters
+            for pass in record.passed {
+                guard let limit = pass.limitKmh else { continue }
+                if FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0 { overPasses += 1 }
+            }
+        }
+        return (distance, overPasses)
     }
 
     /// Записи, попадающие в период.
@@ -161,17 +258,6 @@ extension TripHistory {
         guard let interval = period.interval else { return history }
         let from = now.addingTimeInterval(-interval)
         return history.filter { $0.startedAt > from && $0.startedAt <= now }
-    }
-
-    /// Дистанция за предыдущее такое же окно — для стрелки «больше/меньше».
-    private static func previousDistance(_ history: [TripRecord], period: StatsPeriod,
-                                         now: Date) -> CLLocationDistance {
-        guard let interval = period.interval else { return 0 }
-        let to = now.addingTimeInterval(-interval)
-        let from = to.addingTimeInterval(-interval)
-        return history
-            .filter { $0.startedAt > from && $0.startedAt <= to }
-            .reduce(0) { $0 + $1.distanceMeters }
     }
 
     /// Километры по дням периода (нулевые дни включены) — данные графика.

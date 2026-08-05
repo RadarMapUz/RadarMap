@@ -857,6 +857,278 @@
         }
       }
     },
+    "Ближайшая цель" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ближайшая цель"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eng yaqin maqsad"
+          }
+        }
+      }
+    },
+    "Время риска — %1$@: там %2$lld из %3$lld превышений" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Время риска — %1$@: там %2$lld из %3$lld превышений"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xavf vaqti — %1$@: %3$lld tadan %2$lld ta oshirish o'sha payt"
+          }
+        }
+      }
+    },
+    "Когда рискуете" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Когда рискуете"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qachon xavf qilasiz"
+          }
+        }
+      }
+    },
+    "Ни одного штрафуемого превышения. Камер в лимите: %lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ни одного штрафуемого превышения. Камер в лимите: %lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jarima soladigan bironta oshirish yo'q. Limitdagi kameralar: %lld"
+          }
+        }
+      }
+    },
+    "Показать на карте" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показать на карте"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xaritada ko'rsatish"
+          }
+        }
+      }
+    },
+    "Разбор за всё время" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Разбор за всё время"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Butun davr tahlili"
+          }
+        }
+      }
+    },
+    "Разбор месяца" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Разбор месяца"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oy tahlili"
+          }
+        }
+      }
+    },
+    "Разбор недели" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Разбор недели"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hafta tahlili"
+          }
+        }
+      }
+    },
+    "Рейтинг вырос" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Рейтинг вырос"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reyting o'sdi"
+          }
+        }
+      }
+    },
+    "Рейтинг вырос: %1$lld → %2$lld (%3$@)" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Рейтинг вырос: %1$lld → %2$lld (%3$@)"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reyting o'sdi: %1$lld → %2$lld (%3$@)"
+          }
+        }
+      }
+    },
+    "Рейтинг просел: %1$lld → %2$lld (%3$@)" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Рейтинг просел: %1$lld → %2$lld (%3$@)"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reyting tushdi: %1$lld → %2$lld (%3$@)"
+          }
+        }
+      }
+    },
+    "Рейтинг снизился" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Рейтинг снизился"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reyting pasaydi"
+          }
+        }
+      }
+    },
+    "Рискуете чаще: %1$@ превышения на 100 км против %2$@ в прошлый период" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Рискуете чаще: %1$@ превышения на 100 км против %2$@ в прошлый период"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tez-tez xavf qilyapsiz: har 100 km ga %1$@ ta oshirish, o'tgan davrda %2$@ edi"
+          }
+        }
+      }
+    },
+    "С %1$02d до %2$02d часов: превышений %3$lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "С %1$02d до %2$02d часов: превышений %3$lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$02d dan %2$02d gacha: %3$lld ta oshirish"
+          }
+        }
+      }
+    },
+    "Стали ездить чище: %1$@ превышения на 100 км против %2$@ в прошлый период" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Стали ездить чище: %1$@ превышения на 100 км против %2$@ в прошлый период"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tozaroq hayday boshladingiz: har 100 km ga %1$@ ta oshirish, o'tgan davrda %2$@ edi"
+          }
+        }
+      }
+    },
+    "У пройденных камер неизвестен лимит дороги — превышения по ним не считались" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "У пройденных камер неизвестен лимит дороги — превышения по ним не считались"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O'tilgan kameralarda yo'l limiti noma'lum — ular bo'yicha oshirishlar hisoblanmadi"
+          }
+        }
+      }
+    },
+    "Чаще всего — %1$@: превышений %2$lld из %3$lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чаще всего — %1$@: превышений %2$lld из %3$lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ko'pincha — %1$@: %3$lld tadan %2$lld ta oshirish"
+          }
+        }
+      }
+    },
     "без риска штрафов" : {
       "localizations" : {
         "ru" : {
@@ -6583,22 +6855,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fon deyarli quvvat sarflamaydi: aniq GPS faqat kameralar yonida yoqiladi"
-          }
-        }
-      }
-    },
-    "Чаще всего: %@ — показать" : {
-      "localizations" : {
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Чаще всего: %@ — показать"
-          }
-        },
-        "uz" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eng ko‘p: %@ — ko‘rsatish"
           }
         }
       }

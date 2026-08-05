@@ -171,6 +171,11 @@ struct Achievement: Identifiable {
 
     var earned: Bool { progress >= target }
     var fraction: Double { min(1, progress / max(target, 1)) }
+    /// «830 / 1 000» — прогресс без единиц: у бейджей они разные (км, камеры,
+    /// поездки), а понятно и так.
+    var progressText: String {
+        "\(Int(progress.rounded(.down))) / \(Int(target))"
+    }
 }
 
 enum Achievements {
@@ -202,5 +207,12 @@ enum Achievements {
             Achievement(id: "streak50", icon: "trophy.fill",
                         title: String(localized: "50 чистых подряд"), detail: streakDetail, target: 50, progress: streak),
         ]
+    }
+
+    /// Ближайшее незакрытое достижение — то, до которого меньше всего осталось.
+    /// Лента бейджей показывает всё сразу и не отвечает на вопрос «а что дальше»;
+    /// одна цель с прогрессом отвечает.
+    nonisolated static func next(for stats: LifetimeStats) -> Achievement? {
+        all(for: stats).filter { !$0.earned }.max { $0.fraction < $1.fraction }
     }
 }

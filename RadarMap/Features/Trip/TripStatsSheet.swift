@@ -86,17 +86,23 @@ struct TripStatsSheet: View {
                     } else {
                         heroCard(trip: trip, summary: summary)
                             .entrance(1, appeared)
+                        // Разбор идёт сразу за рейтингом: сначала вывод, потом
+                        // цифры, на которых он построен, — а не наоборот.
+                        insightsCard(summary: summary)
+                            .entrance(1, appeared)
                         riskCard(summary: summary)
                             .entrance(2, appeared)
                         mapCard
                             .entrance(3, appeared)
                             .id("map")
-                        periodTiles(summary: summary)
+                        kpiStrip(summary: summary)
                             .entrance(3, appeared)
                         if let days = period.chartDays {
                             dailyChart(days: days, summary: summary)
                                 .entrance(4, appeared)
                         }
+                        riskHoursCard(summary: summary)
+                            .entrance(4, appeared)
                         tripsSection(trip: trip, proxy: proxy)
                             .entrance(4, appeared)
                             .id("history")
@@ -121,6 +127,10 @@ struct TripStatsSheet: View {
                 #endif
                 }
             }
+            // Карточки уезжали под прозрачный бар и просвечивали сквозь него:
+            // «85 рейтинг» читался поверх кнопок. Жёсткий край прокрутки
+            // отделяет содержимое от панели.
+            .backport.scrollEdgeEffectStyle(.hard, for: .top)
             .background(Theme.background)
             .navigationTitle("Итоги")
             .navigationBarTitleDisplayMode(.inline)
@@ -240,8 +250,16 @@ struct TripStatsSheet: View {
         } label: {
             HStack(spacing: 16) {
                 if let rating = summary.rating {
-                    RatingRing(rating: rating)
-                        .frame(width: 88, height: 88)
+                    VStack(spacing: 6) {
+                        RatingRing(rating: rating)
+                            .frame(width: 88, height: 88)
+                        // Рейтинг сам по себе — абстракция. Движение к прошлому
+                        // такому же периоду делает его понятным.
+                        if let delta = summary.ratingDelta,
+                           abs(delta) >= AppConfig.insightRatingStep {
+                            ratingDeltaBadge(delta)
+                        }
+                    }
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(period.caption)
@@ -292,6 +310,63 @@ struct TripStatsSheet: View {
         let trips = String(format: String(localized: "Поездок: %lld"), summary.trips)
         return "\(trips) · \(Formatting.duration(summary.movingDuration)) "
             + String(localized: "за рулём")
+    }
+
+    /// «+6» под кольцом: рост рейтинга — зелёный, просадка — красная.
+    private func ratingDeltaBadge(_ delta: Int) -> some View {
+        let up = delta > 0
+        let tint = up ? Theme.success : Theme.danger
+        return Label(up ? "+\(delta)" : "\(delta)",
+                     systemImage: up ? "arrow.up" : "arrow.down")
+            .font(.rounded(11, .bold).monospacedDigit())
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(tint.opacity(0.14), in: Capsule())
+            .accessibilityLabel(Text(up ? "Рейтинг вырос" : "Рейтинг снизился"))
+    }
+
+    // MARK: - Разбор периода
+
+    /// Два-три вывода вместо стены цифр: стало лучше или хуже, где и когда
+    /// рискуете. Всё формулирует модель (PeriodInsights) — вьюха только красит.
+    @ViewBuilder
+    private func insightsCard(summary: PeriodSummary) -> some View {
+        let insights = PeriodInsights.build(summary)
+        if !insights.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(period.insightsTitle)
+                ForEach(insights) { insight in
+                    insightRow(insight)
+                }
+            }
+            .statCard()
+        }
+    }
+
+    private func insightRow(_ insight: Insight) -> some View {
+        let tint = Self.insightTint(insight.kind)
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: insight.icon)
+                .font(.rounded(13, .bold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(tint.opacity(0.14), in: Circle())
+            Text(insight.text)
+                .font(.rounded(13, .medium))
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private static func insightTint(_ kind: Insight.Kind) -> Color {
+        switch kind {
+        case .good:    return Theme.success
+        case .warning: return Theme.radar
+        case .bad:     return Theme.danger
+        case .neutral: return Theme.accent
+        }
     }
 
     private func deltaBadge(_ delta: Int) -> some View {
@@ -347,9 +422,10 @@ struct TripStatsSheet: View {
                             Text(passesLine(summary, total: total, ok: ok))
                                 .font(.rounded(11))
                                 .foregroundStyle(Theme.textTertiary)
-                            if !ok, let top = summary.topOverLocation {
-                                Label(String(format: String(localized: "Чаще всего: %@ — показать"), top),
-                                      systemImage: "mappin.circle.fill")
+                            if !ok {
+                                // Где именно и сколько раз — сказал разбор выше;
+                                // здесь остаётся только вход на карту.
+                                Label("Показать на карте", systemImage: "mappin.circle.fill")
                                     .font(.rounded(11, .medium))
                                     .foregroundStyle(Theme.radar)
                                     .lineLimit(1)
@@ -666,21 +742,101 @@ struct TripStatsSheet: View {
         mapPayload = PeriodMapPayload(data: data, focus: focus)
     }
 
-    // MARK: - Плитки периода
+    // MARK: - Полоса KPI
 
-    /// Четыре цифры, которых нет выше: доля чистых проездов ушла — она дословно
-    /// повторяла зону риска, вместо неё «дней за рулём» (регулярность езды).
-    private func periodTiles(summary: PeriodSummary) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            StatTile(value: "\(summary.cameras)", label: "камер пройдено",
-                     icon: "camera.metering.center.weighted", color: Theme.accent)
-            StatTile(value: activeDaysText(summary), label: "дней за рулём",
-                     icon: "calendar", color: Theme.success)
-            StatTile(value: "\(Int(summary.maxSpeedKmh))", label: "макс. км/ч",
-                     icon: "gauge.with.dots.needle.100percent", color: Theme.danger)
-            StatTile(value: "\(Int(summary.averageSpeedKmh))", label: "средняя км/ч",
-                     icon: "gauge.with.dots.needle.33percent", color: Theme.radar)
+    /// Четыре цифры одной строкой вместо сетки 2×2 из разноцветных плиток.
+    /// Сетка занимала полэкрана и красила каждую цифру в свой цвет — цвет
+    /// переставал что-либо значить. Здесь цветом отмечено только состояние
+    /// (зона риска, рейтинг), а справочные числа спокойные.
+    private func kpiStrip(summary: PeriodSummary) -> some View {
+        HStack(spacing: 0) {
+            kpiCell(value: "\(summary.cameras)", label: "камер",
+                    icon: "camera.metering.center.weighted")
+            kpiDivider
+            kpiCell(value: activeDaysText(summary), label: "дней за рулём",
+                    icon: "calendar")
+            kpiDivider
+            kpiCell(value: "\(Int(summary.averageSpeedKmh))", label: "средняя км/ч",
+                    icon: "gauge.with.dots.needle.33percent")
+            kpiDivider
+            kpiCell(value: "\(Int(summary.maxSpeedKmh))", label: "макс. км/ч",
+                    icon: "gauge.with.dots.needle.100percent")
         }
+        .statCard(padding: 14)
+    }
+
+    private func kpiCell(value: String, label: LocalizedStringKey, icon: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.rounded(11, .semibold))
+                .foregroundStyle(Theme.textTertiary)
+            Text(value)
+                .font(.rounded(21, .heavy).monospacedDigit())
+                .foregroundStyle(Theme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(label)
+                .font(.rounded(10, .medium))
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(value), ") + Text(label))
+    }
+
+    private var kpiDivider: some View {
+        Rectangle().fill(Theme.stroke).frame(width: 1, height: 42)
+    }
+
+    // MARK: - Когда рискуете
+
+    /// Превышения по времени суток. «Где» уже отвечает карта, а «когда» до этого
+    /// не отвечал никто — хотя вечерний час пик и пустая ночная дорога дают
+    /// совершенно разные привычки.
+    @ViewBuilder
+    private func riskHoursCard(summary: PeriodSummary) -> some View {
+        if summary.overPasses >= AppConfig.insightMinOverForHours,
+           let peak = summary.peakBlock {
+            let blocks = summary.overByBlock
+            let top = max(blocks.max() ?? 1, 1)
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(title: String(localized: "Когда рискуете")) {
+                    Text(peak.title)
+                        .font(.rounded(12, .semibold))
+                        .foregroundStyle(Theme.danger)
+                }
+                HStack(alignment: .bottom, spacing: 8) {
+                    ForEach(Array(blocks.enumerated()), id: \.offset) { index, count in
+                        hourBar(count: count, peak: top, isPeak: index == peak.index,
+                                hour: index * 4)
+                    }
+                }
+            }
+            .statCard()
+        }
+    }
+
+    private func hourBar(count: Int, peak: Int, isPeak: Bool, hour: Int) -> some View {
+        VStack(spacing: 6) {
+            Text(count > 0 ? "\(count)" : " ")
+                .font(.rounded(10, .bold).monospacedDigit())
+                .foregroundStyle(isPeak ? Theme.danger : Theme.textTertiary)
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(isPeak ? Theme.danger.gradient : Theme.accent.opacity(0.35).gradient)
+                // Пустой блок оставляет тонкую риску: полоса читается как шкала
+                // суток, а не как случайный набор столбиков.
+                .frame(height: max(3, 52 * Double(count) / Double(peak)))
+            Text(String(format: "%02d", hour))
+                .font(.rounded(10, .medium).monospacedDigit())
+                .foregroundStyle(Theme.textTertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(String(format: String(localized: "С %1$02d до %2$02d часов: превышений %3$lld"),
+                                        hour, (hour + 4) % 24, count)))
     }
 
     /// «5 из 7» — в окне периода видно, насколько плотно катаешься.
@@ -834,6 +990,11 @@ struct TripStatsSheet: View {
     private func achievementsSection(trip: TripStats) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(String(localized: "Достижения"))
+            // Лента бейджей показывает всё сразу и не отвечает «а что дальше» —
+            // ближайшая цель с прогрессом отвечает.
+            if let next = Achievements.next(for: trip.lifetime) {
+                nextGoalRow(next)
+            }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(Achievements.all(for: trip.lifetime)) { badge in
@@ -850,6 +1011,51 @@ struct TripStatsSheet: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Ближайшая цель: иконка, название, полоса прогресса и «830 / 1 000».
+    private func nextGoalRow(_ badge: Achievement) -> some View {
+        Button {
+            selectedBadge = badge
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: badge.icon)
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 38, height: 38)
+                    .background(Theme.accent.opacity(0.12), in: Circle())
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 6) {
+                        Text("Ближайшая цель")
+                            .font(.rounded(11, .medium))
+                            .foregroundStyle(Theme.textTertiary)
+                        Text(badge.title)
+                            .font(.rounded(13, .bold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                    }
+                    Capsule()
+                        .fill(Theme.stroke)
+                        .frame(height: 5)
+                        .overlay(alignment: .leading) {
+                            GeometryReader { geometry in
+                                Capsule()
+                                    .fill(Theme.accent.gradient)
+                                    .frame(width: max(6, geometry.size.width * badge.fraction))
+                            }
+                        }
+                        .clipShape(Capsule())
+                }
+                Text(badge.progressText)
+                    .font(.rounded(12, .semibold).monospacedDigit())
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)
+            }
+            .statCard(padding: 14, radius: Theme.cornerMedium)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Шеринг периода

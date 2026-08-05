@@ -253,16 +253,18 @@ final class TripStats {
     func seedDemoHistory(shiftDays: Double = 0) {
         let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
         let now = Date().addingTimeInterval(-shiftDays * 86400)
-        var seeded: [TripRecord] = []
-        for (index, daysAgo) in [0.2, 1.1, 2.3, 3.0, 4.5, 5.4].enumerated() {
-            let start = now.addingTimeInterval(-daysAgo * 86400)
-            let km = [12.4, 8.1, 23.7, 5.2, 31.0, 14.8][index]
-            // Три поездки идут по одному «рабочему» коридору (общий seed): так на
-            // карте проездов видно градусы частоты, а не шесть равнозначных линий.
-            let seed = [1, 1, 2, 3, 1, 4][index]
+
+        /// Одна демо-поездка. `hour` задаёт время суток проезда камеры — от него
+        /// зависит полоса «когда рискуете».
+        func makeRecord(index: Int, daysAgo: Double, km: Double, seed: Int,
+                        over: Bool, hour: Int, withStop: Bool = false) -> TripRecord {
+            let day = Calendar.current.startOfDay(for: now.addingTimeInterval(-daysAgo * 86400))
+            var start = day.addingTimeInterval(Double(hour) * 3600)
+            // Заданный час мог оказаться позже «сейчас» (вечер ещё не наступил):
+            // такая запись уезжает в будущее и в период не попадает — сдвигаем её
+            // на сутки назад.
+            if start > now { start.addTimeInterval(-86400) }
             let track = Self.demoTrack(from: base, seed: seed, km: km)
-            // Каждая третья поездка — с превышением у камеры, чтобы была зона риска.
-            let over = index % 3 == 0
             // Камера стоит НА треке (примерно на 40% пути), а не в стороне от него.
             let camIndex = max(0, (track.count / 3) / 3 * 3)
             let cam = CLLocationCoordinate2D(latitude: track[camIndex],
@@ -273,17 +275,43 @@ final class TripStats {
                                     speedKmh: over ? 88 : 56,
                                     date: start.addingTimeInterval(400),
                                     lat: cam.latitude, lon: cam.longitude, limitKmh: 60)
-            // Одна поездка со заездом по пути — проверить блок остановок.
-            let stops: [TripStop]? = index == 2 ? [TripStop(
+            // Одна поездка с заездом по пути — проверить блок остановок.
+            let stops: [TripStop]? = withStop ? [TripStop(
                 id: UUID(), lat: base.latitude, lon: base.longitude,
                 from: start.addingTimeInterval(900),
                 to: start.addingTimeInterval(900 + 1500))] : nil
-            seeded.append(TripRecord(
+            return TripRecord(
                 id: start.timeIntervalSince1970, startedAt: start,
                 endedAt: start.addingTimeInterval(km * 90 + (stops?.first?.duration ?? 0)),
                 distanceMeters: km * 1000, maxSpeedKmh: over ? 104 : 82,
                 passed: [pass], endLat: track[track.count - 3], endLon: track[track.count - 2],
-                track: track, score: over ? 68 : 94, stops: stops, endedManually: true))
+                track: track, score: over ? 68 : 94, stops: stops, endedManually: true)
+        }
+
+        var seeded: [TripRecord] = []
+        // Эта неделя: три поездки идут по одному «рабочему» коридору (общий seed) —
+        // на карте видно градусы частоты, а не шесть равнозначных линий. Три
+        // проезда с превышением дают зону риска и полосу часов.
+        let week: [(daysAgo: Double, km: Double, seed: Int, over: Bool, hour: Int)] = [
+            (0.2, 12.4, 1, true,  19), (1.1, 8.1,  1, false, 9),
+            (2.3, 23.7, 2, false, 14), (3.0, 5.2,  3, true,  20),
+            (4.5, 31.0, 1, false, 8),  (5.4, 14.8, 4, true,  18),
+        ]
+        for (index, item) in week.enumerated() {
+            seeded.append(makeRecord(index: index, daysAgo: item.daysAgo, km: item.km,
+                                     seed: item.seed, over: item.over, hour: item.hour,
+                                     withStop: index == 2))
+        }
+        // Прошлая неделя — база сравнения. Без неё «стало лучше/хуже», дельта
+        // километров и движение рейтинга сравнивать не с чем, и половина разбора
+        // периода на экране просто не появляется.
+        let previous: [(daysAgo: Double, km: Double, seed: Int, over: Bool, hour: Int)] = [
+            (8.3, 9.6, 1, true, 19), (9.6, 11.2, 1, true, 20),
+            (11.2, 7.4, 2, true, 18), (12.7, 6.1, 3, false, 10),
+        ]
+        for (index, item) in previous.enumerated() {
+            seeded.append(makeRecord(index: 6 + index, daysAgo: item.daysAgo, km: item.km,
+                                     seed: item.seed, over: item.over, hour: item.hour))
         }
         history = seeded
         lifetime = LifetimeStats.rebuilt(from: history)

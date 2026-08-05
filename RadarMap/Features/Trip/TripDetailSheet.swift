@@ -220,6 +220,9 @@ struct TripDetailSheet: View {
                 if ProcessInfo.processInfo.arguments.contains("-shareTrip") { share() }
                 #endif
             }
+            // Тот же жёсткий край прокрутки, что и в Итогах: карта поездки
+            // не должна просвечивать сквозь панель с заголовком.
+            .backport.scrollEdgeEffectStyle(.hard, for: .top)
             .background(Theme.background)
             .navigationTitle(record.startedAt.formatted(date: .abbreviated, time: .shortened))
             .navigationBarTitleDisplayMode(.inline)

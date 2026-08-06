@@ -99,6 +99,142 @@ final class RatingBreakdownTests: XCTestCase {
         XCTAssertEqual(points.last?.rating, 80)
     }
 
+    /// Строка обязана объяснять сама себя: недобор × доля = вклад.
+    /// Именно это показано на экране, и расхождение здесь означает, что
+    /// водителю показали арифметику, которая не сходится.
+    func testContributionExplainsItself() {
+        let history = [record(daysAgo: 1, km: 30, score: 55),
+                       record(daysAgo: 2, km: 10, score: 80)]
+        let days = TripDayBook.rebuilt(from: history, calendar: utc)
+        let items = RatingBreakdown.contributions(records: history, days: days,
+                                                  in: month, calendar: utc)
+
+        XCTAssertEqual(items.reduce(0) { $0 + $1.weightShare }, 1, accuracy: 0.001,
+                       "доли веса обязаны складываться в единицу")
+        for item in items {
+            XCTAssertEqual(item.points, item.weightShare * Double(item.deficit),
+                           accuracy: 0.05, "вклад = недобор × доля")
+        }
+        // 30 км против 10: длинная поездка весит втрое больше.
+        XCTAssertEqual(items.first?.weightShare ?? 0, 0.75, accuracy: 0.001)
+    }
+
+    // MARK: - Куда ушли баллы
+
+    /// Разложение по камерам обязано сходиться с разложением по поездкам,
+    /// а оно — с самим рейтингом. Иначе экран показывает два разных ответа
+    /// на один вопрос — ровно то, от чего эти блоки и защищают.
+    func testSourcesSumToContributions() {
+        let history = [
+            record(daysAgo: 1, km: 30, score: 67, passes: [
+                pass(1, speed: 88, limit: 60, location: "Юнусабад"),   // +28 → 25
+                pass(2, speed: 66, limit: 60, location: "Чиланзар"),   // +6  → 8
+            ]),
+            record(daysAgo: 2, km: 10, score: 92, passes: [
+                pass(1, speed: 68, limit: 60, location: "Юнусабад", daysAgo: 2),  // +8 → 8
+            ]),
+            // Поездка вообще без камер: её недобор — рваная езда.
+            record(daysAgo: 3, km: 10, score: 85),
+        ]
+        let days = TripDayBook.rebuilt(from: history, calendar: utc)
+        let summary = TripHistory.summary(days: days, history: history, period: .month,
+                                          anchor: now, calendar: utc)
+        let sources = RatingBreakdown.sources(records: history, days: days, in: month)
+
+        XCTAssertEqual(sources.total, 100 - Double(summary.rating ?? 0), accuracy: 0.5,
+                       "камеры + плавность обязаны дать весь недобор рейтинга")
+        XCTAssertGreaterThan(sources.smoothness, 0, "поездка без камер уходит в плавность")
+
+        // Повторные проезды одной камеры — одна строка, а не две.
+        let top = sources.cameras.first
+        XCTAssertEqual(top?.location, "Юнусабад")
+        XCTAssertEqual(top?.times, 2)
+        XCTAssertEqual(top?.worstSpeedKmh, 88)
+        XCTAssertGreaterThan(top?.points ?? 0, sources.cameras.last?.points ?? .infinity)
+    }
+
+    /// Записи вычищены — названий камер взять неоткуда, и выдумывать их нельзя.
+    func testSourcesEmptyWhenRecordsPruned() {
+        let history = (1...10).map { record(daysAgo: Double($0), km: 10, score: 70) }
+        let days = TripDayBook.rebuilt(from: history, calendar: utc)
+        let sources = RatingBreakdown.sources(records: Array(history.prefix(2)),
+                                              days: days, in: month)
+        XCTAssertTrue(sources.isEmpty)
+    }
+
+    // MARK: - «А если бы в лимите»
+
+    func testRatingIfCleanRaisesRating() {
+        let violation = pass(1, speed: 88, limit: 60)      // +28 → −25 балла
+        let trip = record(daysAgo: 1, km: 20, score: 75, passes: [violation])
+        let days = TripDayBook.rebuilt(from: [trip], calendar: utc)
+
+        let improved = RatingBreakdown.ratingIfClean(pass: violation, record: trip,
+                                                     days: days, in: month)
+        XCTAssertEqual(improved, 100, "единственное нарушение — рейтинг стал бы идеальным")
+    }
+
+    /// Чистый проезд ничего не меняет — предлагать «а если бы» нечего.
+    func testRatingIfCleanNilForCleanPass() {
+        let clean = pass(1, speed: 61, limit: 60)
+        let trip = record(daysAgo: 1, km: 20, score: 100, passes: [clean])
+        let days = TripDayBook.rebuilt(from: [trip], calendar: utc)
+        XCTAssertNil(RatingBreakdown.ratingIfClean(pass: clean, record: trip,
+                                                   days: days, in: month))
+    }
+
+    /// Улучшение одной поездки не может опустить рейтинг периода.
+    func testRatingIfCleanNeverLowersRating() {
+        let violation = pass(1, speed: 105, limit: 60)
+        let bad = record(daysAgo: 1, km: 30, score: 60, passes: [violation])
+        let good = record(daysAgo: 2, km: 10, score: 95)
+        let days = TripDayBook.rebuilt(from: [bad, good], calendar: utc)
+        let summary = TripHistory.summary(days: days, history: [bad, good], period: .month,
+                                          anchor: now, calendar: utc)
+        let improved = RatingBreakdown.ratingIfClean(pass: violation, record: bad,
+                                                     days: days, in: month)
+        XCTAssertGreaterThanOrEqual(improved ?? 0, summary.rating ?? 0)
+    }
+
+    // MARK: - Ваша норма
+
+    func testBaselineMedianAndRange() {
+        // По одной поездке в каждую из четырёх прошлых недель.
+        let history = [record(daysAgo: 7, km: 10, score: 60),
+                       record(daysAgo: 14, km: 10, score: 70),
+                       record(daysAgo: 21, km: 10, score: 80),
+                       record(daysAgo: 28, km: 10, score: 90)]
+        let days = TripDayBook.rebuilt(from: history, calendar: utc)
+        let baseline = RatingBreakdown.baseline(days: days, period: .week, anchor: now,
+                                                calendar: utc)
+        XCTAssertEqual(baseline?.periods, 4)
+        XCTAssertEqual(baseline?.median, 80)
+        XCTAssertEqual(baseline?.low, 70)
+        XCTAssertEqual(baseline?.high, 80)
+        XCTAssertTrue(baseline?.contains(75) ?? false)
+        XCTAssertEqual(baseline?.delta(from: 73) ?? 0, -7)
+    }
+
+    /// Двух недель для «нормы» мало — лучше молчать, чем выдавать шум за норму.
+    func testBaselineNeedsEnoughPeriods() {
+        let history = [record(daysAgo: 7, km: 10, score: 60),
+                       record(daysAgo: 14, km: 10, score: 70)]
+        let days = TripDayBook.rebuilt(from: history, calendar: utc)
+        XCTAssertNil(RatingBreakdown.baseline(days: days, period: .week, anchor: now,
+                                              calendar: utc))
+    }
+
+    /// Норма считается по ПРОШЛЫМ окнам: текущее не должно объяснять само себя.
+    func testBaselineIgnoresCurrentPeriod() {
+        let history = [record(daysAgo: 0, km: 100, score: 10),   // провал прямо сейчас
+                       record(daysAgo: 7, km: 10, score: 80),
+                       record(daysAgo: 14, km: 10, score: 80),
+                       record(daysAgo: 21, km: 10, score: 80)]
+        let days = TripDayBook.rebuilt(from: history, calendar: utc)
+        XCTAssertEqual(RatingBreakdown.baseline(days: days, period: .week, anchor: now,
+                                                calendar: utc)?.median, 80)
+    }
+
     func testNextLevelThresholds() {
         XCTAssertEqual(DrivingScore.nextLevel(for: 87)?.threshold, 90)
         XCTAssertEqual(DrivingScore.nextLevel(for: 61)?.threshold, 75)

@@ -84,10 +84,10 @@ struct PassRow: View {
 /// карту проезда; у старых записей без координат остаётся простая строка.
 struct PassRowButton: View {
     let pass: PassedCamera
-    let onTap: (PassedCamera) -> Void
+    var onTap: ((PassedCamera) -> Void)?
 
     var body: some View {
-        if pass.coordinate != nil {
+        if pass.coordinate != nil, let onTap {
             Button { onTap(pass) } label: {
                 PassRow(pass: pass, showsChevron: true)
                     .contentShape(Rectangle())
@@ -159,89 +159,164 @@ struct TrackCanvas: View {
 
 // MARK: - Деталка поездки
 
+/// Связь поездки с рейтингом периода — показывается, когда деталка открыта из
+/// разбора рейтинга. Без неё «−12,6» в списке вкладов и «балл 55» на этом
+/// экране остаются двумя не связанными числами.
+struct TripRatingContext {
+    let contribution: RatingContribution
+    /// «за неделю» — окно, у которого поездка отняла баллы.
+    let periodCaption: String
+    /// Километры всего окна: доля веса становится проверяемой.
+    let periodDistance: Double
+}
+
+/// Шит-обёртка: из истории деталка открывается ровно как раньше.
 struct TripDetailSheet: View {
-    @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     let record: TripRecord
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
 
-    @State private var sharePayload: ShareImagePayload?
     @State private var selectedPass: PassedCamera?
-    @State private var appeared = false
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                ScrollViewReader { proxy in
-                VStack(spacing: 16) {
-                    mapSection
-                        .entrance(0, appeared)
-                    scoreRow
-                        .entrance(1, appeared)
-                    scoreBreakdown
-                        .entrance(1, appeared)
-                    statsGrid
-                        .entrance(2, appeared)
-                    TripStopsSection(record: record) { dismiss() }
-                        .entrance(3, appeared)
-                    SpeedProfileChart(record: record)
-                        .entrance(3, appeared)
-                        .id("chart")
-                    if !record.passed.isEmpty {
-                        passesSection
-                            .entrance(4, appeared)
-                    }
-                    if let onRoute, let end = record.endCoordinate {
-                        PrimaryButton(title: "Повторить маршрут",
-                                      systemImage: "arrow.triangle.turn.up.right.circle.fill") {
-                            dismiss()
-                            onRoute(end, String(localized: "Как в прошлый раз"))
-                        }
-                        .entrance(4, appeared)
+            TripDetailContent(record: record, onRoute: onRoute) { selectedPass = $0 }
+                .navigationTitle(record.startedAt.formatted(date: .abbreviated,
+                                                            time: .shortened))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Готово") { dismiss() }
                     }
                 }
-                .padding(20)
-                #if DEBUG
-                .onAppear {
-                    // Скриншот-автоматизация: прокрутить к графику скорости.
-                    guard ProcessInfo.processInfo.arguments.contains("-scrollChart") else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        withAnimation { proxy.scrollTo("chart", anchor: .top) }
-                    }
-                }
-                #endif
-                }
-            }
-            .onAppear {
-                appeared = true
-                #if DEBUG
-                // Скриншот-автоматизация: сразу открыть системный шэр.
-                if ProcessInfo.processInfo.arguments.contains("-shareTrip") { share() }
-                #endif
-            }
-            // Тот же жёсткий край прокрутки, что и в Итогах: карта поездки
-            // не должна просвечивать сквозь панель с заголовком.
-            .backport.scrollEdgeEffectStyle(.hard, for: .top)
-            .background(Theme.background)
-            .navigationTitle(record.startedAt.formatted(date: .abbreviated, time: .shortened))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
-                ToolbarItem(placement: .primaryAction) {
-                    Button { share() } label: { Image(systemName: "square.and.arrow.up") }
-                        .accessibilityLabel(Text("Поделиться поездкой"))
-                }
-            }
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .sheet(item: $selectedPass) { pass in
+            PassMapSheet(pass: pass, track: record.trackPoints, record: record)
+        }
+    }
+}
+
+/// Содержимое деталки без собственной навигации — чтобы её можно было и
+/// показать шитом, и втолкнуть в стек разбора рейтинга. Во втором случае
+/// «Назад» возвращает в разложение, а не выбрасывает на экран Итогов, как
+/// делал шит поверх шита.
+struct TripDetailContent: View {
+    @Environment(\.dismiss) private var dismiss
+    let record: TripRecord
+    /// Открыто из разбора рейтинга — показываем, что поездка отняла у периода.
+    var rating: TripRatingContext? = nil
+    var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
+    /// Тап по камере: шит показывает карту проезда, стек разбора — толкает её
+    /// следующим уровнем.
+    var onOpenPass: ((PassedCamera) -> Void)? = nil
+
+    @State private var sharePayload: ShareImagePayload?
+    @State private var appeared = false
+
+    var body: some View {
+        ScrollView {
+            ScrollViewReader { proxy in
+            VStack(spacing: 16) {
+                mapSection
+                    .entrance(0, appeared)
+                ratingCard
+                    .entrance(0, appeared)
+                scoreRow
+                    .entrance(1, appeared)
+                scoreBreakdown
+                    .entrance(1, appeared)
+                statsGrid
+                    .entrance(2, appeared)
+                TripStopsSection(record: record) { dismiss() }
+                    .entrance(3, appeared)
+                SpeedProfileChart(record: record)
+                    .entrance(3, appeared)
+                    .id("chart")
+                if !record.passed.isEmpty {
+                    passesSection
+                        .entrance(4, appeared)
+                }
+                if let onRoute, let end = record.endCoordinate {
+                    PrimaryButton(title: "Повторить маршрут",
+                                  systemImage: "arrow.triangle.turn.up.right.circle.fill") {
+                        dismiss()
+                        onRoute(end, String(localized: "Как в прошлый раз"))
+                    }
+                    .entrance(4, appeared)
+                }
+            }
+            .padding(20)
+            #if DEBUG
+            .onAppear {
+                // Скриншот-автоматизация: прокрутить к графику скорости.
+                guard ProcessInfo.processInfo.arguments.contains("-scrollChart") else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    withAnimation { proxy.scrollTo("chart", anchor: .top) }
+                }
+            }
+            #endif
+            }
+        }
+        .onAppear {
+            appeared = true
+            #if DEBUG
+            // Скриншот-автоматизация: сразу открыть системный шэр.
+            if ProcessInfo.processInfo.arguments.contains("-shareTrip") { share() }
+            #endif
+        }
+        // Тот же жёсткий край прокрутки, что и в Итогах: карта поездки
+        // не должна просвечивать сквозь панель с заголовком.
+        .backport.scrollEdgeEffectStyle(.hard, for: .top)
+        .background(Theme.background)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { share() } label: { Image(systemName: "square.and.arrow.up") }
+                    .accessibilityLabel(Text("Поделиться поездкой"))
+            }
+        }
         .sheet(item: $sharePayload) { payload in
             ActivityShareSheet(image: payload.image)
                 .presentationDetents([.medium, .large])
                 .ignoresSafeArea()
         }
-        .sheet(item: $selectedPass) { pass in
-            PassMapSheet(pass: pass, track: record.trackPoints)
+    }
+
+    // MARK: Вклад в рейтинг периода
+
+    /// Смыкает уровни разбора: та же арифметика «недобор × доля», что в списке
+    /// вкладов, но здесь рядом с самой поездкой.
+    @ViewBuilder private var ratingCard: some View {
+        if let rating {
+            let item = rating.contribution
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    Image(systemName: "chart.pie.fill")
+                        .font(.rounded(13, .bold))
+                        .foregroundStyle(Theme.danger)
+                        .frame(width: 32, height: 32)
+                        .background(Theme.danger.opacity(0.12), in: Circle())
+                    Text(String(format: String(localized: "Вклад в рейтинг %@"),
+                                rating.periodCaption))
+                        .font(.rounded(13, .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                    Spacer(minLength: 8)
+                    Text(Formatting.points(item.points))
+                        .font(.rounded(20, .heavy).monospacedDigit())
+                        .foregroundStyle(Theme.danger)
+                }
+                Text(String(format: String(localized: "Недобор %1$lld баллов × доля %2$lld %% (%3$@ из %4$@ %5$@)"),
+                            item.deficit, Int((item.weightShare * 100).rounded()),
+                            Formatting.distance(item.distanceMeters),
+                            Formatting.distance(rating.periodDistance),
+                            rating.periodCaption))
+                    .font(.rounded(11))
+                    .foregroundStyle(Theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .statCard()
+            .accessibilityElement(children: .combine)
         }
     }
 
@@ -354,33 +429,50 @@ struct TripDetailSheet: View {
         }
     }
 
+    /// Строка снятых баллов. Если снял конкретный проезд — строка ведёт к нему:
+    /// «−25 за Юнусабад» без возможности посмотреть сам проезд остаётся
+    /// утверждением, которое нечем проверить.
     private func penaltyRow(_ item: DrivingScore.Penalty) -> some View {
         // Отрицательные баллы = «вернули» (потолок штрафа) — зелёный плюс.
         let returned = item.points < 0
-        return HStack(spacing: 12) {
-            Image(systemName: item.icon)
-                .font(.rounded(12, .bold))
-                .foregroundStyle(returned ? Theme.success : Theme.danger)
-                .frame(width: 30, height: 30)
-                .background((returned ? Theme.success : Theme.danger).opacity(0.12),
-                            in: Circle())
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.title)
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
-                if let detail = item.detail {
-                    Text(detail)
-                        .font(.rounded(11))
-                        .foregroundStyle(Theme.textTertiary)
+        let pass = item.passID.flatMap { id in record.passed.first { $0.id == id } }
+        let openable = pass != nil && onOpenPass != nil
+        return Button {
+            if let pass { onOpenPass?(pass) }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: item.icon)
+                    .font(.rounded(12, .bold))
+                    .foregroundStyle(returned ? Theme.success : Theme.danger)
+                    .frame(width: 30, height: 30)
+                    .background((returned ? Theme.success : Theme.danger).opacity(0.12),
+                                in: Circle())
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.title)
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
+                    if let detail = item.detail {
+                        Text(detail)
+                            .font(.rounded(11))
+                            .foregroundStyle(Theme.textTertiary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 8)
+                Text(returned ? "+\(-item.points)" : "−\(item.points)")
+                    .font(.rounded(15, .heavy).monospacedDigit())
+                    .foregroundStyle(returned ? Theme.success : Theme.danger)
+                if openable {
+                    Image(systemName: "chevron.right")
+                        .font(.rounded(11, .semibold))
+                        .foregroundStyle(Theme.textTertiary)
                 }
             }
-            Spacer(minLength: 8)
-            Text(returned ? "+\(-item.points)" : "−\(item.points)")
-                .font(.rounded(15, .heavy).monospacedDigit())
-                .foregroundStyle(returned ? Theme.success : Theme.danger)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .disabled(!openable)
         .accessibilityElement(children: .combine)
     }
 
@@ -404,7 +496,7 @@ struct TripDetailSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(String(localized: "Пройденные камеры"))
             ForEach(record.passed.reversed()) { pass in
-                PassRowButton(pass: pass) { selectedPass = $0 }
+                PassRowButton(pass: pass, onTap: onOpenPass)
             }
         }
     }

@@ -92,6 +92,17 @@ nonisolated enum StatsPeriod: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Подпись «вашей нормы»: по скольким прошлым окнам она посчитана.
+    /// Меньше трёх окон норму не показываем (см. ratingBaselineMinPeriods),
+    /// поэтому падежных вариантов на единицу здесь не нужно.
+    func baselineTitle(periods: Int) -> String {
+        switch self {
+        case .day:   return String(format: String(localized: "по %lld прошлым дням"), periods)
+        case .week:  return String(format: String(localized: "по %lld прошлым неделям"), periods)
+        case .month: return String(format: String(localized: "по %lld прошлым месяцам"), periods)
+        }
+    }
+
     /// Заголовок списка поездок — список подчиняется тому же фильтру.
     var tripsTitle: String {
         switch self {

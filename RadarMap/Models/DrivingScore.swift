@@ -41,42 +41,62 @@ enum DrivingScore {
         let limitKmh: Int?
     }
 
+    // MARK: Лестница снятия баллов
+    //
+    // Одно место на всё приложение. Раньше ступени были выписаны дважды —
+    // в tripScore и в breakdown, — и разложение балла могло разойтись с самим
+    // баллом от одной опечатки. Разбор рейтинга периода (RatingBreakdown)
+    // считает по ним же.
+
+    /// Больше этого за камеры не снимаем: одна ужасная поездка не должна
+    /// обнулять балл целиком.
+    nonisolated static let cameraPenaltyCap: Double = 70
+    /// Потолок штрафа за рваную езду.
+    nonisolated static let smoothPenaltyCap: Double = 20
+    /// Спокойная езда — 2–4 км/ч перепада на шаг трека; дёрганая — 8+.
+    nonisolated static let smoothBaselineKmh: Double = 3.5
+    nonisolated static let smoothFactor: Double = 5
+    /// Меньше этого числа точек трека — судить о плавности не по чему.
+    nonisolated static let smoothMinPoints = 10
+
+    /// Сколько баллов снимает один проезд камеры при таком превышении.
+    nonisolated static func penaltyPoints(overKmh: Double) -> Double {
+        switch overKmh {
+        case ..<2:    return 0    // идеально
+        case 2..<5:   return 2    // на грани
+        case 5..<12:  return 8    // штрафная ступень близко
+        case 12..<20: return 14
+        case 20..<40: return 25   // 5 БРВ
+        default:      return 40   // 9 БРВ
+        }
+    }
+
+    /// Штраф за рваную езду по треку. nil — трека мало, судить не по чему.
+    nonisolated static func smoothPenalty(trackSpeeds: [Double]) -> Double? {
+        guard trackSpeeds.count >= smoothMinPoints else { return nil }
+        var delta = 0.0
+        for index in 1..<trackSpeeds.count {
+            delta += abs(trackSpeeds[index] - trackSpeeds[index - 1])
+        }
+        let mean = delta / Double(trackSpeeds.count - 1)
+        return min(max((mean - smoothBaselineKmh) * smoothFactor, 0), smoothPenaltyCap)
+    }
+
     /// Балл поездки 0–100. nil — данных мало (ни лимитных проездов, ни трека).
     /// Камеры — главный компонент (штрафные ступени), плавность по треку — второй.
     nonisolated static func tripScore(passes: [Pass], trackSpeeds: [Double]) -> Double? {
-        var cameraPenalty = 0.0
+        var cameras = 0.0
         var limitedPasses = 0
         for pass in passes {
             guard let limit = pass.limitKmh else { continue }
             limitedPasses += 1
-            let over = pass.speedKmh - Double(limit)
-            switch over {
-            case ..<2:    break               // идеально
-            case 2..<5:   cameraPenalty += 2  // на грани
-            case 5..<12:  cameraPenalty += 8  // штрафная ступень близко
-            case 12..<20: cameraPenalty += 14
-            case 20..<40: cameraPenalty += 25 // 5 БРВ
-            default:      cameraPenalty += 40 // 9 БРВ
-            }
+            cameras += penaltyPoints(overKmh: pass.speedKmh - Double(limit))
         }
-        cameraPenalty = min(cameraPenalty, 70)
+        cameras = min(cameras, cameraPenaltyCap)
 
-        // Плавность: средний перепад скорости между точками трека (шаг ~30 м).
-        // Спокойная езда — 2–4 км/ч на шаг, дёрганая — 8+.
-        var smoothPenalty = 0.0
-        var hasTrack = false
-        if trackSpeeds.count >= 10 {
-            hasTrack = true
-            var delta = 0.0
-            for i in 1..<trackSpeeds.count {
-                delta += abs(trackSpeeds[i] - trackSpeeds[i - 1])
-            }
-            let mean = delta / Double(trackSpeeds.count - 1)
-            smoothPenalty = min(max((mean - 3.5) * 5, 0), 20)
-        }
-
-        guard limitedPasses > 0 || hasTrack else { return nil }
-        return max(0, 100 - cameraPenalty - smoothPenalty)
+        let smooth = smoothPenalty(trackSpeeds: trackSpeeds)
+        guard limitedPasses > 0 || smooth != nil else { return nil }
+        return max(0, 100 - cameras - (smooth ?? 0))
     }
 
     /// Одна строка разложения балла: за что и сколько снято.
@@ -86,6 +106,9 @@ enum DrivingScore {
         let title: String
         let detail: String?
         let points: Int      // снято баллов (положительное число)
+        /// Проезд, из-за которого снято: по нему открывается карта проезда.
+        /// nil — строка не про камеру (потолок, плавность).
+        var passID: UUID? = nil
     }
 
     /// Из чего сложился балл поездки — та же арифметика, что в tripScore,
@@ -99,16 +122,7 @@ enum DrivingScore {
         for pass in passed {
             guard let limit = pass.limitKmh else { continue }
             limitedPasses += 1
-            let over = pass.speedKmh - Double(limit)
-            let points: Double
-            switch over {
-            case ..<2:    points = 0
-            case 2..<5:   points = 2
-            case 5..<12:  points = 8
-            case 12..<20: points = 14
-            case 20..<40: points = 25
-            default:      points = 40
-            }
+            let points = penaltyPoints(overKmh: pass.speedKmh - Double(limit))
             cameraPenalty += points
             guard points > 0 else { continue }
             let place = pass.location.isEmpty ? pass.kind.displayName : pass.location
@@ -116,30 +130,26 @@ enum DrivingScore {
                 id: pass.id.uuidString, icon: pass.kind.symbolName, title: place,
                 detail: String(format: String(localized: "%1$lld км/ч при лимите %2$lld"),
                                Int(pass.speedKmh), limit),
-                points: Int(points)))
+                points: Int(points), passID: pass.id))
         }
         // Штраф за камеры ограничен потолком: одна ужасная поездка не должна
         // обнулять балл (см. tripScore). Показываем это честной строкой.
-        if cameraPenalty > 70 {
+        if cameraPenalty > cameraPenaltyCap {
             items.append(Penalty(
                 id: "cap", icon: "arrow.down.to.line",
                 title: String(localized: "Потолок штрафа за камеры"),
-                detail: String(localized: "больше 70 баллов за камеры не снимаем"),
-                points: -Int(cameraPenalty - 70)))
+                detail: String(format: String(localized: "больше %lld баллов за камеры не снимаем"),
+                               Int(cameraPenaltyCap)),
+                points: -Int(cameraPenalty - cameraPenaltyCap)))
         }
 
-        if trackSpeeds.count >= 10 {
-            var delta = 0.0
-            for index in 1..<trackSpeeds.count {
-                delta += abs(trackSpeeds[index] - trackSpeeds[index - 1])
-            }
-            let mean = delta / Double(trackSpeeds.count - 1)
-            let smooth = Int(min(max((mean - 3.5) * 5, 0), 20).rounded())
-            if smooth > 0 {
+        if let smooth = smoothPenalty(trackSpeeds: trackSpeeds) {
+            let points = Int(smooth.rounded())
+            if points > 0 {
                 items.append(Penalty(
                     id: "smooth", icon: "waveform.path.ecg",
                     title: String(localized: "Резкие разгоны и торможения"),
-                    detail: String(localized: "по треку поездки"), points: smooth))
+                    detail: String(localized: "по треку поездки"), points: points))
             }
         } else if limitedPasses == 0 {
             return []   // балла нет — раскладывать нечего

@@ -1,0 +1,909 @@
+//
+//  RatingDetailSheet.swift
+//  RadarMap
+//
+//  Разбор рейтинга периода: почему у ВАС именно столько и что с этим делать.
+//
+//  Раньше это была расшифровка-методичка с пятью строками разложения и тупиком
+//  вместо продолжения: список обрезался на «остальные поездки: 7», а тап по
+//  строке закрывал шит и открывал ДРУГОЙ шит — «Назад» возвращало не в разбор,
+//  а на экран Итогов. Цепочка рассуждения рвалась ровно там, где начиналась.
+//
+//  Теперь это стек с четырьмя уровнями, и на каждом видно, откуда взялось
+//  число предыдущего:
+//
+//      рейтинг периода → все вклады → поездка → проезд камеры
+//
+//  Порядок блоков — от вывода к сырым данным: сколько (герой) → из чего
+//  сложилось (формула и полоса) → нормально ли это для меня (норма) → где
+//  именно теряю (камеры) → поимённо (вклады) → как это устроено (свёрнуто).
+//
+//  Все числа приходят готовыми из RatingBreakdown.screen, посчитанного вне
+//  main: на месяце это полсотни записей со всеми проездами.
+//
+
+import SwiftUI
+import Charts
+
+/// Куда можно провалиться из разбора. Значения Hashable и лёгкие — путь живёт
+/// по идентификаторам, а сами записи достаются из истории в момент показа.
+private enum RatingRoute: Hashable {
+    case allContributions
+    case trip(Double)
+    case pass(trip: Double, pass: UUID)
+}
+
+struct RatingDetailSheet: View {
+    let summary: PeriodSummary
+    let period: StatsPeriod
+    /// Окно, за которое показан рейтинг: по нему считается всё разложение.
+    var interval: DateInterval = DateInterval(start: .distantPast, end: Date())
+    /// Якорь окна — по нему берутся прошлые такие же окна для «вашей нормы».
+    var anchor: Date = Date()
+
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.dismiss) private var dismiss
+    @State private var path: [RatingRoute] = []
+    @State private var data = RatingScreen()
+    /// Подсвеченная строка — тап по сегменту полосы вкладов.
+    @State private var highlighted: Double?
+
+    /// Ключ пересчёта: окно и состав истории.
+    private struct DataKey: Equatable {
+        let period: StatsPeriod
+        let anchor: Date
+        let trips: Int
+        let days: Int
+        let latest: Double?
+    }
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            ScrollView {
+                ScrollViewReader { proxy in
+                    LazyVStack(spacing: 16) {
+                        hero
+                        formulaCard(proxy: proxy)
+                        baselineCard
+                        sourcesCard
+                        contributionsCard
+                        understandCard
+                    }
+                    .padding(20)
+                }
+            }
+            .backport.scrollEdgeEffectStyle(.hard, for: .top)
+            .background(Theme.background)
+            .navigationTitle("Рейтинг вождения")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
+            }
+            .navigationDestination(for: RatingRoute.self) { destination($0) }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .task(id: DataKey(period: period, anchor: anchor, trips: env.trip.history.count,
+                          days: env.trip.days.count, latest: env.trip.history.first?.id)) {
+            data = await RatingBreakdown.screen(records: env.trip.history, days: env.trip.days,
+                                                period: period, anchor: anchor)
+        }
+    }
+
+    // MARK: - Уровни разбора
+
+    @ViewBuilder private func destination(_ route: RatingRoute) -> some View {
+        switch route {
+        case .allContributions:
+            AllContributionsView(items: data.contributions, period: period,
+                                 days: env.trip.days) { path.append(.trip($0)) }
+        case .trip(let id):
+            if let record = env.trip.history.first(where: { $0.id == id }) {
+                TripDetailContent(record: record, rating: ratingContext(for: id),
+                                  onOpenPass: { path.append(.pass(trip: id, pass: $0.id)) })
+                    .navigationTitle(record.startedAt.formatted(date: .abbreviated,
+                                                                time: .shortened))
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+        case .pass(let tripID, let passID):
+            if let record = env.trip.history.first(where: { $0.id == tripID }),
+               let pass = record.passed.first(where: { $0.id == passID }) {
+                PassDetailView(pass: pass, track: record.trackPoints, record: record,
+                               days: env.trip.days, interval: interval, period: period)
+            }
+        }
+    }
+
+    /// Связь поездки с рейтингом периода — чтобы на её экране было видно, что
+    /// именно она отняла у общей цифры.
+    private func ratingContext(for id: Double) -> TripRatingContext? {
+        guard let item = data.contributions.first(where: { $0.id == id && $0.isTrip })
+        else { return nil }
+        return TripRatingContext(contribution: item, periodCaption: period.caption,
+                                 periodDistance: summary.distance)
+    }
+
+    // MARK: - Герой
+
+    private var hero: some View {
+        HStack(spacing: 16) {
+            if let rating = summary.rating {
+                RatingRing(rating: rating)
+                    .frame(width: 92, height: 92)
+            } else {
+                Image(systemName: "gauge.with.needle")
+                    .font(.rounded(30))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 92, height: 92)
+                    .background(Theme.accent.opacity(0.10), in: Circle())
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Text(period.caption)
+                    .font(.rounded(11, .medium))
+                    .foregroundStyle(Theme.textTertiary)
+                    .textCase(.uppercase)
+                if let rating = summary.rating {
+                    Text(DrivingScore.level(for: rating))
+                        .font(.rounded(19, .bold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let delta = summary.ratingDelta {
+                    deltaBadge(delta)
+                }
+                Text(String(format: String(localized: "Поездок: %1$lld · %2$@"),
+                            summary.trips, Formatting.distance(summary.distance)))
+                    .font(.rounded(12))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .statCard()
+    }
+
+    private func deltaBadge(_ delta: Int) -> some View {
+        let up = delta > 0
+        let flat = delta == 0
+        let tint: Color = flat ? Theme.textSecondary : (up ? Theme.success : Theme.danger)
+        return Label(flat ? String(localized: "как в прошлый период")
+                          : (up ? "+\(delta)" : "\(delta)"),
+                     systemImage: flat ? "equal" : (up ? "arrow.up" : "arrow.down"))
+            .font(.rounded(11, .bold).monospacedDigit())
+            .foregroundStyle(tint)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(tint.opacity(0.14), in: Capsule())
+    }
+
+    // MARK: - Формула и полоса вкладов
+
+    /// `100 − 27 = 73` плюс сама сотня, разложенная в полосу: сразу видно,
+    /// рейтинг съела одна поездка или десяток мелких. Число и картинка
+    /// показывают одно и то же — полоса строится из тех же вкладов.
+    @ViewBuilder private func formulaCard(proxy: ScrollViewProxy) -> some View {
+        if let rating = summary.rating {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 6) {
+                    Text("100")
+                        .font(.rounded(17, .heavy).monospacedDigit())
+                        .foregroundStyle(Theme.textSecondary)
+                    Text("−\(Int((100 - Double(rating)).rounded()))")
+                        .font(.rounded(17, .heavy).monospacedDigit())
+                        .foregroundStyle(Theme.danger)
+                    Text("=")
+                        .font(.rounded(15, .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                    Text("\(rating)")
+                        .font(.rounded(20, .heavy).monospacedDigit())
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer(minLength: 0)
+                }
+
+                ContributionBar(rating: rating, items: data.contributions,
+                                highlighted: highlighted) { id in
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    withAnimation(.snappy(duration: 0.3)) {
+                        highlighted = highlighted == id ? nil : id
+                        if highlighted != nil { proxy.scrollTo(id, anchor: .center) }
+                    }
+                }
+
+                HStack(spacing: 14) {
+                    legendDot(TripHistorySection.scoreColor(rating),
+                              String(format: String(localized: "удержано %lld"), rating))
+                    legendDot(Theme.danger,
+                              String(format: String(localized: "потеряно %lld"),
+                                     Int((100 - Double(rating)).rounded())))
+                    Spacer(minLength: 0)
+                }
+
+                if let next = DrivingScore.nextLevel(for: rating) {
+                    Text(String(format: String(localized: "До уровня «%1$@» — %2$lld балла"),
+                                next.name, next.threshold - rating))
+                        .font(.rounded(11, .medium))
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+            .statCard()
+        }
+    }
+
+    private func legendDot(_ color: Color, _ title: String) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(title).font(.rounded(11)).foregroundStyle(Theme.textTertiary)
+        }
+    }
+
+    // MARK: - Ваша норма
+
+    /// Абсолютная цифра ничего не говорит: 73 для одного водителя рекорд, для
+    /// другого — провал. Норма считается по прошлым таким же окнам (текущее в
+    /// неё не входит — иначе оно объясняло бы само себя).
+    @ViewBuilder private var baselineCard: some View {
+        if data.daily.count >= 2 || data.baseline != nil {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(title: String(localized: "Ваша норма")) {
+                    if let baseline = data.baseline {
+                        Text(period.baselineTitle(periods: baseline.periods))
+                            .font(.rounded(11, .medium))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                }
+                if let verdict = baselineVerdict {
+                    Text(verdict)
+                        .font(.rounded(13, .medium))
+                        .foregroundStyle(Theme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if data.daily.count >= 2 { ratingChart }
+            }
+            .statCard()
+        }
+    }
+
+    private var baselineVerdict: String? {
+        guard let baseline = data.baseline, let rating = summary.rating else { return nil }
+        if baseline.contains(rating) {
+            return String(format: String(localized: "Это ваш обычный уровень — вы обычно держитесь между %1$lld и %2$lld."),
+                          baseline.low, baseline.high)
+        }
+        let delta = baseline.delta(from: rating)
+        return delta > 0
+            ? String(format: String(localized: "На %1$lld балла выше вашей нормы (обычно %2$lld)."),
+                     delta, baseline.median)
+            : String(format: String(localized: "На %1$lld балла ниже вашей нормы (обычно %2$lld)."),
+                     -delta, baseline.median)
+    }
+
+    private var ratingChart: some View {
+        Chart {
+            if let baseline = data.baseline {
+                RuleMark(y: .value("Норма", baseline.median))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            ForEach(data.daily) { point in
+                LineMark(x: .value("День", point.day, unit: .day),
+                         y: .value("Рейтинг", point.rating))
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(Theme.accent)
+                PointMark(x: .value("День", point.day, unit: .day),
+                          y: .value("Рейтинг", point.rating))
+                    .foregroundStyle(TripHistorySection.scoreColor(point.rating))
+            }
+        }
+        .chartYScale(domain: 0...100)
+        .chartYAxis {
+            AxisMarks(values: [0, 50, 100]) { _ in
+                AxisValueLabel().font(.rounded(9)).foregroundStyle(Theme.textTertiary)
+            }
+        }
+        .chartXAxis {
+            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                AxisValueLabel(format: .dateTime.day().month(.abbreviated))
+                    .font(.rounded(9)).foregroundStyle(Theme.textTertiary)
+            }
+        }
+        // Полоса «обычного диапазона» рисуется фоном графика: так она не спорит
+        // с линией и не требует отдельной шкалы.
+        .chartBackground { proxy in
+            GeometryReader { geometry in
+                if let baseline = data.baseline, let plot = proxy.plotFrame,
+                   let low = proxy.position(forY: Double(baseline.low)),
+                   let high = proxy.position(forY: Double(baseline.high)) {
+                    let frame = geometry[plot]
+                    Rectangle()
+                        .fill(Theme.accent.opacity(0.10))
+                        .frame(width: frame.width, height: max(2, abs(low - high)))
+                        .position(x: frame.midX, y: frame.minY + (low + high) / 2)
+                }
+            }
+        }
+        .frame(height: 110)
+    }
+
+    // MARK: - Где теряете баллы
+
+    /// Двенадцать строк «поездка такая-то» не говорят, что делать. «Юнусабад,
+    /// 4 проезда, −18» говорит. Сумма строк равна сумме вкладов поездок.
+    @ViewBuilder private var sourcesCard: some View {
+        let sources = data.sources
+        if !sources.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(String(localized: "Где теряете баллы"))
+                // Плавность встаёт в общий порядок по величине, а не отдельной
+                // строкой снизу: блок обещает «где теряете больше всего», и
+                // −20 за рваную езду под −6 за камеру этому обещанию врёт.
+                ForEach(sourceRows(sources)) { row in
+                    switch row {
+                    case .camera(let hotspot): hotspotRow(hotspot)
+                    case .smoothness(let points): smoothnessRow(points)
+                    }
+                }
+                let rest = sources.cameras.dropFirst(AppConfig.hotspotsVisibleRows)
+                if !rest.isEmpty {
+                    restRow(title: String(format: String(localized: "Остальные камеры: %lld"),
+                                          rest.count),
+                            points: rest.reduce(0) { $0 + $1.points })
+                }
+            }
+            .statCard()
+        }
+    }
+
+    private enum SourceRow: Identifiable {
+        case camera(RatingHotspot)
+        case smoothness(Double)
+
+        var id: Int {
+            switch self {
+            case .camera(let hotspot): return hotspot.id
+            case .smoothness:          return -1
+            }
+        }
+        var points: Double {
+            switch self {
+            case .camera(let hotspot): return hotspot.points
+            case .smoothness(let value): return value
+            }
+        }
+    }
+
+    private func sourceRows(_ sources: RatingSources) -> [SourceRow] {
+        var rows = sources.cameras.prefix(AppConfig.hotspotsVisibleRows).map(SourceRow.camera)
+        if sources.smoothness >= 0.5 { rows.append(.smoothness(sources.smoothness)) }
+        return rows.sorted { $0.points > $1.points }
+    }
+
+    private func hotspotRow(_ hotspot: RatingHotspot) -> some View {
+        Button {
+            guard let found = worstPass(cameraID: hotspot.id) else { return }
+            path.append(.pass(trip: found.record.id, pass: found.pass.id))
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "camera.metering.center.weighted")
+                    .font(.rounded(13, .bold))
+                    .foregroundStyle(Theme.danger)
+                    .frame(width: 32, height: 32)
+                    .background(Theme.danger.opacity(0.12), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(hotspot.location)
+                        .font(.rounded(14, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(1)
+                    Text(hotspotDetail(hotspot))
+                        .font(.rounded(11))
+                        .foregroundStyle(Theme.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Text(Formatting.points(hotspot.points))
+                    .font(.rounded(16, .heavy).monospacedDigit())
+                    .foregroundStyle(Theme.danger)
+                Image(systemName: "chevron.right")
+                    .font(.rounded(11, .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(worstPass(cameraID: hotspot.id) == nil)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Подпись строки. Одна улица может нести несколько камер с одинаковым
+    /// названием — тогда единственный проезд различает дата, а повторные
+    /// проезды и так различаются числом.
+    private func hotspotDetail(_ hotspot: RatingHotspot) -> String {
+        let head = hotspot.times > 1
+            ? String(format: String(localized: "проездов: %lld"), hotspot.times)
+            : hotspot.worstDate.formatted(.dateTime.day().month(.abbreviated).hour().minute())
+        guard let limit = hotspot.limitKmh else { return head }
+        let speed = hotspot.times > 1
+            ? String(format: String(localized: "до %1$lld при лимите %2$lld"),
+                     Int(hotspot.worstSpeedKmh), limit)
+            : String(format: String(localized: "%1$lld при лимите %2$lld"),
+                     Int(hotspot.worstSpeedKmh), limit)
+        return head + " · " + speed
+    }
+
+    private func smoothnessRow(_ points: Double) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "waveform.path.ecg")
+                .font(.rounded(13, .bold))
+                .foregroundStyle(Theme.warning)
+                .frame(width: 32, height: 32)
+                .background(Theme.warning.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Резкие разгоны и торможения")
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("по трекам поездок периода")
+                    .font(.rounded(11))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            Spacer(minLength: 8)
+            Text(Formatting.points(points))
+                .font(.rounded(16, .heavy).monospacedDigit())
+                .foregroundStyle(Theme.warning)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func restRow(title: String, points: Double) -> some View {
+        HStack {
+            Text(title)
+                .font(.rounded(12))
+                .foregroundStyle(Theme.textTertiary)
+            Spacer(minLength: 0)
+            Text(Formatting.points(points))
+                .font(.rounded(13, .semibold).monospacedDigit())
+                .foregroundStyle(Theme.textTertiary)
+        }
+    }
+
+    /// Худший проезд этой камеры за окно — именно его и стоит показать.
+    private func worstPass(cameraID: Int) -> (record: TripRecord, pass: PassedCamera)? {
+        var best: (record: TripRecord, pass: PassedCamera)?
+        for record in env.trip.history where interval.contains(record.startedAt) {
+            for pass in record.passed where pass.cameraID == cameraID {
+                if best == nil || pass.speedKmh > best!.pass.speedKmh {
+                    best = (record, pass)
+                }
+            }
+        }
+        return best
+    }
+
+    // MARK: - Вклады поездок
+
+    /// Превью крупных вкладов; полный список — отдельным экраном с сортировкой
+    /// и фильтром. Двадцать строк по −0,1 балла на первом экране объясняют
+    /// ровно ничего, но и прятать их насовсем нельзя — сумма должна сходиться.
+    @ViewBuilder private var contributionsCard: some View {
+        let items = data.contributions
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(String(localized: "Из чего сложился ваш рейтинг"))
+                let shown = Array(items.prefix(AppConfig.breakdownVisibleRows))
+                    .filter { $0.points >= AppConfig.breakdownMinPoints }
+                ForEach(shown) { item in
+                    ContributionRow(item: item, highlighted: highlighted == item.id) {
+                        open(item)
+                    }
+                    .id(item.id)
+                }
+                // Хвост считаем по ТЕМ ЖЕ строкам, что показали: иначе мелкая
+                // строка внутри первой пятёрки съезжала бы в оба списка сразу
+                // и блок переставал сходиться к 100 − рейтинг.
+                let shownIDs = Set(shown.map(\.id))
+                let rest = items.filter { !shownIDs.contains($0.id) }
+                if !rest.isEmpty {
+                    restRow(title: String(format: String(localized: "Остальные поездки: %lld"),
+                                          rest.count),
+                            points: rest.reduce(0) { $0 + $1.points })
+                }
+
+                Button {
+                    path.append(.allContributions)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(String(format: String(localized: "Все вклады (%lld)"), items.count))
+                            .font(.rounded(13, .semibold))
+                        Image(systemName: "chevron.right")
+                            .font(.rounded(10, .bold))
+                    }
+                    .foregroundStyle(Theme.accent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 2)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle())
+
+                if data.unrated > 0 {
+                    Text(String(format: String(localized: "Ещё %lld поездок без известных лимитов и трека — в рейтинг они не вошли"),
+                                data.unrated))
+                        .font(.rounded(11))
+                        .foregroundStyle(Theme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .statCard()
+        }
+    }
+
+    private func open(_ item: RatingContribution) {
+        guard item.isTrip else { return }
+        path.append(.trip(item.id))
+    }
+
+    // MARK: - Понять данные
+
+    /// Методика нужна, но она не должна занимать три карточки над личными
+    /// цифрами: кто спросит — раскроет.
+    private var understandCard: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 10) {
+                    SectionHeader(String(localized: "Шкала"))
+                    scaleRow(Theme.success, "90–100", String(localized: "Идеальный стиль"))
+                    scaleRow(Theme.success.opacity(0.75), "75–89",
+                             String(localized: "Аккуратный водитель"))
+                    scaleRow(Theme.warning, "60–74",
+                             String(localized: "Уверенный, но с риском"))
+                    scaleRow(Theme.danger, "0–59", String(localized: "Рискованный стиль"))
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    SectionHeader(String(localized: "Из чего складывается"))
+                    componentRow(icon: "camera.metering.center.weighted", tint: Theme.accent,
+                                 title: String(localized: "Скорость у камер"),
+                                 text: String(localized: "Каждый проезд камеры с известным лимитом: берём минимальную скорость в 80 м перед камерой — разгон после проезда не считается. Штрафные ступени снижают балл сильнее всего."))
+                    componentRow(icon: "waveform.path.ecg", tint: Theme.Types.intelligent,
+                                 title: String(localized: "Плавность езды"),
+                                 text: String(localized: "Резкие разгоны и торможения по треку поездки снижают балл."))
+                    componentRow(icon: "scalemass", tint: Theme.warning,
+                                 title: String(localized: "Вес поездки"),
+                                 text: String(localized: "Рейтинг периода — среднее баллов, взвешенное по километрам: длинная трасса влияет на него сильнее, чем поездка до магазина."))
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    SectionHeader(String(localized: "Как поднять"))
+                    tipRow(String(localized: "Проезжайте камеры не выше лимита — уже +6 км/ч попадает в штрафную ступень."))
+                    tipRow(String(localized: "Разгоняйтесь и тормозите плавно."))
+                    tipRow(String(localized: "Начните с камер из блока «Где теряете баллы» — там теряется больше всего."))
+                }
+            }
+            .padding(.top, 14)
+        } label: {
+            Text("Понять данные")
+                .font(.rounded(14, .semibold))
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .tint(Theme.accent)
+        .statCard()
+    }
+
+    private func scaleRow(_ color: Color, _ range: String, _ name: String) -> some View {
+        HStack(spacing: 10) {
+            Circle().fill(color).frame(width: 10, height: 10)
+            Text(range)
+                .font(.rounded(14, .bold).monospacedDigit())
+                .foregroundStyle(Theme.textPrimary)
+                .frame(width: 64, alignment: .leading)
+            Text(name)
+                .font(.rounded(14))
+                .foregroundStyle(Theme.textSecondary)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func componentRow(icon: String, tint: Color, title: String,
+                              text: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.rounded(15, .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 36, height: 36)
+                .background(tint.opacity(0.10),
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.rounded(14, .semibold)).foregroundStyle(Theme.textPrimary)
+                Text(text).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func tipRow(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.rounded(13))
+                .foregroundStyle(Theme.success)
+                .padding(.top, 2)
+            Text(text)
+                .font(.rounded(13))
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+// MARK: - Полоса вкладов
+
+/// Сотня баллов, разложенная в одну шкалу: удержанное плюс сегменты потерь.
+/// Тап по сегменту подсвечивает свою строку в списке — картинка и цифры
+/// связаны, а не живут рядом.
+private struct ContributionBar: View {
+    let rating: Int
+    let items: [RatingContribution]
+    var highlighted: Double?
+    var onSelect: (Double) -> Void
+
+    /// Сколько потерь показываем отдельными сегментами: дальше полоса
+    /// превращается в рябь из волосков.
+    private static let visibleLosses = 4
+
+    private struct Segment: Identifiable {
+        let id: Double?
+        let points: Double
+        let color: Color
+    }
+
+    private var segments: [Segment] {
+        var result = [Segment(id: nil, points: Double(rating),
+                              color: TripHistorySection.scoreColor(rating))]
+        let losses = items.filter { $0.points >= 0.05 }
+        for (index, item) in losses.prefix(Self.visibleLosses).enumerated() {
+            result.append(Segment(id: item.id, points: item.points,
+                                  color: Theme.danger.opacity(1 - Double(index) * 0.18)))
+        }
+        let rest = losses.dropFirst(Self.visibleLosses).reduce(0) { $0 + $1.points }
+        if rest >= 0.05 {
+            result.append(Segment(id: nil, points: rest, color: Theme.textTertiary))
+        }
+        return result
+    }
+
+    var body: some View {
+        let parts = segments
+        let spacing: CGFloat = 2
+        GeometryReader { geometry in
+            let available = max(0, geometry.size.width - spacing * CGFloat(parts.count - 1))
+            HStack(spacing: spacing) {
+                ForEach(Array(parts.enumerated()), id: \.offset) { _, segment in
+                    Capsule()
+                        .fill(segment.color)
+                        .frame(width: max(3, available * segment.points / 100))
+                        .opacity(highlighted == nil || highlighted == segment.id ? 1 : 0.35)
+                        .onTapGesture {
+                            if let id = segment.id { onSelect(id) }
+                        }
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(height: 14)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(String(format: String(localized: "Удержано %lld баллов из 100"),
+                                        rating)))
+    }
+}
+
+// MARK: - Строка вклада
+
+/// Строка обязана объяснять сама себя: слева — что за поездка, справа — вклад
+/// и та самая арифметика «недобор × доля», из которой он получился.
+private struct ContributionRow: View {
+    let item: RatingContribution
+    var highlighted = false
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 10) {
+                // Тонкая риска слева: величина вклада читается до чтения цифр.
+                Capsule()
+                    .fill(item.points >= 1 ? Theme.danger : Theme.textTertiary)
+                    .frame(width: 3, height: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.date.formatted(date: .abbreviated,
+                                             time: item.isTrip ? .shortened : .omitted))
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("\(Formatting.distance(item.distanceMeters)) · "
+                         + String(format: String(localized: "балл %lld"), item.score))
+                        .font(.rounded(11))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                Spacer(minLength: 8)
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(Formatting.points(item.points))
+                        .font(.rounded(16, .heavy).monospacedDigit())
+                        .foregroundStyle(item.points >= 1 ? Theme.danger : Theme.textSecondary)
+                    // Откуда взялось именно это число.
+                    Text(String(format: String(localized: "%1$lld × %2$lld %%"),
+                                item.deficit, Int((item.weightShare * 100).rounded())))
+                        .font(.rounded(10, .medium).monospacedDigit())
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                if item.isTrip {
+                    Image(systemName: "chevron.right")
+                        .font(.rounded(11, .semibold))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+            }
+            .padding(.vertical, 2)
+            .background(highlighted ? Theme.accent.opacity(0.10) : .clear,
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!item.isTrip)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Все вклады
+
+/// Полный список без потолка: сортировка и фильтр вместо «остальные поездки: 7».
+private struct AllContributionsView: View {
+    let items: [RatingContribution]
+    let period: StatsPeriod
+    /// Дневные агрегаты — по ним раскрываются строки-дни, чьи записи вычищены.
+    let days: [TripDay]
+    let onOpenTrip: (Double) -> Void
+
+    private enum Sort: String, CaseIterable, Identifiable {
+        case points, date
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .points: return String(localized: "По вкладу")
+            case .date:   return String(localized: "По дате")
+            }
+        }
+    }
+
+    @State private var sort: Sort = .points
+    @State private var onlyViolations = false
+    @State private var expandedDay: Double?
+    @Namespace private var sortPill
+
+    private var shown: [RatingContribution] {
+        let filtered = onlyViolations ? items.filter(\.hasViolation) : items
+        return sort == .points ? filtered.sorted { $0.points > $1.points }
+                               : filtered.sorted { $0.date > $1.date }
+    }
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                controls
+                if shown.isEmpty {
+                    Text("В этом периоде нет поездок с превышениями — это хорошая новость.")
+                        .font(.rounded(13))
+                        .foregroundStyle(Theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 24)
+                } else {
+                    ForEach(shown) { item in
+                        VStack(alignment: .leading, spacing: 8) {
+                            ContributionRow(item: item) { tap(item) }
+                            if !item.isTrip, expandedDay == item.id {
+                                dayDetail(item)
+                            }
+                        }
+                        .statCard(padding: 12, radius: Theme.cornerMedium)
+                    }
+                    total
+                }
+            }
+            .padding(20)
+        }
+        .backport.scrollEdgeEffectStyle(.hard, for: .top)
+        .background(Theme.background)
+        .navigationTitle("Все вклады")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var controls: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 2) {
+                ForEach(Sort.allCases) { item in
+                    let selected = sort == item
+                    Button {
+                        withAnimation(.snappy(duration: 0.25)) { sort = item }
+                    } label: {
+                        Text(item.title)
+                            .font(.rounded(12, .semibold))
+                            .foregroundStyle(selected ? Theme.background : Theme.textSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 7)
+                            .background {
+                                if selected {
+                                    Capsule().fill(Theme.accent.gradient)
+                                        .matchedGeometryEffect(id: "sortPill", in: sortPill)
+                                }
+                            }
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+                }
+            }
+            .padding(3)
+            .background(Theme.surface, in: Capsule())
+
+            Button {
+                withAnimation(.snappy(duration: 0.25)) { onlyViolations.toggle() }
+            } label: {
+                Label("Только с превышениями",
+                      systemImage: onlyViolations ? "checkmark.circle.fill" : "circle")
+                    .font(.rounded(12, .medium))
+                    .foregroundStyle(onlyViolations ? Theme.accent : Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.bottom, 4)
+    }
+
+    /// Итог списка: сумма показанных вкладов. Она обязана сходиться с
+    /// «100 − рейтинг», когда фильтр выключен, — это и есть проверка сложением.
+    private var total: some View {
+        HStack {
+            Text(String(format: String(localized: "Показано вкладов: %lld"), shown.count))
+                .font(.rounded(12))
+                .foregroundStyle(Theme.textTertiary)
+            Spacer(minLength: 0)
+            Text(Formatting.points(shown.reduce(0) { $0 + $1.points }))
+                .font(.rounded(14, .heavy).monospacedDigit())
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .padding(.top, 4)
+    }
+
+    private func tap(_ item: RatingContribution) {
+        if item.isTrip {
+            onOpenTrip(item.id)
+        } else {
+            withAnimation(.snappy(duration: 0.25)) {
+                expandedDay = expandedDay == item.id ? nil : item.id
+            }
+        }
+    }
+
+    /// Строка-день: записи уже вычищены, но дневной агрегат жив — показываем
+    /// его целиком и честно говорим, почему поездок не видно.
+    @ViewBuilder private func dayDetail(_ item: RatingContribution) -> some View {
+        if let day = days.first(where: { $0.day.timeIntervalSince1970 == item.id }) {
+            VStack(alignment: .leading, spacing: 6) {
+                Rectangle().fill(Theme.stroke).frame(height: 1)
+                HStack(spacing: 14) {
+                    dayMetric("\(day.trips)", String(localized: "поездок"))
+                    dayMetric(Formatting.distance(day.distanceMeters),
+                              String(localized: "пройдено"))
+                    dayMetric("\(day.overPasses)", String(localized: "превышений"))
+                    Spacer(minLength: 0)
+                }
+                Text("Полные записи за этот день уже удалены — остались дневные итоги.")
+                    .font(.rounded(10))
+                    .foregroundStyle(Theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func dayMetric(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(value)
+                .font(.rounded(14, .bold).monospacedDigit())
+                .foregroundStyle(Theme.textPrimary)
+            Text(label)
+                .font(.rounded(10))
+                .foregroundStyle(Theme.textTertiary)
+        }
+    }
+}

@@ -70,6 +70,38 @@ final class PerformanceBudgetTests: XCTestCase {
                           "слой частоты деградировал: \(elapsed)")
     }
 
+    /// Разбор рейтинга за месяц: вклады, камеры, норма по восьми прошлым окнам.
+    /// Считается на открытие экрана и на смену периода; если он уедет обратно
+    /// в body, экран начнёт пересчитывать всё это на каждый кадр прокрутки.
+    func testRatingScreenBudget() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        // Полгода езды: хватает и на месяц разбора, и на восемь окон нормы.
+        let history: [TripRecord] = (0..<50).map { index in
+            let start = now.addingTimeInterval(Double(-index) * 3600 * 24)
+            let passes: [PassedCamera] = (0..<8).map { p in
+                PassedCamera(id: UUID(), cameraID: p, typeRaw: "Стационар радар",
+                             location: "Юнусабад", speedKmh: 70 + Double(p),
+                             date: start, lat: 41.3, lon: 69.2, limitKmh: 60)
+            }
+            return TripRecord(id: start.timeIntervalSince1970, startedAt: start,
+                              endedAt: start.addingTimeInterval(1800),
+                              distanceMeters: 12_000, maxSpeedKmh: 90,
+                              passed: passes, score: 72)
+        }
+        let days = TripDayBook.rebuilt(from: history)
+
+        let clock = ContinuousClock()
+        var total: Duration = .zero
+        for _ in 0..<10 {
+            let start = clock.now
+            _ = await RatingBreakdown.screen(records: history, days: days,
+                                             period: .month, anchor: now)
+            total += clock.now - start
+        }
+        XCTAssertLessThan(total, .milliseconds(500),
+                          "разбор рейтинга деградировал: \(total) на 10 пересчётов")
+    }
+
     /// Сводка периода по полной истории (50 записей с проездами).
     /// Считается при каждом пересчёте body Итогов — обязана быть мгновенной.
     func testPeriodSummaryBudget() {

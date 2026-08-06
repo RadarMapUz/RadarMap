@@ -151,6 +151,16 @@ nonisolated enum TripDayBook {
         days.filter { interval.contains($0.day) }
     }
 
+    /// Взвешенная сумма баллов окна и её вес — знаменатель самого рейтинга.
+    /// Нужен там, где рейтинг пересчитывают «а если бы»: подменить один
+    /// слагаемый можно только зная всю сумму (см. RatingBreakdown.ratingIfClean).
+    static func weightedScore(_ days: [TripDay], in interval: DateInterval)
+        -> (sum: Double, weight: Double) {
+        self.days(days, in: interval).reduce((sum: 0.0, weight: 0.0)) {
+            ($0.sum + $1.scoreSum, $0.weight + $1.scoreWeight)
+        }
+    }
+
     /// Сводка за интервал по дневным агрегатам. Числа, которые обязаны пережить
     /// чистку истории, берутся отсюда; всё, что требует самих проездов
     /// (зона риска по названию камеры), досчитывается по записям — см.

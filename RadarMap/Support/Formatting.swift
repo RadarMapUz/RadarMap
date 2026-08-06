@@ -24,6 +24,12 @@ enum Formatting {
     }
 
     /// «440 000 сум» / «1,2 млн сум» — суммы штрафов и экономии.
+    /// Баллы рейтинга: «−12,6», «0». Один формат на все блоки разбора —
+    /// разложение должно читаться как одна таблица, а не как три разных.
+    static func points(_ value: Double) -> String {
+        value < 0.05 ? "0" : "−" + String(format: "%.1f", locale: .current, value)
+    }
+
     static func money(_ sum: Double) -> String {
         if sum >= 1_000_000 {
             let millions = (sum / 100_000).rounded() / 10

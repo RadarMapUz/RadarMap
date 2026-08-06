@@ -148,6 +148,46 @@ nonisolated struct RoadShape {
     }
 }
 
+/// Геометрия ПРОЕЗДА: был ли он на самом деле.
+///
+/// Гейты оповещений и гейт записи в историю решают разные задачи, и у них
+/// разная цена ошибки. Оповещение по подозрению стоит одного лишнего сигнала —
+/// поэтому там всё щедро и неизвестность трактуется в пользу предупреждения.
+/// Запись проезда по подозрению стоит ложного превышения, чужого перекрёстка
+/// в «Где теряете баллы» и снятых баллов рейтинга — поэтому здесь неизвестность
+/// НЕ трактуется никак: отклоняем только по доказательству.
+///
+/// Доказательство одно и твёрдое: кусок собственной проезжей части камеры
+/// (`road`, есть у 99,7 % базы). Боковое отклонение от него — настоящая
+/// измеренная величина, а не эвристический конус коридора.
+nonisolated enum PassGeometry {
+
+    /// Насколько близко надо пройти, чтобы камера считалась пройденной.
+    /// У камер со снапом координата стоит на оси дороги — порог узкий; у своих
+    /// и краудсорсных точек её ставил человек, там остаётся прежний широкий.
+    static func traverseLimit(for camera: Camera) -> CLLocationDistance {
+        camera.hasTrustedRoadProfile && camera.road != nil
+            ? AppConfig.passTraverseMaxMeters
+            : AppConfig.passTraverseNoProfileMeters
+    }
+
+    /// Доказано ли, что в этой точке мы ехали НЕ по дороге камеры.
+    ///
+    /// `false` означает «доказательства нет», а не «мы на её дороге»: кусок
+    /// дороги на перекрёстке бывает в два-три десятка метров (OSM режет улицу
+    /// на огрызки), и тогда проекция уходит за его край, а `lateralOffset`
+    /// честно возвращает nil. Такие случаи ловит порог траверза.
+    static func isProvenOffRoad(camera: Camera,
+                                at coordinate: CLLocationCoordinate2D) -> Bool {
+        guard camera.hasTrustedRoadProfile,
+              let shape = RoadShape(camera: camera),
+              let lateral = shape.lateralOffset(from: coordinate) else { return false }
+        let width = RoadGeometry.halfWidth(lanes: camera.lanes, roadClass: camera.roadClass)
+        let limit = max(AppConfig.passOffRoadMeters, width * AppConfig.passOffRoadFactor)
+        return lateral > limit
+    }
+}
+
 nonisolated enum RoadGeometry {
     /// Половина ширины проезжей части плюс запас на неточность координаты в
     /// реестре: до этого расстояния от ломаной считаем, что мы на этой дороге.

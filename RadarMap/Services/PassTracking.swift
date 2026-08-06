@@ -18,6 +18,12 @@ nonisolated struct PassTracking {
         var limitAtMin: Int?
         /// (дистанция, скорость) на подходе в пределах зоны измерения.
         var zone: [(dist: Double, speed: Double)] = []
+        /// В точке максимального сближения было ДОКАЗАНО, что мы на другой
+        /// дороге. Проверяется именно там: коридор оповещений щедр на подходе
+        /// (68–93 м бокового допуска в 400 м впереди) и проверяется лишь в
+        /// момент захвата — дальше камера соседней улицы ехала «своим ходом»
+        /// до самой записи в историю.
+        var offRoadAtMin = false
     }
 
     /// Завершённый проезд, готовый к записи в поездку.
@@ -39,18 +45,24 @@ nonisolated struct PassTracking {
 
     /// Один GPS-тик: начать слежение за ближайшей камерой в радиусе, обновить
     /// траверзы всех отслеживаемых, вернуть завершённые проезды.
-    /// «Пройдено» — только если траверз был ближе passTraverseMaxMeters:
-    /// камера с параллельной улицы (400+ м) не наша, её лимит не про нас.
+    /// «Пройдено» — только если траверз был близко И геометрия дороги камеры
+    /// это не опровергла: камера соседней улицы не наша, её проезд не про нас.
+    /// `offRoad` — доказательство «мы не на дороге этой камеры» в текущей точке
+    /// (см. PassGeometry). Считается только в момент нового сближения, то есть
+    /// пару раз за проезд. По умолчанию доказательства нет — прежнее поведение.
     mutating func update(nearest: Camera?, nearestDistance: CLLocationDistance?,
                          coordinate: CLLocationCoordinate2D, speedKmh: Double,
-                         roadLimit: Int?, radius: CLLocationDistance) -> [Pass] {
+                         roadLimit: Int?, radius: CLLocationDistance,
+                         offRoad: (Camera, CLLocationCoordinate2D) -> Bool = { _, _ in false })
+        -> [Pass] {
         // Вошли в радиус камеры впереди — начинаем следить.
         if let nearest, let distance = nearestDistance,
            distance <= radius, tracked[nearest.id] == nil {
             var tracker = Tracker(camera: nearest, minDist: distance,
                                   speedAtMin: speedKmh, limitAtMin: roadLimit)
-            if distance <= AppConfig.passTraverseMaxMeters {
+            if distance <= AppConfig.passZoneMeters {
                 tracker.zone.append((distance, speedKmh))
+                tracker.offRoadAtMin = offRoad(nearest, coordinate)
             }
             tracked[nearest.id] = tracker
         }
@@ -66,10 +78,12 @@ nonisolated struct PassTracking {
                 tracker.minDist = distance
                 tracker.speedAtMin = speedKmh
                 tracker.limitAtMin = roadLimit ?? tracker.limitAtMin
-                // Пока приближаемся — копим сэмплы зоны измерения.
-                if distance <= AppConfig.passTraverseMaxMeters {
+                // Пока приближаемся — копим сэмплы зоны измерения и проверяем
+                // геометрию: важна именно точка сближения, а не подход к ней.
+                if distance <= AppConfig.passZoneMeters {
                     tracker.zone.append((distance, speedKmh))
                     if tracker.zone.count > 8 { tracker.zone.removeFirst() }
+                    tracker.offRoadAtMin = offRoad(tracker.camera, coordinate)
                 }
                 tracked[id] = tracker
             } else if distance > radius + AppConfig.passReleaseHysteresisMeters {
@@ -91,9 +105,15 @@ nonisolated struct PassTracking {
         tracked.removeAll()
     }
 
-    /// Гейт по траверзу: проезд засчитывается, только если реально прошли рядом.
+    /// Два гейта записи, оба по точке максимального сближения.
+    ///
+    /// Первый — расстояние: камера снимает проезжую часть, над которой стоит,
+    /// и пройти под ней в полусотне метров нельзя. Второй — геометрия её
+    /// собственной дороги: он ловит случай, когда мы прошли близко, но по
+    /// соседней полосе-дублёру или поперечной улице развязки.
     private static func pass(from tracker: Tracker) -> Pass? {
-        guard tracker.minDist <= AppConfig.passTraverseMaxMeters else { return nil }
+        guard tracker.minDist <= PassGeometry.traverseLimit(for: tracker.camera),
+              !tracker.offRoadAtMin else { return nil }
         return Pass(camera: tracker.camera,
                     speedKmh: measuredSpeed(zone: tracker.zone, fallback: tracker.speedAtMin),
                     limitKmh: tracker.limitAtMin)

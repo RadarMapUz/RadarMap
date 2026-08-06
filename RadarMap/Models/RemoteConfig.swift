@@ -101,24 +101,8 @@ nonisolated struct RemoteConfig: Codable, Equatable, Sendable {
     }
 }
 
-/// Конверт, в котором пульт лежит на сервере: полезная нагрузка — base64 точных
-/// байтов, по которым считана подпись. Подписывать сам JSON нельзя: любая
-/// перекодировка (порядок ключей, пробелы) ломает подпись, а так проверяются
-/// ровно те байты, что подписал владелец ключа.
-nonisolated struct RemoteConfigEnvelope: Decodable, Sendable {
-    let payload: String
-    let sig: String?
-
-    /// Разобрать и проверить. Возвращает `nil` на любой неисправности —
-    /// вызывающий обязан взять дефолты, а не пытаться спасти часть данных.
-    func verified(publicKeyB64: String = AppConfig.otaPublicKeyB64) -> RemoteConfig? {
-        guard let data = Data(base64Encoded: payload),
-              OTASignature.isValid(data: data, signatureB64: sig, publicKeyB64: publicKeyB64),
-              let config = try? JSONDecoder().decode(RemoteConfig.self, from: data)
-        else { return nil }
-        return config
-    }
-}
+/// Конверт, в котором пульт лежит на сервере (см. `SignedPayload`).
+typealias RemoteConfigEnvelope = SignedPayload<RemoteConfig>
 
 /// Сохранённый пульт: значения плюс отметка, когда их получили. Дата нужна,
 /// чтобы стоп-кран пережил перезапуск, но не действовал вечно.

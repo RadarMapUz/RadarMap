@@ -36,9 +36,41 @@ final class RemoteSyncService {
 
     /// Тихая автопроверка при запуске — не чаще, чем раз в `syncCheckInterval`.
     func autoCheckIfNeeded() async {
+        // Правки модератора идут своим темпом и не зависят от того, вышла ли
+        // новая база: файл в 2 КБ, а «камеры больше нет» ждать сутки не должно.
+        await checkOverridesIfNeeded()
         if let last = lastCheckDate,
            Date().timeIntervalSince(last) < AppConfig.syncCheckInterval { return }
         await check()
+    }
+
+    // MARK: - Правки модератора (overrides.json)
+
+    func checkOverridesIfNeeded() async {
+        if let last = Storage.date(.overridesCheck),
+           Date().timeIntervalSince(last) < AppConfig.overridesCheckInterval { return }
+        await checkOverrides()
+    }
+
+    func checkOverrides() async {
+        do {
+            let envelope = try await api.get(AppConfig.cameraOverridesPath,
+                                             as: CameraOverridesEnvelope.self)
+            guard let overrides = envelope.verified() else {
+                // Правки применяются без участия пользователя и умеют гасить
+                // камеры — неподписанным верить нельзя ни при каких условиях.
+                Log.cameras.error("правки: подпись не сошлась — не применяю")
+                Storage.set(Date(), for: .overridesCheck)
+                return
+            }
+            if store.applyOverrides(overrides) {
+                Storage.set(Date(), for: .overridesCheck)
+            }
+        } catch {
+            // Файла нет (правок пока не публиковали) или сети нет — обычное
+            // дело, живём на том, что уже применено. Дату не двигаем.
+            Log.cameras.debug("правки не загрузились: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private struct Manifest: Decodable {

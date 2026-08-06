@@ -354,6 +354,28 @@ nonisolated enum AppConfig {
     /// Границы интервала опроса из пульта: присланное вне их — мусор.
     nonisolated static let remoteConfigPollRange: ClosedRange<TimeInterval> = 60...3600
 
+    // MARK: - Правки базы камер (overrides.json)
+
+    /// Подписанный журнал правок модератора поверх базы. 2 КБ против мегабайта
+    /// базы — поэтому проверяется чаще неё и публикуется хоть каждый день.
+    static let cameraOverridesPath = "overrides.json"
+    static let overridesCheckInterval: TimeInterval = 3 * 3600
+
+    /// Какую долю базы правки вправе скрыть. Предохранитель от ошибки в админке
+    /// или в скрипте публикации: файл, гасящий сотни камер разом, вероятнее
+    /// опечатка в SQL, чем решение модератора, — а скрытая камера производит
+    /// молчание там, где камера стоит. Такому файлу не верим целиком.
+    nonisolated static let overrideMaxHiddenShare = 0.05
+
+    /// Насколько далеко правка вправе подвинуть камеру. Поправка снапа — это
+    /// десятки метров; километр означает перепутанную камеру или запятую в
+    /// координате, а «переехавшая» камера молчит ровно так же, как скрытая.
+    nonisolated static let overrideMaxMoveMeters: CLLocationDistance = 500
+
+    /// Границы Узбекистана — координата вне их заведомо ошибочна.
+    nonisolated static let uzLatRange: ClosedRange<Double> = 37.0...46.0
+    nonisolated static let uzLonRange: ClosedRange<Double> = 55.0...74.0
+
     /// Через сколько секунд устойчивой остановки авто-завершать поездку (не гасим на светофоре).
     static let autoStopAfterSeconds: Double = 180
 

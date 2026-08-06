@@ -17,3 +17,7 @@ xcuserdata/
 *.env
 *.pem
 *.mobileprovision
+
+# Python-кэш серверных скриптов: собирается при каждом запуске тестов
+__pycache__/
+*.pyc

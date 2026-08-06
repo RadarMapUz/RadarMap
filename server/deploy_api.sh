@@ -5,18 +5,26 @@ set -euo pipefail
 
 HOST=root@45.130.148.94
 API=/opt/radarmap/api/api.py
+ADMIN=/opt/radarmap/api/admin.py
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "→ Бэкап текущей версии и заливка новой…"
 scp "$DIR/api.py" "$HOST:$API.new"
+scp "$DIR/admin.py" "$HOST:$ADMIN.new"
 
 echo "→ Проверка синтаксиса, подмена, рестарт…"
 ssh "$HOST" "
   set -e
-  python3 -c \"import ast; ast.parse(open('$API.new').read())\" && echo 'syntax ok'
+  python3 -c \"import ast; ast.parse(open('$API.new').read())\" && echo 'api syntax ok'
+  python3 -c \"import ast; ast.parse(open('$ADMIN.new').read())\" && echo 'admin syntax ok'
   cp $API $API.bak.\$(date +%Y%m%d%H%M%S) 2>/dev/null || true
+  cp $ADMIN $ADMIN.bak.\$(date +%Y%m%d%H%M%S) 2>/dev/null || true
   mv $API.new $API
+  mv $ADMIN.new $ADMIN
   systemctl restart radarmap-api
+  # Панель — отдельный юнит: она может быть ещё не установлена, и это не повод
+  # валить деплой публичного api.
+  systemctl restart radarmap-admin 2>/dev/null || echo 'radarmap-admin не установлен (см. radarmap-admin.service)'
   sleep 1
   systemctl is-active radarmap-api
 "

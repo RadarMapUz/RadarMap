@@ -19,12 +19,10 @@ Endpoints:
   * 3+ дизлайков и дизлайков больше лайков -> отметка скрывается
   * на устройство: максимум 3 активных отметки, минимум 120 с между отметками
 
-Модерация репортов о камерах — вручную на сервере:
-  sqlite3 /opt/radarmap/api/reports.db \
-    "SELECT camera_id, reason, COUNT(DISTINCT device) n, MAX(datetime(received,'unixepoch')) last \
-     FROM camera_reports WHERE resolved=0 GROUP BY camera_id, reason ORDER BY n DESC;"
-  sqlite3 /opt/radarmap/api/reports.db \
-    "SELECT id, datetime(received,'unixepoch'), app_version, contact, message FROM feedback ORDER BY id DESC LIMIT 20;"
+Модерация — в панели (server/admin.py, отдельный процесс на :8092, наружу
+через nginx /admin/ с basic auth). Она же проставляет camera_reports.resolved
+и копит решения в таблице overrides; публикует их владелец локальной командой
+server/publish_overrides.sh — ключ подписи на VPS не хранится.
 """
 import json
 import math

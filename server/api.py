@@ -12,6 +12,9 @@ Endpoints:
   POST /api/metrics        {device, kind, payload}   -> {"ok": true}   (MetricKit)
   POST /api/camera_report  {camera_id, reason, lat, lon, db_version, device} -> {"ok": true}
   POST /api/feedback       {message, contact, app_version, device}     -> {"ok": true}
+  POST /api/stat           {device, day, app, ios, model, location_auth, onboarded,
+                            trips, km, alerts, passes, reports, screens} -> {"ok": true}
+                           (обезличенный суточный агрегат: ни координат, ни времени событий)
 
 Правила передвижных радаров:
   * отметка живёт 3 ч; подтверждение (+1) продлевает на 30 мин (максимум 6 ч)
@@ -26,6 +29,7 @@ server/publish_overrides.sh — ключ подписи на VPS не храни
 """
 import json
 import math
+import re
 import sqlite3
 import threading
 import time
@@ -58,7 +62,8 @@ MAX_ID = 2**31               # верхняя граница id: больше �
 # а 250 — сбор метрик на месяц. CGNAT мобильных сетей помним, поэтому капы
 # щедрые: за одним адресом оператора живут десятки честных водителей.
 IP_DAILY_CAPS = {"report": 30, "vote": 100, "camera_report": 60,
-                 "feedback": 30, "metrics": 60}
+                 "feedback": 30, "metrics": 60, "stat": 60}
+MAX_USAGE_ROWS = 2_000_000   # ~90 дней × 20 000 устройств: потолок диска
 # Скрытие отметки требует дизлайков с РАЗНЫХ адресов: три свежих UUID с одного
 # телефона больше не снимают чужую отметку с карты.
 HIDE_DISTINCT_IPS = 3
@@ -118,6 +123,17 @@ def init_db():
         app_version TEXT,
         device TEXT NOT NULL,
         received REAL NOT NULL)""")
+    # Обезличенный суточный агрегат: ни координат, ни маршрутов, ни времени
+    # событий — только счётчики. Один отчёт на устройство в сутки (PRIMARY KEY),
+    # повтор просто перезаписывает: сеть могла оборвать подтверждение, и
+    # дубликат не должен раздувать «сколько у нас пользователей».
+    conn.execute("""CREATE TABLE IF NOT EXISTS usage_stats(
+        device TEXT NOT NULL, day TEXT NOT NULL,
+        app TEXT, ios TEXT, model TEXT,
+        location_auth TEXT, onboarded INTEGER,
+        trips INTEGER, km REAL, alerts INTEGER, passes INTEGER, reports INTEGER,
+        screens TEXT, received REAL NOT NULL,
+        PRIMARY KEY(device, day))""")
 
     # --- миграции живой БД (порядок: только после CREATE всех таблиц) ---
     migrate(conn, "votes", "ts REAL DEFAULT 0")               # суточный лимит голосов
@@ -153,6 +169,8 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_feedback_device ON feedback(device, received)",
         "CREATE INDEX IF NOT EXISTS idx_metrics_device ON metrics(device, received)",
         "CREATE INDEX IF NOT EXISTS idx_metrics_received ON metrics(received)",
+        "CREATE INDEX IF NOT EXISTS idx_usage_day ON usage_stats(day)",
+        "CREATE INDEX IF NOT EXISTS idx_usage_received ON usage_stats(received)",
     ):
         conn.execute(statement)
 
@@ -172,6 +190,19 @@ def clean_text(s):
     """Пользовательский текст идёт в терминал модератора (sqlite3 в консоли) —
     вырезаем управляющие символы, чтобы ANSI-escape'ами нельзя было рисовать."""
     return "".join(ch for ch in s if ch.isprintable() or ch == "\n")
+
+DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def clamp_int(value, limit=100000):
+    """Счётчик из отчёта. Не число, отрицательное или неправдоподобно большое —
+    ноль: испорченное поле не должно ни падать, ни искажать сводку."""
+    try:
+        number = int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    return number if 0 <= number <= limit else 0
+
 
 def as_str(value, default=None):
     """Строгое строковое поле. str(dict) молча сохранял Python-repr словаря
@@ -288,7 +319,68 @@ class Handler(BaseHTTPRequestHandler):
             return self._camera_report()
         if path == "/api/feedback":
             return self._feedback()
+        if path == "/api/stat":
+            return self._stat()
         self._json(404, {"error": "not found"})
+
+    def _stat(self):
+        """Суточный агрегат использования. Координат тут нет и быть не может:
+        всё, что принимается, — числа, версии и уровень разрешений."""
+        data = self._body(limit=8192)
+        if not data:
+            return self._json(400, {"error": "bad json"})
+        try:
+            device = as_str(data["device"])[:64]
+            day = as_str(data["day"])[:10]
+            app = as_str(data.get("app"), default="")[:16]
+            ios = as_str(data.get("ios"), default="")[:16]
+            model = as_str(data.get("model"), default="")[:32]
+            auth = as_str(data.get("location_auth"), default="")[:16]
+            onboarded = 1 if data.get("onboarded") else 0
+            trips = clamp_int(data.get("trips"))
+            alerts = clamp_int(data.get("alerts"))
+            passes = clamp_int(data.get("passes"))
+            reports = clamp_int(data.get("reports"))
+            km = float(data.get("km") or 0)
+        except (KeyError, TypeError, ValueError):
+            return self._json(400, {"error": "bad fields"})
+        if not device or not DAY_RE.match(day):
+            return self._json(400, {"error": "bad fields"})
+        if auth not in ("", "always", "whenInUse", "denied", "restricted",
+                        "notDetermined", "unknown"):
+            return self._json(400, {"error": "bad fields"})
+        # 20 000 км за сутки — это не поездка, а испорченное поле.
+        if not 0 <= km <= 20000 or km != km:
+            km = 0.0
+        screens = data.get("screens")
+        if not isinstance(screens, dict):
+            screens = {}
+        screens = {as_str(k)[:24]: clamp_int(v) for k, v in list(screens.items())[:20]}
+
+        if ip_quota_exceeded("stat", self._ip(), IP_DAILY_CAPS["stat"]):
+            return self._json(429, {"error": "too many"})
+
+        now = time.time()
+        conn = db()
+        try:
+            total = conn.execute("SELECT COUNT(*) FROM usage_stats").fetchone()[0]
+            if total >= MAX_USAGE_ROWS:
+                # Ротация device не должна заливать диск. Чистим старое и только
+                # потом отказываем: иначе таблица однажды закрывается навсегда.
+                conn.execute("DELETE FROM usage_stats WHERE received < ?", (now - 90 * 86400,))
+                if conn.execute("SELECT COUNT(*) FROM usage_stats").fetchone()[0] >= MAX_USAGE_ROWS:
+                    conn.commit()
+                    return self._json(429, {"error": "too many"})
+            conn.execute(
+                "INSERT OR REPLACE INTO usage_stats(device, day, app, ios, model, "
+                "location_auth, onboarded, trips, km, alerts, passes, reports, "
+                "screens, received) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (device, day, app, ios, model, auth, onboarded, trips, km,
+                 alerts, passes, reports, json.dumps(screens), now))
+            conn.commit()
+        finally:
+            conn.close()
+        return self._json(200, {"ok": True})
 
     def _metrics(self):
         try:

@@ -9444,6 +9444,54 @@
           }
         }
       }
+    },
+    "Помогать улучшать приложение" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Помогать улучшать приложение"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ilovani yaxshilashga yordam berish"
+          }
+        }
+      }
+    },
+    "Конфиденциальность" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Конфиденциальность"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maxfiylik"
+          }
+        }
+      }
+    },
+    "Раз в сутки отправляем обезличенные счётчики: сколько поездок, километров и оповещений было. Ни маршрутов, ни координат, ни времени — только числа. Идентификатор меняется каждые 30 дней." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Раз в сутки отправляем обезличенные счётчики: сколько поездок, километров и оповещений было. Ни маршрутов, ни координат, ни времени — только числа. Идентификатор меняется каждые 30 дней."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kuniga bir marta shaxssiz hisoblagichlarni yuboramiz: nechta safar, kilometr va ogohlantirish bo‘lgani. Na marshrut, na koordinata, na vaqt — faqat raqamlar. Identifikator har 30 kunda o‘zgaradi."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

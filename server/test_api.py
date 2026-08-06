@@ -47,7 +47,8 @@ class APITest(unittest.TestCase):
 
     def setUp(self):
         conn = sqlite3.connect(api.DB_PATH)
-        for table in ("reports", "votes", "metrics", "camera_reports", "feedback"):
+        for table in ("reports", "votes", "metrics", "camera_reports", "feedback",
+                      "usage_stats"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -229,6 +230,62 @@ class APITest(unittest.TestCase):
         status, _ = _call(self.port, "POST", "/api/metrics",
                           {"device": "d", "kind": "metric", "payload": "x" * 250000})
         self.assertEqual(status, 400, "раньше payload молча резался в битый JSON")
+
+    # --- обезличенная статистика ---
+
+    def test_stat_roundtrip(self):
+        status, _ = _call(self.port, "POST", "/api/stat", {
+            "device": "d1", "day": "2026-08-06", "app": "1.0", "ios": "18.5",
+            "model": "iPhone14,2", "location_auth": "always", "onboarded": True,
+            "trips": 3, "km": 42.5, "alerts": 17, "passes": 9, "reports": 1,
+            "screens": {"map": 5, "stats": 2}})
+        self.assertEqual(status, 200)
+        conn = sqlite3.connect(api.DB_PATH)
+        row = conn.execute("SELECT location_auth, trips, km, screens FROM usage_stats").fetchone()
+        conn.close()
+        self.assertEqual(row[0], "always")
+        self.assertEqual(row[1], 3)
+        self.assertAlmostEqual(row[2], 42.5)
+        self.assertEqual(json.loads(row[3]), {"map": 5, "stats": 2})
+
+    def test_stat_is_one_row_per_device_per_day(self):
+        """Сеть могла оборвать подтверждение — повтор не должен раздувать
+        «сколько у нас пользователей»."""
+        payload = {"device": "d1", "day": "2026-08-06", "trips": 1}
+        _call(self.port, "POST", "/api/stat", payload)
+        _call(self.port, "POST", "/api/stat", {**payload, "trips": 2})
+        conn = sqlite3.connect(api.DB_PATH)
+        count, trips = conn.execute("SELECT COUNT(*), MAX(trips) FROM usage_stats").fetchone()
+        conn.close()
+        self.assertEqual(count, 1)
+        self.assertEqual(trips, 2, "повтор перезаписывает, а не добавляет")
+
+    def test_stat_rejects_bad_day_and_auth(self):
+        for bad in ({"device": "d", "day": "вчера"},
+                    {"device": "d", "day": "2026-08-06", "location_auth": "root"},
+                    {"device": "", "day": "2026-08-06"}):
+            status, _ = _call(self.port, "POST", "/api/stat", bad)
+            self.assertEqual(status, 400, bad)
+
+    def test_stat_sanitizes_absurd_counters(self):
+        _call(self.port, "POST", "/api/stat", {
+            "device": "d1", "day": "2026-08-06",
+            "trips": -5, "alerts": 10**12, "km": 999999, "screens": "не словарь"})
+        conn = sqlite3.connect(api.DB_PATH)
+        trips, alerts, km, screens = conn.execute(
+            "SELECT trips, alerts, km, screens FROM usage_stats").fetchone()
+        conn.close()
+        self.assertEqual((trips, alerts), (0, 0), "испорченные счётчики не должны искажать сводку")
+        self.assertEqual(km, 0.0, "20 000 км за сутки — это не поездка")
+        self.assertEqual(json.loads(screens), {})
+
+    def test_stat_ip_cap(self):
+        for i in range(api.IP_DAILY_CAPS["stat"]):
+            _call(self.port, "POST", "/api/stat",
+                  {"device": f"d{i}", "day": "2026-08-06"}, ip="10.7.7.7")
+        status, _ = _call(self.port, "POST", "/api/stat",
+                          {"device": "extra", "day": "2026-08-06"}, ip="10.7.7.7")
+        self.assertEqual(status, 429, "ротация device не должна лить статистику без предела")
 
     # --- схема и нагрузка ---
 

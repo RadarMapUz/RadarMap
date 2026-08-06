@@ -177,7 +177,7 @@ a.map { color:#3cdcff; font-size:13px; }
 """
 
 TABS = (("/", "Сводка"), ("/cameras", "Камеры"), ("/mobile", "Передвижные"),
-        ("/feedback", "Обращения"), ("/health", "Здоровье"))
+        ("/feedback", "Обращения"), ("/usage", "Люди"), ("/health", "Здоровье"))
 
 
 def esc(value):
@@ -413,6 +413,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, self.mobile_page(conn))
             if path == "/feedback":
                 return self._send(200, self.feedback_page(conn))
+            if path == "/usage":
+                return self._send(200, self.usage_page(conn))
             if path == "/health":
                 return self._send(200, self.health_page(conn))
         finally:
@@ -666,6 +668,92 @@ class Handler(BaseHTTPRequestHandler):
         new_count = sum(1 for row in rows if row["status"] == "new")
         return page("/feedback", "Обращения",
                     f"<h1>Обращения ({new_count} новых из {len(rows)})</h1>{''.join(cards)}")
+
+    def usage_page(self, conn):
+        """Воронка и активность. Главная цифра здесь — доля «Всегда»: без этого
+        разрешения не работают ни фоновые оповещения, ни автостарт поездки,
+        то есть половина продукта, и если её выдаёт меньшинство, то экран
+        объяснения важнее любой новой функции."""
+        now = time.time()
+        window = now - 30 * DAY
+        rows = conn.execute(
+            "SELECT device, day, app, ios, model, location_auth, onboarded, "
+            "trips, km, alerts, passes, reports FROM usage_stats WHERE received > ?",
+            (window,)).fetchall()
+        if not rows:
+            return page("/usage", "Люди", '<div class="empty">Отчётов пока нет. '
+                        'Они приходят раз в сутки и только с версий, где включена '
+                        'отправка статистики.</div>')
+
+        # По устройству берём ПОСЛЕДНИЙ известный статус: разрешение меняется,
+        # и считать по всем строкам значило бы считать один телефон много раз.
+        latest, totals = {}, {"trips": 0, "km": 0.0, "alerts": 0,
+                              "passes": 0, "reports": 0}
+        active_days = {}
+        for row in rows:
+            latest[row["device"]] = row
+            for key in ("trips", "alerts", "passes", "reports"):
+                totals[key] += row[key] or 0
+            totals["km"] += row["km"] or 0
+            active_days[row["device"]] = active_days.get(row["device"], 0) + 1
+
+        devices = len(latest)
+        onboarded = sum(1 for r in latest.values() if r["onboarded"])
+        auth = {}
+        versions = {}
+        models = {}
+        for row in latest.values():
+            auth[row["location_auth"] or "?"] = auth.get(row["location_auth"] or "?", 0) + 1
+            versions[row["app"] or "?"] = versions.get(row["app"] or "?", 0) + 1
+            models[row["model"] or "?"] = models.get(row["model"] or "?", 0) + 1
+        drivers = sum(1 for d, r in latest.items() if (r["trips"] or 0) > 0)
+        loyal = sum(1 for count in active_days.values() if count >= 7)
+
+        def share(count):
+            return f"{count} · {100 * count / devices:.0f}%" if devices else "0"
+
+        always = auth.get("always", 0)
+        always_tone = "t-warn" if devices and always / devices < 0.5 else ""
+
+        def rows_of(mapping, limit=6):
+            return " ".join(
+                f'<span class="tag">{esc(name)}: {count}</span>'
+                for name, count in sorted(mapping.items(), key=lambda kv: -kv[1])[:limit])
+
+        return page("/usage", "Люди", f"""
+<h1>Воронка за 30 дней</h1>
+<div class="row">
+  <div class="card" style="flex:1 1 140px"><div class="big">{devices}</div>
+    <div class="muted">устройств прислали отчёт</div></div>
+  <div class="card" style="flex:1 1 140px"><div class="big">{esc(share(onboarded))}</div>
+    <div class="muted">прошли онбординг</div></div>
+  <div class="card" style="flex:1 1 140px">
+    <div class="big {always_tone}">{esc(share(always))}</div>
+    <div class="muted">дали геолокацию «Всегда»</div></div>
+  <div class="card" style="flex:1 1 140px"><div class="big">{esc(share(drivers))}</div>
+    <div class="muted">хоть раз поехали</div></div>
+  <div class="card" style="flex:1 1 140px"><div class="big">{esc(share(loyal))}</div>
+    <div class="muted">пользуются неделю и дольше</div></div>
+</div>
+<div class="card"><div class="muted">Разрешение геолокации: {rows_of(auth)}</div>
+  <div class="muted" style="margin-top:6px">Без «Всегда» не работают фоновые
+  оповещения и автостарт поездки — это половина продукта.</div></div>
+
+<h1>Чем пользуются</h1>
+<div class="card"><div class="row">
+  <span class="tag">поездок: {totals['trips']}</span>
+  <span class="tag">километров: {totals['km']:.0f}</span>
+  <span class="tag">оповещений: {totals['alerts']}</span>
+  <span class="tag">проездов камер: {totals['passes']}</span>
+  <span class="tag">отметок и жалоб: {totals['reports']}</span>
+</div></div>
+
+<h1>На чём</h1>
+<div class="card"><div class="muted">Версии: {rows_of(versions)}</div>
+  <div class="muted" style="margin-top:6px">Модели: {rows_of(models, limit=8)}</div></div>
+<div class="card"><div class="muted">Ни координат, ни маршрутов, ни времени
+событий здесь нет и быть не может — только счётчики за сутки. Идентификатор
+ротируется раз в 30 дней.</div></div>""")
 
     def health_page(self, conn):
         now = time.time()

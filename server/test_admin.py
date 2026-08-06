@@ -73,7 +73,7 @@ class AdminTest(unittest.TestCase):
     def setUp(self):
         conn = sqlite3.connect(admin.DB_PATH)
         for table in ("camera_reports", "feedback", "reports", "votes",
-                      "metrics", "overrides", "moderation_log"):
+                      "metrics", "overrides", "moderation_log", "usage_stats"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -268,10 +268,27 @@ class AdminTest(unittest.TestCase):
 
     def test_all_pages_render(self):
         self.add_report()
-        for path in ("/", "/cameras", "/mobile", "/feedback", "/health"):
+        for path in ("/", "/cameras", "/mobile", "/feedback", "/usage", "/health"):
             status, body = _get(self.port, path)
             self.assertEqual(status, 200, path)
             self.assertIn("RadarMap", body, path)
+
+    def test_usage_funnel_counts_each_device_once(self):
+        """Разрешение меняется, и считать по всем строкам значило бы считать
+        один телефон много раз. Главная цифра воронки — доля «Всегда»."""
+        conn = sqlite3.connect(admin.DB_PATH)
+        now = time.time()
+        for day, auth in (("2026-08-01", "whenInUse"), ("2026-08-05", "always")):
+            conn.execute(
+                "INSERT INTO usage_stats(device, day, app, ios, model, location_auth, "
+                "onboarded, trips, km, alerts, passes, reports, screens, received) "
+                "VALUES('d1',?,'1.0','18.5','iPhone14,2',?,1,2,10,5,3,0,'{}',?)",
+                (day, auth, now - 1))
+        conn.commit()
+        conn.close()
+        _, body = _get(self.port, "/usage")
+        self.assertIn("1 · 100%", body, "одно устройство, а не два строчки-пользователя")
+        self.assertIn("«Всегда»", body)
 
     def test_camera_title_uses_database(self):
         self.add_report()

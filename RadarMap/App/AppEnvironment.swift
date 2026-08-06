@@ -41,6 +41,9 @@ final class AppEnvironment {
     /// Связь: нужна ровно для честной фразы «карта серая, но камеры
     /// предупреждают» — база лежит на телефоне и сети не требует.
     let network = NetworkMonitor()
+    /// Обезличенная статистика использования: без неё неизвестно даже, сколько
+    /// людей выдаёт геолокацию «Всегда» — а без неё не работает половина продукта.
+    let usage: UsageStatsService
 
     init() {
         let settings = AppSettings()
@@ -52,6 +55,7 @@ final class AppEnvironment {
         let alerts = AlertPlayer(settings: settings)
         let trip = TripStats()
 
+        self.usage = UsageStatsService(settings: settings)
         self.settings = settings
         self.cameras = cameras
         self.notifications = notifications
@@ -76,6 +80,8 @@ final class AppEnvironment {
         route.config = config
         mobile.config = config
         metrics.config = config
+        usage.config = config
+        usage.location = self.location
 
         // Автостарт/стоп поездки по движению (режим старта — в настройках).
         let location = self.location
@@ -124,6 +130,29 @@ final class AppEnvironment {
             )
         }
 
+        // Обезличенные счётчики: сколько ездят и сколько проездов через камеры.
+        // Вешаемся на уже готовое событие конца поездки — отдельных крючков по
+        // коду не расставляем, чтобы «что мы вообще считаем» читалось в одном
+        // месте, здесь.
+        let usage = self.usage
+        trip.onTripFinished = { [weak trip, weak notifications, weak usage] in
+            guard let trip else { return }
+            // История приходит от новых к старым — только что закрытая поездка первая.
+            if let last = trip.history.first {
+                usage?.noteTrip(distanceMeters: last.distanceMeters)
+                usage?.note { $0.passes += last.camerasPassed }
+            }
+            guard let notifications else { return }
+            let week = TripHistory.summary(days: trip.days, history: trip.history, period: .week)
+            guard !week.isEmpty else { return }
+            notifications.scheduleWeeklyDigest(
+                distance: week.distance,
+                cameras: week.cameras,
+                rating: week.rating,
+                cleanMonth: week.overPasses == 0
+            )
+        }
+
         // Голосовое сопровождение маршрута: перестроение, прибытие, манёвры.
         route.onRerouted = { [weak alerts] in
             guard settings.voiceEnabled else { return }
@@ -155,6 +184,8 @@ final class AppEnvironment {
     func startDrivingServices() {
         // Пульт — первым: он может отменить всё, что запускается следом.
         Task { await config.refreshIfNeeded() }
+        // Досылаем вчерашние счётчики (сегодняшние ещё не полны).
+        Task { await usage.flush() }
         // Тихая проверка обновлений базы (не чаще раза в сутки), не блокирует UI.
         Task { await sync.autoCheckIfNeeded() }
         // Дослать репорты/фидбек, не ушедшие в прошлый раз (офлайн-очередь).

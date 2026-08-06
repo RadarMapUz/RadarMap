@@ -602,10 +602,15 @@ final class LocationService: NSObject {
         // Активные оповещения (звук/голос/экран) — в поездке ИЛИ пока приложение открыто.
         if isTripActive || isForeground {
             trip.update(coordinate: coordinate, speedKmh: speedKmh)
+            // Геометрия проверяется в точке сближения, а не при захвате:
+            // коридор оповещений на подходе широк намеренно (о камере за
+            // поворотом молчать нельзя), и камера соседней улицы, попав под
+            // него однажды, доезжала до записи в историю.
             register(passes: passTracking.update(
                 nearest: nearestCamera, nearestDistance: distanceToNearest,
                 coordinate: coordinate, speedKmh: speedKmh,
-                roadLimit: speedLimits?.currentLimit, radius: effectiveAlertRadius))
+                roadLimit: speedLimits?.currentLimit, radius: effectiveAlertRadius,
+                offRoad: PassGeometry.isProvenOffRoad(camera:at:)))
             runAlertEngine()
             speakPostponedVoice()
             // Лимит дороги + превышение; манёвры и прогресс маршрута.

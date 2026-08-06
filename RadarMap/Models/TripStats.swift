@@ -462,17 +462,28 @@ final class TripStats {
         // пока автозапуск не начал новую поездку. После lifetime: восстановление
         // добавляет к счётчикам, а не пересобирает их.
         restoreInflightIfAny()
-        // Одноразовая гео-чистка: старые версии засчитывали камеры с параллельных
-        // улиц — выкидываем их из истории и пересчитываем баллы и счётчики.
-        if !Storage.bool(.passGeoCleanup1) {
+        // Гео-чистка: старые версии засчитывали камеры с чужих улиц — выкидываем
+        // их из истории и пересчитываем баллы и счётчики. Второй прогон нужен
+        // из-за сужения порога (120 → 70 м): развязки первый прогон пропускал.
+        if !Storage.bool(.passGeoCleanup2) {
+            let before = history
             let (cleaned, changed) = TripHistory.sanitized(history)
             if changed {
+                // Дневные агрегаты правим ХИРУРГИЧЕСКИ, а не пересборкой из
+                // истории: они переживают чистку записей и хранят месяцы, для
+                // которых поездок уже нет. Полный rebuild стёр бы их.
+                for (old, new) in zip(before, cleaned) where old.passed.count != new.passed.count {
+                    days = TripDayBook.unfolded(old, from: days)
+                    days = TripDayBook.folded(new, into: days)
+                }
                 history = cleaned
                 lifetime = LifetimeStats.rebuilt(from: history)
                 persist()
                 persistLifetime()
+                persistDays()
             }
             Storage.set(true, for: .passGeoCleanup1)
+            Storage.set(true, for: .passGeoCleanup2)
         }
         // Обновились с версии без счётчиков, а поездки уже есть — восстанавливаем
         // из истории, чтобы экономия и достижения не начинались с нуля.

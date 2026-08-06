@@ -82,10 +82,15 @@ final class AppEnvironment {
 
         // Одноразовая ретро-чистка «мостовых» проездов: оси дорог появились в
         // базе v8 — старые «проезды» поперёк оси (мост над камерой) выкидываем.
-        trip.axisCleanupIfNeeded(axisByID: Dictionary(
-            uniqueKeysWithValues: cameras.cameras.compactMap { cam in
-                cam.axis.map { (cam.id, $0) }
-            }))
+        // Строго ПОСЛЕ загрузки базы: она декодируется асинхронно, и вызов
+        // прямо отсюда получал пустой список камер — миграция молча выключалась.
+        cameras.onDatabaseLoaded = { [weak cameras, weak trip] in
+            guard let cameras, let trip else { return }
+            trip.axisCleanupIfNeeded(axisByID: Dictionary(
+                uniqueKeysWithValues: cameras.cameras.compactMap { cam in
+                    cam.axis.map { (cam.id, $0) }
+                }))
+        }
 
         // Недельный дайджест: после каждой поездки перепланируем пуш со свежими цифрами.
         trip.onTripFinished = { [weak trip, weak notifications] in
@@ -121,4 +126,25 @@ final class AppEnvironment {
     }
 
     var loadError: String? { cameras.loadError }
+
+    /// Сервисы, нужные любой АКТИВНОЙ сцене — телефонной и CarPlay.
+    ///
+    /// CarPlay может подключиться первым (телефон остался в кармане), а раньше
+    /// весь этот набор стартовал только из телефонной сцены: поездка из машины
+    /// шла без базы лимитов — каждый проезд без limitKmh, то есть без рейтинга
+    /// и «возможных штрафов», — без краудсорсных радаров и без автостарта по
+    /// движению. Все старты идемпотентны, повторный вызов из второй сцены
+    /// ничего не дублирует.
+    func startDrivingServices() {
+        // Тихая проверка обновлений базы (не чаще раза в сутки), не блокирует UI.
+        Task { await sync.autoCheckIfNeeded() }
+        // Дослать репорты/фидбек, не ушедшие в прошлый раз (офлайн-очередь).
+        Task { await feedback.flushPending() }
+        speedLimits.start()   // база лимитов: локально сразу, сервер раз в неделю
+        metrics.start()       // MetricKit: суточные отчёты о батарее/крашах
+        guard Storage.bool(.hasCompletedOnboarding) else { return }
+        location.bootstrap()
+        mobile.startPolling()
+        motion.start()
+    }
 }

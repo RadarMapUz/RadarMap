@@ -50,6 +50,23 @@ final class MapState {
 
     private(set) var orientation: Orientation = .following
 
+    /// Куда повёрнут «верх экрана» карты, градусы от севера; nil — неизвестно
+    /// (карта крутится сама за компасом устройства).
+    ///
+    /// Нужен клину направления на маркере: контент Annotation в MapKit
+    /// экранно-выровнен и с картой НЕ вращается, поэтому «поворот прямо из
+    /// dir» верен только при севере вверху. В режиме «по ходу движения» ошибка
+    /// равнялась курсу карты — клин врал сильнее всего ровно тогда, когда
+    /// водитель на карту смотрит. Известный поворот компенсируем, неизвестный
+    /// (compass-follow) — честно прячем клин: спрятать лучше, чем соврать.
+    /// Квантование 5° — чтобы плавный доворот не перерисовывал маркеры зря.
+    private(set) var mapHeading: Double? = 0
+
+    func setMapHeading(_ heading: Double?) {
+        let quantized = heading.map { ($0 / 5).rounded() * 5 }
+        if mapHeading != quantized { mapHeading = quantized }
+    }
+
     /// Точка, от которой считается важность маркеров (CameraTier).
     ///
     /// Троттлится по `mapFocusStepMeters`: это не косметика — маркеры читают
@@ -273,6 +290,7 @@ final class MapState {
             followsDeviceHeading = false
         case .following:
             followsDeviceHeading = false
+            setMapHeading(0)   // .userLocation ставит карту на север
             withAnimation(.easeInOut(duration: 0.35)) {
                 position = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
             }
@@ -285,6 +303,7 @@ final class MapState {
                 follow(coordinate: coordinate, course: course, pitched: true, force: true)
             } else {
                 followsDeviceHeading = true
+                setMapHeading(nil)   // карту крутит компас телефона — угла мы не знаем
                 withAnimation(.easeInOut(duration: 0.35)) {
                     position = .userLocation(followsHeading: true,
                                              fallback: .region(AppConfig.uzbekistanRegion))
@@ -324,6 +343,7 @@ final class MapState {
         let center = (pitched && course >= 0)
             ? GeoMath.destination(from: coordinate, bearing: course, distanceMeters: 160)
             : coordinate
+        setMapHeading(course >= 0 ? course : 0)   // мы сами задаём поворот карты
         withAnimation(.easeOut(duration: 0.4)) {
             position = .camera(MapCamera(
                 centerCoordinate: center,

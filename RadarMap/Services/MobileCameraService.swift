@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import os
 import CoreLocation
 import Observation
 
@@ -123,6 +124,9 @@ final class MobileCameraService {
             await refresh()
             return response.merged ? .confirmed : .created
         } catch {
+            // Пользователь увидит «не удалось» — причина (таймаут/4xx) обязана
+            // дойти хотя бы до Console: это главный краудсорс-путь приложения.
+            Log.network.error("отметка радара не ушла: \(error.localizedDescription, privacy: .public)")
             return .failed
         }
     }

@@ -797,10 +797,13 @@ final class LocationService: NSObject {
         }
     }
 
-    /// Обнулить «ближайшую» без лишних оповещений наблюдателям (см. setNearest).
+    /// Обнулить «ближайшую» без лишних оповещений наблюдателям: @Observable не
+    /// сравнивает значения, и голая перезапись тем же nil будила бы всех
+    /// подписчиков (HUD, карту, CarPlay) на каждом тике без камеры впереди —
+    /// то есть почти всегда.
     private func clearNearest() {
         if nearestCamera != nil { nearestCamera = nil }
-        distanceToNearest = nil
+        if distanceToNearest != nil { distanceToNearest = nil }
         if !clusteredCameras.isEmpty { clusteredCameras = [] }
     }
 
@@ -1064,7 +1067,11 @@ final class LocationService: NSObject {
 // MARK: - CLLocationManagerDelegate
 
 extension LocationService: CLLocationManagerDelegate {
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    // nonisolated, как остальные шесть колбэков: с дефолтной MainActor-изоляцией
+    // витнесс nonisolated-требования ObjC-протокола получал динамический
+    // precondition на самом горячем колбэке.
+    nonisolated func locationManager(_ manager: CLLocationManager,
+                                     didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
         let fix = LocationFilter.Fix(location)
         Task { @MainActor in self.handleFix(fix) }

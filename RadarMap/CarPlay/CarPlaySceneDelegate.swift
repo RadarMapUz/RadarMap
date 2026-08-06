@@ -25,9 +25,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private var session = 0
     /// Таймер автозакрытия всплывающего подтверждения («Отметка принята»).
     private var toastTask: Task<Void, Never>?
-    /// Что было включено до тишины — чтобы вернуть ровно это.
-    private var soundBeforeMute = true
-    private var voiceBeforeMute = true
 
     private var env: AppEnvironment { AppEnvironment.shared }
 
@@ -53,6 +50,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // В машине приложение «на переднем плане», даже если телефон заблокирован
         // в кармане — у CarPlay свой флаг, телефонная сцена его не затирает.
         env.location.setCarPlayConnected(true)
+        // CarPlay может быть ПЕРВОЙ сценой процесса: без этого вызова база
+        // лимитов, краудсорс и автостарт стартовали только из телефонной сцены,
+        // и поездка из машины писалась без лимитов — без рейтинга и штрафов.
+        env.startDrivingServices()
         session += 1
         syncTemplate()
     }
@@ -68,6 +69,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Вышли из машины: телефон мог всё это время быть в фоне, события
         // scenePhase не будет — снимаем «передний план» сами.
         AppEnvironment.shared.location.setCarPlayConnected(false)
+        // Тишина — атрибут ПОЕЗДКИ, а не настройка: кнопку жали в машине
+        // (спит пассажир, идёт разговор), и без отката телефон навсегда
+        // оставался в «Молча», а человек не связал бы это с кнопкой в машине.
+        // Откатываем только тишину, включённую КНОПКОЙ машины (маркер в
+        // Storage): выключенное руками в настройках не трогаем.
+        if Storage.bool(.carPlayMuted) { unmute() }
     }
 
     // MARK: - Сборка шаблона
@@ -157,21 +164,44 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     /// Тишина — это молчат и писк, и голос: водитель, нажавший «динамик», ждёт
     /// тишины, а не «звук выключил, а голос остался».
-    private var isMuted: Bool { !env.settings.soundEnabled && !env.settings.voiceEnabled }
+    ///
+    /// Читает ТОЛЬКО @Observable-настройки: isMuted стоит внутри
+    /// withObservationTracking, и чтение Storage здесь оставило бы кнопку
+    /// без перерисовки после нажатия.
+    private var isMuted: Bool {
+        !env.settings.soundEnabled && env.settings.voiceMode == .off
+    }
 
     private func toggleMute() {
-        let settings = env.settings
         if isMuted {
-            // Возвращаем ровно то, что было до заглушения: у кого-то голос был
-            // выключен намеренно — не включаем его «в подарок».
-            settings.soundEnabled = soundBeforeMute
-            settings.voiceEnabled = voiceBeforeMute
+            unmute()
         } else {
-            soundBeforeMute = settings.soundEnabled
-            voiceBeforeMute = settings.voiceEnabled
-            settings.soundEnabled = false
-            settings.voiceEnabled = false
+            // «До тишины» — в Storage, а не в полях делегата: при
+            // переподключении делегат создаётся заново, и поля-умолчания
+            // «включали в подарок» звук и голос тем, кто выключил их намеренно.
+            // Хранится сам rawValue VoiceMode: восстановление через фасад
+            // voiceEnabled превращало «Обо всех» в «Умно».
+            Storage.set(env.settings.soundEnabled, for: .carPlaySoundBeforeMute)
+            Storage.set(env.settings.voiceMode.rawValue, for: .carPlayVoiceBeforeMute)
+            Storage.set(true, for: .carPlayMuted)
+            env.settings.soundEnabled = false
+            env.settings.voiceMode = .off
         }
+    }
+
+    /// Возвращаем ровно то, что было до заглушения. Если тишину включили не
+    /// кнопкой машины (всё выключено руками в настройках), «размучивание» —
+    /// осознанное желание слышать: включаем разумный минимум.
+    private func unmute() {
+        if Storage.bool(.carPlayMuted) {
+            env.settings.soundEnabled = Storage.bool(.carPlaySoundBeforeMute)
+            env.settings.voiceMode = Storage.string(.carPlayVoiceBeforeMute)
+                .flatMap(VoiceMode.init(rawValue:)) ?? .smart
+        } else {
+            env.settings.soundEnabled = true
+            env.settings.voiceMode = .smart
+        }
+        Storage.set(false, for: .carPlayMuted)
     }
 
     private static func buttonImage(_ symbol: String) -> UIImage? {

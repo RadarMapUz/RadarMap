@@ -27,6 +27,12 @@ enum Storage {
         case speedLimitsLastCheck   // дата последней проверки базы лимитов
         case hasCompletedOnboarding // онбординг пройден (@AppStorage)
         case reviewAskedVersion     // версия, в которой уже просили оценку App Store
+        // Тишина, включённая кнопкой в CarPlay. Хранится, а не живёт в делегате:
+        // при переподключении делегат создаётся заново и «что было до тишины»
+        // терялось — восстановление включало звук тем, кто выключал его намеренно.
+        case carPlayMuted           // тишина активна (снимается при выходе из машины)
+        case carPlayVoiceBeforeMute // rawValue VoiceMode до тишины
+        case carPlaySoundBeforeMute // soundEnabled до тишины
     }
 
     private static var defaults: UserDefaults { .standard }

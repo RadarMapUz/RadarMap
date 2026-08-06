@@ -208,14 +208,24 @@ final class TripStats {
     }
 
     /// Одноразовая чистка «мостовых» проездов: направление трека у камеры против
-    /// оси её дороги (появилась в базе v8). Вызывает AppEnvironment после сборки
-    /// сервисов — оси знает CameraRepository.
+    /// оси её дороги (появилась в базе v8). Вызывается из onDatabaseLoaded
+    /// CameraRepository — база декодируется асинхронно, и на момент сборки
+    /// сервисов осей ещё нет (пустой словарь тут молча выключал миграцию).
     func axisCleanupIfNeeded(axisByID: [Int: Int]) {
         guard !Storage.bool(.passAxisCleanup1), !axisByID.isEmpty else { return }
+        let before = history
         let (cleaned, changed) = TripHistory.axisSanitized(history, axisByID: axisByID)
         if changed {
+            // Lifetime — хирургически, как в гео-чистке: rebuilt по обрезанной
+            // истории стирал бы пожизненные счётчики.
+            var removed: [DrivingScore.Pass] = []
+            for (old, new) in zip(before, cleaned) where old.passed.count != new.passed.count {
+                removed += old.passed
+                    .filter { pass in !new.passed.contains { $0.id == pass.id } }
+                    .map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) }
+            }
             history = cleaned
-            lifetime = LifetimeStats.rebuilt(from: history)
+            lifetime = LifetimeStats.subtractingPasses(removed, from: lifetime)
             persist()
             persistLifetime()
             Log.trips.info("чистка мостовых проездов: история пересчитана")
@@ -469,15 +479,31 @@ final class TripStats {
             let before = history
             let (cleaned, changed) = TripHistory.sanitized(history)
             if changed {
-                // Дневные агрегаты правим ХИРУРГИЧЕСКИ, а не пересборкой из
-                // истории: они переживают чистку записей и хранят месяцы, для
-                // которых поездок уже нет. Полный rebuild стёр бы их.
+                // Дневные агрегаты и lifetime правим ХИРУРГИЧЕСКИ, а не
+                // пересборкой из истории: и то и другое переживает чистку
+                // записей и хранит месяцы, для которых поездок уже нет.
+                // rebuilt(from:) по обрезанной истории обнулял бы годовые
+                // километры, экономию и достижения.
+                var removed: [DrivingScore.Pass] = []
                 for (old, new) in zip(before, cleaned) where old.passed.count != new.passed.count {
-                    days = TripDayBook.unfolded(old, from: days)
-                    days = TripDayBook.folded(new, into: days)
+                    let gone = old.passed.filter { pass in
+                        !new.passed.contains { $0.id == pass.id }
+                    }
+                    removed += gone.map {
+                        DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh)
+                    }
+                    // Смена часового пояса могла увести день записи на другой
+                    // ключ: unfolded тогда промахнётся и молча выйдет, а folded
+                    // добавит день заново — поездка задвоится. Правим только
+                    // если строка дня на месте.
+                    let key = Calendar.current.startOfDay(for: old.startedAt)
+                    if days.contains(where: { $0.day == key }) {
+                        days = TripDayBook.unfolded(old, from: days)
+                        days = TripDayBook.folded(new, into: days)
+                    }
                 }
                 history = cleaned
-                lifetime = LifetimeStats.rebuilt(from: history)
+                lifetime = LifetimeStats.subtractingPasses(removed, from: lifetime)
                 persist()
                 persistLifetime()
                 persistDays()

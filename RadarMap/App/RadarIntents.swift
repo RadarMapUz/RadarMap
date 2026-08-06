@@ -8,6 +8,7 @@
 //
 
 import AppIntents
+import CoreLocation
 import Foundation
 
 struct StartTripIntent: AppIntent {
@@ -18,7 +19,11 @@ struct StartTripIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let env = AppEnvironment.shared
-        guard env.location.isAuthorized else {
+        // Именно «Всегда», а не любой доступ: фраза Сири может поднять процесс
+        // В ФОНЕ, и с «При использовании» непрерывный GPS не запустится —
+        // ответ «Поехали» был бы ложным обещанием ровно в сценарии
+        // «руки на руле».
+        guard env.location.authorizationStatus == .authorizedAlways else {
             return .result(dialog: IntentDialog(
                 "Нет доступа к геолокации. Откройте RadarMap и разрешите «Всегда»."))
         }

@@ -53,6 +53,9 @@ struct TripStatsSheet: View {
     /// Вся сохранённая история отдельным экраном — вместо сегмента «Всё время»,
     /// который обещал показать всё, а показывал последние записи.
     @State private var showAllTrips = false
+    /// Поездка, выбранная в «Всех поездках»: деталка откроется после того, как
+    /// список ЗАКОНЧИТ закрываться (см. onDismiss у шита).
+    @State private var pendingDetailRecord: TripRecord?
     /// Полноэкранная карта проездов (item — чтобы передать фокус зоны риска).
     @State private var mapPayload: PeriodMapPayload?
     /// Треки, маркеры и слой частоты — считаются на смену периода, а не в body.
@@ -242,10 +245,19 @@ struct TripStatsSheet: View {
                              interval: period.interval(containing: anchor))
         }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
-        .sheet(isPresented: $showAllTrips) {
+        // Деталка открывается из onDismiss, а не в один тик с закрытием списка:
+        // sheet поверх ещё анимирующегося sheet молча не показывается (см.
+        // комментарий к скриншот-хукам) — тап по поездке закрывал список, а
+        // деталка не появлялась, и повторный тап по той же записи был мёртв.
+        .sheet(isPresented: $showAllTrips, onDismiss: {
+            if let pending = pendingDetailRecord {
+                pendingDetailRecord = nil
+                selectedRecord = pending
+            }
+        }) {
             AllTripsSheet(onOpenDetail: { record in
+                pendingDetailRecord = record
                 showAllTrips = false
-                selectedRecord = record
             }, onRepeat: onRoute.map { route in
                 { coord, name in dismiss(); route(coord, name) }
             })

@@ -111,9 +111,12 @@ struct DashboardView: View {
         guard let distance = env.location.distanceToNearest else { return Theme.accent }
         let radius = AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
                                                  baseRadius: env.settings.alertRadius)
+        // Три ступени: вплотную — опасность, в средней зоне — внимание,
+        // в радиусе — нейтральный акцент. Раньше вторая ветка звала
+        // Theme.role(.alarm) — тот же danger, и эскалация была двухступенчатой.
         if distance <= radius * 0.3 { return Theme.danger }
-        if distance <= radius * 0.6 { return Theme.role(.alarm) }
-        if distance <= radius { return Theme.warning }
+        if distance <= radius * 0.6 { return Theme.warning }
+        if distance <= radius { return Theme.accent }
         return Theme.accent
     }
 }

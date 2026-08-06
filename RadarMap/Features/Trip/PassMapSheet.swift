@@ -30,6 +30,9 @@ struct PassDetailView: View {
 
     @State private var position: MapCameraPosition
     @State private var appeared = false
+    /// «А если бы» — из .task, не из body: пересчёт рейтинга периода попадал в
+    /// кадры анимации подлёта (Map пишет position обратно на каждом кадре).
+    @State private var whatIf: (tripScore: Int, periodRating: Int?, currentRating: Int?)?
 
     init(pass: PassedCamera, track: [TrackPoint] = [], record: TripRecord? = nil,
          days: [TripDay] = [], interval: DateInterval? = nil, period: StatsPeriod? = nil) {
@@ -69,6 +72,17 @@ struct PassDetailView: View {
         .background(Theme.background)
         .navigationTitle("Проезд камеры")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            guard let record, pass.limitKmh != nil,
+                  let tripScore = RatingBreakdown.tripScoreIfClean(pass: pass, record: record)
+            else { return }
+            let periodRating = interval.flatMap { window in
+                RatingBreakdown.ratingIfClean(pass: pass, record: record,
+                                              days: days, in: window)
+            }
+            let current = interval.map { TripDayBook.summary(days, in: $0).rating } ?? nil
+            whatIf = (tripScore, periodRating, current)
+        }
         .onAppear {
             guard let coordinate = pass.coordinate else { return }
             // Подлёт: с высоты — к камере, с лёгким наклоном для объёма.
@@ -238,14 +252,9 @@ struct PassDetailView: View {
 
     /// Цена вопроса в тех же единицах, что и весь разбор. Считается по той же
     /// лестнице баллов, что и сам рейтинг, — это не «прогноз», а проверяемая
-    /// арифметика на уже случившихся данных.
+    /// арифметика на уже случившихся данных. Числа готовит .task.
     @ViewBuilder private var whatIfCard: some View {
-        if let record, let limit = pass.limitKmh,
-           let tripScore = RatingBreakdown.tripScoreIfClean(pass: pass, record: record) {
-            let periodRating = interval.flatMap { window in
-                RatingBreakdown.ratingIfClean(pass: pass, record: record,
-                                              days: days, in: window)
-            }
+        if let record, let limit = pass.limitKmh, let whatIf {
             VStack(alignment: .leading, spacing: 10) {
                 SectionHeader(String(localized: "А если бы в лимите"))
                 Text(String(format: String(localized: "Пройди вы эту камеру на %lld км/ч:"), limit))
@@ -253,22 +262,16 @@ struct PassDetailView: View {
                     .foregroundStyle(Theme.textSecondary)
                 if let score = record.score {
                     whatIfRow(title: String(localized: "балл поездки"),
-                              from: Int(score.rounded()), to: tripScore)
+                              from: Int(score.rounded()), to: whatIf.tripScore)
                 }
-                if let periodRating, let period {
+                if let periodRating = whatIf.periodRating, let period {
                     whatIfRow(title: String(format: String(localized: "рейтинг %@"),
                                             period.caption),
-                              from: currentRating ?? periodRating, to: periodRating)
+                              from: whatIf.currentRating ?? periodRating, to: periodRating)
                 }
             }
             .statCard()
         }
-    }
-
-    /// Рейтинг окна прямо сейчас — левая часть сравнения «было → стало бы».
-    private var currentRating: Int? {
-        guard let interval else { return nil }
-        return TripDayBook.summary(days, in: interval).rating
     }
 
     private func whatIfRow(title: String, from: Int, to: Int) -> some View {

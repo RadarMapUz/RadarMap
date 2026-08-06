@@ -29,6 +29,7 @@ Endpoints:
 import json
 import math
 import sqlite3
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -48,6 +49,16 @@ MAX_METRICS_ROWS = 5000      # строк метрик в БД (по ~200 КБ �
 MAX_DAILY_ROWS = 2000        # camera_reports/feedback суммарно в сутки
 MAX_VOTES_PER_DAY = 30       # голосов с устройства в сутки
 MAX_ID = 2**31               # верхняя граница id: больше — не наш id, а OverflowError в SQLite
+# Суточные капы по IP: device ротируется бесплатно, IP — нет. Пороги в разы
+# выше честного пользования, но на порядки ниже «один атакующий забивает
+# глобальный кап»: раньше 500 UUID с одного адреса гасили /api/report для всех,
+# а 250 — сбор метрик на месяц. CGNAT мобильных сетей помним, поэтому капы
+# щедрые: за одним адресом оператора живут десятки честных водителей.
+IP_DAILY_CAPS = {"report": 30, "vote": 100, "camera_report": 60,
+                 "feedback": 30, "metrics": 60}
+# Скрытие отметки требует дизлайков с РАЗНЫХ адресов: три свежих UUID с одного
+# телефона больше не снимают чужую отметку с карты.
+HIDE_DISTINCT_IPS = 3
 
 def db():
     conn = sqlite3.connect(DB_PATH)
@@ -68,6 +79,15 @@ def db():
         conn.execute("ALTER TABLE reports ADD COLUMN type TEXT DEFAULT 'radar'")
     except sqlite3.OperationalError:
         pass
+    # Миграция: IP голосов и отметок. Все device-лимиты обходятся новым UUID
+    # на каждый запрос; IP от nginx (X-Forwarded-For = $remote_addr, клиентский
+    # заголовок перезаписывается) — единственный признак, который ротацией не
+    # меняется. Старые строки остаются с '' и в IP-проверках не участвуют.
+    for table in ("votes", "reports"):
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN ip TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
     conn.execute("""CREATE TABLE IF NOT EXISTS metrics(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         device TEXT NOT NULL, kind TEXT NOT NULL,
@@ -95,6 +115,40 @@ def clean_text(s):
     вырезаем управляющие символы, чтобы ANSI-escape'ами нельзя было рисовать."""
     return "".join(ch for ch in s if ch.isprintable() or ch == "\n")
 
+def as_str(value, default=None):
+    """Строгое строковое поле. str(dict) молча сохранял Python-repr словаря
+    вместо 400 — ветка except TypeError в хендлерах была недостижима."""
+    if value is None and default is not None:
+        return default
+    if not isinstance(value, str):
+        raise TypeError(f"expected str, got {type(value).__name__}")
+    return value
+
+# Суточные счётчики по IP — в памяти, а не в БД: при рестарте обнуляются, и это
+# нормально для rate-limit'а. Ключ (день, ip); прошлые дни чистятся лениво.
+_ip_lock = threading.Lock()
+_ip_counters = {}
+
+# Чистка протухших отметок из GET /api/mobile — не чаще раза в минуту.
+_cleanup_lock = threading.Lock()
+_last_cleanup = 0.0
+
+def ip_quota_exceeded(bucket, ip, cap):
+    """True — суточный кап этого IP по данному бакету исчерпан (и счёт +1)."""
+    if not ip:
+        return False
+    day = int(time.time() // 86400)
+    with _ip_lock:
+        stale = [k for k in _ip_counters if k[0] != day]
+        for k in stale:
+            del _ip_counters[k]
+        key = (day, bucket, ip)
+        count = _ip_counters.get(key, 0)
+        if count >= cap:
+            return True
+        _ip_counters[key] = count + 1
+        return False
+
 def haversine(lat1, lon1, lat2, lon2):
     r = 6371000.0
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -117,6 +171,13 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _ip(self):
+        """IP клиента. nginx перезаписывает X-Forwarded-For значением
+        $remote_addr (см. nginx-radarmap.conf), поэтому заголовку можно верить;
+        напрямую (тесты, локалка) берём адрес сокета."""
+        return (self.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+                or self.client_address[0])
+
     def _body(self, limit=4096):
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -127,16 +188,26 @@ class Handler(BaseHTTPRequestHandler):
             return None
 
     def do_GET(self):
-        if self.path == "/api/health":
+        path = self.path.split("?", 1)[0].rstrip("/")   # /api/mobile/?x — тот же эндпоинт
+        if path == "/api/health":
             return self._json(200, {"ok": True})
-        if self.path == "/api/mobile":
+        if path == "/api/mobile":
             now = time.time()
             conn = db()
             try:
-                conn.execute("DELETE FROM reports WHERE expires < ?", (now - 86400,))
-                # голоса удалённых отметок — сироты, без чистки таблица растёт вечно
-                conn.execute("DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)")
-                conn.commit()
+                # Чистку не гоняем на каждый GET: это два DELETE и commit в
+                # файле, куда параллельно пишет /api/report, — при 10 r/s с IP
+                # чтение превращалось в постоянную запись. Раз в минуту хватает.
+                global _last_cleanup
+                with _cleanup_lock:
+                    due = now - _last_cleanup >= 60
+                    if due:
+                        _last_cleanup = now
+                if due:
+                    conn.execute("DELETE FROM reports WHERE expires < ?", (now - 86400,))
+                    # голоса удалённых отметок — сироты, без чистки таблица растёт вечно
+                    conn.execute("DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)")
+                    conn.commit()
                 rows = conn.execute(
                     "SELECT id, lat, lon, created, expires, up, down, type FROM reports "
                     "WHERE active = 1 AND expires > ?", (now,)).fetchall()
@@ -148,15 +219,16 @@ class Handler(BaseHTTPRequestHandler):
         self._json(404, {"error": "not found"})
 
     def do_POST(self):
-        if self.path == "/api/report":
+        path = self.path.split("?", 1)[0].rstrip("/")
+        if path == "/api/report":
             return self._report()
-        if self.path == "/api/vote":
+        if path == "/api/vote":
             return self._vote()
-        if self.path == "/api/metrics":
+        if path == "/api/metrics":
             return self._metrics()
-        if self.path == "/api/camera_report":
+        if path == "/api/camera_report":
             return self._camera_report()
-        if self.path == "/api/feedback":
+        if path == "/api/feedback":
             return self._feedback()
         self._json(404, {"error": "not found"})
 
@@ -166,8 +238,8 @@ class Handler(BaseHTTPRequestHandler):
             if length <= 0 or length > 262144:
                 return self._json(400, {"error": "bad length"})
             data = json.loads(self.rfile.read(length))
-            device = str(data["device"])[:64]
-            kind = str(data["kind"])[:16]
+            device = as_str(data["device"])[:64]
+            kind = as_str(data["kind"])[:16]
             payload = json.dumps(data["payload"])
             if len(payload) > 200000:  # срез сделал бы JSON невалидным — отказываем целиком
                 return self._json(400, {"error": "payload too big"})
@@ -175,6 +247,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "bad json"})
         if not device or kind not in ("metric", "diagnostic"):
             return self._json(400, {"error": "bad fields"})
+        if ip_quota_exceeded("metrics", self._ip(), IP_DAILY_CAPS["metrics"]):
+            return self._json(429, {"error": "too many"})
         now = time.time()
         conn = db()
         try:
@@ -203,8 +277,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "bad json"})
         try:
             camera_id = int(data["camera_id"])
-            reason = str(data["reason"])[:32]
-            device = str(data["device"])[:64]
+            reason = as_str(data["reason"])[:32]
+            device = as_str(data["device"])[:64]
             lat = float(data.get("lat") or 0) or None
             lon = float(data.get("lon") or 0) or None
             db_version = int(data.get("db_version") or 0) or None
@@ -213,6 +287,18 @@ class Handler(BaseHTTPRequestHandler):
         if reason not in ("gone", "wrong_location", "still_here") or not device \
                 or not 0 < camera_id < MAX_ID:
             return self._json(400, {"error": "bad fields"})
+        # Версия базы — наша, маленькая. Всё прочее (включая 10**100, который
+        # раньше ронял хендлер OverflowError'ом на INSERT) — мусор, не повод 500.
+        if db_version is not None and not 0 < db_version < MAX_ID:
+            return self._json(400, {"error": "bad fields"})
+        # Координаты — только правдоподобные: NaN/Infinity проходят float(),
+        # но проваливают сравнение с границами и превращаются в NULL.
+        if lat is not None and not (UZ_LAT[0] <= lat <= UZ_LAT[1]):
+            lat = None
+        if lon is not None and not (UZ_LON[0] <= lon <= UZ_LON[1]):
+            lon = None
+        if ip_quota_exceeded("camera_report", self._ip(), IP_DAILY_CAPS["camera_report"]):
+            return self._json(429, {"error": "too many"})
 
         now = time.time()
         conn = db()
@@ -250,14 +336,18 @@ class Handler(BaseHTTPRequestHandler):
         if not data:
             return self._json(400, {"error": "bad json"})
         try:
-            message = clean_text(str(data["message"]).strip()[:2000])
-            contact = clean_text(str(data.get("contact") or "")[:200])
-            app_version = str(data.get("app_version") or "")[:32]
-            device = str(data["device"])[:64]
+            message = clean_text(as_str(data["message"]).strip()[:2000])
+            contact = clean_text(as_str(data.get("contact"), default="")[:200])
+            # app_version печатается в терминале модератора рядом с message —
+            # ANSI-мусор вырезаем и здесь.
+            app_version = clean_text(as_str(data.get("app_version"), default="")[:32])
+            device = as_str(data["device"])[:64]
         except (KeyError, TypeError, ValueError):
             return self._json(400, {"error": "bad fields"})
         if not message or not device:
             return self._json(400, {"error": "bad fields"})
+        if ip_quota_exceeded("feedback", self._ip(), IP_DAILY_CAPS["feedback"]):
+            return self._json(429, {"error": "too many"})
 
         now = time.time()
         conn = db()
@@ -287,14 +377,17 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "bad json"})
         try:
             lat, lon = float(data["lat"]), float(data["lon"])
-            device = str(data["device"])[:64]
-            rtype = str(data.get("type") or "radar")
+            device = as_str(data["device"])[:64]
+            rtype = as_str(data.get("type"), default="radar")
         except (KeyError, TypeError, ValueError):
             return self._json(400, {"error": "bad fields"})
         if not (UZ_LAT[0] <= lat <= UZ_LAT[1] and UZ_LON[0] <= lon <= UZ_LON[1]) or not device:
             return self._json(400, {"error": "out of bounds"})
         if rtype not in REPORT_TTLS:
             return self._json(400, {"error": "bad type"})
+        ip = self._ip()
+        if ip_quota_exceeded("report", ip, IP_DAILY_CAPS["report"]):
+            return self._json(429, {"error": "too many"})
 
         now = time.time()
         conn = db()
@@ -320,8 +413,9 @@ class Handler(BaseHTTPRequestHandler):
                     # пересчитывает up/down только из votes, инкремент в
                     # reports первый же голос стёр бы.
                     conn.execute(
-                        "INSERT OR REPLACE INTO votes(report_id, device, value, ts) VALUES(?,?,1,?)",
-                        (r[0], device, now))
+                        "INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip) "
+                        "VALUES(?,?,1,?,?)",
+                        (r[0], device, now, ip))
                     up = conn.execute(
                         "SELECT COUNT(*) FROM votes WHERE report_id = ? AND value = 1",
                         (r[0],)).fetchone()[0]
@@ -335,8 +429,9 @@ class Handler(BaseHTTPRequestHandler):
             if len(active_rows) >= MAX_ACTIVE_REPORTS:
                 return self._json(429, {"error": "too many active"})
             cur = conn.execute(
-                "INSERT INTO reports(lat, lon, created, expires, device, type) VALUES(?,?,?,?,?,?)",
-                (lat, lon, now, now + REPORT_TTLS[rtype], device, rtype))
+                "INSERT INTO reports(lat, lon, created, expires, device, type, ip) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (lat, lon, now, now + REPORT_TTLS[rtype], device, rtype, ip))
             conn.commit()
             return self._json(200, {"id": cur.lastrowid, "merged": False})
         finally:
@@ -348,12 +443,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "bad json"})
         try:
             rid = int(data["id"])
-            device = str(data["device"])[:64]
+            device = as_str(data["device"])[:64]
             value = int(data["value"])
         except (KeyError, TypeError, ValueError):
             return self._json(400, {"error": "bad fields"})
         if value not in (1, -1) or not device or not 0 < rid < MAX_ID:
             return self._json(400, {"error": "bad value"})
+        ip = self._ip()
+        if ip_quota_exceeded("vote", ip, IP_DAILY_CAPS["vote"]):
+            return self._json(429, {"error": "too many"})
 
         now = time.time()
         conn = db()
@@ -367,15 +465,23 @@ class Handler(BaseHTTPRequestHandler):
                                (rid,)).fetchone()
             if not row:
                 return self._json(404, {"error": "no report"})
-            conn.execute("INSERT OR REPLACE INTO votes(report_id, device, value, ts) VALUES(?,?,?,?)",
-                         (rid, device, value, now))
+            conn.execute("INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip) "
+                         "VALUES(?,?,?,?,?)",
+                         (rid, device, value, now, ip))
             up, down = conn.execute(
                 "SELECT COALESCE(SUM(value = 1), 0), COALESCE(SUM(value = -1), 0) "
                 "FROM votes WHERE report_id = ?", (rid,)).fetchone()
             expires = row[1]
             if value == 1:
                 expires = min(row[0] + MAX_LIFE, max(expires, now) + EXTEND)
-            active = 0 if (down >= 3 and down > up) else 1
+            # Скрытие — по числу РАЗНЫХ адресов среди дизлайков: device
+            # ротируется бесплатно, и три свежих UUID с одного телефона гасили
+            # любую отметку. Старые голоса (ip = '') в кворум не входят —
+            # лучше передержать отметку, чем дать её снять анонимной ротацией.
+            down_ips = conn.execute(
+                "SELECT COUNT(DISTINCT ip) FROM votes "
+                "WHERE report_id = ? AND value = -1 AND ip != ''", (rid,)).fetchone()[0]
+            active = 0 if (down >= 3 and down > up and down_ips >= HIDE_DISTINCT_IPS) else 1
             conn.execute("UPDATE reports SET up = ?, down = ?, expires = ?, active = ? WHERE id = ?",
                          (up, down, expires, active, rid))
             conn.commit()

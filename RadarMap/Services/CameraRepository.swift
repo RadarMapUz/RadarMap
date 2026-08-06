@@ -83,6 +83,11 @@ final class CameraStore: CameraRepository {
     private(set) var dbVersion: Int =
         Storage.intIfPresent(.cameraDBVersion) ?? AppConfig.bundledDBVersion
 
+    /// Первая загрузка базы завершена (декод асинхронный). Для одноразовых
+    /// миграций, которым нужны данные камер: вызов в момент сборки сервисов
+    /// пришёлся бы на пустой список.
+    @ObservationIgnored var onDatabaseLoaded: (() -> Void)?
+
     init() {
         loadUserData()
         let downloadedVersion = Storage.intIfPresent(.cameraDBVersion) ?? 0
@@ -99,6 +104,7 @@ final class CameraStore: CameraRepository {
                 Storage.remove(.cameraDBVersion)
             }
             self.dataChanged()
+            self.onDatabaseLoaded?()
         }
     }
 
@@ -144,7 +150,12 @@ final class CameraStore: CameraRepository {
             throw NSError(domain: "RadarMap.Sync", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "Файл базы неполный (\(decoded.count) камер)."])
         }
-        try data.write(to: Self.remoteFileURL, options: .atomic)
+        // Запись ~1 МБ атомарно (temp + rename) — вне main, как декод выше:
+        // на применении OTA она подвешивала кадр.
+        let url = Self.remoteFileURL
+        try await Task.detached(priority: .userInitiated) {
+            try data.write(to: url, options: .atomic)
+        }.value
         bundled = decoded
         dbVersion = version
         Storage.set(version, for: .cameraDBVersion)

@@ -137,8 +137,9 @@ nonisolated struct LocationFilter {
 }
 
 extension LocationFilter.Fix {
-    /// Фикс из CoreLocation. Единственное место, где движок встречается с CLLocation.
-    init(_ location: CLLocation) {
+    /// Фикс из CoreLocation. Единственное место, где движок встречается с
+    /// CLLocation. nonisolated: зовётся из nonisolated-делегата CLLocationManager.
+    nonisolated init(_ location: CLLocation) {
         self.init(lat: location.coordinate.latitude,
                   lon: location.coordinate.longitude,
                   horizontalAccuracy: location.horizontalAccuracy,

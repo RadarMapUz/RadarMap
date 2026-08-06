@@ -133,12 +133,17 @@ nonisolated enum TripHistory {
         return best
     }
 
-    /// Порог ретро-чистки: трек упрощён (±22 м) и записан раз в 30 м, поэтому
-    /// допуск шире живого гейта траверза (40 м) — но ровно на эту величину, а
-    /// не втрое. Прежние 120 м были калиброваны под старый гейт в 80 м и
-    /// пропускали ровно то, ради чего чистка существует: камеру поперечной
-    /// улицы развязки, до которой трек не подходил ближе сотни метров.
+    /// Пороги ретро-чистки: живой гейт траверза плюс запас на упрощение трека
+    /// (±22 м, точки раз в 30 м). Прежние единые 120 м были калиброваны под
+    /// старый гейт в 80 м и пропускали ровно то, ради чего чистка существует:
+    /// камеру поперечной улицы развязки. Для рукотворных точек (свои камеры,
+    /// краудсорс — id от firstHandPlacedCameraID) порог шире, как и живой:
+    /// их координату ставил человек, а не снап по оси дороги.
     static let passCleanupMaxMeters = 70.0
+    static let passCleanupNoProfileMaxMeters = 110.0
+    /// Зеркало CameraRepository.firstCustomID: с этого id начинаются точки,
+    /// поставленные руками (свои камеры, за ними краудсорс с 2 000 000).
+    static let firstHandPlacedCameraID = 1_000_001
 
     /// Направление трека в ближайшей к точке (lat, lon) вершине — азимут
     /// сегмента, на который пришёлся минимум расстояния. nil — трека мало.
@@ -211,7 +216,9 @@ nonisolated enum TripHistory {
             guard track.count >= 2, !record.passed.isEmpty else { return record }
             let kept = record.passed.filter { pass in
                 guard let lat = pass.lat, let lon = pass.lon else { return true }
-                return distanceToTrack(lat: lat, lon: lon, track: track) <= passCleanupMaxMeters
+                let limit = pass.cameraID >= firstHandPlacedCameraID
+                    ? passCleanupNoProfileMaxMeters : passCleanupMaxMeters
+                return distanceToTrack(lat: lat, lon: lon, track: track) <= limit
             }
             guard kept.count != record.passed.count else { return record }
             changed = true

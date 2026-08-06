@@ -239,7 +239,7 @@ nonisolated struct LifetimeStats: Codable, Equatable {
 
 // MARK: - Достижения
 
-struct Achievement: Identifiable {
+nonisolated struct Achievement: Identifiable {
     let id: String
     let icon: String
     let title: String
@@ -256,7 +256,7 @@ struct Achievement: Identifiable {
     }
 }
 
-enum Achievements {
+nonisolated enum Achievements {
     /// Девять бейджей: дистанция, чистые камеры, лучшая серия.
     nonisolated static func all(for stats: LifetimeStats) -> [Achievement] {
         let km = stats.distanceMeters / 1000

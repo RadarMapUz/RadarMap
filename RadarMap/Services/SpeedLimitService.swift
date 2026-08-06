@@ -59,6 +59,14 @@ final class SpeedLimitService {
     /// спрашивает лимиты двух сотен камер разом; LimitIndex — Sendable).
     var limitIndex: LimitIndex? { index }
 
+    /// База лимитов есть. Без неё не считаются ни превышения, ни рейтинг, ни
+    /// «возможные штрафы» — то есть половина Итогов пустая, и по экрану
+    /// непонятно почему. Пользователю это надо сказать, а не оставить гадать.
+    var isReady: Bool { index != nil }
+
+    /// Скачивание идёт прямо сейчас (для честной плашки, а не спиннера-загадки).
+    private(set) var isDownloading = false
+
     // MARK: - Загрузка базы
 
     /// Вызывается при старте приложения: локальный файл сразу, сервер — раз в 7 дней.
@@ -82,11 +90,20 @@ final class SpeedLimitService {
         }
     }
 
+    /// Повторить загрузку по кнопке из плашки: человек видит, что данных нет,
+    /// и должен иметь возможность что-то с этим сделать, а не ждать неделю.
+    func retryDownload() async {
+        Storage.set(0, for: .speedLimitsLastCheck)
+        await refreshFromServerIfNeeded()
+    }
+
     private func refreshFromServerIfNeeded() async {
         let lastCheck = Storage.double(.speedLimitsLastCheck)
         let weekAgo = Date().timeIntervalSince1970 - 7 * 24 * 3600
         guard index == nil || lastCheck < weekAgo else { return }
 
+        isDownloading = true
+        defer { isDownloading = false }
         // Недельная фоновая проверка: сбой сети не критичен, попробуем в следующий раз.
         let api = APIClient(timeout: 30)
         guard let data = try? await api.getData("speed_limits.json",

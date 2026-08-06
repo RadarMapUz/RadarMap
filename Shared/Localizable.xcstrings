@@ -9428,6 +9428,22 @@
           }
         }
       }
+    },
+    "Загружаю…" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Загружаю…"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yuklanmoqda…"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

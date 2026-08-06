@@ -9252,6 +9252,182 @@
           }
         }
       }
+    },
+    "Маршруты временно недоступны — мы уже чиним" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Маршруты временно недоступны — мы уже чиним"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marshrutlar vaqtincha ishlamayapti — tuzatyapmiz"
+          }
+        }
+      }
+    },
+    "Доступна новая версия" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Доступна новая версия"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yangi versiya mavjud"
+          }
+        }
+      }
+    },
+    "Эта версия больше не поддерживается — обновите приложение в App Store." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эта версия больше не поддерживается — обновите приложение в App Store."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu versiya endi qo‘llab-quvvatlanmaydi — ilovani App Store’da yangilang."
+          }
+        }
+      }
+    },
+    "Закрыть объявление" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Закрыть объявление"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "E’lonni yopish"
+          }
+        }
+      }
+    },
+    "Карта не загружается — нет сети" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Карта не загружается — нет сети"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xarita yuklanmayapti — internet yo‘q"
+          }
+        }
+      }
+    },
+    "Камеры предупреждают как обычно: база хранится на телефоне" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Камеры предупреждают как обычно: база хранится на телефоне"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kameralar odatdagidek ogohlantiradi: baza telefonda saqlanadi"
+          }
+        }
+      }
+    },
+    "Телефон перегрелся" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Телефон перегрелся"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Telefon qizib ketdi"
+          }
+        }
+      }
+    },
+    "Упростили карту, чтобы не тормозило. Оповещения работают полностью" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Упростили карту, чтобы не тормозило. Оповещения работают полностью"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sekinlashmasligi uchun xaritani soddalashtirdik. Ogohlantirishlar to‘liq ishlaydi"
+          }
+        }
+      }
+    },
+    "Ограничения скорости не загрузились" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ограничения скорости не загрузились"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tezlik cheklovlari yuklanmadi"
+          }
+        }
+      }
+    },
+    "Без них не считаются превышения, рейтинг и штрафы" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Без них не считаются превышения, рейтинг и штрафы"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ularsiz tezlikdan oshish, reyting va jarimalar hisoblanmaydi"
+          }
+        }
+      }
+    },
+    "Повторить" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторить"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qayta urinish"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

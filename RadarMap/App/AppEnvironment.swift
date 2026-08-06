@@ -31,6 +31,10 @@ final class AppEnvironment {
     let watchBridge = WatchBridgeService()
     let metrics = MetricsService()
     let feedback = FeedbackService()
+    /// «Пульт»: подписанный config.json с сервера. Умеет погасить маршруты,
+    /// краудсорс и метрики и показать объявление — но не трогает оповещения
+    /// о камерах: они обязаны работать и без сервера (см. RemoteConfig).
+    let config = RemoteConfigService()
 
     init() {
         let settings = AppSettings()
@@ -59,6 +63,13 @@ final class AppEnvironment {
         self.location.route = route
         self.location.speedLimits = speedLimits
         self.location.watchBridge = watchBridge
+
+        // Пульт раздаём тем, кого он имеет право глушить. Список намеренно
+        // короткий: всё это зависит от нашего сервера, а оповещения о камерах
+        // работают на локальной базе и остаются вне его досягаемости.
+        route.config = config
+        mobile.config = config
+        metrics.config = config
 
         // Автостарт/стоп поездки по движению (режим старта — в настройках).
         let location = self.location
@@ -136,6 +147,8 @@ final class AppEnvironment {
     /// движению. Все старты идемпотентны, повторный вызов из второй сцены
     /// ничего не дублирует.
     func startDrivingServices() {
+        // Пульт — первым: он может отменить всё, что запускается следом.
+        Task { await config.refreshIfNeeded() }
         // Тихая проверка обновлений базы (не чаще раза в сутки), не блокирует UI.
         Task { await sync.autoCheckIfNeeded() }
         // Дослать репорты/фидбек, не ушедшие в прошлый раз (офлайн-очередь).

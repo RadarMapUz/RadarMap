@@ -18,6 +18,13 @@ final class MetricsService: NSObject, MXMetricManagerSubscriber {
 
     private var started = false
 
+    /// Пульт: приём метрик можно погасить, если на сервере беда с местом или
+    /// разбором. Проверяем в момент отправки, а не подписки: пакеты приходят
+    /// раз в сутки, и к этому времени пульт давно загружен.
+    weak var config: RemoteConfigService?
+
+    private var isUploadAllowed: Bool { config?.areMetricsEnabled ?? true }
+
     func start() {
         guard !started else { return }
         started = true
@@ -35,6 +42,7 @@ final class MetricsService: NSObject, MXMetricManagerSubscriber {
 
     nonisolated private func upload(_ payloads: [Data], kind: String) {
         Task {
+            guard await self.isUploadAllowed else { return }
             let api = APIClient(timeout: 20)
             for data in payloads {
                 guard let parsed = try? JSONSerialization.jsonObject(with: data) else {

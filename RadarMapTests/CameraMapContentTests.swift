@@ -97,4 +97,67 @@ final class CameraMapContentTests: XCTestCase {
                                                  filter: .all, budget: 220)
         XCTAssertEqual(layer, CameraMapContent.Layer())
     }
+
+    // MARK: - Важность маркера
+
+    /// Камера в 400 метрах по курсу и камера в трёх километрах за спиной
+    /// обязаны выглядеть по-разному — иначе полсотни точек читаются как сыпь.
+    private func camera(_ id: Int, metersEast: Double) -> Camera {
+        // ~0.0000120° долготы на метр в широтах Ташкента.
+        Camera(id: id, region: "Т", city: "", location: "к\(id)",
+               lat: center.latitude,
+               lon: center.longitude + metersEast * 0.0000120,
+               type: "Стационар радар", violations: [], needsReview: false)
+    }
+
+    func testNearestCameraIsTheOnlyTarget() {
+        let near = camera(1, metersEast: 300)
+        let far = camera(2, metersEast: 500)
+        XCTAssertEqual(CameraMapContent.tier(camera: near, focus: center,
+                                             targetID: 1, routeIDs: []), .target)
+        XCTAssertEqual(CameraMapContent.tier(camera: far, focus: center,
+                                             targetID: 1, routeIDs: []), .near)
+    }
+
+    func testDistantCameraFallsToBackground() {
+        let far = camera(3, metersEast: 6000)
+        XCTAssertEqual(CameraMapContent.tier(camera: far, focus: center,
+                                             targetID: nil, routeIDs: []), .background)
+    }
+
+    /// Камера маршрута — «моя» на любом расстоянии: иначе на длинной трассе
+    /// весь маршрут уходил бы в фон.
+    func testRouteCameraStaysNearAtAnyDistance() {
+        let far = camera(4, metersEast: 40_000)
+        XCTAssertEqual(CameraMapContent.tier(camera: far, focus: center,
+                                             targetID: nil, routeIDs: [4]), .near)
+    }
+
+    /// Позиции нет — приглушать не от чего. Показываем всё в полную силу:
+    /// пропавшая камера хуже лишней.
+    func testWithoutFocusNothingIsDimmed() {
+        let far = camera(5, metersEast: 40_000)
+        XCTAssertEqual(CameraMapContent.tier(camera: far, focus: nil,
+                                             targetID: nil, routeIDs: []), .near)
+    }
+
+    /// Клин направления рисуется только там, где направление доказано.
+    func testDirectionConeOnlyWhenProven() {
+        func made(dir: Int?, twin: Bool?, split: Bool?, cls: String?) -> Camera {
+            Camera(id: 7, region: "Т", city: "", location: "к",
+                   lat: center.latitude, lon: center.longitude,
+                   type: "Стационар радар", violations: [], needsReview: false,
+                   dir: dir, cls: cls, split: split, twin: twin)
+        }
+        // Парная камера обратного направления — стороны доказанно поделены.
+        XCTAssertEqual(made(dir: 90, twin: true, split: nil, cls: "primary").markerDirection, 90)
+        // Дорога заведомо не разделена — обратной проезжей части нет.
+        XCTAssertEqual(made(dir: 90, twin: nil, split: false, cls: "primary").markerDirection, 90)
+        // Доказательства нет — камера может снимать обе стороны, клин был бы ложью.
+        XCTAssertNil(made(dir: 90, twin: nil, split: nil, cls: "primary").markerDirection)
+        // Снап сел на тротуар — профилю дороги верить нельзя.
+        XCTAssertNil(made(dir: 90, twin: true, split: nil, cls: "footway").markerDirection)
+        // Направления просто нет.
+        XCTAssertNil(made(dir: nil, twin: true, split: nil, cls: "primary").markerDirection)
+    }
 }

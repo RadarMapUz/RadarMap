@@ -267,6 +267,12 @@ final class AppSettings {
     var hapticsEnabled: Bool { didSet { store.set(hapticsEnabled, forKey: Keys.haptics) } }
     /// Не гасить экран в активной поездке (телефон в держателе — как у навигаторов).
     var keepScreenOn: Bool { didSet { store.set(keepScreenOn, forKey: Keys.keepScreenOn) } }
+    /// Слои подложки — тумблеры в легенде карты. Пробки уважают выбор всегда:
+    /// затор впереди нужен именно в дороге. Места (заправки, парковки,
+    /// больницы, посты) в поездке гасятся сами — на скорости их подписи только
+    /// засоряют карту, а стоя они и есть то, ради чего карту открывают.
+    var mapTraffic: Bool { didSet { store.set(mapTraffic, forKey: Keys.mapTraffic) } }
+    var mapPlaces: Bool { didSet { store.set(mapPlaces, forKey: Keys.mapPlaces) } }
     /// Имена знакомых автомобильных магнитол (BT): подключены к своей машине —
     /// автостарт не переспрашивает «вы за рулём?».
     var knownCarAudio: [String] { didSet { store.set(knownCarAudio, forKey: Keys.knownCarAudio) } }
@@ -319,6 +325,8 @@ final class AppSettings {
         static let haptics = "hapticsEnabled"
         static let mapAppearance = "mapAppearance"
         static let keepScreenOn = "keepScreenOn"
+        static let mapTraffic = "mapTraffic"
+        static let mapPlaces = "mapPlaces"
         static let alertMode = "alertMode"
         static let knownCarAudio = "knownCarAudio"
         static let voiceOnlyOverspeed = "voiceOnlyWhenOverspeeding"
@@ -350,6 +358,7 @@ final class AppSettings {
             Keys.digest: true,
             Keys.haptics: true,
             Keys.keepScreenOn: true,
+            Keys.mapPlaces: true,
         ])
         soundEnabled = store.bool(forKey: Keys.sound)
         // Миграция с трёх переключателей на один. Голос был выключен — «Молча»;
@@ -384,6 +393,8 @@ final class AppSettings {
         adaptiveGPS = store.bool(forKey: Keys.adaptive)
         showNextCamera = store.bool(forKey: Keys.nextCamera)
         keepScreenOn = store.bool(forKey: Keys.keepScreenOn)
+        mapTraffic = store.bool(forKey: Keys.mapTraffic)
+        mapPlaces = store.bool(forKey: Keys.mapPlaces)
         alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto
         voiceOnlyWhenOverspeeding = store.bool(forKey: Keys.voiceOnlyOverspeed)
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []

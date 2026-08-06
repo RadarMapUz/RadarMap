@@ -33,6 +33,43 @@ final class MapState {
     /// (второй тап по кнопке локации, как в Apple Maps).
     var followsDeviceHeading = false
 
+    /// Как карта соотносится с миром.
+    ///
+    /// Раньше этим управляли ТРИ кнопки: системный компас (висел всегда, даже
+    /// когда карта строго на север и он не значит ничего), «моё
+    /// местоположение» и «по ходу движения». Все три — про одно, и Apple свела
+    /// их в один контрол не от бедности.
+    enum Orientation: Equatable {
+        /// Карту тянут рукой — она никуда не едет сама.
+        case free
+        /// Центр на себе, север вверху.
+        case following
+        /// Центр на себе и поворот: по курсу в поездке, по компасу телефона стоя.
+        case heading
+    }
+
+    private(set) var orientation: Orientation = .following
+
+    /// Точка, от которой считается важность маркеров (CameraTier).
+    ///
+    /// Троттлится по `mapFocusStepMeters`: это не косметика — маркеры читают
+    /// её в своём body, и запись на каждый GPS-тик перерисовывала бы всю карту
+    /// раз в секунду. Ровно эта ошибка уже стоила нам лагов в Итогах.
+    private(set) var focus: CLLocationCoordinate2D?
+
+    /// Точка отсчёта — там, КУДА СМОТРИТ водитель, а не где он стоит.
+    /// Пока карта следует за ним, это одно и то же; но стоит утащить её в
+    /// соседний район — и приглушать те камеры за то, что они далеко от дома,
+    /// было бы прямой ошибкой: человек пришёл смотреть именно на них.
+    func updateFocus(_ coordinate: CLLocationCoordinate2D?, force: Bool = false) {
+        guard let coordinate else { return }
+        if !force, let focus,
+           GeoMath.fastDistance(focus.latitude, focus.longitude,
+                                coordinate.latitude, coordinate.longitude)
+            < AppConfig.mapFocusStepMeters { return }
+        focus = coordinate
+    }
+
     private var repository: CameraRepository?
     @ObservationIgnored private weak var speedLimits: SpeedLimitService?
     private var currentRegion: MKCoordinateRegion?
@@ -118,6 +155,8 @@ final class MapState {
         currentRegion = region
         let dotZoom = region.span.latitudeDelta > AppConfig.dotModeSpanDegrees
         if dotZoom != isDotZoom { isDotZoom = dotZoom }
+        // Карту тянут рукой — важность считаем от центра экрана.
+        if orientation == .free { updateFocus(region.center) }
         // База декодируется асинхронно: пока камер нет, регион не кэшируем —
         // иначе пустой результат «прилипнет» и карта останется без точек.
         guard let repository, !repository.cameras.isEmpty else { return }
@@ -217,12 +256,62 @@ final class MapState {
     @ObservationIgnored private var lastFollowCoord: CLLocationCoordinate2D?
     @ObservationIgnored private var lastFollowCourse: CLLocationDirection = -1
 
+    /// Тап по контролу ориентации: свободна → следование → поворот → следование.
+    /// Вернуть «свободу» тапом нельзя — она наступает сама, когда карту тянут
+    /// рукой; кнопка, отменяющая слежение, водителю не нужна.
+    func cycleOrientation(coordinate: CLLocationCoordinate2D?,
+                          course: CLLocationDirection, inTrip: Bool) {
+        let next: Orientation = orientation == .following ? .heading : .following
+        apply(orientation: next, coordinate: coordinate, course: course, inTrip: inTrip)
+    }
+
+    func apply(orientation next: Orientation, coordinate: CLLocationCoordinate2D?,
+               course: CLLocationDirection, inTrip: Bool) {
+        orientation = next
+        switch next {
+        case .free:
+            followsDeviceHeading = false
+        case .following:
+            followsDeviceHeading = false
+            withAnimation(.easeInOut(duration: 0.35)) {
+                position = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
+            }
+        case .heading:
+            if inTrip {
+                // В движении крутим по КУРСУ: компас телефона в держателе врёт
+                // (магнитное поле машины), да и смотрит водитель вперёд, а не
+                // туда, куда лежит телефон.
+                followsDeviceHeading = false
+                follow(coordinate: coordinate, course: course, pitched: true, force: true)
+            } else {
+                followsDeviceHeading = true
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    position = .userLocation(followsHeading: true,
+                                             fallback: .region(AppConfig.uzbekistanRegion))
+                }
+            }
+        }
+        // Целевой регион известен только когда есть геопозиция — подгружаем сами.
+        if let coordinate, next != .free {
+            refreshVisible(around: coordinate, widthMeters: 3000)
+        }
+    }
+
+    /// Карту потянули рукой — слежение снимается само.
+    func releaseOrientation() {
+        guard orientation != .free else { return }
+        orientation = .free
+        followsDeviceHeading = false
+    }
+
     /// Центрировать карту на пользователе и повернуть по курсу движения.
     /// `pitched` — 3D-вид навигатора: камера наклонена, смотрим вперёд по дороге.
-    /// Троттлинг: пропускаем мелкие сдвиги/повороты, чтобы карта не дёргалась.
-    func follow(coordinate: CLLocationCoordinate2D?, course: CLLocationDirection, pitched: Bool = false) {
+    /// Троттлинг: пропускаем мелкие сдвиги/повороты, чтобы карта не дёргалась;
+    /// `force` — явный тап пользователя, его пропускать нельзя.
+    func follow(coordinate: CLLocationCoordinate2D?, course: CLLocationDirection,
+                pitched: Bool = false, force: Bool = false) {
         guard let coordinate else { return }
-        if let last = lastFollowCoord {
+        if let last = lastFollowCoord, !force {
             let moved = CLLocation(latitude: last.latitude, longitude: last.longitude)
                 .distance(from: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
             let courseDelta = (course >= 0 && lastFollowCourse >= 0)

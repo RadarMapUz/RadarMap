@@ -59,12 +59,15 @@ struct CarPlayMapScreen: View {
             Spacer(minLength: 0)
             HStack(spacing: 0) {
                 dock
-                // Справа у CarPlay своя колонка кнопок карты — не подлезаем под неё.
-                Spacer(minLength: 76)
+                Spacer(minLength: 0)
             }
         }
+        // Колонку своих кнопок CarPlay кладёт в safe area, и сторона зависит от
+        // системы машины. Раньше здесь стоял отступ 76 pt справа — в машине с
+        // кнопками слева панель уехала бы прямо под них.
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
+        .safeAreaPadding(.horizontal)
         .animation(.spring(duration: 0.35), value: env.location.isApproachingCamera)
         .animation(.spring(duration: 0.35), value: env.route.isActive)
         // HUD — только показывает: жесты карты (тап, панорама, щипок) должны

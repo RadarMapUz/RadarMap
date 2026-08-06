@@ -182,6 +182,12 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
     /// направление проезжей части, и доказательство, что стороны поделены.
     var allowsDirectionGate: Bool { dir != nil && sidesAreProven }
 
+    /// Направление для клина на маркере карты; nil — рисуем круг.
+    /// Условие то же, что у гейта: нарисовать стрелку камере, чьё направление
+    /// база доказать не может, значило бы соврать — она вполне снимает обе
+    /// стороны. Одно правило на карту телефона и на карту машины.
+    var markerDirection: Int? { allowsDirectionGate ? dir : nil }
+
     /// Класс дороги в разобранном виде.
     var roadClass: RoadClass { RoadClass(raw: cls) }
 

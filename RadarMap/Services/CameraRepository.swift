@@ -39,10 +39,17 @@ final class CameraStore: CameraRepository {
     /// Запросы «в области» и «ближайшие» не сканируют все 3341 камеры, а берут пару ячеек.
     @ObservationIgnored private var gridCache: [Int: [Int]]?
 
-    /// Итоговый набор для карты и оповещений: база + свои + передвижные, без скрытых.
+    /// Правки модератора поверх базы (overrides.json). Применяются только к
+    /// базе: свои камеры — дело пользователя, передвижные модерируются на
+    /// сервере напрямую, там правка мгновенна и подписи не требует.
+    private(set) var overrides: CameraOverrides = .empty
+
+    /// Итоговый набор для карты и оповещений:
+    /// база + правки модератора + свои + передвижные, без скрытых пользователем.
     var cameras: [Camera] {
         if let mergedCache { return mergedCache }
-        let merged = (bundled + custom + mobile).filter { !hiddenIDs.contains($0.id) }
+        let base = CameraOverrideEngine.apply(overrides, to: bundled).cameras
+        let merged = (base + custom + mobile).filter { !hiddenIDs.contains($0.id) }
         mergedCache = merged
         return merged
     }
@@ -97,6 +104,7 @@ final class CameraStore: CameraRepository {
             guard let self else { return }
             self.bundled = result.cameras
             self.loadError = result.error
+            self.loadOverrides()   // правки применяются к базе — только после неё
             if !result.usedRemote && self.dbVersion != AppConfig.bundledDBVersion {
                 // Скачанная копия испорчена, удалена или устарела относительно
                 // встроенной — честно откатываемся на версию из бандла.
@@ -139,6 +147,42 @@ final class CameraStore: CameraRepository {
             return ([], "Не удалось загрузить cameras.json из бандла.", false)
         }
         return (decoded, nil, false)
+    }
+
+    // MARK: - Правки модератора
+
+    /// Файл правок, скачанный с сервера (переживает обновления приложения).
+    nonisolated private static var overridesFileURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("camera_overrides.json")
+    }
+
+    /// Поднять сохранённые правки. Зовётся сразу после загрузки базы: правки
+    /// без базы применять не к чему, а проверка правдоподобия считает долю от
+    /// её размера.
+    private func loadOverrides() {
+        guard let stored = JSONFile.load(CameraOverrides.self,
+                                         from: Self.overridesFileURL, log: Log.cameras),
+              CameraOverrideEngine.isSane(stored, baseCount: bundled.count) else { return }
+        overrides = stored
+    }
+
+    /// Применить свежий файл правок. Возвращает `false`, если файл отвергнут —
+    /// тогда остаёмся на прежних правках, а не «ни на каких»: полпути здесь
+    /// хуже, чем оба конца.
+    @discardableResult
+    func applyOverrides(_ fresh: CameraOverrides) -> Bool {
+        guard CameraOverrideEngine.isSane(fresh, baseCount: bundled.count) else {
+            Log.cameras.fault("правки отвергнуты: скрывают слишком много камер (\(fresh.items.count, privacy: .public) записей на \(self.bundled.count, privacy: .public) камер)")
+            return false
+        }
+        guard fresh != overrides else { return true }
+        overrides = fresh
+        JSONFile.save(fresh, to: Self.overridesFileURL, log: Log.cameras)
+        let result = CameraOverrideEngine.apply(fresh, to: bundled)
+        Log.cameras.notice("правки v\(fresh.version, privacy: .public): скрыто \(result.hidden, privacy: .public), сдвинуто \(result.moved, privacy: .public), переопределено \(result.retyped, privacy: .public), отвергнуто \(result.rejected, privacy: .public)")
+        dataChanged()
+        return true
     }
 
     /// Применить скачанное обновление базы: валидация → атомарная запись → подмена в памяти.

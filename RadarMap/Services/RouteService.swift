@@ -74,6 +74,11 @@ final class RouteService {
     func dismissArrival() { lastArrival = nil }
 
     /// Голосовые события — подключаются в AppEnvironment.
+    /// Пульт: маршруты строит наш OSRM, и его падение — единственная беда,
+    /// которую иначе никак не сообщить пользователю до следующего релиза.
+    @ObservationIgnored weak var config: RemoteConfigService?
+    var isRoutingEnabled: Bool { config?.isRoutingEnabled ?? true }
+
     @ObservationIgnored var onRerouted: (() -> Void)?
     @ObservationIgnored var onArrived: (() -> Void)?
     @ObservationIgnored var onManeuver: ((String) -> Void)?
@@ -113,6 +118,13 @@ final class RouteService {
                to destination: CLLocationCoordinate2D,
                name: String, cameras: [Camera],
                alternatives: Bool = true) async {
+        // Пульт: если наш OSRM лежит, честное «временно недоступны» лучше, чем
+        // спиннер на 20 секунд и «Маршрут не найден» — последнее водитель
+        // прочитает как «дороги нет», а не как «сервер чинят».
+        guard isRoutingEnabled else {
+            errorMessage = String(localized: "Маршруты временно недоступны — мы уже чиним")
+            return
+        }
         isBuilding = true
         errorMessage = nil
         defer { isBuilding = false }

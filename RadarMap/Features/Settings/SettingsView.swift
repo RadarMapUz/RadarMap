@@ -203,6 +203,15 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("Помогать улучшать приложение", isOn: $settings.usageStatsEnabled)
+                } header: {
+                    Text("Конфиденциальность")
+                } footer: {
+                    Text("Раз в сутки отправляем обезличенные счётчики: сколько поездок, километров и оповещений было. Ни маршрутов, ни координат, ни времени — только числа. Идентификатор меняется каждые 30 дней.")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Section {
                     Button {
                         showFeedback = true
                     } label: {

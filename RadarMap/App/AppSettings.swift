@@ -267,6 +267,14 @@ final class AppSettings {
     var hapticsEnabled: Bool { didSet { store.set(hapticsEnabled, forKey: Keys.haptics) } }
     /// Не гасить экран в активной поездке (телефон в держателе — как у навигаторов).
     var keepScreenOn: Bool { didSet { store.set(keepScreenOn, forKey: Keys.keepScreenOn) } }
+
+    /// Отправлять обезличенную статистику использования (см. `UsageStats`).
+    /// Хранится инвертированно («выключено»), чтобы значение по умолчанию у
+    /// `UserDefaults.bool` — false — означало включено: иначе после обновления
+    /// приложения у всех оказалось бы выключено без их участия.
+    var usageStatsEnabled: Bool {
+        didSet { store.set(!usageStatsEnabled, forKey: Keys.usageStats) }
+    }
     /// Слои подложки — тумблеры в легенде карты. Пробки уважают выбор всегда:
     /// затор впереди нужен именно в дороге. Места (заправки, парковки,
     /// больницы, посты) в поездке гасятся сами — на скорости их подписи только
@@ -323,6 +331,7 @@ final class AppSettings {
         static let mapPlaces = "mapPlaces"
         static let alertMode = "alertMode"
         static let knownCarAudio = "knownCarAudio"
+        static let usageStats = "usageStatsDisabled"
     }
 
     /// Пишем/снимаем override языка приложения. iOS читает «AppleLanguages» из
@@ -391,6 +400,7 @@ final class AppSettings {
         alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []
         weeklyDigest = store.bool(forKey: Keys.digest)
+        usageStatsEnabled = !store.bool(forKey: Keys.usageStats)
         appLanguage = AppLanguage(rawValue: store.string(forKey: Keys.language) ?? "") ?? .system
         backgroundAlerts = BackgroundAlertMode(rawValue: store.string(forKey: Keys.backgroundAlerts) ?? "") ?? .all
         hapticsEnabled = store.bool(forKey: Keys.haptics)

@@ -36,7 +36,7 @@ class APITest(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         api.DB_PATH = cls.tmp.name
-        api.db().close()   # создать схему до первого setUp
+        api.init_db()      # схема, миграции и индексы — один раз, как в проде
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), api.Handler)
         cls.port = cls.server.server_address[1]
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
@@ -47,7 +47,8 @@ class APITest(unittest.TestCase):
 
     def setUp(self):
         conn = sqlite3.connect(api.DB_PATH)
-        for table in ("reports", "votes", "metrics", "camera_reports", "feedback"):
+        for table in ("reports", "votes", "metrics", "camera_reports", "feedback",
+                      "usage_stats"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -229,6 +230,129 @@ class APITest(unittest.TestCase):
         status, _ = _call(self.port, "POST", "/api/metrics",
                           {"device": "d", "kind": "metric", "payload": "x" * 250000})
         self.assertEqual(status, 400, "раньше payload молча резался в битый JSON")
+
+    # --- обезличенная статистика ---
+
+    def test_stat_roundtrip(self):
+        status, _ = _call(self.port, "POST", "/api/stat", {
+            "device": "d1", "day": "2026-08-06", "app": "1.0", "ios": "18.5",
+            "model": "iPhone14,2", "location_auth": "always", "onboarded": True,
+            "trips": 3, "km": 42.5, "alerts": 17, "passes": 9, "reports": 1,
+            "screens": {"map": 5, "stats": 2}})
+        self.assertEqual(status, 200)
+        conn = sqlite3.connect(api.DB_PATH)
+        row = conn.execute("SELECT location_auth, trips, km, screens FROM usage_stats").fetchone()
+        conn.close()
+        self.assertEqual(row[0], "always")
+        self.assertEqual(row[1], 3)
+        self.assertAlmostEqual(row[2], 42.5)
+        self.assertEqual(json.loads(row[3]), {"map": 5, "stats": 2})
+
+    def test_stat_is_one_row_per_device_per_day(self):
+        """Сеть могла оборвать подтверждение — повтор не должен раздувать
+        «сколько у нас пользователей»."""
+        payload = {"device": "d1", "day": "2026-08-06", "trips": 1}
+        _call(self.port, "POST", "/api/stat", payload)
+        _call(self.port, "POST", "/api/stat", {**payload, "trips": 2})
+        conn = sqlite3.connect(api.DB_PATH)
+        count, trips = conn.execute("SELECT COUNT(*), MAX(trips) FROM usage_stats").fetchone()
+        conn.close()
+        self.assertEqual(count, 1)
+        self.assertEqual(trips, 2, "повтор перезаписывает, а не добавляет")
+
+    def test_stat_rejects_bad_day_and_auth(self):
+        for bad in ({"device": "d", "day": "вчера"},
+                    {"device": "d", "day": "2026-08-06", "location_auth": "root"},
+                    {"device": "", "day": "2026-08-06"}):
+            status, _ = _call(self.port, "POST", "/api/stat", bad)
+            self.assertEqual(status, 400, bad)
+
+    def test_stat_sanitizes_absurd_counters(self):
+        _call(self.port, "POST", "/api/stat", {
+            "device": "d1", "day": "2026-08-06",
+            "trips": -5, "alerts": 10**12, "km": 999999, "screens": "не словарь"})
+        conn = sqlite3.connect(api.DB_PATH)
+        trips, alerts, km, screens = conn.execute(
+            "SELECT trips, alerts, km, screens FROM usage_stats").fetchone()
+        conn.close()
+        self.assertEqual((trips, alerts), (0, 0), "испорченные счётчики не должны искажать сводку")
+        self.assertEqual(km, 0.0, "20 000 км за сутки — это не поездка")
+        self.assertEqual(json.loads(screens), {})
+
+    def test_stat_ip_cap(self):
+        for i in range(api.IP_DAILY_CAPS["stat"]):
+            _call(self.port, "POST", "/api/stat",
+                  {"device": f"d{i}", "day": "2026-08-06"}, ip="10.7.7.7")
+        status, _ = _call(self.port, "POST", "/api/stat",
+                          {"device": "extra", "day": "2026-08-06"}, ip="10.7.7.7")
+        self.assertEqual(status, 429, "ротация device не должна лить статистику без предела")
+
+    # --- схема и нагрузка ---
+
+    def test_wal_and_indexes_are_set_up(self):
+        """WAL и индексы ставятся один раз в init_db, а не на каждый запрос."""
+        conn = sqlite3.connect(api.DB_PATH)
+        mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        names = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index'")}
+        conn.close()
+        self.assertEqual(mode.lower(), "wal",
+                         "без WAL писатель блокирует читателей и они получают 500")
+        for index in ("idx_reports_live", "idx_camrep_camera", "idx_feedback_received",
+                      "idx_metrics_device", "idx_votes_device"):
+            self.assertIn(index, names, f"нет индекса {index} — полный скан на каждый кап")
+
+    def test_db_connection_does_not_touch_schema(self):
+        """db() обязан быть дешёвым: раньше он гонял всю миграцию на КАЖДЫЙ
+        HTTP-запрос — шесть CREATE TABLE и четыре ALTER, все четыре в исключение."""
+        conn = api.db()
+        try:
+            self.assertEqual(conn.execute("PRAGMA busy_timeout").fetchone()[0],
+                             api.BUSY_TIMEOUT_MS,
+                             "без busy_timeout параллельная запись даёт мгновенный 500")
+        finally:
+            conn.close()
+        # схему db() не создаёт — проверяем на пустом файле
+        empty = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        saved, api.DB_PATH = api.DB_PATH, empty.name
+        try:
+            conn = api.db()
+            tables = conn.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'").fetchone()[0]
+            conn.close()
+        finally:
+            api.DB_PATH = saved
+        self.assertEqual(tables, 0, "db() не должен создавать схему")
+
+    def test_camera_report_stores_ip(self):
+        """Кворум на скрытие камеры считается по разным адресам, а не по
+        device: UUID ротируется бесплатно, и «5 разных устройств» подделывалось
+        одним телефоном. Снятая по фейку живая камера — это молчание там, где
+        камера стоит, худший отказ системы."""
+        _call(self.port, "POST", "/api/camera_report",
+              {"camera_id": 7, "reason": "gone", "device": "d1"}, ip="10.5.5.5")
+        conn = sqlite3.connect(api.DB_PATH)
+        ip = conn.execute("SELECT ip FROM camera_reports").fetchone()[0]
+        conn.close()
+        self.assertEqual(ip, "10.5.5.5")
+
+    def test_bounded_server_refuses_over_capacity(self):
+        """Сверх потолка потоков — честный 503, а не бесконечная очередь."""
+        class FakeSocket:
+            def __init__(self): self.sent = b""; self.closed = False
+            def sendall(self, data): self.sent += data
+            def shutdown(self, how): pass
+            def close(self): self.closed = True
+
+        server = api.BoundedHTTPServer(("127.0.0.1", 0), api.Handler, max_workers=1)
+        try:
+            self.assertTrue(server._slots.acquire(blocking=False))  # занимаем единственный слот
+            sock = FakeSocket()
+            server.process_request(sock, ("10.0.0.1", 1234))
+            self.assertIn(b"503", sock.sent)
+            self.assertTrue(sock.closed, "соединение сверх потолка должно закрываться")
+        finally:
+            server.server_close()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,31 @@
+# Панель модератора. Кладётся в /etc/systemd/system/radarmap-admin.service:
+#   systemctl daemon-reload && systemctl enable --now radarmap-admin
+#
+# Отдельный юнит от radarmap-api намеренно: deploy_api.sh перезапускает api,
+# и модерация не должна отваливаться вместе с приёмом репортов от водителей —
+# как и наоборот.
+
+[Unit]
+Description=RadarMap moderation panel
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/radarmap/api/admin.py
+WorkingDirectory=/opt/radarmap/api
+Restart=always
+RestartSec=3
+
+# Панели нужна только своя БД и файл базы камер на чтение.
+ProtectSystem=strict
+ReadWritePaths=/opt/radarmap/api
+ReadOnlyPaths=/opt/radarmap/www
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+# Слушает только localhost — наружу отдаёт nginx с basic auth.
+RestrictAddressFamilies=AF_INET AF_UNIX
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

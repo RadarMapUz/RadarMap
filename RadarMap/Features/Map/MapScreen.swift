@@ -78,7 +78,7 @@ struct MapScreen: View {
         .mapScope(mapScope)
         .fullScreenCover(isPresented: $showDashboard) { DashboardView() }
         .task {
-            map.configure(env.cameras, speedLimits: env.speedLimits)
+            map.configure(env.cameras, speedLimits: env.speedLimits, thermal: env.thermal)
             map.filter = env.settings.filter
             // Если карта уже отдала регион до конфигурации (статичный старт без геопозиции) —
             // пересчитываем принудительно, иначе аннотации не появятся до первого движения карты.
@@ -376,6 +376,11 @@ struct MapScreen: View {
 
     private var topLayer: some View {
         VStack(spacing: 10) {
+            // Почему приложение работает не в полную силу: объявление сервера,
+            // серая карта без сети, урезанная карта в жару, отсутствие лимитов.
+            // Выше всего, потому что человек должен узнать причину раньше, чем
+            // упрётся в неё сам и решит, что приложение сломалось.
+            MapStatusBanner()
             // Тап по HUD — «Спидометр»; долгий тап — быстрые тумблеры оповещений.
             // В навигации главный элемент — манёвр, поэтому HUD уходит на
             // второй план: одного «главного» на экране достаточно, два спорят

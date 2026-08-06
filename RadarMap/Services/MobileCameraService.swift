@@ -24,6 +24,9 @@ final class MobileCameraService {
     @ObservationIgnored private weak var store: CameraStore?
     @ObservationIgnored private let api = APIClient()
     @ObservationIgnored private var pollTask: Task<Void, Never>?
+    /// Пульт: позволяет погасить краудсорс на сутки (волна фейковых отметок) или
+    /// разредить опрос, не дожидаясь релиза. Без пульта — обычное поведение.
+    @ObservationIgnored weak var config: RemoteConfigService?
 
     /// Анонимный идентификатор устройства для защиты от спама.
     @ObservationIgnored private let deviceID = Storage.anonymousID(.mobileDeviceID)
@@ -37,6 +40,14 @@ final class MobileCameraService {
 
     // MARK: - Опрос
 
+    /// Интервал опроса: из пульта, если он прислан и вменяем, иначе из сборки.
+    private var pollInterval: TimeInterval {
+        config?.pollInterval ?? AppConfig.mobilePollInterval
+    }
+
+    /// Краудсорс целиком выключается пультом — на случай волны фейковых отметок.
+    var isEnabled: Bool { config?.areMobileReportsEnabled ?? true }
+
     func startPolling() {
         guard pollTask == nil else { return }
         pollTask = Task { [weak self] in
@@ -44,10 +55,14 @@ final class MobileCameraService {
                 // Частые пары inactive→active (Face ID, шторка, переключатель
                 // приложений) перезапускают цикл — интервал держим и между ними,
                 // иначе каждый возврат в приложение будил бы радио лишним GET.
-                if let self, Date().timeIntervalSince(self.lastRefreshAt) >= AppConfig.mobilePollInterval {
+                guard let self else { return }
+                let interval = self.pollInterval
+                if !self.isEnabled {
+                    self.clearAll()   // выключили краудсорс — убираем и то, что уже на карте
+                } else if Date().timeIntervalSince(self.lastRefreshAt) >= interval {
                     await self.refresh()
                 }
-                await Task.pause(seconds: AppConfig.mobilePollInterval)
+                await Task.pause(seconds: interval)
             }
         }
     }
@@ -57,6 +72,14 @@ final class MobileCameraService {
     func stopPolling() {
         pollTask?.cancel()
         pollTask = nil
+    }
+
+    /// Убрать отметки с карты (пульт погасил краудсорс). Идемпотентно.
+    private func clearAll() {
+        guard !reports.isEmpty else { return }
+        reports = []
+        confirmations = [:]
+        store?.setMobileCameras([])
     }
 
     private struct APIReport: Decodable {
@@ -117,6 +140,9 @@ final class MobileCameraService {
     func report(at coordinate: CLLocationCoordinate2D,
                 kind: ReportKind = .radar) async -> ReportResult {
         struct Response: Decodable { let id: Int; let merged: Bool }
+        // Краудсорс погашен пультом — отправлять некуда, и честнее сказать это
+        // сразу, чем ждать таймаута сети.
+        guard isEnabled else { return .failed }
         do {
             let payload = ["lat": coordinate.latitude, "lon": coordinate.longitude,
                            "device": deviceID, "type": kind.rawValue] as [String: Any]

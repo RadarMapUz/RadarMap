@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- App Groups отключены: бесплатный Apple ID их не поддерживает. -->
+	<!-- Та же группа, что у приложения: через неё домашний виджет читает слепок
+	     статистики (Shared/SharedDefaults). Без неё UserDefaults(suiteName:)
+	     возвращает nil и виджет показывает заглушку вместо цифр поездок. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.uz.radarmap.ios</string>
+	</array>
 </dict>
 </plist>

@@ -223,6 +223,32 @@ nonisolated struct LifetimeStats: Codable, Equatable {
         return s
     }
 
+    /// Хирургический откат вычищенных проездов из пожизненных счётчиков.
+    ///
+    /// Ретро-чистка ложных проездов НЕ имеет права пересобирать lifetime из
+    /// истории (`rebuilt`): история обрезана до 50 записей / 30 дней, и такой
+    /// «пересчёт» обнулял бы годовые километры, экономию и достижения — ровно
+    /// то, ради чего lifetime хранится отдельно. Вычитаем только то, что
+    /// внесли сами удалённые проезды. Поездки и километры не трогаем (поездка
+    /// была), серии тоже: ложное НАРУШЕНИЕ могло только оборвать серию, так
+    /// что оставить её как есть — консервативно в пользу пользователя.
+    nonisolated static func subtractingPasses(_ removed: [DrivingScore.Pass],
+                                              from stats: LifetimeStats) -> LifetimeStats {
+        var s = stats
+        for pass in removed {
+            s.camerasPassed = max(0, s.camerasPassed - 1)
+            guard let limit = pass.limitKmh else { continue }
+            let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
+            if fine > 0 {
+                s.riskFinesSum = max(0, s.riskFinesSum - fine)
+            } else {
+                s.camerasInLimit = max(0, s.camerasInLimit - 1)
+                s.savedFinesSum = max(0, s.savedFinesSum - FineSchedule.minimumFine)
+            }
+        }
+        return s
+    }
+
     /// Восстановление счётчиков из уже накопленной истории (обновление приложения:
     /// у пользователя есть поездки, а lifetime ещё пуст) — от старых к новым.
     nonisolated static func rebuilt(from historyNewestFirst: [TripRecord]) -> LifetimeStats {
@@ -239,7 +265,7 @@ nonisolated struct LifetimeStats: Codable, Equatable {
 
 // MARK: - Достижения
 
-struct Achievement: Identifiable {
+nonisolated struct Achievement: Identifiable {
     let id: String
     let icon: String
     let title: String
@@ -256,7 +282,7 @@ struct Achievement: Identifiable {
     }
 }
 
-enum Achievements {
+nonisolated enum Achievements {
     /// Девять бейджей: дистанция, чистые камеры, лучшая серия.
     nonisolated static func all(for stats: LifetimeStats) -> [Achievement] {
         let km = stats.distanceMeters / 1000

@@ -27,6 +27,10 @@ struct CameraAnnotationView: View {
     var limit: Int? = nil
     /// Важность прямо сейчас: цель / рядом / фон.
     var tier: CameraTier = .near
+    /// Поворот карты (0 — север вверху). Контент Annotation экранно-выровнен
+    /// и с картой не вращается — клин компенсирует поворот сам; nil — угол
+    /// неизвестен (compass-follow), клин честно прячется.
+    var mapHeading: Double? = 0
 
     /// Фоновые камеры не тают в ноль: пропавшая камера — худшая ошибка карты,
     /// чем лишняя. Они просто перестают спорить за взгляд.
@@ -69,7 +73,9 @@ struct CameraAnnotationView: View {
             ZStack(alignment: .bottom) {
                 ZStack {
                     Circle().fill(.white)
-                    Circle().strokeBorder(Color(red: 0.85, green: 0.1, blue: 0.1), lineWidth: 4.5)
+                    // Тот же красный, что у SpeedLimitSign: знак уже рисуется
+                    // в HUD, деталке и CarPlay — кайма не должна отличаться.
+                    Circle().strokeBorder(Color(red: 0.85, green: 0.05, blue: 0.1), lineWidth: 4.5)
                     Text("\(limit)")
                         .font(.system(size: limit >= 100 ? 10 : 12, weight: .heavy, design: .rounded))
                         .foregroundStyle(.black)
@@ -121,15 +127,15 @@ struct CameraAnnotationView: View {
         .animation(.spring(duration: 0.25), value: selected)
     }
 
-    /// Клин по направлению съёмки. Рисуется поверх карты «на север», поэтому
-    /// поворот берём прямо из `dir` — маркер не крутится вместе с картой, и это
-    /// правильно: направление камеры — свойство дороги, а не экрана.
+    /// Клин по направлению съёмки. Направление камеры — свойство дороги, а
+    /// контент Annotation экранно-выровнен, поэтому известный поворот карты
+    /// вычитаем, а при неизвестном клин спрятан (см. mapHeading).
     @ViewBuilder private func directionCone(radius: CGFloat) -> some View {
-        if let heading = camera.markerDirection {
+        if let heading = camera.markerDirection, let mapHeading {
             DirectionCone(spread: AppConfig.mapDirectionConeDegrees)
                 .fill(camera.kind.tint.opacity(0.45))
                 .frame(width: radius * 2, height: radius * 2)
-                .rotationEffect(.degrees(Double(heading)))
+                .rotationEffect(.degrees(Double(heading) - mapHeading))
                 .allowsHitTesting(false)
         }
     }

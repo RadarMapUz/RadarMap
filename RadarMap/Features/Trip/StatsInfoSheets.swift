@@ -26,6 +26,8 @@ struct SavingsInfoSheet: View {
     var interval: DateInterval = DateInterval(start: .distantPast, end: Date())
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
+    /// Камеры-источники: считаются один раз на открытие, не в body.
+    @State private var sources: [FineSource] = []
 
     var body: some View {
         NavigationStack {
@@ -47,6 +49,9 @@ struct SavingsInfoSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .task {
+            sources = RatingBreakdown.fineSources(records: env.trip.history, in: interval)
+        }
     }
 
     private var header: some View {
@@ -91,8 +96,9 @@ struct SavingsInfoSheet: View {
 
     /// Откуда взялась сумма: камеры от дорогих к дешёвым. Сумма строк равна
     /// общему риску за то же окно — блок можно проверить сложением.
+    /// Данные из .task, не из body: полный перебор истории со всеми проездами
+    /// на каждый пересчёт вьюхи — ровно то, от чего ушёл RatingDetailSheet.
     @ViewBuilder private var sourcesSection: some View {
-        let sources = RatingBreakdown.fineSources(records: env.trip.history, in: interval)
         if !sources.isEmpty {
             infoCard(title: String(localized: "Откуда сумма")) {
                 ForEach(sources.prefix(AppConfig.fineSourcesVisibleRows)) { source in
@@ -137,8 +143,8 @@ struct SavingsInfoSheet: View {
 
     private var fineTable: some View {
         infoCard(title: String(localized: "Штрафы за превышение — ст. 128-3 КоАО")) {
-            fineRow("+6…20 км/ч", brv: 1)
-            fineRow("+21…40 км/ч", brv: 5)
+            fineRow(String(localized: "+6…20 км/ч"), brv: 1)
+            fineRow(String(localized: "+21…40 км/ч"), brv: 5)
             fineRow(String(localized: "свыше +40 км/ч"), brv: 9)
             Text("Первые ~\(Int(FineSchedule.toleranceKmh)) км/ч сверх лимита камеры обычно не штрафуют. Суммы — первая фиксация, повторные нарушения заметно дороже.")
                 .font(.rounded(11))

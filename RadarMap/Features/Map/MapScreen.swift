@@ -139,7 +139,19 @@ struct MapScreen: View {
         // Пуш «Итоги поездки» и другие диплинки на статистику ведут сюда.
         .onOpenURL { url in
             guard url.scheme == "radarmap", url.host() == "trip" else { return }
-            map.showStats = true
+            // Поверх может быть другой шит — вторая презентация молча не
+            // проходит, а «истинный» showStats делал кнопку Итогов мёртвой.
+            // Закрываем всё своё и открываем Итоги после паузы на анимацию.
+            map.selectedCamera = nil
+            map.showNearbySheet = false
+            map.showSearch = false
+            map.showSettings = false
+            showRouteCameras = false
+            assignSlot = nil
+            showDashboard = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                map.showStats = true
+            }
         }
         .onChange(of: env.location.nearestCamera?.id) { _, _ in
             dismissedApproachID = nil   // новая ближайшая камера — снова показываем предупреждение
@@ -276,7 +288,8 @@ struct MapScreen: View {
                         // на каждую перерисовку карты — это и был один из лагов.
                         limit: map.isDotZoom ? nil : map.visibleLimits[camera.id],
                         tier: CameraMapContent.tier(camera: camera, focus: map.focus,
-                                                    targetID: targetID, routeIDs: routeIDs)
+                                                    targetID: targetID, routeIDs: routeIDs),
+                        mapHeading: map.mapHeading
                     )
                     .onTapGesture { map.select(camera) }
                 }
@@ -308,6 +321,10 @@ struct MapScreen: View {
         .mapControls {}
         .onMapCameraChange(frequency: .onEnd) { context in
             map.updateVisible(for: context.region)
+            // Поворот карты руками (двухпалый жест): клин направления должен
+            // знать актуальный угол. В compass-follow сюда не попадаем — там
+            // heading уже честно nil.
+            if !map.followsDeviceHeading { map.setMapHeading(context.camera.heading) }
         }
         // Любое касание карты будит спрятанные кнопки (не мешая тапам по маркерам)
         // и закрывает бар точки долгого тапа.
@@ -367,6 +384,13 @@ struct MapScreen: View {
                 .onTapGesture { showDashboard = true }
                 .onLongPressGesture(minimumDuration: 0.4) {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    withAnimation(.spring(duration: 0.3)) { showQuickToggles.toggle() }
+                }
+                // Жесты для VoiceOver не существуют — даём оба входа действиями.
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(Text("Открывает спидометр"))
+                .accessibilityAction(named: Text("Спидометр")) { showDashboard = true }
+                .accessibilityAction(named: Text("Быстрые тумблеры")) {
                     withAnimation(.spring(duration: 0.3)) { showQuickToggles.toggle() }
                 }
             if showQuickToggles {

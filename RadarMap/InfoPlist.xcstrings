@@ -28,6 +28,12 @@
             "state" : "new",
             "value" : "RadarMap"
           }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RadarMap"
+          }
         }
       }
     },
@@ -38,6 +44,12 @@
         "ru" : {
           "stringUnit" : {
             "state" : "new",
+            "value" : "RadarMap"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
             "value" : "RadarMap"
           }
         }

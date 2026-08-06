@@ -49,17 +49,11 @@ struct RootView: View {
         }
         #endif
         .task {
-            // Тихая проверка обновлений базы (не чаще раза в сутки), не блокирует UI.
-            Task { await env.sync.autoCheckIfNeeded() }
-            // Дослать репорты/фидбек, не ушедшие в прошлый раз (офлайн-очередь).
-            Task { await env.feedback.flushPending() }
-            env.speedLimits.start()   // база лимитов: локально сразу, сервер раз в неделю
-            env.metrics.start()       // MetricKit: суточные отчёты о батарее/крашах
+            // Общий набор сервисов вождения — см. startDrivingServices:
+            // CarPlay может подключиться раньше телефонной сцены.
+            env.startDrivingServices()
             guard hasCompletedOnboarding else { return }
-            env.location.bootstrap()
             env.location.setForeground(true)
-            env.mobile.startPolling()
-            env.motion.start()
         }
         .onChange(of: scenePhase) { _, phase in
             guard hasCompletedOnboarding else { return }

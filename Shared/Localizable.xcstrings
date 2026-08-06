@@ -117,7 +117,20 @@
       }
     },
     "/ %lld" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "/ %lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "/ %lld"
+          }
+        }
+      }
     },
     "%.0f км" : {
       "localizations" : {
@@ -155,18 +168,14 @@
       "localizations" : {
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "%1$@ · %2$@"
           }
-        }
-      }
-    },
-    "%@ · %lld 📷" : {
-      "localizations" : {
-        "ru" : {
+        },
+        "uz" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ · %2$lld 📷"
+            "state" : "translated",
+            "value" : "%1$@ · %2$@"
           }
         }
       }
@@ -268,7 +277,20 @@
       }
     },
     "%@ от старта" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ от старта"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "startdan %@"
+          }
+        }
+      }
     },
     "%@ по курсу" : {
       "localizations" : {
@@ -319,7 +341,20 @@
       }
     },
     "%@, " : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, "
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, "
+          }
+        }
+      }
     },
     "%@, %lld метров" : {
       "localizations" : {
@@ -370,7 +405,20 @@
       }
     },
     "%lld" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
+        }
+      }
     },
     "%lld БРВ" : {
       "localizations" : {
@@ -405,7 +453,20 @@
       }
     },
     "%lld камер на маршруте" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld камер на маршруте"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "marshrutda %lld ta kamera"
+          }
+        }
+      }
     },
     "%lld км/ч" : {
       "localizations" : {
@@ -424,10 +485,36 @@
       }
     },
     "%lld м" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld м"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld m"
+          }
+        }
+      }
     },
     "%lld%%" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%%"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld%%"
+          }
+        }
+      }
     },
     "+5 км/ч" : {
       "localizations" : {
@@ -702,16 +789,68 @@
       }
     },
     "999+" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "999+"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "999+"
+          }
+        }
+      }
     },
     "OK" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
     },
     "RadarMap" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RadarMap"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RadarMap"
+          }
+        }
+      }
     },
     "RadarMap следит за %lld камерами вокруг" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RadarMap следит за %lld камерами вокруг"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RadarMap atrofdagi %lld ta kamerani kuzatmoqda"
+          }
+        }
+      }
     },
     "Авто" : {
       "localizations" : {
@@ -2122,7 +2261,20 @@
       }
     },
     "в %@ от вас" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "в %@ от вас"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "sizdan %@ masofada"
+          }
+        }
+      }
     },
     "В городе — коротко: «камера, 300 метров». Камеры на перекрёстке назову одной фразой" : {
       "localizations" : {
@@ -2928,8 +3080,14 @@
       "localizations" : {
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "Готово: %1$@, камер — %2$lld. Итоги в приложении."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tayyor: %1$@, kameralar — %2$lld. Yakunlar ilovada."
           }
         }
       }
@@ -4279,7 +4437,20 @@
       }
     },
     "Карта выбранной поездки. Открыть на весь экран" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Карта выбранной поездки. Открыть на весь экран"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanlangan safar xaritasi. To'liq ekranda ochish"
+          }
+        }
+      }
     },
     "Карта камер и навигатор Узбекистана" : {
       "localizations" : {
@@ -4362,7 +4533,20 @@
       }
     },
     "км" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "км"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "km"
+          }
+        }
+      }
     },
     "км/ч" : {
       "localizations" : {
@@ -4461,7 +4645,20 @@
       }
     },
     "Легенда камер" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Легенда камер"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kameralar belgilari"
+          }
+        }
+      }
     },
     "Лимит %lld" : {
       "localizations" : {
@@ -4512,7 +4709,20 @@
       }
     },
     "м" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "м"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "m"
+          }
+        }
+      }
     },
     "макс. км/ч" : {
       "localizations" : {
@@ -5539,7 +5749,20 @@
       }
     },
     "Первые ~%lld км/ч сверх лимита камеры обычно не штрафуют. Суммы — первая фиксация, повторные нарушения заметно дороже." : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Первые ~%lld км/ч сверх лимита камеры обычно не штрафуют. Суммы — первая фиксация, повторные нарушения заметно дороже."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limitdan ortiq birinchi ~%lld km/soat uchun odatda jarima yozilmaydi. Summalar — birinchi qayd; takroriy buzishlar ancha qimmat."
+          }
+        }
+      }
     },
     "Передвижной" : {
       "localizations" : {
@@ -5910,10 +6133,36 @@
       }
     },
     "Поездка. Открыть подробности" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поездка. Открыть подробности"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Safar. Tafsilotlarni ochish"
+          }
+        }
+      }
     },
     "Поездка. Показать на карте" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поездка. Показать на карте"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Safar. Xaritada ko'rsatish"
+          }
+        }
+      }
     },
     "Поездки за месяц" : {
       "localizations" : {
@@ -6124,7 +6373,20 @@
       }
     },
     "Последняя проверка: %@" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Последняя проверка: %@"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oxirgi tekshiruv: %@"
+          }
+        }
+      }
     },
     "Пост ДПС" : {
       "localizations" : {
@@ -7455,7 +7717,20 @@
       }
     },
     "Старт" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Старт"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start"
+          }
+        }
+      }
     },
     "Старт поездки" : {
       "localizations" : {

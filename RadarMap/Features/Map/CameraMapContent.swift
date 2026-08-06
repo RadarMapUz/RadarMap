@@ -20,7 +20,7 @@ import Foundation
 import MapKit
 
 /// Кластер камер: центроид + количество.
-struct CameraCluster: Identifiable, Equatable {
+nonisolated struct CameraCluster: Identifiable, Equatable {
     let id: Int64
     let coordinate: CLLocationCoordinate2D
     let count: Int

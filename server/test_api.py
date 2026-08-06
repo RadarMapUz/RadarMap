@@ -15,11 +15,15 @@ from http.server import ThreadingHTTPServer
 import api
 
 
-def _call(port, method, path, payload=None):
+def _call(port, method, path, payload=None, ip=None):
+    """ip — имитация X-Forwarded-For: в проде его ставит nginx ($remote_addr),
+    здесь мы сами играем роль nginx и подставляем «адрес клиента»."""
     url = f"http://127.0.0.1:{port}{path}"
     data = json.dumps(payload).encode() if payload is not None else None
-    req = urllib.request.Request(url, data=data, method=method,
-                                 headers={"Content-Type": "application/json"})
+    headers = {"Content-Type": "application/json"}
+    if ip:
+        headers["X-Forwarded-For"] = ip
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
             return resp.status, json.loads(resp.read())
@@ -47,6 +51,10 @@ class APITest(unittest.TestCase):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
+        with api._ip_lock:
+            api._ip_counters.clear()
+        with api._cleanup_lock:
+            api._last_cleanup = 0.0
 
     # --- передвижные радары ---
 
@@ -71,8 +79,35 @@ class APITest(unittest.TestCase):
         rid = first["id"]
         for i, device in enumerate(("h1", "h2", "h3")):
             status, body = _call(self.port, "POST", "/api/vote",
-                                 {"id": rid, "device": device, "value": -1})
-        self.assertFalse(body["active"], "3 дизлайка без лайков должны скрыть")
+                                 {"id": rid, "device": device, "value": -1},
+                                 ip=f"10.0.0.{i + 1}")
+        self.assertFalse(body["active"], "3 дизлайка с разных адресов должны скрыть")
+
+    def test_dislikes_from_one_ip_do_not_hide(self):
+        """Три свежих UUID с ОДНОГО адреса — это один недовольный, а не кворум:
+        раньше так снималась с карты любая чужая отметка."""
+        _, first = _call(self.port, "POST", "/api/report",
+                         {"lat": 41.31, "lon": 69.25, "device": "creator"})
+        rid = first["id"]
+        for device in ("h1", "h2", "h3"):
+            status, body = _call(self.port, "POST", "/api/vote",
+                                 {"id": rid, "device": device, "value": -1},
+                                 ip="10.9.9.9")
+        self.assertTrue(body["active"], "ротация UUID с одного IP не должна скрывать")
+
+    def test_vote_ip_daily_cap(self):
+        _, first = _call(self.port, "POST", "/api/report",
+                         {"lat": 41.31, "lon": 69.25, "device": "creator"})
+        rid = first["id"]
+        for i in range(api.IP_DAILY_CAPS["vote"]):
+            _call(self.port, "POST", "/api/vote",
+                  {"id": rid, "device": f"v{i}", "value": 1}, ip="10.1.1.1")
+        status, _ = _call(self.port, "POST", "/api/vote",
+                          {"id": rid, "device": "extra", "value": 1}, ip="10.1.1.1")
+        self.assertEqual(status, 429, "кап голосов по IP не сработал")
+        status, _ = _call(self.port, "POST", "/api/vote",
+                          {"id": rid, "device": "other", "value": 1}, ip="10.1.1.2")
+        self.assertEqual(status, 200, "чужой IP не должен страдать от чужого капа")
 
     def test_report_types_ttl_and_no_cross_merge(self):
         """ДТП живёт час; пост рядом с радаром не сливается (разные сущности)."""
@@ -131,6 +166,25 @@ class APITest(unittest.TestCase):
         self.assertNotIn("duplicate", first)
         self.assertTrue(second.get("duplicate"), "повтор с того же устройства")
 
+    def test_camera_report_huge_db_version_is_400(self):
+        """10**100 раньше ронял хендлер OverflowError'ом на INSERT."""
+        status, _ = _call(self.port, "POST", "/api/camera_report",
+                          {"camera_id": 7, "reason": "gone", "device": "d",
+                           "db_version": 10**100})
+        self.assertEqual(status, 400)
+
+    def test_camera_report_nan_coords_stored_null(self):
+        status, _ = _call(self.port, "POST", "/api/camera_report",
+                          {"camera_id": 7, "reason": "gone", "device": "d",
+                           "lat": float("nan"), "lon": 200.0})
+        self.assertEqual(status, 200)
+        conn = sqlite3.connect(api.DB_PATH)
+        lat, lon = conn.execute(
+            "SELECT lat, lon FROM camera_reports").fetchone()
+        conn.close()
+        self.assertIsNone(lat, "NaN не должен долетать до БД")
+        self.assertIsNone(lon, "координата вне Узбекистана не должна долетать до БД")
+
     def test_camera_report_bad_reason(self):
         status, _ = _call(self.port, "POST", "/api/camera_report",
                           {"camera_id": 7, "reason": "hacked", "device": "d"})
@@ -143,6 +197,33 @@ class APITest(unittest.TestCase):
         message = conn.execute("SELECT message FROM feedback").fetchone()[0]
         conn.close()
         self.assertNotIn("\x1b", message, "ANSI-escape в терминал модератора")
+
+    def test_feedback_app_version_stripped_and_dict_message_rejected(self):
+        _call(self.port, "POST", "/api/feedback",
+              {"message": "ок", "device": "d", "app_version": "1.0[2J"})
+        conn = sqlite3.connect(api.DB_PATH)
+        version = conn.execute("SELECT app_version FROM feedback").fetchone()[0]
+        conn.close()
+        self.assertNotIn("", version, "ANSI в app_version идёт в терминал модератора")
+        status, _ = _call(self.port, "POST", "/api/feedback",
+                          {"message": {"a": 1}, "device": "d2"})
+        self.assertEqual(status, 400, "словарь вместо строки сохранялся Python-repr'ом")
+
+    def test_trailing_slash_and_query_are_same_endpoint(self):
+        status, _ = _call(self.port, "GET", "/api/health/")
+        self.assertEqual(status, 200)
+        status, _ = _call(self.port, "GET", "/api/mobile?x=1")
+        self.assertEqual(status, 200)
+
+    def test_metrics_roundtrip_saved(self):
+        status, _ = _call(self.port, "POST", "/api/metrics",
+                          {"device": "d", "kind": "metric", "payload": {"cpu": 1}})
+        self.assertEqual(status, 200)
+        conn = sqlite3.connect(api.DB_PATH)
+        kind, payload = conn.execute("SELECT kind, payload FROM metrics").fetchone()
+        conn.close()
+        self.assertEqual(kind, "metric")
+        self.assertEqual(json.loads(payload), {"cpu": 1})
 
     def test_metrics_rejects_oversize_payload(self):
         status, _ = _call(self.port, "POST", "/api/metrics",

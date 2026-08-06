@@ -359,7 +359,7 @@ extension TripHistory {
     }
 
     /// Записи, попадающие в календарное окно периода.
-    static func records(_ history: [TripRecord], period: StatsPeriod,
+    nonisolated static func records(_ history: [TripRecord], period: StatsPeriod,
                         anchor: Date = Date(),
                         calendar: Calendar = .current) -> [TripRecord] {
         let interval = period.interval(containing: anchor, calendar: calendar)
@@ -405,7 +405,7 @@ extension TripHistory {
 
     /// Треки периода для карты отчёта: только те записи, у которых трек ещё жив
     /// (см. pruned — за пределами недели он выброшен).
-    static func tracks(_ history: [TripRecord], period: StatsPeriod,
+    nonisolated static func tracks(_ history: [TripRecord], period: StatsPeriod,
                        anchor: Date = Date(),
                        calendar: Calendar = .current) -> [[TrackPoint]] {
         records(history, period: period, anchor: anchor, calendar: calendar)
@@ -429,27 +429,27 @@ extension TripHistory {
 
     /// Данные карты для одной поездки: сам трек и камеры именно этого проезда.
     /// Слой частоты для одной поездки не имеет смысла — линия рисуется яркой.
-    static func mapData(of record: TripRecord) -> PeriodMapData {
+    nonisolated static func mapData(of record: TripRecord) -> PeriodMapData {
         let track = record.trackPoints
         return PeriodMapData(tracks: track.count >= 2 ? [track] : [],
                              markers: passMarkers(of: record), heat: [])
     }
 
     /// Проезды камер одной поездки — маркеры выбранного трека.
-    static func passMarkers(of record: TripRecord) -> [PassMarker] {
+    nonisolated static func passMarkers(of record: TripRecord) -> [PassMarker] {
         markers(from: [record])
     }
 
     /// Проезды камер периода, сгруппированные по точке: сколько раз проезжали,
     /// было ли превышение, максимальная скорость проезда. Маркеры карты отчёта
     /// и карточка по тапу («где я превышал»).
-    static func passMarkers(_ history: [TripRecord], period: StatsPeriod,
+    nonisolated static func passMarkers(_ history: [TripRecord], period: StatsPeriod,
                             anchor: Date = Date(),
                             calendar: Calendar = .current) -> [PassMarker] {
         markers(from: records(history, period: period, anchor: anchor, calendar: calendar))
     }
 
-    private static func markers(from records: [TripRecord]) -> [PassMarker] {
+    nonisolated private static func markers(from records: [TripRecord]) -> [PassMarker] {
         var byCamera: [Int: PassMarker] = [:]
         for record in records {
             for pass in record.passed {
@@ -576,7 +576,7 @@ extension TripHistory {
 
     /// Медиана по окну: одиночные провалы частоты (шум GPS то попадает в ячейку
     /// соседнего проезда, то нет) иначе резали бы трек на сотни коротких кусков.
-    static func medianSmoothed(_ values: [Int], window: Int = 5) -> [Int] {
+    nonisolated static func medianSmoothed(_ values: [Int], window: Int = 5) -> [Int] {
         guard values.count > 2, window > 1 else { return values }
         let radius = max(1, window / 2)
         return values.indices.map { index in

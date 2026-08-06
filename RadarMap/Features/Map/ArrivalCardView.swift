@@ -27,6 +27,13 @@ struct ArrivalCardView: View {
         .background(Theme.background.opacity(0.45).ignoresSafeArea())
         .contentShape(Rectangle())
         .onTapGesture { onDismiss() }
+        // Для VoiceOver тап по фону не существует: даём карточке имя, трейт
+        // кнопки и действие закрытия (иначе спасало только автозакрытие).
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(Text("Вы на месте"))
+        .accessibilityHint(Text("Закрывает карточку прибытия"))
+        .accessibilityAction { onDismiss() }
         .onAppear {
             withAnimation(.spring(duration: 0.45, bounce: 0.35)) { appeared = true }
             UINotificationFeedbackGenerator().notificationOccurred(.success)

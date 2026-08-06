@@ -407,7 +407,10 @@ struct RatingDetailSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(worstPass(cameraID: hotspot.id) == nil)
+        // Без .disabled по worstPass: он обходит всю историю, и в body это
+        // делалось 4 раза на каждый пересчёт. Кнопка с пустым действием при
+        // отсутствии проезда безвредна, а случай почти невозможен — hotspot
+        // построен из тех же записей.
         .accessibilityElement(children: .combine)
     }
 
@@ -777,7 +780,10 @@ private struct AllContributionsView: View {
     }
 
     var body: some View {
-        ScrollView {
+        // Один расчёт на проход body: shown — фильтр + сортировка, и как
+        // computed property оно считалось четырежды (isEmpty, ForEach, total×2).
+        let shown = self.shown
+        return ScrollView {
             LazyVStack(spacing: 10) {
                 controls
                 if shown.isEmpty {
@@ -796,7 +802,7 @@ private struct AllContributionsView: View {
                         }
                         .statCard(padding: 12, radius: Theme.cornerMedium)
                     }
-                    total
+                    total(shown)
                 }
             }
             .padding(20)
@@ -852,7 +858,7 @@ private struct AllContributionsView: View {
 
     /// Итог списка: сумма показанных вкладов. Она обязана сходиться с
     /// «100 − рейтинг», когда фильтр выключен, — это и есть проверка сложением.
-    private var total: some View {
+    private func total(_ shown: [RatingContribution]) -> some View {
         HStack {
             Text(String(format: String(localized: "Показано вкладов: %lld"), shown.count))
                 .font(.rounded(12))

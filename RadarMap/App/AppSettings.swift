@@ -280,12 +280,6 @@ final class AppSettings {
     var alertMode: AlertMode {
         didSet { store.set(alertMode.rawValue, forKey: Keys.alertMode) }
     }
-    /// Полная тишина, пока едем в лимите: о камере предупредит только HUD и тук.
-    /// По умолчанию выключено — на трассе спокойный анонс полезнее тишины.
-    var voiceOnlyWhenOverspeeding: Bool {
-        didSet { store.set(voiceOnlyWhenOverspeeding, forKey: Keys.voiceOnlyOverspeed) }
-    }
-
     /// Подложка карты: тёмная / светлая / авто по времени суток.
     var mapAppearance: MapAppearance {
         didSet { store.set(mapAppearance.rawValue, forKey: Keys.mapAppearance) }
@@ -329,7 +323,6 @@ final class AppSettings {
         static let mapPlaces = "mapPlaces"
         static let alertMode = "alertMode"
         static let knownCarAudio = "knownCarAudio"
-        static let voiceOnlyOverspeed = "voiceOnlyWhenOverspeeding"
     }
 
     /// Пишем/снимаем override языка приложения. iOS читает «AppleLanguages» из
@@ -396,7 +389,6 @@ final class AppSettings {
         mapTraffic = store.bool(forKey: Keys.mapTraffic)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)
         alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto
-        voiceOnlyWhenOverspeeding = store.bool(forKey: Keys.voiceOnlyOverspeed)
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []
         weeklyDigest = store.bool(forKey: Keys.digest)
         appLanguage = AppLanguage(rawValue: store.string(forKey: Keys.language) ?? "") ?? .system

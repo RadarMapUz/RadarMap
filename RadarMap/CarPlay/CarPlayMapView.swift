@@ -74,6 +74,10 @@ struct CarPlayMapView: UIViewRepresentable {
         if tripActive != coordinator.tripActiveSeen {
             coordinator.tripActiveSeen = tripActive
             map.setUserTrackingMode(coordinator.preferredTracking, animated: true)
+            // Смена режима меняет и поворот карты (по курсу ↔ на север), а
+            // клин направления в картинке маркера нарисован для севера вверху —
+            // пересоздаём маркеры под новый режим (≤40 штук, дёшево).
+            coordinator.reloadCameras(on: map, force: true)
         }
 
         coordinator.applyRoute(route, on: map)
@@ -187,7 +191,11 @@ struct CarPlayMapView: UIViewRepresentable {
 
         // MARK: Камеры
 
-        func reloadCameras(on map: MKMapView) {
+        func reloadCameras(on map: MKMapView, force: Bool = false) {
+            if force, !shown.isEmpty {
+                map.removeAnnotations(Array(shown.values))
+                shown.removeAll()
+            }
             // На обзорном зуме камеры не показываем — это уровень «вся страна».
             guard map.region.span.latitudeDelta < AppConfig.carPlayCameraZoomThreshold else {
                 if !shown.isEmpty {
@@ -214,7 +222,12 @@ struct CarPlayMapView: UIViewRepresentable {
                                  limit: speedLimits.limit(near: camera.coordinate),
                                  tier: CameraMapContent.tier(camera: camera, focus: focus,
                                                              targetID: targetID,
-                                                             routeIDs: routeIDs))
+                                                             routeIDs: routeIDs),
+                                 // В поездке карта повёрнута по курсу
+                                 // (followWithHeading), а клин в картинке
+                                 // нарисован для севера вверху — там он врал бы
+                                 // на угол поворота. Прячем: спрятать честнее.
+                                 showsDirection: !tripActiveSeen)
             }
             if !added.isEmpty {
                 map.addAnnotations(added)
@@ -290,6 +303,9 @@ final class CameraAnnotation: NSObject, MKAnnotation {
     let camera: Camera
     /// Лимит дороги у камеры (OSM): есть — маркер рисуется знаком «60».
     let limit: Int?
+    /// Рисовать ли клин направления: false в поездке — карта повёрнута по
+    /// курсу, а клин в кэшированной картинке нарисован для севера вверху.
+    let showsDirection: Bool
     /// Важность прямо сейчас — та же шкала, что на телефоне (CameraTier).
     /// Дальние камеры на экране машины гасятся: смотрят на него боковым
     /// зрением и долю секунды, и всё, что не про ближайший километр, — помеха.
@@ -298,10 +314,12 @@ final class CameraAnnotation: NSObject, MKAnnotation {
         CLLocationCoordinate2D(latitude: camera.lat, longitude: camera.lon)
     }
 
-    init(camera: Camera, limit: Int? = nil, tier: CameraTier = .near) {
+    init(camera: Camera, limit: Int? = nil, tier: CameraTier = .near,
+         showsDirection: Bool = true) {
         self.camera = camera
         self.limit = limit
         self.tier = tier
+        self.showsDirection = showsDirection
     }
 }
 
@@ -316,7 +334,8 @@ final class CameraMarkerView: MKAnnotationView {
         didSet {
             guard let annotation = annotation as? CameraAnnotation else { return }
             image = Self.marker(for: annotation.camera.kind, limit: annotation.limit,
-                                direction: annotation.camera.markerDirection)
+                                direction: annotation.showsDirection
+                                    ? annotation.camera.markerDirection : nil)
             centerOffset = .zero
             collisionMode = .circle
             displayPriority = .defaultHigh

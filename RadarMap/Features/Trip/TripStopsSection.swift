@@ -41,8 +41,13 @@ struct TripStopsSection: View {
                 }
             }
             .task { await loadTitles() }
+            // Живой Binding, не .constant: закрытие диалога системой (тап мимо,
+            // свайп) пишет false именно в биндинг, и с .constant кандидат
+            // оставался непустым — диалог залипал и переоткрывался.
             .confirmationDialog("Разделить поездку на две?",
-                                isPresented: .constant(splitCandidate != nil),
+                                isPresented: Binding(
+                                    get: { splitCandidate != nil },
+                                    set: { if !$0 { splitCandidate = nil } }),
                                 titleVisibility: .visible) {
                 Button("Разделить", role: .destructive) {
                     guard let stop = splitCandidate else { return }

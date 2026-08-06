@@ -34,6 +34,11 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 DB_PATH = "/opt/radarmap/api/reports.db"
+# Потолок одновременных обработчиков. У ThreadingHTTPServer предела нет: поток
+# на соединение плюс медленный клиент — и память кончается раньше, чем сработают
+# капы. Сверх потолка отвечаем 503: честный отказ лучше молчаливой очереди.
+MAX_WORKERS = 64
+BUSY_TIMEOUT_MS = 5000
 TTL = 3 * 3600
 EXTEND = 30 * 60
 MAX_LIFE = 6 * 3600
@@ -61,7 +66,31 @@ IP_DAILY_CAPS = {"report": 30, "vote": 100, "camera_report": 60,
 HIDE_DISTINCT_IPS = 3
 
 def db():
-    conn = sqlite3.connect(DB_PATH)
+    """Соединение для обработки одного запроса.
+
+    Схему здесь НЕ трогаем: раньше каждый HTTP-запрос выполнял шесть
+    CREATE TABLE IF NOT EXISTS и четыре ALTER TABLE, из которых все четыре
+    всегда падали в исключение — десяток служебных запросов до начала работы.
+    Схема и миграции живут в init_db() и выполняются один раз при старте.
+
+    busy_timeout обязателен: без него параллельный POST во время чтения
+    /api/mobile отдаёт «database is locked» мгновенным 500 вместо ожидания.
+    """
+    conn = sqlite3.connect(DB_PATH, timeout=BUSY_TIMEOUT_MS / 1000)
+    conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+    # NORMAL в паре с WAL: fsync на каждый коммит нам не нужен — потеря
+    # последних отметок при отключении питания дешевле, чем запись в темпе диска.
+    conn.execute("PRAGMA synchronous = NORMAL")
+    return conn
+
+
+def init_db():
+    """Схема, миграции и индексы. Вызывается один раз при старте процесса."""
+    conn = sqlite3.connect(DB_PATH, timeout=BUSY_TIMEOUT_MS / 1000)
+    # WAL — свойство файла БД, ставится один раз и переживает перезапуск.
+    # Без него писатель блокирует читателей: один POST /api/report во время
+    # опроса десятком телефонов давал им 500.
+    conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("""CREATE TABLE IF NOT EXISTS reports(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         lat REAL NOT NULL, lon REAL NOT NULL,
@@ -71,23 +100,6 @@ def db():
     conn.execute("""CREATE TABLE IF NOT EXISTS votes(
         report_id INTEGER, device TEXT, value INTEGER,
         PRIMARY KEY(report_id, device))""")
-    try:  # миграция живой БД: ts нужен для суточного лимита голосов
-        conn.execute("ALTER TABLE votes ADD COLUMN ts REAL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # колонка уже есть
-    try:  # миграция: тип отметки (radar/tripod/post/accident)
-        conn.execute("ALTER TABLE reports ADD COLUMN type TEXT DEFAULT 'radar'")
-    except sqlite3.OperationalError:
-        pass
-    # Миграция: IP голосов и отметок. Все device-лимиты обходятся новым UUID
-    # на каждый запрос; IP от nginx (X-Forwarded-For = $remote_addr, клиентский
-    # заголовок перезаписывается) — единственный признак, который ротацией не
-    # меняется. Старые строки остаются с '' и в IP-проверках не участвуют.
-    for table in ("votes", "reports"):
-        try:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN ip TEXT DEFAULT ''")
-        except sqlite3.OperationalError:
-            pass
     conn.execute("""CREATE TABLE IF NOT EXISTS metrics(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         device TEXT NOT NULL, kind TEXT NOT NULL,
@@ -108,7 +120,55 @@ def db():
         app_version TEXT,
         device TEXT NOT NULL,
         received REAL NOT NULL)""")
-    return conn
+
+    # --- миграции живой БД (порядок: только после CREATE всех таблиц) ---
+    migrate(conn, "votes", "ts REAL DEFAULT 0")               # суточный лимит голосов
+    migrate(conn, "reports", "type TEXT DEFAULT 'radar'")     # radar/tripod/post/accident
+    migrate(conn, "feedback", "status TEXT DEFAULT 'new'")    # new/open/answered (админка)
+    migrate(conn, "feedback", "note TEXT DEFAULT ''")         # заметка модератора
+    # IP голосов, отметок и репортов о камерах. Все device-лимиты обходятся
+    # новым UUID на каждый запрос; IP от nginx (X-Forwarded-For = $remote_addr,
+    # клиентский заголовок перезаписывается) — единственный признак, который
+    # ротацией не меняется. Старые строки остаются с '' и в проверках не
+    # участвуют: лучше передержать отметку, чем дать снять её анонимной ротацией.
+    #
+    # camera_reports получили ip позже остальных, и это была дыра: модератор
+    # видел «5 разных устройств сообщили, что камеры нет» — а это пять запросов
+    # с одного телефона со свежим UUID. Снять по такому сигналу живую камеру
+    # значит получить молчание там, где камера стоит, то есть худший отказ всей
+    # системы. Кворум на скрытие считается по РАЗНЫМ адресам (см. admin.py).
+    for table in ("votes", "reports", "camera_reports"):
+        migrate(conn, table, "ip TEXT DEFAULT ''")
+
+    # --- индексы ---
+    # Раньше не было ни одного: каждая проверка суточного капа была полным
+    # сканом таблицы, а горячий GET /api/mobile сканировал все отметки.
+    for statement in (
+        "CREATE INDEX IF NOT EXISTS idx_reports_live ON reports(active, expires)",
+        "CREATE INDEX IF NOT EXISTS idx_reports_device ON reports(device, active, expires)",
+        # votes(report_id, …) уже покрыт индексом первичного ключа
+        "CREATE INDEX IF NOT EXISTS idx_votes_device ON votes(device, ts)",
+        "CREATE INDEX IF NOT EXISTS idx_camrep_camera ON camera_reports(camera_id, resolved)",
+        "CREATE INDEX IF NOT EXISTS idx_camrep_device ON camera_reports(device, received)",
+        "CREATE INDEX IF NOT EXISTS idx_camrep_received ON camera_reports(received)",
+        "CREATE INDEX IF NOT EXISTS idx_feedback_received ON feedback(received)",
+        "CREATE INDEX IF NOT EXISTS idx_feedback_device ON feedback(device, received)",
+        "CREATE INDEX IF NOT EXISTS idx_metrics_device ON metrics(device, received)",
+        "CREATE INDEX IF NOT EXISTS idx_metrics_received ON metrics(received)",
+    ):
+        conn.execute(statement)
+
+    conn.commit()
+    conn.close()
+
+
+def migrate(conn, table, column_def):
+    """ALTER TABLE ADD COLUMN, идемпотентно. Отдельной функцией, чтобы
+    «колонка уже есть» не путалась с настоящей ошибкой схемы в глазах читателя."""
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+    except sqlite3.OperationalError:
+        pass  # колонка уже есть
 
 def clean_text(s):
     """Пользовательский текст идёт в терминал модератора (sqlite3 в консоли) —
@@ -297,7 +357,8 @@ class Handler(BaseHTTPRequestHandler):
             lat = None
         if lon is not None and not (UZ_LON[0] <= lon <= UZ_LON[1]):
             lon = None
-        if ip_quota_exceeded("camera_report", self._ip(), IP_DAILY_CAPS["camera_report"]):
+        ip = self._ip()
+        if ip_quota_exceeded("camera_report", ip, IP_DAILY_CAPS["camera_report"]):
             return self._json(429, {"error": "too many"})
 
         now = time.time()
@@ -322,9 +383,9 @@ class Handler(BaseHTTPRequestHandler):
             if dup:
                 return self._json(200, {"ok": True, "duplicate": True})
             conn.execute(
-                "INSERT INTO camera_reports(camera_id, reason, lat, lon, db_version, device, received) "
-                "VALUES(?,?,?,?,?,?,?)",
-                (camera_id, reason, lat, lon, db_version, device, now))
+                "INSERT INTO camera_reports(camera_id, reason, lat, lon, db_version, "
+                "device, received, ip) VALUES(?,?,?,?,?,?,?,?)",
+                (camera_id, reason, lat, lon, db_version, device, now, ip))
             conn.commit()
         finally:
             conn.close()
@@ -489,5 +550,45 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             conn.close()
 
+class BoundedHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer с потолком одновременных обработчиков.
+
+    Базовый класс плодит поток на каждое соединение без предела: сотня
+    медленных POST'ов — сотня потоков, висящих до таймаута в 10 с. Капы в
+    хендлерах от этого не спасают, они срабатывают уже внутри обработчика.
+    Сверх потолка отвечаем 503 и закрываем: отказ, который клиент увидит и
+    повторит позже, лучше очереди, которую никто не разгребёт.
+    """
+    daemon_threads = True
+
+    def __init__(self, *args, max_workers=MAX_WORKERS, **kwargs):
+        self._slots = threading.BoundedSemaphore(max_workers)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address):
+        if not self._slots.acquire(blocking=False):
+            try:
+                request.sendall(b"HTTP/1.1 503 Service Unavailable\r\n"
+                                b"Content-Length: 0\r\nConnection: close\r\n\r\n")
+            except OSError:
+                pass  # клиент уже отвалился — отвечать некому
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            # поток не стартовал (например, кончились потоки ОС) — слот вернуть,
+            # иначе сервер медленно «зарастает» и перестаёт принимать вообще
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+
 if __name__ == "__main__":
-    ThreadingHTTPServer(("127.0.0.1", 8091), Handler).serve_forever()
+    init_db()
+    BoundedHTTPServer(("127.0.0.1", 8091), Handler).serve_forever()

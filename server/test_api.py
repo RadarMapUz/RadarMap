@@ -36,7 +36,7 @@ class APITest(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         api.DB_PATH = cls.tmp.name
-        api.db().close()   # создать схему до первого setUp
+        api.init_db()      # схема, миграции и индексы — один раз, как в проде
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), api.Handler)
         cls.port = cls.server.server_address[1]
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
@@ -229,6 +229,73 @@ class APITest(unittest.TestCase):
         status, _ = _call(self.port, "POST", "/api/metrics",
                           {"device": "d", "kind": "metric", "payload": "x" * 250000})
         self.assertEqual(status, 400, "раньше payload молча резался в битый JSON")
+
+    # --- схема и нагрузка ---
+
+    def test_wal_and_indexes_are_set_up(self):
+        """WAL и индексы ставятся один раз в init_db, а не на каждый запрос."""
+        conn = sqlite3.connect(api.DB_PATH)
+        mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        names = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index'")}
+        conn.close()
+        self.assertEqual(mode.lower(), "wal",
+                         "без WAL писатель блокирует читателей и они получают 500")
+        for index in ("idx_reports_live", "idx_camrep_camera", "idx_feedback_received",
+                      "idx_metrics_device", "idx_votes_device"):
+            self.assertIn(index, names, f"нет индекса {index} — полный скан на каждый кап")
+
+    def test_db_connection_does_not_touch_schema(self):
+        """db() обязан быть дешёвым: раньше он гонял всю миграцию на КАЖДЫЙ
+        HTTP-запрос — шесть CREATE TABLE и четыре ALTER, все четыре в исключение."""
+        conn = api.db()
+        try:
+            self.assertEqual(conn.execute("PRAGMA busy_timeout").fetchone()[0],
+                             api.BUSY_TIMEOUT_MS,
+                             "без busy_timeout параллельная запись даёт мгновенный 500")
+        finally:
+            conn.close()
+        # схему db() не создаёт — проверяем на пустом файле
+        empty = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        saved, api.DB_PATH = api.DB_PATH, empty.name
+        try:
+            conn = api.db()
+            tables = conn.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'").fetchone()[0]
+            conn.close()
+        finally:
+            api.DB_PATH = saved
+        self.assertEqual(tables, 0, "db() не должен создавать схему")
+
+    def test_camera_report_stores_ip(self):
+        """Кворум на скрытие камеры считается по разным адресам, а не по
+        device: UUID ротируется бесплатно, и «5 разных устройств» подделывалось
+        одним телефоном. Снятая по фейку живая камера — это молчание там, где
+        камера стоит, худший отказ системы."""
+        _call(self.port, "POST", "/api/camera_report",
+              {"camera_id": 7, "reason": "gone", "device": "d1"}, ip="10.5.5.5")
+        conn = sqlite3.connect(api.DB_PATH)
+        ip = conn.execute("SELECT ip FROM camera_reports").fetchone()[0]
+        conn.close()
+        self.assertEqual(ip, "10.5.5.5")
+
+    def test_bounded_server_refuses_over_capacity(self):
+        """Сверх потолка потоков — честный 503, а не бесконечная очередь."""
+        class FakeSocket:
+            def __init__(self): self.sent = b""; self.closed = False
+            def sendall(self, data): self.sent += data
+            def shutdown(self, how): pass
+            def close(self): self.closed = True
+
+        server = api.BoundedHTTPServer(("127.0.0.1", 0), api.Handler, max_workers=1)
+        try:
+            self.assertTrue(server._slots.acquire(blocking=False))  # занимаем единственный слот
+            sock = FakeSocket()
+            server.process_request(sock, ("10.0.0.1", 1234))
+            self.assertIn(b"503", sock.sent)
+            self.assertTrue(sock.closed, "соединение сверх потолка должно закрываться")
+        finally:
+            server.server_close()
 
 
 if __name__ == "__main__":

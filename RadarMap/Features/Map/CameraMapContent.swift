@@ -32,7 +32,40 @@ struct CameraCluster: Identifiable, Equatable {
     }
 }
 
+/// Насколько камера важна ПРЯМО СЕЙЧАС. До этого все маркеры были одного
+/// цвета и размера: камера в 400 метрах прямо по курсу выглядела ровно так же,
+/// как камера в трёх километрах за спиной. На полусотне точек в кадре глазу
+/// не за что зацепиться — карта читается как сыпь, а не как карта.
+nonisolated enum CameraTier: Equatable {
+    /// Та самая, к которой едем: единственная на экране, полный пин.
+    case target
+    /// Рядом или на маршруте — «мои» камеры, полный цвет.
+    case near
+    /// Контекст: есть, но не про сейчас. Мельче и приглушённо.
+    case background
+}
+
 nonisolated enum CameraMapContent {
+
+    /// Уровень камеры для отрисовки.
+    ///
+    /// Понижать в фон можно ТОЛЬКО по расстоянию и маршруту — никогда по
+    /// направлению. Гейты направления живут в конвейере оповещений, где ошибка
+    /// стоит одного лишнего предупреждения; на карте та же ошибка стоит камеры,
+    /// которую водитель не увидел.
+    ///
+    /// Позиция неизвестна — приглушать нечего и не от чего: показываем всё
+    /// в полную силу.
+    static func tier(camera: Camera, focus: CLLocationCoordinate2D?,
+                     targetID: Int?, routeIDs: Set<Int>,
+                     nearMeters: Double = AppConfig.mapNearCameraMeters) -> CameraTier {
+        if camera.id == targetID { return .target }
+        if routeIDs.contains(camera.id) { return .near }
+        guard let focus else { return .near }
+        let distance = GeoMath.fastDistance(focus.latitude, focus.longitude,
+                                            camera.lat, camera.lon)
+        return distance <= nearMeters ? .near : .background
+    }
 
     /// Готовый слой карты: либо точки, либо кластеры (одновременно — только
     /// одиночки в своих ячейках рядом с кластерами). `limits` — лимит дороги

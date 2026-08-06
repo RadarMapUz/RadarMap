@@ -92,7 +92,8 @@ struct CarPlayMapView: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(repository: repository, speedLimits: speedLimits)
+        Coordinator(repository: repository, speedLimits: speedLimits,
+                    route: route, location: location)
     }
 
     // MARK: - Координатор
@@ -101,6 +102,10 @@ struct CarPlayMapView: UIViewRepresentable {
     final class Coordinator: NSObject, MKMapViewDelegate {
         private let repository: CameraStore
         private let speedLimits: SpeedLimitService
+        /// Нужны для важности маркера: где машина и какие камеры на маршруте.
+        /// Оба — @Observable-сервисы композиционного корня, живут дольше карты.
+        private let route: RouteService
+        private let location: LocationService
         var recenterHandled = 0
         var zoomInHandled = 0
         var zoomOutHandled = 0
@@ -119,9 +124,12 @@ struct CarPlayMapView: UIViewRepresentable {
         private var traveledLine: MKPolyline?
         private var traveledProgress: CLLocationDistance = -1
 
-        init(repository: CameraStore, speedLimits: SpeedLimitService) {
+        init(repository: CameraStore, speedLimits: SpeedLimitService,
+             route: RouteService, location: LocationService) {
             self.repository = repository
             self.speedLimits = speedLimits
+            self.route = route
+            self.location = location
         }
 
         var preferredTracking: MKUserTrackingMode { tripActiveSeen ? .followWithHeading : .follow }
@@ -190,6 +198,9 @@ struct CarPlayMapView: UIViewRepresentable {
             }
             let fresh = repository.cameras(in: map.region, limit: AppConfig.carPlayMaxCameraMarkers)
             let freshIDs = Set(fresh.map(\.id))
+            // Точка отсчёта важности: где машина, а не куда утащили карту.
+            let focus = location.currentCoordinate ?? map.centerCoordinate
+            let routeIDs = Set(route.camerasOnRoute.map(\.camera.id))
 
             let outdated = shown.filter { !freshIDs.contains($0.key) }
             if !outdated.isEmpty {
@@ -199,11 +210,24 @@ struct CarPlayMapView: UIViewRepresentable {
             // Лимит дороги считаем один раз при создании аннотации: индекс
             // быстрый, но дёргать его на каждой перерисовке маркера незачем.
             let added = fresh.filter { shown[$0.id] == nil }.map { camera in
-                CameraAnnotation(camera: camera, limit: speedLimits.limit(near: camera.coordinate))
+                CameraAnnotation(camera: camera,
+                                 limit: speedLimits.limit(near: camera.coordinate),
+                                 tier: CameraMapContent.tier(camera: camera, focus: focus,
+                                                             targetID: targetID,
+                                                             routeIDs: routeIDs))
             }
             if !added.isEmpty {
                 map.addAnnotations(added)
                 added.forEach { shown[$0.camera.id] = $0 }
+            }
+            // Машина едет — вчерашняя «ближняя» камера могла стать дальней.
+            // Сорок маркеров пересчитать дешевле, чем держать устаревшую картину.
+            for annotation in shown.values {
+                let tier = CameraMapContent.tier(camera: annotation.camera, focus: focus,
+                                                 targetID: targetID, routeIDs: routeIDs)
+                guard tier != annotation.tier else { continue }
+                annotation.tier = tier
+                (map.view(for: annotation) as? CameraMarkerView)?.applyTier(tier)
             }
         }
 
@@ -232,6 +256,7 @@ struct CarPlayMapView: UIViewRepresentable {
                 withIdentifier: CameraMarkerView.reuseID,
                 for: annotation
             ) as? CameraMarkerView
+            view?.applyTier(camera.tier)
             view?.setTarget(camera.camera.id == targetID)
             return view
         }
@@ -265,13 +290,18 @@ final class CameraAnnotation: NSObject, MKAnnotation {
     let camera: Camera
     /// Лимит дороги у камеры (OSM): есть — маркер рисуется знаком «60».
     let limit: Int?
+    /// Важность прямо сейчас — та же шкала, что на телефоне (CameraTier).
+    /// Дальние камеры на экране машины гасятся: смотрят на него боковым
+    /// зрением и долю секунды, и всё, что не про ближайший километр, — помеха.
+    var tier: CameraTier = .near
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: camera.lat, longitude: camera.lon)
     }
 
-    init(camera: Camera, limit: Int? = nil) {
+    init(camera: Camera, limit: Int? = nil, tier: CameraTier = .near) {
         self.camera = camera
         self.limit = limit
+        self.tier = tier
     }
 }
 
@@ -285,16 +315,25 @@ final class CameraMarkerView: MKAnnotationView {
     override var annotation: (any MKAnnotation)? {
         didSet {
             guard let annotation = annotation as? CameraAnnotation else { return }
-            image = Self.marker(for: annotation.camera.kind, limit: annotation.limit)
+            image = Self.marker(for: annotation.camera.kind, limit: annotation.limit,
+                                direction: annotation.camera.markerDirection)
             centerOffset = .zero
             collisionMode = .circle
             displayPriority = .defaultHigh
+            applyTier(annotation.tier)
         }
     }
 
     override func prepareForReuse() {
         super.prepareForReuse()
         setTarget(false)
+        applyTier(.near)
+    }
+
+    /// Важность маркера: дальние гасим, но не убираем — пропавшая камера хуже
+    /// лишней. Плотность, а не удаление.
+    func applyTier(_ tier: CameraTier) {
+        alpha = tier == .background ? AppConfig.mapBackgroundCameraOpacity : 1
     }
 
     /// Цель оповещения: крупнее, поверх соседей и с пульсирующим кольцом —
@@ -338,20 +377,45 @@ final class CameraMarkerView: MKAnnotationView {
         halo = ring
     }
 
-    private static func marker(for kind: CameraType, limit: Int?) -> UIImage {
-        let key = "\(kind.sourceString)|\(limit ?? -1)"
+    /// Направление квантуем шагом 15°: глазом разницы не видно, а кэш вместо
+    /// 360 вариантов на каждый тип держит 24.
+    private static func marker(for kind: CameraType, limit: Int?, direction: Int?) -> UIImage {
+        let step = direction.map { (Int((Double($0) / 15).rounded()) * 15) % 360 }
+        let key = "\(kind.sourceString)|\(limit ?? -1)|\(step ?? -1)"
         if let cached = cache[key] { return cached }
-        let rendered = limit.map { limitMarker(kind: kind, limit: $0) } ?? glyphMarker(kind: kind)
+        let rendered = limit.map { limitMarker(kind: kind, limit: $0, direction: step) }
+            ?? glyphMarker(kind: kind, direction: step)
         cache[key] = rendered
         return rendered
     }
 
+    /// Клин «камера смотрит туда» — та же деталь, что на телефоне. Рисуется
+    /// только там, где направление доказано (см. Camera.markerDirection):
+    /// половина базы доказать его не может, и клин у такой камеры был бы ложью.
+    private static func drawCone(direction: Int?, kind: CameraType,
+                                 center: CGPoint, radius: CGFloat) {
+        guard let direction else { return }
+        let spread = AppConfig.mapDirectionConeDegrees * .pi / 180
+        // Ноль градусов — на север, то есть вверх по экрану карты.
+        let heading = Double(direction) * .pi / 180 - .pi / 2
+        let path = UIBezierPath()
+        path.move(to: center)
+        path.addArc(withCenter: center, radius: radius,
+                    startAngle: CGFloat(heading - spread / 2),
+                    endAngle: CGFloat(heading + spread / 2), clockwise: true)
+        path.close()
+        UIColor(kind.tint).withAlphaComponent(0.45).setFill()
+        path.fill()
+    }
+
     /// Знак «ограничение скорости» с цветной точкой типа внизу — тот же язык,
     /// что на карте телефона.
-    private static func limitMarker(kind: CameraType, limit: Int) -> UIImage {
-        let size = CGSize(width: 34, height: 40)
+    private static func limitMarker(kind: CameraType, limit: Int, direction: Int?) -> UIImage {
+        let size = CGSize(width: 46, height: 52)
         return UIGraphicsImageRenderer(size: size).image { _ in
-            let sign = CGRect(x: 1, y: 0, width: 32, height: 32)
+            let sign = CGRect(x: 7, y: 6, width: 32, height: 32)
+            drawCone(direction: direction, kind: kind,
+                     center: CGPoint(x: sign.midX, y: sign.midY), radius: 22)
             UIColor.white.setFill()
             UIBezierPath(ovalIn: sign).fill()
             UIColor(red: 0.85, green: 0.1, blue: 0.1, alpha: 1).setStroke()
@@ -368,7 +432,7 @@ final class CameraMarkerView: MKAnnotationView {
                                   y: sign.midY - bounds.height / 2),
                       withAttributes: attributes)
 
-            let dot = CGRect(x: size.width / 2 - 6, y: 27, width: 12, height: 12)
+            let dot = CGRect(x: size.width / 2 - 6, y: 33, width: 12, height: 12)
             UIColor(kind.tint).setFill()
             UIBezierPath(ovalIn: dot).fill()
             UIColor.white.setStroke()
@@ -380,10 +444,12 @@ final class CameraMarkerView: MKAnnotationView {
 
     /// Лимит неизвестен — цветной круг с глифом типа: тёмная кайма держит
     /// маркер читаемым и на светлых участках карты.
-    private static func glyphMarker(kind: CameraType) -> UIImage {
-        let size = CGSize(width: 32, height: 32)
+    private static func glyphMarker(kind: CameraType, direction: Int?) -> UIImage {
+        let size = CGSize(width: 44, height: 44)
         return UIGraphicsImageRenderer(size: size).image { _ in
-            let rect = CGRect(origin: .zero, size: size)
+            let rect = CGRect(x: 6, y: 6, width: 32, height: 32)
+            drawCone(direction: direction, kind: kind,
+                     center: CGPoint(x: rect.midX, y: rect.midY), radius: 21)
             UIColor.black.withAlphaComponent(0.55).setFill()
             UIBezierPath(ovalIn: rect).fill()
             UIColor(kind.tint).setFill()

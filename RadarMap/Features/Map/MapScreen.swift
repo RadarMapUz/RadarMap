@@ -14,7 +14,6 @@ struct MapScreen: View {
     @Environment(AppEnvironment.self) private var env
     @State private var map = MapState()
     @State private var dismissedApproachID: Int?
-    @State private var headingUp = false
     @State private var showRouteCameras = false
     // Умные кнопки: в поездке через 5 с бездействия интерфейс прячется, тап по карте возвращает.
     @State private var controlsHidden = false
@@ -29,8 +28,8 @@ struct MapScreen: View {
     @State private var showQuickToggles = false
     /// Пикер типа отметки (радар/тренога/пост/ДТП) для выбранной точки.
     @State private var reportPoint: MapPoint?
-    /// Связывает карту с внешним MapCompass: системный компас, но в нашей колонке
-    /// контролов, а не под статус-баром.
+    /// Область карты для системных контролов MapKit. Своих в ней не осталось
+    /// (компас убран), но scope нужен `Map(scope:)`.
     @Namespace private var mapScope
 
     /// Что нужно водителю прямо сейчас: правила видимости — в MapMode,
@@ -74,7 +73,7 @@ struct MapScreen: View {
             OverspeedVignetteGate()
 
             // Следование за GPS: единственный подписчик locationTick.
-            LocationFollowDriver(map: map, headingUp: headingUp)
+            LocationFollowDriver(map: map)
         }
         .mapScope(mapScope)
         .fullScreenCover(isPresented: $showDashboard) { DashboardView() }
@@ -146,7 +145,10 @@ struct MapScreen: View {
             dismissedApproachID = nil   // новая ближайшая камера — снова показываем предупреждение
         }
         .onChange(of: env.location.isTripActive) { _, active in
-            headingUp = active   // в поездке карта сама встаёт «по ходу движения»
+            // В поездке карта сама встаёт «по ходу движения», после — назад на север.
+            map.apply(orientation: active ? .heading : .following,
+                      coordinate: env.location.currentCoordinate,
+                      course: env.location.currentCourse, inTrip: active)
             if active {
                 scheduleControlsHide()
             } else {
@@ -207,6 +209,15 @@ struct MapScreen: View {
         }
     }
 
+    /// Места на подложке. Полностью стерильная карта была мертва в покое: ни
+    /// заправки, ни больницы — то есть ровно того, ради чего карту открывают,
+    /// когда никуда не едешь. За рулём подписи гасим сами: на скорости они
+    /// только засоряют, а водитель смотрит на дорогу, а не читает вывески.
+    private var pointsOfInterest: PointOfInterestCategories {
+        guard env.settings.mapPlaces, !env.location.isTripActive else { return .excludingAll }
+        return .including([.gasStation, .parking, .hospital, .pharmacy, .police])
+    }
+
     private var mapContent: some View {
         Map(position: $map.position, scope: mapScope) {
             UserAnnotation()
@@ -249,6 +260,10 @@ struct MapScreen: View {
                 .annotationTitles(.hidden)
             }
 
+            // Важность считается один раз на пересборку: id цели и камеры
+            // маршрута меняются редко, точка отсчёта троттлится по 300 м.
+            let targetID = env.location.nearestCamera?.id
+            let routeIDs = Set(env.route.camerasOnRoute.map(\.camera.id))
             ForEach(map.visibleCameras) { camera in
                 Annotation(camera.displayTitle, coordinate: camera.coordinate, anchor: .center) {
                     // Средний зум: точки; близкий — мини-знак лимита («60»);
@@ -256,11 +271,12 @@ struct MapScreen: View {
                     CameraAnnotationView(
                         camera: camera,
                         selected: map.highlightedID == camera.id,
-                        compact: map.isDotZoom
-                            && camera.id != env.location.nearestCamera?.id,
+                        compact: map.isDotZoom && camera.id != targetID,
                         // Лимит из слоя, а не из спатиал-индекса: 220 запросов
                         // на каждую перерисовку карты — это и был один из лагов.
-                        limit: map.isDotZoom ? nil : map.visibleLimits[camera.id]
+                        limit: map.isDotZoom ? nil : map.visibleLimits[camera.id],
+                        tier: CameraMapContent.tier(camera: camera, focus: map.focus,
+                                                    targetID: targetID, routeIDs: routeIDs)
                     )
                     .onTapGesture { map.select(camera) }
                 }
@@ -285,14 +301,13 @@ struct MapScreen: View {
                 .annotationTitles(.hidden)
             }
         }
-        .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll, showsTraffic: false))
-        // Системный компас вылезал под статус-бар в правом верхнем углу —
-        // прячем, свой (по повороту карты) живёт в колонке контролов.
+        .mapStyle(.standard(elevation: .flat, pointsOfInterest: pointsOfInterest,
+                            showsTraffic: env.settings.mapTraffic))
+        // Системный компас убран совсем: при севере вверху он не значит ничего,
+        // а при повороте его роль берёт третье состояние MapOrientationControl.
         .mapControls {}
         .onMapCameraChange(frequency: .onEnd) { context in
             map.updateVisible(for: context.region)
-            // Потянул карту рукой — слежение за компасом устройства снимается.
-            if !map.position.followsUserLocation { map.followsDeviceHeading = false }
         }
         // Любое касание карты будит спрятанные кнопки (не мешая тапам по маркерам)
         // и закрывает бар точки долгого тапа.
@@ -302,7 +317,13 @@ struct MapScreen: View {
                 withAnimation(.spring(duration: 0.3)) { map.pressedPoint = nil }
             }
         })
-        .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in revealControls() })
+        // Потянул карту рукой — слежение снимается. Именно жест, а не
+        // onMapCameraChange: тот срабатывает и на собственные анимации следования,
+        // и режим «по ходу движения» гасил бы сам себя на каждом кадре.
+        .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
+            revealControls()
+            map.releaseOrientation()
+        })
     }
 
     // MARK: - Умные кнопки
@@ -361,23 +382,13 @@ struct MapScreen: View {
             // Turn-by-turn: ближайший манёвр — в поездке по маршруту.
             // Отдельная вью: дистанция до манёвра меняется каждый тик GPS.
             ManeuverBannerGate()
-            // Кнопки навигации — сразу под HUD справа; в поездке сами прячутся.
-            if !map.isAddingCamera && !controlsHidden {
+            // Кнопки навигации — сразу под HUD справа. Не прячутся: см. controlColumn.
+            if !map.isAddingCamera {
                 HStack {
                     Spacer()
                     controlColumn
                 }
                 .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
-            // Компас — ВНЕ прячущейся колонки (та удаляется из иерархии по таймауту,
-            // и компас пропадал вместе с ней). Виден всегда: «появляется при повороте»
-            // оказалось неочевидным — кнопку, которую нужно знать, не находят.
-            if !map.isAddingCamera {
-                HStack {
-                    Spacer()
-                    MapCompass(scope: mapScope)
-                        .mapControlVisibility(.visible)
-                }
             }
             Spacer()
         }
@@ -415,27 +426,18 @@ struct MapScreen: View {
 
     // MARK: - Колонка навигации (компас, локация, зум)
 
+    /// Две кнопки — и обе живут постоянно, не прячась по таймауту.
+    ///
+    /// Раньше колонка пряталась целиком через 5 секунд бездействия в поездке, и
+    /// вместе с ней исчезала кнопка «Радар здесь!» — то есть единственный способ
+    /// отметить треногу пропадал ровно тогда, когда мимо треноги едешь. Прятать
+    /// нужно хром (легенду, быстрые цели, бар действий), а не органы управления.
     private var controlColumn: some View {
         VStack(spacing: 12) {
-            // Тумблер «по ходу движения» нужен только в движении: вне поездки/маршрута
-            // он висел в углу без дела и налезал на маркеры камер.
-            if env.location.isTripActive || env.route.isActive {
-                CircleControl(systemName: headingUp ? "location.north.line.fill" : "location.north.line",
-                              tint: headingUp ? Theme.accent : Theme.textPrimary,
-                              accessibilityLabel: "Карта по ходу движения") {
-                    headingUp.toggle()
-                    if headingUp {
-                        map.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
-                    }
-                    revealControls()
-                }
-                .transition(.scale.combined(with: .opacity))
-            }
-            CircleControl(systemName: map.followsDeviceHeading ? "location.north.circle.fill"
-                                                              : "location.fill",
-                          tint: Theme.accent,
-                          accessibilityLabel: "Моё местоположение") {
-                recenter()
+            MapOrientationControl(orientation: map.orientation) {
+                map.cycleOrientation(coordinate: env.location.currentCoordinate,
+                                     course: env.location.currentCourse,
+                                     inTrip: env.location.isTripActive)
                 revealControls()
             }
             // «Радар здесь!» одним тапом — отметить передвижной радар для
@@ -450,10 +452,11 @@ struct MapScreen: View {
                     }
                     revealControls()
                 }
+                .transition(.scale.combined(with: .opacity))
             }
             // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
-        .animation(.spring(duration: 0.3), value: env.location.isTripActive || env.route.isActive)
+        .animation(.spring(duration: 0.3), value: mode.showsReportButton)
     }
 
     // MARK: - Низ: панель действий / режим добавления
@@ -608,7 +611,8 @@ struct MapScreen: View {
             var rect = MKMapRect.null
             for variant in env.route.variants { rect = rect.union(variant.polyline.boundingMapRect) }
             if !rect.isNull {
-                headingUp = false
+                // Показываем маршрут целиком — это уже не слежение за точкой.
+                map.releaseOrientation()
                 let padded = rect.insetBy(dx: -rect.width * 0.18, dy: -rect.height * 0.18)
                 withAnimation(.easeInOut(duration: 0.5)) {
                     map.position = .rect(padded)
@@ -701,38 +705,85 @@ struct MapScreen: View {
             .contentShape(Rectangle())
     }
 
-    /// Легенда-кнопка: свёрнута в компактный кружок, тап раскрывает на 6 секунд.
+    /// Кнопка слоёв: свёрнута в компактный кружок, тап раскрывает панель —
+    /// легенда типов плюс два тумблера подложки. Тумблеры живут именно здесь,
+    /// а не в настройках: это решение «что показать на карте прямо сейчас»,
+    /// и принимают его глядя на карту.
     @ViewBuilder private var smartLegend: some View {
+        @Bindable var settings = env.settings
         if legendExpanded {
             VStack(alignment: .leading, spacing: 8) {
                 LegendChip(color: Theme.Types.camera, symbol: "camera.fill", text: "Камера")
                 LegendChip(color: Theme.Types.radar, symbol: "speedometer", text: "Радар")
                 LegendChip(color: Theme.Types.intelligent, symbol: "camera.metering.matrix", text: "Интеллект.")
                 LegendChip(color: Theme.Types.mobile, symbol: "dot.radiowaves.left.and.right", text: "Передвижной")
+
+                Rectangle().fill(Theme.stroke).frame(height: 1).padding(.vertical, 2)
+
+                layerToggle("Пробки", "car.2.fill", isOn: $settings.mapTraffic)
+                layerToggle("Места", "fuelpump.fill", isOn: $settings.mapPlaces)
+                if env.location.isTripActive, env.settings.mapPlaces {
+                    Text("в поездке места скрыты")
+                        .font(.rounded(10))
+                        .foregroundStyle(Theme.textTertiary)
+                }
             }
             .padding(12)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
-            .onTapGesture { toggleLegend() }
             .transition(.scale(scale: 0.7, anchor: .bottomLeading).combined(with: .opacity))
         } else {
             CircleControl(systemName: "square.3.layers.3d", size: 44,
-                          accessibilityLabel: "Легенда камер") {
+                          accessibilityLabel: "Слои карты") {
                 toggleLegend()
             }
             .transition(.scale(scale: 0.7, anchor: .bottomLeading).combined(with: .opacity))
         }
     }
 
+    /// Строка-тумблер слоя. Тап по ней не сворачивает панель — иначе включить
+    /// оба слоя за один заход было бы нельзя.
+    private func layerToggle(_ title: LocalizedStringKey, _ icon: String,
+                             isOn: Binding<Bool>) -> some View {
+        Button {
+            isOn.wrappedValue.toggle()
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            postponeLegendCollapse()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(isOn.wrappedValue ? Theme.accent : Theme.textTertiary)
+                    .frame(width: 18)
+                Text(title)
+                    .font(.rounded(12, .medium))
+                    .foregroundStyle(Theme.textPrimary)
+                Spacer(minLength: 10)
+                Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
+                    .font(.rounded(13))
+                    .foregroundStyle(isOn.wrappedValue ? Theme.accent : Theme.textTertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn.wrappedValue ? [.isButton, .isSelected] : .isButton)
+    }
+
     private func toggleLegend() {
         legendCollapseTask?.cancel()
         withAnimation(.spring(duration: 0.35)) { legendExpanded.toggle() }
-        if legendExpanded {
-            legendCollapseTask = Task {
-                await Task.pause(seconds: 6)
-                guard !Task.isCancelled else { return }
-                withAnimation(.spring(duration: 0.35)) { legendExpanded = false }
-            }
+        if legendExpanded { postponeLegendCollapse() }
+    }
+
+    /// Панель сворачивается сама — каждое действие в ней отодвигает срок,
+    /// иначе она закрывалась бы под рукой. Шесть секунд хватало справочной
+    /// легенде; с тумблерами нужно успеть прочитать И переключить.
+    private func postponeLegendCollapse() {
+        legendCollapseTask?.cancel()
+        legendCollapseTask = Task {
+            await Task.pause(seconds: 12)
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(duration: 0.35)) { legendExpanded = false }
         }
     }
 
@@ -780,31 +831,6 @@ struct MapScreen: View {
             }
         }
         withAnimation { map.isAddingCamera = false }
-    }
-
-    private func recenter() {
-        if headingUp {
-            map.follow(coordinate: env.location.currentCoordinate, course: env.location.currentCourse, pitched: env.location.isTripActive)
-            return
-        }
-        // Как в Apple Maps: первый тап — центр на себе; второй — карта крутится
-        // сама за компасом устройства (куда повернул телефон, туда и карта).
-        if map.position.followsUserLocation && !map.followsDeviceHeading {
-            map.followsDeviceHeading = true
-            withAnimation(.easeInOut(duration: 0.35)) {
-                map.position = .userLocation(followsHeading: true,
-                                             fallback: .region(AppConfig.uzbekistanRegion))
-            }
-        } else {
-            map.followsDeviceHeading = false
-            withAnimation(.easeInOut(duration: 0.35)) {
-                map.position = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
-            }
-        }
-        // Целевой регион известен только когда есть геопозиция — подгружаем окрестности сами.
-        if let coordinate = env.location.currentCoordinate {
-            map.refreshVisible(around: coordinate, widthMeters: 3000)
-        }
     }
 
     private var bannerInfo: (message: String, button: String, action: () -> Void)? {
@@ -934,8 +960,7 @@ struct MapScreen: View {
                 if args.contains("-driveDemo") {
                     await Task.pause(seconds: 3)
                     if env.route.isActive {
-                        headingUp = true
-                        env.location.startTrip()
+                        env.location.startTrip()   // ориентацию поставит onChange
                     }
                     // Автозавершение поездки через N секунд: на симуляторе нет
                     // CoreMotion (автостоп не сработает) и нет тапов — а для
@@ -944,7 +969,6 @@ struct MapScreen: View {
                        let seconds = args.dropFirst(idx + 1).first.flatMap(Double.init) {
                         await Task.pause(seconds: seconds)
                         env.location.endTrip()
-                        headingUp = false
                     }
                 }
             }
@@ -1036,21 +1060,24 @@ private struct DrivingHintChip: View {
 private struct LocationFollowDriver: View {
     @Environment(AppEnvironment.self) private var env
     let map: MapState
-    let headingUp: Bool
 
     var body: some View {
         Color.clear
             .allowsHitTesting(false)
             .onChange(of: env.location.locationTick) { _, _ in
                 // Прогресс маршрута (прибытие/манёвры) тикает в LocationService —
-                // здесь только следование карты за курсом.
-                if headingUp {
+                // здесь только следование карты за курсом. Вне поездки поворот
+                // по компасу телефона делает сам MapKit (.userLocation
+                // followsHeading), догонять его тиками не нужно.
+                if map.orientation == .heading, env.location.isTripActive {
                     map.follow(coordinate: env.location.currentCoordinate,
                                course: env.location.currentCourse,
-                               pitched: env.location.isTripActive)
+                               pitched: true)
                 }
                 if let coordinate = env.location.currentCoordinate {
                     map.snapToUserOnce(coordinate)   // первый фикс после запуска → окрестности
+                    // Точка отсчёта важности маркеров: сама себя троттлит.
+                    map.updateFocus(coordinate)
                 }
             }
     }

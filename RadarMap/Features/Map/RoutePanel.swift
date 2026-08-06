@@ -191,10 +191,19 @@ struct TripLiveBar: View {
                             .font(.rounded(20, .heavy).monospacedDigit())
                             .foregroundStyle(Theme.success)
                     }
-                    Text("\(Formatting.distance(env.trip.distanceMeters)) · \(env.trip.camerasPassed) 📷")
-                        .font(.rounded(12, .medium))
-                        .foregroundStyle(Theme.textSecondary)
-                        .contentTransition(.numericText())
+                    // Эмодзи-камера рендерилась чёрно-белым глифом и выбивалась
+                    // из всего интерфейса — здесь тот же SF Symbol, что везде.
+                    HStack(spacing: 4) {
+                        Text(Formatting.distance(env.trip.distanceMeters))
+                            .contentTransition(.numericText())
+                        Text("·")
+                        Image(systemName: "camera.fill")
+                            .font(.rounded(10, .semibold))
+                        Text("\(env.trip.camerasPassed)")
+                            .contentTransition(.numericText())
+                    }
+                    .font(.rounded(12, .medium))
+                    .foregroundStyle(Theme.textSecondary)
                 }
             }
             Spacer(minLength: 8)

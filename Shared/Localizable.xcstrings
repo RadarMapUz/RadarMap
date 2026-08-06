@@ -7023,7 +7023,20 @@
       }
     },
     "Сбросить маршрут" : {
-
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сбросить маршрут"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marshrutni bekor qilish"
+          }
+        }
+      }
     },
     "сверните на съезд" : {
       "localizations" : {
@@ -8881,6 +8894,86 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "o'tishlar: %lld"
+          }
+        }
+      }
+    },
+    "Карта следует за вами" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Карта следует за вами"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xarita sizni kuzatmoqda"
+          }
+        }
+      }
+    },
+    "Места" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Места"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Joylar"
+          }
+        }
+      }
+    },
+    "Пробки" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пробки"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tirbandlik"
+          }
+        }
+      }
+    },
+    "Слои карты" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Слои карты"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xarita qatlamlari"
+          }
+        }
+      }
+    },
+    "в поездке места скрыты" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "в поездке места скрыты"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "safarda joylar yashiriladi"
           }
         }
       }

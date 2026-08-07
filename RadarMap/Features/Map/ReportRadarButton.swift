@@ -33,26 +33,7 @@ struct ReportRadarButton: View {
 
     var body: some View {
         Button(action: send) {
-            ZStack {
-                RoundedRectangle(cornerRadius: isLarge ? 20 : 14, style: .continuous)
-                    .fill(background.gradient)
-                if isSending {
-                    ProgressView().controlSize(.small).tint(.white)
-                } else {
-                    Image(systemName: symbol)
-                        .font(.system(size: isLarge ? 30 : 17, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-            }
-            .frame(width: isLarge ? 96 : 44, height: isLarge ? 76 : 44)
-            .overlay(alignment: .bottom) {
-                if isLarge, !isSending {
-                    Text("Радар")
-                        .font(.rounded(11, .bold))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .padding(.bottom, 6)
-                }
-            }
+            if isLarge { largeLabel } else { compactLabel }
         }
         .buttonStyle(.plain)
         .disabled(isSending)
@@ -60,6 +41,45 @@ struct ReportRadarButton: View {
         .animation(.easeOut(duration: 0.2), value: isSending)
         .accessibilityLabel(Text("Отметить радар"))
         .accessibilityHint(Text("Отправляет отметку другим водителям"))
+    }
+
+    /// Приборка: капсула во всю ширину. Тап делается вслепую, и промахнуться
+    /// мимо полосы на весь экран сложнее, чем мимо квадрата по центру.
+    private var largeLabel: some View {
+        HStack(spacing: 10) {
+            if isSending {
+                ProgressView().controlSize(.regular).tint(.white)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: 22, weight: .bold))
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            Text("Радар")
+                .font(.rounded(21, .heavy))
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity)
+        .frame(height: 62)
+        .background(background.gradient, in: Capsule())
+        // Свечение вместо рамки: кнопка должна находиться боковым зрением
+        // на чёрном экране, не крича громче предупреждения о камере.
+        .shadow(color: background.opacity(0.35), radius: 14, y: 5)
+    }
+
+    /// Строка маршрута: компактный квадрат в ряду других кнопок.
+    private var compactLabel: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(background.gradient)
+            if isSending {
+                ProgressView().controlSize(.small).tint(.white)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+        }
+        .frame(width: 44, height: 44)
     }
 
     private var symbol: String {

@@ -129,6 +129,166 @@
         }
       }
     },
+    "Быстрые тумблеры" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Быстрые тумблеры"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tezkor sozlagichlar"
+          }
+        }
+      }
+    },
+    "Вы на месте" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы на месте"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yetib keldingiz"
+          }
+        }
+      }
+    },
+    "Если приложение промолчало об этой камере — скажите. Мы приложим место, скорость и лимит: без них найти причину невозможно." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Если приложение промолчало об этой камере — скажите. Мы приложим место, скорость и лимит: без них найти причину невозможно."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agar ilova bu kamera haqida jim qolgan bo‘lsa — ayting. Joy, tezlik va cheklovni ilova qilamiz: ularsiz sababini topib bo‘lmaydi."
+          }
+        }
+      }
+    },
+    "Закрывает карточку прибытия" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Закрывает карточку прибытия"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yetib kelish kartasini yopadi"
+          }
+        }
+      }
+    },
+    "Не предупредила о камере" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не предупредила о камере"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamera haqida ogohlantirmadi"
+          }
+        }
+      }
+    },
+    "Открывает спидометр" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открывает спидометр"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spidometrni ochadi"
+          }
+        }
+      }
+    },
+    "Отметить радар" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отметить радар"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Radarni belgilash"
+          }
+        }
+      }
+    },
+    "Отправляет отметку другим водителям" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отправляет отметку другим водителям"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belgini boshqa haydovchilarga yuboradi"
+          }
+        }
+      }
+    },
+    "Прослушать оповещение" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Прослушать оповещение"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ogohlantirishni tinglash"
+          }
+        }
+      }
+    },
+    "Радар ещё стоял?" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Радар ещё стоял?"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Radar hali ham turibdimi?"
+          }
+        }
+      }
+    },
     "Жарко — экономлю экран" : {
       "localizations" : {
         "ru" : {

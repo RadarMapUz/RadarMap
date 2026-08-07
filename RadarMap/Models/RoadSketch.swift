@@ -10,16 +10,20 @@
 //  серый экран), и её надо ЧИТАТЬ — найти себя, найти точку, соотнести с
 //  дорогой. Это секунды внимания там, где есть доли.
 //
-//  А чертить есть из чего: у 3455 камер из 3467 в базе лежит кусок их
-//  СОБСТВЕННОЙ проезжей части (`Camera.road`, медиана 200 м). Значит дорогу
-//  камеры можно нарисовать по-настоящему, локально, без единого байта сети.
+//  Устройство — «север вверху» плюс точка зрения, и это разделение и есть
+//  плавность за дёшево. СЦЕНА (Scene) строится в метрах вокруг опорной точки
+//  без всякого курса и растеризуется вью ОДИН раз; между GPS-тиками движение
+//  изображают три анимированных transform'а (сдвиг, поворот по курсу, зум),
+//  которые компоновщик считает на GPU без единой перерисовки. Пересборка сцены
+//  случается на смене данных или уходе от опоры (needsRebuild) — раз в сотни
+//  метров, а не раз в секунду, как рисовала прежняя раскладка.
 //
-//  Схема ориентирована ПО ХОДУ ДВИЖЕНИЯ: мой курс — вверх. Тогда дорога камеры
-//  на экране либо идёт вертикально (камера на моей дороге), либо пересекает
-//  вид поперёк (камера на другой улице) — и это видно мгновенно, без чтения.
-//  Ровно тот вопрос, на который приложение до сих пор не отвечало никак.
+//  Всё, что в сцене, — измеренные данные: проезжая часть камеры из базы (есть
+//  у 3455 камер из 3467), окрестная сеть из индекса лимитов, маршрут и свой
+//  трек. Улицы, которых мы не знаем, не дорисовываются: пустота честнее
+//  выдумки.
 //
-//  Чистая геометрия, покрыта RoadSketchTests.
+//  Чистая геометрия, покрыта RoadSketchTests и PerformanceBudgetTests.
 //
 
 import CoreLocation
@@ -28,9 +32,7 @@ import Foundation
 
 nonisolated enum RoadSketch {
 
-    /// Раскладка в координатах вида: 0…1 по обеим осям, y растёт ВНИЗ (как в
-    /// SwiftUI). Всё, что нужно для отрисовки, уже посчитано — вью только чертит.
-    /// Дорога сети, готовая к отрисовке.
+    /// Дорога сети в сцене (метры относительно опоры, север — +y).
     struct Line: Equatable {
         var points: [CGPoint]
         var kind: RoadClass
@@ -41,30 +43,68 @@ nonisolated enum RoadSketch {
         var isDetailed: Bool
     }
 
-    struct Layout: Equatable {
+    /// Камера в сцене: id нужен, чтобы вью подсветила тревожную кольцом.
+    struct CameraDot: Equatable {
+        var id: Int
+        var point: CGPoint
+    }
+
+    /// Сцена «север вверху» в МЕТРАХ относительно опорной точки. Никакого
+    /// курса и никакого экрана: и то и другое — дело точки зрения, которая
+    /// меняется каждый тик, тогда как сцена живёт сотни метров.
+    struct Scene: Equatable {
         /// Окрестная дорожная сеть — перекрёстки, развязки, параллельные улицы.
         var network: [Line] = []
-        /// Проезжая часть камеры, продлённая до краёв вида.
+        /// Проезжая часть тревожной камеры, продлённая по её направлению.
         var road: [CGPoint] = []
-        /// Построенный маршрут — та самая жирная линия «куда я еду».
-        var route: [CGPoint] = []
-        /// Откуда я приехал: хвост трека поездки. Даёт схеме контекст улицы
-        /// вместо линии в пустоте.
-        var track: [CGPoint] = []
-        /// Камера. `nil` — камер впереди нет, чертим только себя и маршрут.
-        var camera: CGPoint?
-        /// Я. Всегда в одной точке — схема движется относительно меня, а не наоборот.
-        var me: CGPoint = .init(x: 0.5, y: meY)
-        /// Сколько метров укладывается по высоте вида (для подписи масштаба).
-        var spanMeters: Double = minSpanMeters
-        /// Дорога камеры нарисована по её реальной геометрии, а не предположена
-        /// по оси. Вью показывает предположение бледнее — обещать точность,
-        /// которой нет, нельзя.
+        /// Дорога камеры измерена снапом, а не предположена по оси. Вью
+        /// показывает предположение бледнее — обещать точность, которой нет,
+        /// нельзя.
         var roadIsMeasured = false
+        /// Построенный маршрут — «куда я еду».
+        var route: [CGPoint] = []
+        /// Хвост трека поездки — «откуда я приехал».
+        var track: [CGPoint] = []
+        /// ВСЕ камеры охвата, а не только тревожная: на ферганском чорраха
+        /// их четыре, и схема с одной точкой прятала три остальные.
+        var cameras: [CameraDot] = []
+        /// Камера, о которой сейчас предупреждаем (кольцо и её дорога). nil —
+        /// тревожной в охвате нет.
+        var alertCameraID: Int?
+        var anchorLatitude: Double = 0
+        var anchorLongitude: Double = 0
+        /// Ступень масштаба, под которую растеризована сцена (метры по высоте
+        /// вида). Вью докручивает точный масштаб scaleEffect'ом ≤ 1.
+        var spanBucket: Double = minSpanMeters
+        /// Охват в момент сборки: от него считаются дрейф до пересборки и
+        /// сторона растра.
+        var spanAtBuild: Double = minSpanMeters
+        /// Радиус содержимого сцены вокруг опоры, метры.
+        var radiusMeters: Double = 0
 
-        var isEmpty: Bool {
-            network.isEmpty && road.isEmpty && route.isEmpty && track.isEmpty && camera == nil
+        var anchor: CLLocationCoordinate2D {
+            CLLocationCoordinate2D(latitude: anchorLatitude, longitude: anchorLongitude)
         }
+        var isEmpty: Bool {
+            network.isEmpty && road.isEmpty && route.isEmpty && track.isEmpty
+                && cameras.isEmpty
+        }
+        var alertCamera: CGPoint? {
+            guard let alertCameraID else { return nil }
+            return cameras.first { $0.id == alertCameraID }?.point
+        }
+    }
+
+    /// Ключ пересборки: пока он совпадает и мы не уехали от опоры, растр
+    /// переиспользуется как есть.
+    struct RebuildKey: Equatable {
+        var alertCameraID: Int?
+        var alertInRange = false
+        var spanBucket: Double = minSpanMeters
+        var routeToken: ObjectIdentifier?
+        var networkGeneration = 0
+        var storeRevision = 0
+        var budget = 0
     }
 
     /// Где стоит «я»: не в центре, а ниже — впереди должно быть видно больше,
@@ -87,98 +127,179 @@ nonisolated enum RoadSketch {
     /// только на своём порядке длины. Дальше начинается сочинение геометрии.
     static let maxExtensionMeters: Double = 180
 
-    /// Построить раскладку. `nil` — чертить нечего (нет курса: на стоянке
-    /// «по ходу движения» не определено, и схема соврала бы направлением).
+    /// Шаг ступеней масштаба. Растр рисуется под ступень, точный масштаб
+    /// добирает scaleEffect в пределах (1/ratio, 1] — сцена не пересобирается
+    /// от каждого метра сближения с камерой.
+    static let bucketRatio = 1.25
+
+    /// Доля охвата, после которой уехали от опоры и растр надо пересобрать.
+    static let rebuildDriftFactor = 0.35
+
+    /// Сколько метров можно уехать от опоры, не пересобирая растр. Нижняя
+    /// граница в метрах принципиальна: на минимальном охвате доля от 140 м —
+    /// это пересборка каждые полсотни метров, то есть каждые пару секунд по
+    /// городу. Запас оплачивается стороной растра, а не тиками.
+    static func driftMeters(forSpan span: Double) -> Double {
+        max(rebuildDriftFactor * span, 100)
+    }
+
+    /// Радиус сцены: круг видимости при любом повороте (до дальнего угла
+    /// вида, ~1.5 охвата с запасом на докрутку масштаба) плюс дрейф до
+    /// пересборки.
+    static func sceneRadius(forSpan span: Double) -> Double {
+        span * 1.55 + driftMeters(forSpan: span)
+    }
+
+    // MARK: - Точка зрения (каждый тик, чистая арифметика)
+
+    /// Охват по дистанции до тревожной камеры: она должна попасть в верхнюю
+    /// часть вида с запасом, а не упираться в край.
+    static func span(forDistance distance: Double?) -> Double {
+        guard let distance else { return minSpanMeters }
+        return min(maxSpanMeters, max(minSpanMeters, distance / (meY - 0.12)))
+    }
+
+    /// Камера в охвате вида. За охватом она не рисуется вовсе: показать её у
+    /// края значило бы соврать масштабом, а дотянуть к ней дорогу — геометрией.
+    static func isInRange(distance: Double, span: Double) -> Bool {
+        distance <= span * (meY - 0.05)
+    }
+
+    /// Ступень масштаба ≤ охвата: растр выходит чуть детальнее, чем нужно,
+    /// и scaleEffect только СЖИМАЕТ (резкость не теряется).
+    static func bucket(forSpan span: Double) -> Double {
+        let steps = floor(log(span / minSpanMeters) / log(bucketRatio))
+        return minSpanMeters * pow(bucketRatio, max(0, steps))
+    }
+
+    /// Размотанный курс: переход 359°→1° должен крутить схему на +2°, а не
+    /// на −358° — анимация поворота интерполирует градусы как есть.
     ///
-    /// Сетку окрестных улиц не рисуем и не будем: дорожного графа на телефоне
-    /// нет, а придумывать улицы, которых мы не знаем, — это ровно то враньё,
-    /// от которого приложение и должно быть свободно. Чертим только измеренное:
-    /// проезжую часть камеры из базы, построенный маршрут и собственный трек.
-    static func layout(camera: Camera?,
-                       network: RoadNetworkSource = EmptyRoadNetwork(),
-                       networkBudget: Int = .max,
-                       route: [CLLocationCoordinate2D] = [],
-                       track: [CLLocationCoordinate2D] = [],
-                       from me: CLLocationCoordinate2D,
-                       courseDegrees: Double,
-                       aspect: Double) -> Layout? {
-        guard courseDegrees >= 0, aspect > 0 else { return nil }
+    /// nil — курса не было ни разу: повернуть схему наугад значило бы соврать
+    /// направлением. Стоя (raw < 0) держим прошлое значение: мы никуда не
+    /// повернули, и прошлый курс — честное описание того, как машина стоит.
+    static func unwound(_ previous: Double?, towards raw: Double) -> Double? {
+        guard raw >= 0 else { return previous }
+        guard let previous else { return raw }
+        var delta = (raw - previous).truncatingRemainder(dividingBy: 360)
+        if delta > 180 { delta -= 360 }
+        if delta < -180 { delta += 360 }
+        return previous + delta
+    }
 
-        let metersPerLon = 111_320.0 * cos(me.latitude * .pi / 180)
-        // Синус и косинус курса — один раз на раскладку, а не в каждой точке:
-        // через local() проходят тысячи точек маршрута и сетки на каждом
-        // GPS-тике открытой приборки.
-        let courseRadians = courseDegrees * .pi / 180
-        let sinCourse = sin(courseRadians), cosCourse = cos(courseRadians)
-        /// Метры относительно меня, повёрнутые так, что мой курс — вверх (+y).
+    /// Точка сцены → координаты вида (0…1, y растёт вниз) при данной точке
+    /// зрения. ОБЯЗАНА совпадать с transform'ами RoadSketchView — тесты
+    /// поворота проверяют именно эту функцию.
+    static func screenPoint(_ point: CGPoint, meOffset: CGPoint,
+                            courseDegrees: Double, spanMeters: Double,
+                            aspect: Double) -> CGPoint {
+        let east = point.x - meOffset.x
+        let north = point.y - meOffset.y
+        // Знак положительный, и это не мелочь: точка по курсу обязана
+        // оказаться строго ВВЕРХУ. С обратным знаком поворот давал
+        // x = d·sin(2·курс) — на курсе 45° камера уезжала вбок, и дорога,
+        // по которой едешь, рисовалась поперёк экрана.
+        let angle = courseDegrees * .pi / 180
+        let x = east * cos(angle) - north * sin(angle)
+        let y = east * sin(angle) + north * cos(angle)
+        return CGPoint(x: 0.5 + x / (spanMeters * aspect), y: meY - y / spanMeters)
+    }
+
+    /// Пора ли пересобирать растр: сменились данные или уехали от опоры.
+    static func needsRebuild(scene: Scene?, key: RebuildKey, previousKey: RebuildKey?,
+                             meOffsetMeters: CGPoint) -> Bool {
+        guard let scene, key == previousKey else { return true }
+        return hypot(meOffsetMeters.x, meOffsetMeters.y)
+            > driftMeters(forSpan: scene.spanAtBuild)
+    }
+
+    /// Деление линейки масштаба: круглое число, занимающее заметную, но не
+    /// доминирующую часть вида.
+    static func scaleBarMeters(forSpan span: Double) -> Double {
+        let candidates: [Double] = [50, 100, 200, 300, 500]
+        return candidates.last { $0 <= span * 0.45 } ?? candidates[0]
+    }
+
+    // MARK: - Сцена (раз в сотни метров)
+
+    /// Собрать сцену вокруг опоры. `meOffset` — где я относительно опоры в
+    /// момент сборки: нужен бюджету сети, чтобы при урезании выживали БЛИЖНИЕ
+    /// к машине линии.
+    static func scene(alertCamera: Camera?, alertInRange: Bool,
+                      cameras: [Camera] = [],
+                      network: RoadNetworkSource = EmptyRoadNetwork(),
+                      networkBudget: Int = .max,
+                      route: [CLLocationCoordinate2D] = [],
+                      track: [CLLocationCoordinate2D] = [],
+                      anchor: CLLocationCoordinate2D,
+                      meOffset: CGPoint = .zero,
+                      spanMeters: Double) -> Scene {
+        let radius = sceneRadius(forSpan: spanMeters)
+        let metersPerLon = 111_320.0 * cos(anchor.latitude * .pi / 180)
+        /// Метры относительно опоры: восток +x, север +y. Никакого поворота —
+        /// он дело точки зрения, а не сцены.
         func local(_ point: CLLocationCoordinate2D) -> CGPoint {
-            let east = (point.longitude - me.longitude) * metersPerLon
-            let north = (point.latitude - me.latitude) * 111_320.0
-            // Знак положительный, и это не мелочь: точка по курсу обязана
-            // оказаться строго ВВЕРХУ. С обратным знаком поворот давал
-            // x = d·sin(2·курс) — на курсе 45° камера уезжала вбок, и дорога,
-            // по которой едешь, рисовалась поперёк экрана.
-            return CGPoint(x: east * cosCourse - north * sinCourse,
-                           y: east * sinCourse + north * cosCourse)
+            CGPoint(x: (point.longitude - anchor.longitude) * metersPerLon,
+                    y: (point.latitude - anchor.latitude) * 111_320.0)
         }
-
-        let rawCameraPoint = camera.map { local($0.coordinate) }
-        let distance = rawCameraPoint.map { hypot($0.x, $0.y) } ?? 0
-        // Охват подбираем от дистанции: камера должна попасть в верхнюю часть
-        // вида с запасом, а не упираться в край, — но не дальше maxSpanMeters.
-        let span = min(maxSpanMeters, max(minSpanMeters, distance / (meY - 0.12)))
-        // Камера за охватом на схеме не появляется вовсе. Показать её у края
-        // значило бы соврать масштабом, а дотянуть к ней дорогу — геометрией.
-        let inRange = distance <= span * (meY - 0.05)
-        let cameraPoint = inRange ? rawCameraPoint : nil
-
-        /// Метры → координаты вида.
-        func project(_ point: CGPoint) -> CGPoint {
-            CGPoint(x: 0.5 + point.x / (span * aspect),
-                    y: meY - point.y / span)
-        }
-        /// Отбросить всё, что заведомо за краями, — ДО тригонометрии: маршрут
-        /// бывает на сотни километров, а чертим мы двести метров вокруг себя.
-        /// Сравнение в градусах — два модуля на точку вместо поворота каждой.
+        /// Отбросить всё, что заведомо за растром, — ДО перевода в метры:
+        /// маршрут бывает на сотни километров, а сцена — двухкилометровый круг.
         func nearby(_ points: [CLLocationCoordinate2D]) -> [CGPoint] {
-            let limit = span * 2
-            let maxLatDelta = limit / 111_320.0
-            let maxLonDelta = limit / metersPerLon
+            let maxLatDelta = radius / 111_320.0
+            let maxLonDelta = radius / metersPerLon
             return points.compactMap { point in
-                guard abs(point.latitude - me.latitude) <= maxLatDelta,
-                      abs(point.longitude - me.longitude) <= maxLonDelta
+                guard abs(point.latitude - anchor.latitude) <= maxLatDelta,
+                      abs(point.longitude - anchor.longitude) <= maxLonDelta
                 else { return nil }
-                return project(local(point))
+                return local(point)
             }
         }
 
-        var layout = Layout(camera: cameraPoint.map(project),
-                            spanMeters: span)
-        layout.route = nearby(route)
-        layout.track = nearby(track)
+        var scene = Scene(anchorLatitude: anchor.latitude,
+                          anchorLongitude: anchor.longitude,
+                          spanBucket: bucket(forSpan: spanMeters),
+                          spanAtBuild: spanMeters,
+                          radiusMeters: radius)
+        scene.route = nearby(route)
+        scene.track = nearby(track)
+
+        // Все камеры охвата — точками на своих местах. Тревожную гарантируем
+        // отдельно: сторонний список мог её не включить (лимит, фильтр вида).
+        scene.cameras = cameras.compactMap { camera in
+            let point = local(camera.coordinate)
+            guard hypot(point.x, point.y) <= radius else { return nil }
+            return CameraDot(id: camera.id, point: point)
+        }
+        if alertInRange, let alertCamera {
+            scene.alertCameraID = alertCamera.id
+            if !scene.cameras.contains(where: { $0.id == alertCamera.id }) {
+                scene.cameras.append(CameraDot(id: alertCamera.id,
+                                               point: local(alertCamera.coordinate)))
+            }
+        }
+
         if networkBudget > 0 {
-            // Сеть запрашиваем по диагонали вида, а не по высоте: иначе дороги
-            // обрывались бы у боковых краёв.
             let candidates = network
-                .roads(near: me, radius: span * sqrt(1 + aspect * aspect) * 0.6)
+                .roads(near: anchor, radius: radius)
                 .compactMap { line -> (line: Line, proximityMeters: Double)? in
                     guard line.points.count >= 2 else { return nil }
-                    // За один проход: проекция, близость к машине и рамка линии.
+                    // За один проход: перевод в метры, близость к машине и
+                    // рамка линии.
                     var proximity = Double.greatestFiniteMagnitude
                     var minX = CGFloat.infinity, maxX = -CGFloat.infinity
                     var minY = CGFloat.infinity, maxY = -CGFloat.infinity
                     let points = line.points.map { coordinate -> CGPoint in
-                        let meters = local(coordinate)
-                        proximity = min(proximity, max(abs(meters.x), abs(meters.y)))
-                        let point = project(meters)
+                        let point = local(coordinate)
+                        proximity = min(proximity, max(abs(point.x - meOffset.x),
+                                                       abs(point.y - meOffset.y)))
                         minX = min(minX, point.x); maxX = max(maxX, point.x)
                         minY = min(minY, point.y); maxY = max(maxY, point.y)
                         return point
                     }
-                    // Круг запроса у боковых краёв шире вида — линию, целиком
-                    // лежащую за экраном, незачем ни хранить, ни рисовать.
-                    guard maxX >= -0.05, minX <= 1.05,
-                          maxY >= -0.05, minY <= 1.05 else { return nil }
+                    // Линию целиком за квадратом растра незачем ни хранить,
+                    // ни рисовать.
+                    guard maxX >= -radius, minX <= radius,
+                          maxY >= -radius, minY <= radius else { return nil }
                     return (Line(points: points, kind: line.kind, level: line.level,
                                  isOneWay: line.isOneWay, isDetailed: line.isDetailed),
                             proximity)
@@ -191,30 +312,30 @@ nonisolated enum RoadSketch {
                 : Array(candidates.sorted { $0.proximityMeters < $1.proximityMeters }
                     .prefix(networkBudget))
             // Сначала земля, потом мосты: рендерер полагается на этот порядок.
-            layout.network = kept.map(\.line).sorted { $0.level < $1.level }
+            scene.network = kept.map(\.line).sorted { $0.level < $1.level }
         }
 
-        if let camera, let cameraPoint, inRange {
-            let shape = RoadShape(camera: camera)
-            layout.roadIsMeasured = (shape?.points.count ?? 0) >= 2
-            let raw: [CGPoint] = if let shape, layout.roadIsMeasured {
+        // Дорога тревожной камеры. Пунктиром — если предположена по оси.
+        if alertInRange, let alertCamera {
+            let cameraPoint = local(alertCamera.coordinate)
+            let shape = RoadShape(camera: alertCamera)
+            scene.roadIsMeasured = (shape?.points.count ?? 0) >= 2
+            let raw: [CGPoint] = if let shape, scene.roadIsMeasured {
                 shape.points.map(local)
-            } else if let axis = camera.axis {
+            } else if let axis = alertCamera.axis {
                 // Куска дороги нет (12 камер из 3467) — чертим ось как прямую
                 // через камеру. Это предположение, и вью рисует его бледнее.
-                straightLine(through: cameraPoint,
-                             bearingDegrees: Double(axis) - courseDegrees,
-                             halfLength: span)
+                straightLine(through: cameraPoint, bearingDegrees: Double(axis),
+                             halfLength: spanMeters)
             } else {
                 []
             }
-            layout.road = extended(raw, toReach: min(span * 0.5, maxExtensionMeters))
-                .map(project)
+            scene.road = extended(raw, toReach: min(spanMeters * 0.5, maxExtensionMeters))
         }
-        return layout
+        return scene
     }
 
-    /// Прямая через точку под заданным углом (0 = вверх, по часовой).
+    /// Прямая через точку под азимутом (0 = север, по часовой).
     private static func straightLine(through point: CGPoint, bearingDegrees: Double,
                                      halfLength: Double) -> [CGPoint] {
         let angle = bearingDegrees * .pi / 180

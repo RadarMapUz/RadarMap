@@ -2,34 +2,175 @@
 //  RoadSketchView.swift
 //  RadarMap
 //
-//  Схема «где камера» для приборки: чертим сами, без карты и без сети.
+//  Отрисовка схемы «где камера» для приборки: чертим сами, без карты и без
+//  сети.
 //
-//  Всё, что здесь нарисовано, — измеренные данные: проезжая часть камеры из
-//  базы (есть у 3455 камер из 3467), построенный маршрут и собственный трек.
-//  Сетки окрестных улиц нет и не будет: дорожного графа на телефоне мы не
-//  держим, а рисовать улицы, которых не знаем, — враньё ради красоты.
+//  Устройство повторяет архитектуру RoadSketch: сцена «север вверху»
+//  растеризуется ОДИН раз (Canvas + drawingGroup → текстура), а движение
+//  между GPS-тиками изображают три transform'а — сдвиг (я еду), поворот (мой
+//  курс — вверх) и зум (охват по дистанции до камеры). Их анимирует
+//  SketchState, компоновщик считает на GPU: ни перерисовки, ни работы CPU
+//  на кадр. Именно поэтому приборка остаётся самым дешёвым экраном
+//  приложения — и при этом движется плавно, а не прыжками раз в секунду.
 //
-//  Стоимость: один `Canvas` с десятком отрезков против MapKit с тайлами по
-//  сети. Приборка — режим «телефон лежит в держателе», и она обязана быть
-//  самым дешёвым экраном приложения, а не самым дорогим.
+//  Порядок transform'ов значим: offset (я — в центр растра) → rotation
+//  (вокруг меня) → scale (вокруг меня) → position (я — в точку «я» вида).
+//  Математика продублирована в RoadSketch.screenPoint и проверена тестами.
 //
 
 import CoreLocation
 import SwiftUI
 
 struct RoadSketchView: View {
-    let layout: RoadSketch.Layout
+    let scene: RoadSketch.Scene
+    let state: SketchState
     /// Цвет тревоги — тот же, что у дистанции рядом: схема и цифра не должны
     /// расходиться в оценке близости.
     var tint: Color = Theme.accent
 
     var body: some View {
+        GeometryReader { geometry in
+            let size = geometry.size
+            let pivot = CGPoint(x: size.width / 2,
+                                y: size.height * RoadSketch.meY)
+            // Пунктов на метр растра: по высоте вид покрывает spanBucket метров.
+            let k = size.height / scene.spanBucket
+            // Сторона квадрата растра: круг видимости вокруг «я» при любом
+            // повороте (до дальнего угла вида), с запасом на сжатие
+            // scaleEffect (≤ 1/bucketRatio) и на дрейф до пересборки растра.
+            let viewRadius = hypot(size.width / 2, size.height * RoadSketch.meY)
+            let side = 2 * (viewRadius * RoadSketch.bucketRatio
+                            + RoadSketch.driftMeters(forSpan: scene.spanAtBuild) * k)
+
+            ZStack {
+                world(side: side, k: k)
+                    .position(pivot)
+                vignette
+                MeArrow()
+                    .fill(.white)
+                    .shadow(color: .black.opacity(0.6), radius: 3)
+                    .frame(width: 26, height: 30)
+                    .position(pivot)
+                scaleBar(height: size.height)
+            }
+            .clipped()
+        }
+        .accessibilityHidden(true)   // цифру и сторону рядом VoiceOver уже читает
+    }
+
+    /// Мир: растр сцены и кольцо тревожной камеры, под общими transform'ами —
+    /// кольцо живёт в мировых координатах и движется вместе с дорогами само.
+    private func world(side: CGFloat, k: CGFloat) -> some View {
+        ZStack {
+            SketchRaster(scene: scene, k: k)
+                .equatable()
+                .frame(width: side, height: side)
+            if let camera = scene.alertCamera {
+                let at = CGPoint(x: side / 2 + camera.x * k,
+                                 y: side / 2 - camera.y * k)
+                Circle()
+                    .fill(tint.opacity(0.20))
+                    .frame(width: 44, height: 44)
+                    .position(at)
+                Circle()
+                    .stroke(tint, lineWidth: 3)
+                    .frame(width: 24, height: 24)
+                    .position(at)
+            }
+        }
+        .frame(width: side, height: side)
+        .offset(x: -state.meOffset.width * k, y: state.meOffset.height * k)
+        .rotationEffect(.degrees(-state.courseDegrees))
+        .scaleEffect(scene.spanBucket / state.spanMeters)
+    }
+
+    /// Виньетка: дороги растворяются у краёв, а не обрываются. Фон приборки
+    /// чёрный, поэтому чёрные градиенты поверх — это то же затухание, что
+    /// маска, только без офскрин-прохода.
+    private var vignette: some View {
+        Color.clear
+            .overlay(alignment: .top) {
+                LinearGradient(colors: [.black, .clear],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: 26)
+            }
+            .overlay(alignment: .bottom) {
+                LinearGradient(colors: [.clear, .black],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: 26)
+            }
+            .overlay(alignment: .leading) {
+                LinearGradient(colors: [.black, .clear],
+                               startPoint: .leading, endPoint: .trailing)
+                    .frame(width: 22)
+            }
+            .overlay(alignment: .trailing) {
+                LinearGradient(colors: [.clear, .black],
+                               startPoint: .leading, endPoint: .trailing)
+                    .frame(width: 22)
+            }
+            .allowsHitTesting(false)
+    }
+
+    /// Линейка масштаба: схема без масштаба заставляла бы угадывать, далеко
+    /// ли перекрёсток. Ширина следует за охватом и анимируется вместе с ним.
+    private func scaleBar(height: CGFloat) -> some View {
+        let meters = RoadSketch.scaleBarMeters(forSpan: state.spanMeters)
+        let width = CGFloat(meters) * height / CGFloat(state.spanMeters)
+        return HStack(spacing: 6) {
+            Capsule()
+                .fill(.white.opacity(0.35))
+                .frame(width: width, height: 2)
+            Text(Formatting.distance(meters))
+                .font(.rounded(11, .medium))
+                .monospacedDigit()
+                .foregroundStyle(Theme.textTertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity,
+               alignment: .bottomLeading)
+        .padding(.leading, 30)
+        .padding(.bottom, 8)
+        .allowsHitTesting(false)
+    }
+}
+
+/// Стрелка «я»: всегда строго вверх — схема повёрнута по ходу движения,
+/// поэтому «вверх» и есть «куда я еду». Отдельным слоем, а не в растре:
+/// мир вращается, стрелка — никогда.
+private struct MeArrow: Shape {
+    func path(in rect: CGRect) -> Path {
+        let cx = rect.midX, cy = rect.midY
+        var path = Path()
+        path.move(to: CGPoint(x: cx, y: cy - 15))
+        path.addLine(to: CGPoint(x: cx - 11, y: cy + 11))
+        path.addLine(to: CGPoint(x: cx, y: cy + 5))
+        path.addLine(to: CGPoint(x: cx + 11, y: cy + 11))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// Растр сцены. Equatable — SwiftUI не трогает Canvas, пока сцена та же:
+/// перерисовка случается на пересборке сцены, а не на каждом тике.
+private struct SketchRaster: View, Equatable {
+    let scene: RoadSketch.Scene
+    let k: CGFloat
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.k == rhs.k && lhs.scene == rhs.scene
+    }
+
+    var body: some View {
         Canvas { context, size in
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            func at(_ point: CGPoint) -> CGPoint {
+                CGPoint(x: center.x + point.x * k, y: center.y - point.y * k)
+            }
             func path(_ points: [CGPoint]) -> Path {
                 var path = Path()
                 guard let first = points.first else { return path }
-                path.move(to: scaled(first, size))
-                for point in points.dropFirst() { path.addLine(to: scaled(point, size)) }
+                path.move(to: at(first))
+                for point in points.dropFirst() { path.addLine(to: at(point)) }
                 return path
             }
 
@@ -37,7 +178,7 @@ struct RoadSketchView: View {
             // уровня: сначала всё, что по земле, потом эстакады. Только так
             // камера НА мосту отличима от камеры на дороге ПОД ним — а это
             // разные камеры и разное решение водителя.
-            for line in layout.network where line.points.count >= 2 {
+            for line in scene.network where line.points.count >= 2 {
                 let width = self.width(for: line)
                 // Мост отбивается тёмной «подложкой» шире самой линии: она
                 // разрывает то, что проходит под ним, и пересечение читается
@@ -50,66 +191,56 @@ struct RoadSketchView: View {
                 }
                 context.stroke(path(line.points),
                                with: .color(.white.opacity(line.level < 0 ? 0.10 : 0.20)),
-                               style: .init(lineWidth: width, lineCap: .round, lineJoin: .round,
+                               style: .init(lineWidth: width, lineCap: .round,
+                                            lineJoin: .round,
                                             dash: line.level < 0 ? [10, 8] : []))
             }
 
             // Трек — самый бледный слой: он объясняет, откуда я приехал, и не
             // должен спорить с тем, что впереди.
-            if layout.track.count >= 2 {
-                context.stroke(path(layout.track),
+            if scene.track.count >= 2 {
+                context.stroke(path(scene.track),
                                with: .color(.white.opacity(0.18)),
-                               style: .init(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                               style: .init(lineWidth: 5, lineCap: .round,
+                                            lineJoin: .round))
             }
 
-            // Дорога камеры. Пунктиром — если она предположена по оси, а не
-            // измерена снапом: обещать точность, которой нет, нельзя.
-            if layout.road.count >= 2 {
-                context.stroke(path(layout.road),
-                               with: .color(.white.opacity(layout.roadIsMeasured ? 0.30 : 0.16)),
-                               style: .init(lineWidth: 22, lineCap: .round, lineJoin: .round,
-                                            dash: layout.roadIsMeasured ? [] : [14, 10]))
-                context.stroke(path(layout.road),
+            // Дорога тревожной камеры. Пунктиром — если она предположена по
+            // оси, а не измерена снапом: обещать точность, которой нет, нельзя.
+            if scene.road.count >= 2 {
+                context.stroke(path(scene.road),
+                               with: .color(.white.opacity(scene.roadIsMeasured ? 0.30 : 0.16)),
+                               style: .init(lineWidth: 22, lineCap: .round,
+                                            lineJoin: .round,
+                                            dash: scene.roadIsMeasured ? [] : [14, 10]))
+                context.stroke(path(scene.road),
                                with: .color(.white.opacity(0.10)),
                                style: .init(lineWidth: 1.5, lineCap: .round,
                                             dash: [10, 12]))   // осевая разметка
             }
 
             // Маршрут — единственная цветная линия: это «куда я еду».
-            if layout.route.count >= 2 {
-                context.stroke(path(layout.route),
+            if scene.route.count >= 2 {
+                context.stroke(path(scene.route),
                                with: .color(Theme.success.opacity(0.9)),
-                               style: .init(lineWidth: 9, lineCap: .round, lineJoin: .round))
+                               style: .init(lineWidth: 9, lineCap: .round,
+                                            lineJoin: .round))
             }
 
-            // Камера.
-            if let camera = layout.camera {
-                let point = scaled(camera, size)
-                context.fill(Path(ellipseIn: CGRect(x: point.x - 17, y: point.y - 17,
-                                                    width: 34, height: 34)),
-                             with: .color(tint.opacity(0.22)))
-                context.fill(Path(ellipseIn: CGRect(x: point.x - 8, y: point.y - 8,
-                                                    width: 16, height: 16)),
-                             with: .color(tint))
+            // ВСЕ камеры охвата — точками на своих местах: на ферганском
+            // чорраха их четыре, и одна точка прятала три остальные. Тревожную
+            // выделяет кольцо (оверлей вью) — сама точка у всех одинаковая.
+            for dot in scene.cameras {
+                let point = at(dot.point)
+                context.fill(Path(ellipseIn: CGRect(x: point.x - 6, y: point.y - 6,
+                                                    width: 12, height: 12)),
+                             with: .color(Theme.danger.opacity(0.85)))
+                context.stroke(Path(ellipseIn: CGRect(x: point.x - 6, y: point.y - 6,
+                                                      width: 12, height: 12)),
+                               with: .color(.black.opacity(0.6)), lineWidth: 1.5)
             }
-
-            // Я — треугольник строго вверх: схема повёрнута по ходу движения,
-            // поэтому «вверх» и есть «куда я еду».
-            let me = scaled(layout.me, size)
-            var arrow = Path()
-            arrow.move(to: CGPoint(x: me.x, y: me.y - 15))
-            arrow.addLine(to: CGPoint(x: me.x - 11, y: me.y + 11))
-            arrow.addLine(to: CGPoint(x: me.x, y: me.y + 5))
-            arrow.addLine(to: CGPoint(x: me.x + 11, y: me.y + 11))
-            arrow.closeSubpath()
-            context.fill(arrow, with: .color(.white))
         }
-        .drawingGroup()   // один слой в композиторе вместо десятка примитивов
-        .accessibilityHidden(true)   // цифру и сторону рядом VoiceOver уже читает
-    }
-
-    private func scaled(_ point: CGPoint, _ size: CGSize) -> CGPoint {
-        CGPoint(x: point.x * size.width, y: point.y * size.height)
+        .drawingGroup()   // одна текстура: transform'ы крутят её без перерисовки
     }
 
     /// Ширина линии по классу дороги: магистраль толстая, двор тонкий — схема

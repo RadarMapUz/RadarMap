@@ -155,10 +155,11 @@ final class PerformanceBudgetTests: XCTestCase {
         return LimitIndex.build(from: data)!
     }
 
-    /// Раскладка схемы приборки. Считается на КАЖДОМ GPS-тике, пока приборка
-    /// открыта, — то есть каждую секунду всей поездки в держателе. Минута езды
-    /// по плотному центру, позади построен маршрут на 300 км (10 000 точек):
-    /// ловим возврат «пересчитать весь маршрут тригонометрией на каждый тик».
+    /// Схема приборки, полный горячий путь минуты езды: на каждом тике —
+    /// арифметика точки зрения и решение о пересборке, изредка — сборка сцены
+    /// (плотный центр, позади маршрут на 300 км из 10 000 точек). Ловим два
+    /// регресса: возврат тяжёлой работы на каждый тик и разучившийся жить
+    /// растр, который пересобирается каждую секунду.
     func testRoadSketchBudget() {
         // Как в бою: индекс под кэшем окрестности (см. SpeedLimitService).
         let network = CachedRoadNetwork(syntheticRoadNetwork())
@@ -183,19 +184,48 @@ final class PerformanceBudgetTests: XCTestCase {
 
         let clock = ContinuousClock()
         var total: Duration = .zero
+        var scene: RoadSketch.Scene?
+        var key: RoadSketch.RebuildKey?
+        var rebuilds = 0
         for tick in 0..<60 {
             // 20 м/тик ≈ 72 км/ч: проезжаем камеру насквозь, как в жизни.
             let me = CLLocationCoordinate2D(
                 latitude: start0.latitude + Double(tick) * 20 / 111_320.0,
                 longitude: start0.longitude)
             let began = clock.now
-            _ = RoadSketch.layout(camera: camera, network: network,
-                                  route: route, track: track,
-                                  from: me, courseDegrees: 0, aspect: 16.0 / 9.0)
+            let distance = GeoMath.fastDistance(me.latitude, me.longitude,
+                                                camera.lat, camera.lon)
+            let span = RoadSketch.span(forDistance: distance)
+            let inRange = RoadSketch.isInRange(distance: distance, span: span)
+            let freshKey = RoadSketch.RebuildKey(
+                alertCameraID: inRange ? camera.id : nil,
+                alertInRange: inRange,
+                spanBucket: RoadSketch.bucket(forSpan: span),
+                networkGeneration: 1, storeRevision: 1, budget: 80)
+            let offset = scene.map { built in
+                CGPoint(x: 0, y: (me.latitude - built.anchorLatitude) * 111_320.0)
+            } ?? .zero
+            if RoadSketch.needsRebuild(scene: scene, key: freshKey,
+                                       previousKey: key, meOffsetMeters: offset) {
+                rebuilds += 1
+                scene = RoadSketch.scene(alertCamera: camera, alertInRange: inRange,
+                                         cameras: [camera], network: network,
+                                         networkBudget: 80, route: route, track: track,
+                                         anchor: me, spanMeters: span)
+            }
+            key = freshKey
+            _ = RoadSketch.screenPoint(scene?.alertCamera ?? .zero, meOffset: offset,
+                                       courseDegrees: 0, spanMeters: span,
+                                       aspect: 16.0 / 9.0)
             total += clock.now - began
         }
         // Минута тиков приборки — суммарно меньше полсекунды.
         XCTAssertLessThan(total, .milliseconds(500),
                           "схема приборки деградировала: \(total) на 60 тиков")
+        // Суть архитектуры: проезд камеры насквозь — худший случай (ступени
+        // масштаба щёлкают туда и обратно), и даже он обязан пересобирать
+        // растр в разы реже, чем раз в тик.
+        XCTAssertLessThan(rebuilds, 30,
+                          "растр пересобирается слишком часто: \(rebuilds) раз за минуту")
     }
 }

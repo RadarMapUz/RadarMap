@@ -14,6 +14,9 @@ import UIKit
 struct DashboardView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
+    /// Экранная модель схемы: сцена «север вверху» + анимированная точка
+    /// зрения. Живёт, пока открыта приборка.
+    @State private var sketch = SketchState()
 
     var body: some View {
         ZStack {
@@ -47,8 +50,8 @@ struct DashboardView: View {
                 // Схема «где камера»: чертим сами, без карты и без сети.
                 // Приборка — режим «телефон в держателе», она обязана быть самым
                 // дешёвым экраном приложения, а не самым дорогим.
-                if let layout = sketchLayout, !layout.isEmpty {
-                    RoadSketchView(layout: layout, tint: alertColor)
+                if let scene = sketch.scene, sketch.hasCourse, !scene.isEmpty {
+                    RoadSketchView(scene: scene, state: sketch, tint: alertColor)
                         .frame(height: 210)
                         .padding(.horizontal, 28)
                         .opacity(sketchIsStale ? 0.45 : 1)
@@ -77,8 +80,13 @@ struct DashboardView: View {
         .contentShape(Rectangle())
         .onTapGesture { dismiss() }
         .statusBarHidden()
+        // Тик GPS → точка зрения схемы (и изредка пересборка её растра).
+        .onChange(of: env.location.locationTick) { sketch.refresh(env) }
         // Приборка должна светиться всю поездку — не даём экрану погаснуть.
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = true
+            sketch.refresh(env)
+        }
         .onDisappear {
             // Закрыли спидометр в активной поездке — экран продолжает держать поездка.
             UIApplication.shared.isIdleTimerDisabled =
@@ -89,43 +97,11 @@ struct DashboardView: View {
         .accessibilityHint(Text("Нажмите, чтобы вернуться к карте"))
     }
 
-    /// Курс живой или последний достоверный.
-    ///
-    /// Проверено на симуляции: на остановке курс становится −1, и раньше схема
-    /// исчезала целиком вместе со стрелкой и словом стороной. На настоящей
-    /// дороге это значило бы, что панель гаснет на каждом светофоре, а мигание
-    /// водитель читает как поломку. Стоя мы никуда не повернули — прошлый курс
-    /// остаётся честным описанием того, как машина стоит.
-    private var sketchCourse: CLLocationDegrees {
-        env.location.currentCourse >= 0
-            ? env.location.currentCourse
-            : env.location.lastTrustedCourse
-    }
-
-    /// Схема нарисована по устаревшему курсу — показываем приглушённо: «это
-    /// последнее, что мы знали», а не «это происходит сейчас».
+    /// Схема нарисована по устаревшему курсу (стоим, курса нет) — показываем
+    /// приглушённо: «это последнее, что мы знали», а не «это происходит
+    /// сейчас». Проверено на симуляции: раньше схема на остановке исчезала
+    /// целиком, то есть панель гасла бы на каждом светофоре.
     private var sketchIsStale: Bool { env.location.currentCourse < 0 }
-
-    /// Раскладка схемы. `nil` — курса не было ни разу (только запустились):
-    /// повернуть схему наугад значило бы соврать направлением.
-    private var sketchLayout: RoadSketch.Layout? {
-        guard let me = env.location.currentCoordinate else { return nil }
-        return RoadSketch.layout(camera: env.location.nearestCamera,
-                                 // Дороги берём из индекса лимитов (под кэшем
-                                 // окрестности): он уже на телефоне и несёт
-                                 // настоящую геометрию. Когда появится свой
-                                 // roads.json — меняется только эта строка
-                                 // (см. RoadNetwork.swift).
-                                 network: env.speedLimits.sketchNetwork,
-                                 // Перегрев режет фоновую сеть, но не дорогу
-                                 // камеры, не маршрут и не трек.
-                                 networkBudget: env.thermal.mode.sketchNetworkBudget,
-                                 route: env.route.routeCoordinates,
-                                 track: env.trip.recentTrack(),
-                                 from: me,
-                                 courseDegrees: sketchCourse,
-                                 aspect: 16.0 / 9.0)
-    }
 
     /// Блок ближайшей камеры.
     ///

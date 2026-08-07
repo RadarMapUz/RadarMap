@@ -9700,6 +9700,22 @@
           }
         }
       }
+    },
+    "координата приблизительная" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "координата приблизительная"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "koordinata taxminiy"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

@@ -804,6 +804,25 @@ final class LocationService: NSObject {
         relativeBearingToNearest.map { CameraDirection.classify(relativeBearing: $0) }
     }
 
+    /// Одно слово стороны — для приборки: «прямо» / «справа» / «слева».
+    ///
+    /// Отдельно от голосовой фразы намеренно: в речи нужен оборот («впереди
+    /// справа»), на экране, который читают боковым зрением, — одно слово.
+    /// `nil`, когда курс недостоверен: показать «прямо» на стоянке значило бы
+    /// соврать, а стрелка в этом случае и так не рисуется.
+    var nearestSideWord: String? {
+        guard relativeBearingToNearest != nil else { return nil }
+        switch nearestDirection {
+        case .right, .behindRight: return String(localized: "справа")
+        case .left, .behindLeft:   return String(localized: "слева")
+        case .ahead:               return String(localized: "прямо")
+        case nil:                  return nil
+        }
+    }
+
+    /// Камера на построенном маршруте — самый сильный ответ на «какая именно».
+    func isOnActiveRoute(_ camera: Camera) -> Bool { isCameraOnRoute(camera) }
+
     /// «впереди» / «впереди справа» / «впереди слева» — для голосового предупреждения.
     private var directionPhrase: String {
         switch nearestDirection {

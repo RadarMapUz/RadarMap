@@ -900,6 +900,9 @@ struct MapScreen: View {
         if args.contains("-demoHistoryOld") { env.trip.seedDemoHistory(shiftDays: 14) }
         if args.contains("-showStats") { map.showStats = true }
         if args.contains("-showSettings") { map.showSettings = true }
+        // Приборку на симуляторе иначе не снять: её открывают тапом по HUD,
+        // а он перекрыт кнопкой поездки в скриншот-прогонах.
+        if args.contains("-showDashboard") { showDashboard = true }
         if args.contains("-showCameraDetail") {
             Task {
                 await Task.pause(seconds: 1.5)

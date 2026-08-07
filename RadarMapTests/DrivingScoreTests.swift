@@ -543,6 +543,33 @@ final class LifetimeRebuildTests: XCTestCase {
                    endLat: nil, endLon: nil, track: nil, score: nil)
     }
 
+    // MARK: - Штраф за рваную езду объясним
+
+    func testHarshDrivingPenaltyShowsTheMeasuredNumber() {
+        // Пила 40↔70: средняя перемена скорости между точками — 30 км/ч.
+        // Пользователь обязан видеть именно это число: строка «−20 по треку
+        // поездки» ничего не объясняла и не проверялась.
+        let speeds = (0..<20).map { $0 % 2 == 0 ? 40.0 : 70.0 }
+        XCTAssertEqual(DrivingScore.meanSpeedChange(trackSpeeds: speeds), 30, accuracy: 0.01)
+
+        let items = DrivingScore.breakdown(passed: [], trackSpeeds: speeds)
+        guard let harsh = items.first(where: { $0.id == "smooth" }),
+              let detail = harsh.detail else {
+            return XCTFail("нет строки о рваной езде")
+        }
+        // В строке — измеренное число и порог: и то и другое проверяемо.
+        XCTAssertTrue(detail.contains("30"), "нет измеренного числа: \(detail)")
+        XCTAssertTrue(detail.contains("3"), "нет порога спокойной езды: \(detail)")
+    }
+
+    func testSteadyDrivingIsNotPenalised() {
+        // Ровная езда: перемены нет — и штрафной строки быть не должно.
+        let steady = [Double](repeating: 60, count: 20)
+        XCTAssertEqual(DrivingScore.meanSpeedChange(trackSpeeds: steady), 0, accuracy: 0.001)
+        XCTAssertNil(DrivingScore.breakdown(passed: [], trackSpeeds: steady)
+            .first { $0.id == "smooth" })
+    }
+
     func testRebuildGoesOldestToNewest() {
         // Новейшая — чистая, старейшая — со штрафом: серия должна закончиться на 1.
         let history = [record(daysAgo: 1, passes: [pass(55, limit: 60)]),

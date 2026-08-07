@@ -18,6 +18,10 @@ import SwiftUI
 
 struct MapStatusBanner: View {
     @Environment(AppEnvironment.self) private var env
+    /// Открыть приборку. Без сети она — единственный экран, который рисуется
+    /// целиком локально, и предложить её честнее, чем оставить человека
+    /// смотреть на серый прямоугольник вместо карты.
+    var onOpenDashboard: (() -> Void)?
     /// Что уже закрыли руками. В памяти сцены, а не в Storage: состояния
     /// недолгие, а лишний ключ в настройках — навсегда.
     @State private var dismissed: Set<String> = []
@@ -75,7 +79,10 @@ struct MapStatusBanner: View {
             shell(symbol: "wifi.slash", tint: Theme.textSecondary,
                   title: String(localized: "Карта не загружается — нет сети"),
                   body: String(localized: "Камеры предупреждают как обычно: база хранится на телефоне"),
-                  id: status.id)
+                  id: status.id,
+                  action: onOpenDashboard.map { open in
+                      (String(localized: "Открыть приборку"), open)
+                  })
         case .overheated:
             shell(symbol: "thermometer.high", tint: Theme.warning,
                   title: String(localized: "Телефон перегрелся"),

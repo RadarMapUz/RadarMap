@@ -39,6 +39,18 @@ struct SettingsView: View {
                             Slider(value: $settings.alertVolume, in: 0.2...1.0).tint(Theme.accent)
                             Image(systemName: "speaker.wave.3.fill").foregroundStyle(Theme.textSecondary)
                         }
+                        // Ползунок без прослушивания — это гадание: громкость
+                        // оповещения зависит и от него, и от системного звука,
+                        // и от того, играет ли музыка. Проверять это на дороге,
+                        // когда камера уже рядом, поздно.
+                        Button {
+                            env.alerts.beep(count: 1)
+                            env.alerts.speak(String(localized: "Камера, триста метров"))
+                        } label: {
+                            Label("Прослушать оповещение", systemImage: "play.circle.fill")
+                                .font(.rounded(14, .semibold))
+                                .foregroundStyle(Theme.accent)
+                        }
                     }
                     Toggle("Вибрация у камер", isOn: $settings.hapticsEnabled)
                     // Один профиль вместо четырёх перечислений. Раньше поведение

@@ -22,52 +22,40 @@ struct DashboardView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            // Три зоны, как на приборной панели машины: статус — наверху
-            // (поездка, заряд, жара), середина — скорость и камера, ровно по
-            // центру между зонами, низ — только действия. Раньше строка жары
-            // висела сиротой посреди экрана, а строка поездки толкалась внизу
-            // с тремя другими элементами.
+            // Порядок зон — просьба водителя с реальной поездки: направления
+            // (манёвр и схема) — на самом верху, как в настоящем навигаторе;
+            // скорость и камера — по центру; всё, что нажимается (стоп,
+            // «Радар»), — внизу, под большим пальцем. Мелкие чипы статуса
+            // (жара, заряд вне поездки) — тонкой строкой над направлениями.
             VStack(spacing: 0) {
-                topStrip
+                statusChips
                     .padding(.horizontal, 28)
                     .padding(.top, 10)
 
-                Spacer(minLength: 16)
+                // Манёвр при активном маршруте. Голос и так говорит «через
+                // 300 метров направо», но приборка — экран поездки, и взгляд
+                // на неё не должен оставлять вопрос «а поворот-то где?».
+                if env.route.isActive, let step = env.route.nextStep {
+                    maneuverRow(step)
+                        .padding(.top, 12)
+                }
 
-                VStack(spacing: 20) {
-                    speedHero
-
-                    // Манёвр при активном маршруте. Голос и так говорит «через
-                    // 300 метров направо», но приборка — экран поездки, и взгляд
-                    // на неё не должен оставлять вопрос «а поворот-то где?».
-                    if env.route.isActive, let step = env.route.nextStep {
-                        HStack(spacing: 12) {
-                            Image(systemName: step.icon)
-                                .font(.rounded(26, .bold))
-                                .foregroundStyle(Theme.accent)
-                            Text(Formatting.distance(env.route.nextStepDistance))
-                                .font(.rounded(30, .heavy))
-                                .monospacedDigit()
-                                .foregroundStyle(Theme.textPrimary)
-                                .contentTransition(.numericText())
-                            Text(step.text)
-                                .font(.rounded(13))
-                                .foregroundStyle(Theme.textSecondary)
-                                .lineLimit(1)
-                        }
+                // Схема «где камера»: чертим сами, без карты и без сети.
+                // Приборка — режим «телефон в держателе», она обязана быть
+                // самым дешёвым экраном приложения, а не самым дорогим.
+                if let scene = sketch.scene, sketch.hasCourse, !scene.isEmpty {
+                    RoadSketchView(scene: scene, state: sketch, tint: alertColor)
+                        .frame(height: 200)
                         .padding(.horizontal, 28)
-                    }
+                        .padding(.top, 6)
+                        .opacity(sketchIsStale ? 0.45 : 1)
+                        .animation(.easeOut(duration: 0.4), value: sketchIsStale)
+                }
 
-                    // Схема «где камера»: чертим сами, без карты и без сети.
-                    // Приборка — режим «телефон в держателе», она обязана быть
-                    // самым дешёвым экраном приложения, а не самым дорогим.
-                    if let scene = sketch.scene, sketch.hasCourse, !scene.isEmpty {
-                        RoadSketchView(scene: scene, state: sketch, tint: alertColor)
-                            .frame(height: 210)
-                            .padding(.horizontal, 28)
-                            .opacity(sketchIsStale ? 0.45 : 1)
-                            .animation(.easeOut(duration: 0.4), value: sketchIsStale)
-                    }
+                Spacer(minLength: 14)
+
+                VStack(spacing: 18) {
+                    speedHero
 
                     // Ближайшая камера: дистанция крупно, цвет греется по уровню тревоги.
                     if let camera = env.location.nearestCamera,
@@ -81,24 +69,29 @@ struct DashboardView: View {
                     }
                 }
 
-                Spacer(minLength: 16)
+                Spacer(minLength: 14)
 
-                VStack(spacing: 14) {
+                VStack(spacing: 12) {
                     // «Радар ещё стоял?» — приборка перекрывает карту целиком, и
                     // вопрос, нарисованный там, сгорал под ней невидимым: водитель
                     // в держателе не видел его НИКОГДА. Здесь своя копия; на карте
                     // плашка в это время ждёт (isCovered), таймер не двоится.
                     MobileConfirmBar()
-                        .padding(.horizontal, 28)
 
-                    // Кнопка «Радар!» — крупная: приборка это режим «телефон в
-                    // держателе», и тап делается вслепую.
+                    if env.location.isTripActive {
+                        tripRow
+                    }
+
+                    // Кнопка «Радар!» — во всю ширину: тап делается вслепую, и
+                    // промахнуться мимо широкой капсулы сложнее, чем мимо квадрата.
                     ReportRadarButton(isLarge: true)
 
                     Text("Нажмите, чтобы вернуться к карте")
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textTertiary)
+                        .padding(.top, 2)
                 }
+                .padding(.horizontal, 28)
                 .padding(.bottom, 12)
             }
         }
@@ -127,25 +120,38 @@ struct DashboardView: View {
         .accessibilityHint(Text("Нажмите, чтобы вернуться к карте"))
     }
 
-    /// Верхняя полоса статуса. В поездке — карточка «время · путь · камеры ·
-    /// заряд · стоп»; под ней мелкие индикаторы: жара слева, заряд справа.
+    /// Тонкая строка статуса над направлениями: жара слева, заряд справа.
     /// Вне поездки заряд показываем отдельным чипом — приборка строилась ради
     /// батареи, и её экран — то место, где заряд должен быть виден всегда
-    /// (в поездке он уже в карточке, не дублируем).
+    /// (в поездке он уже в строке поездки внизу, не дублируем).
     @ViewBuilder
-    private var topStrip: some View {
-        VStack(spacing: 10) {
-            if env.location.isTripActive {
-                tripRow
-            }
-            if env.thermal.mode != .full || !env.location.isTripActive {
-                HStack {
-                    if env.thermal.mode != .full { thermalChip }
-                    Spacer()
-                    if !env.location.isTripActive { BatteryChip() }
-                }
+    private var statusChips: some View {
+        if env.thermal.mode != .full || !env.location.isTripActive {
+            HStack {
+                if env.thermal.mode != .full { thermalChip }
+                Spacer()
+                if !env.location.isTripActive { BatteryChip() }
             }
         }
+    }
+
+    /// Манёвр — верхний баннер, как в навигаторе: иконка + дистанция + фраза.
+    private func maneuverRow(_ step: RouteStep) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: step.icon)
+                .font(.rounded(26, .bold))
+                .foregroundStyle(Theme.accent)
+            Text(Formatting.distance(env.route.nextStepDistance))
+                .font(.rounded(30, .heavy))
+                .monospacedDigit()
+                .foregroundStyle(Theme.textPrimary)
+                .contentTransition(.numericText())
+            Text(step.text)
+                .font(.rounded(13))
+                .foregroundStyle(Theme.textSecondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 28)
     }
 
     /// Жара: троттлинг уже работает (бюджет сетки схемы, буст GPS погашен) —

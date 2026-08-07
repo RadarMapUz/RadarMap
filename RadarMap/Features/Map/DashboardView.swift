@@ -44,6 +44,15 @@ struct DashboardView: View {
                     .foregroundStyle(Theme.textTertiary)
                     .padding(.top, -26)
 
+                // Схема «где камера»: чертим сами, без карты и без сети.
+                // Приборка — режим «телефон в держателе», она обязана быть самым
+                // дешёвым экраном приложения, а не самым дорогим.
+                if let layout = sketchLayout, !layout.isEmpty {
+                    RoadSketchView(layout: layout, tint: alertColor)
+                        .frame(height: 210)
+                        .padding(.horizontal, 28)
+                }
+
                 // Ближайшая камера: дистанция крупно, цвет греется по уровню тревоги.
                 if let camera = env.location.nearestCamera,
                    let distance = env.location.distanceToNearest {
@@ -76,6 +85,18 @@ struct DashboardView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Спидометр"))
         .accessibilityHint(Text("Нажмите, чтобы вернуться к карте"))
+    }
+
+    /// Раскладка схемы. `nil` — курса нет (стоим), и «по ходу движения» не
+    /// определено: повернуть схему наугад значило бы соврать направлением.
+    private var sketchLayout: RoadSketch.Layout? {
+        guard let me = env.location.currentCoordinate else { return nil }
+        return RoadSketch.layout(camera: env.location.nearestCamera,
+                                 route: env.route.routeCoordinates,
+                                 track: env.trip.recentTrack(),
+                                 from: me,
+                                 courseDegrees: env.location.currentCourse,
+                                 aspect: 16.0 / 9.0)
     }
 
     /// Блок ближайшей камеры.

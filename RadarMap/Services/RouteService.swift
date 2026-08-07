@@ -97,6 +97,16 @@ final class RouteService {
     var isActive: Bool { !variants.isEmpty }
     var selected: Variant? { variants.first { $0.id == selectedID } }
     var polyline: MKPolyline? { selected?.polyline }
+
+    /// Координаты выбранного маршрута — для схемы на приборке, которая чертит
+    /// линию сама, без карты.
+    var routeCoordinates: [CLLocationCoordinate2D] {
+        guard let polyline else { return [] }
+        var points = [CLLocationCoordinate2D](repeating: .init(),
+                                              count: polyline.pointCount)
+        polyline.getCoordinates(&points, range: NSRange(location: 0, length: polyline.pointCount))
+        return points
+    }
     var camerasOnRoute: [RouteCamera] { selected?.cameras ?? [] }
     var distanceText: String { selected?.distanceText ?? "" }
     var etaText: String { selected?.etaText ?? "" }

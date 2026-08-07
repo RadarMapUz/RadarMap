@@ -606,6 +606,23 @@ class AdminTest(unittest.TestCase):
             with open(self.conf.name, "w", encoding="utf-8") as handle:
                 handle.writelines(f"{k}={v}\n" for k, v in conf.items())
 
+    def test_map_csp_allows_its_own_data(self):
+        """Карта берёт камеры и сохраняет правки со своего же сервера. Без
+        'self' в connect-src страница открывается, но остаётся ПУСТОЙ: запросы
+        молча блокирует политика. На стенде без CSP это не видно вовсе."""
+        policy = admin.Handler.CSP_MAP
+        connect = [part for part in policy.split(";") if "connect-src" in part][0]
+        self.assertIn("'self'", connect, "карта не сможет загрузить свои данные")
+        self.assertIn("api-maps.yandex.ru", connect)
+        # yastatic.net — не мелочь: api-maps.yandex.ru отдаёт только загрузчик,
+        # сам код карты лежит там. Без него страница открывается, а карта
+        # остаётся пустой — единственная улика в консоли браузера.
+        scripts = [p for p in policy.split(";") if "script-src" in p][0]
+        self.assertIn("yastatic.net", scripts, "карта не догрузит свой код")
+        # И при этом политика обязана оставаться закрытой по умолчанию.
+        self.assertIn("default-src 'none'", policy)
+        self.assertNotIn("'unsafe-inline'", policy.split("script-src")[1].split(";")[0])
+
     def test_old_paths_lead_to_the_map(self):
         """Ссылки из очереди жалоб не должны ломаться, а второго способа
         двигать камеру быть не должно."""

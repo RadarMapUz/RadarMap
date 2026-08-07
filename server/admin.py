@@ -670,11 +670,21 @@ class Handler(BaseHTTPRequestHandler):
     # Свой скрипт лежит файлом ('self'), поэтому 'unsafe-inline' для скриптов
     # не нужен — внедрить код через данные камеры нельзя.
     CSP_MAP = ("default-src 'none'; form-action 'self'; "
-               "script-src 'self' https://api-maps.yandex.ru https://*.maps.yandex.net; "
+               # yastatic.net обязателен: api-maps.yandex.ru — только загрузчик,
+               # сам код карты лежит там. Без него страница открывается, а карта
+               # остаётся пустой с «Failed to bundle "full"» в консоли.
+               "script-src 'self' https://api-maps.yandex.ru "
+               "https://*.maps.yandex.net https://yastatic.net; "
                "style-src 'unsafe-inline'; "
-               "img-src 'self' data: blob: https://*.maps.yandex.net https://*.yandex.ru; "
-               "connect-src https://api-maps.yandex.ru https://*.maps.yandex.net "
-               "https://*.yandex.ru; font-src data:")
+               "img-src 'self' data: blob: https://*.maps.yandex.net "
+               "https://*.yandex.ru https://yastatic.net; "
+               # 'self' обязателен: карта берёт камеры и сохраняет правки со
+               # СВОЕГО же сервера (/api/*). Без него страница открывалась, но
+               # оставалась пустой — запросы молча блокировались политикой, и
+               # на стенде без CSP этого было не увидеть.
+               "connect-src 'self' https://api-maps.yandex.ru "
+               "https://*.maps.yandex.net https://*.yandex.ru https://yastatic.net; "
+               "font-src data:; worker-src blob:; child-src blob:")
 
     def _send(self, code, body, content_type="text/html; charset=utf-8", csp=None):
         payload = body.encode()

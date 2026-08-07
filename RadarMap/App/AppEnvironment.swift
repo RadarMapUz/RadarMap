@@ -77,6 +77,7 @@ final class AppEnvironment {
         self.location.route = route
         self.location.speedLimits = speedLimits
         self.location.watchBridge = watchBridge
+        self.location.thermal = thermal   // буст GPS приборки — только пока холодно
 
         // Пульт раздаём тем, кого он имеет право глушить. Список намеренно
         // короткий: всё это зависит от нашего сервера, а оповещения о камерах

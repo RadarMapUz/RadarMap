@@ -90,12 +90,17 @@ struct DashboardView: View {
         // Приборка должна светиться всю поездку — не даём экрану погаснуть.
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
+            // Пока водитель смотрит на схему, фиксы нужны чаще: крейсерские
+            // 25 м — это рывок раз в 2–3 секунды. Буст снимается сам при
+            // закрытии и не включается в перегрев (см. tuneAdaptiveAccuracy).
+            env.location.setDashboardVisible(true)
             sketch.refresh(env)
         }
         .onDisappear {
             // Закрыли спидометр в активной поездке — экран продолжает держать поездка.
             UIApplication.shared.isIdleTimerDisabled =
                 env.location.isTripActive && env.settings.keepScreenOn
+            env.location.setDashboardVisible(false)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Спидометр"))

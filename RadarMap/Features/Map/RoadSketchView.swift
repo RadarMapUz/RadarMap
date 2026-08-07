@@ -252,15 +252,20 @@ private struct SketchRaster: View, Equatable {
             }
 
             // ВСЕ камеры охвата — точками на своих местах: на ферганском
-            // чорраха их четыре, и одна точка прятала три остальные. Тревожную
-            // выделяет кольцо (оверлей вью) — сама точка у всех одинаковая.
+            // чорраха их четыре, и одна точка прятала три остальные. Но
+            // одинаковыми они быть не должны: десяток равных точек по краям
+            // читается как сыпь, а не как карта (проверено реальной поездкой).
+            // Тревожная — полная, с кольцом от вью; остальные — мельче и
+            // тише: контекст, а не предупреждение.
             for dot in scene.cameras {
                 let point = at(dot.point)
-                context.fill(Path(ellipseIn: CGRect(x: point.x - 6, y: point.y - 6,
-                                                    width: 12, height: 12)),
-                             with: .color(Theme.danger.opacity(0.85)))
-                context.stroke(Path(ellipseIn: CGRect(x: point.x - 6, y: point.y - 6,
-                                                      width: 12, height: 12)),
+                let isAlert = dot.id == scene.alertCameraID
+                let r: CGFloat = isAlert ? 6 : 4.5
+                let rect = CGRect(x: point.x - r, y: point.y - r,
+                                  width: r * 2, height: r * 2)
+                context.fill(Path(ellipseIn: rect),
+                             with: .color(Theme.danger.opacity(isAlert ? 0.85 : 0.6)))
+                context.stroke(Path(ellipseIn: rect),
                                with: .color(.black.opacity(0.6)), lineWidth: 1.5)
             }
         }

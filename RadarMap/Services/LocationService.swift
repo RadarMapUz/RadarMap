@@ -33,6 +33,9 @@ final class LocationService: NSObject {
     @ObservationIgnored weak var watchBridge: WatchBridgeService?
     @ObservationIgnored weak var route: RouteService?
     @ObservationIgnored weak var speedLimits: SpeedLimitService?
+    /// Перегрев: буст GPS для открытой приборки разрешён только пока телефон
+    /// холодный — в жару экономия важнее плавности картинки.
+    @ObservationIgnored weak var thermal: ThermalService?
 
     private(set) var authorizationStatus: CLAuthorizationStatus
     private(set) var currentCoordinate: CLLocationCoordinate2D?
@@ -253,6 +256,7 @@ final class LocationService: NSObject {
         alertEngine.reset()
         passTracking.reset()
         locationFilter.reset()
+        speedSmoother.reset()
         voicedInGroup.removeAll()
         postponedVoice = nil
         // Заезд по пути — не новая поездка: если пауза похожа на «забежал в
@@ -386,6 +390,7 @@ final class LocationService: NSObject {
             manager.pausesLocationUpdatesAutomatically = true
             isSignalStale = false   // без непрерывного GPS «нет сигнала» не про нас
             locationFilter.reset()
+            speedSmoother.reset()
             return
         }
         // В поездке паузу отдавать системе нельзя — она может не возобновить.
@@ -432,6 +437,16 @@ final class LocationService: NSObject {
            Date().timeIntervalSince(lastMovementAt) > AppConfig.gpsIdleAfterSeconds {
             tier = 3
         }
+        // Открытая приборка: водитель СМОТРИТ на схему, и фиксы раз в 25 м
+        // (2–3 с в городе) видны глазом как рывки. Поднимаем крейсерский тир
+        // до подъездного — но только пока телефон холодный: в перегрев
+        // плавность картинки проигрывает экономии (тот самый держатель под
+        // солнцем), а стоянку (тир 3) не трогаем вовсе — стоя анимировать
+        // нечего. Экран при этом уже горит и стоит на порядок дороже GPS.
+        if tier == 2, isDashboardVisible, isForeground,
+           (thermal?.mode ?? .full) == .full {
+            tier = 1
+        }
         guard tier != accuracyTier else { return }
         accuracyTier = tier
         switch tier {
@@ -445,6 +460,18 @@ final class LocationService: NSObject {
                  manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
                  manager.distanceFilter = 30
         }
+    }
+
+    /// Приборка на экране (см. буст в tuneAdaptiveAccuracy).
+    @ObservationIgnored private var isDashboardVisible = false
+
+    /// Открытие/закрытие приборки: пересматриваем тир GPS сразу, не дожидаясь
+    /// следующего фикса — на стоящем в пробке телефоне он может прийти нескоро.
+    func setDashboardVisible(_ visible: Bool) {
+        guard isDashboardVisible != visible else { return }
+        isDashboardVisible = visible
+        accuracyTier = -1
+        tuneAdaptiveAccuracy()
     }
 
     /// Попросить точную геопозицию на эту сессию (если дана «приблизительная»).
@@ -526,7 +553,9 @@ final class LocationService: NSObject {
 
     /// Растёт на каждое обновление локации — карта в режиме следования подписывается на это.
     private(set) var locationTick = 0
-    @ObservationIgnored private var lastSpeedTickAt: Date?
+    /// Сглаживание спидометра: по времени, с мгновенным откликом на настоящий
+    /// перепад (чистая структура, покрыта SpeedSmootherTests).
+    @ObservationIgnored private var speedSmoother = SpeedSmoother()
     /// Когда машина в последний раз реально двигалась (для тира «стоянка»).
     @ObservationIgnored private var lastMovementAt = Date()
 
@@ -609,20 +638,14 @@ final class LocationService: NSObject {
     private func handleLocationBody(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed,
                                     course: CLLocationDirection) {
         currentCoordinate = coordinate
-        // Спидометр без дёрганья: GPS-скорость шумит (68→71→69) — лёгкое экспоненциальное
-        // сглаживание, но только по свежим точкам (после паузы берём сырое значение).
+        // Спидометр: сглаживание по ВРЕМЕНИ и мгновенный отклик на настоящий
+        // перепад (SpeedSmoother — прежние константные веса на редких тиках
+        // адаптивного GPS растягивали хвост торможения на 5+ секунд).
         // speed < 0 — фикс без скорости (туннель, плохая геометрия спутников): держим
         // прошлое значение, нулём считать нельзя — PassTracking берёт МИНИМУМ по зоне
         // проезда, и один такой фикс занизил бы записанную скорость у камеры.
         if speed >= 0 {
-            let rawKmh = speed * 3.6
-            if let lastAt = lastSpeedTickAt, Date().timeIntervalSince(lastAt) < 5 {
-                let smoothed = speedKmh * 0.6 + rawKmh * 0.4
-                speedKmh = smoothed < 1 ? 0 : smoothed
-            } else {
-                speedKmh = rawKmh
-            }
-            lastSpeedTickAt = Date()
+            speedKmh = speedSmoother.update(rawKmh: speed * 3.6, at: Date())
         }
         if speedKmh >= 3 { lastMovementAt = Date() }
         currentCourse = course

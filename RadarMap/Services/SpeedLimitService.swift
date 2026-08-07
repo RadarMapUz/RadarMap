@@ -207,7 +207,7 @@ final class SpeedLimitService {
 // MARK: - Индекс сегментов
 
 /// Иммутабельный индекс: строится в фоне, читается с главного потока без блокировок.
-struct LimitIndex: Sendable {
+struct LimitIndex: Sendable, RoadNetworkSource {
     struct Segment: Sendable {
         let limit: Int
         let pts: [MKMapPoint]
@@ -215,6 +215,49 @@ struct LimitIndex: Sendable {
 
     let segments: [Segment]
     let grid: [Int: [Int32]]   // ячейка 0.01° → индексы сегментов
+
+    // MARK: - Дороги для схемы на приборке
+
+    /// Индекс лимитов — по совместительству ЕДИНСТВЕННАЯ дорожная геометрия,
+    /// которая уже лежит на телефоне: 21 558 сегментов, 183 483 точки, офлайн.
+    /// Мы качали его ради матчинга лимита, а он несёт настоящие линии дорог —
+    /// с перекрёстками и развязками. Первый источник для RoadSketch, пока не
+    /// собран собственный roads.json (см. RoadNetwork.swift).
+    ///
+    /// Чего этот источник НЕ знает: класса дороги, моста, односторонности —
+    /// в файле их нет. Поэтому все линии помечены как «без подробностей», и
+    /// вью рисует их ровно, не выдавая догадку за измеренное.
+    func roads(near coordinate: CLLocationCoordinate2D,
+               radius: CLLocationDistance) -> [RoadLine] {
+        // Ячейка грида 0.01° ≈ 1,1 км — берём кольцо ячеек по радиусу.
+        let span = max(1, Int((radius / 1100).rounded(.up)))
+        let centerLat = Int((coordinate.latitude + 90) * 100)
+        let centerLon = Int((coordinate.longitude + 180) * 100)
+
+        var seen = Set<Int32>()
+        for latCell in (centerLat - span)...(centerLat + span) {
+            for lonCell in (centerLon - span)...(centerLon + span) {
+                if let found = grid[latCell * 40_000 + lonCell] { seen.formUnion(found) }
+            }
+        }
+        guard !seen.isEmpty else { return [] }
+
+        let origin = MKMapPoint(coordinate)
+        // Метры → единицы MKMapPoint на этой широте.
+        let limitPoints = radius / MKMetersPerMapPointAtLatitude(coordinate.latitude)
+        return seen.compactMap { index -> RoadLine? in
+            let segment = segments[Int(index)]
+            // Точки за радиусом отбрасываем, но линию не рвём: берём кусок от
+            // первой до последней попавшей — иначе дорога рассыпалась бы на
+            // обрывки там, где она просто длинная.
+            guard let first = segment.pts.firstIndex(where: {
+                      $0.distance(to: origin) <= limitPoints }),
+                  let last = segment.pts.lastIndex(where: {
+                      $0.distance(to: origin) <= limitPoints }),
+                  last > first else { return nil }
+            return RoadLine(points: segment.pts[first...last].map(\.coordinate))
+        }
+    }
 
     nonisolated private static func cellKey(lat: Double, lon: Double) -> Int {
         let latCell = Int((lat + 90) * 100)

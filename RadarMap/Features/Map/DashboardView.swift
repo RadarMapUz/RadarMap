@@ -51,6 +51,8 @@ struct DashboardView: View {
                     RoadSketchView(layout: layout, tint: alertColor)
                         .frame(height: 210)
                         .padding(.horizontal, 28)
+                        .opacity(sketchIsStale ? 0.45 : 1)
+                        .animation(.easeOut(duration: 0.4), value: sketchIsStale)
                 }
 
                 // Ближайшая камера: дистанция крупно, цвет греется по уровню тревоги.
@@ -87,8 +89,25 @@ struct DashboardView: View {
         .accessibilityHint(Text("Нажмите, чтобы вернуться к карте"))
     }
 
-    /// Раскладка схемы. `nil` — курса нет (стоим), и «по ходу движения» не
-    /// определено: повернуть схему наугад значило бы соврать направлением.
+    /// Курс живой или последний достоверный.
+    ///
+    /// Проверено на симуляции: на остановке курс становится −1, и раньше схема
+    /// исчезала целиком вместе со стрелкой и словом стороной. На настоящей
+    /// дороге это значило бы, что панель гаснет на каждом светофоре, а мигание
+    /// водитель читает как поломку. Стоя мы никуда не повернули — прошлый курс
+    /// остаётся честным описанием того, как машина стоит.
+    private var sketchCourse: CLLocationDegrees {
+        env.location.currentCourse >= 0
+            ? env.location.currentCourse
+            : env.location.lastTrustedCourse
+    }
+
+    /// Схема нарисована по устаревшему курсу — показываем приглушённо: «это
+    /// последнее, что мы знали», а не «это происходит сейчас».
+    private var sketchIsStale: Bool { env.location.currentCourse < 0 }
+
+    /// Раскладка схемы. `nil` — курса не было ни разу (только запустились):
+    /// повернуть схему наугад значило бы соврать направлением.
     private var sketchLayout: RoadSketch.Layout? {
         guard let me = env.location.currentCoordinate else { return nil }
         return RoadSketch.layout(camera: env.location.nearestCamera,
@@ -100,7 +119,7 @@ struct DashboardView: View {
                                  route: env.route.routeCoordinates,
                                  track: env.trip.recentTrack(),
                                  from: me,
-                                 courseDegrees: env.location.currentCourse,
+                                 courseDegrees: sketchCourse,
                                  aspect: 16.0 / 9.0)
     }
 
@@ -126,7 +145,7 @@ struct DashboardView: View {
                         .foregroundStyle(.white)
                         .frame(width: 54, height: 54)
                         .background(camera.kind.tint.gradient, in: Circle())
-                    if let rel = env.location.relativeBearingToNearest {
+                    if let rel = env.location.displayBearingToNearest {
                         let angle = CameraDirection.arrowAngle(relativeBearing: rel)
                         Image(systemName: "arrowtriangle.up.fill")
                             .font(.system(size: 13, weight: .bold))

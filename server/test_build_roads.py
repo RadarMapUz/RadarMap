@@ -45,6 +45,22 @@ class EncodeTests(unittest.TestCase):
         self.assertEqual(len(encoded), 4, "дубль обязан быть выброшен")
 
 
+class OrientationTests(unittest.TestCase):
+    def test_reverse_oneway_is_flipped(self):
+        # oneway=-1: односторонняя ПРОТИВ порядка точек. Телефон рисует
+        # стрелки по порядку точек, поэтому геометрия разворачивается здесь.
+        points = [(69.25, 41.31), (69.26, 41.31)]
+        flipped = build_roads.oriented(points, {"oneway": "-1"})
+        self.assertEqual(flipped[0], (69.26, 41.31))
+        self.assertEqual(build_roads.flags_of({"oneway": "-1"}),
+                         build_roads.FLAG_ONEWAY)
+
+    def test_normal_oneway_is_untouched(self):
+        points = [(69.25, 41.31), (69.26, 41.31)]
+        self.assertEqual(build_roads.oriented(points, {"oneway": "yes"}), points)
+        self.assertEqual(build_roads.oriented(points, {}), points)
+
+
 class TileTests(unittest.TestCase):
     def test_border_road_lands_in_both_tiles(self):
         # Дорога через границу тайлов 0.5°: обязана лежать в обоих целиком.

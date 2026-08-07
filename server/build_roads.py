@@ -146,6 +146,16 @@ def flags_of(properties):
     return flags
 
 
+def oriented(points, properties):
+    """Геометрия по ходу движения. oneway=-1 в OSM значит «односторонняя
+    ПРОТИВ порядка точек» — разворачиваем здесь, чтобы телефон рисовал
+    стрелки направления по порядку точек и никогда не думал об этом сам:
+    стрелка в обратную сторону хуже, чем никакой."""
+    if properties.get("oneway") == "-1":
+        return list(reversed(points))
+    return points
+
+
 def collect(source_path, tolerance_deg):
     """Прочитать geojsonl → список (code, flags, encoded, tile_keys)."""
     roads = []
@@ -175,7 +185,7 @@ def collect(source_path, tolerance_deg):
             if len(points) < 2:
                 continue
 
-            points = simplify(points, tolerance_deg)
+            points = simplify(oriented(points, properties), tolerance_deg)
             encoded = encode(points)
             if len(encoded) < 4:
                 continue

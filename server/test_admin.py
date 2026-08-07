@@ -7,6 +7,7 @@
 Запуск: python3 server/test_admin.py
 """
 import json
+import os
 import sqlite3
 import tempfile
 import threading
@@ -18,19 +19,33 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 
 import admin
+import admin_auth
 import api
 
 DAY = 86400
+# Пароль стенда: панель теперь под замком, и каждый запрос идёт с сессией.
+TEST_PASSWORD = "stend-parol-123"
+COOKIE = {"value": ""}
 
 
-def _get(port, path):
-    with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as resp:
-        return resp.status, resp.read().decode()
+def _get(port, path, cookie=None):
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}")
+    token = COOKIE["value"] if cookie is None else cookie
+    if token:
+        req.add_header("Cookie", token)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status, resp.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
 
 
-def _post(port, path, fields, origin=None):
+def _post(port, path, fields, origin=None, cookie=None):
     data = urllib.parse.urlencode(fields).encode()
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    token = COOKIE["value"] if cookie is None else cookie
+    if token:
+        headers["Cookie"] = token
     if origin:
         headers["Origin"] = origin
     req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=data,
@@ -62,9 +77,34 @@ class AdminTest(unittest.TestCase):
         cls.cameras.close()
         admin.CAMERAS_PATH = cls.cameras.name
 
+        # Пароль панели — во временный конфиг: настоящий трогать нельзя.
+        cls.conf = tempfile.NamedTemporaryFile(suffix=".conf", delete=False)
+        cls.conf.close()
+        admin_auth.CONFIG_PATH = cls.conf.name
+        admin_auth.write_password(TEST_PASSWORD, cls.conf.name)
+
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), admin.Handler)
         cls.port = cls.server.server_address[1]
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+        COOKIE["value"] = cls.login(cls.port, TEST_PASSWORD)
+
+    @staticmethod
+    def login(port, password):
+        """Войти и вернуть заголовок Cookie для последующих запросов."""
+        data = urllib.parse.urlencode({"password": password}).encode()
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/login", data=data,
+                                     method="POST")
+
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *args, **kwargs):
+                return None
+        opener = urllib.request.build_opener(NoRedirect)
+        try:
+            with opener.open(req, timeout=10) as resp:
+                header = resp.headers.get("Set-Cookie", "")
+        except urllib.error.HTTPError as e:
+            header = e.headers.get("Set-Cookie", "") if e.headers else ""
+        return header.split(";")[0] if header else ""
 
     @classmethod
     def tearDownClass(cls):
@@ -295,6 +335,169 @@ class AdminTest(unittest.TestCase):
         _, body = _get(self.port, "/cameras")
         self.assertIn("Юнусабад", body, "модератор должен видеть адрес, а не голый id")
 
+
+    # --- Вход ---
+
+    def test_guest_sees_login_not_data(self):
+        """Без сессии панель не отдаёт ничего, кроме формы входа. Это главная
+        проверка всего замка: любой другой ответ здесь — открытая дверь."""
+        for path in ("/", "/cameras", "/mobile", "/feedback", "/usage", "/health"):
+            code, body = _get(self.port, path, cookie="")
+            self.assertEqual(code, 401, path)
+            self.assertNotIn("Юнусабад", body, f"{path}: данные видны гостю")
+
+    def test_guest_cannot_act(self):
+        """POST без сессии не должен ничего менять — иначе замок только на GET."""
+        self.add_report()
+        code = _post(self.port, "/cameras/act",
+                     {"camera_id": 7, "action": "hide"}, cookie="")
+        self.assertEqual(code, 401)
+        conn = admin.db()
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM overrides").fetchone()[0], 0)
+        finally:
+            conn.close()
+
+    def test_wrong_password_gives_no_session(self):
+        self.assertEqual(self.login(self.port, "не тот пароль"), "")
+
+    def test_password_is_stored_hashed(self):
+        """В конфиге не должно быть пароля открытым текстом."""
+        stored = admin_auth.read_config(self.conf.name).get("password_hash", "")
+        self.assertTrue(stored.startswith("scrypt$"))
+        self.assertNotIn(TEST_PASSWORD, stored)
+        self.assertTrue(admin_auth.check_password(TEST_PASSWORD, stored))
+        self.assertFalse(admin_auth.check_password(TEST_PASSWORD + "x", stored))
+
+    def test_broken_hash_is_a_closed_door(self):
+        """Испорченная запись — «нет», а не «пускать всех»."""
+        for junk in ("", "scrypt$", "bcrypt$a$b", "мусор", "scrypt$!!$??"):
+            self.assertFalse(admin_auth.check_password("что угодно", junk), junk)
+
+    def test_logout_kills_the_session(self):
+        token = self.login(self.port, TEST_PASSWORD)
+        self.assertTrue(token)
+        self.assertEqual(_get(self.port, "/cameras", cookie=token)[0], 200)
+        _get(self.port, "/logout", cookie=token)
+        self.assertEqual(_get(self.port, "/cameras", cookie=token)[0], 401)
+
+    def test_brute_force_is_throttled(self):
+        sessions = admin_auth.Sessions()
+        for _ in range(admin_auth.MAX_ATTEMPTS):
+            self.assertFalse(sessions.blocked("10.0.0.9"))
+            sessions.note_failure("10.0.0.9")
+        self.assertTrue(sessions.blocked("10.0.0.9"))
+        # Успешный вход снимает счётчик, чужой адрес не задет.
+        self.assertFalse(sessions.blocked("10.0.0.10"))
+        sessions.note_success("10.0.0.9")
+        self.assertFalse(sessions.blocked("10.0.0.9"))
+
+    def test_session_expires(self):
+        sessions = admin_auth.Sessions(ttl=60)
+        token = sessions.issue(now=1000)
+        self.assertTrue(sessions.valid(token, now=1030))
+        self.assertFalse(sessions.valid(token, now=1061))
+
+    def test_plain_http_from_outside_is_refused(self):
+        """Пароль по открытому HTTP ушёл бы открытым текстом. Пока нет TLS,
+        панель отказывает всем, кроме локального соединения."""
+        self.assertTrue(admin_auth.require_secure({}, "127.0.0.1"))
+        self.assertFalse(admin_auth.require_secure({}, "203.0.113.7"))
+        self.assertTrue(admin_auth.require_secure({"X-Forwarded-Proto": "https"},
+                                                  "203.0.113.7"))
+
+    # --- Положение камеры: очередь и карта ---
+
+    def test_suspicious_queue_puts_complaints_first(self):
+        """Жалоба водителя весит больше любой догадки алгоритма: у него глаза,
+        у нас эвристика."""
+        conn = admin.db()
+        try:
+            admin._cameras = {
+                1: {"id": 1, "lat": 41.3, "lon": 69.2, "location": "Без дороги",
+                    "city": "", "region": "", "type": "Стационар камера"},
+                2: {"id": 2, "lat": 41.4, "lon": 69.3, "location": "Тротуар",
+                    "city": "", "region": "", "type": "Стационар камера",
+                    "cls": "footway", "road": [0, 0, 1, 1]},
+                3: {"id": 3, "lat": 41.5, "lon": 69.4, "location": "Жалоба",
+                    "city": "", "region": "", "type": "Стационар камера",
+                    "cls": "primary", "road": [0, 0, 1, 1]},
+                4: {"id": 4, "lat": 41.6, "lon": 69.5, "location": "Хорошая",
+                    "city": "", "region": "", "type": "Стационар камера",
+                    "cls": "primary", "road": [0, 0, 1, 1]},
+            }
+            # Ровно текущее время файла: cameras() перечитывает его при
+            # РАСХОЖДЕНИИ, поэтому «-1» не заморозил бы подмену, а наоборот.
+            admin._cameras_mtime = os.path.getmtime(admin.CAMERAS_PATH)
+            self.add_report(camera_id=3, reason="wrong_location")
+            items = admin.suspicious_cameras(conn)
+            ids = [item[1] for item in items]
+            self.assertEqual(ids[0], 3, "камера с жалобой должна быть первой")
+            self.assertIn(2, ids, "снап на тротуаре — подозрительна")
+            self.assertIn(1, ids, "нет куска дороги — подозрительна")
+            self.assertNotIn(4, ids, "здоровая камера не должна попадать в очередь")
+        finally:
+            conn.close()
+            # Вернуть настоящую базу камер: соседние тесты ждут «Юнусабад».
+            admin._cameras, admin._cameras_mtime = {}, 0
+
+    def test_map_page_needs_key_and_shows_the_cost(self):
+        """Без ключа — честное объяснение, а не пустая карта. С ключом — данные
+        камеры и предупреждение о потере профиля дороги."""
+        code, body = _get(self.port, "/cameras/7/map")
+        self.assertEqual(code, 200)
+        self.assertIn("yandex_key", body, "нет объяснения про отсутствующий ключ")
+
+        conf = admin_auth.read_config(self.conf.name)
+        conf["yandex_key"] = "test-key"
+        with open(self.conf.name, "w", encoding="utf-8") as handle:
+            handle.writelines(f"{k}={v}\n" for k, v in conf.items())
+        try:
+            code, body = _get(self.port, "/cameras/7/map")
+            self.assertEqual(code, 200)
+            self.assertIn("Юнусабад", body)
+            self.assertIn("теряет измеренный профиль", body,
+                          "цена переноса должна быть на экране, а не в документации")
+            self.assertIn("41.31", body, "нет исходной координаты для карты")
+        finally:
+            conf.pop("yandex_key")
+            with open(self.conf.name, "w", encoding="utf-8") as handle:
+                handle.writelines(f"{k}={v}\n" for k, v in conf.items())
+
+    def test_map_page_refuses_unknown_camera(self):
+        self.assertEqual(_get(self.port, "/cameras/999999/map")[0], 404)
+
+    def test_static_serves_only_the_whitelist(self):
+        """Отдача файлов по имени из URL — способ вынести наружу что угодно."""
+        self.assertEqual(_get(self.port, "/static/map.js")[0], 200)
+        for path in ("/static/../admin.py", "/static/admin_auth.py", "/static/x.js"):
+            self.assertEqual(_get(self.port, path)[0], 404, path)
+
+    def test_actions_survive_missing_reports_table(self):
+        """Панель может подняться раньше api.py, который владеет camera_reports.
+
+        Раньше её отсутствие роняло обработчик ПОСЛЕ записи правки и ДО commit:
+        модератор видел ошибку, а решение исчезало. Проверяем на отдельной базе,
+        чтобы не ломать общий стенд.
+        """
+        fresh = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        fresh.close()
+        old_path, admin.DB_PATH = admin.DB_PATH, fresh.name
+        try:
+            admin.init_db()          # только overrides и журнал, без camera_reports
+            conn = admin.db()
+            try:
+                self.assertIsNone(
+                    conn.execute("SELECT name FROM sqlite_master WHERE "
+                                 "name = 'camera_reports'").fetchone())
+                handler = admin.Handler.__new__(admin.Handler)
+                # Не должно бросить: «закрывать нечего» — это не ошибка.
+                handler.resolve_reports(conn, 7, admin.RESOLVED_DONE)
+            finally:
+                conn.close()
+        finally:
+            admin.DB_PATH = old_path
+            os.unlink(fresh.name)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

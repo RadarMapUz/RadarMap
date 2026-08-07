@@ -92,6 +92,11 @@ struct DashboardView: View {
     private var sketchLayout: RoadSketch.Layout? {
         guard let me = env.location.currentCoordinate else { return nil }
         return RoadSketch.layout(camera: env.location.nearestCamera,
+                                 // Дороги берём из индекса лимитов: он уже на
+                                 // телефоне и несёт настоящую геометрию. Когда
+                                 // появится свой roads.json — меняется только
+                                 // эта строка (см. RoadNetwork.swift).
+                                 network: env.speedLimits.limitIndex ?? EmptyRoadNetwork(),
                                  route: env.route.routeCoordinates,
                                  track: env.trip.recentTrack(),
                                  from: me,

@@ -30,7 +30,20 @@ nonisolated enum RoadSketch {
 
     /// Раскладка в координатах вида: 0…1 по обеим осям, y растёт ВНИЗ (как в
     /// SwiftUI). Всё, что нужно для отрисовки, уже посчитано — вью только чертит.
+    /// Дорога сети, готовая к отрисовке.
+    struct Line: Equatable {
+        var points: [CGPoint]
+        var kind: RoadClass
+        /// 0 — по земле, > 0 — мост, < 0 — тоннель. Рендерер рисует по
+        /// возрастанию: мост ложится ПОВЕРХ того, что под ним.
+        var level: Int
+        var isOneWay: Bool
+        var isDetailed: Bool
+    }
+
     struct Layout: Equatable {
+        /// Окрестная дорожная сеть — перекрёстки, развязки, параллельные улицы.
+        var network: [Line] = []
         /// Проезжая часть камеры, продлённая до краёв вида.
         var road: [CGPoint] = []
         /// Построенный маршрут — та самая жирная линия «куда я еду».
@@ -49,7 +62,9 @@ nonisolated enum RoadSketch {
         /// которой нет, нельзя.
         var roadIsMeasured = false
 
-        var isEmpty: Bool { road.isEmpty && route.isEmpty && track.isEmpty && camera == nil }
+        var isEmpty: Bool {
+            network.isEmpty && road.isEmpty && route.isEmpty && track.isEmpty && camera == nil
+        }
     }
 
     /// Где стоит «я»: не в центре, а ниже — впереди должно быть видно больше,
@@ -80,6 +95,7 @@ nonisolated enum RoadSketch {
     /// от которого приложение и должно быть свободно. Чертим только измеренное:
     /// проезжую часть камеры из базы, построенный маршрут и собственный трек.
     static func layout(camera: Camera?,
+                       network: RoadNetworkSource = EmptyRoadNetwork(),
                        route: [CLLocationCoordinate2D] = [],
                        track: [CLLocationCoordinate2D] = [],
                        from me: CLLocationCoordinate2D,
@@ -127,6 +143,18 @@ nonisolated enum RoadSketch {
                             spanMeters: span)
         layout.route = nearby(route).map(project)
         layout.track = nearby(track).map(project)
+        // Сеть запрашиваем по диагонали вида, а не по высоте: иначе дороги
+        // обрывались бы у боковых краёв.
+        layout.network = network
+            .roads(near: me, radius: span * sqrt(1 + aspect * aspect) * 0.6)
+            .compactMap { line in
+                let points = line.points.map(local).map(project)
+                guard points.count >= 2 else { return nil }
+                return Line(points: points, kind: line.kind, level: line.level,
+                            isOneWay: line.isOneWay, isDetailed: line.isDetailed)
+            }
+            // Сначала земля, потом мосты: рендерер полагается на этот порядок.
+            .sorted { $0.level < $1.level }
 
         if let camera, let cameraPoint, inRange {
             let shape = RoadShape(camera: camera)

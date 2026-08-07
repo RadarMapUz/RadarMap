@@ -33,6 +33,27 @@ struct RoadSketchView: View {
                 return path
             }
 
+            // Окрестная сеть — самый нижний слой. Рисуем строго по возрастанию
+            // уровня: сначала всё, что по земле, потом эстакады. Только так
+            // камера НА мосту отличима от камеры на дороге ПОД ним — а это
+            // разные камеры и разное решение водителя.
+            for line in layout.network where line.points.count >= 2 {
+                let width = self.width(for: line)
+                // Мост отбивается тёмной «подложкой» шире самой линии: она
+                // разрывает то, что проходит под ним, и пересечение читается
+                // как развязка, а не как перекрёсток.
+                if line.level > 0 {
+                    context.stroke(path(line.points),
+                                   with: .color(.black),
+                                   style: .init(lineWidth: width + 8,
+                                                lineCap: .butt, lineJoin: .round))
+                }
+                context.stroke(path(line.points),
+                               with: .color(.white.opacity(line.level < 0 ? 0.10 : 0.20)),
+                               style: .init(lineWidth: width, lineCap: .round, lineJoin: .round,
+                                            dash: line.level < 0 ? [10, 8] : []))
+            }
+
             // Трек — самый бледный слой: он объясняет, откуда я приехал, и не
             // должен спорить с тем, что впереди.
             if layout.track.count >= 2 {
@@ -89,5 +110,25 @@ struct RoadSketchView: View {
 
     private func scaled(_ point: CGPoint, _ size: CGSize) -> CGPoint {
         CGPoint(x: point.x * size.width, y: point.y * size.height)
+    }
+
+    /// Ширина линии по классу дороги: магистраль толстая, двор тонкий — схема
+    /// читается как местность, а не как паутина одинаковых линий.
+    ///
+    /// Источник, который класса НЕ ЗНАЕТ (индекс лимитов), получает одну
+    /// среднюю ширину на всё. Рисовать разную толщину по догадке значило бы
+    /// выдавать предположение за измеренное — здесь это так же недопустимо,
+    /// как в оповещениях.
+    private func width(for line: RoadSketch.Line) -> CGFloat {
+        guard line.isDetailed else { return 9 }
+        switch line.kind {
+        case .motorway, .trunk: return 15
+        case .primary:          return 12
+        case .secondary:        return 10
+        case .tertiary:         return 8
+        case .residential:      return 6
+        case .service:          return 4
+        case .pedestrian, .unknown: return 3
+        }
     }
 }

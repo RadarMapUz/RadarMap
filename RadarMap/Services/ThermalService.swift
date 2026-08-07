@@ -91,6 +91,15 @@ final class ThermalService {
     @ObservationIgnored private var observer: NSObjectProtocol?
 
     init() {
+        #if DEBUG
+        // Перегрев на симуляторе не воспроизвести, а посмотреть глазами на всё,
+        // что от него зависит (чип приборки, урезанный бюджет схемы), — надо.
+        // Тот же аргумент, что у плашки карты (MapStatusBanner).
+        if ProcessInfo.processInfo.arguments.contains("-forceOverheated") {
+            mode = .reduced
+            return
+        }
+        #endif
         observer = NotificationCenter.default.addObserver(
             forName: ProcessInfo.thermalStateDidChangeNotification,
             object: nil, queue: nil

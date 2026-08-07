@@ -291,8 +291,10 @@ final class RouteService {
             return
         }
 
-        // Пройденный кусок для тусклой отрисовки (пересобираем не чаще, чем раз в 40 м).
-        if abs(along - lastSplitAlong) > 40 {
+        // Пройденный кусок для тусклой отрисовки. Шаг крупный намеренно: эту
+        // линию читает тело экрана карты, и каждая перезапись пересобирает
+        // карту со всеми маркерами (см. AppConfig.routeTraveledStepMeters).
+        if abs(along - lastSplitAlong) > AppConfig.routeTraveledStepMeters {
             lastSplitAlong = along
             traveledPolyline = Self.traveledPrefix(points: variant.points, upTo: along)
         }

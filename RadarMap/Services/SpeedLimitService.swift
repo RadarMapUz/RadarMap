@@ -4,8 +4,12 @@
 //
 //  Лимиты скорости дорог (maxspeed из OpenStreetMap, готовит наш сервер).
 //  Определяет лимит дороги, по которой едем (позиция + курс), и следит за превышением.
-//  База ~3 МБ обновляется раз в неделю; индекс и матчинг устроены так, чтобы
-//  на каждом GPS-тике работать за микросекунды и не трогать главный поток при загрузке.
+//  База ~3 МБ обновляется раз в неделю и не трогает главный поток при загрузке.
+//  Матчинг на GPS-тике стоит ~0,1 мс в плотном центре (замерено
+//  PerformanceBudgetTests на сети по статистике боевого файла) — это
+//  по-прежнему самая дорогая арифметика тика, и трогать её надо с замером.
+//  Прежний комментарий обещал здесь «микросекунды»; на деле их не было
+//  никогда — до появления рамки сегмента цена была 0,7 мс.
 //
 
 import Foundation
@@ -223,6 +227,33 @@ struct LimitIndex: Sendable, RoadNetworkSource {
     struct Segment: Sendable {
         let limit: Int
         let pts: [MKMapPoint]
+        /// Рамка сегмента в единицах MKMapPoint.
+        ///
+        /// Ячейка грида — 1,1 км, а совпадением считается 35 м: почти всё, что
+        /// попало в кольцо ячеек, до дороги под колесом не дотягивается. Без
+        /// рамки `match` обходил ВСЕ пары точек ВСЕХ сегментов кольца — в
+        /// плотном центре это тысячи пар на каждом GPS-тике. Рамка отсекает
+        /// сегмент четырьмя сравнениями, до того как начнётся геометрия.
+        let minX, minY, maxX, maxY: Double
+
+        init(limit: Int, pts: [MKMapPoint]) {
+            self.limit = limit
+            self.pts = pts
+            var minX = Double.greatestFiniteMagnitude, minY = Double.greatestFiniteMagnitude
+            var maxX = -Double.greatestFiniteMagnitude, maxY = -Double.greatestFiniteMagnitude
+            for point in pts {
+                minX = min(minX, point.x); maxX = max(maxX, point.x)
+                minY = min(minY, point.y); maxY = max(maxY, point.y)
+            }
+            self.minX = minX; self.minY = minY
+            self.maxX = maxX; self.maxY = maxY
+        }
+
+        /// Может ли эта дорога оказаться ближе `reach` (в единицах MKMapPoint).
+        func mayReach(_ p: MKMapPoint, within reach: Double) -> Bool {
+            p.x >= minX - reach && p.x <= maxX + reach
+                && p.y >= minY - reach && p.y <= maxY + reach
+        }
     }
 
     let segments: [Segment]
@@ -255,17 +286,30 @@ struct LimitIndex: Sendable, RoadNetworkSource {
         guard !seen.isEmpty else { return [] }
 
         let origin = MKMapPoint(coordinate)
-        // Метры → единицы MKMapPoint на этой широте.
-        let limitPoints = radius / MKMetersPerMapPointAtLatitude(coordinate.latitude)
+        // Радиус в единицах MKMapPoint, и сравниваем КВАДРАТЫ — в тех же
+        // единицах, что и точки сегмента.
+        //
+        // Здесь была путаница в единицах: `MKMapPoint.distance` возвращает
+        // МЕТРЫ, а сравнивали его с радиусом, уже переведённым в единицы карты.
+        // На широте Ташкента это множитель ~8,8 — «дороги в радиусе 570 м»
+        // отдавались в радиусе пяти километров. Схема потом всё равно обрезала
+        // их своим масштабом, поэтому на экране это не проявлялось: просто
+        // каждая пересборка тащила в несколько раз больше геометрии, чем
+        // просила, и делала это на телефоне в держателе.
+        let limitSquared = Self.points(radius, at: coordinate) * Self.points(radius, at: coordinate)
+        func within(_ point: MKMapPoint) -> Bool {
+            let dx = point.x - origin.x, dy = point.y - origin.y
+            return dx * dx + dy * dy <= limitSquared
+        }
+        let reach = Self.points(radius, at: coordinate)
         return seen.compactMap { index -> RoadLine? in
             let segment = segments[Int(index)]
+            guard segment.mayReach(origin, within: reach) else { return nil }
             // Точки за радиусом отбрасываем, но линию не рвём: берём кусок от
             // первой до последней попавшей — иначе дорога рассыпалась бы на
             // обрывки там, где она просто длинная.
-            guard let first = segment.pts.firstIndex(where: {
-                      $0.distance(to: origin) <= limitPoints }),
-                  let last = segment.pts.lastIndex(where: {
-                      $0.distance(to: origin) <= limitPoints }),
+            guard let first = segment.pts.firstIndex(where: within),
+                  let last = segment.pts.lastIndex(where: within),
                   last > first else { return nil }
             return RoadLine(points: segment.pts[first...last].map(\.coordinate))
         }
@@ -322,23 +366,40 @@ struct LimitIndex: Sendable, RoadNetworkSource {
         return segments.isEmpty ? nil : LimitIndex(segments: segments, grid: grid)
     }
 
-    /// Лимит дороги в точке: ближе 35 м к линии и направление совпадает с курсом (±40°, обе стороны).
-    nonisolated func match(_ coordinate: CLLocationCoordinate2D, courseDegrees: Double) -> Int? {
-        let p = MKMapPoint(coordinate)
-        var bestDistance = 35.0
-        var bestLimit: Int?
-
-        var candidates = Set<Int32>()
+    /// Кандидаты кольца 3×3 ячеек вокруг точки. Один сегмент лежит в нескольких
+    /// ячейках, поэтому Set: без него длинный проспект перебирался бы девять раз.
+    nonisolated private func candidates(around coordinate: CLLocationCoordinate2D) -> Set<Int32> {
+        var found = Set<Int32>()
         for dLat in -1...1 {
             for dLon in -1...1 {
                 let key = Self.cellKey(lat: coordinate.latitude + Double(dLat) * 0.01,
                                        lon: coordinate.longitude + Double(dLon) * 0.01)
-                if let list = grid[key] { candidates.formUnion(list) }
+                if let list = grid[key] { found.formUnion(list) }
             }
         }
+        return found
+    }
 
+    /// Ближайшая дорога кольца: лимит и квадрат расстояния в единицах MKMapPoint.
+    ///
+    /// Общее тело для `match` и `limit(near:)` — они обязаны сходиться в том,
+    /// какую дорогу считают ближайшей, а раньше это были две копии одного
+    /// цикла, расходившиеся при каждой правке.
+    ///
+    /// Считаем в КВАДРАТАХ единиц карты, а не в метрах: `MKMapPoint.distance`
+    /// на каждую пару точек — это корень и пересчёт масштаба по широте, а нам
+    /// нужно только сравнить, что ближе. Порядок сравнений от этого не меняется
+    /// (масштаб внутри кольца постоянен), а метры остаются только на границе.
+    nonisolated private func nearestRoad(
+        to p: MKMapPoint, within reach: Double, candidates: Set<Int32>,
+        accepts: (_ dx: Double, _ dy: Double) -> Bool
+    ) -> Int? {
+        var bestSquared = reach * reach
+        var bestLimit: Int?
         for candidate in candidates {
             let segment = segments[Int(candidate)]
+            // Рамка: четыре сравнения вместо обхода всех точек сегмента.
+            guard segment.mayReach(p, within: reach) else { continue }
             let pts = segment.pts
             for i in 0..<(pts.count - 1) {
                 let a = pts[i], b = pts[i + 1]
@@ -347,51 +408,42 @@ struct LimitIndex: Sendable, RoadNetworkSource {
                 let len2 = dx * dx + dy * dy
                 guard len2 > 0 else { continue }
                 let t = max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2))
-                let closest = MKMapPoint(x: a.x + t * dx, y: a.y + t * dy)
-                let d = p.distance(to: closest)
-                guard d < bestDistance else { continue }
-                // Совпадение направления (дорогу считаем двусторонней).
-                // Меркатор конформен: азимут корректно берётся прямо из map-точек (y растёт на юг).
-                let segmentBearing = (atan2(dx, -dy) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
-                var diff = abs(segmentBearing - courseDegrees).truncatingRemainder(dividingBy: 360)
-                if diff > 180 { diff = 360 - diff }
-                guard min(diff, 180 - diff) <= 40 else { continue }
-                bestDistance = d
+                let ox = a.x + t * dx - p.x, oy = a.y + t * dy - p.y
+                let squared = ox * ox + oy * oy
+                guard squared < bestSquared else { continue }
+                guard accepts(dx, dy) else { continue }
+                bestSquared = squared
                 bestLimit = segment.limit
             }
         }
         return bestLimit
     }
 
+    /// Метры в единицы MKMapPoint на этой широте.
+    nonisolated private static func points(_ meters: Double,
+                                           at coordinate: CLLocationCoordinate2D) -> Double {
+        meters / MKMetersPerMapPointAtLatitude(coordinate.latitude)
+    }
+
+    /// Лимит дороги в точке: ближе 35 м к линии и направление совпадает с курсом (±40°, обе стороны).
+    nonisolated func match(_ coordinate: CLLocationCoordinate2D, courseDegrees: Double) -> Int? {
+        nearestRoad(to: MKMapPoint(coordinate),
+                    within: Self.points(35, at: coordinate),
+                    candidates: candidates(around: coordinate)) { dx, dy in
+            // Совпадение направления (дорогу считаем двусторонней).
+            // Меркатор конформен: азимут корректно берётся прямо из map-точек (y растёт на юг).
+            let segmentBearing = (atan2(dx, -dy) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+            var diff = abs(segmentBearing - courseDegrees).truncatingRemainder(dividingBy: 360)
+            if diff > 180 { diff = 360 - diff }
+            return min(diff, 180 - diff) <= 40
+        }
+    }
+
     /// Лимит ближайшей дороги без учёта курса — для карточки камеры
     /// (камера стоит, курса нет; берём просто ближайшую дорогу до 45 м).
     nonisolated func limit(near coordinate: CLLocationCoordinate2D) -> Int? {
-        let p = MKMapPoint(coordinate)
-        var bestDistance = 45.0
-        var bestLimit: Int?
-        var candidates = Set<Int32>()
-        for dLat in -1...1 {
-            for dLon in -1...1 {
-                let key = Self.cellKey(lat: coordinate.latitude + Double(dLat) * 0.01,
-                                       lon: coordinate.longitude + Double(dLon) * 0.01)
-                if let list = grid[key] { candidates.formUnion(list) }
-            }
-        }
-        for candidate in candidates {
-            let pts = segments[Int(candidate)].pts
-            for i in 0..<(pts.count - 1) {
-                let a = pts[i], b = pts[i + 1]
-                let dx = b.x - a.x, dy = b.y - a.y
-                let len2 = dx * dx + dy * dy
-                guard len2 > 0 else { continue }
-                let t = max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2))
-                let d = p.distance(to: MKMapPoint(x: a.x + t * dx, y: a.y + t * dy))
-                if d < bestDistance {
-                    bestDistance = d
-                    bestLimit = segments[Int(candidate)].limit
-                }
-            }
-        }
-        return bestLimit
+        nearestRoad(to: MKMapPoint(coordinate),
+                    within: Self.points(45, at: coordinate),
+                    candidates: candidates(around: coordinate)) { _, _ in true }
     }
 }

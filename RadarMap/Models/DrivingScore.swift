@@ -71,14 +71,22 @@ enum DrivingScore {
         }
     }
 
-    /// Штраф за рваную езду по треку. nil — трека мало, судить не по чему.
-    nonisolated static func smoothPenalty(trackSpeeds: [Double]) -> Double? {
-        guard trackSpeeds.count >= smoothMinPoints else { return nil }
+    /// Средняя перемена скорости между соседними точками трека, км/ч. Это и
+    /// есть измеряемая «рваность» — то самое число, которое показывается
+    /// пользователю в разборе балла.
+    nonisolated static func meanSpeedChange(trackSpeeds: [Double]) -> Double {
+        guard trackSpeeds.count >= 2 else { return 0 }
         var delta = 0.0
         for index in 1..<trackSpeeds.count {
             delta += abs(trackSpeeds[index] - trackSpeeds[index - 1])
         }
-        let mean = delta / Double(trackSpeeds.count - 1)
+        return delta / Double(trackSpeeds.count - 1)
+    }
+
+    /// Штраф за рваную езду по треку. nil — трека мало, судить не по чему.
+    nonisolated static func smoothPenalty(trackSpeeds: [Double]) -> Double? {
+        guard trackSpeeds.count >= smoothMinPoints else { return nil }
+        let mean = meanSpeedChange(trackSpeeds: trackSpeeds)
         return min(max((mean - smoothBaselineKmh) * smoothFactor, 0), smoothPenaltyCap)
     }
 
@@ -146,10 +154,17 @@ enum DrivingScore {
         if let smooth = smoothPenalty(trackSpeeds: trackSpeeds) {
             let points = Int(smooth.rounded())
             if points > 0 {
+                // «по треку поездки» не объясняло НИЧЕГО: человек видел −20 и
+                // не мог ни проверить, ни исправить. Показываем измеренное
+                // число и порог, с которого начинается штраф, — тогда строка
+                // становится проверяемой, как и все остальные.
                 items.append(Penalty(
                     id: "smooth", icon: "waveform.path.ecg",
                     title: String(localized: "Резкие разгоны и торможения"),
-                    detail: String(localized: "по треку поездки"), points: points))
+                    detail: String(format: String(localized: "скорость менялась в среднем на %1$lld км/ч между точками трека, спокойная езда — до %2$lld"),
+                                   Int(meanSpeedChange(trackSpeeds: trackSpeeds).rounded()),
+                                   Int(smoothBaselineKmh)),
+                    points: points))
             }
         } else if limitedPasses == 0 {
             return []   // балла нет — раскладывать нечего

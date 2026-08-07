@@ -79,6 +79,8 @@ final class MobileCameraService {
         guard !reports.isEmpty else { return }
         reports = []
         confirmations = [:]
+        passTracks = [:]
+        pendingConfirm = nil
         store?.setMobileCameras([])
     }
 
@@ -147,6 +149,8 @@ final class MobileCameraService {
             let payload = ["lat": coordinate.latitude, "lon": coordinate.longitude,
                            "device": deviceID, "type": kind.rawValue] as [String: Any]
             let response = try await api.post("api/report", json: payload, as: Response.self)
+            lastSent = ReportGuard.Sent(kind: kind, latitude: coordinate.latitude,
+                                        longitude: coordinate.longitude, at: Date())
             await refresh()
             return response.merged ? .confirmed : .created
         } catch {
@@ -155,6 +159,78 @@ final class MobileCameraService {
             Log.network.error("отметка радара не ушла: \(error.localizedDescription, privacy: .public)")
             return .failed
         }
+    }
+
+    // MARK: - Кнопка «Радар!» за рулём
+
+    /// Последняя ушедшая отметка — только в памяти сессии: защита от дублей
+    /// нужна на протяжении поездки, а не между запусками.
+    @ObservationIgnored private(set) var lastSent: ReportGuard.Sent?
+
+    /// Итог одного тапа по кнопке в поездке: что сказать вслух и показать.
+    enum QuickOutcome {
+        case sent(ReportResult)
+        case refused(ReportGuard.Refusal)
+
+        /// Фраза голосом. За рулём на экран не смотрят — ответ обязан звучать,
+        /// иначе непонятно, ушло или нет, и человек жмёт ещё раз.
+        var spoken: String {
+            switch self {
+            case .sent(.created):   return String(localized: "Принято, спасибо")
+            case .sent(.confirmed): return String(localized: "Подтвердили, спасибо")
+            case .sent(.failed):    return String(localized: "Не отправилось, нет связи")
+            case .refused(.duplicate):  return String(localized: "Уже отметили здесь")
+            case .refused(.noPosition): return String(localized: "Ждём спутники")
+            case .refused(.notDriving): return String(localized: "Отметка ставится в движении")
+            }
+        }
+
+        var isSuccess: Bool {
+            if case .sent(let result) = self { return result != .failed }
+            return false
+        }
+    }
+
+    /// Один тап: проверить, отправить, ответить. Вся кнопка «Радар!» — здесь,
+    /// чтобы телефон, CarPlay и Siri вели себя одинаково.
+    func quickReport(kind: ReportKind = .radar,
+                     coordinate: CLLocationCoordinate2D?,
+                     speedKmh: Double,
+                     isTripActive: Bool) async -> QuickOutcome {
+        if let refusal = ReportGuard.check(kind: kind, coordinate: coordinate,
+                                           speedKmh: speedKmh, isTripActive: isTripActive,
+                                           lastSent: lastSent, now: Date()) {
+            return .refused(refusal)
+        }
+        guard let coordinate else { return .refused(.noPosition) }
+        return .sent(await report(at: coordinate, kind: kind))
+    }
+
+    // MARK: - «Радар ещё стоит?» после проезда
+
+    /// Точка, о которой уместно спросить прямо сейчас. nil — спрашивать нечего.
+    /// Ставится, только когда водитель прошёл вплотную и уже отъехал.
+    private(set) var pendingConfirm: Camera?
+
+    @ObservationIgnored private var passTracks: [Int: MobilePassWatch.Track] = [:]
+
+    /// Тик положения: обновить наблюдение за передвижными точками.
+    /// Дёргается с карты — там же, где показывается вопрос.
+    func trackPasses(from coordinate: CLLocationCoordinate2D) {
+        guard isEnabled, pendingConfirm == nil else { return }
+        guard let askID = MobilePassWatch.update(tracks: &passTracks,
+                                                 mobileCameras: reports,
+                                                 from: coordinate) else { return }
+        pendingConfirm = reports.first { $0.id == askID }
+    }
+
+    /// Ответили. `nil` — закрыли/промолчали: не шлём ничего, потому что
+    /// «не знаю» испортит данные сильнее, чем их отсутствие.
+    func answerConfirm(stillThere: Bool?) {
+        guard let camera = pendingConfirm else { return }
+        pendingConfirm = nil
+        guard let stillThere else { return }
+        Task { await vote(cameraID: camera.id, stillThere: stillThere) }
     }
 
     /// value: true = «радар на месте» (продлевает жизнь), false = «радара нет».

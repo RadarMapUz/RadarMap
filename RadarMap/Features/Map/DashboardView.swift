@@ -71,6 +71,11 @@ struct DashboardView: View {
 
                 Spacer()
 
+                // Кнопка «Радар!» — крупная: приборка это режим «телефон в
+                // держателе», и тап делается вслепую.
+                ReportRadarButton(isLarge: true)
+                    .padding(.bottom, 4)
+
                 Text("Нажмите, чтобы вернуться к карте")
                     .font(.rounded(12))
                     .foregroundStyle(Theme.textTertiary)

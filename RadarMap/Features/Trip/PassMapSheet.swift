@@ -28,8 +28,11 @@ struct PassDetailView: View {
     var interval: DateInterval? = nil
     var period: StatsPeriod? = nil
 
+    @Environment(AppEnvironment.self) private var env
     @State private var position: MapCameraPosition
     @State private var appeared = false
+    @State private var isSendingMissed = false
+    @State private var missedSent = false
     /// «А если бы» — из .task, не из body: пересчёт рейтинга периода попадал в
     /// кадры анимации подлёта (Map пишет position обратно на каждом кадре).
     @State private var whatIf: (tripScore: Int, periodRating: Int?, currentRating: Int?)?
@@ -65,6 +68,7 @@ struct PassDetailView: View {
                 costCard
                 whatIfCard
                 methodCard
+                missedAlertCard
             }
             .padding(20)
         }
@@ -308,6 +312,59 @@ struct PassDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .statCard()
+    }
+
+    // MARK: Жалоба «не предупредила»
+
+    /// Молчание о настоящей камере — худшая из наших ошибок, и до сих пор
+    /// сообщить о ней было негде: в отзыве «иногда не предупреждает» нет ни
+    /// места, ни скорости, ни маршрута, то есть воспроизвести нечего.
+    /// Здесь весь контекст уже известен — остаётся один тап.
+    @ViewBuilder
+    private var missedAlertCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(String(localized: "Что-то не так с этим проездом?"))
+            if missedSent {
+                Label(String(localized: "Спасибо — разберёмся"), systemImage: "checkmark.circle.fill")
+                    .font(.rounded(13, .semibold))
+                    .foregroundStyle(Theme.success)
+            } else {
+                Text("Если приложение промолчало об этой камере — скажите. Мы приложим место, скорость и лимит: без них найти причину невозможно.")
+                    .font(.rounded(12))
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    sendMissedAlert()
+                } label: {
+                    HStack(spacing: 8) {
+                        if isSendingMissed {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "speaker.slash.fill")
+                        }
+                        Text("Не предупредила о камере")
+                    }
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(Theme.warning)
+                }
+                .buttonStyle(.plain)
+                .disabled(isSendingMissed)
+            }
+        }
+        .statCard()
+    }
+
+    private func sendMissedAlert() {
+        guard !isSendingMissed else { return }
+        isSendingMissed = true
+        Task {
+            _ = await env.feedback.reportMissedAlert(
+                pass: pass,
+                dbVersion: env.cameras.dbVersion)
+            isSendingMissed = false
+            // Очередь оффлайна — тоже успех: жалоба уйдёт, когда появится сеть.
+            missedSent = true
+        }
     }
 }
 

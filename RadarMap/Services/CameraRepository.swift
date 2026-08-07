@@ -93,7 +93,10 @@ final class CameraStore: CameraRepository {
     /// Первая загрузка базы завершена (декод асинхронный). Для одноразовых
     /// миграций, которым нужны данные камер: вызов в момент сборки сервисов
     /// пришёлся бы на пустой список.
-    @ObservationIgnored var onDatabaseLoaded: (() -> Void)?
+    @ObservationIgnored var onDatabaseLoaded: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onDatabaseLoaded,
+                                               "CameraRepository.onDatabaseLoaded") }
+    }
 
     init() {
         loadUserData()

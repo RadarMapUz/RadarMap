@@ -37,9 +37,21 @@ final class SketchState {
 
     @ObservationIgnored private var unwoundCourse: Double?
     @ObservationIgnored private var key: RoadSketch.RebuildKey?
+    /// Когда пришёл прошлый тик: анимация точки зрения длится ровно до
+    /// следующего ожидаемого фикса, а не фиксированную секунду.
+    @ObservationIgnored private var lastTickAt: Date?
+    /// Мелкие улицы видны (мы сами на такой). Два тика подряд на смену:
+    /// на границе двора с проспектом решение не должно мигать.
+    @ObservationIgnored private var minorsVisible = false
+    @ObservationIgnored private var minorFlipTicks = 0
 
     /// Тик GPS: дёргается из DashboardView по locationTick.
     func refresh(_ env: AppEnvironment) {
+        // Схема на приборке — единственное, что считается на каждом тике ради
+        // картинки. Она обязана быть самым дешёвым экраном, а не самым дорогим,
+        // и проверять это надо приборами, а не на глаз.
+        let token = Perf.begin(Perf.Name.sketchRefresh)
+        defer { token.end() }
         guard let me = env.location.currentCoordinate else { return }
         unwoundCourse = RoadSketch.unwound(unwoundCourse,
                                            towards: env.location.currentCourse)
@@ -61,6 +73,20 @@ final class SketchState {
             false
         }
 
+        // Мелкие улицы: видны, только когда мы сами на такой. Решение с
+        // гистерезисом в два тика — иначе на границе двора с проспектом
+        // растр пересобирался бы туда-сюда.
+        let wantsMinors = RoadSketch.prefersMinorRoads(network: network(env), at: me)
+        if wantsMinors != minorsVisible {
+            minorFlipTicks += 1
+            if minorFlipTicks >= 2 {
+                minorsVisible = wantsMinors
+                minorFlipTicks = 0
+            }
+        } else {
+            minorFlipTicks = 0
+        }
+
         let freshKey = RoadSketch.RebuildKey(
             alertCameraID: inRange ? alert?.id : nil,
             alertInRange: inRange,
@@ -69,8 +95,18 @@ final class SketchState {
             networkGeneration: env.speedLimits.indexRevision,
             roadsGeneration: env.roads.revision,
             storeRevision: env.cameras.revision,
-            budget: env.thermal.mode.sketchNetworkBudget)
+            budget: env.thermal.mode.sketchNetworkBudget,
+            minorRoads: minorsVisible)
         let offset = offsetMeters(of: me)
+
+        // Плавность — это ритм: анимация длится до следующего ОЖИДАЕМОГО
+        // фикса (лучшее предсказание интервала — предыдущий), а не жёсткую
+        // секунду. С константой схема секунду ехала и две стояла — фиксы на
+        // крейсере приходят раз в 15–25 метров.
+        let now = Date()
+        let duration = RoadSketch.animationDuration(
+            sincePreviousTick: lastTickAt.map { now.timeIntervalSince($0) })
+        lastTickAt = now
 
         if RoadSketch.needsRebuild(scene: scene, key: freshKey, previousKey: key,
                                    meOffsetMeters: offset) {
@@ -79,18 +115,25 @@ final class SketchState {
             scene = build(env: env, me: me, span: span,
                           alert: alert, inRange: inRange)
             meOffset = .zero
-            withAnimation(.linear(duration: 1)) {
+            withAnimation(.linear(duration: duration)) {
                 courseDegrees = course
                 spanMeters = span
             }
         } else {
-            withAnimation(.linear(duration: 1)) {
+            withAnimation(.linear(duration: duration)) {
                 meOffset = CGSize(width: offset.x, height: offset.y)
                 courseDegrees = course
                 spanMeters = span
             }
         }
         key = freshKey
+    }
+
+    /// Один источник сети на тик и на сборку: свои тайлы, где есть, иначе
+    /// индекс лимитов.
+    private func network(_ env: AppEnvironment) -> FallbackRoadNetwork {
+        FallbackRoadNetwork(primary: env.roads.network,
+                            fallback: env.speedLimits.sketchNetwork)
     }
 
     private func offsetMeters(of me: CLLocationCoordinate2D) -> CGPoint {
@@ -115,10 +158,9 @@ final class SketchState {
                                 cameras: dots,
                                 // Свои тайлы (классы, мосты, дворы), где они
                                 // уже есть; иначе — сеть из индекса лимитов.
-                                network: FallbackRoadNetwork(
-                                    primary: env.roads.network,
-                                    fallback: env.speedLimits.sketchNetwork),
+                                network: network(env),
                                 networkBudget: env.thermal.mode.sketchNetworkBudget,
+                                showMinorRoads: minorsVisible,
                                 route: env.route.routeCoordinates,
                                 track: env.trip.recentTrack(),
                                 anchor: me, spanMeters: span)

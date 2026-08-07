@@ -107,6 +107,67 @@ nonisolated enum RoadSketch {
         var roadsGeneration = 0
         var storeRevision = 0
         var budget = 0
+        /// Видны ли мелкие улицы (мы сами на такой): свернули во дворы —
+        /// растр пересобрать с ними, выехали на проспект — без них.
+        var minorRoads = false
+    }
+
+    // MARK: - Мелкие улицы
+
+    /// Мелкая улица для схемы: прячется, пока мы не на такой же.
+    ///
+    /// На городском охвате (200–700 м) дворы и проезды превращают схему в
+    /// паутину — see-скриншот из реальной поездки, где среди сетки переулков
+    /// не читалась ДОРОГА. Настоящий навигатор мелочь на таком масштабе
+    /// прячет. Правило одно: residential/service/pedestrian рисуются, только
+    /// когда мы сами едем по такой улице — тогда они и есть наша местность.
+    static func isMinorLine(_ line: RoadLine) -> Bool {
+        line.isDetailed && isMinorClass(line.kind)
+    }
+
+    static func isMinorClass(_ kind: RoadClass) -> Bool {
+        kind == .residential || kind == .service || kind == .pedestrian
+    }
+
+    /// Радиус, в котором ищем «свою» улицу.
+    static let minorProbeRadiusMeters: Double = 60
+    /// Ближе этого до мелкой улицы считаем, что едем по ней.
+    static let minorOnRoadMeters: Double = 25
+
+    /// Едем ли мы сейчас по мелкой улице: ближайшая К НАМ дорога — мелкая.
+    ///
+    /// Только детальные линии: источник, не знающий классов (индекс лимитов),
+    /// мелочь не прячет вовсе — скрывать то, чего не знаешь, нельзя. На
+    /// проспекте с дублёром в 15 м решает та дорога, что ближе: по ней мы и
+    /// едем.
+    static func prefersMinorRoads(network: RoadNetworkSource,
+                                  at coordinate: CLLocationCoordinate2D) -> Bool {
+        let lines = network.roads(near: coordinate, radius: minorProbeRadiusMeters)
+        let metersPerLon = 111_320.0 * cos(coordinate.latitude * .pi / 180)
+        var minor = Double.infinity
+        var major = Double.infinity
+        for line in lines where line.isDetailed {
+            var previous: CGPoint?
+            var nearest = Double.infinity
+            for point in line.points {
+                let local = CGPoint(
+                    x: (point.longitude - coordinate.longitude) * metersPerLon,
+                    y: (point.latitude - coordinate.latitude) * 111_320.0)
+                if let a = previous {
+                    // Расстояние до отрезка a–local от нуля (мы — начало координат).
+                    let dx = local.x - a.x, dy = local.y - a.y
+                    let len2 = dx * dx + dy * dy
+                    let t = len2 > 0 ? max(0, min(1, (-a.x * dx - a.y * dy) / len2)) : 0
+                    nearest = min(nearest, hypot(a.x + t * dx, a.y + t * dy))
+                } else {
+                    nearest = min(nearest, hypot(local.x, local.y))
+                }
+                previous = local
+            }
+            if isMinorClass(line.kind) { minor = min(minor, nearest) }
+            else { major = min(major, nearest) }
+        }
+        return minor <= minorOnRoadMeters && minor <= major
     }
 
     /// Где стоит «я»: не в центре, а ниже — впереди должно быть видно больше,
@@ -174,6 +235,21 @@ nonisolated enum RoadSketch {
         return minSpanMeters * pow(bucketRatio, max(0, steps))
     }
 
+    /// Длительность анимации точки зрения — по РЕАЛЬНОМУ ритму фиксов.
+    ///
+    /// Здесь была константа в 1 секунду, и она же была причиной рывков:
+    /// адаптивный GPS на крейсере отдаёт фикс раз в 15–25 метров, в городе
+    /// это 2–3 секунды — схема секунду ехала и две стояла. Навигаторы движутся
+    /// плавно не потому, что фиксы частые, а потому, что анимируют ровно до
+    /// следующего ожидаемого фикса: лучшее предсказание следующего интервала —
+    /// предыдущий.
+    ///
+    /// Зажим сверху: после паузы (светофор, туннель) догонять точку зрения
+    /// три секунды можно, дольше — уже враньё о том, где мы.
+    static func animationDuration(sincePreviousTick dt: TimeInterval?) -> TimeInterval {
+        min(max(dt ?? 1, 0.35), 3.0)
+    }
+
     /// Размотанный курс: переход 359°→1° должен крутить схему на +2°, а не
     /// на −358° — анимация поворота интерполирует градусы как есть.
     ///
@@ -231,6 +307,7 @@ nonisolated enum RoadSketch {
                       cameras: [Camera] = [],
                       network: RoadNetworkSource = EmptyRoadNetwork(),
                       networkBudget: Int = .max,
+                      showMinorRoads: Bool = true,
                       route: [CLLocationCoordinate2D] = [],
                       track: [CLLocationCoordinate2D] = [],
                       anchor: CLLocationCoordinate2D,
@@ -267,7 +344,12 @@ nonisolated enum RoadSketch {
 
         // Все камеры охвата — точками на своих местах. Тревожную гарантируем
         // отдельно: сторонний список мог её не включить (лимит, фильтр вида).
+        // Камера на спрятанной мелкой улице прячется ВМЕСТЕ с улицей: точка
+        // в чёрной пустоте без своей дороги читается как ошибка карты. Это
+        // только картинка схемы — оповещение о такой камере не трогается,
+        // а став тревожной, она рисуется гарантированно (ниже).
         scene.cameras = cameras.compactMap { camera in
+            guard showMinorRoads || !isMinorClass(camera.roadClass) else { return nil }
             let point = local(camera.coordinate)
             guard hypot(point.x, point.y) <= radius else { return nil }
             return CameraDot(id: camera.id, point: point)
@@ -285,6 +367,9 @@ nonisolated enum RoadSketch {
                 .roads(near: anchor, radius: radius)
                 .compactMap { line -> (line: Line, proximityMeters: Double)? in
                     guard line.points.count >= 2 else { return nil }
+                    // Мелкие улицы — только когда мы сами на такой (фильтр ДО
+                    // бюджета: бюджет обязан достаться видимым дорогам).
+                    guard showMinorRoads || !isMinorLine(line) else { return nil }
                     // За один проход: перевод в метры, близость к машине и
                     // рамка линии.
                     var proximity = Double.greatestFiniteMagnitude

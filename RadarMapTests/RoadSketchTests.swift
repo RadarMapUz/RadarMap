@@ -330,4 +330,95 @@ final class RoadSketchTests: XCTestCase {
         XCTAssertEqual(RoadSketch.extended([CGPoint(x: 1, y: 1)], toReach: 10).count, 1)
         XCTAssertTrue(RoadSketch.extended([], toReach: 10).isEmpty)
     }
+
+    // MARK: - Ритм анимации (плавность = длительность по реальному интервалу)
+
+    /// Родился из реальной поездки: константа в 1 с при фиксах раз в 2–3 с
+    /// давала «секунду едет, две стоит».
+    func testAnimationDurationFollowsTickRhythm() {
+        XCTAssertEqual(RoadSketch.animationDuration(sincePreviousTick: nil), 1)
+        XCTAssertEqual(RoadSketch.animationDuration(sincePreviousTick: 0.1), 0.35)
+        XCTAssertEqual(RoadSketch.animationDuration(sincePreviousTick: 2.2), 2.2)
+        XCTAssertEqual(RoadSketch.animationDuration(sincePreviousTick: 30), 3,
+                       "после паузы догонять дольше трёх секунд — врать о том, где мы")
+    }
+
+    // MARK: - Мелкие улицы: видны, только когда мы на такой
+
+    private func detailedStreet(metresAhead: Double, kind: RoadClass) -> RoadLine {
+        var line = crossStreet(metresAhead: metresAhead, kind: kind)
+        line.isDetailed = true
+        return line
+    }
+
+    func testMinorStreetsHiddenUnlessDrivingOnOne() {
+        let network = StubNetwork(lines: [
+            detailedStreet(metresAhead: 100, kind: .primary),
+            detailedStreet(metresAhead: 60, kind: .service),
+        ])
+        let hidden = RoadSketch.scene(alertCamera: nil, alertInRange: false,
+                                      network: network, showMinorRoads: false,
+                                      anchor: me, spanMeters: 300)
+        XCTAssertEqual(hidden.network.count, 1)
+        XCTAssertEqual(hidden.network.first?.kind, .primary)
+
+        let shown = RoadSketch.scene(alertCamera: nil, alertInRange: false,
+                                     network: network, showMinorRoads: true,
+                                     anchor: me, spanMeters: 300)
+        XCTAssertEqual(shown.network.count, 2)
+    }
+
+    /// Индекс лимитов классов не знает — прятать то, чего не знаешь, нельзя.
+    func testUndetailedSourceIsNeverFiltered() {
+        let network = StubNetwork(lines: [crossStreet(metresAhead: 60, kind: .unknown)])
+        let scene = RoadSketch.scene(alertCamera: nil, alertInRange: false,
+                                     network: network, showMinorRoads: false,
+                                     anchor: me, spanMeters: 300)
+        XCTAssertEqual(scene.network.count, 1)
+    }
+
+    func testPrefersMinorRoadsOnlyWhenClosestRoadIsMinor() {
+        // Едем по дворовой: она в 5 м, проспект в 100 м — мелочь показываем.
+        let onMinor = StubNetwork(lines: [
+            detailedStreet(metresAhead: 5, kind: .service),
+            detailedStreet(metresAhead: 100, kind: .primary),
+        ])
+        XCTAssertTrue(RoadSketch.prefersMinorRoads(network: onMinor, at: me))
+
+        // Едем по проспекту, дублёр в 20 м сбоку — решает ближняя дорога.
+        let onMajor = StubNetwork(lines: [
+            detailedStreet(metresAhead: 3, kind: .primary),
+            detailedStreet(metresAhead: 20, kind: .service),
+        ])
+        XCTAssertFalse(RoadSketch.prefersMinorRoads(network: onMajor, at: me))
+
+        // Источник без классов: судить не по чему, мелочь не включаем.
+        let vague = StubNetwork(lines: [crossStreet(metresAhead: 5, kind: .unknown)])
+        XCTAssertFalse(RoadSketch.prefersMinorRoads(network: vague, at: me))
+    }
+
+    /// Камера прячется ВМЕСТЕ со своей мелкой улицей (точка в пустоте читается
+    /// как ошибка карты) — но тревожная рисуется всегда, что бы ни было
+    /// спрятано: это картинка, а не оповещение.
+    func testCameraOnMinorStreetHidesWithItsStreet() {
+        let onService = Camera(id: 5, region: "Т", city: "", location: "двор",
+                               lat: me.latitude + 100 / 111_320, lon: me.longitude,
+                               type: "Стационар радар", violations: [],
+                               needsReview: nil, cls: "service")
+        let hidden = RoadSketch.scene(alertCamera: nil, alertInRange: false,
+                                      cameras: [onService], showMinorRoads: false,
+                                      anchor: me, spanMeters: 300)
+        XCTAssertTrue(hidden.cameras.isEmpty)
+
+        let shown = RoadSketch.scene(alertCamera: nil, alertInRange: false,
+                                     cameras: [onService], showMinorRoads: true,
+                                     anchor: me, spanMeters: 300)
+        XCTAssertEqual(shown.cameras.count, 1)
+
+        let alerting = RoadSketch.scene(alertCamera: onService, alertInRange: true,
+                                        cameras: [onService], showMinorRoads: false,
+                                        anchor: me, spanMeters: 300)
+        XCTAssertEqual(alerting.cameras.map(\.id), [5],
+                       "тревожная камера обязана рисоваться, что бы ни пряталось")
+    }
 }

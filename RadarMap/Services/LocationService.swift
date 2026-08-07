@@ -33,6 +33,9 @@ final class LocationService: NSObject {
     @ObservationIgnored weak var watchBridge: WatchBridgeService?
     @ObservationIgnored weak var route: RouteService?
     @ObservationIgnored weak var speedLimits: SpeedLimitService?
+    /// Перегрев: буст GPS для открытой приборки разрешён только пока телефон
+    /// холодный — в жару экономия важнее плавности картинки.
+    @ObservationIgnored weak var thermal: ThermalService?
 
     private(set) var authorizationStatus: CLAuthorizationStatus
     private(set) var currentCoordinate: CLLocationCoordinate2D?
@@ -79,7 +82,10 @@ final class LocationService: NSObject {
     /// Режим «Поездка»: непрерывная геолокация + активные оповещения даже в свёрнутом виде.
     private(set) var isTripActive = false
 
-    @ObservationIgnored private var anchor: CLLocation?
+    /// Точка последнего пере-тайлинга. Координата, а не `CLLocation`: расстояние
+    /// до неё меряется тем же `GeoMath.fastDistance`, что и всё остальное в
+    /// пайплайне, и не создаёт двух объектов на каждый тик ради одного числа.
+    @ObservationIgnored private var anchor: CLLocationCoordinate2D?
     @ObservationIgnored private var alertedCameraIDs: Set<Int> = []   // фон, дебаунс уведомлений
     /// Гейт качества фикса и доверенный курс (чистый модуль, покрыт тестами).
     @ObservationIgnored private var locationFilter = LocationFilter()
@@ -250,6 +256,7 @@ final class LocationService: NSObject {
         alertEngine.reset()
         passTracking.reset()
         locationFilter.reset()
+        speedSmoother.reset()
         voicedInGroup.removeAll()
         postponedVoice = nil
         // Заезд по пути — не новая поездка: если пауза похожа на «забежал в
@@ -383,6 +390,7 @@ final class LocationService: NSObject {
             manager.pausesLocationUpdatesAutomatically = true
             isSignalStale = false   // без непрерывного GPS «нет сигнала» не про нас
             locationFilter.reset()
+            speedSmoother.reset()
             return
         }
         // В поездке паузу отдавать системе нельзя — она может не возобновить.
@@ -429,6 +437,16 @@ final class LocationService: NSObject {
            Date().timeIntervalSince(lastMovementAt) > AppConfig.gpsIdleAfterSeconds {
             tier = 3
         }
+        // Открытая приборка: водитель СМОТРИТ на схему, и фиксы раз в 25 м
+        // (2–3 с в городе) видны глазом как рывки. Поднимаем крейсерский тир
+        // до подъездного — но только пока телефон холодный: в перегрев
+        // плавность картинки проигрывает экономии (тот самый держатель под
+        // солнцем), а стоянку (тир 3) не трогаем вовсе — стоя анимировать
+        // нечего. Экран при этом уже горит и стоит на порядок дороже GPS.
+        if tier == 2, isDashboardVisible, isForeground,
+           (thermal?.mode ?? .full) == .full {
+            tier = 1
+        }
         guard tier != accuracyTier else { return }
         accuracyTier = tier
         switch tier {
@@ -442,6 +460,18 @@ final class LocationService: NSObject {
                  manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
                  manager.distanceFilter = 30
         }
+    }
+
+    /// Приборка на экране (см. буст в tuneAdaptiveAccuracy).
+    @ObservationIgnored private var isDashboardVisible = false
+
+    /// Открытие/закрытие приборки: пересматриваем тир GPS сразу, не дожидаясь
+    /// следующего фикса — на стоящем в пробке телефоне он может прийти нескоро.
+    func setDashboardVisible(_ visible: Bool) {
+        guard isDashboardVisible != visible else { return }
+        isDashboardVisible = visible
+        accuracyTier = -1
+        tuneAdaptiveAccuracy()
     }
 
     /// Попросить точную геопозицию на эту сессию (если дана «приблизительная»).
@@ -467,7 +497,6 @@ final class LocationService: NSObject {
     // MARK: - Пере-тайлинг 20 ближайших
 
     private func retileIfNeeded(around coordinate: CLLocationCoordinate2D) {
-        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
         // Пустое окно = данные ещё не загрузились на прошлом тайлинге — пробуем снова.
         guard let anchor, !trackedCameras.isEmpty else { return retile(around: coordinate) }
         // Окно обязано покрывать всё, до чего мы доедем до следующего пересчёта:
@@ -476,14 +505,16 @@ final class LocationService: NSObject {
         let reach = max(AppConfig.retileMinDistance,
                         min(AppConfig.retileDistance,
                             trackedRadius - AppConfig.trackedCoverageMeters))
-        if anchor.distance(from: location) < reach { return }
+        let moved = GeoMath.fastDistance(anchor.latitude, anchor.longitude,
+                                         coordinate.latitude, coordinate.longitude)
+        if moved < reach { return }
         retile(around: coordinate)
     }
 
     private func retile(around coordinate: CLLocationCoordinate2D) {
         // Якорь ставим здесь, а не только в retileIfNeeded: refreshMonitoring
         // зовёт retile напрямую, и без якоря следующий тик перетайлил бы повторно.
-        anchor = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        anchor = coordinate
         manager.monitoredRegions.forEach { manager.stopMonitoring(for: $0) }
 
         // Окно кандидатов на оповещение — широкое; геозоны — только 20 ближайших
@@ -522,7 +553,9 @@ final class LocationService: NSObject {
 
     /// Растёт на каждое обновление локации — карта в режиме следования подписывается на это.
     private(set) var locationTick = 0
-    @ObservationIgnored private var lastSpeedTickAt: Date?
+    /// Сглаживание спидометра: по времени, с мгновенным откликом на настоящий
+    /// перепад (чистая структура, покрыта SpeedSmootherTests).
+    @ObservationIgnored private var speedSmoother = SpeedSmoother()
     /// Когда машина в последний раз реально двигалась (для тира «стоянка»).
     @ObservationIgnored private var lastMovementAt = Date()
 
@@ -594,21 +627,25 @@ final class LocationService: NSObject {
     }
 
     private func handleLocation(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed, course: CLLocationDirection) {
+        // Главный горячий путь приложения: всё, что происходит на GPS-точке, —
+        // на главном акторе, раз в секунду, всю поездку. В Instruments это один
+        // интервал `handleLocation`; если он вырастет, вырастет и нагрев.
+        Perf.measure(Perf.Name.handleLocation) {
+            handleLocationBody(coordinate: coordinate, speed: speed, course: course)
+        }
+    }
+
+    private func handleLocationBody(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed,
+                                    course: CLLocationDirection) {
         currentCoordinate = coordinate
-        // Спидометр без дёрганья: GPS-скорость шумит (68→71→69) — лёгкое экспоненциальное
-        // сглаживание, но только по свежим точкам (после паузы берём сырое значение).
+        // Спидометр: сглаживание по ВРЕМЕНИ и мгновенный отклик на настоящий
+        // перепад (SpeedSmoother — прежние константные веса на редких тиках
+        // адаптивного GPS растягивали хвост торможения на 5+ секунд).
         // speed < 0 — фикс без скорости (туннель, плохая геометрия спутников): держим
         // прошлое значение, нулём считать нельзя — PassTracking берёт МИНИМУМ по зоне
         // проезда, и один такой фикс занизил бы записанную скорость у камеры.
         if speed >= 0 {
-            let rawKmh = speed * 3.6
-            if let lastAt = lastSpeedTickAt, Date().timeIntervalSince(lastAt) < 5 {
-                let smoothed = speedKmh * 0.6 + rawKmh * 0.4
-                speedKmh = smoothed < 1 ? 0 : smoothed
-            } else {
-                speedKmh = rawKmh
-            }
-            lastSpeedTickAt = Date()
+            speedKmh = speedSmoother.update(rawKmh: speed * 3.6, at: Date())
         }
         if speedKmh >= 3 { lastMovementAt = Date() }
         currentCourse = course
@@ -657,8 +694,13 @@ final class LocationService: NSObject {
                                    roadClass: nearestCamera?.roadClass ?? .unknown)
             if contextDetector.context != alertContext { alertContext = contextDetector.context }
         }
-        // Live Activity живёт только в поездке; update — no-op, если она не запущена.
-        liveActivity?.update(state: activityState)
+        // Live Activity живёт только в поездке. Проверяем ЗДЕСЬ, а не полагаемся
+        // на no-op внутри: `activityState` — вычисляемое свойство, и оно
+        // собиралось каждую секунду ради вызова, который тут же выходил по
+        // guard. Плашка не запущена почти всю жизнь приложения.
+        if liveActivity?.isActive == true {
+            liveActivity?.update(state: activityState)
+        }
         // Часы: то же состояние (мост квантует и дедупит — без изменений радио молчит).
         watchBridge?.update(isTripActive: isTripActive, speedKmh: speedKmh,
                             cameraTitle: nearestCamera?.displayTitle,
@@ -684,9 +726,22 @@ final class LocationService: NSObject {
         )
     }
 
+    /// Обстановка для гейтов «наша ли камера» (чистый модуль LocationGates).
+    /// Собирается здесь и только здесь: гейт не должен уметь дотянуться до
+    /// сервиса, иначе он перестанет быть проверяемой функцией от геометрии.
+    ///
+    /// Координата — параметром, а не из `currentCoordinate`: гейты зовутся с
+    /// точкой ТЕКУЩЕГО тика, и подмена её на свойство развела бы решение о
+    /// камере и точку, для которой оно принимается.
+    private func gateSituation(at coordinate: CLLocationCoordinate2D) -> LocationGates.Situation {
+        LocationGates.Situation(coordinate: coordinate, course: currentCourse,
+                                speedKmh: speedKmh, horizontalAccuracy: horizontalAccuracy,
+                                context: alertContext)
+    }
+
     /// Фильтр направления активен, когда едем достаточно быстро и GPS-курс достоверен.
     var isDirectionalFilteringActive: Bool {
-        currentCourse >= 0 && speedKmh >= AppConfig.directionalMinSpeedKmh
+        LocationGates.isFilteringActive(gateSituation(at: currentCoordinate ?? .init()))
     }
 
     /// Направление на камеру для ЭКРАНА: живое, а если курс пропал (светофор,
@@ -701,98 +756,12 @@ final class LocationService: NSObject {
         return (bearing - lastTrustedCourse + 360).truncatingRemainder(dividingBy: 360)
     }
 
-    /// Камера «наша»: подтверждена маршрутом, либо мы на её проезжей части, либо
-    /// она лежит в коридоре нашей дороги впереди. Коридор (RoadCorridor) считает
-    /// боковое отклонение в метрах и отсекает параллельные улицы, дублёры и
-    /// эстакады, которые прежний угловой фильтр пропускал (±70° на дистанции
-    /// 400 м — это 375 м вбок).
-    ///
-    /// Порядок здесь и есть политика: сначала прямые доказательства «наша», и
-    /// только потом эвристики, которые вправе глушить. Каждый гейт глушит лишь
-    /// при доказательстве, что камера НЕ наша, — молчание про настоящую камеру
-    /// хуже лишнего предупреждения.
+    /// Камера «наша». Вся политика — в `LocationGates` (чистый модуль со своими
+    /// тестами); сервис отвечает только за то, что гейт вообще не может знать
+    /// сам: лежит ли камера на построенном маршруте.
     private func isOnOurRoad(_ camera: Camera, from coordinate: CLLocationCoordinate2D) -> Bool {
-        guard isDirectionalFilteringActive else { return true }   // стоим/курс неизвестен → не фильтруем
-
-        // 1. Камера на активном маршруте — она на нашем пути по определению, и
-        // никакая геометрия этого не отменяет: координата в реестре бывает
-        // смещена вбок от полосы. Раньше проверка стояла ПОСЛЕ геометрии, и та
-        // успевала заглушить камеру на собственном маршруте пользователя.
-        if isCameraOnRoute(camera) { return true }
-
-        let shape = RoadShape(camera: camera)
-
-        // 2. НАПРАВЛЕНИЕ проезжей части — самый однозначный признак, но применять
-        // его можно не везде: часть камер снимает И обратную сторону дороги, и
-        // для них молчание опаснее лишнего предупреждения. Гейт включается
-        // только там, где стороны заведомо поделены между двумя камерами или
-        // дорога не разделена вовсе (см. Camera.sidesAreProven).
-        if camera.allowsDirectionGate, let direction = camera.dir {
-            if GeoMath.angleDifference(currentCourse, Double(direction))
-                > AppConfig.cameraDirectionMaxAngle {
-                return false
-            }
-        } else if camera.hasTrustedRoadProfile,
-                  let axis = shape?.axis(near: coordinate) ?? camera.axis.map(Double.init) {
-            // Ось дороги камеры против курса: едем поперёк — это мост НАД камерой
-            // или перпендикулярная улица развязки. Боковое отклонение тут ноль,
-            // коридор бессилен — различает только направление. Ось берём с куска
-            // дороги, если он есть: на кривой единственная ось всей дороги врёт.
-            if GeoMath.axisDifference(course: currentCourse, axis: axis)
-                > AppConfig.cameraAxisMaxAngle {
-                return false
-            }
-        }
-
-        // 3. Кусок проезжей части камеры — единственные твёрдые данные о её
-        // дороге, поэтому он решает в ОБЕ стороны: попали в её ширину — камера
-        // наша (осталось убедиться, что она впереди), не попали — не наша.
-        // Допуск включает погрешность фикса: на плохом GPS проверка обязана
-        // воздержаться, а не глушить камеру.
-        if let shape, let lateral = shape.lateralOffset(from: coordinate) {
-            var allowed = RoadGeometry.halfWidth(lanes: camera.lanes,
-                                                 roadClass: camera.roadClass)
-                + max(AppConfig.roadShapeMinToleranceMeters, horizontalAccuracy)
-            // Камера может снимать обе стороны разделённой дороги — тогда «своей»
-            // для неё считается и обратная проезжая часть. В OSM каждая сторона
-            // отдельная линия, и без этого запаса мы едем в 10–40 м от её куска
-            // дороги и глушим камеру, которая нас как раз и снимает.
-            if !camera.sidesAreProven { allowed += AppConfig.dividedRoadSpanMeters }
-            if lateral <= allowed { return isAhead(camera, from: coordinate) }
-            // Мы не на дороге камеры — но глушить вправе только там, где стороны
-            // доказанно поделены. Иначе решает коридор.
-            if camera.sidesAreProven { return false }
-        }
-
-        // 4. Коридор — эвристика для всего остального: куска дороги нет (старая
-        // база, снап не нашёл дорогу) или он кончился раньше нас.
-        // Внезапным точкам (краудсорс) — коридор трассы: их координату ставил
-        // человек на ходу. Камерам с непроверенной позицией (needsReview: снап
-        // не нашёл её дорогу) — тоже: лучше предупредить с запасом, чем
-        // промолчать из-за смещённой координаты в реестре.
-        let generous = camera.kind.isSudden || camera.needsReview == true
-        let context: AlertPolicy.Context = generous ? .highway : alertContext
-        // Ширина ближней зоны коридора — от реальной дороги, если она известна.
-        // Пол по константе: коридор мерится от линии НАШЕГО курса, а её точность
-        // ограничена GPS, поэтому уже 10 м делать нельзя. Узкую ширину даём
-        // только доказанным сторонам: у камеры, снимающей обе, обратная полоса
-        // сама по себе шире этой ширины.
-        let knowsRoad = camera.cls != nil || camera.lanes != nil
-        let narrow = knowsRoad && !generous && camera.sidesAreProven
-        let nearWidth: CLLocationDistance? = narrow
-            ? max(AppConfig.corridorMinNearMeters,
-                  RoadGeometry.halfWidth(lanes: camera.lanes, roadClass: camera.roadClass))
-            : nil
-        return RoadCorridor.contains(camera: camera.coordinate, from: coordinate,
-                                     course: currentCourse, context: context,
-                                     nearWidth: nearWidth)
-    }
-
-    /// Камера впереди по курсу (с тем же запасом «немного позади», что у
-    /// коридора: на самом траверзе продольная составляющая шумит вокруг нуля).
-    private func isAhead(_ camera: Camera, from coordinate: CLLocationCoordinate2D) -> Bool {
-        RoadCorridor.fix(from: coordinate, course: currentCourse, to: camera.coordinate)
-            .along >= -AppConfig.corridorBehindToleranceMeters
+        LocationGates.isOnOurRoad(camera, in: gateSituation(at: coordinate),
+                                  isOnRoute: isCameraOnRoute(camera))
     }
 
     /// Сглаженный азимут камеры относительно курса (0 = прямо по ходу, растёт по часовой).
@@ -822,7 +791,7 @@ final class LocationService: NSObject {
 
     /// Ближайшая камера лежит на активном маршруте (в его коридоре).
     private func isCameraOnRoute(_ camera: Camera) -> Bool {
-        route?.camerasOnRoute.contains { $0.camera.id == camera.id } ?? false
+        route?.routeCamera(id: camera.id) != nil
     }
 
     /// Направление на ближайшую камеру для голоса/HUD (учитывает мёртвую зону и маршрут).
@@ -913,7 +882,7 @@ final class LocationService: NSObject {
     /// и приложение предупреждало о камере, до которой ещё ехать и ехать.
     private func routeRemaining(to camera: Camera) -> CLLocationDistance? {
         guard let route, route.isActive,
-              let onRoute = route.camerasOnRoute.first(where: { $0.camera.id == camera.id })
+              let onRoute = route.routeCamera(id: camera.id)
         else { return nil }
         return onRoute.distanceAlong - route.progressAlong
     }

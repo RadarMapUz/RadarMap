@@ -370,6 +370,8 @@ nonisolated enum RatingBreakdown {
     @concurrent static func screen(records: [TripRecord], days: [TripDay],
                                    period: StatsPeriod, anchor: Date,
                                    calendar: Calendar = .current) async -> RatingScreen {
+        let token = Perf.begin(Perf.Name.ratingScreen)
+        defer { token.end() }
         let interval = period.interval(containing: anchor, calendar: calendar)
         return RatingScreen(
             contributions: contributions(records: records, days: days, in: interval,

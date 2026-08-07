@@ -40,6 +40,16 @@ struct MapScreen: View {
 
     var body: some View {
         @Bindable var map = map
+        // Событие, а не интервал: у пересборки тела нет длительности, которую
+        // мы могли бы измерить изнутри, — ценно её КОЛИЧЕСТВО. Здесь висит
+        // карта с двумя сотнями маркеров, и каждая лишняя пересборка стоит
+        // дороже всего, что мы считаем на тике. На дорожке приборов частота
+        // этих точек и есть ответ, нужна ли изоляция слоя карты.
+        //
+        // `let _ =` — не стиль, а единственная форма, которую пропускает
+        // ViewBuilder: голый вызов в его блоке — это значение типа `()`, а он
+        // требует `View`. Тем же приёмом пользуется `Self._printChanges()`.
+        let _ = Perf.event(Perf.Name.mapBody)
 
         ZStack {
             // Тема только у карты: интерфейс остаётся тёмным «радар-детектором»,
@@ -281,8 +291,10 @@ struct MapScreen: View {
 
             // Важность считается один раз на пересборку: id цели и камеры
             // маршрута меняются редко, точка отсчёта троттлится по 300 м.
+            // Набор камер маршрута берём готовым: собирать его здесь значило
+            // строить Set заново на каждую пересборку слоя.
             let targetID = env.location.nearestCamera?.id
-            let routeIDs = Set(env.route.camerasOnRoute.map(\.camera.id))
+            let routeIDs = env.route.routeCameraIDs
             ForEach(map.visibleCameras) { camera in
                 Annotation(camera.displayTitle, coordinate: camera.coordinate, anchor: .center) {
                     // Средний зум: точки; близкий — мини-знак лимита («60»);
@@ -1021,108 +1033,7 @@ struct MapScreen: View {
     #endif
 }
 
-// MARK: - Изоляторы пер-тиковых чтений
-//
-// Эти четыре вью существуют ради одного: они ЕДИНСТВЕННЫЕ читают свойства,
-// которые LocationService/RouteService обновляют каждый GPS-тик (скорость,
-// дистанции). Пока эти чтения жили в body MapScreen, каждый фикс пересобирал
-// весь экран вместе с картой и двумя сотнями маркеров — это и был главный лаг.
-
-/// Красное свечение по краям при превышении у камеры.
-private struct OverspeedVignetteGate: View {
-    @Environment(AppEnvironment.self) private var env
-
-    var body: some View {
-        ZStack {
-            if env.location.isApproachingCamera && env.speedLimits.isOverspeeding {
-                OverspeedVignette()
-            }
-        }
-        .animation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)
-        .allowsHitTesting(false)
-    }
-}
-
-/// Полноэкранное предупреждение о камере (со своим «закрыть до следующей»).
-private struct ApproachOverlayGate: View {
-    @Environment(AppEnvironment.self) private var env
-    @Binding var dismissedID: Int?
-
-    var body: some View {
-        ZStack {
-            if env.location.isApproachingCamera,
-               let camera = env.location.nearestCamera,
-               let distance = env.location.distanceToNearest,
-               dismissedID != camera.id {
-                ApproachAlertView(
-                    camera: camera,
-                    distance: distance,
-                    speedKmh: env.location.speedKmh,
-                    relativeBearing: env.location.relativeBearingToNearest,
-                    alertRadius: env.settings.alertRadius,
-                    onDismiss: { dismissedID = camera.id }
-                )
-            }
-        }
-        .animation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)
-    }
-}
-
-/// Баннер ближайшего манёвра: дистанция до него меняется каждый тик.
-private struct ManeuverBannerGate: View {
-    @Environment(AppEnvironment.self) private var env
-
-    var body: some View {
-        let mode = MapMode.current(isTripActive: env.location.isTripActive,
-                                   hasRoute: env.route.isActive)
-        ZStack {
-            if mode.showsManeuver, let step = env.route.nextStep {
-                ManeuverBanner(step: step, distance: env.route.nextStepDistance)
-            }
-        }
-        .animation(.spring(duration: 0.3), value: env.route.nextStep?.distanceAlong)
-    }
-}
-
-/// «Похоже, вы едете» — подсказка включить оповещения; условие читает скорость.
-private struct DrivingHintChip: View {
-    @Environment(AppEnvironment.self) private var env
-
-    var body: some View {
-        if !env.location.isTripActive
-            && env.location.speedKmh >= AppConfig.speakSpeedThresholdKmh {
-            Text("Похоже, вы едете — включите оповещения")
-                .font(.rounded(12, .medium))
-                .foregroundStyle(Theme.success)
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: Capsule())
-        }
-    }
-}
-
-/// Следование карты за GPS: единственный подписчик locationTick.
-private struct LocationFollowDriver: View {
-    @Environment(AppEnvironment.self) private var env
-    let map: MapState
-
-    var body: some View {
-        Color.clear
-            .allowsHitTesting(false)
-            .onChange(of: env.location.locationTick) { _, _ in
-                // Прогресс маршрута (прибытие/манёвры) тикает в LocationService —
-                // здесь только следование карты за курсом. Вне поездки поворот
-                // по компасу телефона делает сам MapKit (.userLocation
-                // followsHeading), догонять его тиками не нужно.
-                if map.orientation == .heading, env.location.isTripActive {
-                    map.follow(coordinate: env.location.currentCoordinate,
-                               course: env.location.currentCourse,
-                               pitched: true)
-                }
-                if let coordinate = env.location.currentCoordinate {
-                    map.snapToUserOnce(coordinate)   // первый фикс после запуска → окрестности
-                    // Точка отсчёта важности маркеров: сама себя троттлит.
-                    map.updateFocus(coordinate)
-                }
-            }
-    }
-}
+// Изоляторы пер-тиковых чтений (OverspeedVignetteGate, ApproachOverlayGate,
+// ManeuverBannerGate, DrivingHintChip, LocationFollowDriver) живут в
+// MapTickGates.swift: они ЕДИНСТВЕННЫЕ читают то, что меняется каждый GPS-тик.
+// Новое такое чтение добавляется туда, а не в body MapScreen.

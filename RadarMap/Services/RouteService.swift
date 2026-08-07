@@ -79,9 +79,18 @@ final class RouteService {
     @ObservationIgnored weak var config: RemoteConfigService?
     var isRoutingEnabled: Bool { config?.isRoutingEnabled ?? true }
 
-    @ObservationIgnored var onRerouted: (() -> Void)?
-    @ObservationIgnored var onArrived: (() -> Void)?
-    @ObservationIgnored var onManeuver: ((String) -> Void)?
+    @ObservationIgnored var onRerouted: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onRerouted,
+                                               "RouteService.onRerouted") }
+    }
+    @ObservationIgnored var onArrived: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onArrived,
+                                               "RouteService.onArrived") }
+    }
+    @ObservationIgnored var onManeuver: ((String) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onManeuver,
+                                               "RouteService.onManeuver") }
+    }
 
     @ObservationIgnored private var offRouteTicks = 0
     @ObservationIgnored private var lastSplitAlong: CLLocationDistance = -1
@@ -124,6 +133,54 @@ final class RouteService {
     var camerasOnRoute: [RouteCamera] { selected?.cameras ?? [] }
     var distanceText: String { selected?.distanceText ?? "" }
     var etaText: String { selected?.etaText ?? "" }
+
+    // MARK: - Индекс камер маршрута
+
+    /// Камеры выбранного маршрута по идентификатору — и их набор для карты.
+    ///
+    /// Кэш, а не перебор, потому что вопрос «эта камера на маршруте?» задают не
+    /// раз в секунду, а полтораста раз в секунду: `recomputeNearest` спрашивает
+    /// его про каждую камеру окна на каждом GPS-тике. На междугородном маршруте
+    /// камер под две сотни — перебором это десятки тысяч сравнений на тик, и
+    /// растёт оно ровно там, где дорога длиннее и телефон греется дольше.
+    ///
+    /// Ключ — объект полилайна выбранного варианта, как у `routeCoordinates`:
+    /// перестроение при уходе с маршрута заменяет варианты, НЕ трогая поколение,
+    /// и кэш по поколению отдавал бы камеры старой линии.
+    @ObservationIgnored private var routeIndexCache:
+        (polyline: MKPolyline, byID: [Int: RouteCamera], ids: Set<Int>)?
+
+    /// Сам индекс — чистая функция, чтобы его можно было проверить тестом без
+    /// живого маршрута (собрать `Variant` извне нельзя, он строится сетью).
+    ///
+    /// Камера может встретиться на маршруте дважды — петля развязки, круговое
+    /// движение, разворот. Оставляем ПЕРВУЮ, как делал прежний `first(where:)`:
+    /// она ближайшая по ходу, и остаток пути считается именно до неё. Со второй
+    /// приложение молчало бы о камере, пока не проедет её в первый раз.
+    nonisolated static func index(of cameras: [RouteCamera])
+        -> (byID: [Int: RouteCamera], ids: Set<Int>) {
+        let byID = Dictionary(cameras.map { ($0.camera.id, $0) },
+                              uniquingKeysWith: { first, _ in first })
+        return (byID, Set(byID.keys))
+    }
+
+    private func routeIndex() -> (byID: [Int: RouteCamera], ids: Set<Int>) {
+        guard let variant = selected else { return ([:], []) }
+        if let cache = routeIndexCache, cache.polyline === variant.polyline {
+            return (cache.byID, cache.ids)
+        }
+        let built = Self.index(of: variant.cameras)
+        routeIndexCache = (variant.polyline, built.byID, built.ids)
+        return built
+    }
+
+    /// Идентификаторы камер маршрута. Карта красит по ним маркеры и строила
+    /// этот набор заново внутри `MapContentBuilder` — то есть на каждую
+    /// пересборку слоя, а их за поездку тысячи.
+    var routeCameraIDs: Set<Int> { routeIndex().ids }
+
+    /// Камера маршрута по идентификатору — O(1).
+    func routeCamera(id: Int) -> RouteCamera? { routeIndex().byID[id] }
 
     // Живой остаток пути (для компактной панели поездки).
     var remainingDistance: CLLocationDistance {
@@ -234,8 +291,10 @@ final class RouteService {
             return
         }
 
-        // Пройденный кусок для тусклой отрисовки (пересобираем не чаще, чем раз в 40 м).
-        if abs(along - lastSplitAlong) > 40 {
+        // Пройденный кусок для тусклой отрисовки. Шаг крупный намеренно: эту
+        // линию читает тело экрана карты, и каждая перезапись пересобирает
+        // карту со всеми маркерами (см. AppConfig.routeTraveledStepMeters).
+        if abs(along - lastSplitAlong) > AppConfig.routeTraveledStepMeters {
             lastSplitAlong = along
             traveledPolyline = Self.traveledPrefix(points: variant.points, upTo: along)
         }

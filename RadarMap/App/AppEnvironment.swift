@@ -77,6 +77,7 @@ final class AppEnvironment {
         self.location.route = route
         self.location.speedLimits = speedLimits
         self.location.watchBridge = watchBridge
+        self.location.thermal = thermal   // буст GPS приборки — только пока холодно
 
         // Пульт раздаём тем, кого он имеет право глушить. Список намеренно
         // короткий: всё это зависит от нашего сервера, а оповещения о камерах
@@ -119,25 +120,16 @@ final class AppEnvironment {
                 }))
         }
 
-        // Недельный дайджест: после каждой поездки перепланируем пуш со свежими цифрами.
-        trip.onTripFinished = { [weak trip, weak notifications] in
-            guard let trip, let notifications else { return }
-            // Тот же расчёт, что на экране Итогов: пуш и экран не имеют права
-            // разойтись в цифрах (раньше здесь смешивались окна 7 и 30 дней).
-            let week = TripHistory.summary(days: trip.days, history: trip.history, period: .week)
-            guard !week.isEmpty else { return }
-            notifications.scheduleWeeklyDigest(
-                distance: week.distance,
-                cameras: week.cameras,
-                rating: week.rating,
-                cleanMonth: week.overPasses == 0
-            )
-        }
-
-        // Обезличенные счётчики: сколько ездят и сколько проездов через камеры.
-        // Вешаемся на уже готовое событие конца поездки — отдельных крючков по
-        // коду не расставляем, чтобы «что мы вообще считаем» читалось в одном
-        // месте, здесь.
+        // Конец поездки: обезличенные счётчики и недельный дайджест.
+        //
+        // ОДНО назначение на всё, и это не стиль. Здесь стояли два подряд, и
+        // второе молча затирало первое — тринадцать строк дайджеста не
+        // выполнялись никогда. Спасло только то, что второй блок повторял их
+        // слово в слово; правка в первом ушла бы в никуда без единого признака.
+        // `onTripFinished` — простое замыкание, а не список подписчиков, и
+        // назначать его дважды нельзя по определению: композиционный корень
+        // читают как ответ на вопрос «что происходит в конце поездки», и ответ
+        // обязан быть один.
         let usage = self.usage
         trip.onTripFinished = { [weak trip, weak notifications, weak usage] in
             guard let trip else { return }
@@ -147,6 +139,8 @@ final class AppEnvironment {
                 usage?.note { $0.passes += last.camerasPassed }
             }
             guard let notifications else { return }
+            // Тот же расчёт, что на экране Итогов: пуш и экран не имеют права
+            // разойтись в цифрах (раньше здесь смешивались окна 7 и 30 дней).
             let week = TripHistory.summary(days: trip.days, history: trip.history, period: .week)
             guard !week.isEmpty else { return }
             notifications.scheduleWeeklyDigest(

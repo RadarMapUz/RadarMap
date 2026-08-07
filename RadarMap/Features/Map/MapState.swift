@@ -346,8 +346,8 @@ final class MapState {
                 pitched: Bool = false, force: Bool = false) {
         guard let coordinate else { return }
         if let last = lastFollowCoord, !force {
-            let moved = CLLocation(latitude: last.latitude, longitude: last.longitude)
-                .distance(from: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
+            let moved = GeoMath.fastDistance(last.latitude, last.longitude,
+                                             coordinate.latitude, coordinate.longitude)
             let courseDelta = (course >= 0 && lastFollowCourse >= 0)
                 ? GeoMath.angleDifference(course, lastFollowCourse) : 999
             if moved < 12 && courseDelta < 8 { return }

@@ -118,13 +118,14 @@ struct TripStatsSheet: View {
                         mapCard
                             .entrance(3, appeared)
                             .id("map")
-                        kpiStrip(summary: summary)
+                        KPIStrip(summary: summary,
+                                 activeDaysText: activeDaysText(summary))
                             .entrance(3, appeared)
                         if let days = period.chartDays(containing: anchor) {
                             dailyChart(days: days, summary: summary)
                                 .entrance(4, appeared)
                         }
-                        riskHoursCard(summary: summary)
+                        RiskHoursCard(summary: summary)
                             .entrance(4, appeared)
                         tripsSection(trip: trip, proxy: proxy)
                             .entrance(4, appeared)
@@ -845,104 +846,8 @@ struct TripStatsSheet: View {
         mapPayload = PeriodMapPayload(data: data, focus: focus)
     }
 
-    // MARK: - Полоса KPI
-
-    /// Четыре цифры одной строкой вместо сетки 2×2 из разноцветных плиток.
-    /// Сетка занимала полэкрана и красила каждую цифру в свой цвет — цвет
-    /// переставал что-либо значить. Здесь цветом отмечено только состояние
-    /// (зона риска, рейтинг), а справочные числа спокойные.
-    private func kpiStrip(summary: PeriodSummary) -> some View {
-        HStack(spacing: 0) {
-            // Именно ПРОЕЗДЫ: одна камера, пройденная дважды, — это два.
-            // Легенда карты считает уникальные точки — слово должно отличаться.
-            kpiCell(value: "\(summary.cameras)", label: "проездов камер",
-                    icon: "camera.metering.center.weighted")
-            kpiDivider
-            kpiCell(value: activeDaysText(summary), label: "дней за рулём",
-                    icon: "calendar")
-            kpiDivider
-            kpiCell(value: "\(Int(summary.averageSpeedKmh))", label: "средняя км/ч",
-                    icon: "gauge.with.dots.needle.33percent")
-            kpiDivider
-            kpiCell(value: "\(Int(summary.maxSpeedKmh))", label: "макс. км/ч",
-                    icon: "gauge.with.dots.needle.100percent")
-        }
-        .statCard(padding: 14)
-    }
-
-    private func kpiCell(value: String, label: LocalizedStringKey, icon: String) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.rounded(11, .semibold))
-                .foregroundStyle(Theme.textTertiary)
-            Text(value)
-                .font(.rounded(21, .heavy).monospacedDigit())
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            Text(label)
-                .font(.rounded(10, .medium))
-                .foregroundStyle(Theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("\(value), ") + Text(label))
-    }
-
-    private var kpiDivider: some View {
-        Rectangle().fill(Theme.stroke).frame(width: 1, height: 42)
-    }
-
-    // MARK: - Когда рискуете
-
-    /// Превышения по времени суток. «Где» уже отвечает карта, а «когда» до этого
-    /// не отвечал никто — хотя вечерний час пик и пустая ночная дорога дают
-    /// совершенно разные привычки.
-    @ViewBuilder
-    private func riskHoursCard(summary: PeriodSummary) -> some View {
-        if summary.overPasses >= AppConfig.insightMinOverForHours,
-           let peak = summary.peakBlock {
-            let blocks = summary.overByBlock
-            let top = max(blocks.max() ?? 1, 1)
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(title: String(localized: "Когда рискуете")) {
-                    Text(peak.title)
-                        .font(.rounded(12, .semibold))
-                        .foregroundStyle(Theme.danger)
-                }
-                HStack(alignment: .bottom, spacing: 8) {
-                    ForEach(Array(blocks.enumerated()), id: \.offset) { index, count in
-                        hourBar(count: count, peak: top, isPeak: index == peak.index,
-                                hour: index * 4)
-                    }
-                }
-            }
-            .statCard()
-        }
-    }
-
-    private func hourBar(count: Int, peak: Int, isPeak: Bool, hour: Int) -> some View {
-        VStack(spacing: 6) {
-            Text(count > 0 ? "\(count)" : " ")
-                .font(.rounded(10, .bold).monospacedDigit())
-                .foregroundStyle(isPeak ? Theme.danger : Theme.textTertiary)
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(isPeak ? Theme.danger.gradient : Theme.accent.opacity(0.35).gradient)
-                // Пустой блок оставляет тонкую риску: полоса читается как шкала
-                // суток, а не как случайный набор столбиков.
-                .frame(height: max(3, 52 * Double(count) / Double(peak)))
-            Text(String(format: "%02d", hour))
-                .font(.rounded(10, .medium).monospacedDigit())
-                .foregroundStyle(Theme.textTertiary)
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(String(format: String(localized: "С %1$02d до %2$02d часов: превышений %3$lld"),
-                                        hour, (hour + 4) % 24, count)))
-    }
+    // Полоса KPI и «Когда рискуете» — в TripStatsCards.swift: карточки
+    // читают только summary, и экрану они не должны стоить ни строчки.
 
     /// «5 из 7» — в окне периода видно, насколько плотно катаешься.
     private func activeDaysText(_ summary: PeriodSummary) -> String {
@@ -1029,17 +934,17 @@ struct TripStatsSheet: View {
     private func lifetimeStrip(trip: TripStats) -> some View {
         VStack(spacing: 12) {
             HStack(spacing: 0) {
-                kpiCell(value: "\(trip.lifetime.trips)", label: "поездок",
-                        icon: "car.side")
-                kpiDivider
-                kpiCell(value: Formatting.distance(trip.lifetime.distanceMeters),
-                        label: "пройдено", icon: "point.topleft.down.to.point.bottomright.curvepath")
-                kpiDivider
-                kpiCell(value: "\(trip.lifetime.camerasInLimit)", label: "камер в лимите",
-                        icon: "checkmark.shield")
-                kpiDivider
-                kpiCell(value: "\(trip.lifetime.bestStreak)", label: "лучшая серия",
-                        icon: "flame")
+                StatStripCell(value: "\(trip.lifetime.trips)", label: "поездок",
+                              icon: "car.side")
+                StatStripDivider()
+                StatStripCell(value: Formatting.distance(trip.lifetime.distanceMeters),
+                              label: "пройдено", icon: "point.topleft.down.to.point.bottomright.curvepath")
+                StatStripDivider()
+                StatStripCell(value: "\(trip.lifetime.camerasInLimit)", label: "камер в лимите",
+                              icon: "checkmark.shield")
+                StatStripDivider()
+                StatStripCell(value: "\(trip.lifetime.bestStreak)", label: "лучшая серия",
+                              icon: "flame")
             }
             Button {
                 showAllTrips = true

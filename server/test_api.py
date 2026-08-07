@@ -289,6 +289,33 @@ class APITest(unittest.TestCase):
 
     # --- схема и нагрузка ---
 
+    def test_real_ip_header_wins_over_forwarded_for(self):
+        """Верить можно только заголовку, который ПЕРЕЗАПИСЫВАЕТ nginx.
+
+        На проде он ставил X-Real-IP, а api.py читал X-Forwarded-For, которого
+        nginx не трогал, — то есть его значение приходило от клиента. Проверено
+        живым запросом: «X-Forwarded-For: 8.8.8.8» списывался с чужого лимита.
+        Так обходились все суточные капы и подделывался кворум «разных
+        адресов», по которому снимается отметка с карты.
+        """
+        url = f"http://127.0.0.1:{self.port}/api/report"
+        body = json.dumps({"lat": 41.31, "lon": 69.25, "device": "spoofer"}).encode()
+        req = urllib.request.Request(url, data=body, method="POST", headers={
+            "Content-Type": "application/json",
+            "X-Real-IP": "10.0.0.1",        # то, что поставил бы nginx
+            "X-Forwarded-For": "8.8.8.8",   # то, что подсунул бы клиент
+        })
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            self.assertEqual(resp.status, 200)
+        conn = sqlite3.connect(api.DB_PATH)
+        ip = conn.execute("SELECT ip FROM reports").fetchone()[0]
+        conn.close()
+        self.assertEqual(ip, "10.0.0.1", "клиентский заголовок не должен побеждать")
+        with api._ip_lock:
+            keys = {key[2] for key in api._ip_counters}
+        self.assertIn("10.0.0.1", keys)
+        self.assertNotIn("8.8.8.8", keys, "кап списан с подделанного адреса")
+
     def test_wal_and_indexes_are_set_up(self):
         """WAL и индексы ставятся один раз в init_db, а не на каждый запрос."""
         conn = sqlite3.connect(api.DB_PATH)

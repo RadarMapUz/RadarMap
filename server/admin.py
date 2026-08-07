@@ -5,7 +5,7 @@
 приходили в sqlite и умирали там — колонку camera_reports.resolved никто
 никогда не писал, а единственным способом модерации был SELECT в ssh-сессии.
 
-Stdlib-only (sqlite3 + http.server), слушает 127.0.0.1:8092, наружу отдаётся
+Stdlib-only (sqlite3 + http.server), слушает 127.0.0.1:8093, наружу отдаётся
 nginx'ом на /admin/ с basic auth. Отдельный процесс от api.py намеренно:
 падение или перезапуск панели не должны ронять приём репортов от водителей,
 а публичный api и приватная панель не должны делить адресное пространство.
@@ -35,7 +35,8 @@ from urllib.parse import parse_qs, urlparse
 
 DB_PATH = os.environ.get("RADARMAP_DB", "/opt/radarmap/api/reports.db")
 CAMERAS_PATH = os.environ.get("RADARMAP_CAMERAS", "/opt/radarmap/www/cameras.json")
-PORT = int(os.environ.get("RADARMAP_ADMIN_PORT", "8092"))
+# 8092 занят OSRM (docker-proxy), 8091 — публичным api. 8093 свободен.
+PORT = int(os.environ.get("RADARMAP_ADMIN_PORT", "8093"))
 DAY = 86400
 
 # --- Порог, при котором панель ПРЕДЛАГАЕТ скрыть камеру ---------------------

@@ -261,11 +261,25 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _ip(self):
-        """IP клиента. nginx перезаписывает X-Forwarded-For значением
-        $remote_addr (см. nginx-radarmap.conf), поэтому заголовку можно верить;
-        напрямую (тесты, локалка) берём адрес сокета."""
-        return (self.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-                or self.client_address[0])
+        """IP клиента.
+
+        Порядок важен и стоил бы нам всей защиты по IP. Верить можно только
+        заголовку, который nginx ПЕРЕЗАПИСЫВАЕТ значением $remote_addr —
+        клиентский он затирает. Живой конфиг ставит X-Real-IP, поэтому он и
+        первый; X-Forwarded-For остаётся вторым для тестов и на случай другого
+        фронта, а сокет — для запуска без прокси вовсе.
+
+        Раньше первым (и единственным) читался X-Forwarded-For, которого живой
+        nginx НЕ ставил, — то есть его значение приходило от клиента. Проверено
+        на проде: запрос с «X-Forwarded-For: 8.8.8.8» проходил и списывался с
+        чужого лимита. Так обходились все суточные капы и подделывался кворум
+        «разных адресов», по которому скрывается отметка.
+        """
+        for header in ("X-Real-IP", "X-Forwarded-For"):
+            value = self.headers.get(header, "").split(",")[0].strip()
+            if value:
+                return value
+        return self.client_address[0]
 
     def _body(self, limit=4096):
         try:

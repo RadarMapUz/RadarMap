@@ -1,9 +1,6 @@
 {
   "sourceLanguage" : "ru",
   "strings" : {
-    "" : {
-
-    },
     " на %@" : {
       "localizations" : {
         "ru" : {

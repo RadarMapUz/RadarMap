@@ -340,6 +340,26 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertEqual(found, 60 * 150)
     }
 
+    /// «Мы на мелкой улице?» — единственная НОВАЯ работа на тике открытой
+    /// приборки (решает, показывать ли дворы). Радиус пробы 60 м, но сеть
+    /// отдаёт кольцо ячеек целиком — тест ловит возврат обхода всей
+    /// окрестности вместо ближней пробы.
+    func testMinorRoadProbeBudget() {
+        let network = CachedRoadNetwork(syntheticRoadNetwork())
+        let clock = ContinuousClock()
+        var total: Duration = .zero
+        for tick in 0..<600 {
+            // 10 минут приборки: едем по сетке, проба на каждом тике.
+            let me = CLLocationCoordinate2D(latitude: 41.30,
+                                            longitude: 69.205 + Double(tick) * 0.0002)
+            let began = clock.now
+            _ = RoadSketch.prefersMinorRoads(network: network, at: me)
+            total += clock.now - began
+        }
+        XCTAssertLessThan(total, .milliseconds(600),
+                          "проба мелких улиц деградировала: \(total) на 600 тиков")
+    }
+
     /// Камера, встреченная маршрутом дважды (петля развязки, круговое движение,
     /// разворот), обязана резолвиться в ПЕРВОЕ вхождение. Со вторым остаток
     /// пути считался бы до дальнего прохода — то есть приложение молчало бы о

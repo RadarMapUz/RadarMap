@@ -178,22 +178,46 @@ private struct SketchRaster: View, Equatable {
             // уровня: сначала всё, что по земле, потом эстакады. Только так
             // камера НА мосту отличима от камеры на дороге ПОД ним — а это
             // разные камеры и разное решение водителя.
-            for line in scene.network where line.points.count >= 2 {
-                let width = self.width(for: line)
+            //
+            // Внутри уровня — проходами, а не по линии: сперва ВСЕ подложки
+            // мостов, потом ВСЕ кромки, потом ВСЕ заливки. Иначе кромка одной
+            // дороги ложилась бы поверх заливки соседней, и каждый перекрёсток
+            // рассекался бы швами.
+            let byLevel = Dictionary(grouping: scene.network.filter { $0.points.count >= 2 },
+                                     by: \.level)
+            for level in byLevel.keys.sorted() {
+                let lines = byLevel[level]!
                 // Мост отбивается тёмной «подложкой» шире самой линии: она
                 // разрывает то, что проходит под ним, и пересечение читается
                 // как развязка, а не как перекрёсток.
-                if line.level > 0 {
-                    context.stroke(path(line.points),
-                                   with: .color(.black),
-                                   style: .init(lineWidth: width + 8,
-                                                lineCap: .butt, lineJoin: .round))
+                if level > 0 {
+                    for line in lines {
+                        context.stroke(path(line.points), with: .color(.black),
+                                       style: .init(lineWidth: width(for: line) + 8,
+                                                    lineCap: .butt, lineJoin: .round))
+                    }
                 }
-                context.stroke(path(line.points),
-                               with: .color(.white.opacity(line.level < 0 ? 0.10 : 0.20)),
-                               style: .init(lineWidth: width, lineCap: .round,
-                                            lineJoin: .round,
-                                            dash: line.level < 0 ? [10, 8] : []))
+                // Кромка: полотно читается как дорога с краями, а не как линия.
+                // Только там, где класс известен по-настоящему; тоннелям
+                // кромка не рисуется — они и так пунктиром «под землёй».
+                for line in lines where line.isDetailed && level >= 0 {
+                    context.stroke(path(line.points),
+                                   with: .color(.white.opacity(0.08)),
+                                   style: .init(lineWidth: width(for: line) + 4,
+                                                lineCap: .round, lineJoin: .round))
+                }
+                for line in lines {
+                    context.stroke(path(line.points),
+                                   with: .color(fill(for: line)),
+                                   style: .init(lineWidth: width(for: line),
+                                                lineCap: .round, lineJoin: .round,
+                                                dash: level < 0 ? [10, 8] : []))
+                }
+                // Стрелки односторонних — редкие шевроны по ходу точек
+                // (сервер уже развернул oneway=-1 по движению).
+                for line in lines where line.isOneWay && line.isDetailed && level >= 0 {
+                    chevrons(context: &context, along: line.points.map(at))
+                }
             }
 
             // Трек — самый бледный слой: он объясняет, откуда я приехал, и не
@@ -260,6 +284,57 @@ private struct SketchRaster: View, Equatable {
         case .residential:      return 6
         case .service:          return 4
         case .pedestrian, .unknown: return 3
+        }
+    }
+
+    /// Тон полотна: крупные дороги ярче и чуть теплее, дворы холоднее и
+    /// тусклее — глубина вместо паутины одинаковых линий. Тоннель приглушён:
+    /// он «под землёй». Незнающий класса источник — прежний ровный тон.
+    private func fill(for line: RoadSketch.Line) -> Color {
+        guard line.isDetailed else { return .white.opacity(line.level < 0 ? 0.10 : 0.20) }
+        if line.level < 0 { return .white.opacity(0.10) }
+        switch line.kind {
+        case .motorway, .trunk:
+            return Color(red: 1.0, green: 0.97, blue: 0.90).opacity(0.34)
+        case .primary:
+            return Color(red: 1.0, green: 0.98, blue: 0.93).opacity(0.30)
+        case .secondary:        return .white.opacity(0.26)
+        case .tertiary:         return .white.opacity(0.21)
+        case .residential:      return .white.opacity(0.15)
+        case .service:          return .white.opacity(0.11)
+        case .pedestrian, .unknown: return .white.opacity(0.13)
+        }
+    }
+
+    /// Шевроны направления на односторонней: каждые ~90 пт, остриём по ходу
+    /// точек. Редкие и бледные: это подсказка, а не разметка.
+    private func chevrons(context: inout GraphicsContext, along points: [CGPoint]) {
+        guard points.count >= 2 else { return }
+        let step: CGFloat = 90
+        var nextAt: CGFloat = step / 2
+        var travelled: CGFloat = 0
+        for index in 1..<points.count {
+            let from = points[index - 1], to = points[index]
+            let dx = to.x - from.x, dy = to.y - from.y
+            let length = hypot(dx, dy)
+            guard length > 0.5 else { continue }
+            while nextAt <= travelled + length {
+                let f = (nextAt - travelled) / length
+                let tip = CGPoint(x: from.x + dx * f, y: from.y + dy * f)
+                let ux = dx / length, uy = dy / length      // по ходу
+                let px = -uy, py = ux                        // поперёк
+                var chevron = Path()
+                chevron.move(to: CGPoint(x: tip.x - ux * 5 - px * 4,
+                                         y: tip.y - uy * 5 - py * 4))
+                chevron.addLine(to: tip)
+                chevron.addLine(to: CGPoint(x: tip.x - ux * 5 + px * 4,
+                                            y: tip.y - uy * 5 + py * 4))
+                context.stroke(chevron, with: .color(.white.opacity(0.35)),
+                               style: .init(lineWidth: 1.8, lineCap: .round,
+                                            lineJoin: .round))
+                nextAt += step
+            }
+            travelled += length
         }
     }
 }

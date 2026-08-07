@@ -331,6 +331,11 @@ final class AppSettings {
     var hapticsEnabled: Bool { didSet { store.set(hapticsEnabled, forKey: Keys.haptics) } }
     /// Не гасить экран в активной поездке (телефон в держателе — как у навигаторов).
     var keepScreenOn: Bool { didSet { store.set(keepScreenOn, forKey: Keys.keepScreenOn) } }
+    /// Открывать спидометр при старте поездки. Спидометр — самый дешёвый экран
+    /// приложения (чёрный OLED + растр вместо тайлов и двухсот маркеров), и он
+    /// строился ради батареи — но был секретным: попасть на него можно было,
+    /// только зная про тап по HUD. Ручное закрытие уважается до конца поездки.
+    var dashboardAutoOpens: Bool { didSet { store.set(dashboardAutoOpens, forKey: Keys.dashboardAuto) } }
 
     /// Отправлять обезличенную статистику использования (см. `UsageStats`).
     /// Хранится инвертированно («выключено»), чтобы значение по умолчанию у
@@ -402,6 +407,7 @@ final class AppSettings {
         static let haptics = "hapticsEnabled"
         static let mapAppearance = "mapAppearance"
         static let keepScreenOn = "keepScreenOn"
+        static let dashboardAuto = "dashboardAutoOpens"
         static let mapTraffic = "mapTraffic"
         static let mapPlaces = "mapPlaces"
         static let alertMode = "alertMode"
@@ -436,6 +442,7 @@ final class AppSettings {
             Keys.digest: true,
             Keys.haptics: true,
             Keys.keepScreenOn: true,
+            Keys.dashboardAuto: true,
             Keys.mapPlaces: true,
         ])
         soundEnabled = store.bool(forKey: Keys.sound)
@@ -471,6 +478,7 @@ final class AppSettings {
         adaptiveGPS = store.bool(forKey: Keys.adaptive)
         showNextCamera = store.bool(forKey: Keys.nextCamera)
         keepScreenOn = store.bool(forKey: Keys.keepScreenOn)
+        dashboardAutoOpens = store.bool(forKey: Keys.dashboardAuto)
         mapTraffic = store.bool(forKey: Keys.mapTraffic)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)
         alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto

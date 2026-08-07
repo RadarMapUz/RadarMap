@@ -1,6 +1,150 @@
 {
   "sourceLanguage" : "ru",
   "strings" : {
+    "«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов. Спидометр — самый экономный экран: чёрный фон и схема вместо карты; закрыли его руками — до конца поездки не откроется сам." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов. Спидометр — самый экономный экран: чёрный фон и схема вместо карты; закрыли его руками — до конца поездки не откроется сам."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Aqlli» — safar faqat o‘z mashinangizda o‘zi yonadi (CarPlay yoki tanish magnitola), boshqa mashinada avval «rulda siz?» deb so‘raydi. «Avto» — har doim o‘zi. «Qo‘lda» — faqat tugma bilan, harakat kuzatuvi butunlay o‘chiq. Yo‘l-yo‘lakay kirish (do‘kon, zapravka) yangi safarga aylanmaydi — shu safar ichidagi to‘xtash bo‘lib qoladi. Safar davomida ekran navigatorlardek o‘chmaydi. Spidometr — eng tejamkor ekran: xarita o‘rniga qora fon va sxema; uni qo‘lda yopsangiz — safar oxirigacha o‘zi ochilmaydi."
+          }
+        }
+      }
+    },
+    "Спидометр при старте поездки" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Спидометр при старте поездки"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Safar boshlanganda spidometr"
+          }
+        }
+      }
+    },
+    "Жарко — экономлю экран" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жарко — экономлю экран"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Issiq — ekranni tejayapman"
+          }
+        }
+      }
+    },
+    "Спидометр тратит меньше — тап по скорости" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Спидометр тратит меньше — тап по скорости"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spidometr kamroq quvvat oladi — tezlikka bosing"
+          }
+        }
+      }
+    },
+    "Тап по скорости — спидометр во весь экран" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тап по скорости — спидометр во весь экран"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tezlikka bosish — butun ekran spidometri"
+          }
+        }
+      }
+    },
+    "Долгий тап по скорости — быстрые переключатели" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Долгий тап по скорости — быстрые переключатели"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tezlikka uzoq bosish — tezkor tugmalar"
+          }
+        }
+      }
+    },
+    "Жёлтая кнопка — отметить радар для других" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Жёлтая кнопка — отметить радар для других"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sariq tugma — boshqalar uchun radarni belgilash"
+          }
+        }
+      }
+    },
+    "Заряд %lld процентов" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Заряд %lld процентов"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quvvat %lld foiz"
+          }
+        }
+      }
+    },
+    "Заряд неизвестен" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Заряд неизвестен"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quvvat noma’lum"
+          }
+        }
+      }
+    },
     " на %@" : {
       "localizations" : {
         "ru" : {

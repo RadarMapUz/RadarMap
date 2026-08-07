@@ -20,6 +20,15 @@ struct MapScreen: View {
     @State private var hideControlsTask: Task<Void, Never>?
     /// Режим «Спидометр» — тап по HUD (телефон в держателе).
     @State private var showDashboard = false
+    /// Спидометр закрыли руками в этой поездке — до её конца не навязываемся.
+    /// Флаг живёт здесь, а не в настройках: это решение «сейчас», не «всегда».
+    @State private var dashboardDismissedInTrip = false
+    /// Разовая подсказка о жесте (см. OneTimeHints): максимум одна за запуск.
+    @State private var activeHint: OneTimeHints.Hint?
+    @State private var hintConsumedThisLaunch = false
+    /// «Спидометр тратит меньше» — когда поездка началась на карте, батарея
+    /// тает и зарядки нет.
+    @State private var showBatterySaverHint = false
     @State private var legendExpanded = false
     @State private var legendCollapseTask: Task<Void, Never>?
     /// Чип «Задать Дом и Работу» → поиск сразу в режиме назначения слота.
@@ -99,6 +108,12 @@ struct MapScreen: View {
             #if DEBUG
             openScreenFromLaunchArguments()
             #endif
+            // Подсказка о жесте — после того как карта обжилась: чип поверх
+            // стартовой анимации читается как сбой, а не как помощь.
+            Task {
+                await Task.pause(seconds: 3)
+                maybeShowHint()
+            }
         }
         .onChange(of: env.settings.filter) { _, newValue in
             map.filter = newValue
@@ -180,9 +195,29 @@ struct MapScreen: View {
                       course: env.location.currentCourse, inTrip: active)
             if active {
                 scheduleControlsHide()
+                // Поездка = спидометр: он строился ради батареи (чёрный OLED и
+                // растр вместо тайлов с двумя сотнями маркеров), но был
+                // секретным экраном за тапом по HUD. Открываем сами — если
+                // пользователь не отключил это в настройках.
+                if env.settings.dashboardAutoOpens {
+                    showDashboard = true
+                } else {
+                    // Спидометр не откроется сам — самое время для подсказок:
+                    // про жёлтую кнопку (она видна только в поездке) и про
+                    // экономию, если батарея тает без зарядки.
+                    maybeShowHint()
+                    maybeSuggestDashboardForBattery()
+                }
             } else {
                 revealControls()
+                dashboardDismissedInTrip = false   // новая поездка — с чистого листа
+                showDashboard = false              // поездка кончилась — спидометр не нужен
             }
+        }
+        // Закрыли спидометр руками во время поездки — запоминаем и до её конца
+        // не открываем сами: автопереход не должен спорить с человеком.
+        .onChange(of: showDashboard) { _, shown in
+            if !shown, env.location.isTripActive { dashboardDismissedInTrip = true }
         }
     }
 
@@ -364,6 +399,50 @@ struct MapScreen: View {
         })
     }
 
+    // MARK: - Разовые подсказки
+
+    /// Показать следующую невиданную подсказку (максимум одну за запуск).
+    /// Решение «какую» — чистый OneTimeHints; здесь только Storage и таймер.
+    private func maybeShowHint() {
+        guard Storage.bool(.hasCompletedOnboarding), !hintConsumedThisLaunch,
+              activeHint == nil, !map.isAddingCamera, !showDashboard else { return }
+        var shown: Set<OneTimeHints.Hint> = []
+        if Storage.bool(.hintDashboardShown) { shown.insert(.dashboard) }
+        if Storage.bool(.hintTogglesShown) { shown.insert(.toggles) }
+        if Storage.bool(.hintRadarShown) { shown.insert(.radar) }
+        guard let hint = OneTimeHints.next(shown: shown,
+                                           radarVisible: mode.showsReportButton) else { return }
+        hintConsumedThisLaunch = true
+        switch hint {
+        case .dashboard: Storage.set(true, for: .hintDashboardShown)
+        case .toggles:   Storage.set(true, for: .hintTogglesShown)
+        case .radar:     Storage.set(true, for: .hintRadarShown)
+        }
+        withAnimation(.spring(duration: 0.3)) { activeHint = hint }
+        Task {
+            await Task.pause(seconds: 7)
+            withAnimation(.easeOut(duration: 0.3)) { activeHint = nil }
+        }
+    }
+
+    /// «Спидометр тратит меньше»: поездка началась на карте (автопереход
+    /// выключен), зарядки нет, батарея ниже трети. Мониторинг батареи
+    /// включается на один замер и тут же гасится — держать его постоянно ради
+    /// подсказки было бы иронией на тему экономии.
+    private func maybeSuggestDashboardForBattery() {
+        let device = UIDevice.current
+        device.isBatteryMonitoringEnabled = true
+        let level = device.batteryLevel
+        let charging = device.batteryState == .charging || device.batteryState == .full
+        device.isBatteryMonitoringEnabled = false
+        guard level >= 0, level < 0.3, !charging else { return }
+        withAnimation(.spring(duration: 0.3)) { showBatterySaverHint = true }
+        Task {
+            await Task.pause(seconds: 8)
+            withAnimation(.easeOut(duration: 0.3)) { showBatterySaverHint = false }
+        }
+    }
+
     // MARK: - Умные кнопки
 
     /// В поездке интерфейс не нужен постоянно: прячем всё, кроме HUD, манёвра и панели.
@@ -423,6 +502,14 @@ struct MapScreen: View {
                 QuickTogglesBar {
                     withAnimation(.spring(duration: 0.3)) { showQuickToggles = false }
                 }
+            }
+            // Разовые подсказки по жестам и экономии — по одной, не простынёй.
+            if let hint = activeHint {
+                HintChip(text: hint.text)
+            }
+            if showBatterySaverHint {
+                HintChip(text: String(localized: "Спидометр тратит меньше — тап по скорости"),
+                         tint: Theme.success)
             }
             // «Я в такси»: приложение молчит осознанно — человек должен видеть,
             // почему нет оповещений, и уметь передумать одним тапом.
@@ -571,7 +658,9 @@ struct MapScreen: View {
                 // двадцать секунд и уходит сам, ничего не отправляя. Пока на
                 // экране предупреждение о камере, вопрос ждёт: камера важнее,
                 // а под оверлеем плашка сгорала невидимой.
-                MobileConfirmBar(isCovered: env.location.isApproachingCamera)
+                // Ждёт и под предупреждением о камере, и под приборкой: там
+                // вопрос рисует она сама, а два живых таймера — двойной ответ.
+                MobileConfirmBar(isCovered: env.location.isApproachingCamera || showDashboard)
                 if mode.showsTripBar {
                     // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
                     // максимум экрана отдан карте, и она не прячется вместе с кнопками.
@@ -1039,3 +1128,19 @@ struct MapScreen: View {
 // ManeuverBannerGate, DrivingHintChip, LocationFollowDriver) живут в
 // MapTickGates.swift: они ЕДИНСТВЕННЫЕ читают то, что меняется каждый GPS-тик.
 // Новое такое чтение добавляется туда, а не в body MapScreen.
+
+/// Однострочная подсказка-капсула под HUD (см. OneTimeHints).
+private struct HintChip: View {
+    let text: String
+    var tint: Color = Theme.accent
+
+    var body: some View {
+        Text(text)
+            .font(.rounded(12, .semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().stroke(Theme.stroke, lineWidth: 1))
+            .transition(.move(edge: .top).combined(with: .opacity))
+    }
+}

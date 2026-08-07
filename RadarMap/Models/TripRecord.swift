@@ -21,6 +21,10 @@ nonisolated struct PassedCamera: Codable, Identifiable {
     var lat: Double?
     var lon: Double?
     var limitKmh: Int?
+    /// Лимит не из OSM, а предположен по классу дороги (`RoadClass.assumedLimitKmh`).
+    /// Опциональное поле: у записей, сделанных до появления фолбэка, его нет,
+    /// и трактуем как «лимит настоящий» — раньше других и не было.
+    var limitAssumed: Bool?
 
     var kind: CameraType { CameraType(raw: typeRaw) }
     var coordinate: CLLocationCoordinate2D? {
@@ -32,6 +36,14 @@ nonisolated struct PassedCamera: Codable, Identifiable {
         guard let limitKmh else { return nil }
         return speedKmh - Double(limitKmh)
     }
+
+    /// Можно ли называть по этому проезду КОНКРЕТНУЮ сумму штрафа.
+    ///
+    /// Нельзя, если лимит предположен: «возможный штраф 1 БРВ» — это заявление
+    /// о деньгах, и оно требует уверенности, которой у догадки по классу дороги
+    /// нет. Для рейтинга и голоса предположения достаточно (там цена ошибки —
+    /// лишний совет), для суммы — нет.
+    var limitIsCertain: Bool { limitKmh != nil && limitAssumed != true }
 }
 
 /// Остановка внутри склеенной поездки: заехал в магазин, на заправку, за человеком.

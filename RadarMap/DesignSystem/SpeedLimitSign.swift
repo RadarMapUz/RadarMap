@@ -11,6 +11,10 @@ import SwiftUI
 struct SpeedLimitSign: View {
     let limit: Int
     var diameter: CGFloat = 42
+    /// Лимит предположен по классу дороги, а не взят из OSM. Рисуем пунктиром
+    /// и со знаком «≈»: цифра без пометки читается как факт, а это догадка,
+    /// и водитель имеет право видеть разницу.
+    var isAssumed = false
 
     /// Толщина обводки и кегль подписи масштабируются от диаметра —
     /// знак одинаково читается и в HUD (42), и в карточке проезда (44).
@@ -20,12 +24,19 @@ struct SpeedLimitSign: View {
     var body: some View {
         ZStack {
             Circle().fill(.white)
-            Circle().strokeBorder(Color(red: 0.85, green: 0.05, blue: 0.1), lineWidth: borderWidth)
-            Text("\(limit)")
-                .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+            Circle()
+                .strokeBorder(Color(red: 0.85, green: 0.05, blue: 0.1),
+                              style: StrokeStyle(lineWidth: borderWidth,
+                                                 dash: isAssumed ? [diameter * 0.14] : []))
+            Text(isAssumed ? "≈\(limit)" : "\(limit)")
+                .font(.system(size: isAssumed ? fontSize * 0.82 : fontSize,
+                              weight: .heavy, design: .rounded))
                 .foregroundStyle(.black)
                 .contentTransition(.numericText())
         }
         .frame(width: diameter, height: diameter)
+        .accessibilityLabel(isAssumed
+            ? Text(String(format: String(localized: "Предположительно %lld"), limit))
+            : Text(String(format: String(localized: "Лимит %lld"), limit)))
     }
 }

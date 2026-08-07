@@ -113,12 +113,34 @@ final class AlertPlayer: NSObject {
 
     func speak(_ text: String) {
         activate()
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "ru-RU")
+        let spoken = Self.speaksUzbek ? UzbekSpeech.spoken(text) : text
+        let utterance = AVSpeechUtterance(string: spoken)
+        utterance.voice = AVSpeechSynthesisVoice(language: Self.voiceLanguage)
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         utterance.volume = Float(settings.alertVolume)
         utterance.postUtteranceDelay = 0.1
         synthesizer.speak(utterance)
+    }
+
+    /// Интерфейс сейчас на узбекском — значит и фразы приходят узбекские.
+    /// Читаем язык у самого приложения, а не у настройки: `AppLanguage.system`
+    /// означает «как в системе», и знать это может только Bundle.
+    static var speaksUzbek: Bool {
+        (Bundle.main.preferredLocalizations.first ?? "ru").hasPrefix("uz")
+    }
+
+    /// Язык голоса.
+    ///
+    /// Узбекского голоса в iOS НЕТ — ни встроенного, ни догружаемого: узбекский
+    /// не входит в список языков синтеза Apple вовсе. Из тюркских в системе
+    /// только турецкий, и он же ближайший родственник. Поэтому узбекские фразы
+    /// читает он, а орфография предварительно переписывается под турецкую
+    /// фонетику (см. UzbekSpeech).
+    ///
+    /// Раньше здесь стояло жёсткое "ru-RU", и при узбекском интерфейсе русский
+    /// синтезатор читал латиницу — за рулём это шум, а не речь.
+    static var voiceLanguage: String {
+        speaksUzbek ? UzbekSpeech.voiceLanguage : "ru-RU"
     }
 
     // MARK: - Сессия

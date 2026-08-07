@@ -1,0 +1,56 @@
+//
+//  AlertProfileTests.swift
+//  RadarMapTests
+//
+//  Профиль оповещений — фасад над старыми настройками. Главное, что здесь
+//  проверяется: переезд со старой версии не меняет поведение молча. Человек,
+//  который однажды настроил приложение под себя, не должен обнаружить, что
+//  обновление решило за него.
+//
+
+import XCTest
+@testable import RadarMap
+
+final class AlertProfileTests: XCTestCase {
+
+    func testProfilesApplyExpectedSettings() {
+        XCTAssertEqual(AlertProfile.auto.applied?.voice, .smart)
+        XCTAssertEqual(AlertProfile.auto.applied?.mode, .auto)
+        XCTAssertEqual(AlertProfile.city.applied?.mode, .city)
+        XCTAssertEqual(AlertProfile.highway.applied?.mode, .highway)
+        XCTAssertEqual(AlertProfile.quiet.applied?.voice, .off)
+        XCTAssertNil(AlertProfile.custom.applied, "«Свой» ничего не переписывает")
+    }
+
+    func testMigrationKeepsWhatUserChose() {
+        // Готовые сочетания узнаются как профили.
+        XCTAssertEqual(AlertProfile.matching(voice: .smart, mode: .auto), .auto)
+        XCTAssertEqual(AlertProfile.matching(voice: .smart, mode: .city), .city)
+        XCTAssertEqual(AlertProfile.matching(voice: .smart, mode: .highway), .highway)
+        // «Молча» — это «Тихий» при любом режиме контекста.
+        XCTAssertEqual(AlertProfile.matching(voice: .off, mode: .highway), .quiet)
+    }
+
+    func testUnusualCombinationBecomesCustomRatherThanBeingReset() {
+        // «Обо всех» + город — осознанный выбор, и он обязан пережить обновление.
+        XCTAssertEqual(AlertProfile.matching(voice: .always, mode: .city), .custom)
+        XCTAssertEqual(AlertProfile.matching(voice: .always, mode: .auto), .custom)
+    }
+
+    func testEveryProfileRoundTripsThroughItsSettings() {
+        // Профиль → настройки → профиль: цикл не должен уводить в сторону,
+        // иначе экран настроек начнёт «прыгать» при каждом открытии.
+        for profile in AlertProfile.allCases where profile != .custom {
+            guard let applied = profile.applied else { continue }
+            XCTAssertEqual(AlertProfile.matching(voice: applied.voice, mode: applied.mode),
+                           profile, "\(profile.rawValue) не воспроизводится из своих же настроек")
+        }
+    }
+
+    func testEveryProfileHasTitleAndDetail() {
+        for profile in AlertProfile.allCases {
+            XCTAssertFalse(profile.title.isEmpty)
+            XCTAssertFalse(profile.detail.isEmpty, "профиль без объяснения выбирают наугад")
+        }
+    }
+}

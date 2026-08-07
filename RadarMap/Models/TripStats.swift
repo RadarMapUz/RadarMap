@@ -130,11 +130,13 @@ final class TripStats {
     }
 
     /// Зафиксировать прохождение камеры (скорость — в точке максимального сближения).
-    func registerPass(camera: Camera, speedKmh: Double, limitKmh: Int?) {
+    func registerPass(camera: Camera, speedKmh: Double, limitKmh: Int?,
+                      limitAssumed: Bool = false) {
         passed.append(PassedCamera(
             id: UUID(), cameraID: camera.id, typeRaw: camera.type,
             location: camera.displayTitle, speedKmh: speedKmh, date: Date(),
-            lat: camera.lat, lon: camera.lon, limitKmh: limitKmh
+            lat: camera.lat, lon: camera.lon, limitKmh: limitKmh,
+            limitAssumed: limitAssumed ? true : nil
         ))
     }
 

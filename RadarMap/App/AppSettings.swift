@@ -200,6 +200,70 @@ enum MapAppearance: String, CaseIterable, Identifiable {
     }
 }
 
+/// Профиль оповещений — одна строка вместо четырёх перечислений.
+///
+/// Поведение задавали `VoiceMode`, `AlertMode`, `BackgroundAlertMode` и
+/// `TripStartMode`, причём в трёх из них было своё «Авто»/«Умно» с разным
+/// смыслом. Держать эту матрицу в голове пользователь не обязан, а результат
+/// комбинаций предсказать нельзя было и нам.
+///
+/// Профиль — фасад: он ЗАПИСЫВАЕТ нижележащие настройки, а не подменяет их.
+/// Поэтому весь остальной код продолжает читать `voiceMode` и `alertMode` как
+/// раньше, а «Свой» просто перестаёт их трогать и открывает подробности.
+enum AlertProfile: String, CaseIterable, Identifiable {
+    case auto, city, highway, quiet, custom
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .auto:    return String(localized: "Авто")
+        case .city:    return String(localized: "Город")
+        case .highway: return String(localized: "Трасса")
+        case .quiet:   return String(localized: "Тихий")
+        case .custom:  return String(localized: "Свой")
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .auto:
+            return String(localized: "Сам понимает город или трассу. В городе — коротко, на трассе — полной фразой, о своих камерах — только вибрация, при превышении — громко.")
+        case .city:
+            return String(localized: "Всегда короткие фразы: камеры идут одна за другой.")
+        case .highway:
+            return String(localized: "Всегда полные фразы и заранее: камер мало, ехать до следующей далеко.")
+        case .quiet:
+            return String(localized: "Ни слова. Камеру показывает панель и отмечает вибрация.")
+        case .custom:
+            return String(localized: "Настраиваете сами.")
+        }
+    }
+
+    /// Значения, которые профиль проставляет. `nil` — не трогать (свой профиль).
+    var applied: (voice: VoiceMode, mode: AlertMode)? {
+        switch self {
+        case .auto:    return (.smart, .auto)
+        case .city:    return (.smart, .city)
+        case .highway: return (.smart, .highway)
+        case .quiet:   return (.off, .auto)
+        case .custom:  return nil
+        }
+    }
+
+    /// Какой профиль соответствует уже сохранённым настройкам — для переезда
+    /// со старой версии. Всё, что не ложится в готовый профиль, становится
+    /// «Своим»: привычка пользователя важнее стройности списка.
+    static func matching(voice: VoiceMode, mode: AlertMode) -> AlertProfile {
+        if voice == .off { return .quiet }
+        guard voice == .smart else { return .custom }
+        switch mode {
+        case .auto:    return .auto
+        case .city:    return .city
+        case .highway: return .highway
+        }
+    }
+}
+
 /// Язык интерфейса. `.system` — как в настройках телефона; ru/uz форсируют язык
 /// через ключ `AppleLanguages` (применяется при следующем запуске — так весь
 /// текст, включая `String(localized:)`, переключается разом, без «каши» языков).
@@ -275,6 +339,17 @@ final class AppSettings {
     var usageStatsEnabled: Bool {
         didSet { store.set(!usageStatsEnabled, forKey: Keys.usageStats) }
     }
+
+    /// Профиль оповещений. Записывает нижележащие `voiceMode`/`alertMode`,
+    /// поэтому остальной код о нём знать не обязан (см. AlertProfile).
+    var alertProfile: AlertProfile {
+        didSet {
+            store.set(alertProfile.rawValue, forKey: Keys.alertProfile)
+            guard let applied = alertProfile.applied else { return }
+            if voiceMode != applied.voice { voiceMode = applied.voice }
+            if alertMode != applied.mode { alertMode = applied.mode }
+        }
+    }
     /// Слои подложки — тумблеры в легенде карты. Пробки уважают выбор всегда:
     /// затор впереди нужен именно в дороге. Места (заправки, парковки,
     /// больницы, посты) в поездке гасятся сами — на скорости их подписи только
@@ -332,6 +407,7 @@ final class AppSettings {
         static let alertMode = "alertMode"
         static let knownCarAudio = "knownCarAudio"
         static let usageStats = "usageStatsDisabled"
+        static let alertProfile = "alertProfile"
     }
 
     /// Пишем/снимаем override языка приложения. iOS читает «AppleLanguages» из
@@ -401,6 +477,12 @@ final class AppSettings {
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []
         weeklyDigest = store.bool(forKey: Keys.digest)
         usageStatsEnabled = !store.bool(forKey: Keys.usageStats)
+        // Переезд со старой версии: профиля ещё нет — выводим его из того, что
+        // человек уже выбрал, чтобы ни одна привычка не сменилась молча.
+        alertProfile = AlertProfile(rawValue: store.string(forKey: Keys.alertProfile) ?? "")
+            ?? AlertProfile.matching(
+                voice: VoiceMode(rawValue: store.string(forKey: Keys.voiceMode) ?? "") ?? .smart,
+                mode: AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto)
         appLanguage = AppLanguage(rawValue: store.string(forKey: Keys.language) ?? "") ?? .system
         backgroundAlerts = BackgroundAlertMode(rawValue: store.string(forKey: Keys.backgroundAlerts) ?? "") ?? .all
         hapticsEnabled = store.bool(forKey: Keys.haptics)

@@ -16,6 +16,8 @@ nonisolated struct PassTracking {
         var minDist: Double
         var speedAtMin: Double
         var limitAtMin: Int?
+        /// Лимит был предположен по классу дороги, а не взят из OSM.
+        var limitAssumedAtMin = false
         /// (дистанция, скорость) на подходе в пределах зоны измерения.
         var zone: [(dist: Double, speed: Double)] = []
         /// В точке максимального сближения было ДОКАЗАНО, что мы на другой
@@ -31,6 +33,9 @@ nonisolated struct PassTracking {
         let camera: Camera
         let speedKmh: Double
         let limitKmh: Int?
+        /// Лимит предположен по классу дороги: годится для рейтинга и голоса,
+        /// но не для конкретной суммы штрафа (см. PassedCamera.limitIsCertain).
+        let limitAssumed: Bool
     }
 
     private(set) var tracked: [Int: Tracker] = [:]
@@ -52,14 +57,16 @@ nonisolated struct PassTracking {
     /// пару раз за проезд. По умолчанию доказательства нет — прежнее поведение.
     mutating func update(nearest: Camera?, nearestDistance: CLLocationDistance?,
                          coordinate: CLLocationCoordinate2D, speedKmh: Double,
-                         roadLimit: Int?, radius: CLLocationDistance,
+                         roadLimit: Int?, roadLimitAssumed: Bool = false,
+                         radius: CLLocationDistance,
                          offRoad: (Camera, CLLocationCoordinate2D) -> Bool = { _, _ in false })
         -> [Pass] {
         // Вошли в радиус камеры впереди — начинаем следить.
         if let nearest, let distance = nearestDistance,
            distance <= radius, tracked[nearest.id] == nil {
             var tracker = Tracker(camera: nearest, minDist: distance,
-                                  speedAtMin: speedKmh, limitAtMin: roadLimit)
+                                  speedAtMin: speedKmh, limitAtMin: roadLimit,
+                                  limitAssumedAtMin: roadLimitAssumed)
             if distance <= AppConfig.passZoneMeters {
                 tracker.zone.append((distance, speedKmh))
                 tracker.offRoadAtMin = offRoad(nearest, coordinate)
@@ -77,7 +84,10 @@ nonisolated struct PassTracking {
             if distance < tracker.minDist {
                 tracker.minDist = distance
                 tracker.speedAtMin = speedKmh
-                tracker.limitAtMin = roadLimit ?? tracker.limitAtMin
+                if roadLimit != nil {
+                    tracker.limitAtMin = roadLimit
+                    tracker.limitAssumedAtMin = roadLimitAssumed
+                }
                 // Пока приближаемся — копим сэмплы зоны измерения и проверяем
                 // геометрию: важна именно точка сближения, а не подход к ней.
                 if distance <= AppConfig.passZoneMeters {
@@ -116,6 +126,7 @@ nonisolated struct PassTracking {
               !tracker.offRoadAtMin else { return nil }
         return Pass(camera: tracker.camera,
                     speedKmh: measuredSpeed(zone: tracker.zone, fallback: tracker.speedAtMin),
-                    limitKmh: tracker.limitAtMin)
+                    limitKmh: tracker.limitAtMin,
+                    limitAssumed: tracker.limitAssumedAtMin)
     }
 }

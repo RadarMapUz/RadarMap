@@ -97,6 +97,34 @@ EOF
 
 То же для `RadarMap/InfoPlist.xcstrings` (4 permission-строки). Ноль пропусков — иначе допереводить.
 
+**Вторая проверка — литералы МИМО каталога.** Скрипт выше видит только ключи,
+которые в каталоге уже есть; строка, которую забыли добавить, остаётся русской
+на всех языках и в отчёте не всплывает (так «Прослушать оповещение» и десяток
+accessibility-строк жили без перевода). Ревизия литералов кода против каталога:
+
+```bash
+python3 - <<'EOF'
+import json, re, pathlib
+catalog = set(json.load(open("Shared/Localizable.xcstrings"))["strings"].keys())
+pattern = re.compile(
+    r'(?:Text|Label|Button|String\(localized:|LocalizedStringKey|TextField|navigationTitle|accessibilityLabel\(Text|accessibilityHint\(Text|SectionHeader)\s*\(\s*"((?:[^"\\]|\\.)*)"')
+missing = {}
+for path in pathlib.Path("RadarMap").rglob("*.swift"):
+    for m in pattern.finditer(path.read_text()):
+        s = m.group(1)
+        if not re.search(r'[а-яА-ЯёЁ]', s) or '\\(' in s:
+            continue
+        key = s.replace('\\n', '\n').replace('\\"', '"')
+        if key not in catalog:
+            missing.setdefault(key, str(path))
+print(f"литералов мимо каталога: {len(missing)}")
+[print(" -", k, "←", p) for k, p in sorted(missing.items())]
+EOF
+```
+
+Строки с интерполяцией `\(…)` скрипт пропускает — их ключи в каталоге в формате
+`%@`/`%lld`, проверять руками по месту.
+
 ## 5. Код-ревью веером агентов
 
 На «проверь всё» — четыре параллельных read-only агента по зонам, каждый читает файлы

@@ -35,7 +35,7 @@ struct ReportRadarButton: View {
         Button(action: send) {
             if isLarge { largeLabel } else { compactLabel }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
         .disabled(isSending)
         .animation(.easeOut(duration: 0.25), value: flash)
         .animation(.easeOut(duration: 0.2), value: isSending)
@@ -45,6 +45,8 @@ struct ReportRadarButton: View {
 
     /// Приборка: капсула во всю ширину. Тап делается вслепую, и промахнуться
     /// мимо полосы на весь экран сложнее, чем мимо квадрата по центру.
+    /// Стиль — тот же «премиальный» язык, что у «Начать поездку» на карте:
+    /// градиент со световой кромкой сверху и двойная тень, один вид на всё.
     private var largeLabel: some View {
         HStack(spacing: 10) {
             if isSending {
@@ -60,10 +62,16 @@ struct ReportRadarButton: View {
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity)
         .frame(height: 62)
-        .background(background.gradient, in: Capsule())
+        .background(
+            LinearGradient(colors: [background.opacity(0.98), background.opacity(0.72)],
+                           startPoint: .top, endPoint: .bottom), in: Capsule())
+        .overlay(Capsule().strokeBorder(
+            LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.03)],
+                           startPoint: .top, endPoint: .bottom), lineWidth: 1))
         // Свечение вместо рамки: кнопка должна находиться боковым зрением
         // на чёрном экране, не крича громче предупреждения о камере.
         .shadow(color: background.opacity(0.35), radius: 14, y: 5)
+        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
     }
 
     /// Строка маршрута: компактный квадрат в ряду других кнопок.

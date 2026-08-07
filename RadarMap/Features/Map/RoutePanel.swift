@@ -207,6 +207,9 @@ struct TripLiveBar: View {
                 }
             }
             Spacer(minLength: 8)
+            // Заряд — как на приборке: одна поездка, одни и те же цифры на
+            // любом экране, включая живую дельту «−N».
+            BatteryChip(sinceStartPercent: env.trip.startBatteryPercent)
             // «Радар!» слева от «стоп» — в поездке это самая частая кнопка
             // после самой остановки, и до неё палец должен доходить не глядя.
             ReportRadarButton()
@@ -239,10 +242,13 @@ struct ManeuverBanner: View {
                 .frame(width: 46, height: 46)
                 .background(Theme.accent.gradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
+                // Моноширинные цифры — как у приборки и CarPlay: дистанция
+                // тает каждый тик, и без них баннер дрожал шириной.
                 Text(Formatting.distance(distance))
-                    .font(.rounded(20, .heavy))
+                    .font(.rounded(20, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
+                    .animation(.easeOut(duration: 0.3), value: Int(distance))
                 Text(step.text)
                     .font(.rounded(13, .medium))
                     .foregroundStyle(Theme.textSecondary)

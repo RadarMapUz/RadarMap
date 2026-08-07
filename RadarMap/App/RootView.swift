@@ -12,6 +12,9 @@ struct RootView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(Storage.Key.hasCompletedOnboarding.rawValue) private var hasCompletedOnboarding = false
+    /// «Открыть карту на телефоне» при подключённом CarPlay (пассажиру нужны
+    /// настройки и Итоги). Память сцены, не настройка: живёт до конца сессии.
+    @State private var phoneMapOverride = false
     #if DEBUG
     /// Скриншот-автоматизация: CarPlay-экран на телефоне (симулятор не даёт
     /// открыть CarPlay-дисплей без ручного клика по меню).
@@ -23,9 +26,17 @@ struct RootView: View {
             Theme.background.ignoresSafeArea()
 
             if hasCompletedOnboarding {
-                MapScreen()
-                    .transition(.opacity)
-                    .modifier(ReviewPromptModifier())   // оценка App Store после 3-й чистой поездки
+                // Пока едет CarPlay, телефонная карта уступает место экрану
+                // передачи: MapKit на двух экранах разом — двойной нагрев,
+                // а водитель смотрит на экран машины.
+                if env.isCarPlayConnected && !phoneMapOverride {
+                    CarPlayHandoffView { phoneMapOverride = true }
+                        .transition(.opacity)
+                } else {
+                    MapScreen()
+                        .transition(.opacity)
+                        .modifier(ReviewPromptModifier())   // оценка App Store после 3-й чистой поездки
+                }
             } else {
                 OnboardingView {
                     env.location.bootstrap()
@@ -33,6 +44,11 @@ struct RootView: View {
                 }
                 .transition(.opacity)
             }
+        }
+        .animation(.easeInOut(duration: 0.3), value: env.isCarPlayConnected)
+        // Вышли из машины — следующее подключение снова начнёт с экрана передачи.
+        .onChange(of: env.isCarPlayConnected) { _, connected in
+            if !connected { phoneMapOverride = false }
         }
         // Виджет локскрина: radarmap://start-trip — поездка одним тапом с
         // заблокированного экрана. Активную поездку диплинк никогда не трогает.
@@ -49,6 +65,12 @@ struct RootView: View {
         }
         #endif
         .task {
+            #if DEBUG
+            // Экран передачи без машины: проверить глазами на симуляторе.
+            if ProcessInfo.processInfo.arguments.contains("-carplayConnected") {
+                env.setCarPlayConnected(true)
+            }
+            #endif
             // Общий набор сервисов вождения — см. startDrivingServices:
             // CarPlay может подключиться раньше телефонной сцены.
             env.startDrivingServices()

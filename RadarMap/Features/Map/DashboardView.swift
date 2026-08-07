@@ -22,6 +22,13 @@ struct DashboardView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
+            // Штрафное превышение: красное свечение краёв, видное боковым
+            // зрением. БЕЗ пульса — вечная анимация на экране экономии жгла бы
+            // GPU-композитинг часами; у камеры (короткие секунды) пульс уместен.
+            if isFineOverspeed {
+                OverspeedVignette(pulses: false)
+            }
+
             // Порядок зон — просьба водителя с реальной поездки: направления
             // (манёвр и схема) — на самом верху, как в настоящем навигаторе;
             // скорость и камера — по центру; всё, что нажимается (стоп,
@@ -120,19 +127,35 @@ struct DashboardView: View {
         .accessibilityHint(Text("Нажмите, чтобы вернуться к карте"))
     }
 
-    /// Тонкая строка статуса над направлениями: жара слева, заряд справа.
-    /// Вне поездки заряд показываем отдельным чипом — приборка строилась ради
-    /// батареи, и её экран — то место, где заряд должен быть виден всегда
-    /// (в поездке он уже в строке поездки внизу, не дублируем).
+    /// Тонкая строка статуса над направлениями: спутники и жара слева, заряд
+    /// справа. Вне поездки заряд показываем отдельным чипом — приборка
+    /// строилась ради батареи, и её экран — то место, где заряд должен быть
+    /// виден всегда (в поездке он уже в строке поездки внизу, не дублируем).
     @ViewBuilder
     private var statusChips: some View {
-        if env.thermal.mode != .full || !env.location.isTripActive {
-            HStack {
+        if env.thermal.mode != .full || !env.location.isTripActive
+            || env.location.isSignalStale {
+            HStack(spacing: 8) {
+                // Сигнал протух (тоннель, паркинг): скорость и дистанции на
+                // экране — последнее известное, а не происходящее. Честнее
+                // сказать это, чем показывать замершие цифры как живые.
+                if env.location.isSignalStale {
+                    statusChip("Ждём спутники", symbol: "location.slash.fill")
+                }
                 if env.thermal.mode != .full { thermalChip }
                 Spacer()
                 if !env.location.isTripActive { BatteryChip() }
             }
         }
+    }
+
+    /// Чип статуса в стиле термочипа — жёлтая капсула с иконкой.
+    private func statusChip(_ title: LocalizedStringKey, symbol: String) -> some View {
+        Label(title, systemImage: symbol)
+            .font(.rounded(12, .medium))
+            .foregroundStyle(Theme.warning)
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .background(Theme.warning.opacity(0.12), in: Capsule())
     }
 
     /// Манёвр — верхний баннер, как в навигаторе: иконка + дистанция + фраза.
@@ -158,11 +181,7 @@ struct DashboardView: View {
     /// но молча. Молчаливая деградация читается как поломка, один чип
     /// честности дешевле жалобы «лагает».
     private var thermalChip: some View {
-        Label("Жарко — экономлю экран", systemImage: "thermometer.sun.fill")
-            .font(.rounded(12, .medium))
-            .foregroundStyle(Theme.warning)
-            .padding(.horizontal, 11).padding(.vertical, 6)
-            .background(Theme.warning.opacity(0.12), in: Capsule())
+        statusChip("Жарко — экономлю экран", symbol: "thermometer.sun.fill")
     }
 
     /// Скорость — главное, во весь экран.
@@ -218,7 +237,7 @@ struct DashboardView: View {
                 .foregroundStyle(Theme.textSecondary)
             }
             Spacer(minLength: 8)
-            BatteryChip()
+            BatteryChip(sinceStartPercent: env.trip.startBatteryPercent)
             Button {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 // Тот же путь, что стоп на карте; приборку закроет сам конец
@@ -361,6 +380,12 @@ struct DashboardView: View {
         if over <= 2 { return .white }
         if FineSchedule.fine(overKmh: over) == 0 { return Theme.role(.attention) }
         return Theme.danger
+    }
+
+    /// Превышение уже стоит денег — то же условие, что красит скорость красным.
+    private var isFineOverspeed: Bool {
+        guard let limit = env.speedLimits.currentLimit else { return false }
+        return FineSchedule.fine(overKmh: env.location.speedKmh - Double(limit)) > 0
     }
 
     private var alertColor: Color {

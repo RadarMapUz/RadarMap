@@ -126,10 +126,18 @@ final class SketchState {
                 spanMeters = span
             }
         } else {
-            withAnimation(.linear(duration: duration)) {
-                meOffset = CGSize(width: offset.x, height: offset.y)
-                courseDegrees = course
-                spanMeters = span
+            // Гейт неподвижности: на светофоре тики идут, а картинка стоит —
+            // не пишем ничего, и композитор не получает ни кадра работы.
+            let offsetDelta = hypot(offset.x - meOffset.width,
+                                    offset.y - meOffset.height)
+            if RoadSketch.viewpointMoved(offsetDeltaMeters: offsetDelta,
+                                         courseDeltaDegrees: abs(course - courseDegrees),
+                                         spanChanged: span != spanMeters) {
+                withAnimation(.linear(duration: duration)) {
+                    meOffset = CGSize(width: offset.x, height: offset.y)
+                    courseDegrees = course
+                    spanMeters = span
+                }
             }
         }
         key = freshKey

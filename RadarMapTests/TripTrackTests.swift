@@ -55,4 +55,32 @@ final class TripTrackTests: XCTestCase {
         XCTAssertEqual(points[1].speedKmh, 72.5)
         XCTAssertEqual(points[2].lat, 41.32)
     }
+
+    // MARK: - Заряд за поездку
+
+    func testBatteryDropIsStartMinusEnd() {
+        XCTAssertEqual(TripStats.batteryDrop(startPercent: 80, endPercent: 74), 6)
+        // Ноль — валидный и лучший ответ: поездка не стоила ни процента.
+        XCTAssertEqual(TripStats.batteryDrop(startPercent: 80, endPercent: 80), 0)
+    }
+
+    /// Заряжались в пути (конец выше старта) или заряд не читался — дельты нет:
+    /// фиктивная «экономия» хуже отсутствия цифры.
+    func testBatteryDropRefusesChargingAndUnknown() {
+        XCTAssertNil(TripStats.batteryDrop(startPercent: 60, endPercent: 75))
+        XCTAssertNil(TripStats.batteryDrop(startPercent: nil, endPercent: 75))
+        XCTAssertNil(TripStats.batteryDrop(startPercent: 60, endPercent: nil))
+    }
+
+    /// Склейка: «заряд на старте» = текущий + расход первой ноги, тогда финальная
+    /// дельта суммирует обе ноги. Расход первой ноги неизвестен — вся дельта
+    /// неизвестна: «−2 %» за поездку, стоившую пять, хуже молчания.
+    func testResumedStartPercentAccumulatesLegs() {
+        XCTAssertEqual(TripStats.resumedStartPercent(previousDrop: 4, currentPercent: 70), 74)
+        XCTAssertNil(TripStats.resumedStartPercent(previousDrop: nil, currentPercent: 70))
+        XCTAssertNil(TripStats.resumedStartPercent(previousDrop: 4, currentPercent: nil))
+        // Сквозной сценарий: нога 1 съела 4 %, нога 2 — ещё 3 %.
+        let start = TripStats.resumedStartPercent(previousDrop: 4, currentPercent: 70)
+        XCTAssertEqual(TripStats.batteryDrop(startPercent: start, endPercent: 67), 7)
+    }
 }

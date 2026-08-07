@@ -262,7 +262,12 @@ final class LocationService: NSObject {
         postponedVoice = nil
         // Заезд по пути — не новая поездка: если пауза похожа на «забежал в
         // магазин», поднимаем прошлую запись обратно в живую сессию.
-        if !resumePreviousTripIfMerged() { trip.begin() }
+        // Заряд читаем один раз здесь: дельта за поездку — это видимая цена
+        // приложения, ради которой приборка и строилась.
+        let batteryPercent = BatteryProbe.percent()
+        if !resumePreviousTripIfMerged(batteryPercent: batteryPercent) {
+            trip.begin(batteryPercent: batteryPercent)
+        }
         applyLocationMode()
         liveActivity?.startIfNeeded(state: activityState)
         if auto, !isDriverRecognized { notifier.askDriverCheck() }
@@ -270,7 +275,7 @@ final class LocationService: NSObject {
 
     /// Продолжить прошлую поездку вместо новой. Решение принимает чистый
     /// TripMerge; здесь только собираем факты. true — склеили.
-    private func resumePreviousTripIfMerged() -> Bool {
+    private func resumePreviousTripIfMerged(batteryPercent: Int? = nil) -> Bool {
         guard let previous = trip.history.first,
               let previousEnd = previous.endCoordinate else { return false }
         let now = Date()
@@ -289,7 +294,7 @@ final class LocationService: NSObject {
             existingStops: previous.stops?.count ?? 0,
             previousDuration: previous.duration)
         guard TripMerge.shouldMerge(context) else { return false }
-        trip.resume(previous, stoppedUntil: now)
+        trip.resume(previous, stoppedUntil: now, batteryPercent: batteryPercent)
         return true
     }
 
@@ -345,13 +350,16 @@ final class LocationService: NSObject {
         voicedInGroup.removeAll()
         postponedVoice = nil
         notifier.clearDriverCheck()   // вопрос «вы за рулём?» больше не актуален
+        let batteryPercent = BatteryProbe.percent()
         if asPassenger {
             _ = passTracking.flush()   // пассажирские «проезды» не считаем
-            if trip.distanceMeters < 500 { trip.cancel() } else { trip.finish() }
+            if trip.distanceMeters < 500 { trip.cancel() } else {
+                trip.finish(batteryPercent: batteryPercent)
+            }
         } else {
             // Камеры, мимо которых ещё «проезжали» в момент остановки.
             register(passes: passTracking.flush())
-            trip.finish(endedManually: !auto)
+            trip.finish(endedManually: !auto, batteryPercent: batteryPercent)
             // Автостоп с телефоном в кармане: короткие итоги на локскрин —
             // цифры дошли до человека, даже если он не откроет приложение.
             // Свежесть по endedAt, а не по новому id: у продолженной поездки
@@ -441,13 +449,14 @@ final class LocationService: NSObject {
            Date().timeIntervalSince(lastMovementAt) > AppConfig.gpsIdleAfterSeconds {
             tier = 3
         }
-        // Открытая приборка: водитель СМОТРИТ на схему, и фиксы раз в 25 м
-        // (2–3 с в городе) видны глазом как рывки. Поднимаем крейсерский тир
-        // до подъездного — но только пока телефон холодный: в перегрев
-        // плавность картинки проигрывает экономии (тот самый держатель под
-        // солнцем), а стоянку (тир 3) не трогаем вовсе — стоя анимировать
-        // нечего. Экран при этом уже горит и стоит на порядок дороже GPS.
-        if tier == 2, isDashboardVisible, isForeground,
+        // Открытая приборка (или схема на экране CarPlay): водитель СМОТРИТ на
+        // схему, и фиксы раз в 25 м (2–3 с в городе) видны глазом как рывки.
+        // Поднимаем крейсерский тир до подъездного — но только пока телефон
+        // холодный: в перегрев плавность картинки проигрывает экономии (тот
+        // самый держатель под солнцем), а стоянку (тир 3) не трогаем вовсе —
+        // стоя анимировать нечего. Экран при этом уже горит и стоит на
+        // порядок дороже GPS.
+        if tier == 2, isForeground, isDashboardVisible || isCarPlaySketchVisible,
            (thermal?.mode ?? .full) == .full {
             tier = 1
         }
@@ -468,12 +477,22 @@ final class LocationService: NSObject {
 
     /// Приборка на экране (см. буст в tuneAdaptiveAccuracy).
     @ObservationIgnored private var isDashboardVisible = false
+    /// Схема на экране CarPlay — тот же буст, что у приборки телефона.
+    @ObservationIgnored private var isCarPlaySketchVisible = false
 
     /// Открытие/закрытие приборки: пересматриваем тир GPS сразу, не дожидаясь
     /// следующего фикса — на стоящем в пробке телефоне он может прийти нескоро.
     func setDashboardVisible(_ visible: Bool) {
         guard isDashboardVisible != visible else { return }
         isDashboardVisible = visible
+        accuracyTier = -1
+        tuneAdaptiveAccuracy()
+    }
+
+    /// Схема CarPlay показана/скрыта: та же немедленная переоценка тира.
+    func setCarPlaySketchVisible(_ visible: Bool) {
+        guard isCarPlaySketchVisible != visible else { return }
+        isCarPlaySketchVisible = visible
         accuracyTier = -1
         tuneAdaptiveAccuracy()
     }

@@ -33,6 +33,102 @@
         }
       }
     },
+    "Схема" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Схема"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sxema"
+          }
+        }
+      }
+    },
+    "Схема появится с началом движения" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Схема появится с началом движения"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sxema harakat boshlanishi bilan paydo bo‘ladi"
+          }
+        }
+      }
+    },
+    "Едем в CarPlay" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Едем в CarPlay"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CarPlay’da ketyapmiz"
+          }
+        }
+      }
+    },
+    "Карта и предупреждения — на экране машины.\nТелефон отдыхает и не греется." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Карта и предупреждения — на экране машины.\nТелефон отдыхает и не греется."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xarita va ogohlantirishlar — mashina ekranida.\nTelefon dam oladi va qizimaydi."
+          }
+        }
+      }
+    },
+    "Открыть карту на телефоне" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открыть карту на телефоне"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xaritani telefonda ochish"
+          }
+        }
+      }
+    },
+    "заряда за поездку" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "заряда за поездку"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "safar uchun quvvat"
+          }
+        }
+      }
+    },
     "Жарко — экономлю экран" : {
       "localizations" : {
         "ru" : {

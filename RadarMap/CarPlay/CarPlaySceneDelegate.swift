@@ -49,7 +49,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
         // В машине приложение «на переднем плане», даже если телефон заблокирован
         // в кармане — у CarPlay свой флаг, телефонная сцена его не затирает.
-        env.location.setCarPlayConnected(true)
+        // Через окружение: телефонный экран по этому же флагу уступает место
+        // экрану передачи (MapKit на двух экранах разом — двойной нагрев).
+        env.setCarPlayConnected(true)
         // CarPlay может быть ПЕРВОЙ сценой процесса: без этого вызова база
         // лимитов, краудсорс и автостарт стартовали только из телефонной сцены,
         // и поездка из машины писалась без лимитов — без рейтинга и штрафов.
@@ -68,7 +70,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         toastTask = nil
         // Вышли из машины: телефон мог всё это время быть в фоне, события
         // scenePhase не будет — снимаем «передний план» сами.
-        AppEnvironment.shared.location.setCarPlayConnected(false)
+        AppEnvironment.shared.setCarPlayConnected(false)
         // Тишина — атрибут ПОЕЗДКИ, а не настройка: кнопку жали в машине
         // (спит пассажир, идёт разговор), и без отката телефон навсегда
         // оставался в «Молча», а человек не связал бы это с кнопкой в машине.
@@ -90,12 +92,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             let tripActive = env.location.isTripActive
             let routeActive = env.route.isActive
             let muted = isMuted   // читает оба тумблера — оба и отслеживаем
+            let sketchShown = model.showsSketch
 
-            mapTemplate.leadingNavigationBarButtons = [tripButton(active: tripActive)]
+            mapTemplate.leadingNavigationBarButtons = [tripButton(active: tripActive),
+                                                       viewButton(sketchShown: sketchShown)]
             mapTemplate.trailingNavigationBarButtons = [destinationsButton(routeActive: routeActive),
                                                        reportButton]
-            mapTemplate.mapButtons = [soundButton(muted: muted),
-                                      zoomInButton, zoomOutButton, recenterButton]
+            // В режиме схемы зум и «к себе» бессмысленны: охват и центр схема
+            // выбирает сама по дистанции до камеры. Оставляем только звук.
+            mapTemplate.mapButtons = sketchShown
+                ? [soundButton(muted: muted)]
+                : [soundButton(muted: muted), zoomInButton, zoomOutButton, recenterButton]
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, self.session == session else { return }
@@ -113,6 +120,16 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             guard let self else { return }
             let location = env.location
             if location.isTripActive { location.endTrip() } else { location.startTrip() }
+        }
+    }
+
+    /// «Схема» ⇄ «Карта»: режим экрана машины. Схема — самый дешёвый рендер
+    /// (телефон перестаёт греться об тайлы), карта — самый подробный. В жару
+    /// автоматика предпочитает схему, но нажатая кнопка старше автоматики.
+    private func viewButton(sketchShown: Bool) -> CPBarButton {
+        CPBarButton(title: sketchShown ? String(localized: "Карта")
+                                       : String(localized: "Схема")) { [model] _ in
+            model.toggleView()
         }
     }
 

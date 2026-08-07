@@ -27,6 +27,7 @@ enum Storage {
         case overridesCheck         // дата последней проверки правок модератора (overrides.json)
         case cameraDBVersion        // версия локальной базы камер
         case speedLimitsLastCheck   // дата последней проверки базы лимитов
+        case roadsIndexLastCheck    // дата последней проверки индекса дорожных тайлов
         case hasCompletedOnboarding // онбординг пройден (@AppStorage)
         case reviewAskedVersion     // версия, в которой уже просили оценку App Store
         // Тишина, включённая кнопкой в CarPlay. Хранится, а не живёт в делегате:

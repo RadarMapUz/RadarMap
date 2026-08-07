@@ -48,6 +48,10 @@ final class SketchState {
         guard let course = unwoundCourse else { return }
         hasCourse = true
 
+        // Тайлы окрестности: дёшево, когда всё на месте; скачивает недостающее
+        // только пока приборка на экране.
+        env.roads.ensureCoverage(around: me)
+
         let alert = env.location.nearestCamera
         let distance = env.location.distanceToNearest
         let span = RoadSketch.span(forDistance: alert != nil ? distance : nil)
@@ -63,6 +67,7 @@ final class SketchState {
             spanBucket: RoadSketch.bucket(forSpan: span),
             routeToken: env.route.polyline.map(ObjectIdentifier.init),
             networkGeneration: env.speedLimits.indexRevision,
+            roadsGeneration: env.roads.revision,
             storeRevision: env.cameras.revision,
             budget: env.thermal.mode.sketchNetworkBudget)
         let offset = offsetMeters(of: me)
@@ -108,7 +113,11 @@ final class SketchState {
             .filter { env.settings.filter.matches($0) }
         return RoadSketch.scene(alertCamera: alert, alertInRange: inRange,
                                 cameras: dots,
-                                network: env.speedLimits.sketchNetwork,
+                                // Свои тайлы (классы, мосты, дворы), где они
+                                // уже есть; иначе — сеть из индекса лимитов.
+                                network: FallbackRoadNetwork(
+                                    primary: env.roads.network,
+                                    fallback: env.speedLimits.sketchNetwork),
                                 networkBudget: env.thermal.mode.sketchNetworkBudget,
                                 route: env.route.routeCoordinates,
                                 track: env.trip.recentTrack(),

@@ -62,6 +62,22 @@ def _post(port, path, fields, origin=None, cookie=None):
         return e.code
 
 
+def _post_json(port, path, payload, cookie=None):
+    """JSON-запрос: карта общается с панелью так, без перезагрузок."""
+    data = json.dumps(payload).encode()
+    headers = {"Content-Type": "application/json"}
+    token = COOKIE["value"] if cookie is None else cookie
+    if token:
+        headers["Cookie"] = token
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=data,
+                                 headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status, resp.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+
 class AdminTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -358,6 +374,35 @@ class AdminTest(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_login_works_with_origin_null(self):
+        """Браузер шлёт `Origin: null`, когда политика реферера запрещает его
+        раскрывать. Это НЕ чужой источник — панель отвергала так собственную
+        форму входа с 403, и увидеть это можно было только в браузере: curl
+        заголовок не шлёт вовсе, поэтому тесты молчали."""
+        data = urllib.parse.urlencode({"password": TEST_PASSWORD}).encode()
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/login",
+                                     data=data, method="POST",
+                                     headers={"Origin": "null"})
+
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *args, **kwargs):
+                return None
+        opener = urllib.request.build_opener(NoRedirect)
+        try:
+            with opener.open(req, timeout=10) as resp:
+                code, cookie = resp.status, resp.headers.get("Set-Cookie", "")
+        except urllib.error.HTTPError as e:
+            # 303 прилетает исключением: куку читаем из него же.
+            code, cookie = e.code, (e.headers.get("Set-Cookie", "") if e.headers else "")
+        self.assertEqual(code, 303, "вход с Origin: null должен проходить")
+        self.assertTrue(cookie, "сессия не выдана")
+
+    def test_foreign_origin_is_still_refused(self):
+        """Послабление для «null» не должно открывать дорогу чужой странице."""
+        code = _post(self.port, "/cameras/act", {"camera_id": 7, "action": "hide"},
+                     origin="http://evil.example")
+        self.assertEqual(code, 403)
+
     def test_wrong_password_gives_no_session(self):
         self.assertEqual(self.login(self.port, "не тот пароль"), "")
 
@@ -375,11 +420,18 @@ class AdminTest(unittest.TestCase):
             self.assertFalse(admin_auth.check_password("что угодно", junk), junk)
 
     def test_logout_kills_the_session(self):
+        """Выход обязан отзывать куку НА СЕРВЕРЕ, а не только просить браузер
+        её забыть: иначе уведённая сессия переживает выход."""
         token = self.login(self.port, TEST_PASSWORD)
         self.assertTrue(token)
         self.assertEqual(_get(self.port, "/cameras", cookie=token)[0], 200)
-        _get(self.port, "/logout", cookie=token)
-        self.assertEqual(_get(self.port, "/cameras", cookie=token)[0], 401)
+        try:
+            _get(self.port, "/logout", cookie=token)
+            self.assertEqual(_get(self.port, "/cameras", cookie=token)[0], 401)
+        finally:
+            # Выход перевыпустил секрет и оборвал общую сессию стенда — она
+            # нужна остальным тестам, входим заново.
+            COOKIE["value"] = self.login(self.port, TEST_PASSWORD)
 
     def test_brute_force_is_throttled(self):
         sessions = admin_auth.Sessions()
@@ -393,10 +445,46 @@ class AdminTest(unittest.TestCase):
         self.assertFalse(sessions.blocked("10.0.0.9"))
 
     def test_session_expires(self):
-        sessions = admin_auth.Sessions(ttl=60)
+        sessions = admin_auth.Sessions(ttl=60, secret="s3cret")
         token = sessions.issue(now=1000)
         self.assertTrue(sessions.valid(token, now=1030))
         self.assertFalse(sessions.valid(token, now=1061))
+
+    def test_session_survives_restart(self):
+        """Главная причина, по которой вход «не работал»: сессии жили в памяти,
+        и любой перезапуск панели (то есть любой деплой) выкидывал модератора
+        на форму входа. Со стороны это неотличимо от неверного пароля."""
+        issued = admin_auth.Sessions(ttl=3600, secret="s3cret").issue(now=1000)
+        after_restart = admin_auth.Sessions(ttl=3600, secret="s3cret")
+        self.assertTrue(after_restart.valid(issued, now=1500),
+                        "перезапуск панели не должен разлогинивать")
+
+    def test_forged_session_is_rejected(self):
+        """Кука — это срок годности плюс подпись. Без подписи или с чужой
+        подписью она не должна пускать: иначе достаточно вписать дату."""
+        sessions = admin_auth.Sessions(ttl=3600, secret="s3cret")
+        far_future = str(int(2_000_000_000))
+        for forged in ("", "мусор", far_future, far_future + ".",
+                       far_future + ".deadbeef", "." + far_future):
+            self.assertFalse(sessions.valid(forged, now=1000), forged)
+        # Подпись от другого секрета — тоже нет.
+        alien = admin_auth.Sessions(ttl=3600, secret="другой").issue(now=1000)
+        self.assertFalse(sessions.valid(alien, now=1100))
+
+    def test_password_change_kills_sessions(self):
+        """Смена пароля — единственный способ отозвать выданные куки, поэтому
+        она обязана перевыпускать секрет подписи."""
+        path = tempfile.NamedTemporaryFile(suffix=".conf", delete=False).name
+        try:
+            admin_auth.write_password("pervyj-parol-1", path)
+            first = admin_auth.read_config(path)["session_secret"]
+            token = admin_auth.Sessions(secret=first).issue()
+            admin_auth.write_password("vtoroj-parol-2", path)
+            second = admin_auth.read_config(path)["session_secret"]
+            self.assertNotEqual(first, second)
+            self.assertFalse(admin_auth.Sessions(secret=second).valid(token))
+        finally:
+            os.unlink(path)
 
     def test_plain_http_from_outside_is_refused(self):
         """Пароль по открытому HTTP ушёл бы открытым текстом. Пока нет TLS,
@@ -408,9 +496,9 @@ class AdminTest(unittest.TestCase):
 
     # --- Положение камеры: очередь и карта ---
 
-    def test_suspicious_queue_puts_complaints_first(self):
-        """Жалоба водителя весит больше любой догадки алгоритма: у него глаза,
-        у нас эвристика."""
+    def test_map_payload_colours_the_work(self):
+        """Цвет маркера — это очередь работы: решение перекрывает жалобу,
+        жалоба перекрывает догадку алгоритма."""
         conn = admin.db()
         try:
             admin._cameras = {
@@ -426,50 +514,107 @@ class AdminTest(unittest.TestCase):
                     "city": "", "region": "", "type": "Стационар камера",
                     "cls": "primary", "road": [0, 0, 1, 1]},
             }
-            # Ровно текущее время файла: cameras() перечитывает его при
-            # РАСХОЖДЕНИИ, поэтому «-1» не заморозил бы подмену, а наоборот.
             admin._cameras_mtime = os.path.getmtime(admin.CAMERAS_PATH)
             self.add_report(camera_id=3, reason="wrong_location")
-            items = admin.suspicious_cameras(conn)
-            ids = [item[1] for item in items]
-            self.assertEqual(ids[0], 3, "камера с жалобой должна быть первой")
-            self.assertIn(2, ids, "снап на тротуаре — подозрительна")
-            self.assertIn(1, ids, "нет куска дороги — подозрительна")
-            self.assertNotIn(4, ids, "здоровая камера не должна попадать в очередь")
+            state = {row[0]: row[3] for row in admin.cameras_payload(conn)}
+            self.assertEqual(state[4], admin.STATE_PLAIN)
+            self.assertEqual(state[1], admin.STATE_SUSPECT, "нет куска дороги")
+            self.assertEqual(state[2], admin.STATE_SUSPECT, "снап на тротуаре")
+            self.assertEqual(state[3], admin.STATE_COMPLAINT, "жалоба важнее догадки")
+
+            conn.execute("INSERT OR REPLACE INTO overrides(camera_id, op, lat, lon, "
+                         "type, note, decided_at, published_at) "
+                         "VALUES(3,'move',41.55,69.45,NULL,'',?,NULL)", (time.time(),))
+            conn.commit()
+            payload = {row[0]: row for row in admin.cameras_payload(conn)}
+            self.assertEqual(payload[3][3], admin.STATE_DECIDED, "решение перекрывает всё")
+            self.assertEqual(payload[3][1], 41.55, "карта должна показывать новое место")
         finally:
             conn.close()
-            # Вернуть настоящую базу камер: соседние тесты ждут «Юнусабад».
             admin._cameras, admin._cameras_mtime = {}, 0
 
-    def test_map_page_needs_key_and_shows_the_cost(self):
-        """Без ключа — честное объяснение, а не пустая карта. С ключом — данные
-        камеры и предупреждение о потере профиля дороги."""
-        code, body = _get(self.port, "/cameras/7/map")
+    def test_move_json_saves_and_undo_removes(self):
+        """Перенос и отмена — по одному запросу, без перезагрузки страницы."""
+        code, body = _post_json(self.port, "/api/move",
+                                {"id": 7, "lat": 41.3105, "lon": 69.2505})
+        self.assertEqual(code, 200, body)
+        self.assertEqual(json.loads(body)["pending"], 1)
+        conn = admin.db()
+        try:
+            self.assertEqual(
+                conn.execute("SELECT op FROM overrides WHERE camera_id=7").fetchone()["op"],
+                "move")
+        finally:
+            conn.close()
+
+        code, body = _post_json(self.port, "/api/undo", {"id": 7})
         self.assertEqual(code, 200)
-        self.assertIn("yandex_key", body, "нет объяснения про отсутствующий ключ")
+        self.assertEqual(json.loads(body)["pending"], 0)
+        conn = admin.db()
+        try:
+            self.assertIsNone(
+                conn.execute("SELECT op FROM overrides WHERE camera_id=7").fetchone())
+        finally:
+            conn.close()
+
+    def test_move_json_refuses_what_the_app_would_reject(self):
+        """Проверки живут на СЕРВЕРЕ: браузер подсказывает, решает панель."""
+        self.assertEqual(_post_json(self.port, "/api/move",
+                                    {"id": 7, "lat": 41.40, "lon": 69.25})[0], 400)
+        self.assertEqual(_post_json(self.port, "/api/move",
+                                    {"id": 7, "lat": 55.75, "lon": 37.61})[0], 400)
+        self.assertEqual(_post_json(self.port, "/api/move",
+                                    {"id": 999999, "lat": 41.31, "lon": 69.25})[0], 404)
+        conn = admin.db()
+        try:
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) c FROM overrides").fetchone()["c"], 0,
+                "отвергнутая правка не должна попадать в базу")
+        finally:
+            conn.close()
+
+    def test_guest_cannot_touch_the_json_api(self):
+        for path in ("/api/cameras", "/api/camera/7", "/api/search?q=" + urllib.parse.quote("юну")):
+            self.assertEqual(_get(self.port, path, cookie="")[0], 401, path)
+        self.assertEqual(_post_json(self.port, "/api/move",
+                                    {"id": 7, "lat": 41.31, "lon": 69.25},
+                                    cookie="")[0], 401)
+
+    def test_search_finds_by_id_and_address(self):
+        self.assertEqual(json.loads(_get(self.port, "/api/search?q=7")[1])["found"][0]["id"], 7)
+        self.assertEqual(
+            json.loads(_get(self.port, "/api/search?q=" + urllib.parse.quote("юнусабад"))[1])["found"][0]["id"], 7)
+        self.assertEqual(json.loads(_get(self.port, "/api/search?q=")[1])["found"], [])
+
+    def test_map_needs_key_and_states_the_cost(self):
+        """Без ключа — честное объяснение. С ключом — цена переноса на экране."""
+        code, body = _get(self.port, "/map")
+        self.assertEqual(code, 200)
+        self.assertIn("yandex_key", body)
 
         conf = admin_auth.read_config(self.conf.name)
         conf["yandex_key"] = "test-key"
         with open(self.conf.name, "w", encoding="utf-8") as handle:
             handle.writelines(f"{k}={v}\n" for k, v in conf.items())
         try:
-            code, body = _get(self.port, "/cameras/7/map")
+            code, body = _get(self.port, "/map")
             self.assertEqual(code, 200)
-            self.assertIn("Юнусабад", body)
-            self.assertIn("теряет измеренный профиль", body,
-                          "цена переноса должна быть на экране, а не в документации")
-            self.assertIn("41.31", body, "нет исходной координаты для карты")
+            self.assertIn("теряет измеренный профиль", body)
+            self.assertIn("/static/moderate.js", body)
         finally:
             conf.pop("yandex_key")
             with open(self.conf.name, "w", encoding="utf-8") as handle:
                 handle.writelines(f"{k}={v}\n" for k, v in conf.items())
 
-    def test_map_page_refuses_unknown_camera(self):
-        self.assertEqual(_get(self.port, "/cameras/999999/map")[0], 404)
+    def test_old_paths_lead_to_the_map(self):
+        """Ссылки из очереди жалоб не должны ломаться, а второго способа
+        двигать камеру быть не должно."""
+        for path in ("/positions", "/cameras/7/map"):
+            self.assertIn(_get(self.port, path)[0], (200, 303), path)
 
     def test_static_serves_only_the_whitelist(self):
         """Отдача файлов по имени из URL — способ вынести наружу что угодно."""
-        self.assertEqual(_get(self.port, "/static/map.js")[0], 200)
+        self.assertEqual(_get(self.port, "/static/moderate.js")[0], 200)
         for path in ("/static/../admin.py", "/static/admin_auth.py", "/static/x.js"):
             self.assertEqual(_get(self.port, path)[0], 404, path)
 

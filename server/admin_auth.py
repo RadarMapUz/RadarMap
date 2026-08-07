@@ -8,9 +8,14 @@
 
 * **Пароль хранится хэшем** (scrypt с солью), а не текстом. Файл конфигурации
   на VPS могут прочитать по неосторожности — из хэша пароль не достать.
-* **Сессия — случайный токен в памяти процесса.** Перезапуск панели разлогинит
-  всех, и это правильно: панель перезапускают редко, а «вечная» сессия в файле
-  переживает и утечку файла.
+* **Сессия — подписанная кука, а не запись в памяти.** Первая версия держала
+  токены в памяти процесса, и это оказалось прямой ошибкой: каждый перезапуск
+  панели (а её перезапускает любой деплой) выкидывал модератора на форму
+  входа. Со стороны человека это неотличимо от «пароль не работает» — он вводит
+  верный пароль и снова видит форму. Теперь в куке лежит срок годности с
+  HMAC-подписью: сервер проверяет её арифметикой, ничего не помня.
+* **Смена пароля обрывает все сессии.** Секрет подписи перевыпускается вместе с
+  паролем — иначе украденную куку нельзя было бы отозвать вовсе.
 * **Ограничение попыток по адресу.** Пароль у панели один, подбирать его будут
   именно перебором.
 * **Сравнение хэшей — постоянного времени** (`compare_digest`): разница в
@@ -74,10 +79,16 @@ def read_config(path=None):
 
 
 def write_password(password, path=None):
-    """Записать хэш пароля, сохранив остальные ключи файла."""
+    """Записать хэш пароля, сохранив остальные ключи файла.
+
+    Заодно перевыпускает секрет подписи сессий: смена пароля обязана обрывать
+    уже выданные куки, иначе украденная сессия переживёт смену пароля — то
+    есть единственное действие, которым её можно было отозвать.
+    """
     path = path or CONFIG_PATH
     config = read_config(path)
     config["password_hash"] = hash_password(password)
+    config["session_secret"] = secrets.token_urlsafe(32)
     body = "".join(f"{key}={value}\n" for key, value in sorted(config.items()))
     # Права до записи содержимого: между созданием файла и chmod не должно быть
     # окна, в котором хэш лежит доступным всем.
@@ -139,39 +150,53 @@ def set_password_interactively(path=None):
 # --------------------------------------------------------------------------
 
 class Sessions:
-    """Токены живых сессий. В памяти процесса: перезапуск = общий выход."""
+    """Сессии без состояния: кука — это срок годности плюс подпись.
 
-    def __init__(self, ttl=SESSION_TTL):
+    Проверка сводится к арифметике, поэтому перезапуск панели никого не
+    разлогинивает. Отозвать выданные куки можно только сменой пароля — она
+    перевыпускает секрет подписи, и все прежние куки перестают сходиться.
+    """
+
+    def __init__(self, ttl=SESSION_TTL, secret=None):
         self.ttl = ttl
-        self._tokens = {}      # токен → время истечения
-        self._attempts = {}    # адрес → [время неудачных попыток]
+        self._secret = secret          # для тестов; иначе берётся из конфига
+        self._attempts = {}            # адрес → [время неудачных попыток]
+
+    def _key(self):
+        return (self._secret or session_secret()).encode()
+
+    def _sign(self, payload):
+        return hmac.new(self._key(), payload.encode(), hashlib.sha256).hexdigest()[:32]
 
     def issue(self, now=None):
         now = now if now is not None else time.time()
-        self._sweep(now)
-        token = secrets.token_urlsafe(32)
-        self._tokens[token] = now + self.ttl
-        return token
+        payload = str(int(now + self.ttl))
+        return payload + "." + self._sign(payload)
 
     def valid(self, token, now=None):
         now = now if now is not None else time.time()
-        if not token:
+        if not token or "." not in token:
             return False
-        expires = self._tokens.get(token)
-        if expires is None:
+        payload, _, signature = token.partition(".")
+        # Сначала подпись, потом срок: сравнение постоянного времени и никакой
+        # веры содержимому куки до проверки.
+        if not hmac.compare_digest(self._sign(payload), signature):
             return False
-        if expires <= now:
-            self._tokens.pop(token, None)
+        try:
+            return int(payload) > now
+        except ValueError:
             return False
-        return True
 
-    def drop(self, token):
-        self._tokens.pop(token, None)
+    def drop(self, token=None):
+        """Выход: перевыпускаем секрет, и все выданные куки перестают сходиться.
 
-    def _sweep(self, now):
-        for token, expires in list(self._tokens.items()):
-            if expires <= now:
-                del self._tokens[token]
+        Без этого «выход» только просил браузер забыть куку — а сама кука
+        оставалась годной до истечения срока, то есть уведённая сессия
+        переживала выход. Модератор один, поэтому «выйти» и «выйти везде»
+        здесь совпадают.
+        """
+        if self._secret is None:
+            rotate_session_secret()
 
     # --- перебор ---
 
@@ -187,6 +212,37 @@ class Sessions:
 
     def note_success(self, address):
         self._attempts.pop(address, None)
+
+
+def _store_secret(path):
+    """Завести новый секрет подписи и сохранить его. Возвращает секрет даже
+    если записать не удалось: сессии тогда проживут до перезапуска, но панель
+    обязана работать."""
+    secret = secrets.token_urlsafe(32)
+    config = read_config(path)
+    config["session_secret"] = secret
+    body = "".join(f"{key}={value}\n" for key, value in sorted(config.items()))
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(body)
+    except OSError:
+        pass
+    return secret
+
+
+def session_secret(path=None):
+    """Секрет подписи кук; заводится при первом обращении (панель с прошлой
+    версии его не имеет)."""
+    path = path or CONFIG_PATH
+    return read_config(path).get("session_secret") or _store_secret(path)
+
+
+def rotate_session_secret(path=None):
+    """Оборвать все выданные куки. Так работает выход: подписанный токен нельзя
+    отозвать поштучно, а модератор у панели один — «выйти» и «выйти везде» для
+    него одно и то же."""
+    return _store_secret(path or CONFIG_PATH)
 
 
 def cookie_token(header):

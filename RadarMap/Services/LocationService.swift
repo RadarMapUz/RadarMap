@@ -92,6 +92,10 @@ final class LocationService: NSObject {
     @ObservationIgnored private var contextDetector = AlertPolicy.Detector()
     /// Камер в радиусе 3 км — сигнал плотности для детектора (пересчёт на ретайле).
     @ObservationIgnored private var cameraDensity3km = 0
+    /// «Свои» камеры: проезжаем регулярно и спокойно — в городе они молчат
+    /// (см. CameraFamiliarity). Пересчитывается на старте поездки: история за
+    /// 30 дней меняется медленно, а на тике это была бы лишняя работа.
+    @ObservationIgnored private var familiarCameraIDs: Set<Int> = []
     /// Текущий контекст для чипа на HUD (в режиме «Авто»).
     private(set) var alertContext: AlertPolicy.Context = .city
     // Два независимых «передних плана»: телефонная сцена и CarPlay. Один флаг
@@ -216,6 +220,7 @@ final class LocationService: NSObject {
     /// вопрос «вы за рулём?» (в своей — CarPlay/знакомая магнитола — молча).
     func startTrip(auto: Bool = false) {
         guard isAuthorized else { return }
+        refreshFamiliarCameras()   // «свои» камеры считаем один раз на поездку
         if auto, isPassengerSession { return }   // пассажир уже сказал своё слово
         // Режим «Умный»: сама поездка стартует только в знакомой машине, иначе
         // ждём подтверждения — но вопрос всё равно задаём (ниже), чтобы человек
@@ -618,9 +623,16 @@ final class LocationService: NSObject {
             // Лимит дороги + превышение; манёвры и прогресс маршрута.
             // Здесь, а не в UI: голос должен работать со свёрнутым приложением.
             // Класс дороги ближайшей камеры — фолбэк лимита там, где OSM молчит.
-            speedLimits?.update(coordinate: coordinate, course: course,
-                                speedKmh: speedKmh, announce: isTripActive,
-                                fallbackClass: nearestCamera?.roadClass ?? .unknown)
+            //
+            // announce: отдельная фраза «Превышение скорости» звучит, только
+            // если впереди НЕТ камеры, о которой мы сейчас скажем. Иначе
+            // водитель получал две реплики внахлёст, и одна из них терялась —
+            // чаще всего именно та, что про камеру. Про камеру фраза и так
+            // содержит скорость с лимитом.
+            speedLimits?.update(
+                coordinate: coordinate, course: course, speedKmh: speedKmh,
+                announce: isTripActive && !willSpeakAboutCameraAhead,
+                fallbackClass: nearestCamera?.roadClass ?? .unknown)
             route?.updateProgress(coordinate: coordinate, cameras: repository.cameras,
                                   announce: isTripActive)
             tuneAdaptiveAccuracy()
@@ -891,12 +903,48 @@ final class LocationService: NSObject {
     /// полная фраза (трасса) → крик (устойчивое превышение или внезапная точка).
     /// Именно УСТОЙЧИВОЕ превышение: мгновенный флаг щёлкает от шума GPS, и
     /// «превысил на 1 км/ч» поднимал спокойный анонс до сирены.
-    private func alertPolicy(for camera: Camera, crawling: Bool) -> AlertPolicy.Decision {
-        AlertPolicy.decision(
-            voice: settings.voiceMode,
-            mode: settings.alertMode, detected: alertContext,
-            isSuddenCamera: camera.kind.isSudden,
-            isOverspeeding: speedLimits?.isOverspeedingSustained == true,
+    /// Скажем ли мы сейчас про камеру впереди. Если да — отдельную фразу про
+    /// превышение подавляем: камера важнее, и говорить надо о ней одной.
+    private var willSpeakAboutCameraAhead: Bool {
+        guard let camera = nearestCamera, let distance = distanceToNearest,
+              distance <= effectiveAlertRadius else { return false }
+        return voicePlan(for: camera, crawling: isCrawling).voice != .none
+    }
+
+    /// Пересчитать «свои» камеры по истории. Зовётся на старте поездки:
+    /// история за 30 дней меняется медленно, на каждом тике это лишняя работа.
+    private func refreshFamiliarCameras() {
+        familiarCameraIDs = CameraFamiliarity.familiarIDs(history: trip.history, now: Date())
+    }
+
+    private func voicePlan(for camera: Camera, crawling: Bool) -> VoiceDirector.Plan {
+        VoiceDirector.decide(situation(for: camera, crawling: crawling))
+    }
+
+    /// Обстановка для арбитра: всё, что он должен видеть разом, собирается
+    /// здесь. Раньше эти же факты читались из трёх мест в разные моменты
+    /// времени — отсюда и брались фразы внахлёст и молчание о камере.
+    private func situation(for camera: Camera, crawling: Bool) -> VoiceDirector.Situation {
+        let context: AlertPolicy.Context = switch settings.alertMode {
+        case .auto: alertContext
+        case .city: .city
+        case .highway: .highway
+        }
+        // Превышение — только УСТОЙЧИВОЕ: мгновенный флаг щёлкает от шума GPS,
+        // и «превысил на 1 км/ч» поднимал спокойный анонс до сирены.
+        let over: Double? = if speedLimits?.isOverspeedingSustained == true,
+                               let limit = speedLimits?.currentLimit {
+            speedKmh - Double(limit)
+        } else {
+            nil
+        }
+        return VoiceDirector.Situation(
+            mode: settings.voiceMode,
+            context: context,
+            isSudden: camera.kind.isSudden,
+            isFamiliar: familiarCameraIDs.contains(camera.id),
+            overKmh: over,
+            limitKmh: speedLimits?.currentLimit,
             isCrawling: crawling)
     }
 
@@ -909,7 +957,7 @@ final class LocationService: NSObject {
         guard let decision = alertEngine.evaluate(cameraID: camera.id, distance: distance,
                                                   radius: effectiveAlertRadius) else { return }
 
-        let policy = alertPolicy(for: camera, crawling: isCrawling)
+        let policy = voicePlan(for: camera, crawling: isCrawling)
 
         // Сирена — только в срочном режиме: спокойный анонс не пищит.
         if settings.soundEnabled, policy.beeps { alerts.beep(count: decision.level) }
@@ -933,13 +981,13 @@ final class LocationService: NSObject {
         }
         // Голос — самая дорогая часть оповещения, в энергосбережении пропускаем.
         guard settings.voiceEnabled, !isLowPowerMode else { return }
-        guard policy.voice else {
+        guard policy.voice != .none else {
             // Промолчали из-за пробки — это ОТСРОЧКА, а не отмена: камера,
             // вошедшая в радиус пока мы разгоняемся от светофора, иначе осталась
             // бы без голоса совсем (уровень уже зачтён, второй раз не придёт).
             // Отложить фразу «поедем — скажу» имеет смысл только там, где она
             // вообще прозвучала бы: в «Умно» и «Молча» голоса нет по замыслу.
-            if isCrawling, settings.voiceMode == .always { postponedVoice = camera.id }
+            if policy.postpone { postponedVoice = camera.id }
             return
         }
         speak(about: camera, distance: distance, policy: policy)
@@ -957,20 +1005,22 @@ final class LocationService: NSObject {
         guard !isCrawling else { return }   // всё ещё стоим
         postponedVoice = nil
         guard settings.voiceEnabled, !isLowPowerMode else { return }
-        let policy = alertPolicy(for: camera, crawling: false)
-        guard policy.voice else { return }
+        let policy = voicePlan(for: camera, crawling: false)
+        guard policy.voice != .none else { return }
         speak(about: camera, distance: distance, policy: policy)
     }
 
     private func speak(about camera: Camera, distance: CLLocationDistance,
-                       policy: AlertPolicy.Decision) {
+                       policy: VoiceDirector.Plan) {
         // Про эту камеру уже сказали групповой фразой на предыдущей — молчим
         // (тук и баннер при этом сработали, камера не потерялась).
         if voicedInGroup.remove(camera.id) != nil { return }
         let group = clusteredCameras
         voicedInGroup.formUnion(group.map(\.id))
         alerts.speak(announcement(for: camera, distance: distance,
-                                  urgent: policy.escalates, brief: policy.isBrief,
+                                  urgent: policy.voice == .urgent,
+                                  speaksLimit: policy.speaksLimit,
+                                  brief: policy.isBrief,
                                   groupCount: group.count))
     }
 
@@ -982,8 +1032,8 @@ final class LocationService: NSObject {
     /// полная фраза на каждую превращается в болтовню. `groupCount` — сколько
     /// камер стоит вплотную за этой: о них говорим здесь же, одной фразой.
     private func announcement(for camera: Camera, distance: CLLocationDistance,
-                              urgent: Bool, brief: Bool = false,
-                              groupCount: Int = 0) -> String {
+                              urgent: Bool, speaksLimit: Bool = false,
+                              brief: Bool = false, groupCount: Int = 0) -> String {
         // Округляем как манёвры маршрута: «через 743 метра» звучит по-роботски.
         let step: Double = distance >= 400 ? 100 : 50
         let rounded = Int((distance / step).rounded() * step)
@@ -1000,13 +1050,19 @@ final class LocationService: NSObject {
             phrase = String(format: String(localized: "%@ %@, %lld метров"),
                             camera.kind.displayName, directionPhrase, rounded)
         }
-        guard urgent else { return phrase }
-        if let limit = speedLimits?.currentLimit {
-            phrase += String(format: String(localized: ". Ваша скорость %lld, лимит %lld"),
-                             Int(speedKmh.rounded()), limit)
-        } else if speedKmh >= AppConfig.speakSpeedThresholdKmh {
-            phrase += String(format: String(localized: ". Ваша скорость %lld"),
-                             Int(speedKmh.rounded()))
+        // Срочно — полная картина: своя скорость и лимит. Иначе (трасса) —
+        // только лимит: «здесь 60» помогает, перечисление своей скорости при
+        // спокойной езде лишнее.
+        if urgent {
+            if let limit = speedLimits?.currentLimit {
+                phrase += String(format: String(localized: ". Ваша скорость %lld, лимит %lld"),
+                                 Int(speedKmh.rounded()), limit)
+            } else if speedKmh >= AppConfig.speakSpeedThresholdKmh {
+                phrase += String(format: String(localized: ". Ваша скорость %lld"),
+                                 Int(speedKmh.rounded()))
+            }
+        } else if speaksLimit, let limit = speedLimits?.currentLimit {
+            phrase += String(format: String(localized: ", здесь %lld"), limit)
         }
         return phrase
     }

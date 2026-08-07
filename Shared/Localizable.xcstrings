@@ -9524,6 +9524,22 @@
           }
         }
       }
+    },
+    ", здесь %lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", здесь %lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", bu yerda %lld"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RadarMap — Политика конфиденциальности</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 720px;
+         margin: 0 auto; padding: 24px 20px 60px; line-height: 1.6; color: #1a1d24; background: #fff; }
+  @media (prefers-color-scheme: dark) { body { color: #e8eaf0; background: #0b0f16; } a { color: #4fc3f7; } }
+  h1 { font-size: 1.6em; } h2 { font-size: 1.15em; margin-top: 1.8em; }
+  .muted { opacity: .65; font-size: .9em; }
+  .card { border: 1px solid rgba(128,128,128,.25); border-radius: 12px; padding: 14px 18px; margin: 18px 0; }
+</style>
+</head>
+<body>
+<h1>🛰 RadarMap — Политика конфиденциальности</h1>
+<p class="muted">Действует с 7 августа 2026 г. · <a href="#uz">O‘zbekcha</a></p>
+
+<div class="card"><strong>Коротко:</strong> RadarMap не собирает персональные данные.
+Нет аккаунтов, нет рекламы, нет трекеров и сторонних SDK аналитики.
+Ваша геопозиция обрабатывается только на вашем устройстве.</div>
+
+<h2>1. Геолокация</h2>
+<p>Координаты используются исключительно на устройстве: для показа вашей позиции на карте,
+предупреждений о приближении к камерам, построения маршрутов и записи итогов поездок.
+История поездок хранится только в памяти вашего телефона и никуда не передаётся.</p>
+
+<h2>2. Что отправляется на сервер</h2>
+<p><strong>Метки передвижных радаров.</strong> Если вы вручную отмечаете радар или голосуете
+за чужую метку, на сервер уходят координаты метки и анонимный идентификатор устройства
+(случайный UUID, не связанный с вашей личностью). Метки автоматически удаляются через несколько часов.</p>
+<p><strong>Отчёты о стабильности.</strong> Раз в сутки iOS может отправлять агрегированный
+отчёт MetricKit (сбои приложения, расход энергии) с тем же анонимным UUID. Отчёты не содержат
+координат, контента или чего-либо, идентифицирующего вас, и хранятся не более 30 дней.</p>
+<p><strong>Построение маршрута.</strong> Для расчёта маршрута на сервер передаются координаты
+точек «откуда» и «куда». Они обрабатываются в момент запроса и не сохраняются.</p>
+<p><strong>Обезличенная статистика использования.</strong> Раз в сутки отправляются счётчики
+за прошедший день: сколько было поездок, километров, оповещений и проездов камер, а также
+версия приложения, версия iOS, модель телефона и уровень выданного разрешения на геолокацию.
+Это <em>только числа</em>: ни координат, ни маршрутов, ни адресов, ни времени событий в отчёте
+нет и быть не может. Идентификатор — тот же анонимный UUID, который меняется каждые 30 дней,
+поэтому связать ваши сутки в длинную историю невозможно. Отправку можно выключить в
+Настройках → «Помогать улучшать приложение».</p>
+
+<h2>3. Чего мы НЕ делаем</h2>
+<ul>
+  <li>Не собираем имена, телефоны, email — в приложении нет регистрации</li>
+  <li>Не отслеживаем перемещения и не храним историю координат на сервере</li>
+  <li>Не показываем рекламу и не передаём данные третьим лицам</li>
+  <li>Не используем сторонние аналитические SDK</li>
+</ul>
+
+<h2>4. Источники данных</h2>
+<p>Стационарные камеры — официальный открытый датасет (data.egov.uz, набор 1-008-0027).
+Карты, маршруты и ограничения скорости — данные © участников
+<a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p>
+
+<h2>5. Контакты</h2>
+<p>Вопросы по конфиденциальности: <a href="mailto:rasul.sadullaev@gmail.com">rasul.sadullaev@gmail.com</a></p>
+
+<hr style="margin-top:40px;opacity:.2">
+<h2 id="uz">O‘zbekcha (qisqacha)</h2>
+<p>RadarMap shaxsiy ma’lumotlarni yig‘maydi: hisob, reklama va kuzatuv yo‘q.
+Joylashuvingiz faqat qurilmangizda qayta ishlanadi. Serverga faqat: qo‘lda belgilangan
+ko‘chma radar koordinatalari (anonim UUID bilan), ilova barqarorligi haqidagi kunlik
+anonim hisobotlar, marshrut so‘rovi nuqtalari (saqlanmaydi) va shaxssiz kunlik
+hisoblagichlar (nechta safar, kilometr, ogohlantirish — faqat raqamlar, koordinatasiz)
+yuboriladi. Hisoblagichlarni Sozlamalarda o‘chirib qo‘yish mumkin.
+Savollar: rasul.sadullaev@gmail.com</p>
+</body>
+</html>

@@ -27,19 +27,25 @@ struct TripStopsSection: View {
 
     var body: some View {
         if !stops.isEmpty {
-            GlassCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    header
-                    ForEach(stops) { stop in
-                        row(stop)
-                        if stop.id != stops.last?.id {
-                            Rectangle()
-                                .fill(Theme.textTertiary.opacity(0.18))
-                                .frame(height: 1)
-                        }
+            // `.statCard()`, а не `GlassCard`: это единственный блок деталки,
+            // который заворачивался в стекло, а `GlassCard` внутренних отступов
+            // НЕ ДАЁТ вовсе — он только рисует подложку и кромку. Отсюда текст
+            // вплотную к границам и обрезанное «Разделить здесь». Соседние
+            // карточки Итогов идут через statCard, у которого padding и фон
+            // общие для всех, — ровно ради этого он и заведён.
+            VStack(alignment: .leading, spacing: 12) {
+                header
+                ForEach(stops) { stop in
+                    row(stop)
+                    if stop.id != stops.last?.id {
+                        Rectangle()
+                            .fill(Theme.textTertiary.opacity(0.18))
+                            .frame(height: 1)
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .statCard()
             .task { await loadTitles() }
             // Живой Binding, не .constant: закрытие диалога системой (тап мимо,
             // свайп) пишет false именно в биндинг, и с .constant кандидат

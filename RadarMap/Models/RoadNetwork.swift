@@ -65,6 +65,25 @@ nonisolated struct EmptyRoadNetwork: RoadNetworkSource {
                radius: CLLocationDistance) -> [RoadLine] { [] }
 }
 
+/// Свои тайлы, где они есть, иначе индекс лимитов.
+///
+/// Тайлы знают класс, мост и односторонность, но покрытие приезжает
+/// постепенно (ленивое скачивание) и может отсутствовать вовсе (первый
+/// запуск без сети). Пустой ответ первичного источника — честный признак
+/// «здесь покрытия нет», и тогда рисуем то, что знаем из лимитов, а не
+/// пустоту.
+nonisolated struct FallbackRoadNetwork: RoadNetworkSource {
+    let primary: any RoadNetworkSource
+    let fallback: any RoadNetworkSource
+
+    func roads(near coordinate: CLLocationCoordinate2D,
+               radius: CLLocationDistance) -> [RoadLine] {
+        let detailed = primary.roads(near: coordinate, radius: radius)
+        return detailed.isEmpty ? fallback.roads(near: coordinate, radius: radius)
+                                : detailed
+    }
+}
+
 /// Кэш окрестности поверх любого источника.
 ///
 /// Сеть вокруг машины меняется на сотнях метров пути, а спрашивают её на

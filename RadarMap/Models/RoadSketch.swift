@@ -103,6 +103,8 @@ nonisolated enum RoadSketch {
         var spanBucket: Double = minSpanMeters
         var routeToken: ObjectIdentifier?
         var networkGeneration = 0
+        /// Поколение дорожных тайлов: приехал тайл — растр пересобрать.
+        var roadsGeneration = 0
         var storeRevision = 0
         var budget = 0
     }

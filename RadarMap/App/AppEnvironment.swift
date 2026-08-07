@@ -41,6 +41,10 @@ final class AppEnvironment {
     /// Связь: нужна ровно для честной фразы «карта серая, но камеры
     /// предупреждают» — база лежит на телефоне и сети не требует.
     let network = NetworkMonitor()
+    /// Дорожные тайлы для схемы приборки: подписанный индекс, ленивые тайлы,
+    /// классы дорог и мосты. Пустой источник, пока не приехали, — схема тогда
+    /// берёт сеть из индекса лимитов (FallbackRoadNetwork).
+    let roads = RoadNetworkService()
     /// Обезличенная статистика использования: без неё неизвестно даже, сколько
     /// людей выдаёт геолокацию «Всегда» — а без неё не работает половина продукта.
     let usage: UsageStatsService
@@ -191,6 +195,7 @@ final class AppEnvironment {
         // Дослать репорты/фидбек, не ушедшие в прошлый раз (офлайн-очередь).
         Task { await feedback.flushPending() }
         speedLimits.start()   // база лимитов: локально сразу, сервер раз в неделю
+        roads.start()         // дорожные тайлы: индекс локально сразу, сервер раз в неделю
         metrics.start()       // MetricKit: суточные отчёты о батарее/крашах
         guard Storage.bool(.hasCompletedOnboarding) else { return }
         location.bootstrap()

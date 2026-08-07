@@ -287,6 +287,28 @@ final class MapState {
 
     @ObservationIgnored private var lastFollowCoord: CLLocationCoordinate2D?
     @ObservationIgnored private var lastFollowCourse: CLLocationDirection = -1
+    /// Когда пришёл прошлый тик следования: анимация камеры длится ровно до
+    /// следующего ожидаемого фикса (TickPacing), а не красивую константу.
+    @ObservationIgnored private var lastFollowAt: Date?
+    /// Текущая высота камеры (автозум): меняем только полными ступенями,
+    /// чтобы шум скорости не заставлял карту дышать.
+    @ObservationIgnored private var followDistance: Double = 0
+
+    /// Высота камеры по скорости: стоишь — ближе, летишь — шире, чтобы видеть
+    /// дальше. Чистая функция, ступени по 100 м (см. followDistance).
+    nonisolated static func cameraDistance(forSpeedKmh speed: Double,
+                                           pitched: Bool) -> Double {
+        guard pitched else { return 900 }
+        let raw = min(max(600 + speed * 6, 600), 1300)
+        return (raw / 100).rounded() * 100
+    }
+
+    /// Точка впереди машины, которую центрируем в 3D: на скорости смотрим
+    /// дальше вперёд — решения принимаются раньше.
+    nonisolated static func lookAheadMeters(forSpeedKmh speed: Double) -> Double {
+        let raw = min(max(120 + speed * 1.2, 120), 280)
+        return (raw / 20).rounded() * 20
+    }
 
     /// Тап по контролу ориентации: свободна → следование → поворот → следование.
     /// Вернуть «свободу» тапом нельзя — она наступает сама, когда карту тянут
@@ -340,29 +362,50 @@ final class MapState {
 
     /// Центрировать карту на пользователе и повернуть по курсу движения.
     /// `pitched` — 3D-вид навигатора: камера наклонена, смотрим вперёд по дороге.
-    /// Троттлинг: пропускаем мелкие сдвиги/повороты, чтобы карта не дёргалась;
-    /// `force` — явный тап пользователя, его пропускать нельзя.
+    /// `force` — явный тап пользователя: без троттлинга и с быстрым откликом.
+    ///
+    /// Плавность здесь — РИТМ, а не константа: анимация длится до следующего
+    /// ожидаемого фикса (TickPacing). С «красивыми» 0.4 с карта 0.4 с ехала и
+    /// 1–2 с стояла — большая карта шагала ровно той же болезнью, что схема
+    /// приборки до её лечения. Троттлинг оставлен только на истинной стоянке:
+    /// пропуск тика при ритмичной анимации — это снова стоп-кадр.
     func follow(coordinate: CLLocationCoordinate2D?, course: CLLocationDirection,
-                pitched: Bool = false, force: Bool = false) {
+                speedKmh: Double = 0, pitched: Bool = false, force: Bool = false) {
         guard let coordinate else { return }
         if let last = lastFollowCoord, !force {
             let moved = GeoMath.fastDistance(last.latitude, last.longitude,
                                              coordinate.latitude, coordinate.longitude)
             let courseDelta = (course >= 0 && lastFollowCourse >= 0)
                 ? GeoMath.angleDifference(course, lastFollowCourse) : 999
-            if moved < 12 && courseDelta < 8 { return }
+            if moved < 3 && courseDelta < 3 { return }
         }
         lastFollowCoord = coordinate
         lastFollowCourse = course
-        // В 3D центрируем точку впереди машины — сам ты в нижней трети экрана, как в навигаторе.
+
+        let now = Date()
+        let duration = force ? 0.35
+            : TickPacing.animationDuration(
+                sincePreviousTick: lastFollowAt.map { now.timeIntervalSince($0) })
+        lastFollowAt = now
+
+        // Автозум: стоишь — ближе, летишь — шире. Ступень меняем только
+        // целиком — шум скорости не должен заставлять карту дышать.
+        let target = Self.cameraDistance(forSpeedKmh: speedKmh, pitched: pitched)
+        if followDistance == 0 || abs(target - followDistance) >= 100 {
+            followDistance = target
+        }
+
+        // В 3D центрируем точку впереди машины — сам ты в нижней трети экрана,
+        // как в навигаторе; на скорости смотрим дальше вперёд.
         let center = (pitched && course >= 0)
-            ? GeoMath.destination(from: coordinate, bearing: course, distanceMeters: 160)
+            ? GeoMath.destination(from: coordinate, bearing: course,
+                                  distanceMeters: Self.lookAheadMeters(forSpeedKmh: speedKmh))
             : coordinate
         setMapHeading(course >= 0 ? course : 0)   // мы сами задаём поворот карты
-        withAnimation(.easeOut(duration: 0.4)) {
+        withAnimation(force ? .easeOut(duration: duration) : .linear(duration: duration)) {
             position = .camera(MapCamera(
                 centerCoordinate: center,
-                distance: pitched ? 700 : 900,
+                distance: followDistance,
                 heading: course >= 0 ? course : 0,
                 pitch: pitched ? 55 : 0
             ))

@@ -52,9 +52,15 @@ final class SketchState {
         // и проверять это надо приборами, а не на глаз.
         let token = Perf.begin(Perf.Name.sketchRefresh)
         defer { token.end() }
-        guard let me = env.location.currentCoordinate else { return }
+        // Координата и курс ДЛЯ КАРТИНКИ: прижаты к оси дороги, когда мы на
+        // ней (RoadSnapper). Стрелка идёт по полотну, а не по газону рядом,
+        // и схему не покачивает от бокового шума GPS.
+        guard let me = env.location.displayCoordinate
+            ?? env.location.currentCoordinate else { return }
         unwoundCourse = RoadSketch.unwound(unwoundCourse,
-                                           towards: env.location.currentCourse)
+                                           towards: env.location.displayCourse >= 0
+                                               ? env.location.displayCourse
+                                               : env.location.currentCourse)
         // Курса не было ни разу (только запустились): повернуть схему наугад
         // значило бы соврать направлением.
         guard let course = unwoundCourse else { return }
@@ -104,7 +110,7 @@ final class SketchState {
         // секунду. С константой схема секунду ехала и две стояла — фиксы на
         // крейсере приходят раз в 15–25 метров.
         let now = Date()
-        let duration = RoadSketch.animationDuration(
+        let duration = TickPacing.animationDuration(
             sincePreviousTick: lastTickAt.map { now.timeIntervalSince($0) })
         lastTickAt = now
 

@@ -257,6 +257,7 @@ final class LocationService: NSObject {
         passTracking.reset()
         locationFilter.reset()
         speedSmoother.reset()
+        roadSnapper.reset()
         voicedInGroup.removeAll()
         postponedVoice = nil
         // Заезд по пути — не новая поездка: если пауза похожа на «забежал в
@@ -391,6 +392,9 @@ final class LocationService: NSObject {
             isSignalStale = false   // без непрерывного GPS «нет сигнала» не про нас
             locationFilter.reset()
             speedSmoother.reset()
+            roadSnapper.reset()
+            displayCoordinate = nil
+            displayCourse = -1
             return
         }
         // В поездке паузу отдавать системе нельзя — она может не возобновить.
@@ -556,6 +560,15 @@ final class LocationService: NSObject {
     /// Сглаживание спидометра: по времени, с мгновенным откликом на настоящий
     /// перепад (чистая структура, покрыта SpeedSmootherTests).
     @ObservationIgnored private var speedSmoother = SpeedSmoother()
+    /// Прижим картинки к оси дороги (чистая структура, RoadSnapperTests).
+    @ObservationIgnored private var roadSnapper = RoadSnapper()
+    /// Координата и курс ДЛЯ КАРТИНКИ: прижаты к оси дороги, когда мы на ней
+    /// (схема приборки, ведение камеры карты). Гейты оповещений, запись
+    /// проездов и трек этим НЕ пользуются — они работают по сырому фиксу:
+    /// подменять измерение предположением там, где решается «глушить или
+    /// предупреждать», нельзя (см. RoadSnapper).
+    private(set) var displayCoordinate: CLLocationCoordinate2D?
+    private(set) var displayCourse: CLLocationDirection = -1
     /// Когда машина в последний раз реально двигалась (для тира «стоянка»).
     @ObservationIgnored private var lastMovementAt = Date()
 
@@ -684,6 +697,14 @@ final class LocationService: NSObject {
                 coordinate: coordinate, course: course, speedKmh: speedKmh,
                 announce: isTripActive && !willSpeakAboutCameraAhead,
                 fallbackClass: nearestCamera?.roadClass ?? .unknown)
+            // Прижим КАРТИНКИ к оси дороги — тем же RoadHit, что нашёл лимит,
+            // без второго запроса. Строго после speedLimits.update и строго
+            // только для отображения (см. RoadSnapper): гейты выше уже
+            // отработали по сырому фиксу.
+            let snapped = roadSnapper.update(course: currentCourse,
+                                             hit: speedLimits?.currentRoadHit)
+            displayCoordinate = snapped?.coordinate ?? coordinate
+            displayCourse = snapped?.courseDegrees ?? currentCourse
             route?.updateProgress(coordinate: coordinate, cameras: repository.cameras,
                                   announce: isTripActive)
             tuneAdaptiveAccuracy()

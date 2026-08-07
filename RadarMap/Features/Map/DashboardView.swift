@@ -22,107 +22,84 @@ struct DashboardView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            VStack(spacing: 24) {
-                Spacer()
+            // Три зоны, как на приборной панели машины: статус — наверху
+            // (поездка, заряд, жара), середина — скорость и камера, ровно по
+            // центру между зонами, низ — только действия. Раньше строка жары
+            // висела сиротой посреди экрана, а строка поездки толкалась внизу
+            // с тремя другими элементами.
+            VStack(spacing: 0) {
+                topStrip
+                    .padding(.horizontal, 28)
+                    .padding(.top, 10)
 
-                // Скорость — главное, во весь экран.
-                HStack(alignment: .center, spacing: 22) {
-                    Text("\(Int(env.location.speedKmh.rounded()))")
-                        .font(.system(size: 148, weight: .heavy, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(speedColor)
-                        .contentTransition(.numericText())
-                        .animation(.snappy(duration: 0.3), value: Int(env.location.speedKmh))
-                    if let limit = env.speedLimits.currentLimit {
-                        SpeedLimitSign(limit: limit, diameter: 84)
-                            .scaleEffect(env.speedLimits.isOverspeeding ? 1.08 : 1)
-                            .animation(env.speedLimits.isOverspeeding
-                                       ? .easeInOut(duration: 0.55).repeatForever(autoreverses: true)
-                                       : .easeOut(duration: 0.25),
-                                       value: env.speedLimits.isOverspeeding)
+                Spacer(minLength: 16)
+
+                VStack(spacing: 20) {
+                    speedHero
+
+                    // Манёвр при активном маршруте. Голос и так говорит «через
+                    // 300 метров направо», но приборка — экран поездки, и взгляд
+                    // на неё не должен оставлять вопрос «а поворот-то где?».
+                    if env.route.isActive, let step = env.route.nextStep {
+                        HStack(spacing: 12) {
+                            Image(systemName: step.icon)
+                                .font(.rounded(26, .bold))
+                                .foregroundStyle(Theme.accent)
+                            Text(Formatting.distance(env.route.nextStepDistance))
+                                .font(.rounded(30, .heavy))
+                                .monospacedDigit()
+                                .foregroundStyle(Theme.textPrimary)
+                                .contentTransition(.numericText())
+                            Text(step.text)
+                                .font(.rounded(13))
+                                .foregroundStyle(Theme.textSecondary)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 28)
+                    }
+
+                    // Схема «где камера»: чертим сами, без карты и без сети.
+                    // Приборка — режим «телефон в держателе», она обязана быть
+                    // самым дешёвым экраном приложения, а не самым дорогим.
+                    if let scene = sketch.scene, sketch.hasCourse, !scene.isEmpty {
+                        RoadSketchView(scene: scene, state: sketch, tint: alertColor)
+                            .frame(height: 210)
+                            .padding(.horizontal, 28)
+                            .opacity(sketchIsStale ? 0.45 : 1)
+                            .animation(.easeOut(duration: 0.4), value: sketchIsStale)
+                    }
+
+                    // Ближайшая камера: дистанция крупно, цвет греется по уровню тревоги.
+                    if let camera = env.location.nearestCamera,
+                       let distance = env.location.distanceToNearest {
+                        cameraBlock(camera: camera, distance: distance)
+                    } else {
+                        Label("Камер рядом нет", systemImage: "checkmark.shield.fill")
+                            .font(.rounded(18, .semibold))
+                            .foregroundStyle(Theme.success)
+                            .padding(.vertical, 24)
                     }
                 }
-                Text("км/ч")
-                    .font(.rounded(18, .medium))
-                    .foregroundStyle(Theme.textTertiary)
-                    .padding(.top, -26)
 
-                // Манёвр при активном маршруте. Голос и так говорит «через 300
-                // метров направо», но приборка — экран поездки, и взгляд на неё
-                // не должен оставлять вопрос «а поворот-то где?». Компактно:
-                // иконка + дистанция, фраза одной строкой.
-                if env.route.isActive, let step = env.route.nextStep {
-                    HStack(spacing: 12) {
-                        Image(systemName: step.icon)
-                            .font(.rounded(26, .bold))
-                            .foregroundStyle(Theme.accent)
-                        Text(Formatting.distance(env.route.nextStepDistance))
-                            .font(.rounded(30, .heavy))
-                            .monospacedDigit()
-                            .foregroundStyle(Theme.textPrimary)
-                            .contentTransition(.numericText())
-                        Text(step.text)
-                            .font(.rounded(13))
-                            .foregroundStyle(Theme.textSecondary)
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 28)
-                }
+                Spacer(minLength: 16)
 
-                // Схема «где камера»: чертим сами, без карты и без сети.
-                // Приборка — режим «телефон в держателе», она обязана быть самым
-                // дешёвым экраном приложения, а не самым дорогим.
-                if let scene = sketch.scene, sketch.hasCourse, !scene.isEmpty {
-                    RoadSketchView(scene: scene, state: sketch, tint: alertColor)
-                        .frame(height: 210)
+                VStack(spacing: 14) {
+                    // «Радар ещё стоял?» — приборка перекрывает карту целиком, и
+                    // вопрос, нарисованный там, сгорал под ней невидимым: водитель
+                    // в держателе не видел его НИКОГДА. Здесь своя копия; на карте
+                    // плашка в это время ждёт (isCovered), таймер не двоится.
+                    MobileConfirmBar()
                         .padding(.horizontal, 28)
-                        .opacity(sketchIsStale ? 0.45 : 1)
-                        .animation(.easeOut(duration: 0.4), value: sketchIsStale)
+
+                    // Кнопка «Радар!» — крупная: приборка это режим «телефон в
+                    // держателе», и тап делается вслепую.
+                    ReportRadarButton(isLarge: true)
+
+                    Text("Нажмите, чтобы вернуться к карте")
+                        .font(.rounded(12))
+                        .foregroundStyle(Theme.textTertiary)
                 }
-
-                // Ближайшая камера: дистанция крупно, цвет греется по уровню тревоги.
-                if let camera = env.location.nearestCamera,
-                   let distance = env.location.distanceToNearest {
-                    cameraBlock(camera: camera, distance: distance)
-                } else {
-                    Label("Камер рядом нет", systemImage: "checkmark.shield.fill")
-                        .font(.rounded(18, .semibold))
-                        .foregroundStyle(Theme.success)
-                        .padding(.vertical, 24)
-                }
-
-                // Жара: троттлинг уже работает (бюджет сети схемы, буст GPS
-                // погашен) — но молча. Молчаливая деградация читается как
-                // поломка, одна строка честности дешевле жалобы «лагает».
-                if env.thermal.mode != .full {
-                    Label("Жарко — экономлю экран", systemImage: "thermometer.sun.fill")
-                        .font(.rounded(12, .medium))
-                        .foregroundStyle(Theme.warning)
-                }
-
-                Spacer()
-
-                // «Радар ещё стоял?» — приборка перекрывает карту целиком, и
-                // вопрос, нарисованный там, сгорал под ней невидимым: водитель
-                // в держателе не видел его НИКОГДА. Здесь своя копия; на карте
-                // плашка в это время ждёт (isCovered), таймер не двоится.
-                MobileConfirmBar()
-                    .padding(.horizontal, 28)
-
-                if env.location.isTripActive {
-                    tripRow
-                        .padding(.horizontal, 28)
-                }
-
-                // Кнопка «Радар!» — крупная: приборка это режим «телефон в
-                // держателе», и тап делается вслепую.
-                ReportRadarButton(isLarge: true)
-                    .padding(.bottom, 4)
-
-                Text("Нажмите, чтобы вернуться к карте")
-                    .font(.rounded(12))
-                    .foregroundStyle(Theme.textTertiary)
-                    .padding(.bottom, 12)
+                .padding(.bottom, 12)
             }
         }
         .contentShape(Rectangle())
@@ -148,6 +125,66 @@ struct DashboardView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Спидометр"))
         .accessibilityHint(Text("Нажмите, чтобы вернуться к карте"))
+    }
+
+    /// Верхняя полоса статуса. В поездке — карточка «время · путь · камеры ·
+    /// заряд · стоп»; под ней мелкие индикаторы: жара слева, заряд справа.
+    /// Вне поездки заряд показываем отдельным чипом — приборка строилась ради
+    /// батареи, и её экран — то место, где заряд должен быть виден всегда
+    /// (в поездке он уже в карточке, не дублируем).
+    @ViewBuilder
+    private var topStrip: some View {
+        VStack(spacing: 10) {
+            if env.location.isTripActive {
+                tripRow
+            }
+            if env.thermal.mode != .full || !env.location.isTripActive {
+                HStack {
+                    if env.thermal.mode != .full { thermalChip }
+                    Spacer()
+                    if !env.location.isTripActive { BatteryChip() }
+                }
+            }
+        }
+    }
+
+    /// Жара: троттлинг уже работает (бюджет сетки схемы, буст GPS погашен) —
+    /// но молча. Молчаливая деградация читается как поломка, один чип
+    /// честности дешевле жалобы «лагает».
+    private var thermalChip: some View {
+        Label("Жарко — экономлю экран", systemImage: "thermometer.sun.fill")
+            .font(.rounded(12, .medium))
+            .foregroundStyle(Theme.warning)
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .background(Theme.warning.opacity(0.12), in: Capsule())
+    }
+
+    /// Скорость — главное, во весь экран.
+    private var speedHero: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 22) {
+                Text("\(Int(env.location.speedKmh.rounded()))")
+                    .font(.system(size: 148, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(speedColor)
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.3), value: Int(env.location.speedKmh))
+                if let limit = env.speedLimits.currentLimit {
+                    SpeedLimitSign(limit: limit, diameter: 84)
+                        .scaleEffect(env.speedLimits.isOverspeeding ? 1.08 : 1)
+                        .animation(env.speedLimits.isOverspeeding
+                                   ? .easeInOut(duration: 0.55).repeatForever(autoreverses: true)
+                                   : .easeOut(duration: 0.25),
+                                   value: env.speedLimits.isOverspeeding)
+                }
+            }
+            Text("км/ч")
+                .font(.rounded(18, .medium))
+                .foregroundStyle(Theme.textTertiary)
+                // Шрифт в 148 pt оставляет под цифрами пустой свес строки —
+                // подтягиваем подпись под сами цифры, а не под строку.
+                .padding(.top, -26)
+        }
     }
 
     /// Строка поездки: время · путь · камеры, заряд и «Стоп». Приборка — экран
@@ -331,68 +368,5 @@ struct DashboardView: View {
         if distance <= radius * 0.6 { return Theme.warning }
         if distance <= radius { return Theme.accent }
         return Theme.accent
-    }
-}
-
-// MARK: - Заряд
-
-/// Заряд телефона на приборке: % и молния на зарядке.
-///
-/// Телефон в держателе — единственный момент, когда водителю важен заряд
-/// ИМЕННО в этом приложении: приборка строилась ради батареи, и её экран —
-/// то место, где экономия должна быть видна, а не предполагаться.
-///
-/// Мониторинг батареи включается ТОЛЬКО пока чип на экране и выключается в
-/// onDisappear: держать его постоянно — значит будить процесс уведомлениями
-/// системы ради цифры, на которую никто не смотрит.
-private struct BatteryChip: View {
-    @State private var level: Float = -1
-    @State private var isCharging = false
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: isCharging ? "bolt.fill" : symbol)
-                .font(.rounded(12, .semibold))
-                .foregroundStyle(tint)
-            if level >= 0 {
-                Text("\(Int((level * 100).rounded())) %")
-                    .font(.rounded(13, .semibold).monospacedDigit())
-                    .foregroundStyle(Theme.textSecondary)
-            }
-        }
-        .onAppear {
-            UIDevice.current.isBatteryMonitoringEnabled = true
-            refresh()
-        }
-        .onDisappear { UIDevice.current.isBatteryMonitoringEnabled = false }
-        .onReceive(NotificationCenter.default.publisher(
-            for: UIDevice.batteryLevelDidChangeNotification)) { _ in refresh() }
-        .onReceive(NotificationCenter.default.publisher(
-            for: UIDevice.batteryStateDidChangeNotification)) { _ in refresh() }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(level >= 0
-            ? Text("Заряд \(Int((level * 100).rounded())) процентов")
-            : Text("Заряд неизвестен"))
-    }
-
-    private func refresh() {
-        level = UIDevice.current.batteryLevel
-        let state = UIDevice.current.batteryState
-        isCharging = state == .charging || state == .full
-    }
-
-    private var symbol: String {
-        switch level {
-        case ..<0:      return "battery.50percent"   // симулятор: уровень неизвестен
-        case ..<0.2:    return "battery.25percent"
-        case ..<0.6:    return "battery.50percent"
-        case ..<0.85:   return "battery.75percent"
-        default:        return "battery.100percent"
-        }
-    }
-
-    private var tint: Color {
-        if isCharging { return Theme.success }
-        return level >= 0 && level < 0.2 ? Theme.danger : Theme.textTertiary
     }
 }

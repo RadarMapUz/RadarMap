@@ -27,6 +27,7 @@
 
 import CoreLocation
 import Foundation
+import os
 
 /// Одна линия дороги для отрисовки.
 ///
@@ -62,4 +63,47 @@ nonisolated protocol RoadNetworkSource: Sendable {
 nonisolated struct EmptyRoadNetwork: RoadNetworkSource {
     func roads(near coordinate: CLLocationCoordinate2D,
                radius: CLLocationDistance) -> [RoadLine] { [] }
+}
+
+/// Кэш окрестности поверх любого источника.
+///
+/// Сеть вокруг машины меняется на сотнях метров пути, а спрашивают её на
+/// каждом GPS-тике открытой приборки. Замер (PerformanceBudgetTests) показал,
+/// что именно сеточный запрос с обрезкой сегментов — самая дорогая часть
+/// раскладки. Поэтому запрашиваем круг с полуторным запасом и отдаём его,
+/// пока запрошенный круг целиком лежит внутри, — настоящий запрос выполняется
+/// раз в пару сотен метров вместо каждой секунды.
+///
+/// Честность не страдает: кэш — всегда НАДмножество запрошенного (никакая
+/// дорога не пропадает), а лишнее раскладка отсекает рамкой вида.
+nonisolated final class CachedRoadNetwork: RoadNetworkSource {
+    private struct Snapshot {
+        var center: CLLocationCoordinate2D
+        var radius: CLLocationDistance
+        var lines: [RoadLine]
+    }
+
+    private let source: any RoadNetworkSource
+    private let cache = OSAllocatedUnfairLock<Snapshot?>(initialState: nil)
+    /// Насколько шире запрашиваем, чем спросили. Запас и есть срок жизни кэша:
+    /// при радиусе вида ~400 м обновляемся каждые ~200 м пути.
+    private static let margin = 1.5
+
+    init(_ source: any RoadNetworkSource) { self.source = source }
+
+    func roads(near coordinate: CLLocationCoordinate2D,
+               radius: CLLocationDistance) -> [RoadLine] {
+        if let cached = cache.withLock({ $0 }) {
+            let metersPerLon = 111_320.0 * cos(coordinate.latitude * .pi / 180)
+            let moved = hypot(
+                (coordinate.latitude - cached.center.latitude) * 111_320.0,
+                (coordinate.longitude - cached.center.longitude) * metersPerLon)
+            if moved + radius <= cached.radius { return cached.lines }
+        }
+        let fresh = Snapshot(center: coordinate, radius: radius * Self.margin,
+                             lines: source.roads(near: coordinate,
+                                                 radius: radius * Self.margin))
+        cache.withLock { $0 = fresh }
+        return fresh.lines
+    }
 }

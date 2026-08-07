@@ -111,11 +111,15 @@ struct DashboardView: View {
     private var sketchLayout: RoadSketch.Layout? {
         guard let me = env.location.currentCoordinate else { return nil }
         return RoadSketch.layout(camera: env.location.nearestCamera,
-                                 // Дороги берём из индекса лимитов: он уже на
-                                 // телефоне и несёт настоящую геометрию. Когда
-                                 // появится свой roads.json — меняется только
-                                 // эта строка (см. RoadNetwork.swift).
-                                 network: env.speedLimits.limitIndex ?? EmptyRoadNetwork(),
+                                 // Дороги берём из индекса лимитов (под кэшем
+                                 // окрестности): он уже на телефоне и несёт
+                                 // настоящую геометрию. Когда появится свой
+                                 // roads.json — меняется только эта строка
+                                 // (см. RoadNetwork.swift).
+                                 network: env.speedLimits.sketchNetwork,
+                                 // Перегрев режет фоновую сеть, но не дорогу
+                                 // камеры, не маршрут и не трек.
+                                 networkBudget: env.thermal.mode.sketchNetworkBudget,
                                  route: env.route.routeCoordinates,
                                  track: env.trip.recentTrack(),
                                  from: me,

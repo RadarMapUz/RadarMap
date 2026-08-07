@@ -9492,6 +9492,38 @@
           }
         }
       }
+    },
+    "Предположительно %lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Предположительно %lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Taxminan %lld"
+          }
+        }
+      }
+    },
+    "Лимит дороги неизвестен — взят по классу дороги" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Лимит дороги неизвестен — взят по классу дороги"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yo‘l chegarasi noma’lum — yo‘l turiga qarab olindi"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

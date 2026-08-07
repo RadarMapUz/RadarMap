@@ -350,7 +350,7 @@ final class LocationService: NSObject {
     private func register(passes: [PassTracking.Pass]) {
         for pass in passes {
             trip.registerPass(camera: pass.camera, speedKmh: pass.speedKmh,
-                              limitKmh: pass.limitKmh)
+                              limitKmh: pass.limitKmh, limitAssumed: pass.limitAssumed)
         }
     }
 
@@ -609,14 +609,18 @@ final class LocationService: NSObject {
             register(passes: passTracking.update(
                 nearest: nearestCamera, nearestDistance: distanceToNearest,
                 coordinate: coordinate, speedKmh: speedKmh,
-                roadLimit: speedLimits?.currentLimit, radius: effectiveAlertRadius,
+                roadLimit: speedLimits?.currentLimit,
+                roadLimitAssumed: speedLimits?.isCurrentLimitAssumed ?? false,
+                radius: effectiveAlertRadius,
                 offRoad: PassGeometry.isProvenOffRoad(camera:at:)))
             runAlertEngine()
             speakPostponedVoice()
             // Лимит дороги + превышение; манёвры и прогресс маршрута.
             // Здесь, а не в UI: голос должен работать со свёрнутым приложением.
+            // Класс дороги ближайшей камеры — фолбэк лимита там, где OSM молчит.
             speedLimits?.update(coordinate: coordinate, course: course,
-                                speedKmh: speedKmh, announce: isTripActive)
+                                speedKmh: speedKmh, announce: isTripActive,
+                                fallbackClass: nearestCamera?.roadClass ?? .unknown)
             route?.updateProgress(coordinate: coordinate, cameras: repository.cameras,
                                   announce: isTripActive)
             tuneAdaptiveAccuracy()

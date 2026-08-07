@@ -312,7 +312,9 @@ extension TripHistory {
                 let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
                 if fine > 0 {
                     result.overPasses += 1
-                    result.fineRisk += fine
+                    // Предположенный лимит считается нарушением (рейтинг это
+                    // видит), но в сумму штрафов не входит — см. fineRisk.
+                    if pass.limitIsCertain { result.fineRisk += fine }
                     result.overByHour[calendar.component(.hour, from: pass.date)] += 1
                     if !pass.location.isEmpty { overByLocation[pass.location, default: 0] += 1 }
                 } else {

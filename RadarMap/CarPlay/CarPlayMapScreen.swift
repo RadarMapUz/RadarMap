@@ -135,7 +135,8 @@ struct CarPlayMapScreen: View {
             .frame(minWidth: 58)
 
             if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
-                SpeedLimitSign(limit: limit, diameter: 46)
+                SpeedLimitSign(limit: limit, diameter: 46,
+                               isAssumed: env.speedLimits.isCurrentLimitAssumed)
                     .shadow(color: env.speedLimits.isOverspeeding ? Theme.danger.opacity(0.8) : .clear,
                             radius: 9)
                     .transition(.scale.combined(with: .opacity))

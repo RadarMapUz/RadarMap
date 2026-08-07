@@ -16,8 +16,15 @@ import os
 @MainActor
 @Observable
 final class SpeedLimitService {
-    /// Лимит дороги, по которой сейчас едем (nil — дорога без данных).
+    /// Лимит дороги, по которой сейчас едем (nil — дорога без данных и
+    /// предположить не из чего).
     private(set) var currentLimit: Int?
+
+    /// Лимит не из OSM, а предположен по классу дороги
+    /// (`RoadClass.assumedLimitKmh`). Показывается со знаком «≈» и НЕ
+    /// превращается в конкретную сумму штрафа: деньги требуют уверенности,
+    /// а предположение её не даёт.
+    private(set) var isCurrentLimitAssumed = false
     /// Мгновенное превышение — только для подсветки цифры на HUD: флаг щёлкает
     /// на одном GPS-фиксе, а GPS шумит (68 → 71 → 66 при лимите 60).
     private(set) var isOverspeeding = false
@@ -53,6 +60,14 @@ final class SpeedLimitService {
     /// Лимит дороги у произвольной точки (карточка камеры). nil — данных нет.
     func limit(near coordinate: CLLocationCoordinate2D) -> Int? {
         index?.limit(near: coordinate)
+    }
+
+    /// То же, но с предположением по классу дороги, когда OSM молчит.
+    /// Возвращает и признак «предположено» — его обязан показать вызывающий.
+    func limit(for camera: Camera) -> (kmh: Int, isAssumed: Bool)? {
+        if let known = index?.limit(near: camera.coordinate) { return (known, false) }
+        guard let assumed = camera.roadClass.assumedLimitKmh else { return nil }
+        return (assumed, true)
     }
 
     /// Сам индекс — для пакетных запросов вне main (слой маркеров карты
@@ -126,10 +141,15 @@ final class SpeedLimitService {
 
     // MARK: - Тик (вызывается LocationService на каждой GPS-точке)
 
+    /// `fallbackClass` — класс дороги ближайшей камеры. Когда `maxspeed` в OSM
+    /// нет, лимит предполагается по нему: см. `RoadClass.assumedLimitKmh`.
+    /// Класс камеры — лучший доступный признак дороги, по которой мы едем:
+    /// камера стоит НАД этой дорогой, и её `cls` проставлен снапом у 3455 из
+    /// 3467 записей базы.
     func update(coordinate: CLLocationCoordinate2D, course: CLLocationDirection,
-                speedKmh: Double, announce: Bool) {
+                speedKmh: Double, announce: Bool, fallbackClass: RoadClass = .unknown) {
         guard settings.speedLimitsEnabled, let index else {
-            currentLimit = nil; clearOverspeed()
+            currentLimit = nil; isCurrentLimitAssumed = false; clearOverspeed()
             return
         }
 
@@ -138,10 +158,20 @@ final class SpeedLimitService {
         if speedKmh >= 8, course >= 0 {
             if let limit = index.match(coordinate, courseDegrees: course) {
                 if limit != currentLimit { currentLimit = limit }
+                if isCurrentLimitAssumed { isCurrentLimitAssumed = false }
                 missCount = 0
             } else {
                 missCount += 1
-                if missCount >= 4 { currentLimit = nil }   // съехали на дорогу без данных
+                if missCount >= 4 {
+                    // Данных по дороге нет — предполагаем по классу. Раньше
+                    // здесь наступал nil, и вместе с ним пропадали превышение,
+                    // рейтинг и голос о камере в режиме по умолчанию.
+                    let assumed = fallbackClass.assumedLimitKmh
+                    if assumed != currentLimit { currentLimit = assumed }
+                    if isCurrentLimitAssumed != (assumed != nil) {
+                        isCurrentLimitAssumed = assumed != nil
+                    }
+                }
             }
         }
 

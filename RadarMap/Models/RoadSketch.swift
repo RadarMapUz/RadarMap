@@ -276,6 +276,23 @@ nonisolated enum RoadSketch {
             > driftMeters(forSpan: scene.spanAtBuild)
     }
 
+    /// Гейт неподвижности: сдвиг меньше шума GPS на стоянке и курс не повернул.
+    /// Пороги — чуть выше типичного дрожания хорошего фикса (±1 м, ±1°):
+    /// у большой карты тот же гейт стоит на 3 м/3°, у схемы масштаб крупнее
+    /// и заметен раньше.
+    static let standstillMeters = 2.0
+    static let standstillDegrees = 2.0
+
+    /// Нужно ли двигать точку зрения. Стоя на светофоре тик приходит каждую
+    /// секунду, картинка не меняется, а запись смещения запускала анимацию и
+    /// будила композитор — вхолостую, на самом дешёвом экране приложения.
+    static func viewpointMoved(offsetDeltaMeters: Double, courseDeltaDegrees: Double,
+                               spanChanged: Bool) -> Bool {
+        spanChanged
+            || offsetDeltaMeters >= standstillMeters
+            || courseDeltaDegrees >= standstillDegrees
+    }
+
     /// Деление линейки масштаба: круглое число, занимающее заметную, но не
     /// доминирующую часть вида.
     static func scaleBarMeters(forSpan span: Double) -> Double {

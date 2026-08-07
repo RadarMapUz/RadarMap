@@ -39,6 +39,8 @@ enum Storage {
         case carPlayMuted           // тишина активна (снимается при выходе из машины)
         case carPlayVoiceBeforeMute // rawValue VoiceMode до тишины
         case carPlaySoundBeforeMute // soundEnabled до тишины
+        case carPlayShowsSketch     // CarPlay: выбран режим «Схема» вместо карты
+        case carPlayViewChosen      // режим выбран рукой (автоматика жары не переключает)
     }
 
     private static var defaults: UserDefaults { .standard }

@@ -421,4 +421,33 @@ final class RoadSketchTests: XCTestCase {
         XCTAssertEqual(alerting.cameras.map(\.id), [5],
                        "тревожная камера обязана рисоваться, что бы ни пряталось")
     }
+
+    // MARK: - Гейт неподвижности
+
+    /// Стоя на светофоре (дрожание GPS меньше порога) точка зрения не пишется
+    /// вовсе — композитор не получает ни кадра работы на самом дешёвом экране.
+    func testStandstillSkipsViewpointWrites() {
+        XCTAssertFalse(RoadSketch.viewpointMoved(offsetDeltaMeters: 1.2,
+                                                 courseDeltaDegrees: 0.8,
+                                                 spanChanged: false))
+        XCTAssertFalse(RoadSketch.viewpointMoved(offsetDeltaMeters: 0,
+                                                 courseDeltaDegrees: 0,
+                                                 spanChanged: false))
+    }
+
+    /// Любое настоящее изменение — сдвиг, поворот или смена охвата — двигает
+    /// точку зрения: гейт экономит стоянку, а не съедает движение.
+    func testRealMotionPassesTheGate() {
+        XCTAssertTrue(RoadSketch.viewpointMoved(offsetDeltaMeters: 2.5,
+                                                courseDeltaDegrees: 0,
+                                                spanChanged: false))
+        XCTAssertTrue(RoadSketch.viewpointMoved(offsetDeltaMeters: 0,
+                                                courseDeltaDegrees: 2.4,
+                                                spanChanged: false))
+        // Охват сменился (камера вошла в радиус) — зум обязан отработать,
+        // даже когда машина стоит.
+        XCTAssertTrue(RoadSketch.viewpointMoved(offsetDeltaMeters: 0,
+                                                courseDeltaDegrees: 0,
+                                                spanChanged: true))
+    }
 }

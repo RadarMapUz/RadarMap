@@ -23,6 +23,10 @@ final class TripStats {
     /// Заезды по пути, склеенные в эту поездку (см. resume и TripMerge).
     private(set) var stops: [TripStop] = []
 
+    /// Заряд на старте поездки, %: живая дельта на приборке и запись в историю.
+    /// nil — заряд не читался (симулятор) или начало склейки неизвестно.
+    private(set) var startBatteryPercent: Int?
+
     private(set) var history: [TripRecord] = []
     /// Дневные агрегаты — живут вечно, в отличие от записей (чистка режет треки
     /// через неделю и записи через 30 дней). По ним считается статистика за
@@ -75,7 +79,7 @@ final class TripStats {
         movingSeconds > 0 ? distanceMeters / movingSeconds * 3.6 : 0
     }
 
-    func begin() {
+    func begin(batteryPercent: Int? = nil) {
         maxSpeedKmh = 0
         distanceMeters = 0
         lastCoordinate = nil
@@ -83,6 +87,7 @@ final class TripStats {
         stops = []
         trackBuffer = []
         finishedDuration = 0
+        startBatteryPercent = batteryPercent
         startedAt = Date()
         lastPointAt = startedAt
     }
@@ -92,11 +97,16 @@ final class TripStats {
     /// Так заезд в магазин остаётся одной поездкой (решает TripMerge).
     /// Трек поднимаем уже упрощённым — сырых точек прошлой ноги нет, и это
     /// нормально: следующее упрощение при финише всё равно прошло бы по ним.
-    func resume(_ record: TripRecord, stoppedUntil resumedAt: Date = Date()) {
+    func resume(_ record: TripRecord, stoppedUntil resumedAt: Date = Date(),
+                batteryPercent: Int? = nil) {
         history.removeAll { $0.id == record.id }
         // Запись возвращается в живую сессию — вычитаем её из дневного агрегата,
         // иначе после финиша склеенной поездки день посчитает её дважды.
         days = TripDayBook.unfolded(record, from: days)
+        // Эквивалентный «заряд на старте»: текущий плюс расход первой ноги —
+        // тогда финальная дельта честно суммирует обе ноги склейки.
+        startBatteryPercent = Self.resumedStartPercent(
+            previousDrop: record.batteryDropPercent, currentPercent: batteryPercent)
         startedAt = record.startedAt
         lastPointAt = resumedAt
         finishedDuration = 0
@@ -166,15 +176,16 @@ final class TripStats {
         passed = []
         stops = []
         trackBuffer = []
+        startBatteryPercent = nil
         removeCheckpoint()
     }
 
     /// `endedManually` — нажали «Завершить» (а не автостоп по CoreMotion).
     /// Флаг едет в запись: он запрещает склейку следующей поездки (см. TripMerge).
-    func finish(endedManually: Bool = true) {
+    func finish(endedManually: Bool = true, batteryPercent: Int? = nil) {
         finishedDuration = durationSeconds
         // Поездка завершена штатно — страховочный слепок больше не нужен.
-        defer { startedAt = nil; removeCheckpoint() }
+        defer { startedAt = nil; startBatteryPercent = nil; removeCheckpoint() }
         guard let startedAt, distanceMeters >= 100 else { return }
         // Рейтинг считаем по сырому треку (упрощённый теряет пики скорости).
         let scorePasses = passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) }
@@ -194,7 +205,9 @@ final class TripStats {
                                                 maxPoints: Self.trackMaxPoints)),
             score: score,
             stops: stops.isEmpty ? nil : stops,
-            endedManually: endedManually
+            endedManually: endedManually,
+            batteryDropPercent: Self.batteryDrop(startPercent: startBatteryPercent,
+                                                 endPercent: batteryPercent)
         )
         history.insert(record, at: 0)
         history = TripHistory.pruned(history)
@@ -403,6 +416,24 @@ final class TripStats {
         return track
     }
     #endif
+
+    // MARK: - Заряд за поездку
+
+    /// Дельта заряда поездки. Отрицательная (заряжались в пути) — nil: фиктивную
+    /// «экономию» честнее не показывать вовсе. Ноль — валидный и лучший ответ:
+    /// целая поездка не стоила ни процента.
+    nonisolated static func batteryDrop(startPercent: Int?, endPercent: Int?) -> Int? {
+        guard let startPercent, let endPercent, startPercent >= endPercent else { return nil }
+        return startPercent - endPercent
+    }
+
+    /// Эквивалентный «заряд на старте» для склейки: текущий процент плюс расход
+    /// первой ноги. Расход первой ноги неизвестен — вся дельта неизвестна:
+    /// показать «−2 %» за поездку, стоившую пять, хуже, чем промолчать.
+    nonisolated static func resumedStartPercent(previousDrop: Int?, currentPercent: Int?) -> Int? {
+        guard let previousDrop, let currentPercent else { return nil }
+        return currentPercent + previousDrop
+    }
 
     // MARK: - Трек: упаковка и упрощение (Дуглас-Пекер)
 

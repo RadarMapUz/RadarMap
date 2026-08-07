@@ -22,6 +22,40 @@ final class CarPlayMapModel {
     var recenterRequests = 0
     var zoomInRequests = 0
     var zoomOutRequests = 0
+    /// «Схема» вместо карты: MKMapView выгружается ЦЕЛИКОМ. Картинка в машину
+    /// стримится с телефона, так что тайлы и аннотации греют именно телефон —
+    /// схема снимает самый дорогой рендер, оставляя те же предупреждения.
+    var showsSketch: Bool
+    /// Режим выбран рукой водителя: автоматика жары его больше не трогает
+    /// (та же иерархия, что у кнопки тишины: человек старше автоматики).
+    @ObservationIgnored var userChoseView: Bool
+
+    init() {
+        showsSketch = Storage.bool(.carPlayShowsSketch)
+        userChoseView = Storage.bool(.carPlayViewChosen)
+        #if DEBUG
+        // Скриншот-хук: -carplayPreview -carplaySketch открывает сразу схему.
+        if ProcessInfo.processInfo.arguments.contains("-carplaySketch") {
+            showsSketch = true
+            userChoseView = true
+        }
+        #endif
+    }
+
+    /// Тумблер с кнопки шаблона: выбор запоминается между поездками.
+    func toggleView() {
+        showsSketch.toggle()
+        userChoseView = true
+        Storage.set(showsSketch, for: .carPlayShowsSketch)
+        Storage.set(true, for: .carPlayViewChosen)
+    }
+
+    /// Автоматика жары: телефон греется — включаем схему, остыл — возвращаем
+    /// карту. Только пока водитель не выбрал режим сам.
+    func autoSwitch(for mode: PerformanceMode) {
+        guard !userChoseView else { return }
+        showsSketch = mode != .full
+    }
 }
 
 struct CarPlayMapScreen: View {
@@ -30,14 +64,24 @@ struct CarPlayMapScreen: View {
 
     var body: some View {
         ZStack {
-            CarPlayMapView(model: model,
-                           repository: env.cameras,
-                           route: env.route,
-                           location: env.location,
-                           speedLimits: env.speedLimits)
-                .ignoresSafeArea()
+            if model.showsSketch {
+                CarPlaySketchView()
+            } else {
+                CarPlayMapView(model: model,
+                               repository: env.cameras,
+                               route: env.route,
+                               location: env.location,
+                               speedLimits: env.speedLimits)
+                    .ignoresSafeArea()
+            }
 
             overlay
+        }
+        // Жара: схема сама, пока водитель не выбрал режим кнопкой. Проверка и
+        // на подключении тоже — в машину можно сесть с уже горячим телефоном.
+        .onAppear { model.autoSwitch(for: env.thermal.mode) }
+        .onChange(of: env.thermal.mode) { _, mode in
+            withAnimation(.easeInOut(duration: 0.3)) { model.autoSwitch(for: mode) }
         }
     }
 
@@ -55,6 +99,20 @@ struct CarPlayMapScreen: View {
                    env.location.isApproachingCamera {
                     approachBanner(camera: camera, distance: distance)
                 }
+            }
+            // Жара: бюджеты уже урезаны (маркеры карты, сеть схемы) — но молча.
+            // Тот же чип честности, что на приборке телефона.
+            if env.thermal.mode != .full {
+                HStack {
+                    Label("Жарко — экономлю экран", systemImage: "thermometer.sun.fill")
+                        .font(.rounded(12, .medium))
+                        .foregroundStyle(Theme.warning)
+                        .padding(.horizontal, 11).padding(.vertical, 6)
+                        .background(Theme.background.opacity(0.88), in: Capsule())
+                        .overlay(Capsule().stroke(Theme.warning.opacity(0.35), lineWidth: 1))
+                    Spacer(minLength: 0)
+                }
+                .padding(.top, 8)
             }
             Spacer(minLength: 0)
             HStack(spacing: 0) {

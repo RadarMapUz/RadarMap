@@ -489,6 +489,11 @@ struct TripDetailContent: View {
                      icon: "gauge.with.dots.needle.100percent", color: Theme.danger)
             StatTile(value: "\(Int(record.averageSpeedKmh))", label: "средняя км/ч",
                      icon: "gauge.with.dots.needle.33percent", color: Theme.warning)
+            // Цена поездки в заряде — цифрой, а не верой (есть не у всех записей).
+            if let drop = record.batteryDropPercent {
+                StatTile(value: "−\(drop) %", label: "заряда за поездку",
+                         icon: "battery.75percent", color: Theme.success)
+            }
         }
     }
 

@@ -49,6 +49,17 @@ final class AppEnvironment {
     /// людей выдаёт геолокацию «Всегда» — а без неё не работает половина продукта.
     let usage: UsageStatsService
 
+    /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
+    /// машина, телефонная карта уступает место дешёвому экрану передачи —
+    /// рисовать MapKit на двух экранах разом значит греть телефон вдвое.
+    private(set) var isCarPlayConnected = false
+
+    /// Ставит сцена CarPlay при подключении/отключении.
+    func setCarPlayConnected(_ connected: Bool) {
+        isCarPlayConnected = connected
+        location.setCarPlayConnected(connected)
+    }
+
     init() {
         let settings = AppSettings()
         let cameras = CameraStore()

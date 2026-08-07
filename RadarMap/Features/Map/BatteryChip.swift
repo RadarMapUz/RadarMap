@@ -17,6 +17,10 @@ import SwiftUI
 import UIKit
 
 struct BatteryChip: View {
+    /// Заряд на старте поездки: рядом с процентом появляется «−N» — сколько
+    /// съела текущая поездка. Ради этой цифры приборка и строилась.
+    var sinceStartPercent: Int? = nil
+
     @State private var level: Float = -1
     @State private var isCharging = false
 
@@ -29,6 +33,11 @@ struct BatteryChip: View {
                 Text("\(Int((level * 100).rounded())) %")
                     .font(.rounded(13, .semibold).monospacedDigit())
                     .foregroundStyle(Theme.textSecondary)
+                if let drop = tripDrop, drop >= 1 {
+                    Text("−\(drop)")
+                        .font(.rounded(11, .semibold).monospacedDigit())
+                        .foregroundStyle(Theme.textTertiary)
+                }
             }
         }
         .onAppear {
@@ -50,6 +59,12 @@ struct BatteryChip: View {
         level = UIDevice.current.batteryLevel
         let state = UIDevice.current.batteryState
         isCharging = state == .charging || state == .full
+    }
+
+    /// Живая дельта поездки; на зарядке не считаем — цифра стала бы фиктивной.
+    private var tripDrop: Int? {
+        guard let sinceStartPercent, level >= 0, !isCharging else { return nil }
+        return sinceStartPercent - Int((level * 100).rounded())
     }
 
     private var symbol: String {

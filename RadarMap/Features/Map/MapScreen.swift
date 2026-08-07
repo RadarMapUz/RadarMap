@@ -40,6 +40,16 @@ struct MapScreen: View {
 
     var body: some View {
         @Bindable var map = map
+        // Событие, а не интервал: у пересборки тела нет длительности, которую
+        // мы могли бы измерить изнутри, — ценно её КОЛИЧЕСТВО. Здесь висит
+        // карта с двумя сотнями маркеров, и каждая лишняя пересборка стоит
+        // дороже всего, что мы считаем на тике. На дорожке приборов частота
+        // этих точек и есть ответ, нужна ли изоляция слоя карты.
+        //
+        // `let _ =` — не стиль, а единственная форма, которую пропускает
+        // ViewBuilder: голый вызов в его блоке — это значение типа `()`, а он
+        // требует `View`. Тем же приёмом пользуется `Self._printChanges()`.
+        let _ = Perf.event(Perf.Name.mapBody)
 
         ZStack {
             // Тема только у карты: интерфейс остаётся тёмным «радар-детектором»,
@@ -281,8 +291,10 @@ struct MapScreen: View {
 
             // Важность считается один раз на пересборку: id цели и камеры
             // маршрута меняются редко, точка отсчёта троттлится по 300 м.
+            // Набор камер маршрута берём готовым: собирать его здесь значило
+            // строить Set заново на каждую пересборку слоя.
             let targetID = env.location.nearestCamera?.id
-            let routeIDs = Set(env.route.camerasOnRoute.map(\.camera.id))
+            let routeIDs = env.route.routeCameraIDs
             ForEach(map.visibleCameras) { camera in
                 Annotation(camera.displayTitle, coordinate: camera.coordinate, anchor: .center) {
                     // Средний зум: точки; близкий — мини-знак лимита («60»);

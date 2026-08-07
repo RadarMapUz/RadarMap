@@ -19,8 +19,14 @@ final class NotificationService: NSObject {
     @ObservationIgnored private let settings: AppSettings
 
     /// Решение «за рулём / пассажир» — вешает AppEnvironment.
-    @ObservationIgnored var onPassengerConfirmed: (() -> Void)?
-    @ObservationIgnored var onDriverConfirmed: (() -> Void)?
+    @ObservationIgnored var onPassengerConfirmed: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onPassengerConfirmed,
+                                               "NotificationService.onPassengerConfirmed") }
+    }
+    @ObservationIgnored var onDriverConfirmed: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onDriverConfirmed,
+                                               "NotificationService.onDriverConfirmed") }
+    }
 
     init(settings: AppSettings) {
         self.settings = settings

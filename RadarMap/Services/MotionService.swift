@@ -19,8 +19,14 @@ final class MotionService {
     private(set) var isDriving = false
 
     /// Колбэки — вешает AppEnvironment/RootView (старт/стоп поездки).
-    @ObservationIgnored var onDrivingStart: (() -> Void)?
-    @ObservationIgnored var onDrivingStop: (() -> Void)?
+    @ObservationIgnored var onDrivingStart: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onDrivingStart,
+                                               "MotionService.onDrivingStart") }
+    }
+    @ObservationIgnored var onDrivingStop: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onDrivingStop,
+                                               "MotionService.onDrivingStop") }
+    }
 
     @ObservationIgnored private var stopTask: Task<Void, Never>?
     @ObservationIgnored private var startTask: Task<Void, Never>?

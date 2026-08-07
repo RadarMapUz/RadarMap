@@ -30,8 +30,12 @@ final class TripStats {
     private(set) var days: [TripDay] = []
     /// Пожизненные счётчики — живут отдельно от истории (она обрезается до 50 поездок).
     private(set) var lifetime = LifetimeStats()
-    /// Вызывается после сохранения поездки (AppEnvironment вешает сюда недельный дайджест).
-    @ObservationIgnored var onTripFinished: (() -> Void)?
+    /// Вызывается после сохранения поездки (AppEnvironment вешает сюда счётчики
+    /// использования и недельный дайджест — одним замыканием, см. Wiring).
+    @ObservationIgnored var onTripFinished: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onTripFinished,
+                                               "TripStats.onTripFinished") }
+    }
 
     @ObservationIgnored private var lastCoordinate: CLLocationCoordinate2D?
     /// Сырой трек текущей поездки: точка каждые ≥30 м, упрощается при финише.
@@ -115,8 +119,11 @@ final class TripStats {
 
     func update(coordinate: CLLocationCoordinate2D, speedKmh: Double) {
         if let last = lastCoordinate {
-            let step = CLLocation(latitude: last.latitude, longitude: last.longitude)
-                .distance(from: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
+            // Тем же способом, что и весь пайплайн: HUD, гейты и запись проезда
+            // обязаны сходиться в цифрах, а на масштабе одного тика (десятки
+            // метров) разница с точной формулой — доли процента.
+            let step = GeoMath.fastDistance(last.latitude, last.longitude,
+                                            coordinate.latitude, coordinate.longitude)
             if step < 500 { distanceMeters += step }
         }
         lastCoordinate = coordinate

@@ -228,4 +228,128 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertLessThan(rebuilds, 30,
                           "растр пересобирается слишком часто: \(rebuilds) раз за минуту")
     }
+
+    // MARK: - Лимит дороги
+
+    /// Сеть по статистике БОЕВОГО файла, а не по худшему случаю.
+    ///
+    /// `syntheticRoadNetwork()` выше нарочно гуще реальности: он проверяет
+    /// `roads(near:)` под нагрузкой. Для `match` такая сеть врёт в другую
+    /// сторону — её сегменты тянутся через всю область по сотне точек каждый,
+    /// тогда как в `speed_limits.json` 21 558 сегментов на 183 483 точки, то
+    /// есть **8,5 точки на сегмент**: OSM режет улицу на куски там, где
+    /// меняются теги. `match` обходит ВСЕ пары точек всех сегментов кольца 3×3,
+    /// поэтому длина сегмента влияет на цену тика напрямую.
+    ///
+    /// Здесь: улицы через ~220 м (плотный центр Ташкента), каждая порезана на
+    /// куски по 8 точек, шаг точки ~28 м. Область 0,06° — заметно больше
+    /// кольца, чтобы замер не упирался в её край.
+    private func realisticRoadNetwork() -> LimitIndex {
+        var segments: [[Any]] = []
+        let pointStep = 0.00025          // ~28 м между точками
+        let streetStep = 0.002           // ~220 м между улицами
+        let pieces = 8                   // точек в сегменте — как в боевом файле
+        for i in 0..<30 {
+            let lat = 41.28 + Double(i) * streetStep
+            var lon = 69.20
+            while lon < 69.26 {
+                var flat: [Double] = []
+                for k in 0...pieces { flat.append(lat); flat.append(lon + Double(k) * pointStep) }
+                segments.append([60, flat])
+                lon += Double(pieces) * pointStep
+            }
+        }
+        for j in 0..<30 {
+            let lon = 69.20 + Double(j) * streetStep
+            var lat = 41.28
+            while lat < 41.34 {
+                var flat: [Double] = []
+                for k in 0...pieces { flat.append(lat + Double(k) * pointStep); flat.append(lon) }
+                segments.append([60, flat])
+                lat += Double(pieces) * pointStep
+            }
+        }
+        let data = try! JSONSerialization.data(withJSONObject: ["segments": segments])
+        return LimitIndex.build(from: data)!
+    }
+
+    /// Матчинг лимита по позиции и курсу: зовётся на КАЖДОМ GPS-тике, всю
+    /// поездку, и от него зависят превышение, рейтинг и градус оповещения.
+    ///
+    /// Потолок взят с запасом к замеренному, а не к желаемому: сетка ячеек
+    /// отсекает страну, но внутри кольца 3×3 честно перебираются все пары точек
+    /// всех попавших сегментов — в плотном центре это тысячи пар. Тест ловит
+    /// не проценты, а возврат к перебору всей базы: без сетки те же 1000 тиков
+    /// идут не сотни миллисекунд, а минуты.
+    func testSpeedLimitMatchBudget() {
+        let index = realisticRoadNetwork()
+        let clock = ContinuousClock()
+        var total: Duration = .zero
+        var matched = 0
+        // Пять проездов по 200 тиков: 28 м за тик (~100 км/ч) укладывается в
+        // ширину сети ровно 200 раз. Вылет за её край считал бы стоимость
+        // раннего выхода из пустой ячейки, а не работы.
+        for _ in 0..<5 {
+            for tick in 0..<200 {
+                let point = CLLocationCoordinate2D(latitude: 41.30,
+                                                   longitude: 69.205 + Double(tick) * 0.00025)
+                let began = clock.now
+                if index.match(point, courseDegrees: 90) != nil { matched += 1 }
+                total += clock.now - began
+            }
+        }
+        // Замерено на этой сети: ~0,73 с на 1000 тиков, то есть 0,73 мс на тик.
+        // Потолок вдвое выше — ловим регресс в разы, а не шум симулятора.
+        XCTAssertLessThan(total, .milliseconds(1500),
+                          "матчинг лимита деградировал: \(total) на 1000 тиков")
+        // И он обязан что-то находить: мгновенный тест, который ничего не
+        // матчит, померил бы стоимость раннего выхода, а не работы.
+        XCTAssertGreaterThan(matched, 500, "тест не попал в сетку — замер бессмысленный")
+    }
+
+    // MARK: - Камеры маршрута
+
+    /// «Эта камера на маршруте?» — вопрос не раз в секунду, а полтораста раз в
+    /// секунду: `recomputeNearest` задаёт его про каждую камеру окна на каждом
+    /// тике. Перебором по маршруту Ташкент—Самарканд это десятки тысяч
+    /// сравнений на тик, и хуже всего именно там, где ехать дольше всего.
+    func testRouteCameraLookupBudget() {
+        let cameras: [RouteService.RouteCamera] = (0..<250).map { i in
+            RouteService.RouteCamera(
+                camera: Camera(id: i, region: "", city: "", location: "К\(i)",
+                               lat: 41.3 + Double(i) * 0.01, lon: 69.2,
+                               type: "Стационар радар", violations: [], needsReview: nil),
+                distanceAlong: Double(i) * 1200)
+        }
+        let index = RouteService.index(of: cameras)
+
+        let clock = ContinuousClock()
+        var total: Duration = .zero
+        var found = 0
+        // 60 тиков × 150 камер окна — минута езды с построенным маршрутом.
+        for _ in 0..<60 {
+            let began = clock.now
+            for id in 0..<150 where index.byID[id] != nil { found += 1 }
+            total += clock.now - began
+        }
+        XCTAssertLessThan(total, .milliseconds(50),
+                          "поиск камеры маршрута деградировал: \(total) на 9000 запросов")
+        XCTAssertEqual(found, 60 * 150)
+    }
+
+    /// Камера, встреченная маршрутом дважды (петля развязки, круговое движение,
+    /// разворот), обязана резолвиться в ПЕРВОЕ вхождение. Со вторым остаток
+    /// пути считался бы до дальнего прохода — то есть приложение молчало бы о
+    /// камере, пока не проедет её в первый раз.
+    func testRouteCameraIndexKeepsFirstOccurrence() {
+        let camera = Camera(id: 7, region: "", city: "", location: "Развязка",
+                            lat: 41.3, lon: 69.2, type: "Стационар радар",
+                            violations: [], needsReview: nil)
+        let index = RouteService.index(of: [
+            RouteService.RouteCamera(camera: camera, distanceAlong: 800),
+            RouteService.RouteCamera(camera: camera, distanceAlong: 3400),
+        ])
+        XCTAssertEqual(index.byID[7]?.distanceAlong, 800)
+        XCTAssertEqual(index.ids, [7])
+    }
 }

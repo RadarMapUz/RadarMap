@@ -79,7 +79,10 @@ final class LocationService: NSObject {
     /// Режим «Поездка»: непрерывная геолокация + активные оповещения даже в свёрнутом виде.
     private(set) var isTripActive = false
 
-    @ObservationIgnored private var anchor: CLLocation?
+    /// Точка последнего пере-тайлинга. Координата, а не `CLLocation`: расстояние
+    /// до неё меряется тем же `GeoMath.fastDistance`, что и всё остальное в
+    /// пайплайне, и не создаёт двух объектов на каждый тик ради одного числа.
+    @ObservationIgnored private var anchor: CLLocationCoordinate2D?
     @ObservationIgnored private var alertedCameraIDs: Set<Int> = []   // фон, дебаунс уведомлений
     /// Гейт качества фикса и доверенный курс (чистый модуль, покрыт тестами).
     @ObservationIgnored private var locationFilter = LocationFilter()
@@ -467,7 +470,6 @@ final class LocationService: NSObject {
     // MARK: - Пере-тайлинг 20 ближайших
 
     private func retileIfNeeded(around coordinate: CLLocationCoordinate2D) {
-        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
         // Пустое окно = данные ещё не загрузились на прошлом тайлинге — пробуем снова.
         guard let anchor, !trackedCameras.isEmpty else { return retile(around: coordinate) }
         // Окно обязано покрывать всё, до чего мы доедем до следующего пересчёта:
@@ -476,14 +478,16 @@ final class LocationService: NSObject {
         let reach = max(AppConfig.retileMinDistance,
                         min(AppConfig.retileDistance,
                             trackedRadius - AppConfig.trackedCoverageMeters))
-        if anchor.distance(from: location) < reach { return }
+        let moved = GeoMath.fastDistance(anchor.latitude, anchor.longitude,
+                                         coordinate.latitude, coordinate.longitude)
+        if moved < reach { return }
         retile(around: coordinate)
     }
 
     private func retile(around coordinate: CLLocationCoordinate2D) {
         // Якорь ставим здесь, а не только в retileIfNeeded: refreshMonitoring
         // зовёт retile напрямую, и без якоря следующий тик перетайлил бы повторно.
-        anchor = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        anchor = coordinate
         manager.monitoredRegions.forEach { manager.stopMonitoring(for: $0) }
 
         // Окно кандидатов на оповещение — широкое; геозоны — только 20 ближайших
@@ -594,6 +598,16 @@ final class LocationService: NSObject {
     }
 
     private func handleLocation(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed, course: CLLocationDirection) {
+        // Главный горячий путь приложения: всё, что происходит на GPS-точке, —
+        // на главном акторе, раз в секунду, всю поездку. В Instruments это один
+        // интервал `handleLocation`; если он вырастет, вырастет и нагрев.
+        Perf.measure(Perf.Name.handleLocation) {
+            handleLocationBody(coordinate: coordinate, speed: speed, course: course)
+        }
+    }
+
+    private func handleLocationBody(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed,
+                                    course: CLLocationDirection) {
         currentCoordinate = coordinate
         // Спидометр без дёрганья: GPS-скорость шумит (68→71→69) — лёгкое экспоненциальное
         // сглаживание, но только по свежим точкам (после паузы берём сырое значение).
@@ -657,8 +671,13 @@ final class LocationService: NSObject {
                                    roadClass: nearestCamera?.roadClass ?? .unknown)
             if contextDetector.context != alertContext { alertContext = contextDetector.context }
         }
-        // Live Activity живёт только в поездке; update — no-op, если она не запущена.
-        liveActivity?.update(state: activityState)
+        // Live Activity живёт только в поездке. Проверяем ЗДЕСЬ, а не полагаемся
+        // на no-op внутри: `activityState` — вычисляемое свойство, и оно
+        // собиралось каждую секунду ради вызова, который тут же выходил по
+        // guard. Плашка не запущена почти всю жизнь приложения.
+        if liveActivity?.isActive == true {
+            liveActivity?.update(state: activityState)
+        }
         // Часы: то же состояние (мост квантует и дедупит — без изменений радио молчит).
         watchBridge?.update(isTripActive: isTripActive, speedKmh: speedKmh,
                             cameraTitle: nearestCamera?.displayTitle,
@@ -822,7 +841,7 @@ final class LocationService: NSObject {
 
     /// Ближайшая камера лежит на активном маршруте (в его коридоре).
     private func isCameraOnRoute(_ camera: Camera) -> Bool {
-        route?.camerasOnRoute.contains { $0.camera.id == camera.id } ?? false
+        route?.routeCamera(id: camera.id) != nil
     }
 
     /// Направление на ближайшую камеру для голоса/HUD (учитывает мёртвую зону и маршрут).
@@ -913,7 +932,7 @@ final class LocationService: NSObject {
     /// и приложение предупреждало о камере, до которой ещё ехать и ехать.
     private func routeRemaining(to camera: Camera) -> CLLocationDistance? {
         guard let route, route.isActive,
-              let onRoute = route.camerasOnRoute.first(where: { $0.camera.id == camera.id })
+              let onRoute = route.routeCamera(id: camera.id)
         else { return nil }
         return onRoute.distanceAlong - route.progressAlong
     }

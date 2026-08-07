@@ -40,6 +40,11 @@ final class SketchState {
 
     /// Тик GPS: дёргается из DashboardView по locationTick.
     func refresh(_ env: AppEnvironment) {
+        // Схема на приборке — единственное, что считается на каждом тике ради
+        // картинки. Она обязана быть самым дешёвым экраном, а не самым дорогим,
+        // и проверять это надо приборами, а не на глаз.
+        let token = Perf.begin(Perf.Name.sketchRefresh)
+        defer { token.end() }
         guard let me = env.location.currentCoordinate else { return }
         unwoundCourse = RoadSketch.unwound(unwoundCourse,
                                            towards: env.location.currentCourse)

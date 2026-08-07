@@ -34,7 +34,10 @@ final class SpeedLimitService {
     private(set) var isOverspeedingSustained = false
 
     /// Голос «Превышение скорости» — подключается в AppEnvironment.
-    @ObservationIgnored var onOverspeed: (() -> Void)?
+    @ObservationIgnored var onOverspeed: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onOverspeed,
+                                               "SpeedLimitService.onOverspeed") }
+    }
 
     /// Поколение индекса: растёт при загрузке/обновлении базы лимитов. Карта
     /// по нему пересобирает слой маркеров — индекс приезжает с диска и с сервера

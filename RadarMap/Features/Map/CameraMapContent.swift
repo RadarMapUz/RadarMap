@@ -90,6 +90,8 @@ nonisolated enum CameraMapContent {
         limitIndex: LimitIndex? = nil,
         divisions: Double = AppConfig.clusterGridDivisions
     ) async -> Layer {
+        let token = Perf.begin(Perf.Name.cameraLayer)
+        defer { token.end() }
         let box = Box(region)
         let inside = cameras.filter { filter.matches($0) && box.contains(lat: $0.lat, lon: $0.lon) }
         guard inside.count > budget else {

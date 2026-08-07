@@ -1,18 +1,29 @@
 #!/usr/bin/env python3
-"""Сборка roads.json — дорожной сети для схемы на приборке.
+"""Сборка дорожных тайлов для схемы на приборке.
 
 Зачем. Приложение чертит окрестные дороги само, без карты и без сети: приборка
 это режим «телефон в держателе», и она обязана быть самым дешёвым экраном, а
-не самым дорогим. Пока источником служит индекс лимитов скорости — он уже на
+не самым дорогим. Первым источником служил индекс лимитов скорости — он уже на
 телефоне и несёт настоящую геометрию, но НЕ ЗНАЕТ ни класса дороги, ни моста,
-ни односторонности. Всё это есть в OSM, и этот скрипт достаёт именно их.
+ни односторонности, ни дворов. Всё это есть в OSM, и этот скрипт достаёт
+именно их.
 
 Вход:  roads.geojsonl — выгрузка OSM в формате GeoJSON Text Sequence
        (RFC 8142: каждая запись начинается с байта 0x1E — обычный json.loads
        по строке на нём падает, и это первое, обо что тут спотыкаешься).
-Выход: roads.json — компактный, только то, что нужно рисовать.
+Выход: каталог тайлов по 0.5° (~55 км) + index_payload.json.
 
-Формат (экономия важнее читаемости — файл едет на телефоны):
+Тайлы, а не один файл: вся страна — десятки мегабайт, а телефону нужна
+окрестность. Дорога, задевшая несколько тайлов, кладётся в КАЖДЫЙ из них
+целиком — дубль на границе стоит килобайты, а склейка по границам стоила бы
+клиенту кода и ошибок.
+
+Целостность: index_payload.json несёт sha256 каждого тайла. Владелец
+подписывает ЕГО (publish_roads.sh, Ed25519-ключ живёт только у владельца) —
+и подпись индекса накрывает все тайлы разом: подменённый на сервере или по
+дороге тайл не сойдётся по хэшу и будет отброшен телефоном.
+
+Формат тайла (экономия важнее читаемости — файл едет на телефоны):
 
     {"version": 1, "roads": [[cls, flags, [lat, lon, dlat, dlon, …]], …]}
 
@@ -25,16 +36,17 @@
 Индекс по сетке строит уже приложение при загрузке — так же, как для лимитов.
 Дублировать его в файле значило бы возить одно и то же дважды.
 
-Запуск на VPS:
+Запуск на VPS (обычно через publish_roads.sh с локальной машины владельца):
     python3 build_roads.py --in /opt/radarmap/work/roads.geojsonl \\
-                          --out /opt/radarmap/work/roads.json
+                          --tiles /opt/radarmap/work/roads_tiles
 """
 import argparse
+import hashlib
 import json
 import math
 import os
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 
 # Что рисуем. Пешеходное, тропы и велодорожки не берём: схема про то, где
 # едет машина, а лишние линии превращают её в паутину.
@@ -54,6 +66,21 @@ FLAG_ONEWAY, FLAG_BRIDGE, FLAG_TUNNEL = 1, 2, 4
 # а точек становится в разы меньше.
 SIMPLIFY_METERS = 4.0
 SCALE = 1e5   # 1e-5° ≈ 1,1 м
+
+# Тайл 0.5° ≈ 55 км: город с окрестностями в одном-двух файлах, а вся страна —
+# в паре сотен, из которых телефон возит только соседние.
+TILE_DEGREES = 0.5
+
+
+def tile_key(lat, lon, degrees=TILE_DEGREES):
+    """Ключ тайла: смещаем в положительные, чтобы не спорить об округлении
+    отрицательных (и клиент делает ровно то же самое)."""
+    return f"{int(math.floor((lat + 90) / degrees))}_{int(math.floor((lon + 180) / degrees))}"
+
+
+def tile_keys_of(points, degrees=TILE_DEGREES):
+    """Все тайлы, которых касается дорога (GeoJSON: [lon, lat])."""
+    return {tile_key(lat, lon, degrees) for lon, lat in points}
 
 
 def perpendicular_distance(point, start, end):
@@ -119,19 +146,13 @@ def flags_of(properties):
     return flags
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--in", dest="source", required=True)
-    parser.add_argument("--out", dest="target", required=True)
-    parser.add_argument("--tolerance", type=float, default=SIMPLIFY_METERS)
-    args = parser.parse_args()
-
-    tolerance_deg = args.tolerance / 111_320.0
+def collect(source_path, tolerance_deg):
+    """Прочитать geojsonl → список (code, flags, encoded, tile_keys)."""
     roads = []
     classes, flag_counts = Counter(), Counter()
     read = skipped = 0
 
-    with open(args.source, encoding="utf-8") as handle:
+    with open(source_path, encoding="utf-8") as handle:
         for line in handle:
             # RFC 8142: запись начинается с разделителя 0x1E.
             line = line.lstrip("\x1e").strip()
@@ -158,19 +179,64 @@ def main():
             encoded = encode(points)
             if len(encoded) < 4:
                 continue
-            roads.append([code, flags_of(properties), encoded])
+            roads.append((code, flags_of(properties), encoded, tile_keys_of(points)))
             classes[properties["highway"]] += 1
             flag_counts[roads[-1][1]] += 1
 
-    payload = {"version": 1, "roads": roads}
-    with open(args.target, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, separators=(",", ":"))
+    return roads, classes, flag_counts, read, skipped
 
-    size = os.path.getsize(args.target)
+
+def write_tiles(roads, target_dir):
+    """Разложить дороги по тайлам и собрать индекс с sha256 каждого файла.
+
+    Дорога, задевшая несколько тайлов, попадает в каждый целиком: дубль на
+    границе дешевле, чем склейка на клиенте.
+    """
+    os.makedirs(target_dir, exist_ok=True)
+    by_tile = defaultdict(list)
+    for code, flags, encoded, keys in roads:
+        for key in keys:
+            by_tile[key].append([code, flags, encoded])
+
+    index = {}
+    for key, tile_roads in sorted(by_tile.items()):
+        blob = json.dumps({"version": 1, "roads": tile_roads},
+                          separators=(",", ":")).encode()
+        with open(os.path.join(target_dir, f"tile_{key}.json"), "wb") as handle:
+            handle.write(blob)
+        index[key] = {"sha256": hashlib.sha256(blob).hexdigest(),
+                      "bytes": len(blob)}
+
+    # Байты индекса подписывает владелец (publish_roads.sh): подпись индекса
+    # накрывает все тайлы разом через их sha256.
+    payload = json.dumps({"version": 1, "tileDegrees": TILE_DEGREES,
+                          "tiles": index},
+                         separators=(",", ":")).encode()
+    with open(os.path.join(target_dir, "index_payload.json"), "wb") as handle:
+        handle.write(payload)
+    return index
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--in", dest="source", required=True)
+    parser.add_argument("--tiles", dest="tiles_dir", required=True,
+                        help="каталог, куда положить tile_*.json и index_payload.json")
+    parser.add_argument("--tolerance", type=float, default=SIMPLIFY_METERS)
+    args = parser.parse_args()
+
+    roads, classes, flag_counts, read, skipped = collect(
+        args.source, args.tolerance / 111_320.0)
+    index = write_tiles(roads, args.tiles_dir)
+
     points_total = sum(len(r[2]) // 2 for r in roads)
+    total_bytes = sum(meta["bytes"] for meta in index.values())
+    biggest = max(index.items(), key=lambda kv: kv[1]["bytes"], default=None)
     print(f"прочитано объектов: {read} (не разобрано: {skipped})")
-    print(f"дорог в файле: {len(roads)}, точек: {points_total}")
-    print(f"размер: {size / 1e6:.1f} МБ (в gzip будет в разы меньше)")
+    print(f"дорог: {len(roads)}, точек: {points_total}, тайлов: {len(index)}")
+    print(f"суммарно: {total_bytes / 1e6:.1f} МБ (в gzip будет в разы меньше)")
+    if biggest:
+        print(f"самый тяжёлый тайл: {biggest[0]} — {biggest[1]['bytes'] / 1e6:.1f} МБ")
     print("классы:", classes.most_common(10))
     bridges = sum(n for f, n in flag_counts.items() if f & FLAG_BRIDGE)
     tunnels = sum(n for f, n in flag_counts.items() if f & FLAG_TUNNEL)

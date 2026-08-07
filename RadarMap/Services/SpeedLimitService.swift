@@ -98,6 +98,12 @@ final class SpeedLimitService {
     /// Скачивание идёт прямо сейчас (для честной плашки, а не спиннера-загадки).
     private(set) var isDownloading = false
 
+    /// Дорога последнего матчинга: точка полотна и азимут — сырьё для снапа
+    /// картинки (RoadSnapper в LocationService). @ObservationIgnored намеренно:
+    /// пишется каждый тик, а читается синхронно из LocationService — будить
+    /// SwiftUI-подписчиков этой записью было бы ежесекундной перерисовкой.
+    @ObservationIgnored private(set) var currentRoadHit: LimitIndex.RoadHit?
+
     // MARK: - Загрузка базы
 
     /// Вызывается при старте приложения: локальный файл сразу, сервер — раз в 7 дней.
@@ -166,17 +172,22 @@ final class SpeedLimitService {
                 speedKmh: Double, announce: Bool, fallbackClass: RoadClass = .unknown) {
         guard settings.speedLimitsEnabled, let index else {
             currentLimit = nil; isCurrentLimitAssumed = false; clearOverspeed()
+            currentRoadHit = nil
             return
         }
 
         // Матчим дорогу только в движении с достоверным курсом;
-        // стоя (светофор) держим последний известный лимит.
+        // стоя (светофор) держим последний известный лимит — и последнюю
+        // найденную дорогу: стоя мы с неё не съехали, и снап картинки не
+        // должен отлипать на каждом светофоре.
         if speedKmh >= 8, course >= 0 {
-            if let limit = index.match(coordinate, courseDegrees: course) {
-                if limit != currentLimit { currentLimit = limit }
+            if let hit = index.matchHit(coordinate, courseDegrees: course) {
+                currentRoadHit = hit
+                if hit.limit != currentLimit { currentLimit = hit.limit }
                 if isCurrentLimitAssumed { isCurrentLimitAssumed = false }
                 missCount = 0
             } else {
+                currentRoadHit = nil
                 missCount += 1
                 if missCount >= 4 {
                     // Данных по дороге нет — предполагаем по классу. Раньше
@@ -380,7 +391,23 @@ struct LimitIndex: Sendable, RoadNetworkSource {
         return found
     }
 
-    /// Ближайшая дорога кольца: лимит и квадрат расстояния в единицах MKMapPoint.
+    /// Найденная дорога: лимит, ближайшая точка ПОЛОТНА и его направление.
+    ///
+    /// Точка и азимут нужны снапу картинки к дороге (RoadSnapper): тот же
+    /// проход, что ищет лимит, отдаёт их бесплатно — второй запрос по кольцу
+    /// на каждом тике стоил бы столько же, сколько сам матчинг.
+    struct RoadHit: Sendable {
+        let limit: Int
+        /// Ближайшая точка оси дороги.
+        let coordinate: CLLocationCoordinate2D
+        /// Направление сегмента в этой точке (0–360°, куда «идёт» линия;
+        /// дорога двусторонняя — потребитель сам выбирает ближнюю из двух).
+        let bearingDegrees: Double
+        /// Насколько мы в стороне от оси, метры.
+        let distanceMeters: Double
+    }
+
+    /// Ближайшая дорога кольца.
     ///
     /// Общее тело для `match` и `limit(near:)` — они обязаны сходиться в том,
     /// какую дорогу считают ближайшей, а раньше это были две копии одного
@@ -393,9 +420,9 @@ struct LimitIndex: Sendable, RoadNetworkSource {
     nonisolated private func nearestRoad(
         to p: MKMapPoint, within reach: Double, candidates: Set<Int32>,
         accepts: (_ dx: Double, _ dy: Double) -> Bool
-    ) -> Int? {
+    ) -> RoadHit? {
         var bestSquared = reach * reach
-        var bestLimit: Int?
+        var best: (limit: Int, point: MKMapPoint, dx: Double, dy: Double)?
         for candidate in candidates {
             let segment = segments[Int(candidate)]
             // Рамка: четыре сравнения вместо обхода всех точек сегмента.
@@ -408,15 +435,24 @@ struct LimitIndex: Sendable, RoadNetworkSource {
                 let len2 = dx * dx + dy * dy
                 guard len2 > 0 else { continue }
                 let t = max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2))
-                let ox = a.x + t * dx - p.x, oy = a.y + t * dy - p.y
+                let closest = MKMapPoint(x: a.x + t * dx, y: a.y + t * dy)
+                let ox = closest.x - p.x, oy = closest.y - p.y
                 let squared = ox * ox + oy * oy
                 guard squared < bestSquared else { continue }
                 guard accepts(dx, dy) else { continue }
                 bestSquared = squared
-                bestLimit = segment.limit
+                best = (segment.limit, closest, dx, dy)
             }
         }
-        return bestLimit
+        guard let best else { return nil }
+        let coordinate = best.point.coordinate
+        // Меркатор конформен: азимут корректен прямо из map-точек (y растёт на юг).
+        let bearing = (atan2(best.dx, -best.dy) * 180 / .pi + 360)
+            .truncatingRemainder(dividingBy: 360)
+        return RoadHit(limit: best.limit, coordinate: coordinate,
+                       bearingDegrees: bearing,
+                       distanceMeters: bestSquared.squareRoot()
+                           * MKMetersPerMapPointAtLatitude(coordinate.latitude))
     }
 
     /// Метры в единицы MKMapPoint на этой широте.
@@ -427,6 +463,12 @@ struct LimitIndex: Sendable, RoadNetworkSource {
 
     /// Лимит дороги в точке: ближе 35 м к линии и направление совпадает с курсом (±40°, обе стороны).
     nonisolated func match(_ coordinate: CLLocationCoordinate2D, courseDegrees: Double) -> Int? {
+        matchHit(coordinate, courseDegrees: courseDegrees)?.limit
+    }
+
+    /// То же, но с точкой полотна и азимутом — для снапа картинки к дороге.
+    nonisolated func matchHit(_ coordinate: CLLocationCoordinate2D,
+                              courseDegrees: Double) -> RoadHit? {
         nearestRoad(to: MKMapPoint(coordinate),
                     within: Self.points(35, at: coordinate),
                     candidates: candidates(around: coordinate)) { dx, dy in
@@ -444,6 +486,6 @@ struct LimitIndex: Sendable, RoadNetworkSource {
     nonisolated func limit(near coordinate: CLLocationCoordinate2D) -> Int? {
         nearestRoad(to: MKMapPoint(coordinate),
                     within: Self.points(45, at: coordinate),
-                    candidates: candidates(around: coordinate)) { _, _ in true }
+                    candidates: candidates(around: coordinate)) { _, _ in true }?.limit
     }
 }

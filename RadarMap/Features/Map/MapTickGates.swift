@@ -104,8 +104,15 @@ struct LocationFollowDriver: View {
                 // по компасу телефона делает сам MapKit (.userLocation
                 // followsHeading), догонять его тиками не нужно.
                 if map.orientation == .heading, env.location.isTripActive {
-                    map.follow(coordinate: env.location.currentCoordinate,
-                               course: env.location.currentCourse,
+                    // Прижатые к дороге координата и курс: камера карты ведёт
+                    // по полотну, а не по гуляющему вбок GPS. Скорость — для
+                    // автозума (стоишь — ближе, летишь — шире).
+                    map.follow(coordinate: env.location.displayCoordinate
+                                   ?? env.location.currentCoordinate,
+                               course: env.location.displayCourse >= 0
+                                   ? env.location.displayCourse
+                                   : env.location.currentCourse,
+                               speedKmh: env.location.speedKmh,
                                pitched: true)
                 }
                 if let coordinate = env.location.currentCoordinate {

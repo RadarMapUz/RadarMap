@@ -209,14 +209,16 @@ struct MapScreen: View {
 
     // MARK: - Карта
 
-    /// Тема подложки: авто — светлая днём (6–19), тёмная ночью.
+    /// Тема подложки: авто — по СОЛНЦУ в точке пользователя, не по будильнику.
+    /// Прежние часы 6–19 врали дважды в год по часу: в декабре в 18:30 темно,
+    /// а карта слепила белым. Без координаты — прежнее грубое правило (Sun).
     private var mapColorScheme: ColorScheme {
         switch env.settings.mapAppearance {
         case .dark:  return .dark
         case .light: return .light
         case .auto:
-            let hour = Calendar.current.component(.hour, from: Date())
-            return (6..<19).contains(hour) ? .light : .dark
+            return Sun.isDaytime(at: env.location.currentCoordinate, now: Date())
+                ? .light : .dark
         }
     }
 

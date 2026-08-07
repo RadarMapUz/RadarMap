@@ -336,10 +336,10 @@ final class RoadSketchTests: XCTestCase {
     /// Родился из реальной поездки: константа в 1 с при фиксах раз в 2–3 с
     /// давала «секунду едет, две стоит».
     func testAnimationDurationFollowsTickRhythm() {
-        XCTAssertEqual(RoadSketch.animationDuration(sincePreviousTick: nil), 1)
-        XCTAssertEqual(RoadSketch.animationDuration(sincePreviousTick: 0.1), 0.35)
-        XCTAssertEqual(RoadSketch.animationDuration(sincePreviousTick: 2.2), 2.2)
-        XCTAssertEqual(RoadSketch.animationDuration(sincePreviousTick: 30), 3,
+        XCTAssertEqual(TickPacing.animationDuration(sincePreviousTick: nil), 1)
+        XCTAssertEqual(TickPacing.animationDuration(sincePreviousTick: 0.1), 0.35)
+        XCTAssertEqual(TickPacing.animationDuration(sincePreviousTick: 2.2), 2.2)
+        XCTAssertEqual(TickPacing.animationDuration(sincePreviousTick: 30), 3,
                        "после паузы догонять дольше трёх секунд — врать о том, где мы")
     }
 

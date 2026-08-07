@@ -96,6 +96,7 @@ nonisolated enum RoadSketch {
     /// проезжую часть камеры из базы, построенный маршрут и собственный трек.
     static func layout(camera: Camera?,
                        network: RoadNetworkSource = EmptyRoadNetwork(),
+                       networkBudget: Int = .max,
                        route: [CLLocationCoordinate2D] = [],
                        track: [CLLocationCoordinate2D] = [],
                        from me: CLLocationCoordinate2D,
@@ -104,6 +105,11 @@ nonisolated enum RoadSketch {
         guard courseDegrees >= 0, aspect > 0 else { return nil }
 
         let metersPerLon = 111_320.0 * cos(me.latitude * .pi / 180)
+        // Синус и косинус курса — один раз на раскладку, а не в каждой точке:
+        // через local() проходят тысячи точек маршрута и сетки на каждом
+        // GPS-тике открытой приборки.
+        let courseRadians = courseDegrees * .pi / 180
+        let sinCourse = sin(courseRadians), cosCourse = cos(courseRadians)
         /// Метры относительно меня, повёрнутые так, что мой курс — вверх (+y).
         func local(_ point: CLLocationCoordinate2D) -> CGPoint {
             let east = (point.longitude - me.longitude) * metersPerLon
@@ -112,9 +118,8 @@ nonisolated enum RoadSketch {
             // оказаться строго ВВЕРХУ. С обратным знаком поворот давал
             // x = d·sin(2·курс) — на курсе 45° камера уезжала вбок, и дорога,
             // по которой едешь, рисовалась поперёк экрана.
-            let angle = courseDegrees * .pi / 180
-            return CGPoint(x: east * cos(angle) - north * sin(angle),
-                           y: east * sin(angle) + north * cos(angle))
+            return CGPoint(x: east * cosCourse - north * sinCourse,
+                           y: east * sinCourse + north * cosCourse)
         }
 
         let rawCameraPoint = camera.map { local($0.coordinate) }
@@ -132,29 +137,62 @@ nonisolated enum RoadSketch {
             CGPoint(x: 0.5 + point.x / (span * aspect),
                     y: meY - point.y / span)
         }
-        /// Отбросить всё, что заведомо за краями: маршрут бывает на сотни
-        /// километров, а чертим мы двести метров вокруг себя.
+        /// Отбросить всё, что заведомо за краями, — ДО тригонометрии: маршрут
+        /// бывает на сотни километров, а чертим мы двести метров вокруг себя.
+        /// Сравнение в градусах — два модуля на точку вместо поворота каждой.
         func nearby(_ points: [CLLocationCoordinate2D]) -> [CGPoint] {
             let limit = span * 2
-            return points.map(local).filter { hypot($0.x, $0.y) <= limit }
+            let maxLatDelta = limit / 111_320.0
+            let maxLonDelta = limit / metersPerLon
+            return points.compactMap { point in
+                guard abs(point.latitude - me.latitude) <= maxLatDelta,
+                      abs(point.longitude - me.longitude) <= maxLonDelta
+                else { return nil }
+                return project(local(point))
+            }
         }
 
         var layout = Layout(camera: cameraPoint.map(project),
                             spanMeters: span)
-        layout.route = nearby(route).map(project)
-        layout.track = nearby(track).map(project)
-        // Сеть запрашиваем по диагонали вида, а не по высоте: иначе дороги
-        // обрывались бы у боковых краёв.
-        layout.network = network
-            .roads(near: me, radius: span * sqrt(1 + aspect * aspect) * 0.6)
-            .compactMap { line in
-                let points = line.points.map(local).map(project)
-                guard points.count >= 2 else { return nil }
-                return Line(points: points, kind: line.kind, level: line.level,
-                            isOneWay: line.isOneWay, isDetailed: line.isDetailed)
-            }
+        layout.route = nearby(route)
+        layout.track = nearby(track)
+        if networkBudget > 0 {
+            // Сеть запрашиваем по диагонали вида, а не по высоте: иначе дороги
+            // обрывались бы у боковых краёв.
+            let candidates = network
+                .roads(near: me, radius: span * sqrt(1 + aspect * aspect) * 0.6)
+                .compactMap { line -> (line: Line, proximityMeters: Double)? in
+                    guard line.points.count >= 2 else { return nil }
+                    // За один проход: проекция, близость к машине и рамка линии.
+                    var proximity = Double.greatestFiniteMagnitude
+                    var minX = CGFloat.infinity, maxX = -CGFloat.infinity
+                    var minY = CGFloat.infinity, maxY = -CGFloat.infinity
+                    let points = line.points.map { coordinate -> CGPoint in
+                        let meters = local(coordinate)
+                        proximity = min(proximity, max(abs(meters.x), abs(meters.y)))
+                        let point = project(meters)
+                        minX = min(minX, point.x); maxX = max(maxX, point.x)
+                        minY = min(minY, point.y); maxY = max(maxY, point.y)
+                        return point
+                    }
+                    // Круг запроса у боковых краёв шире вида — линию, целиком
+                    // лежащую за экраном, незачем ни хранить, ни рисовать.
+                    guard maxX >= -0.05, minX <= 1.05,
+                          maxY >= -0.05, minY <= 1.05 else { return nil }
+                    return (Line(points: points, kind: line.kind, level: line.level,
+                                 isOneWay: line.isOneWay, isDetailed: line.isDetailed),
+                            proximity)
+                }
+            // Бюджет (даёт PerformanceMode): в перегрев остаются БЛИЖНИЕ линии.
+            // Сеть — контекст, а не предупреждение: дорога камеры, маршрут и
+            // трек не режутся ни на одной ступени, как и сами оповещения.
+            let kept = candidates.count <= networkBudget
+                ? candidates
+                : Array(candidates.sorted { $0.proximityMeters < $1.proximityMeters }
+                    .prefix(networkBudget))
             // Сначала земля, потом мосты: рендерер полагается на этот порядок.
-            .sorted { $0.level < $1.level }
+            layout.network = kept.map(\.line).sorted { $0.level < $1.level }
+        }
 
         if let camera, let cameraPoint, inRange {
             let shape = RoadShape(camera: camera)

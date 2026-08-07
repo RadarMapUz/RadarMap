@@ -57,6 +57,17 @@ nonisolated enum PerformanceMode: Int, Comparable, Sendable {
     /// которое считается по всему треку и в перегрев не нужно.
     var drawsHeatLines: Bool { self == .full }
 
+    /// Сколько линий окрестной сети чертит схема на приборке. Сеть — контекст,
+    /// а не предупреждение: при бюджете первыми выживают ближние к машине
+    /// линии, а дорога камеры, маршрут и трек не режутся ни на одной ступени.
+    var sketchNetworkBudget: Int {
+        switch self {
+        case .full:    return 80
+        case .reduced: return 32
+        case .minimal: return 0
+        }
+    }
+
     /// Во сколько раз реже пересчитывать слой карты при движении.
     var recomputeFactor: Double {
         switch self {

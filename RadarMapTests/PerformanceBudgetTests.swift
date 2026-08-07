@@ -131,4 +131,71 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertLessThan(total, .milliseconds(500),
                           "сводка периода деградировала: \(total) на 50 пересчётов")
     }
+
+    // MARK: - Схема на приборке
+
+    /// Плотная городская сетка улиц через ~110 м: 200 сегментов, 20 200 точек —
+    /// гуще реального центра Ташкента. Собирается боевым `LimitIndex.build`,
+    /// то есть замер включает и сеточный запрос `roads(near:)`.
+    private func syntheticRoadNetwork() -> LimitIndex {
+        var segments: [[Any]] = []
+        for i in 0..<100 {
+            let lat = 41.26 + Double(i) * 0.001
+            var flat: [Double] = []
+            for j in 0...100 { flat.append(lat); flat.append(69.20 + Double(j) * 0.001) }
+            segments.append([60, flat])
+        }
+        for j in 0..<100 {
+            let lon = 69.20 + Double(j) * 0.001
+            var flat: [Double] = []
+            for i in 0...100 { flat.append(41.26 + Double(i) * 0.001); flat.append(lon) }
+            segments.append([60, flat])
+        }
+        let data = try! JSONSerialization.data(withJSONObject: ["segments": segments])
+        return LimitIndex.build(from: data)!
+    }
+
+    /// Раскладка схемы приборки. Считается на КАЖДОМ GPS-тике, пока приборка
+    /// открыта, — то есть каждую секунду всей поездки в держателе. Минута езды
+    /// по плотному центру, позади построен маршрут на 300 км (10 000 точек):
+    /// ловим возврат «пересчитать весь маршрут тригонометрией на каждый тик».
+    func testRoadSketchBudget() {
+        // Как в бою: индекс под кэшем окрестности (см. SpeedLimitService).
+        let network = CachedRoadNetwork(syntheticRoadNetwork())
+        let start0 = CLLocationCoordinate2D(latitude: 41.29, longitude: 69.25)
+        let route: [CLLocationCoordinate2D] = (0..<10_000).map {
+            CLLocationCoordinate2D(latitude: start0.latitude + Double($0) * 0.0003,
+                                   longitude: start0.longitude)
+        }
+        let track: [CLLocationCoordinate2D] = (0..<60).map {
+            CLLocationCoordinate2D(latitude: start0.latitude - Double($0) * 0.0003,
+                                   longitude: start0.longitude)
+        }
+        // Камера в 600 м впереди со своим куском дороги, как у 99,7% базы
+        // (дельты в 1e-6°; ~30 м шага по широте ≈ 270 единиц).
+        var road: [Int] = []
+        for step in -3...3 { road.append(step * 270); road.append(0) }
+        let camera = Camera(id: 1, region: "Т", city: "Т", location: "Тест",
+                            lat: start0.latitude + 600 / 111_320.0,
+                            lon: start0.longitude,
+                            type: "Стационар радар", violations: [], needsReview: nil,
+                            axis: 0, road: road)
+
+        let clock = ContinuousClock()
+        var total: Duration = .zero
+        for tick in 0..<60 {
+            // 20 м/тик ≈ 72 км/ч: проезжаем камеру насквозь, как в жизни.
+            let me = CLLocationCoordinate2D(
+                latitude: start0.latitude + Double(tick) * 20 / 111_320.0,
+                longitude: start0.longitude)
+            let began = clock.now
+            _ = RoadSketch.layout(camera: camera, network: network,
+                                  route: route, track: track,
+                                  from: me, courseDegrees: 0, aspect: 16.0 / 9.0)
+            total += clock.now - began
+        }
+        // Минута тиков приборки — суммарно меньше полсекунды.
+        XCTAssertLessThan(total, .milliseconds(500),
+                          "схема приборки деградировала: \(total) на 60 тиков")
+    }
 }

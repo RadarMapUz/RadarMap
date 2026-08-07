@@ -41,8 +41,17 @@ final class SpeedLimitService {
     /// позже первого слоя, и без сигнала мини-знаки «60» не появились бы до
     /// первого движения карты.
     private(set) var indexRevision = 0
+    /// Сеть для схемы приборки: индекс лимитов под кэшем окрестности.
+    /// Пересоздаётся вместе с индексом — кэш не должен пережить свои данные.
+    private(set) var sketchNetwork: any RoadNetworkSource = EmptyRoadNetwork()
+
     private let settings: AppSettings
-    @ObservationIgnored private var index: LimitIndex? { didSet { indexRevision += 1 } }
+    @ObservationIgnored private var index: LimitIndex? {
+        didSet {
+            indexRevision += 1
+            sketchNetwork = index.map { CachedRoadNetwork($0) } ?? EmptyRoadNetwork()
+        }
+    }
     @ObservationIgnored private var missCount = 0
     @ObservationIgnored private var overspeedSince: Date?
     @ObservationIgnored private var lastWarnAt: Date = .distantPast

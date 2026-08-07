@@ -55,6 +55,16 @@ final class PerformanceModeTests: XCTestCase {
         XCTAssertFalse(PerformanceMode.minimal.drawsHeatLines)
     }
 
+    func testSketchNetworkBudgetShrinksToZero() {
+        XCTAssertGreaterThan(PerformanceMode.full.sketchNetworkBudget,
+                             PerformanceMode.reduced.sketchNetworkBudget)
+        XCTAssertGreaterThan(PerformanceMode.reduced.sketchNetworkBudget, 0,
+                             "в .reduced схема ещё показывает перекрёстки")
+        // Сети схемы ноль РАЗРЕШЁН — в отличие от камер на карте: это фон,
+        // а дорога камеры, маршрут и трек бюджетом не режутся вовсе.
+        XCTAssertEqual(PerformanceMode.minimal.sketchNetworkBudget, 0)
+    }
+
     func testDegradationIsAlwaysExplained() {
         XCTAssertFalse(PerformanceMode.full.explains, "в норме объяснять нечего")
         for mode in [PerformanceMode.reduced, .minimal] {

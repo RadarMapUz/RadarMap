@@ -100,13 +100,27 @@ final class RouteService {
 
     /// Координаты выбранного маршрута — для схемы на приборке, которая чертит
     /// линию сама, без карты.
+    ///
+    /// С кэшем: геттер дёргается на каждом GPS-тике открытой приборки, а
+    /// `getCoordinates` копирует ВЕСЬ маршрут — для Ташкент—Бухара это тысячи
+    /// точек каждую секунду впустую. Ключ — сам объект полилайна, а не
+    /// поколение: перестроение при уходе с маршрута заменяет варианты, НЕ
+    /// трогая поколение, и кэш по поколению отдавал бы старую линию.
     var routeCoordinates: [CLLocationCoordinate2D] {
         guard let polyline else { return [] }
+        if let cache = coordinatesCache, cache.polyline === polyline {
+            return cache.points
+        }
         var points = [CLLocationCoordinate2D](repeating: .init(),
                                               count: polyline.pointCount)
         polyline.getCoordinates(&points, range: NSRange(location: 0, length: polyline.pointCount))
+        coordinatesCache = (polyline, points)
         return points
     }
+    /// Держит полилайн сильной ссылкой: пока ключ жив, его адрес не достанется
+    /// новому объекту и кэш не совпадёт с чужим маршрутом по случайности.
+    @ObservationIgnored private var coordinatesCache:
+        (polyline: MKPolyline, points: [CLLocationCoordinate2D])?
     var camerasOnRoute: [RouteCamera] { selected?.cameras ?? [] }
     var distanceText: String { selected?.distanceText ?? "" }
     var etaText: String { selected?.etaText ?? "" }

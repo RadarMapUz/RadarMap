@@ -9540,6 +9540,166 @@
           }
         }
       }
+    },
+    "Тихий" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тихий"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jim"
+          }
+        }
+      }
+    },
+    "Свой" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Свой"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O‘zim"
+          }
+        }
+      }
+    },
+    "Профиль" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Профиль"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil"
+          }
+        }
+      }
+    },
+    "Город или трасса" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Город или трасса"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shahar yoki trassa"
+          }
+        }
+      }
+    },
+    "Сам понимает город или трассу. В городе — коротко, на трассе — полной фразой, о своих камерах — только вибрация, при превышении — громко." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сам понимает город или трассу. В городе — коротко, на трассе — полной фразой, о своих камерах — только вибрация, при превышении — громко."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O‘zi shahar yoki trassani aniqlaydi. Shaharda — qisqa, trassada — to‘liq, o‘z kameralaringiz haqida — faqat tebranish, tezlikni oshirsangiz — baland ovozda."
+          }
+        }
+      }
+    },
+    "Всегда короткие фразы: камеры идут одна за другой." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Всегда короткие фразы: камеры идут одна за другой."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doim qisqa iboralar: kameralar ketma-ket keladi."
+          }
+        }
+      }
+    },
+    "Всегда полные фразы и заранее: камер мало, ехать до следующей далеко." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Всегда полные фразы и заранее: камер мало, ехать до следующей далеко."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doim to‘liq iboralar va oldindan: kameralar kam, keyingisiga uzoq."
+          }
+        }
+      }
+    },
+    "Ни слова. Камеру показывает панель и отмечает вибрация." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ни слова. Камеру показывает панель и отмечает вибрация."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bir og‘iz ham emas. Kamerani panel ko‘rsatadi, tebranish belgilaydi."
+          }
+        }
+      }
+    },
+    "Настраиваете сами." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Настраиваете сами."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O‘zingiz sozlaysiz."
+          }
+        }
+      }
+    },
+    "Звук и вибрация предупреждают о камере всегда — голос отдельно. «Авто» сам различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громко и с лимитом. О камерах, которые вы проезжаете каждый день спокойно, приложение молчит и только отмечает вибрацией — но заговорит, если подъезжаете к ним с превышением." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Звук и вибрация предупреждают о камере всегда — голос отдельно. «Авто» сам различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громко и с лимитом. О камерах, которые вы проезжаете каждый день спокойно, приложение молчит и только отмечает вибрацией — но заговорит, если подъезжаете к ним с превышением."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tovush va tebranish kamera haqida doim ogohlantiradi — ovoz alohida. «Avto» shahar va trassani o‘zi ajratadi: shaharda qisqa ibora, trassada to‘liq, tezlikni oshirsangiz — baland ovozda va cheklov bilan. Har kuni xotirjam o‘tadigan kameralaringiz haqida ilova jim turadi va faqat tebranish bilan belgilaydi — lekin tezlikni oshirib yaqinlashsangiz, gapiradi."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

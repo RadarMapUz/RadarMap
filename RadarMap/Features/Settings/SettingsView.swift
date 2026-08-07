@@ -41,23 +41,32 @@ struct SettingsView: View {
                         }
                     }
                     Toggle("Вибрация у камер", isOn: $settings.hapticsEnabled)
-                    // Один выбор вместо трёх переключателей: раньше тумблер
-                    // голоса, «только при превышении» и режим город/трасса
-                    // отвечали на один вопрос и противоречили друг другу.
-                    Picker("Голос о камерах", selection: $settings.voiceMode) {
-                        ForEach(VoiceMode.allCases) { Text($0.title).tag($0) }
+                    // Один профиль вместо четырёх перечислений. Раньше поведение
+                    // задавали голос, режим город/трасса, фоновые баннеры и старт
+                    // поездки, и в трёх из них было своё «Авто»/«Умно» с разным
+                    // смыслом — предсказать комбинацию было нельзя.
+                    Picker("Профиль", selection: $settings.alertProfile) {
+                        ForEach(AlertProfile.allCases) { Text($0.title).tag($0) }
                     }
-                    Text(settings.voiceMode.detail)
+                    Text(settings.alertProfile.detail)
                         .font(.rounded(11))
                         .foregroundStyle(Theme.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
-                    // Город/трасса меняет только длину фразы — и нужен лишь
-                    // тому, кто просит говорить обо всех камерах.
-                    if settings.voiceMode == .always {
-                        Picker("Режим оповещений", selection: $settings.alertMode) {
+
+                    // «Свой» — для тех, кто хочет разобрать поведение по частям.
+                    if settings.alertProfile == .custom {
+                        Picker("Голос о камерах", selection: $settings.voiceMode) {
+                            ForEach(VoiceMode.allCases) { Text($0.title).tag($0) }
+                        }
+                        Text(settings.voiceMode.detail)
+                            .font(.rounded(11))
+                            .foregroundStyle(Theme.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Picker("Город или трасса", selection: $settings.alertMode) {
                             ForEach(AlertMode.allCases) { Text($0.title).tag($0) }
                         }
                     }
+
                     Picker("Баннеры в фоне", selection: $settings.backgroundAlerts) {
                         ForEach(BackgroundAlertMode.allCases) { Text($0.title).tag($0) }
                     }
@@ -68,7 +77,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Оповещения")
                 } footer: {
-                    Text("Звук и вибрация предупреждают о камере всегда — голос отдельно. «Умно» молчит, пока вы едете в лимите: камеру видно на панели, музыка не прерывается. Заговорит, только если превышаете или впереди внезапная точка (передвижной радар, тренога, ДТП) — о таких вы знать заранее не можете. «Обо всех» возвращает прежнее поведение: в городе короткая фраза, на трассе полная.")
+                    Text("Звук и вибрация предупреждают о камере всегда — голос отдельно. «Авто» сам различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громко и с лимитом. О камерах, которые вы проезжаете каждый день спокойно, приложение молчит и только отмечает вибрацией — но заговорит, если подъезжаете к ним с превышением.")
                         .fixedSize(horizontal: false, vertical: true)
                 }
 

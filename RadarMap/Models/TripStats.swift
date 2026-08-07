@@ -36,6 +36,15 @@ final class TripStats {
     @ObservationIgnored private var lastCoordinate: CLLocationCoordinate2D?
     /// Сырой трек текущей поездки: точка каждые ≥30 м, упрощается при финише.
     @ObservationIgnored private var trackBuffer: [TrackPoint] = []
+
+    /// Хвост живого трека для схемы на приборке: откуда я приехал.
+    /// Отдаём последние N точек, а не весь буфер: чертим двести метров вокруг
+    /// себя, а поездка бывает на сотню километров.
+    func recentTrack(limit: Int = 60) -> [CLLocationCoordinate2D] {
+        trackBuffer.suffix(limit).map {
+            CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+        }
+    }
     // nonisolated: их читает и nonisolated-восстановление слепка (record(from:)).
     nonisolated private static let trackStepMeters = 30.0
     nonisolated private static let trackTolerance = 0.00022   // ~22 м — упрощение Дугласа-Пекера
@@ -130,11 +139,13 @@ final class TripStats {
     }
 
     /// Зафиксировать прохождение камеры (скорость — в точке максимального сближения).
-    func registerPass(camera: Camera, speedKmh: Double, limitKmh: Int?) {
+    func registerPass(camera: Camera, speedKmh: Double, limitKmh: Int?,
+                      limitAssumed: Bool = false) {
         passed.append(PassedCamera(
             id: UUID(), cameraID: camera.id, typeRaw: camera.type,
             location: camera.displayTitle, speedKmh: speedKmh, date: Date(),
-            lat: camera.lat, lon: camera.lon, limitKmh: limitKmh
+            lat: camera.lat, lon: camera.lon, limitKmh: limitKmh,
+            limitAssumed: limitAssumed ? true : nil
         ))
     }
 

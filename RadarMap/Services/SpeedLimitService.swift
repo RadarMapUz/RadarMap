@@ -16,8 +16,15 @@ import os
 @MainActor
 @Observable
 final class SpeedLimitService {
-    /// Лимит дороги, по которой сейчас едем (nil — дорога без данных).
+    /// Лимит дороги, по которой сейчас едем (nil — дорога без данных и
+    /// предположить не из чего).
     private(set) var currentLimit: Int?
+
+    /// Лимит не из OSM, а предположен по классу дороги
+    /// (`RoadClass.assumedLimitKmh`). Показывается со знаком «≈» и НЕ
+    /// превращается в конкретную сумму штрафа: деньги требуют уверенности,
+    /// а предположение её не даёт.
+    private(set) var isCurrentLimitAssumed = false
     /// Мгновенное превышение — только для подсветки цифры на HUD: флаг щёлкает
     /// на одном GPS-фиксе, а GPS шумит (68 → 71 → 66 при лимите 60).
     private(set) var isOverspeeding = false
@@ -34,8 +41,17 @@ final class SpeedLimitService {
     /// позже первого слоя, и без сигнала мини-знаки «60» не появились бы до
     /// первого движения карты.
     private(set) var indexRevision = 0
+    /// Сеть для схемы приборки: индекс лимитов под кэшем окрестности.
+    /// Пересоздаётся вместе с индексом — кэш не должен пережить свои данные.
+    private(set) var sketchNetwork: any RoadNetworkSource = EmptyRoadNetwork()
+
     private let settings: AppSettings
-    @ObservationIgnored private var index: LimitIndex? { didSet { indexRevision += 1 } }
+    @ObservationIgnored private var index: LimitIndex? {
+        didSet {
+            indexRevision += 1
+            sketchNetwork = index.map { CachedRoadNetwork($0) } ?? EmptyRoadNetwork()
+        }
+    }
     @ObservationIgnored private var missCount = 0
     @ObservationIgnored private var overspeedSince: Date?
     @ObservationIgnored private var lastWarnAt: Date = .distantPast
@@ -55,9 +71,25 @@ final class SpeedLimitService {
         index?.limit(near: coordinate)
     }
 
+    /// То же, но с предположением по классу дороги, когда OSM молчит.
+    /// Возвращает и признак «предположено» — его обязан показать вызывающий.
+    func limit(for camera: Camera) -> (kmh: Int, isAssumed: Bool)? {
+        if let known = index?.limit(near: camera.coordinate) { return (known, false) }
+        guard let assumed = camera.roadClass.assumedLimitKmh else { return nil }
+        return (assumed, true)
+    }
+
     /// Сам индекс — для пакетных запросов вне main (слой маркеров карты
     /// спрашивает лимиты двух сотен камер разом; LimitIndex — Sendable).
     var limitIndex: LimitIndex? { index }
+
+    /// База лимитов есть. Без неё не считаются ни превышения, ни рейтинг, ни
+    /// «возможные штрафы» — то есть половина Итогов пустая, и по экрану
+    /// непонятно почему. Пользователю это надо сказать, а не оставить гадать.
+    var isReady: Bool { index != nil }
+
+    /// Скачивание идёт прямо сейчас (для честной плашки, а не спиннера-загадки).
+    private(set) var isDownloading = false
 
     // MARK: - Загрузка базы
 
@@ -82,11 +114,20 @@ final class SpeedLimitService {
         }
     }
 
+    /// Повторить загрузку по кнопке из плашки: человек видит, что данных нет,
+    /// и должен иметь возможность что-то с этим сделать, а не ждать неделю.
+    func retryDownload() async {
+        Storage.set(0, for: .speedLimitsLastCheck)
+        await refreshFromServerIfNeeded()
+    }
+
     private func refreshFromServerIfNeeded() async {
         let lastCheck = Storage.double(.speedLimitsLastCheck)
         let weekAgo = Date().timeIntervalSince1970 - 7 * 24 * 3600
         guard index == nil || lastCheck < weekAgo else { return }
 
+        isDownloading = true
+        defer { isDownloading = false }
         // Недельная фоновая проверка: сбой сети не критичен, попробуем в следующий раз.
         let api = APIClient(timeout: 30)
         guard let data = try? await api.getData("speed_limits.json",
@@ -109,10 +150,15 @@ final class SpeedLimitService {
 
     // MARK: - Тик (вызывается LocationService на каждой GPS-точке)
 
+    /// `fallbackClass` — класс дороги ближайшей камеры. Когда `maxspeed` в OSM
+    /// нет, лимит предполагается по нему: см. `RoadClass.assumedLimitKmh`.
+    /// Класс камеры — лучший доступный признак дороги, по которой мы едем:
+    /// камера стоит НАД этой дорогой, и её `cls` проставлен снапом у 3455 из
+    /// 3467 записей базы.
     func update(coordinate: CLLocationCoordinate2D, course: CLLocationDirection,
-                speedKmh: Double, announce: Bool) {
+                speedKmh: Double, announce: Bool, fallbackClass: RoadClass = .unknown) {
         guard settings.speedLimitsEnabled, let index else {
-            currentLimit = nil; clearOverspeed()
+            currentLimit = nil; isCurrentLimitAssumed = false; clearOverspeed()
             return
         }
 
@@ -121,10 +167,20 @@ final class SpeedLimitService {
         if speedKmh >= 8, course >= 0 {
             if let limit = index.match(coordinate, courseDegrees: course) {
                 if limit != currentLimit { currentLimit = limit }
+                if isCurrentLimitAssumed { isCurrentLimitAssumed = false }
                 missCount = 0
             } else {
                 missCount += 1
-                if missCount >= 4 { currentLimit = nil }   // съехали на дорогу без данных
+                if missCount >= 4 {
+                    // Данных по дороге нет — предполагаем по классу. Раньше
+                    // здесь наступал nil, и вместе с ним пропадали превышение,
+                    // рейтинг и голос о камере в режиме по умолчанию.
+                    let assumed = fallbackClass.assumedLimitKmh
+                    if assumed != currentLimit { currentLimit = assumed }
+                    if isCurrentLimitAssumed != (assumed != nil) {
+                        isCurrentLimitAssumed = assumed != nil
+                    }
+                }
             }
         }
 
@@ -160,7 +216,7 @@ final class SpeedLimitService {
 // MARK: - Индекс сегментов
 
 /// Иммутабельный индекс: строится в фоне, читается с главного потока без блокировок.
-struct LimitIndex: Sendable {
+struct LimitIndex: Sendable, RoadNetworkSource {
     struct Segment: Sendable {
         let limit: Int
         let pts: [MKMapPoint]
@@ -168,6 +224,49 @@ struct LimitIndex: Sendable {
 
     let segments: [Segment]
     let grid: [Int: [Int32]]   // ячейка 0.01° → индексы сегментов
+
+    // MARK: - Дороги для схемы на приборке
+
+    /// Индекс лимитов — по совместительству ЕДИНСТВЕННАЯ дорожная геометрия,
+    /// которая уже лежит на телефоне: 21 558 сегментов, 183 483 точки, офлайн.
+    /// Мы качали его ради матчинга лимита, а он несёт настоящие линии дорог —
+    /// с перекрёстками и развязками. Первый источник для RoadSketch, пока не
+    /// собран собственный roads.json (см. RoadNetwork.swift).
+    ///
+    /// Чего этот источник НЕ знает: класса дороги, моста, односторонности —
+    /// в файле их нет. Поэтому все линии помечены как «без подробностей», и
+    /// вью рисует их ровно, не выдавая догадку за измеренное.
+    func roads(near coordinate: CLLocationCoordinate2D,
+               radius: CLLocationDistance) -> [RoadLine] {
+        // Ячейка грида 0.01° ≈ 1,1 км — берём кольцо ячеек по радиусу.
+        let span = max(1, Int((radius / 1100).rounded(.up)))
+        let centerLat = Int((coordinate.latitude + 90) * 100)
+        let centerLon = Int((coordinate.longitude + 180) * 100)
+
+        var seen = Set<Int32>()
+        for latCell in (centerLat - span)...(centerLat + span) {
+            for lonCell in (centerLon - span)...(centerLon + span) {
+                if let found = grid[latCell * 40_000 + lonCell] { seen.formUnion(found) }
+            }
+        }
+        guard !seen.isEmpty else { return [] }
+
+        let origin = MKMapPoint(coordinate)
+        // Метры → единицы MKMapPoint на этой широте.
+        let limitPoints = radius / MKMetersPerMapPointAtLatitude(coordinate.latitude)
+        return seen.compactMap { index -> RoadLine? in
+            let segment = segments[Int(index)]
+            // Точки за радиусом отбрасываем, но линию не рвём: берём кусок от
+            // первой до последней попавшей — иначе дорога рассыпалась бы на
+            // обрывки там, где она просто длинная.
+            guard let first = segment.pts.firstIndex(where: {
+                      $0.distance(to: origin) <= limitPoints }),
+                  let last = segment.pts.lastIndex(where: {
+                      $0.distance(to: origin) <= limitPoints }),
+                  last > first else { return nil }
+            return RoadLine(points: segment.pts[first...last].map(\.coordinate))
+        }
+    }
 
     nonisolated private static func cellKey(lat: Double, lon: Double) -> Int {
         let latCell = Int((lat + 90) * 100)

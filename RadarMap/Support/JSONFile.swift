@@ -33,4 +33,15 @@ nonisolated enum JSONFile {
             return false
         }
     }
+
+    /// Удалить кэш. Отсутствие файла — норма, а вот отказ в удалении значит,
+    /// что данные, которым мы перестали верить, останутся лежать: это в лог.
+    static func remove(at url: URL, log: Logger) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            log.error("удаление \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+    }
 }

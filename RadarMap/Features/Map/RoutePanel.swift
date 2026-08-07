@@ -207,6 +207,9 @@ struct TripLiveBar: View {
                 }
             }
             Spacer(minLength: 8)
+            // «Радар!» слева от «стоп» — в поездке это самая частая кнопка
+            // после самой остановки, и до неё палец должен доходить не глядя.
+            ReportRadarButton()
             Button(action: onStop) {
                 Image(systemName: "stop.fill")
                     .font(.rounded(16, .bold))

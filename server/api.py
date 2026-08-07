@@ -12,6 +12,9 @@ Endpoints:
   POST /api/metrics        {device, kind, payload}   -> {"ok": true}   (MetricKit)
   POST /api/camera_report  {camera_id, reason, lat, lon, db_version, device} -> {"ok": true}
   POST /api/feedback       {message, contact, app_version, device}     -> {"ok": true}
+  POST /api/stat           {device, day, app, ios, model, location_auth, onboarded,
+                            trips, km, alerts, passes, reports, screens} -> {"ok": true}
+                           (обезличенный суточный агрегат: ни координат, ни времени событий)
 
 Правила передвижных радаров:
   * отметка живёт 3 ч; подтверждение (+1) продлевает на 30 мин (максимум 6 ч)
@@ -19,21 +22,25 @@ Endpoints:
   * 3+ дизлайков и дизлайков больше лайков -> отметка скрывается
   * на устройство: максимум 3 активных отметки, минимум 120 с между отметками
 
-Модерация репортов о камерах — вручную на сервере:
-  sqlite3 /opt/radarmap/api/reports.db \
-    "SELECT camera_id, reason, COUNT(DISTINCT device) n, MAX(datetime(received,'unixepoch')) last \
-     FROM camera_reports WHERE resolved=0 GROUP BY camera_id, reason ORDER BY n DESC;"
-  sqlite3 /opt/radarmap/api/reports.db \
-    "SELECT id, datetime(received,'unixepoch'), app_version, contact, message FROM feedback ORDER BY id DESC LIMIT 20;"
+Модерация — в панели (server/admin.py, отдельный процесс на :8092, наружу
+через nginx /admin/ с basic auth). Она же проставляет camera_reports.resolved
+и копит решения в таблице overrides; публикует их владелец локальной командой
+server/publish_overrides.sh — ключ подписи на VPS не хранится.
 """
 import json
 import math
+import re
 import sqlite3
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 DB_PATH = "/opt/radarmap/api/reports.db"
+# Потолок одновременных обработчиков. У ThreadingHTTPServer предела нет: поток
+# на соединение плюс медленный клиент — и память кончается раньше, чем сработают
+# капы. Сверх потолка отвечаем 503: честный отказ лучше молчаливой очереди.
+MAX_WORKERS = 64
+BUSY_TIMEOUT_MS = 5000
 TTL = 3 * 3600
 EXTEND = 30 * 60
 MAX_LIFE = 6 * 3600
@@ -55,13 +62,38 @@ MAX_ID = 2**31               # верхняя граница id: больше �
 # а 250 — сбор метрик на месяц. CGNAT мобильных сетей помним, поэтому капы
 # щедрые: за одним адресом оператора живут десятки честных водителей.
 IP_DAILY_CAPS = {"report": 30, "vote": 100, "camera_report": 60,
-                 "feedback": 30, "metrics": 60}
+                 "feedback": 30, "metrics": 60, "stat": 60}
+MAX_USAGE_ROWS = 2_000_000   # ~90 дней × 20 000 устройств: потолок диска
 # Скрытие отметки требует дизлайков с РАЗНЫХ адресов: три свежих UUID с одного
 # телефона больше не снимают чужую отметку с карты.
 HIDE_DISTINCT_IPS = 3
 
 def db():
-    conn = sqlite3.connect(DB_PATH)
+    """Соединение для обработки одного запроса.
+
+    Схему здесь НЕ трогаем: раньше каждый HTTP-запрос выполнял шесть
+    CREATE TABLE IF NOT EXISTS и четыре ALTER TABLE, из которых все четыре
+    всегда падали в исключение — десяток служебных запросов до начала работы.
+    Схема и миграции живут в init_db() и выполняются один раз при старте.
+
+    busy_timeout обязателен: без него параллельный POST во время чтения
+    /api/mobile отдаёт «database is locked» мгновенным 500 вместо ожидания.
+    """
+    conn = sqlite3.connect(DB_PATH, timeout=BUSY_TIMEOUT_MS / 1000)
+    conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+    # NORMAL в паре с WAL: fsync на каждый коммит нам не нужен — потеря
+    # последних отметок при отключении питания дешевле, чем запись в темпе диска.
+    conn.execute("PRAGMA synchronous = NORMAL")
+    return conn
+
+
+def init_db():
+    """Схема, миграции и индексы. Вызывается один раз при старте процесса."""
+    conn = sqlite3.connect(DB_PATH, timeout=BUSY_TIMEOUT_MS / 1000)
+    # WAL — свойство файла БД, ставится один раз и переживает перезапуск.
+    # Без него писатель блокирует читателей: один POST /api/report во время
+    # опроса десятком телефонов давал им 500.
+    conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("""CREATE TABLE IF NOT EXISTS reports(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         lat REAL NOT NULL, lon REAL NOT NULL,
@@ -71,23 +103,6 @@ def db():
     conn.execute("""CREATE TABLE IF NOT EXISTS votes(
         report_id INTEGER, device TEXT, value INTEGER,
         PRIMARY KEY(report_id, device))""")
-    try:  # миграция живой БД: ts нужен для суточного лимита голосов
-        conn.execute("ALTER TABLE votes ADD COLUMN ts REAL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # колонка уже есть
-    try:  # миграция: тип отметки (radar/tripod/post/accident)
-        conn.execute("ALTER TABLE reports ADD COLUMN type TEXT DEFAULT 'radar'")
-    except sqlite3.OperationalError:
-        pass
-    # Миграция: IP голосов и отметок. Все device-лимиты обходятся новым UUID
-    # на каждый запрос; IP от nginx (X-Forwarded-For = $remote_addr, клиентский
-    # заголовок перезаписывается) — единственный признак, который ротацией не
-    # меняется. Старые строки остаются с '' и в IP-проверках не участвуют.
-    for table in ("votes", "reports"):
-        try:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN ip TEXT DEFAULT ''")
-        except sqlite3.OperationalError:
-            pass
     conn.execute("""CREATE TABLE IF NOT EXISTS metrics(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         device TEXT NOT NULL, kind TEXT NOT NULL,
@@ -108,12 +123,86 @@ def db():
         app_version TEXT,
         device TEXT NOT NULL,
         received REAL NOT NULL)""")
-    return conn
+    # Обезличенный суточный агрегат: ни координат, ни маршрутов, ни времени
+    # событий — только счётчики. Один отчёт на устройство в сутки (PRIMARY KEY),
+    # повтор просто перезаписывает: сеть могла оборвать подтверждение, и
+    # дубликат не должен раздувать «сколько у нас пользователей».
+    conn.execute("""CREATE TABLE IF NOT EXISTS usage_stats(
+        device TEXT NOT NULL, day TEXT NOT NULL,
+        app TEXT, ios TEXT, model TEXT,
+        location_auth TEXT, onboarded INTEGER,
+        trips INTEGER, km REAL, alerts INTEGER, passes INTEGER, reports INTEGER,
+        screens TEXT, received REAL NOT NULL,
+        PRIMARY KEY(device, day))""")
+
+    # --- миграции живой БД (порядок: только после CREATE всех таблиц) ---
+    migrate(conn, "votes", "ts REAL DEFAULT 0")               # суточный лимит голосов
+    migrate(conn, "reports", "type TEXT DEFAULT 'radar'")     # radar/tripod/post/accident
+    migrate(conn, "feedback", "status TEXT DEFAULT 'new'")    # new/open/answered (админка)
+    migrate(conn, "feedback", "note TEXT DEFAULT ''")         # заметка модератора
+    # IP голосов, отметок и репортов о камерах. Все device-лимиты обходятся
+    # новым UUID на каждый запрос; IP от nginx (X-Forwarded-For = $remote_addr,
+    # клиентский заголовок перезаписывается) — единственный признак, который
+    # ротацией не меняется. Старые строки остаются с '' и в проверках не
+    # участвуют: лучше передержать отметку, чем дать снять её анонимной ротацией.
+    #
+    # camera_reports получили ip позже остальных, и это была дыра: модератор
+    # видел «5 разных устройств сообщили, что камеры нет» — а это пять запросов
+    # с одного телефона со свежим UUID. Снять по такому сигналу живую камеру
+    # значит получить молчание там, где камера стоит, то есть худший отказ всей
+    # системы. Кворум на скрытие считается по РАЗНЫМ адресам (см. admin.py).
+    for table in ("votes", "reports", "camera_reports"):
+        migrate(conn, table, "ip TEXT DEFAULT ''")
+
+    # --- индексы ---
+    # Раньше не было ни одного: каждая проверка суточного капа была полным
+    # сканом таблицы, а горячий GET /api/mobile сканировал все отметки.
+    for statement in (
+        "CREATE INDEX IF NOT EXISTS idx_reports_live ON reports(active, expires)",
+        "CREATE INDEX IF NOT EXISTS idx_reports_device ON reports(device, active, expires)",
+        # votes(report_id, …) уже покрыт индексом первичного ключа
+        "CREATE INDEX IF NOT EXISTS idx_votes_device ON votes(device, ts)",
+        "CREATE INDEX IF NOT EXISTS idx_camrep_camera ON camera_reports(camera_id, resolved)",
+        "CREATE INDEX IF NOT EXISTS idx_camrep_device ON camera_reports(device, received)",
+        "CREATE INDEX IF NOT EXISTS idx_camrep_received ON camera_reports(received)",
+        "CREATE INDEX IF NOT EXISTS idx_feedback_received ON feedback(received)",
+        "CREATE INDEX IF NOT EXISTS idx_feedback_device ON feedback(device, received)",
+        "CREATE INDEX IF NOT EXISTS idx_metrics_device ON metrics(device, received)",
+        "CREATE INDEX IF NOT EXISTS idx_metrics_received ON metrics(received)",
+        "CREATE INDEX IF NOT EXISTS idx_usage_day ON usage_stats(day)",
+        "CREATE INDEX IF NOT EXISTS idx_usage_received ON usage_stats(received)",
+    ):
+        conn.execute(statement)
+
+    conn.commit()
+    conn.close()
+
+
+def migrate(conn, table, column_def):
+    """ALTER TABLE ADD COLUMN, идемпотентно. Отдельной функцией, чтобы
+    «колонка уже есть» не путалась с настоящей ошибкой схемы в глазах читателя."""
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+    except sqlite3.OperationalError:
+        pass  # колонка уже есть
 
 def clean_text(s):
     """Пользовательский текст идёт в терминал модератора (sqlite3 в консоли) —
     вырезаем управляющие символы, чтобы ANSI-escape'ами нельзя было рисовать."""
     return "".join(ch for ch in s if ch.isprintable() or ch == "\n")
+
+DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def clamp_int(value, limit=100000):
+    """Счётчик из отчёта. Не число, отрицательное или неправдоподобно большое —
+    ноль: испорченное поле не должно ни падать, ни искажать сводку."""
+    try:
+        number = int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    return number if 0 <= number <= limit else 0
+
 
 def as_str(value, default=None):
     """Строгое строковое поле. str(dict) молча сохранял Python-repr словаря
@@ -172,11 +261,25 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _ip(self):
-        """IP клиента. nginx перезаписывает X-Forwarded-For значением
-        $remote_addr (см. nginx-radarmap.conf), поэтому заголовку можно верить;
-        напрямую (тесты, локалка) берём адрес сокета."""
-        return (self.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-                or self.client_address[0])
+        """IP клиента.
+
+        Порядок важен и стоил бы нам всей защиты по IP. Верить можно только
+        заголовку, который nginx ПЕРЕЗАПИСЫВАЕТ значением $remote_addr —
+        клиентский он затирает. Живой конфиг ставит X-Real-IP, поэтому он и
+        первый; X-Forwarded-For остаётся вторым для тестов и на случай другого
+        фронта, а сокет — для запуска без прокси вовсе.
+
+        Раньше первым (и единственным) читался X-Forwarded-For, которого живой
+        nginx НЕ ставил, — то есть его значение приходило от клиента. Проверено
+        на проде: запрос с «X-Forwarded-For: 8.8.8.8» проходил и списывался с
+        чужого лимита. Так обходились все суточные капы и подделывался кворум
+        «разных адресов», по которому скрывается отметка.
+        """
+        for header in ("X-Real-IP", "X-Forwarded-For"):
+            value = self.headers.get(header, "").split(",")[0].strip()
+            if value:
+                return value
+        return self.client_address[0]
 
     def _body(self, limit=4096):
         try:
@@ -230,7 +333,68 @@ class Handler(BaseHTTPRequestHandler):
             return self._camera_report()
         if path == "/api/feedback":
             return self._feedback()
+        if path == "/api/stat":
+            return self._stat()
         self._json(404, {"error": "not found"})
+
+    def _stat(self):
+        """Суточный агрегат использования. Координат тут нет и быть не может:
+        всё, что принимается, — числа, версии и уровень разрешений."""
+        data = self._body(limit=8192)
+        if not data:
+            return self._json(400, {"error": "bad json"})
+        try:
+            device = as_str(data["device"])[:64]
+            day = as_str(data["day"])[:10]
+            app = as_str(data.get("app"), default="")[:16]
+            ios = as_str(data.get("ios"), default="")[:16]
+            model = as_str(data.get("model"), default="")[:32]
+            auth = as_str(data.get("location_auth"), default="")[:16]
+            onboarded = 1 if data.get("onboarded") else 0
+            trips = clamp_int(data.get("trips"))
+            alerts = clamp_int(data.get("alerts"))
+            passes = clamp_int(data.get("passes"))
+            reports = clamp_int(data.get("reports"))
+            km = float(data.get("km") or 0)
+        except (KeyError, TypeError, ValueError):
+            return self._json(400, {"error": "bad fields"})
+        if not device or not DAY_RE.match(day):
+            return self._json(400, {"error": "bad fields"})
+        if auth not in ("", "always", "whenInUse", "denied", "restricted",
+                        "notDetermined", "unknown"):
+            return self._json(400, {"error": "bad fields"})
+        # 20 000 км за сутки — это не поездка, а испорченное поле.
+        if not 0 <= km <= 20000 or km != km:
+            km = 0.0
+        screens = data.get("screens")
+        if not isinstance(screens, dict):
+            screens = {}
+        screens = {as_str(k)[:24]: clamp_int(v) for k, v in list(screens.items())[:20]}
+
+        if ip_quota_exceeded("stat", self._ip(), IP_DAILY_CAPS["stat"]):
+            return self._json(429, {"error": "too many"})
+
+        now = time.time()
+        conn = db()
+        try:
+            total = conn.execute("SELECT COUNT(*) FROM usage_stats").fetchone()[0]
+            if total >= MAX_USAGE_ROWS:
+                # Ротация device не должна заливать диск. Чистим старое и только
+                # потом отказываем: иначе таблица однажды закрывается навсегда.
+                conn.execute("DELETE FROM usage_stats WHERE received < ?", (now - 90 * 86400,))
+                if conn.execute("SELECT COUNT(*) FROM usage_stats").fetchone()[0] >= MAX_USAGE_ROWS:
+                    conn.commit()
+                    return self._json(429, {"error": "too many"})
+            conn.execute(
+                "INSERT OR REPLACE INTO usage_stats(device, day, app, ios, model, "
+                "location_auth, onboarded, trips, km, alerts, passes, reports, "
+                "screens, received) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (device, day, app, ios, model, auth, onboarded, trips, km,
+                 alerts, passes, reports, json.dumps(screens), now))
+            conn.commit()
+        finally:
+            conn.close()
+        return self._json(200, {"ok": True})
 
     def _metrics(self):
         try:
@@ -297,7 +461,8 @@ class Handler(BaseHTTPRequestHandler):
             lat = None
         if lon is not None and not (UZ_LON[0] <= lon <= UZ_LON[1]):
             lon = None
-        if ip_quota_exceeded("camera_report", self._ip(), IP_DAILY_CAPS["camera_report"]):
+        ip = self._ip()
+        if ip_quota_exceeded("camera_report", ip, IP_DAILY_CAPS["camera_report"]):
             return self._json(429, {"error": "too many"})
 
         now = time.time()
@@ -322,9 +487,9 @@ class Handler(BaseHTTPRequestHandler):
             if dup:
                 return self._json(200, {"ok": True, "duplicate": True})
             conn.execute(
-                "INSERT INTO camera_reports(camera_id, reason, lat, lon, db_version, device, received) "
-                "VALUES(?,?,?,?,?,?,?)",
-                (camera_id, reason, lat, lon, db_version, device, now))
+                "INSERT INTO camera_reports(camera_id, reason, lat, lon, db_version, "
+                "device, received, ip) VALUES(?,?,?,?,?,?,?,?)",
+                (camera_id, reason, lat, lon, db_version, device, now, ip))
             conn.commit()
         finally:
             conn.close()
@@ -489,5 +654,45 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             conn.close()
 
+class BoundedHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer с потолком одновременных обработчиков.
+
+    Базовый класс плодит поток на каждое соединение без предела: сотня
+    медленных POST'ов — сотня потоков, висящих до таймаута в 10 с. Капы в
+    хендлерах от этого не спасают, они срабатывают уже внутри обработчика.
+    Сверх потолка отвечаем 503 и закрываем: отказ, который клиент увидит и
+    повторит позже, лучше очереди, которую никто не разгребёт.
+    """
+    daemon_threads = True
+
+    def __init__(self, *args, max_workers=MAX_WORKERS, **kwargs):
+        self._slots = threading.BoundedSemaphore(max_workers)
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address):
+        if not self._slots.acquire(blocking=False):
+            try:
+                request.sendall(b"HTTP/1.1 503 Service Unavailable\r\n"
+                                b"Content-Length: 0\r\nConnection: close\r\n\r\n")
+            except OSError:
+                pass  # клиент уже отвалился — отвечать некому
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            # поток не стартовал (например, кончились потоки ОС) — слот вернуть,
+            # иначе сервер медленно «зарастает» и перестаёт принимать вообще
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+
 if __name__ == "__main__":
-    ThreadingHTTPServer(("127.0.0.1", 8091), Handler).serve_forever()
+    init_db()
+    BoundedHTTPServer(("127.0.0.1", 8091), Handler).serve_forever()

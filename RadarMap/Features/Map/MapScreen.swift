@@ -78,7 +78,7 @@ struct MapScreen: View {
         .mapScope(mapScope)
         .fullScreenCover(isPresented: $showDashboard) { DashboardView() }
         .task {
-            map.configure(env.cameras, speedLimits: env.speedLimits)
+            map.configure(env.cameras, speedLimits: env.speedLimits, thermal: env.thermal)
             map.filter = env.settings.filter
             // Если карта уже отдала регион до конфигурации (статичный старт без геопозиции) —
             // пересчитываем принудительно, иначе аннотации не появятся до первого движения карты.
@@ -155,6 +155,13 @@ struct MapScreen: View {
         }
         .onChange(of: env.location.nearestCamera?.id) { _, _ in
             dismissedApproachID = nil   // новая ближайшая камера — снова показываем предупреждение
+        }
+        // Проезд чужой передвижной отметки → вопрос «ещё стоял?». Тик берём
+        // здесь, а не в LocationService: спрашивать имеет смысл только когда
+        // экран перед глазами, а сервис и без того самый нагруженный в проекте.
+        .onChange(of: env.location.locationTick) {
+            guard let coordinate = env.location.currentCoordinate else { return }
+            withAnimation { env.mobile.trackPasses(from: coordinate) }
         }
         .onChange(of: env.location.isTripActive) { _, active in
             // В поездке карта сама встаёт «по ходу движения», после — назад на север.
@@ -376,6 +383,11 @@ struct MapScreen: View {
 
     private var topLayer: some View {
         VStack(spacing: 10) {
+            // Почему приложение работает не в полную силу: объявление сервера,
+            // серая карта без сети, урезанная карта в жару, отсутствие лимитов.
+            // Выше всего, потому что человек должен узнать причину раньше, чем
+            // упрётся в неё сам и решит, что приложение сломалось.
+            MapStatusBanner(onOpenDashboard: { showDashboard = true })
             // Тап по HUD — «Спидометр»; долгий тап — быстрые тумблеры оповещений.
             // В навигации главный элемент — манёвр, поэтому HUD уходит на
             // второй план: одного «главного» на экране достаточно, два спорят
@@ -541,6 +553,11 @@ struct MapScreen: View {
                     }
                     .transition(.move(edge: .leading).combined(with: .opacity))
                 }
+                // «Радар ещё стоял?» — над панелью поездки: вопрос живёт
+                // двадцать секунд и уходит сам, ничего не отправляя. Пока на
+                // экране предупреждение о камере, вопрос ждёт: камера важнее,
+                // а под оверлеем плашка сгорала невидимой.
+                MobileConfirmBar(isCovered: env.location.isApproachingCamera)
                 if mode.showsTripBar {
                     // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
                     // максимум экрана отдан карте, и она не прячется вместе с кнопками.
@@ -895,6 +912,9 @@ struct MapScreen: View {
         if args.contains("-demoHistoryOld") { env.trip.seedDemoHistory(shiftDays: 14) }
         if args.contains("-showStats") { map.showStats = true }
         if args.contains("-showSettings") { map.showSettings = true }
+        // Приборку на симуляторе иначе не снять: её открывают тапом по HUD,
+        // а он перекрыт кнопкой поездки в скриншот-прогонах.
+        if args.contains("-showDashboard") { showDashboard = true }
         if args.contains("-showCameraDetail") {
             Task {
                 await Task.pause(seconds: 1.5)

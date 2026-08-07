@@ -74,6 +74,11 @@ final class RouteService {
     func dismissArrival() { lastArrival = nil }
 
     /// Голосовые события — подключаются в AppEnvironment.
+    /// Пульт: маршруты строит наш OSRM, и его падение — единственная беда,
+    /// которую иначе никак не сообщить пользователю до следующего релиза.
+    @ObservationIgnored weak var config: RemoteConfigService?
+    var isRoutingEnabled: Bool { config?.isRoutingEnabled ?? true }
+
     @ObservationIgnored var onRerouted: (() -> Void)?
     @ObservationIgnored var onArrived: (() -> Void)?
     @ObservationIgnored var onManeuver: ((String) -> Void)?
@@ -92,6 +97,30 @@ final class RouteService {
     var isActive: Bool { !variants.isEmpty }
     var selected: Variant? { variants.first { $0.id == selectedID } }
     var polyline: MKPolyline? { selected?.polyline }
+
+    /// Координаты выбранного маршрута — для схемы на приборке, которая чертит
+    /// линию сама, без карты.
+    ///
+    /// С кэшем: геттер дёргается на каждом GPS-тике открытой приборки, а
+    /// `getCoordinates` копирует ВЕСЬ маршрут — для Ташкент—Бухара это тысячи
+    /// точек каждую секунду впустую. Ключ — сам объект полилайна, а не
+    /// поколение: перестроение при уходе с маршрута заменяет варианты, НЕ
+    /// трогая поколение, и кэш по поколению отдавал бы старую линию.
+    var routeCoordinates: [CLLocationCoordinate2D] {
+        guard let polyline else { return [] }
+        if let cache = coordinatesCache, cache.polyline === polyline {
+            return cache.points
+        }
+        var points = [CLLocationCoordinate2D](repeating: .init(),
+                                              count: polyline.pointCount)
+        polyline.getCoordinates(&points, range: NSRange(location: 0, length: polyline.pointCount))
+        coordinatesCache = (polyline, points)
+        return points
+    }
+    /// Держит полилайн сильной ссылкой: пока ключ жив, его адрес не достанется
+    /// новому объекту и кэш не совпадёт с чужим маршрутом по случайности.
+    @ObservationIgnored private var coordinatesCache:
+        (polyline: MKPolyline, points: [CLLocationCoordinate2D])?
     var camerasOnRoute: [RouteCamera] { selected?.cameras ?? [] }
     var distanceText: String { selected?.distanceText ?? "" }
     var etaText: String { selected?.etaText ?? "" }
@@ -113,6 +142,13 @@ final class RouteService {
                to destination: CLLocationCoordinate2D,
                name: String, cameras: [Camera],
                alternatives: Bool = true) async {
+        // Пульт: если наш OSRM лежит, честное «временно недоступны» лучше, чем
+        // спиннер на 20 секунд и «Маршрут не найден» — последнее водитель
+        // прочитает как «дороги нет», а не как «сервер чинят».
+        guard isRoutingEnabled else {
+            errorMessage = String(localized: "Маршруты временно недоступны — мы уже чиним")
+            return
+        }
         isBuilding = true
         errorMessage = nil
         defer { isBuilding = false }

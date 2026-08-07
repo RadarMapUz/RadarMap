@@ -89,15 +89,22 @@ final class MapState {
 
     private var repository: CameraRepository?
     @ObservationIgnored private weak var speedLimits: SpeedLimitService?
+    /// Перегрев: под ним карта рисует меньше и пересчитывается реже. Оповещения
+    /// о камерах это не трогает — за рулём голос важнее картинки.
+    @ObservationIgnored private weak var thermal: ThermalService?
     private var currentRegion: MKCoordinateRegion?
     private var loadedRegion: MKCoordinateRegion?   // область, для которой посчитаны точки (с буфером)
 
     /// Координата центра карты (для добавления камеры «здесь»).
     var mapCenter: CLLocationCoordinate2D? { currentRegion?.center }
 
-    func configure(_ repository: CameraRepository, speedLimits: SpeedLimitService? = nil) {
+    var performance: PerformanceMode { thermal?.mode ?? .full }
+
+    func configure(_ repository: CameraRepository, speedLimits: SpeedLimitService? = nil,
+                   thermal: ThermalService? = nil) {
         if self.repository == nil { self.repository = repository }
         if self.speedLimits == nil { self.speedLimits = speedLimits }
+        if self.thermal == nil { self.thermal = thermal }
     }
 
     /// Первый GPS-фикс после запуска: показываем окрестности (~2.5 км), а не всю страну —
@@ -186,10 +193,14 @@ final class MapState {
         let filter = self.filter
         let span = region.span.latitudeDelta
         let limitIndex = speedLimits?.limitIndex
+        // Бюджет маркеров зависит от того, не режет ли iOS процессор из-за
+        // перегрева. Камера при этом не пропадает: всё, что не поместилось в
+        // бюджет, CameraMapContent отдаёт кластерами с числом.
+        let budget = performance.annotationBudget
         Task {
             let layer = await CameraMapContent.layer(
                 cameras: cameras, region: buffered, filter: filter,
-                budget: AppConfig.maxVisibleAnnotations, limitIndex: limitIndex)
+                budget: budget, limitIndex: limitIndex)
             // Пока считали, карту могли увезти дальше — этот ответ уже не про то,
             // что на экране. Область «загруженной» при этом НЕ помечаем: иначе
             // после быстрой прокрутки туда-сюда кэш говорил бы «тут всё есть»,
@@ -212,10 +223,14 @@ final class MapState {
         // отдельных камер.
         let ratio = region.span.latitudeDelta / loadedSpan
         if ratio < 0.6 || ratio > 1.6 { return true }
+        // В перегрев порог сдвига растягиваем: пересчёт слоя — самая дорогая
+        // операция карты, и когда iOS уже режет процессор, делать её вдвое-
+        // вчетверо реже полезнее, чем показать точку на полсекунды раньше.
+        let threshold = min(1, AppConfig.recomputeThreshold * performance.recomputeFactor)
         let movedLat = abs(region.center.latitude - loaded.center.latitude)
         let movedLon = abs(region.center.longitude - loaded.center.longitude)
-        return movedLat > loaded.span.latitudeDelta / 2 * AppConfig.recomputeThreshold
-            || movedLon > loaded.span.longitudeDelta / 2 * AppConfig.recomputeThreshold
+        return movedLat > loaded.span.latitudeDelta / 2 * threshold
+            || movedLon > loaded.span.longitudeDelta / 2 * threshold
     }
 
     /// Применить готовый слой. Анимируем только небольшие наборы: на сотнях

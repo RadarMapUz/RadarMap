@@ -311,6 +311,34 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
             .distance(from: CLLocation(latitude: lat, longitude: lon))
     }
 
+    // MARK: - Правки модератора (CameraOverride)
+
+    /// Камера с исправленной координатой.
+    ///
+    /// Весь профиль дороги при этом сбрасывается: `axis`, `dir`, `road`,
+    /// `split`, `twin`, `bridge`, `cls`, `lanes` снап измерил В ДРУГОЙ ТОЧКЕ, и
+    /// после переноса они описывают чужую дорогу. Особенно `road` — это дельты
+    /// ОТ координаты камеры, так что вместе с ней уехала бы и «проезжая часть».
+    ///
+    /// Цена сброса — камера перестаёт глушиться по направлению и оси, то есть
+    /// предупреждает чаще. Это ровно та сторона, в которую здесь ошибаться
+    /// можно: лишнее предупреждение дешевле молчания.
+    func moved(lat: Double, lon: Double) -> Camera {
+        Camera(id: id, region: region, city: city, location: location,
+               lat: lat, lon: lon, type: type, violations: violations,
+               needsReview: needsReview)
+    }
+
+    /// Камера с исправленным типом. Нарушения выводятся из типа, поэтому
+    /// пересобираются: иначе «радар» остался бы со списком нарушений камеры.
+    func retyped(to newType: String) -> Camera {
+        Camera(id: id, region: region, city: city, location: location,
+               lat: lat, lon: lon, type: newType,
+               violations: Self.defaultViolations(forType: newType),
+               needsReview: needsReview, axis: axis, dir: dir, lanes: lanes,
+               cls: cls, bridge: bridge, road: road, split: split, twin: twin)
+    }
+
     // Равенство/хеш по id — координаты вычисляемые и в синтез не должны попадать.
     static func == (lhs: Camera, rhs: Camera) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }

@@ -104,6 +104,37 @@ final class FeedbackService {
         ])
     }
 
+    /// «Камера была, а приложение промолчало».
+    ///
+    /// Самый ценный сигнал, который у нас есть, и до сих пор его негде было
+    /// подать: молчание камеры мы ловили только глазами на симуляции, а
+    /// водитель в TestFlight мог лишь написать «иногда не предупреждает» —
+    /// без места, скорости и маршрута такая жалоба недиагностируема.
+    ///
+    /// Контекст собирается сам и уходит текстом в общую очередь отзывов
+    /// (в админке она уже разбирается по статусам). Отдельного `reason` на
+    /// сервере не заводим: разбирать это всё равно человеку, а лишняя
+    /// колонка в схеме — миграция ради одной строки.
+    func reportMissedAlert(pass: PassedCamera, dbVersion: Int) async -> FeedbackOutcome {
+        var lines = ["[не предупредила] камера #\(pass.cameraID)"]
+        if !pass.location.isEmpty { lines.append("место: \(pass.location)") }
+        lines.append("тип: \(pass.typeRaw)")
+        lines.append("скорость в зоне: \(Int(pass.speedKmh)) км/ч")
+        if let limit = pass.limitKmh { lines.append("лимит: \(limit) км/ч") }
+        if let lat = pass.lat, let lon = pass.lon {
+            // Координата ПРОЕЗДА, а не трека: она нужна, чтобы повторить
+            // геометрию гейтов, и это единственная точка, без которой жалоба
+            // не воспроизводится.
+            lines.append("координата: \(String(format: "%.5f, %.5f", lat, lon))")
+        }
+        // Был ли построен маршрут, запись проезда не хранит — а гейт «камера
+        // на маршруте» работает именно от него. Спросим у человека в ответе,
+        // но не подставим сюда догадку.
+        lines.append("время: \(pass.date.formatted(.iso8601))")
+        lines.append("база: v\(dbVersion)")
+        return await sendMessage(lines.joined(separator: "\n"), contact: "")
+    }
+
     /// Сообщение разработчику (форма в настройках).
     func sendMessage(_ text: String, contact: String) async -> FeedbackOutcome {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"

@@ -68,9 +68,15 @@ nonisolated enum TripHistory {
     }
 
     /// «Возможные штрафы» поездки/записи — красная строка в деталке.
+    ///
+    /// Считается ТОЛЬКО по достоверным лимитам. Лимит, предположенный по классу
+    /// дороги, годится для рейтинга и для голоса — там цена ошибки лишний
+    /// совет, — но назвать по догадке сумму в сумах значит соврать про деньги.
+    /// Проезд с предположенным лимитом виден в разборе как превышение, но в
+    /// сумму не входит.
     static func fineRisk(of passes: [PassedCamera]) -> Double {
         passes.reduce(0.0) { total, pass in
-            guard let limit = pass.limitKmh else { return total }
+            guard pass.limitIsCertain, let limit = pass.limitKmh else { return total }
             return total + FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
         }
     }

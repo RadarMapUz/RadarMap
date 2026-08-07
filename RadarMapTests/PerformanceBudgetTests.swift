@@ -131,4 +131,101 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertLessThan(total, .milliseconds(500),
                           "сводка периода деградировала: \(total) на 50 пересчётов")
     }
+
+    // MARK: - Схема на приборке
+
+    /// Плотная городская сетка улиц через ~110 м: 200 сегментов, 20 200 точек —
+    /// гуще реального центра Ташкента. Собирается боевым `LimitIndex.build`,
+    /// то есть замер включает и сеточный запрос `roads(near:)`.
+    private func syntheticRoadNetwork() -> LimitIndex {
+        var segments: [[Any]] = []
+        for i in 0..<100 {
+            let lat = 41.26 + Double(i) * 0.001
+            var flat: [Double] = []
+            for j in 0...100 { flat.append(lat); flat.append(69.20 + Double(j) * 0.001) }
+            segments.append([60, flat])
+        }
+        for j in 0..<100 {
+            let lon = 69.20 + Double(j) * 0.001
+            var flat: [Double] = []
+            for i in 0...100 { flat.append(41.26 + Double(i) * 0.001); flat.append(lon) }
+            segments.append([60, flat])
+        }
+        let data = try! JSONSerialization.data(withJSONObject: ["segments": segments])
+        return LimitIndex.build(from: data)!
+    }
+
+    /// Схема приборки, полный горячий путь минуты езды: на каждом тике —
+    /// арифметика точки зрения и решение о пересборке, изредка — сборка сцены
+    /// (плотный центр, позади маршрут на 300 км из 10 000 точек). Ловим два
+    /// регресса: возврат тяжёлой работы на каждый тик и разучившийся жить
+    /// растр, который пересобирается каждую секунду.
+    func testRoadSketchBudget() {
+        // Как в бою: индекс под кэшем окрестности (см. SpeedLimitService).
+        let network = CachedRoadNetwork(syntheticRoadNetwork())
+        let start0 = CLLocationCoordinate2D(latitude: 41.29, longitude: 69.25)
+        let route: [CLLocationCoordinate2D] = (0..<10_000).map {
+            CLLocationCoordinate2D(latitude: start0.latitude + Double($0) * 0.0003,
+                                   longitude: start0.longitude)
+        }
+        let track: [CLLocationCoordinate2D] = (0..<60).map {
+            CLLocationCoordinate2D(latitude: start0.latitude - Double($0) * 0.0003,
+                                   longitude: start0.longitude)
+        }
+        // Камера в 600 м впереди со своим куском дороги, как у 99,7% базы
+        // (дельты в 1e-6°; ~30 м шага по широте ≈ 270 единиц).
+        var road: [Int] = []
+        for step in -3...3 { road.append(step * 270); road.append(0) }
+        let camera = Camera(id: 1, region: "Т", city: "Т", location: "Тест",
+                            lat: start0.latitude + 600 / 111_320.0,
+                            lon: start0.longitude,
+                            type: "Стационар радар", violations: [], needsReview: nil,
+                            axis: 0, road: road)
+
+        let clock = ContinuousClock()
+        var total: Duration = .zero
+        var scene: RoadSketch.Scene?
+        var key: RoadSketch.RebuildKey?
+        var rebuilds = 0
+        for tick in 0..<60 {
+            // 20 м/тик ≈ 72 км/ч: проезжаем камеру насквозь, как в жизни.
+            let me = CLLocationCoordinate2D(
+                latitude: start0.latitude + Double(tick) * 20 / 111_320.0,
+                longitude: start0.longitude)
+            let began = clock.now
+            let distance = GeoMath.fastDistance(me.latitude, me.longitude,
+                                                camera.lat, camera.lon)
+            let span = RoadSketch.span(forDistance: distance)
+            let inRange = RoadSketch.isInRange(distance: distance, span: span)
+            let freshKey = RoadSketch.RebuildKey(
+                alertCameraID: inRange ? camera.id : nil,
+                alertInRange: inRange,
+                spanBucket: RoadSketch.bucket(forSpan: span),
+                networkGeneration: 1, storeRevision: 1, budget: 80)
+            let offset = scene.map { built in
+                CGPoint(x: 0, y: (me.latitude - built.anchorLatitude) * 111_320.0)
+            } ?? .zero
+            if RoadSketch.needsRebuild(scene: scene, key: freshKey,
+                                       previousKey: key, meOffsetMeters: offset) {
+                rebuilds += 1
+                scene = RoadSketch.scene(alertCamera: camera, alertInRange: inRange,
+                                         cameras: [camera], network: network,
+                                         networkBudget: 80, route: route, track: track,
+                                         anchor: me, spanMeters: span)
+            }
+            key = freshKey
+            _ = RoadSketch.screenPoint(scene?.alertCamera ?? .zero, meOffset: offset,
+                                       courseDegrees: 0, spanMeters: span,
+                                       aspect: 16.0 / 9.0)
+            total += clock.now - began
+        }
+        // Минута тиков приборки — суммарно меньше полсекунды.
+        XCTAssertLessThan(total, .milliseconds(500),
+                          "схема приборки деградировала: \(total) на 60 тиков")
+        // Суть архитектуры: проезд камеры насквозь — худший случай (ступени
+        // масштаба щёлкают туда и обратно), и даже он обязан пересобирать
+        // растр в разы реже, чем раз в тик.
+        XCTAssertLessThan(rebuilds, 30,
+                          "растр пересобирается слишком часто: \(rebuilds) раз за минуту")
+    }
 }

@@ -37,6 +37,19 @@ final class LocationService: NSObject {
     private(set) var authorizationStatus: CLAuthorizationStatus
     private(set) var currentCoordinate: CLLocationCoordinate2D?
     private(set) var speedKmh: Double = 0
+    /// Последний ДОСТОВЕРНЫЙ курс. Живёт дольше самого курса намеренно.
+    ///
+    /// `currentCourse` становится −1 на каждой остановке: на светофоре, в
+    /// пробке, при потере сигнала. От него зависят стрелка на камеру, слово
+    /// стороной и вся схема дороги — то есть на красном свете панель гасла
+    /// целиком и загоралась заново на трогании. Мигание на каждом светофоре
+    /// водитель читает как поломку.
+    ///
+    /// Стоя мы никуда не повернули, поэтому прошлый курс — честное описание
+    /// того, как машина стоит. Схема продолжает рисоваться, но приглушённо:
+    /// «это последнее, что мы знали», а не «это происходит сейчас».
+    private(set) var lastTrustedCourse: CLLocationDegrees = -1
+
     /// GPS-курс движения (0–360°, −1 = недостоверен: стоим или нет сигнала).
     private(set) var currentCourse: CLLocationDegrees = -1
     /// 20 ближайших камер — для списка «рядом» и Live Activity (столько же
@@ -600,6 +613,7 @@ final class LocationService: NSObject {
         if speedKmh >= 3 { lastMovementAt = Date() }
         currentCourse = course
         locationTick &+= 1
+        if currentCourse >= 0 { lastTrustedCourse = currentCourse }
         retileIfNeeded(around: coordinate)
         recomputeNearest(from: coordinate)
         recomputeDirection()
@@ -673,6 +687,18 @@ final class LocationService: NSObject {
     /// Фильтр направления активен, когда едем достаточно быстро и GPS-курс достоверен.
     var isDirectionalFilteringActive: Bool {
         currentCourse >= 0 && speedKmh >= AppConfig.directionalMinSpeedKmh
+    }
+
+    /// Направление на камеру для ЭКРАНА: живое, а если курс пропал (светофор,
+    /// пробка) — по последнему достоверному. Гейты оповещений этим НЕ
+    /// пользуются: глушить камеру по устаревшему курсу нельзя, а нарисовать
+    /// стрелку — можно, стоя мы никуда не повернули.
+    var displayBearingToNearest: Double? {
+        if let live = relativeBearingToNearest { return live }
+        guard lastTrustedCourse >= 0, let camera = nearestCamera,
+              let coordinate = currentCoordinate else { return nil }
+        let bearing = GeoMath.bearing(from: coordinate, to: camera.coordinate)
+        return (bearing - lastTrustedCourse + 360).truncatingRemainder(dividingBy: 360)
     }
 
     /// Камера «наша»: подтверждена маршрутом, либо мы на её проезжей части, либо
@@ -808,15 +834,15 @@ final class LocationService: NSObject {
     ///
     /// Отдельно от голосовой фразы намеренно: в речи нужен оборот («впереди
     /// справа»), на экране, который читают боковым зрением, — одно слово.
-    /// `nil`, когда курс недостоверен: показать «прямо» на стоянке значило бы
-    /// соврать, а стрелка в этом случае и так не рисуется.
+    /// `nil` только если курса не было ни разу. На остановке берётся последний
+    /// достоверный: стоя мы никуда не повернули, и слово остаётся правдой —
+    /// а мигание на каждом светофоре читается как поломка.
     var nearestSideWord: String? {
-        guard relativeBearingToNearest != nil else { return nil }
-        switch nearestDirection {
+        guard let bearing = displayBearingToNearest else { return nil }
+        switch CameraDirection.classify(relativeBearing: bearing) {
         case .right, .behindRight: return String(localized: "справа")
         case .left, .behindLeft:   return String(localized: "слева")
         case .ahead:               return String(localized: "прямо")
-        case nil:                  return nil
         }
     }
 

@@ -703,9 +703,22 @@ final class LocationService: NSObject {
         )
     }
 
+    /// Обстановка для гейтов «наша ли камера» (чистый модуль LocationGates).
+    /// Собирается здесь и только здесь: гейт не должен уметь дотянуться до
+    /// сервиса, иначе он перестанет быть проверяемой функцией от геометрии.
+    ///
+    /// Координата — параметром, а не из `currentCoordinate`: гейты зовутся с
+    /// точкой ТЕКУЩЕГО тика, и подмена её на свойство развела бы решение о
+    /// камере и точку, для которой оно принимается.
+    private func gateSituation(at coordinate: CLLocationCoordinate2D) -> LocationGates.Situation {
+        LocationGates.Situation(coordinate: coordinate, course: currentCourse,
+                                speedKmh: speedKmh, horizontalAccuracy: horizontalAccuracy,
+                                context: alertContext)
+    }
+
     /// Фильтр направления активен, когда едем достаточно быстро и GPS-курс достоверен.
     var isDirectionalFilteringActive: Bool {
-        currentCourse >= 0 && speedKmh >= AppConfig.directionalMinSpeedKmh
+        LocationGates.isFilteringActive(gateSituation(at: currentCoordinate ?? .init()))
     }
 
     /// Направление на камеру для ЭКРАНА: живое, а если курс пропал (светофор,
@@ -720,98 +733,12 @@ final class LocationService: NSObject {
         return (bearing - lastTrustedCourse + 360).truncatingRemainder(dividingBy: 360)
     }
 
-    /// Камера «наша»: подтверждена маршрутом, либо мы на её проезжей части, либо
-    /// она лежит в коридоре нашей дороги впереди. Коридор (RoadCorridor) считает
-    /// боковое отклонение в метрах и отсекает параллельные улицы, дублёры и
-    /// эстакады, которые прежний угловой фильтр пропускал (±70° на дистанции
-    /// 400 м — это 375 м вбок).
-    ///
-    /// Порядок здесь и есть политика: сначала прямые доказательства «наша», и
-    /// только потом эвристики, которые вправе глушить. Каждый гейт глушит лишь
-    /// при доказательстве, что камера НЕ наша, — молчание про настоящую камеру
-    /// хуже лишнего предупреждения.
+    /// Камера «наша». Вся политика — в `LocationGates` (чистый модуль со своими
+    /// тестами); сервис отвечает только за то, что гейт вообще не может знать
+    /// сам: лежит ли камера на построенном маршруте.
     private func isOnOurRoad(_ camera: Camera, from coordinate: CLLocationCoordinate2D) -> Bool {
-        guard isDirectionalFilteringActive else { return true }   // стоим/курс неизвестен → не фильтруем
-
-        // 1. Камера на активном маршруте — она на нашем пути по определению, и
-        // никакая геометрия этого не отменяет: координата в реестре бывает
-        // смещена вбок от полосы. Раньше проверка стояла ПОСЛЕ геометрии, и та
-        // успевала заглушить камеру на собственном маршруте пользователя.
-        if isCameraOnRoute(camera) { return true }
-
-        let shape = RoadShape(camera: camera)
-
-        // 2. НАПРАВЛЕНИЕ проезжей части — самый однозначный признак, но применять
-        // его можно не везде: часть камер снимает И обратную сторону дороги, и
-        // для них молчание опаснее лишнего предупреждения. Гейт включается
-        // только там, где стороны заведомо поделены между двумя камерами или
-        // дорога не разделена вовсе (см. Camera.sidesAreProven).
-        if camera.allowsDirectionGate, let direction = camera.dir {
-            if GeoMath.angleDifference(currentCourse, Double(direction))
-                > AppConfig.cameraDirectionMaxAngle {
-                return false
-            }
-        } else if camera.hasTrustedRoadProfile,
-                  let axis = shape?.axis(near: coordinate) ?? camera.axis.map(Double.init) {
-            // Ось дороги камеры против курса: едем поперёк — это мост НАД камерой
-            // или перпендикулярная улица развязки. Боковое отклонение тут ноль,
-            // коридор бессилен — различает только направление. Ось берём с куска
-            // дороги, если он есть: на кривой единственная ось всей дороги врёт.
-            if GeoMath.axisDifference(course: currentCourse, axis: axis)
-                > AppConfig.cameraAxisMaxAngle {
-                return false
-            }
-        }
-
-        // 3. Кусок проезжей части камеры — единственные твёрдые данные о её
-        // дороге, поэтому он решает в ОБЕ стороны: попали в её ширину — камера
-        // наша (осталось убедиться, что она впереди), не попали — не наша.
-        // Допуск включает погрешность фикса: на плохом GPS проверка обязана
-        // воздержаться, а не глушить камеру.
-        if let shape, let lateral = shape.lateralOffset(from: coordinate) {
-            var allowed = RoadGeometry.halfWidth(lanes: camera.lanes,
-                                                 roadClass: camera.roadClass)
-                + max(AppConfig.roadShapeMinToleranceMeters, horizontalAccuracy)
-            // Камера может снимать обе стороны разделённой дороги — тогда «своей»
-            // для неё считается и обратная проезжая часть. В OSM каждая сторона
-            // отдельная линия, и без этого запаса мы едем в 10–40 м от её куска
-            // дороги и глушим камеру, которая нас как раз и снимает.
-            if !camera.sidesAreProven { allowed += AppConfig.dividedRoadSpanMeters }
-            if lateral <= allowed { return isAhead(camera, from: coordinate) }
-            // Мы не на дороге камеры — но глушить вправе только там, где стороны
-            // доказанно поделены. Иначе решает коридор.
-            if camera.sidesAreProven { return false }
-        }
-
-        // 4. Коридор — эвристика для всего остального: куска дороги нет (старая
-        // база, снап не нашёл дорогу) или он кончился раньше нас.
-        // Внезапным точкам (краудсорс) — коридор трассы: их координату ставил
-        // человек на ходу. Камерам с непроверенной позицией (needsReview: снап
-        // не нашёл её дорогу) — тоже: лучше предупредить с запасом, чем
-        // промолчать из-за смещённой координаты в реестре.
-        let generous = camera.kind.isSudden || camera.needsReview == true
-        let context: AlertPolicy.Context = generous ? .highway : alertContext
-        // Ширина ближней зоны коридора — от реальной дороги, если она известна.
-        // Пол по константе: коридор мерится от линии НАШЕГО курса, а её точность
-        // ограничена GPS, поэтому уже 10 м делать нельзя. Узкую ширину даём
-        // только доказанным сторонам: у камеры, снимающей обе, обратная полоса
-        // сама по себе шире этой ширины.
-        let knowsRoad = camera.cls != nil || camera.lanes != nil
-        let narrow = knowsRoad && !generous && camera.sidesAreProven
-        let nearWidth: CLLocationDistance? = narrow
-            ? max(AppConfig.corridorMinNearMeters,
-                  RoadGeometry.halfWidth(lanes: camera.lanes, roadClass: camera.roadClass))
-            : nil
-        return RoadCorridor.contains(camera: camera.coordinate, from: coordinate,
-                                     course: currentCourse, context: context,
-                                     nearWidth: nearWidth)
-    }
-
-    /// Камера впереди по курсу (с тем же запасом «немного позади», что у
-    /// коридора: на самом траверзе продольная составляющая шумит вокруг нуля).
-    private func isAhead(_ camera: Camera, from coordinate: CLLocationCoordinate2D) -> Bool {
-        RoadCorridor.fix(from: coordinate, course: currentCourse, to: camera.coordinate)
-            .along >= -AppConfig.corridorBehindToleranceMeters
+        LocationGates.isOnOurRoad(camera, in: gateSituation(at: coordinate),
+                                  isOnRoute: isCameraOnRoute(camera))
     }
 
     /// Сглаженный азимут камеры относительно курса (0 = прямо по ходу, растёт по часовой).

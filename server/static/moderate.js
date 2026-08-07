@@ -143,7 +143,6 @@ ymaps.ready(function () {
     const point = editor.geometry.getCoordinates();
     const id = current.id;
     post('/api/move', { id: id, lat: point[0], lon: point[1] }, function (data) {
-      if (data.error) { toast(data.error, false); return; }
       objects.objects.setObjectOptions(id, {
         preset: PRESET[STATE_DECIDED], iconOpacity: 1,
       });
@@ -171,14 +170,39 @@ ymaps.ready(function () {
     });
   }
 
+  // Ошибка обязана называть себя. Раньше здесь на ЛЮБУЮ неудачу писалось
+  // «нет связи» — и когда истекала сессия, и когда сервер отказывал по делу,
+  // и когда панель просто перезапускалась. Такое сообщение отправляет чинить
+  // интернет вместо настоящей причины.
   function post(url, body, done) {
     fetch(url, {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    }).then(function (r) { return r.json(); })
-      .then(done)
-      .catch(function () { toast('не сохранилось: нет связи', false); });
+    }).then(function (r) {
+      if (r.status === 401 || r.status === 403) {
+        toast('сессия истекла — войдите заново', false);
+        setTimeout(function () { location.href = '/login'; }, 1500);
+        return null;
+      }
+      return r.text().then(function (text) {
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          // Сервер ответил не JSON — это ошибка панели, а не сети.
+          toast('панель ответила неожиданным (' + r.status + ')', false);
+          return null;
+        }
+      });
+    }).then(function (data) {
+      if (!data) return;
+      if (data.error) { toast(data.error, false); return; }
+      done(data);
+    }).catch(function (error) {
+      // Сюда доходит только настоящий обрыв связи.
+      toast('нет связи с панелью', false);
+      console.error('move/undo:', error);
+    });
   }
 
   let toastTimer = null;

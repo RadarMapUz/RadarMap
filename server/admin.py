@@ -5,14 +5,20 @@
 приходили в sqlite и умирали там — колонку camera_reports.resolved никто
 никогда не писал, а единственным способом модерации был SELECT в ssh-сессии.
 
-Stdlib-only (sqlite3 + http.server), слушает 127.0.0.1:8093, наружу отдаётся
-nginx'ом на /admin/ с basic auth. Отдельный процесс от api.py намеренно:
+Stdlib-only (sqlite3 + http.server), слушает 127.0.0.1:8093. Вход по паролю
+(admin_auth.py: scrypt-хэш в /opt/radarmap/admin.conf, сессия в куке), но
+наружу панель отдаётся ТОЛЬКО поверх HTTPS: по открытому HTTP пароль ушёл бы
+открытым текстом, и `require_secure()` этого не допускает. До покупки домена
+работаем через ssh-туннель. Отдельный процесс от api.py намеренно:
 падение или перезапуск панели не должны ронять приём репортов от водителей,
 а публичный api и приватная панель не должны делить адресное пространство.
 
 Интерфейс — серверный HTML и обычные формы, без JS-фреймворков: модерируют
 чаще всего с телефона между делом, и страница, которая грузится за 200 мс и
-работает без сборки, здесь единственно верный выбор.
+работает без сборки, здесь единственно верный выбор. Единственное исключение —
+страница переноса камеры (/cameras/<id>/map): там нужна настоящая карта со
+спутником, потому что положение камеры проверяют по снимку. Скрипт там один,
+свой, лежит файлом (static/map.js), и CSP послаблена ровно на этой странице.
 
 ВАЖНО: панель ничего не публикует сама. Ключ подписи живёт только на машине
 владельца, поэтому решения копятся в таблице overrides, а публикует их одна
@@ -23,6 +29,7 @@ nginx'ом на /admin/ с basic auth. Отдельный процесс от ap
     python3 admin.py                      # сервер на 127.0.0.1:8092
     python3 admin.py --export             # JSON действующих правок (для публикации)
     python3 admin.py --mark-published 12  # пометить правки опубликованными в версии 12
+    python3 admin.py --set-password       # задать пароль входа (спросит дважды)
 """
 import html
 import json
@@ -32,6 +39,8 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
+
+import admin_auth
 
 DB_PATH = os.environ.get("RADARMAP_DB", "/opt/radarmap/api/reports.db")
 CAMERAS_PATH = os.environ.get("RADARMAP_CAMERAS", "/opt/radarmap/www/cameras.json")
@@ -52,6 +61,9 @@ SUGGEST_MIN_AGE_DAYS = 7   # и самому старому репорту хо�
 SNOOZE_DAYS = 30           # «отложить» — вернуть в очередь через месяц
 
 RESOLVED_NEW, RESOLVED_DONE, RESOLVED_REJECTED = 0, 1, 2
+
+# Живые сессии панели и счётчик неудачных попыток. Один объект на процесс.
+SESSIONS = admin_auth.Sessions()
 
 
 # --------------------------------------------------------------------------
@@ -150,6 +162,7 @@ header { position:sticky; top:0; background:#0b0f18; border-bottom:1px solid #1b
 header a { color:#8ea0bb; text-decoration:none; padding:6px 10px; border-radius:8px;
            font-size:14px; white-space:nowrap; }
 header a.on { background:#101f2e; color:#3cdcff; }
+header a.out { margin-left:auto; color:#6b7482; }
 main { padding:14px; max-width:900px; margin:0 auto; }
 h1 { font-size:19px; margin:18px 0 10px; }
 .card { background:#0c1017; border:1px solid #1b2231; border-radius:14px;
@@ -177,8 +190,9 @@ a.map { color:#3cdcff; font-size:13px; }
 .empty { color:#5f6c80; padding:24px 0; text-align:center; }
 """
 
-TABS = (("/", "Сводка"), ("/cameras", "Камеры"), ("/mobile", "Передвижные"),
-        ("/feedback", "Обращения"), ("/usage", "Люди"), ("/health", "Здоровье"))
+TABS = (("/", "Сводка"), ("/cameras", "Камеры"), ("/positions", "Положение"),
+        ("/mobile", "Передвижные"), ("/feedback", "Обращения"),
+        ("/usage", "Люди"), ("/health", "Здоровье"))
 
 
 def esc(value):
@@ -195,7 +209,38 @@ def page(active, title, body):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>{esc(title)} · RadarMap</title><style>{CSS}</style></head>
-<body><header>{tabs}</header><main>{body}</main></body></html>"""
+<body><header>{tabs}<a href="/logout" class="out">Выход</a></header>
+<main>{body}</main></body></html>"""
+
+
+
+def login_page(message="", secure=True, configured=True):
+    """Форма входа. Отдельно от page(): вкладок здесь быть не должно —
+    по ним ещё нельзя ходить, а ссылки, ведущие на отказ, только злят."""
+    if not secure:
+        note = ("Панель открыта по незашифрованному соединению. Пароль ушёл бы "
+                "открытым текстом, поэтому вход отключён. Откройте её через "
+                "ssh-туннель или настройте HTTPS (server/HTTPS.md).")
+        form = f'<div class="empty">{esc(note)}</div>'
+    elif not configured:
+        note = ("Пароль ещё не задан. На сервере: python3 admin.py --set-password")
+        form = f'<div class="empty">{esc(note)}</div>'
+    else:
+        form = ('<form method="post" action="/login">'
+                '<input type="password" name="password" placeholder="Пароль" '
+                'autofocus autocomplete="current-password" required>'
+                '<button type="submit">Войти</button></form>')
+    error = f'<div class="err">{esc(message)}</div>' if message else ""
+    return f"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Вход · RadarMap</title><style>{CSS}
+.login{{max-width:320px;margin:15vh auto;text-align:center}}
+.login input{{width:100%;padding:12px;margin:8px 0;border-radius:8px;
+border:1px solid #2b3038;background:#16191f;color:#e7e9ee;font-size:16px}}
+.login button{{width:100%;padding:12px;font-size:16px}}
+.err{{color:#ff6b6b;margin:8px 0;font-size:14px}}</style></head>
+<body><main><div class="login"><h1>RadarMap</h1>{error}{form}</div></main></body></html>"""
 
 
 def ago(timestamp):
@@ -215,6 +260,133 @@ def osm_link(lat, lon, text="на карте"):
     return (f'<a class="map" target="_blank" rel="noopener" '
             f'href="https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=18/{lat}/{lon}">'
             f'{esc(text)}</a>')
+
+
+# --------------------------------------------------------------------------
+# Положение камеры: карта и очередь подозрительных
+# --------------------------------------------------------------------------
+
+# Классы дорог, на которых камера действительно стоит над потоком машин.
+# Тот же список, что в приложении (Camera.hasTrustedRoadProfile): снап части
+# камер сел на тротуар, переход или платформу — их положение под вопросом
+# в первую очередь, и приложение по такому «профилю» ничего не глушит.
+VEHICLE_ROAD_CLASSES = {"motorway", "trunk", "primary", "secondary", "tertiary",
+                        "residential", "service", "unclassified", "living_street"}
+
+# Предел переноса — тот же, что в приложении (AppConfig.overrideMaxMoveMeters).
+# Держим числом здесь, чтобы панель отказывала СРАЗУ, а не показывала правку,
+# которую телефоны молча отвергнут.
+MAX_MOVE_METERS = 500
+
+
+def suspicious_cameras(conn, limit=200):
+    """Камеры, чьё положение стоит проверить, — по убыванию подозрительности.
+
+    Три независимых признака, и они не равнозначны:
+      * жалоба водителя «стоит не там» — прямое свидетельство, вес наибольший;
+      * снап сел на тротуар/переход — точно ошибка сопоставления;
+      * куска дороги нет вовсе — снап не нашёл дорогу, координата как в
+        исходных данных, а они и есть источник кривых точек.
+    """
+    reported = {}
+    try:
+        for row in conn.execute(
+                "SELECT camera_id, COUNT(*) n FROM camera_reports "
+                "WHERE reason = 'wrong_location' AND resolved = 0 GROUP BY camera_id"):
+            reported[row["camera_id"]] = row["n"]
+    except sqlite3.OperationalError:
+        # Таблицу репортов создаёт api.py, а панель — отдельный процесс и может
+        # подняться раньше него на свежем сервере. Жалоб тогда просто нет, а
+        # признаки от снапа работают и без них: страница обязана открыться.
+        pass
+
+    items = []
+    for camera_id, camera in cameras().items():
+        road_class = camera.get("cls") or ""
+        complaints = reported.get(camera_id, 0)
+        untrusted = bool(road_class) and road_class not in VEHICLE_ROAD_CLASSES
+        no_road = not camera.get("road")
+        if not (complaints or untrusted or no_road):
+            continue
+        # Вес: жалоба перевешивает любую догадку алгоритма.
+        weight = complaints * 100 + (10 if untrusted else 0) + (1 if no_road else 0)
+        reasons = []
+        if complaints:
+            reasons.append(f"жалоб «стоит не там»: {complaints}")
+        if untrusted:
+            reasons.append(f"снап сел на «{road_class}» — не проезжая часть")
+        if no_road:
+            reasons.append("нет куска дороги: снап не нашёл дорогу")
+        items.append((weight, camera_id, camera, reasons))
+    items.sort(key=lambda item: (-item[0], item[1]))
+    return items[:limit]
+
+
+def render_map_page(camera_id, camera, neighbours, override, api_key):
+    """Страница переноса. Единственная в панели, где есть скрипт, — поэтому
+    и данные, и разрешения CSP собираются здесь, рядом, а не размазаны.
+
+    Карту рисует Яндекс: для Узбекистана у него лучшие спутниковые снимки, а
+    проверить положение камеры можно только по снимку — на схеме столба нет.
+    """
+    lat, lon = camera["lat"], camera["lon"]
+    current = override if override and override["op"] == "move" else None
+    start_lat = current["lat"] if current else lat
+    start_lon = current["lon"] if current else lon
+    payload = json.dumps({
+        "id": camera_id,
+        "origin": [lat, lon],
+        "start": [start_lat, start_lon],
+        "maxMeters": MAX_MOVE_METERS,
+        "neighbours": [[c["lat"], c["lon"], camera_title(i)] for i, c in neighbours],
+    }, ensure_ascii=False)
+
+    profile = []
+    if camera.get("cls"):
+        profile.append(f"класс дороги: {camera['cls']}")
+    if camera.get("axis") is not None:
+        profile.append(f"ось: {camera['axis']}°")
+    if camera.get("dir") is not None:
+        profile.append(f"направление: {camera['dir']}°")
+    profile_text = " · ".join(profile) or "профиля дороги нет"
+
+    return f"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Положение камеры · RadarMap</title><style>{CSS}
+#map{{height:60vh;min-height:360px;border-radius:12px;overflow:hidden;margin:10px 0}}
+.readout{{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:8px 0}}
+.readout b{{font-size:18px}}
+.far{{color:#ff6b6b}}
+.warn{{background:#2a2013;border:1px solid #6b5320;border-radius:10px;
+padding:10px 12px;margin:10px 0;font-size:13px;color:#e3c07b}}</style></head>
+<body><header><a href="/cameras">← Камеры</a><a href="/positions">Проверить положение</a>
+<a href="/logout" class="out">Выход</a></header>
+<main>
+<h2>{esc(camera_title(camera_id))}</h2>
+<div class="muted">id {camera_id} · {esc(profile_text)}</div>
+<div id="map"></div>
+<div class="readout">
+  <span>сдвиг: <b id="dist">0</b> м</span>
+  <span class="muted" id="coords">{start_lat:.6f}, {start_lon:.6f}</span>
+  <button type="button" id="reset">Вернуть на место</button>
+</div>
+<div class="warn">Перенесённая камера теряет измеренный профиль дороги — ось,
+направление и геометрию проезжей части. Снап мерил их в прежней точке, и после
+переноса они относились бы не к той дороге. Практически это значит: камера
+начнёт предупреждать в обе стороны и чаще. Двигайте, когда точка действительно
+не на своей дороге, а не ради десятка метров.</div>
+<form method="post" action="/cameras/act">
+  <input type="hidden" name="camera_id" value="{camera_id}">
+  <input type="hidden" name="lat" id="lat" value="{start_lat:.6f}">
+  <input type="hidden" name="lon" id="lon" value="{start_lon:.6f}">
+  <input type="hidden" name="back" value="/positions">
+  <button name="action" value="move" id="save" disabled>Сохранить перенос</button>
+</form>
+<script type="application/json" id="data">{payload}</script>
+<script src="https://api-maps.yandex.ru/2.1/?apikey={esc(api_key)}&lang=ru_RU"></script>
+<script src="/static/map.js"></script>
+</main></body></html>"""
 
 
 # --------------------------------------------------------------------------
@@ -381,16 +553,26 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
-    def _send(self, code, body, content_type="text/html; charset=utf-8"):
+    # Обычная политика: панель серверная, скрипты ей не нужны ни свои, ни чужие.
+    CSP_STRICT = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'"
+    # Послабление РОВНО для страницы переноса и ровно до доменов Яндекса.
+    # Свой скрипт лежит файлом ('self'), поэтому 'unsafe-inline' для скриптов
+    # не нужен — внедрить код через данные камеры нельзя.
+    CSP_MAP = ("default-src 'none'; form-action 'self'; "
+               "script-src 'self' https://api-maps.yandex.ru https://*.maps.yandex.net; "
+               "style-src 'unsafe-inline'; "
+               "img-src 'self' data: blob: https://*.maps.yandex.net https://*.yandex.ru; "
+               "connect-src https://api-maps.yandex.ru https://*.maps.yandex.net "
+               "https://*.yandex.ru; font-src data:")
+
+    def _send(self, code, body, content_type="text/html; charset=utf-8", csp=None):
         payload = body.encode()
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(payload)))
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Content-Type-Options", "nosniff")
-        # Панель целиком серверная — скрипты ей не нужны ни свои, ни чужие.
-        self.send_header("Content-Security-Policy",
-                         "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'")
+        self.send_header("Content-Security-Policy", csp or self.CSP_STRICT)
         self.end_headers()
         self.wfile.write(payload)
 
@@ -400,10 +582,64 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
+
+    # --- Вход ---
+
+    def _authorized(self):
+        """Пропускать ли дальше. Заодно единственное место, где решается
+        вопрос «безопасно ли вообще принимать пароль по этому соединению»."""
+        if not admin_auth.require_secure(self.headers, self.client_address[0]):
+            return False
+        return SESSIONS.valid(admin_auth.cookie_token(self.headers.get("Cookie")))
+
+    def _send_login(self, message="", code=200):
+        secure = admin_auth.require_secure(self.headers, self.client_address[0])
+        configured = bool(admin_auth.read_config().get("password_hash"))
+        self._send(code, login_page(message, secure=secure, configured=configured))
+
+    def _do_login(self, field):
+        address = self.client_address[0]
+        if not admin_auth.require_secure(self.headers, address):
+            return self._send_login(code=403)
+        # Перебор гасим ДО проверки пароля: иначе scrypt честно считает хэш
+        # на каждую попытку и панель ложится сама от собственной защиты.
+        if SESSIONS.blocked(address):
+            return self._send_login("Слишком много попыток. Подождите 15 минут.", code=429)
+        stored = admin_auth.read_config().get("password_hash")
+        if admin_auth.check_password(field("password"), stored):
+            SESSIONS.note_success(address)
+            token = SESSIONS.issue()
+            self.send_response(303)
+            self.send_header("Location", "/")
+            self.send_header("Set-Cookie",
+                             f"{admin_auth.SESSION_COOKIE}={token}; Path=/; "
+                             "HttpOnly; SameSite=Strict; Max-Age="
+                             f"{admin_auth.SESSION_TTL}")
+            self.send_header("Content-Length", "0")
+            return self.end_headers()
+        SESSIONS.note_failure(address)
+        self._send_login("Неверный пароль", code=401)
+
+    def _do_logout(self):
+        SESSIONS.drop(admin_auth.cookie_token(self.headers.get("Cookie")))
+        self.send_response(303)
+        self.send_header("Location", "/login")
+        self.send_header("Set-Cookie",
+                         f"{admin_auth.SESSION_COOKIE}=; Path=/; HttpOnly; "
+                         "SameSite=Strict; Max-Age=0")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     # --- GET ---
 
     def do_GET(self):
         path = urlparse(self.path).path.rstrip("/") or "/"
+        if path == "/login":
+            return self._send_login()
+        if path == "/logout":
+            return self._do_logout()
+        if not self._authorized():
+            return self._send_login(code=401)
         conn = db()
         try:
             if path == "/":
@@ -418,6 +654,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, self.usage_page(conn))
             if path == "/health":
                 return self._send(200, self.health_page(conn))
+            if path == "/positions":
+                return self._send(200, self.positions_page(conn))
+            if path.startswith("/cameras/") and path.endswith("/map"):
+                return self.map_page(conn, path)
+            if path == "/static/map.js":
+                return self.static_file("map.js", "application/javascript; charset=utf-8")
         finally:
             conn.close()
         self._send(404, page("/", "Не найдено", '<div class="empty">Такой страницы нет</div>'))
@@ -425,9 +667,8 @@ class Handler(BaseHTTPRequestHandler):
     # --- POST ---
 
     def do_POST(self):
-        # Basic auth браузер подставляет автоматически, в том числе в запрос,
-        # инициированный чужой страницей. Сессий у панели нет, поэтому от CSRF
-        # защищаемся проверкой источника: форма своя — Origin совпадает.
+        # Кука сессии помечена SameSite=Strict, но проверку источника оставляем:
+        # два независимых заслона от подделки запроса дешевле одного.
         origin = self.headers.get("Origin") or self.headers.get("Referer") or ""
         host = self.headers.get("Host") or ""
         if origin and host and urlparse(origin).netloc != host:
@@ -442,11 +683,18 @@ class Handler(BaseHTTPRequestHandler):
         field = lambda name: (form.get(name) or [""])[0].strip()
 
         path = urlparse(self.path).path.rstrip("/")
+        if path == "/login":
+            return self._do_login(field)
+        if not self._authorized():
+            return self._send_login(code=401)
+
         conn = db()
         try:
             if path == "/cameras/act":
                 self.camera_action(conn, field)
-                return self._redirect("/cameras")
+                # Возврат туда, откуда пришли: с карты — в очередь положений.
+                back = field("back")
+                return self._redirect(back if back in ("/positions",) else "/cameras")
             if path == "/mobile/act":
                 self.mobile_action(conn, field)
                 return self._redirect("/mobile")
@@ -504,14 +752,27 @@ class Handler(BaseHTTPRequestHandler):
             log_action(conn, camera_id, "resolve")
 
         elif action == "snooze":
-            conn.execute("UPDATE camera_reports SET snooze_until = ? WHERE camera_id = ?",
-                         (now + SNOOZE_DAYS * DAY, camera_id))
+            try:
+                conn.execute("UPDATE camera_reports SET snooze_until = ? WHERE camera_id = ?",
+                             (now + SNOOZE_DAYS * DAY, camera_id))
+            except sqlite3.OperationalError:
+                pass   # см. resolve_reports: таблицы может ещё не быть
             log_action(conn, camera_id, "snooze")
         conn.commit()
 
     def resolve_reports(self, conn, camera_id, status):
-        conn.execute("UPDATE camera_reports SET resolved = ? WHERE camera_id = ? AND resolved = ?",
-                     (status, camera_id, RESOLVED_NEW))
+        """Закрыть жалобы по камере. Таблицу создаёт api.py — на свежем сервере
+        панель может подняться раньше него, и тогда закрывать нечего.
+
+        Раньше её отсутствие роняло весь обработчик, причём ПОСЛЕ записи правки
+        и ДО commit: решение модератора терялось молча, а он видел ошибку сети.
+        Найдено на локальном стенде с пустой базой."""
+        try:
+            conn.execute("UPDATE camera_reports SET resolved = ? "
+                         "WHERE camera_id = ? AND resolved = ?",
+                         (status, camera_id, RESOLVED_NEW))
+        except sqlite3.OperationalError:
+            pass
 
     def mobile_action(self, conn, field):
         """Живые отметки правятся мгновенно: это данные сервера, не базы, и
@@ -583,6 +844,70 @@ class Handler(BaseHTTPRequestHandler):
 самый старый неразобранный репорт: {esc(ago(oldest))}</div></div>
 {'<div class="empty">Пусто — можно закрыть вкладку</div>'
  if not (ready or disputed or new_feedback or unpublished) else ''}""")
+
+
+    # --- Положение камеры ---
+
+    def static_file(self, name, content_type):
+        """Один каталог, одно имя из белого списка. Никаких путей из запроса:
+        отдача файлов по имени из URL — классический способ отдать наружу
+        /etc/passwd, и в панели модератора этого быть не должно."""
+        if name not in ("map.js",):
+            return self._send(404, page("/", "Не найдено", ""))
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", name)
+        try:
+            with open(path, encoding="utf-8") as handle:
+                body = handle.read()
+        except OSError:
+            return self._send(404, page("/", "Не найдено",
+                                        '<div class="empty">Файл карты не найден</div>'))
+        self._send(200, body, content_type)
+
+    def map_page(self, conn, path):
+        try:
+            camera_id = int(path.split("/")[2])
+        except (IndexError, ValueError):
+            return self._send(404, page("/cameras", "Не найдено", ""))
+        camera = cameras().get(camera_id)
+        if not camera:
+            return self._send(404, page("/cameras", "Нет такой камеры",
+                                        '<div class="empty">Камеры нет в текущей базе</div>'))
+        api_key = admin_auth.read_config().get("yandex_key", "")
+        if not api_key:
+            return self._send(200, page("/cameras", "Нет ключа карты",
+                '<div class="empty">В /opt/radarmap/admin.conf нет строки '
+                'yandex_key=… — без неё карта не загрузится</div>'))
+        # Соседи в километре: перенос на место другой камеры — типовая ошибка,
+        # и увидеть их надо до сохранения, а не в отзывах.
+        neighbours = [(other_id, other) for other_id, other in cameras().items()
+                      if other_id != camera_id
+                      and haversine(camera["lat"], camera["lon"],
+                                    other["lat"], other["lon"]) < 1000][:40]
+        override = conn.execute(
+            "SELECT op, lat, lon FROM overrides WHERE camera_id = ?",
+            (camera_id,)).fetchone()
+        self._send(200, render_map_page(camera_id, camera, neighbours, override, api_key),
+                   csp=self.CSP_MAP)
+
+    def positions_page(self, conn):
+        items = suspicious_cameras(conn)
+        if not items:
+            return page("/positions", "Положение камер",
+                        '<div class="empty">Подозрительных точек нет</div>')
+        rows = []
+        for _, camera_id, camera, reasons in items:
+            rows.append(
+                f'<div class="item"><div class="head">'
+                f'<b>{esc(camera_title(camera_id))}</b>'
+                f'<span class="muted">id {camera_id}</span></div>'
+                f'<div class="muted">{esc(" · ".join(reasons))}</div>'
+                f'<div class="acts"><a class="map" href="/cameras/{camera_id}/map">'
+                f'открыть карту</a> '
+                f'{osm_link(camera["lat"], camera["lon"], "в OSM")}</div></div>')
+        head = (f'<div class="muted">Проверить положение: {len(items)} '
+                f'{"камера" if len(items) == 1 else "камер"}. '
+                f'Сверху — те, на что жаловались водители.</div>')
+        return page("/positions", "Положение камер", head + "".join(rows))
 
     def cameras_page(self, conn):
         queue = camera_queue(conn)
@@ -816,6 +1141,9 @@ def main():
         index = sys.argv.index("--export")
         version = int(sys.argv[index + 1]) if len(sys.argv) > index + 1 else 1
         print(json.dumps(export_overrides(version), ensure_ascii=False, separators=(",", ":")))
+        return
+    if "--set-password" in sys.argv:
+        print(admin_auth.set_password_interactively())
         return
     if "--mark-published" in sys.argv:
         index = sys.argv.index("--mark-published")

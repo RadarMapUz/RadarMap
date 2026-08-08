@@ -69,5 +69,13 @@ struct CarPlayHandoffView: View {
             }
             .padding(.horizontal, 32)
         }
+        // Экран передачи обязан ДАВАТЬ телефону гаснуть: дисплей — крупнейший
+        // потребитель, и прибитый чёрный экран за «телефон отдыхает» — обман.
+        // Возврат на карту при живой поездке возвращает прежнее правило.
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = false }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled =
+                env.location.isTripActive && env.settings.keepScreenOn
+        }
     }
 }

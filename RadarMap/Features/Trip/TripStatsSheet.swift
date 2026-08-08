@@ -331,8 +331,11 @@ struct TripStatsSheet: View {
         }
         .buttonStyle(PressableStyle())
         .disabled(!enabled)
-        .accessibilityLabel(Text(symbol == "chevron.left" ? "Предыдущий период"
-                                                          : "Следующий период"))
+        // Тернарник даёт String, и Text берёт НЕлокализующий инициализатор —
+        // без явного String(localized:) подпись оставалась русской на узбекском.
+        .accessibilityLabel(Text(symbol == "chevron.left"
+                                 ? String(localized: "Предыдущий период")
+                                 : String(localized: "Следующий период")))
     }
 
     private func step(_ direction: Int) {
@@ -424,7 +427,8 @@ struct TripStatsSheet: View {
             .foregroundStyle(tint)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(tint.opacity(0.14), in: Capsule())
-            .accessibilityLabel(Text(up ? "Рейтинг вырос" : "Рейтинг снизился"))
+            .accessibilityLabel(Text(up ? String(localized: "Рейтинг вырос")
+                                        : String(localized: "Рейтинг снизился")))
     }
 
     // MARK: - Разбор периода
@@ -478,8 +482,8 @@ struct TripStatsSheet: View {
             .foregroundStyle(up ? Theme.accent : Theme.textSecondary)
             .padding(.horizontal, 7).padding(.vertical, 3)
             .background((up ? Theme.accent : Theme.textSecondary).opacity(0.14), in: Capsule())
-            .accessibilityLabel(Text(up ? "Больше, чем в прошлый период"
-                                        : "Меньше, чем в прошлый период"))
+            .accessibilityLabel(Text(up ? String(localized: "Больше, чем в прошлый период")
+                                        : String(localized: "Меньше, чем в прошлый период")))
     }
 
     // MARK: - Зона риска (тап — карта с фокусом на камере)
@@ -511,7 +515,8 @@ struct TripStatsSheet: View {
                             .frame(width: 48, height: 48)
                             .background((ok ? Theme.success : Theme.danger).opacity(0.12), in: Circle())
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(ok ? "Зона риска" : "Возможные штрафы")
+                            Text(ok ? String(localized: "Зона риска")
+                                    : String(localized: "Возможные штрафы"))
                                 .font(.rounded(13, .medium))
                                 .foregroundStyle(Theme.textSecondary)
                             Text(ok ? String(localized: "0 штрафов")

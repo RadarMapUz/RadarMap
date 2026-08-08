@@ -145,12 +145,14 @@ final class LocationService: NSObject {
         manager.activityType = .automotiveNavigation
         hasFullAccuracy = manager.accuracyAuthorization == .fullAccuracy
 
+        // [weak self] и на ВНЕШНЕМ замыкании: чтобы внутренняя Task могла
+        // сослаться на self слабо, внешнее без списка захвата держало бы его
+        // сильно — NotificationCenter владел бы сервисом вечно (тот же паттерн,
+        // что в ThermalService).
         NotificationCenter.default.addObserver(
             forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: nil
-        ) { _ in
+        ) { [weak self] _ in
             let low = ProcessInfo.processInfo.isLowPowerModeEnabled
-            // Список захвата на самом `Task`: иначе внутреннее замыкание берёт
-            // `self` из внешнего повторно — гонка на захваченной переменной.
             Task { @MainActor [weak self] in self?.powerModeChanged(low) }
         }
     }
@@ -252,7 +254,9 @@ final class LocationService: NSObject {
         isTripActive = true
         lastMovementAt = Date()   // не проваливаться в тир «стоянка» со старым штампом
         // Телефон в держателе — экран не гаснет всю поездку (как у навигаторов).
-        UIApplication.shared.isIdleTimerDisabled = settings.keepScreenOn
+        // Кроме поездки за рулём CarPlay: там телефон показывает экран передачи,
+        // и прибитый экран сводил бы «телефон отдыхает и не греется» к нулю.
+        UIApplication.shared.isIdleTimerDisabled = settings.keepScreenOn && !isCarPlayConnected
         alertEngine.reset()
         passTracking.reset()
         locationFilter.reset()
@@ -346,6 +350,10 @@ final class LocationService: NSObject {
     func endTrip(asPassenger: Bool = false, auto: Bool = false) {
         isTripActive = false
         UIApplication.shared.isIdleTimerDisabled = false
+        // Всю поездку геозоны не перерегистрировались (retile их пропускает —
+        // сработать они всё равно не могли). Возвращаясь в тихий фон, ставим
+        // их вокруг места парковки, а не города въезда.
+        if let coordinate = currentCoordinate { retile(around: coordinate) }
         alertEngine.reset()
         voicedInGroup.removeAll()
         postponedVoice = nil
@@ -440,26 +448,15 @@ final class LocationService: NSObject {
             : .greatestFiniteMagnitude
         let nearest = min(cameraDistance, stepDistance)
 
-        // 0 — финал (Best, частые фиксы), 1 — подъезд (10 м), 2 — крейсер,
-        // 3 — стоянка (пробка/светофор >минуты ВДАЛИ от камер: тир 2 гарантирует,
-        // что до ближайшей камеры/манёвра больше 1.5 км — грубые фиксы безопасны).
-        var tier = nearest < AppConfig.gpsPreciseApproachMeters ? 0
-                 : nearest < AppConfig.gpsMidApproachMeters ? 1 : 2
-        if tier == 2, speedKmh < 3,
-           Date().timeIntervalSince(lastMovementAt) > AppConfig.gpsIdleAfterSeconds {
-            tier = 3
-        }
-        // Открытая приборка (или схема на экране CarPlay): водитель СМОТРИТ на
-        // схему, и фиксы раз в 25 м (2–3 с в городе) видны глазом как рывки.
-        // Поднимаем крейсерский тир до подъездного — но только пока телефон
-        // холодный: в перегрев плавность картинки проигрывает экономии (тот
-        // самый держатель под солнцем), а стоянку (тир 3) не трогаем вовсе —
-        // стоя анимировать нечего. Экран при этом уже горит и стоит на
-        // порядок дороже GPS.
-        if tier == 2, isForeground, isDashboardVisible || isCarPlaySketchVisible,
-           (thermal?.mode ?? .full) == .full {
-            tier = 1
-        }
+        // Порядок правил (стоянка бьёт близость вне 150 м, буст только с
+        // крейсера и на холодном телефоне) — в чистом GPSTiers под тестами.
+        let tier = GPSTiers.tier(.init(
+            nearestTargetMeters: nearest,
+            speedKmh: speedKmh,
+            idleSeconds: Date().timeIntervalSince(lastMovementAt),
+            sketchVisible: isDashboardVisible || isCarPlaySketchVisible,
+            isForeground: isForeground,
+            thermalIsFull: (thermal?.mode ?? .full) == .full))
         guard tier != accuracyTier else { return }
         accuracyTier = tier
         switch tier {
@@ -538,7 +535,6 @@ final class LocationService: NSObject {
         // Якорь ставим здесь, а не только в retileIfNeeded: refreshMonitoring
         // зовёт retile напрямую, и без якоря следующий тик перетайлил бы повторно.
         anchor = coordinate
-        manager.monitoredRegions.forEach { manager.stopMonitoring(for: $0) }
 
         // Окно кандидатов на оповещение — широкое; геозоны — только 20 ближайших
         // из него (жёсткий лимит iOS). Раньше это был один список на двоих, и
@@ -560,6 +556,13 @@ final class LocationService: NSObject {
         // Считаем по всему окну: по двадцатке цифра упиралась в потолок.
         cameraDensity3km = tracked.count { distance(to: $0) <= 3000 }
 
+        // Геозоны — только вне поездки: в поездке handleEnter выходит первой
+        // строкой, то есть они не могут сработать в принципе, а ретайл каждые
+        // 300–1500 м гнал в locationd сотни пар stop/startMonitoring за поездку
+        // ради невозможного события. Окно кандидатов выше живёт как жило;
+        // геозоны пересинхронизирует endTrip.
+        guard !isTripActive else { return }
+        manager.monitoredRegions.forEach { manager.stopMonitoring(for: $0) }
         for camera in nearest {
             let region = CLCircularRegion(
                 center: camera.coordinate,
@@ -590,6 +593,10 @@ final class LocationService: NSObject {
     private(set) var displayCourse: CLLocationDirection = -1
     /// Когда машина в последний раз реально двигалась (для тира «стоянка»).
     @ObservationIgnored private var lastMovementAt = Date()
+    /// Последняя точка, по которой считали прогресс маршрута (гейт стоянки).
+    @ObservationIgnored private var lastRouteProgressCoordinate: CLLocationCoordinate2D?
+    /// Долгая стоянка (>dashboardDimIdleSeconds): приборка гасит яркость.
+    private(set) var isStandingStill = false
 
     /// Единственная точка входа фиксов: сначала гейт качества, потом обработка.
     /// Отброшенный фикс не двигает ни трек, ни алерты, ни спидометр.
@@ -635,14 +642,20 @@ final class LocationService: NSObject {
     }
 
     /// Сторож потери сигнала: перезаряжается на каждом принятом фиксе, поэтому
-    /// срабатывает только если новых фиксов действительно не пришло (лишних
-    /// пробуждений нет — обычный тик GPS его гасит).
+    /// срабатывает только если новых фиксов действительно не пришло.
+    ///
+    /// Отменяемая Task, а не asyncAfter: тот отменить нельзя, и каждый его
+    /// блок ВСЁ РАВНО просыпался в свой дедлайн — при фиксе раз в 1.5 с и окне
+    /// 8 с это 5–6 висящих таймеров и лишнее пробуждение main на каждый фикс
+    /// всю поездку. Отмена Task будит его один раз сразу (в текущей работе),
+    /// а не по будильнику в будущем.
     ///
     /// Заряжается ТОЛЬКО в движении и с окном по ожидаемому интервалу фиксов:
     /// на стоянке и в пробке фиксы не приходят из-за distanceFilter, а не из-за
     /// спутников, и «нет сигнала» было бы прямой ложью водителю.
     private func armStaleWatchdog() {
         fixSequence &+= 1   // прошлый сторож обесценен даже если новый не ставим
+        staleWatchdogTask?.cancel()
         guard speedKmh >= AppConfig.staleWatchdogMinSpeedKmh else { return }
         let speedMps = speedKmh / 3.6
         let expected = speedMps > 0 ? manager.distanceFilter / speedMps : .infinity
@@ -650,13 +663,16 @@ final class LocationService: NSObject {
                          min(AppConfig.staleWatchdogMaxSeconds,
                              expected * AppConfig.staleWatchdogSlack))
         let sequence = fixSequence
-        DispatchQueue.main.asyncAfter(deadline: .now() + window) { [weak self] in
-            guard let self, self.fixSequence == sequence,
+        staleWatchdogTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(window))
+            guard !Task.isCancelled, let self, self.fixSequence == sequence,
                   self.isTripActive || self.isForeground else { return }
             self.isSignalStale = true
             Log.location.notice("нет фиксов \(window, format: .fixed(precision: 1), privacy: .public) с — сигнал потерян")
         }
     }
+
+    @ObservationIgnored private var staleWatchdogTask: Task<Void, Never>?
 
     private func handleLocation(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed, course: CLLocationDirection) {
         // Главный горячий путь приложения: всё, что происходит на GPS-точке, —
@@ -724,9 +740,29 @@ final class LocationService: NSObject {
                                              hit: speedLimits?.currentRoadHit)
             displayCoordinate = snapped?.coordinate ?? coordinate
             displayCourse = snapped?.courseDegrees ?? currentCourse
-            route?.updateProgress(coordinate: coordinate, cameras: repository.cameras,
-                                  announce: isTripActive)
+            // Стоянка: точка не сдвинулась — прогресс маршрута не мог
+            // измениться, пересчёт (проекция, манёвры, префикс) пропускаем.
+            // Порог накопительный от последней ОБРАБОТАННОЙ точки: ползание
+            // набирает свои 2 м и проходит. У финиша (<300 м) не пропускаем
+            // никогда — прибытие ползком в радиус срабатывает тик в тик.
+            let progressMoved = lastRouteProgressCoordinate.map {
+                GeoMath.fastDistance($0.latitude, $0.longitude,
+                                     coordinate.latitude, coordinate.longitude)
+            } ?? .greatestFiniteMagnitude
+            if progressMoved >= RoadSketch.standstillMeters
+                || (route?.remainingDistance ?? .greatestFiniteMagnitude) < 300 {
+                lastRouteProgressCoordinate = coordinate
+                route?.updateProgress(coordinate: coordinate, cameras: repository.cameras,
+                                      announce: isTripActive)
+            }
             tuneAdaptiveAccuracy()
+            // Долгая стоянка (стояночное затемнение приборки): пишем только
+            // на смене — наблюдатели не будятся каждым тиком.
+            let standing = GPSTiers.isStanding(
+                speedKmh: speedKmh,
+                idleSeconds: Date().timeIntervalSince(lastMovementAt),
+                idleAfter: AppConfig.dashboardDimIdleSeconds)
+            if standing != isStandingStill { isStandingStill = standing }
             // Умный режим: детектор города/трассы (дёшево — пара сравнений).
             contextDetector.update(roadLimitKmh: speedLimits?.currentLimit,
                                    camerasWithin3km: cameraDensity3km,
@@ -741,19 +777,29 @@ final class LocationService: NSObject {
         if liveActivity?.isActive == true {
             liveActivity?.update(state: activityState)
         }
-        // Часы: то же состояние (мост квантует и дедупит — без изменений радио молчит).
-        watchBridge?.update(isTripActive: isTripActive, speedKmh: speedKmh,
-                            cameraTitle: nearestCamera?.displayTitle,
-                            distanceMeters: distanceToNearest,
-                            alertLevel: alertLevel)
+        // Часы: только в поездке. Вне её HUD часов рисует «нет поездки» без
+        // цифр, а меняющаяся скорость пробивала дедуп и будила BT-радио ради
+        // данных, которые часы не показывают. Переход в «нет поездки» шлёт
+        // endTrip явными нулями.
+        if isTripActive {
+            watchBridge?.update(isTripActive: true, speedKmh: speedKmh,
+                                cameraTitle: nearestCamera?.displayTitle,
+                                distanceMeters: distanceToNearest,
+                                alertLevel: alertLevel)
+        }
     }
 
     /// Непрерывный уровень тревоги (та же лестница порогов, что в AlertEngine):
     /// 0 — тихо, 1…3 — эскалация. Его показывают часы и приборная панель CarPlay.
+    /// Без промежуточных массивов: читается каждый тик и на каждую перерисовку
+    /// часового моста и дока CarPlay.
     var alertLevel: Int {
         guard isTripActive, let d = distanceToNearest else { return 0 }
         let r = effectiveAlertRadius
-        return [r, r * 0.6, r * 0.3].filter { d <= $0 }.count
+        if d <= r * 0.3 { return 3 }
+        if d <= r * 0.6 { return 2 }
+        if d <= r { return 1 }
+        return 0
     }
 
     /// Текущее состояние для Live Activity.

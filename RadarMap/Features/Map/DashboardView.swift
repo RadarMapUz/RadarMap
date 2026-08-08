@@ -55,7 +55,7 @@ struct DashboardView: View {
                         .frame(height: 200)
                         .padding(.horizontal, 28)
                         .padding(.top, 6)
-                        .opacity(sketchIsStale ? 0.45 : 1)
+                        .opacity(min(sketchIsStale ? 0.45 : 1, isParkedDim ? 0.4 : 1))
                         .animation(.easeOut(duration: 0.4), value: sketchIsStale)
                 }
 
@@ -63,8 +63,11 @@ struct DashboardView: View {
 
                 VStack(spacing: 18) {
                     speedHero
+                        .opacity(isParkedDim ? 0.4 : 1)
 
-                    // Ближайшая камера: дистанция крупно, цвет греется по уровню тревоги.
+                    // Ближайшая камера: дистанция крупно, цвет греется по
+                    // уровню тревоги. НЕ гаснет на стоянке никогда: камера —
+                    // то, ради чего приложение существует.
                     if let camera = env.location.nearestCamera,
                        let distance = env.location.distanceToNearest {
                         cameraBlock(camera: camera, distance: distance)
@@ -100,16 +103,23 @@ struct DashboardView: View {
                 }
                 .padding(.horizontal, 28)
                 .padding(.bottom, 12)
+                .opacity(isParkedDim ? 0.4 : 1)
             }
+            // Стояночное затемнение (как у Waze): стоим >30 с без тревоги —
+            // белые пиксели гаснут до 40%, на OLED это настоящие ватты.
+            // Тронулись — мгновенно ярко (isStandingStill пишется на смене).
+            .animation(.easeInOut(duration: 0.8), value: isParkedDim)
         }
         .contentShape(Rectangle())
         .onTapGesture { dismiss() }
         .statusBarHidden()
         // Тик GPS → точка зрения схемы (и изредка пересборка её растра).
         .onChange(of: env.location.locationTick) { sketch.refresh(env) }
-        // Приборка должна светиться всю поездку — не даём экрану погаснуть.
+        // Приборка светится всю поездку — но по тумблеру пользователя: раньше
+        // автопереход молча перебивал выключенное «не гасить экран», отменяя
+        // единственный рычаг против главного потребителя.
         .onAppear {
-            UIApplication.shared.isIdleTimerDisabled = true
+            UIApplication.shared.isIdleTimerDisabled = env.settings.keepScreenOn
             // Пока водитель смотрит на схему, фиксы нужны чаще: крейсерские
             // 25 м — это рывок раз в 2–3 секунды. Буст снимается сам при
             // закрытии и не включается в перегрев (см. tuneAdaptiveAccuracy).
@@ -117,9 +127,12 @@ struct DashboardView: View {
             sketch.refresh(env)
         }
         .onDisappear {
-            // Закрыли спидометр в активной поездке — экран продолжает держать поездка.
+            // Закрыли спидометр в активной поездке — экран продолжает держать
+            // поездка; за рулём CarPlay телефон показывает экран передачи и
+            // обязан уметь гаснуть.
             UIApplication.shared.isIdleTimerDisabled =
                 env.location.isTripActive && env.settings.keepScreenOn
+                && !env.isCarPlayConnected
             env.location.setDashboardVisible(false)
         }
         .accessibilityElement(children: .ignore)
@@ -197,8 +210,12 @@ struct DashboardView: View {
                 if let limit = env.speedLimits.currentLimit {
                     SpeedLimitSign(limit: limit, diameter: 84)
                         .scaleEffect(env.speedLimits.isOverspeeding ? 1.08 : 1)
+                        // Шесть качков и стоп: «пока превышаешь» на трассе —
+                        // это десятки минут, а вечная анимация на экране
+                        // экономии — GPU-композитинг часами (та же причина,
+                        // по которой кромка приборки без пульса).
                         .animation(env.speedLimits.isOverspeeding
-                                   ? .easeInOut(duration: 0.55).repeatForever(autoreverses: true)
+                                   ? .easeInOut(duration: 0.55).repeatCount(6, autoreverses: true)
                                    : .easeOut(duration: 0.25),
                                    value: env.speedLimits.isOverspeeding)
                 }
@@ -386,6 +403,12 @@ struct DashboardView: View {
     private var isFineOverspeed: Bool {
         guard let limit = env.speedLimits.currentLimit else { return false }
         return FineSchedule.fine(overKmh: env.location.speedKmh - Double(limit)) > 0
+    }
+
+    /// Стояночное затемнение: долгая стоянка И тихо. Любая тревога возвращает
+    /// полную яркость — камера всегда важнее экономии.
+    private var isParkedDim: Bool {
+        env.location.isStandingStill && env.location.alertLevel == 0
     }
 
     private var alertColor: Color {

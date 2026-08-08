@@ -102,6 +102,12 @@ final class RouteService {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var announcedStage: [Int: Int] = [:]   // индекс шага → стадия (2 далеко, 1 близко, 0 сейчас)
     @ObservationIgnored private var segmentHint = 0                    // ускоряет проекцию точки на маршрут
+    /// Кумулятивная длина выбранного варианта (см. Self.cumulative).
+    @ObservationIgnored private var selectedCumulative: [CLLocationDistance] = []
+    /// Подряд неудачных перестроений: каждое удваивает кулдаун (сеть на трассе
+    /// пропадает надолго, и два сетевых захода каждые 20 с — 3 будильника
+    /// радио в минуту на всё время объезда).
+    @ObservationIgnored private var rerouteFailures = 0
 
     var isActive: Bool { !variants.isEmpty }
     var selected: Variant? { variants.first { $0.id == selectedID } }
@@ -237,6 +243,8 @@ final class RouteService {
         destinationName = ""
         destinationCoordinate = nil
         errorMessage = nil
+        selectedCumulative = []
+        rerouteFailures = 0
         resetProgress()
     }
 
@@ -279,7 +287,16 @@ final class RouteService {
               let destination = destinationCoordinate else { return }
         let point = MKMapPoint(coordinate)
 
-        let (along, deviation) = Self.project(point, onto: variant.points, hint: &segmentHint)
+        // Кумулятив ленится к текущему варианту: одна точка самолечения на все
+        // пути смены маршрута (apply, выбор варианта, перестроение).
+        if selectedCumulative.count != variant.points.count {
+            selectedCumulative = Self.cumulative(of: variant.points)
+        }
+        // Вне линии полный перебор — каждый третий тик, не каждый.
+        let (along, deviation) = Self.project(point, onto: variant.points,
+                                              cum: selectedCumulative,
+                                              hint: &segmentHint,
+                                              allowFullScan: offRouteTicks % 3 == 0)
         progressAlong = along
 
         // Прибытие: у самой цели ИЛИ проехали финиш по маршруту (парковка чуть в стороне,
@@ -315,8 +332,13 @@ final class RouteService {
             return
         }
         offRouteTicks += 1
+        // Кулдаун растёт с каждой неудачей (×2, потолок ×16): без бэкоффа при
+        // мёртвой сети перестроение долбило MKDirections + OSRM (таймаут 12 с)
+        // каждые 20 с всё время объезда.
+        let cooldown = AppConfig.rerouteCooldownSeconds
+            * pow(2, Double(min(rerouteFailures, 4)))
         guard offRouteTicks >= AppConfig.rerouteConfirmTicks,
-              Date().timeIntervalSince(lastRebuildAt) > AppConfig.rerouteCooldownSeconds else { return }
+              Date().timeIntervalSince(lastRebuildAt) > cooldown else { return }
 
         offRouteTicks = 0
         lastRebuildAt = Date()
@@ -327,10 +349,12 @@ final class RouteService {
             defer { isRebuilding = false }
             // Перестраиваем без альтернатив — быстрее, и в движении выбор не нужен.
             guard let built = try? await calculate(from: coordinate, to: destination, alternatives: false) else {
-                Log.route.error("перестроение маршрута не удалось — остаёмся на старой линии")
+                rerouteFailures += 1
+                Log.route.error("перестроение маршрута не удалось (\(self.rerouteFailures, privacy: .public)-й раз) — остаёмся на старой линии")
                 return
             }
             guard gen == generation else { return }   // маршрут успели сбросить/заменить
+            rerouteFailures = 0
             await apply(built, name: name, destination: destination, cameras: cameras)
             onRerouted?()
         }
@@ -615,12 +639,30 @@ final class RouteService {
         return result.sorted { $0.distanceAlong < $1.distanceAlong }
     }
 
+    /// Кумулятивная длина маршрута: cum[i] — метры от старта до точки i.
+    /// Считается один раз на маршрут: без неё project честно суммировал длину
+    /// от нуля НА КАЖДОМ ТИКЕ — O(позиция), к середине междугородного маршрута
+    /// это тысячи sqrt в секунду на main, и чем дольше едешь, тем горячее
+    /// телефон. Ровно профиль жалобы «греется в дальней дороге».
+    nonisolated static func cumulative(of pts: [MKMapPoint]) -> [CLLocationDistance] {
+        guard !pts.isEmpty else { return [] }
+        var cum = [CLLocationDistance](repeating: 0, count: pts.count)
+        for i in 1..<pts.count { cum[i] = cum[i - 1] + pts[i - 1].distance(to: pts[i]) }
+        return cum
+    }
+
     /// Проекция точки на маршрут: (пройдено от старта, отклонение от линии).
     /// `hint` — индекс сегмента с прошлого раза: обычно машина рядом, полный перебор не нужен.
+    /// `allowFullScan` — разрешён ли полный перебор при большом отклонении:
+    /// пока водитель едет по дублёру, полный перебор всех сегментов шёл каждый
+    /// тик (десятки тысяч операций в секунду минутами) — а отклонению для
+    /// логики перестроения достаточно оконной оценки, точный индекс нужен реже.
     nonisolated static func project(_ p: MKMapPoint, onto pts: [MKMapPoint],
-                                            hint: inout Int) -> (along: CLLocationDistance, deviation: CLLocationDistance) {
+                                    cum: [CLLocationDistance],
+                                    hint: inout Int,
+                                    allowFullScan: Bool = true) -> (along: CLLocationDistance, deviation: CLLocationDistance) {
         let n = pts.count
-        guard n >= 2 else { return (0, .greatestFiniteMagnitude) }
+        guard n >= 2, cum.count == n else { return (0, .greatestFiniteMagnitude) }
 
         func scan(_ range: Range<Int>) -> (Int, Double, CLLocationDistance) {
             var bestIndex = range.lowerBound
@@ -637,14 +679,12 @@ final class RouteService {
         // Окно вокруг прошлой позиции; если далеко (>200 м) — полный перебор (петли, перестроение).
         let lo = max(0, hint - 8), hi = min(n - 1, hint + 40)
         var (index, t, deviation) = scan(lo..<hi)
-        if deviation > 200 {
+        if deviation > 200, allowFullScan {
             (index, t, deviation) = scan(0..<(n - 1))
         }
         hint = index
 
-        var along: CLLocationDistance = 0
-        for i in 0..<index { along += pts[i].distance(to: pts[i + 1]) }
-        along += t * pts[index].distance(to: pts[index + 1])
+        let along = cum[index] + t * pts[index].distance(to: pts[index + 1])
         return (along, deviation)
     }
 

@@ -84,10 +84,18 @@ struct RootView: View {
                 env.location.setForeground(true)
                 env.mobile.startPolling()
                 env.motion.start()
-            case .background, .inactive:
+            case .background:
                 env.location.setForeground(false)   // в поездке непрерывный GPS продолжит работать
                 env.mobile.stopPolling()             // в фоне не опрашиваем сервер — батарея
                 snapshotForWidget()
+            case .inactive:
+                // Шторка, Пункт управления, Face ID, переключатель приложений:
+                // .inactive прилетает на каждое мелкое прерывание и дважды на
+                // каждый честный круг «свернул-развернул». Гасить здесь GPS и
+                // перезагружать виджеты — значит обнулять спидометр от свайпа
+                // шторки и жечь бюджет обновлений виджета по нескольку раз на
+                // переключение. Настоящий уход — только .background.
+                break
             @unknown default:
                 break
             }

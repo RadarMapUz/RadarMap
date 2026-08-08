@@ -15,6 +15,13 @@ import WatchConnectivity
 final class WatchBridgeService: NSObject {
     /// Последнее отправленное состояние (для дедупа).
     private var lastSent: [String: Int] = [:]
+    /// Когда отправляли: в движении кванты (2 км/ч, 25 м) перешагиваются почти
+    /// каждым тиком, и дедуп по значению превращался в честный 1 Гц — ≈3600
+    /// пробуждений BT-радио обоих устройств за час. Скорость и дистанция на
+    /// запястье не нуждаются в секундной точности — а смена уровня тревоги
+    /// проходит без очереди.
+    private var lastSentAt = Date.distantPast
+    private static let minInterval: TimeInterval = 3
 
     override init() {
         super.init()
@@ -41,7 +48,11 @@ final class WatchBridgeService: NSObject {
             "title": cameraTitle?.hashValue ?? 0,
         ]
         guard quantized != lastSent else { return }
+        // Вне тревоги — не чаще раза в minInterval; рост/сброс уровня — сразу.
+        if quantized["level"] == lastSent["level"],
+           Date().timeIntervalSince(lastSentAt) < Self.minInterval { return }
         lastSent = quantized
+        lastSentAt = Date()
 
         var context: [String: Any] = [
             "active": isTripActive,

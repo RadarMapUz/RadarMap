@@ -30,6 +30,12 @@ struct StartTripIntent: AppIntent {
         if env.location.isTripActive {
             return .result(dialog: IntentDialog("Поездка уже идёт."))
         }
+        // Siri/Кнопка действия поднимают процесс В ФОНЕ — телефонная сцена не
+        // создавалась, и без этого вызова поездка шла без лимитов (ни рейтинга,
+        // ни штрафов) и БЕЗ автозавершения: CoreMotion не запущен, «Завершить»
+        // некому, и Best-GPS висел часами после парковки. Тот же баг уже чинили
+        // для CarPlay-сцены (CarPlaySceneDelegate) — все старты идемпотентны.
+        env.startDrivingServices()
         env.location.startTrip()
         return .result(dialog: IntentDialog("Поехали. Слежу за камерами."))
     }

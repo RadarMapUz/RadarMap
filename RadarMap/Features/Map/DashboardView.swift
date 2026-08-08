@@ -17,6 +17,10 @@ struct DashboardView: View {
     /// Экранная модель схемы: сцена «север вверху» + анимированная точка
     /// зрения. Живёт, пока открыта приборка.
     @State private var sketch = SketchState()
+    /// Настройки прямо с приборки: это экран поездки, и до «голоса о
+    /// превышении» или радиуса оповещений с него раньше было не добраться —
+    /// приходилось закрывать приборку и искать спрятанные кнопки на карте.
+    @State private var showSettings = false
 
     var body: some View {
         ZStack {
@@ -112,6 +116,7 @@ struct DashboardView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { dismiss() }
+        .sheet(isPresented: $showSettings) { SettingsView() }
         .statusBarHidden()
         // Тик GPS → точка зрения схемы (и изредка пересборка её растра).
         .onChange(of: env.location.locationTick) { sketch.refresh(env) }
@@ -144,21 +149,30 @@ struct DashboardView: View {
     /// справа. Вне поездки заряд показываем отдельным чипом — приборка
     /// строилась ради батареи, и её экран — то место, где заряд должен быть
     /// виден всегда (в поездке он уже в строке поездки внизу, не дублируем).
-    @ViewBuilder
     private var statusChips: some View {
-        if env.thermal.mode != .full || !env.location.isTripActive
-            || env.location.isSignalStale {
-            HStack(spacing: 8) {
-                // Сигнал протух (тоннель, паркинг): скорость и дистанции на
-                // экране — последнее известное, а не происходящее. Честнее
-                // сказать это, чем показывать замершие цифры как живые.
-                if env.location.isSignalStale {
-                    statusChip("Ждём спутники", symbol: "location.slash.fill")
-                }
-                if env.thermal.mode != .full { thermalChip }
-                Spacer()
-                if !env.location.isTripActive { BatteryChip() }
+        HStack(spacing: 8) {
+            // Сигнал протух (тоннель, паркинг): скорость и дистанции на
+            // экране — последнее известное, а не происходящее. Честнее
+            // сказать это, чем показывать замершие цифры как живые.
+            if env.location.isSignalStale {
+                statusChip("Ждём спутники", symbol: "location.slash.fill")
             }
+            if env.thermal.mode != .full { thermalChip }
+            Spacer()
+            if !env.location.isTripActive { BatteryChip() }
+            // Шестерёнка живёт в строке всегда: кнопка выигрывает тап у
+            // фонового «нажмите, чтобы вернуться» сама, слоёв не нужно.
+            Button {
+                showSettings = true
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+                    .frame(width: 40, height: 40)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Настройки"))
         }
     }
 

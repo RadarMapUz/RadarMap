@@ -408,6 +408,12 @@ struct MapScreen: View {
             revealControls()
             map.releaseOrientation()
         })
+        // Тап возвращает спрятанный интерфейс — как во всех навигаторах.
+        // Раньше контролы возвращал только жест «потянуть карту», и в поездке
+        // до настроек было не добраться: тапаешь — ничего не происходит.
+        .simultaneousGesture(TapGesture().onEnded {
+            if controlsHidden { revealControls() }
+        })
     }
 
     // MARK: - Разовые подсказки
@@ -473,6 +479,23 @@ struct MapScreen: View {
             withAnimation(.easeOut(duration: 0.25)) { controlsHidden = false }
         }
         scheduleControlsHide()
+    }
+
+    /// Пилюля «Спидометр» над панелью поездки — видимая дверь на приборку.
+    private var dashboardPill: some View {
+        Button {
+            showDashboard = true
+        } label: {
+            Label("Спидометр", systemImage: "gauge.with.needle")
+                .font(.rounded(12, .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .padding(.horizontal, 13).padding(.vertical, 9)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().stroke(Theme.stroke, lineWidth: 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityLabel(Text("Открыть спидометр"))
     }
 
     private var crosshair: some View {
@@ -677,10 +700,16 @@ struct MapScreen: View {
                 if mode.showsTripBar {
                     // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
                     // максимум экрана отдан карте, и она не прячется вместе с кнопками.
-                    TripLiveBar(
-                        onShowCameras: { showRouteCameras = true },
-                        onStop: { toggleTrip() }
-                    )
+                    VStack(alignment: .trailing, spacing: 10) {
+                        // Видимый вход на спидометр: раньше он был только
+                        // секретным тапом по HUD, и о существовании экрана
+                        // экономии узнавали случайно (или никогда).
+                        dashboardPill
+                        TripLiveBar(
+                            onShowCameras: { showRouteCameras = true },
+                            onStop: { toggleTrip() }
+                        )
+                    }
                 } else if mode.showsRoutePanel, env.route.isActive {
                     RoutePanel(
                         onShowCameras: { showRouteCameras = true },

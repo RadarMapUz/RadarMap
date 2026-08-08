@@ -94,11 +94,18 @@ struct DrivingHintChip: View {
 struct LocationFollowDriver: View {
     @Environment(AppEnvironment.self) private var env
     let map: MapState
+    /// Карта накрыта приборкой: fullScreenCover прячет её только зрительно,
+    /// а follow продолжал каждый тик анимировать камеру и грузить тайлы под
+    /// крышкой — замер дал столько же CPU, сколько у открытой карты, и вся
+    /// экономия приборки сводилась к яркости пикселей. На паузе не следим;
+    /// снятие крышки догоняет позицию первым же тиком.
+    var isCovered = false
 
     var body: some View {
         Color.clear
             .allowsHitTesting(false)
             .onChange(of: env.location.locationTick) { _, _ in
+                guard !isCovered else { return }
                 // Прогресс маршрута (прибытие/манёвры) тикает в LocationService —
                 // здесь только следование карты за курсом. Вне поездки поворот
                 // по компасу телефона делает сам MapKit (.userLocation

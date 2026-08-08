@@ -11,6 +11,14 @@ import SwiftUI
 struct RadarMapApp: App {
     @State private var env = AppEnvironment.shared
 
+    init() {
+        #if DEBUG
+        // Сторож подвисаний main (см. HitchWatch): каждый дебаг-прогон сам
+        // ловит фризы дольше 250 мс и пишет их фолтом в лог.
+        HitchWatch.start()
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

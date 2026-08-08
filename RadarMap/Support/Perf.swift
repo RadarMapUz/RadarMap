@@ -30,6 +30,7 @@
 //  лишний вызов на пути, который ведёт к голосу о камере.
 //
 
+import Foundation
 import os
 
 nonisolated enum Perf {
@@ -118,3 +119,34 @@ nonisolated enum Perf {
         #endif
     }
 }
+
+#if DEBUG
+/// Сторож подвисаний главного потока — ответ прибором на вопрос «не тормозит
+/// ли»: фоновый поток раз в полсекунды просит main откликнуться, и отклик
+/// дольше порога попадает в лог фолтом с длительностью. Кадр — 16 мс, порог
+/// 250 мс — это уже видимый глазу фриз, а не дрожание планировщика.
+///
+/// Только DEBUG: в релизной сборке ни потока, ни пингов не существует.
+/// Смотреть: log show --predicate 'subsystem == "uz.radarmap.ios"' | grep фриз
+nonisolated enum HitchWatch {
+    private static let pingEvery: TimeInterval = 0.5
+    private static let threshold: TimeInterval = 0.25
+
+    static func start() {
+        Thread.detachNewThread {
+            Thread.current.name = "HitchWatch"
+            while true {
+                let sem = DispatchSemaphore(value: 0)
+                let sentAt = CFAbsoluteTimeGetCurrent()
+                DispatchQueue.main.async { sem.signal() }
+                _ = sem.wait(timeout: .now() + 5)
+                let lag = CFAbsoluteTimeGetCurrent() - sentAt
+                if lag > threshold {
+                    Log.app.fault("фриз main \(Int(lag * 1000), privacy: .public) мс")
+                }
+                Thread.sleep(forTimeInterval: pingEvery)
+            }
+        }
+    }
+}
+#endif

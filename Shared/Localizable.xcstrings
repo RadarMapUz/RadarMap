@@ -289,6 +289,70 @@
         }
       }
     },
+    "У камер" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "У камер"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kameralar oldida"
+          }
+        }
+      }
+    },
+    "Никогда" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Никогда"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hech qachon"
+          }
+        }
+      }
+    },
+    "Голос о превышении" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Голос о превышении"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tezlikni oshirish haqida ovoz"
+          }
+        }
+      }
+    },
+    "Звук и вибрация предупреждают о камере всегда — голос отдельно. «Авто» сам различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громко и с лимитом. О камерах, которые вы проезжаете каждый день спокойно, приложение молчит и только отмечает вибрацией — но заговорит, если подъезжаете к ним с превышением. «Голос о превышении» — про фразу без камеры: «У камер» скажет о превышении только когда впереди по вашей дороге камера, в остальное время превышение видно цветом скорости." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Звук и вибрация предупреждают о камере всегда — голос отдельно. «Авто» сам различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громко и с лимитом. О камерах, которые вы проезжаете каждый день спокойно, приложение молчит и только отмечает вибрацией — но заговорит, если подъезжаете к ним с превышением. «Голос о превышении» — про фразу без камеры: «У камер» скажет о превышении только когда впереди по вашей дороге камера, в остальное время превышение видно цветом скорости."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tovush va tebranish kamera haqida doim ogohlantiradi — ovoz alohida. «Avto» shahar va trassani o‘zi ajratadi: shaharda qisqa ibora, trassada to‘liq, tezlikni oshirsangiz — baland ovozda va cheklov bilan. Har kuni xotirjam o‘tadigan kameralaringiz haqida ilova jim turadi va faqat tebranish bilan belgilaydi — lekin tezlikni oshirib yaqinlashsangiz, gapiradi. «Tezlikni oshirish haqida ovoz» — kamerasiz iboraga tegishli: «Kameralar oldida» rejimida faqat yo‘lingizda oldinda kamera bo‘lsa aytadi, qolgan paytda oshirish tezlik rangida ko‘rinadi."
+          }
+        }
+      }
+    },
     "Жарко — экономлю экран" : {
       "localizations" : {
         "ru" : {

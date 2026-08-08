@@ -727,10 +727,16 @@ final class LocationService: NSObject {
             // если впереди НЕТ камеры, о которой мы сейчас скажем. Иначе
             // водитель получал две реплики внахлёст, и одна из них терялась —
             // чаще всего именно та, что про камеру. Про камеру фраза и так
-            // содержит скорость с лимитом.
+            // содержит скорость с лимитом. Плюс настройка OverspeedVoice:
+            // в режиме «У камер» фраза заслужена, только когда впереди по
+            // нашей дороге камера в радиусе оповещения (просьба из реальной
+            // поездки: честное по лимиту «превышение» без камеры — ворчание).
+            let cameraAhead = (distanceToNearest ?? .greatestFiniteMagnitude)
+                <= effectiveAlertRadius
             speedLimits?.update(
                 coordinate: coordinate, course: course, speedKmh: speedKmh,
-                announce: isTripActive && !willSpeakAboutCameraAhead,
+                announce: isTripActive && !willSpeakAboutCameraAhead
+                    && settings.overspeedVoice.allows(cameraAhead: cameraAhead),
                 fallbackClass: nearestCamera?.roadClass ?? .unknown)
             // Прижим КАРТИНКИ к оси дороги — тем же RoadHit, что нашёл лимит,
             // без второго запроса. Строго после speedLimits.update и строго

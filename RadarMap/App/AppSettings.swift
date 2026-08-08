@@ -123,6 +123,49 @@ enum VoiceMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// Голос о самом превышении («превышение скорости») — отдельно от голоса о
+/// камерах. Появился из реальной поездки: фраза звучала честно по лимиту, но
+/// без камеры впереди воспринималась как ворчание. Штраф-то возможен только
+/// у камеры — и водитель вправе слышать голос только там.
+enum OverspeedVoice: String, CaseIterable, Identifiable {
+    /// Как раньше: любое устойчивое превышение — фраза (не чаще раза в 30 с).
+    case always
+    /// Только когда впереди ПО НАШЕЙ ДОРОГЕ камера в радиусе оповещения:
+    /// штраф реален — фраза заслужена. Вне камер молчим, превышение видно
+    /// цветом скорости и кромкой приборки.
+    case nearCameras
+    /// Никогда: только цвет и кромка.
+    case off
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .always:      return String(localized: "Всегда")
+        case .nearCameras: return String(localized: "У камер")
+        case .off:         return String(localized: "Никогда")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .always:      return "speaker.wave.2.fill"
+        case .nearCameras: return "camera.metering.spot"
+        case .off:         return "speaker.slash.fill"
+        }
+    }
+
+    /// Разрешён ли голос о превышении сейчас. `cameraAhead` — камера на нашей
+    /// дороге в радиусе оповещения (тот же ближайший, что у HUD и алертов).
+    func allows(cameraAhead: Bool) -> Bool {
+        switch self {
+        case .always:      return true
+        case .nearCameras: return cameraAhead
+        case .off:         return false
+        }
+    }
+}
+
 /// Фоновые баннеры о камерах: о чём предупреждать, когда приложение свёрнуто.
 /// Звук/голос в поездке живут отдельно — это только про уведомления в фоне.
 /// Как включается поездка. «Умный» — компромисс, ради которого этот переключатель
@@ -297,6 +340,10 @@ final class AppSettings {
     var soundEnabled: Bool { didSet { store.set(soundEnabled, forKey: Keys.sound) } }
     /// Голос о камерах — единственная настройка на этот счёт.
     var voiceMode: VoiceMode { didSet { store.set(voiceMode.rawValue, forKey: Keys.voiceMode) } }
+    /// Голос о превышении: всегда / только у камер / никогда (см. OverspeedVoice).
+    var overspeedVoice: OverspeedVoice {
+        didSet { store.set(overspeedVoice.rawValue, forKey: Keys.overspeedVoice) }
+    }
     /// Фасад для «тишины» целиком: кнопка глушилки в CarPlay и голос маршрута.
     var voiceEnabled: Bool {
         get { voiceMode != .off }
@@ -387,6 +434,7 @@ final class AppSettings {
         static let sound = "soundEnabled"
         static let voice = "voiceEnabled"
         static let voiceMode = "voiceMode"
+        static let overspeedVoice = "overspeedVoice"
         static let radius = "alertRadius"
         static let filter = "cameraFilter"
         static let autoStart = "autoStartTrip"        // legacy, только для миграции
@@ -458,6 +506,8 @@ final class AppSettings {
         } else {
             voiceMode = .smart
         }
+        overspeedVoice = OverspeedVoice(
+            rawValue: store.string(forKey: Keys.overspeedVoice) ?? "") ?? .always
         alertRadius = store.double(forKey: Keys.radius)
         filter = CameraFilter(rawValue: store.string(forKey: Keys.filter) ?? "") ?? .all
         // Миграция с тумблера «Автостарт»: включён → «Умный» (новый разумный

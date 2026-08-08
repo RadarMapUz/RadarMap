@@ -89,10 +89,15 @@ struct MapScreen: View {
             // Превышение у камеры: свечение по краям. Отдельная вью: условие
             // читает скорость и дистанцию, меняющиеся каждый тик GPS, — в body
             // MapScreen это чтение пересобирало весь экран с картой ежесекундно.
-            OverspeedVignetteGate()
+            // Под приборкой не монтируем: у неё своя кромка, а пульсирующий
+            // blur во весь экран крутился бы невидимым под крышкой.
+            if !showDashboard {
+                OverspeedVignetteGate()
+            }
 
             // Следование за GPS: единственный подписчик locationTick.
             LocationFollowDriver(map: map, isCovered: showDashboard)
+            MobilePassDriver()
         }
         .mapScope(mapScope)
         .fullScreenCover(isPresented: $showDashboard) { DashboardView() }
@@ -181,13 +186,9 @@ struct MapScreen: View {
         .onChange(of: env.location.nearestCamera?.id) { _, _ in
             dismissedApproachID = nil   // новая ближайшая камера — снова показываем предупреждение
         }
-        // Проезд чужой передвижной отметки → вопрос «ещё стоял?». Тик берём
-        // здесь, а не в LocationService: спрашивать имеет смысл только когда
-        // экран перед глазами, а сервис и без того самый нагруженный в проекте.
-        .onChange(of: env.location.locationTick) {
-            guard let coordinate = env.location.currentCoordinate else { return }
-            withAnimation { env.mobile.trackPasses(from: coordinate) }
-        }
+        // Проезд чужой передвижной отметки живёт в MobilePassDriver
+        // (MapTickGates): onChange(locationTick) прямо здесь делал весь body
+        // зависимым от тика — второй подписчик в обход правила изоляторов.
         .onChange(of: env.location.isTripActive) { _, active in
             // В поездке карта сама встаёт «по ходу движения», после — назад на север.
             map.apply(orientation: active ? .heading : .following,
@@ -229,17 +230,23 @@ struct MapScreen: View {
     }
 
     @ViewBuilder private var approachOverlay: some View {
-        #if DEBUG
-        // -hideCameraAlert: снимаем чистые кадры turn-by-turn (алерт камеры
-        // полноэкранный и перекрывает баннер манёвра).
-        if ProcessInfo.processInfo.arguments.contains("-hideCameraAlert") {
+        // Под приборкой не монтируем вовсе: она показывает камеру сама, а
+        // полноэкранный алерт с вечным пульсом рисовался и диффился невидимым.
+        if showDashboard {
             EmptyView()
         } else {
+            #if DEBUG
+            // -hideCameraAlert: снимаем чистые кадры turn-by-turn (алерт камеры
+            // полноэкранный и перекрывает баннер манёвра).
+            if ProcessInfo.processInfo.arguments.contains("-hideCameraAlert") {
+                EmptyView()
+            } else {
+                ApproachOverlayGate(dismissedID: $dismissedApproachID)
+            }
+            #else
             ApproachOverlayGate(dismissedID: $dismissedApproachID)
+            #endif
         }
-        #else
-        ApproachOverlayGate(dismissedID: $dismissedApproachID)
-        #endif
     }
 
     // MARK: - Карта
@@ -252,7 +259,11 @@ struct MapScreen: View {
         case .dark:  return .dark
         case .light: return .light
         case .auto:
-            return Sun.isDaytime(at: env.location.currentCoordinate, now: Date())
+            // Точка для солнца — троттленный focus (шаг mapFocusStepMeters),
+            // не живая координата: та пишется каждым фиксом, и тема «Авто»
+            // делала body карты заложником тика + NOAA-расчёт каждую секунду.
+            return Sun.isDaytime(at: map.focus ?? env.location.currentCoordinate,
+                                 now: Date())
                 ? .light : .dark
         }
     }
@@ -660,7 +671,9 @@ struct MapScreen: View {
                 // а под оверлеем плашка сгорала невидимой.
                 // Ждёт и под предупреждением о камере, и под приборкой: там
                 // вопрос рисует она сама, а два живых таймера — двойной ответ.
-                MobileConfirmBar(isCovered: env.location.isApproachingCamera || showDashboard)
+                // Условие «накрыто» — в гейте: isApproachingCamera читает
+                // пер-тиковые дистанцию и скорость (см. MapTickGates).
+                MobileConfirmGate(dashboardShown: showDashboard)
                 if mode.showsTripBar {
                     // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
                     // максимум экрана отдан карте, и она не прячется вместе с кнопками.

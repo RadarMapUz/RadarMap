@@ -90,6 +90,36 @@ struct DrivingHintChip: View {
     }
 }
 
+/// «Радар ещё стоял?» на карте. Условие «накрыто» читает пер-тиковую
+/// isApproachingCamera (внутри — дистанция и скорость, пишутся каждым фиксом):
+/// вычисленное В BODY MapScreen оно делало весь экран с двумя сотнями
+/// маркеров заложником тика — глазами читалось как булев флаг, а было
+/// подпиской на каждый метр.
+struct MobileConfirmGate: View {
+    @Environment(AppEnvironment.self) private var env
+    var dashboardShown: Bool
+
+    var body: some View {
+        MobileConfirmBar(isCovered: env.location.isApproachingCamera || dashboardShown)
+    }
+}
+
+/// Проезд чужой передвижной отметки → вопрос «ещё стоял?». Тик читается
+/// здесь: onChange(locationTick) прямо в MapScreen был второй независимой
+/// подпиской body на тик — с ним тишина follow ничего не давала.
+struct MobilePassDriver: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .onChange(of: env.location.locationTick) {
+                guard let coordinate = env.location.currentCoordinate else { return }
+                withAnimation { env.mobile.trackPasses(from: coordinate) }
+            }
+    }
+}
+
 /// Следование карты за GPS: единственный подписчик locationTick.
 struct LocationFollowDriver: View {
     @Environment(AppEnvironment.self) private var env

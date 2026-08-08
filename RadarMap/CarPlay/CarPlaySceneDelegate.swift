@@ -69,8 +69,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         toastTask?.cancel()
         toastTask = nil
         // Вышли из машины: телефон мог всё это время быть в фоне, события
-        // scenePhase не будет — снимаем «передний план» сами.
+        // scenePhase не будет — снимаем «передний план» сами. И флаг схемы
+        // тоже: onDisappear у вью внутри сносимого CPWindow не гарантирован,
+        // а залипший флаг тихо держал бы GPS-буст (тир 2 → 1) весь процесс.
         AppEnvironment.shared.setCarPlayConnected(false)
+        AppEnvironment.shared.location.setCarPlaySketchVisible(false)
         // Тишина — атрибут ПОЕЗДКИ, а не настройка: кнопку жали в машине
         // (спит пассажир, идёт разговор), и без отката телефон навсегда
         // оставался в «Молча», а человек не связал бы это с кнопкой в машине.

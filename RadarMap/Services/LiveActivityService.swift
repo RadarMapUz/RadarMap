@@ -16,6 +16,11 @@ import os
 final class LiveActivityService {
     private var activity: Activity<CameraActivityAttributes>?
     private var lastSentState: CameraActivityAttributes.ContentState?
+    /// Когда обновляли: квант 25 м в движении — это раз в 1–2 секунды, ≈2500
+    /// пробуждений расширения виджета за час. Локскрин не нуждается в
+    /// секундной точности дистанции — раз в 3 с достаточно.
+    private var lastSentAt = Date.distantPast
+    private static let minInterval: TimeInterval = 3
 
     var isActive: Bool { activity != nil }
 
@@ -40,7 +45,12 @@ final class LiveActivityService {
         // у Live Activity ограниченный бюджет обновлений.
         let quantized = Self.quantize(state)
         guard quantized != lastSentState else { return }
+        // Смена камеры (заголовка) — сразу; бегущая дистанция — не чаще
+        // minInterval.
+        if quantized.nearestTitle == lastSentState?.nearestTitle,
+           Date().timeIntervalSince(lastSentAt) < Self.minInterval { return }
         lastSentState = quantized
+        lastSentAt = Date()
         Task { await activity.update(.init(state: quantized, staleDate: nil)) }
     }
 

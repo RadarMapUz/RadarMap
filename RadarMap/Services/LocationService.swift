@@ -252,7 +252,9 @@ final class LocationService: NSObject {
         isTripActive = true
         lastMovementAt = Date()   // не проваливаться в тир «стоянка» со старым штампом
         // Телефон в держателе — экран не гаснет всю поездку (как у навигаторов).
-        UIApplication.shared.isIdleTimerDisabled = settings.keepScreenOn
+        // Кроме поездки за рулём CarPlay: там телефон показывает экран передачи,
+        // и прибитый экран сводил бы «телефон отдыхает и не греется» к нулю.
+        UIApplication.shared.isIdleTimerDisabled = settings.keepScreenOn && !isCarPlayConnected
         alertEngine.reset()
         passTracking.reset()
         locationFilter.reset()
@@ -741,19 +743,29 @@ final class LocationService: NSObject {
         if liveActivity?.isActive == true {
             liveActivity?.update(state: activityState)
         }
-        // Часы: то же состояние (мост квантует и дедупит — без изменений радио молчит).
-        watchBridge?.update(isTripActive: isTripActive, speedKmh: speedKmh,
-                            cameraTitle: nearestCamera?.displayTitle,
-                            distanceMeters: distanceToNearest,
-                            alertLevel: alertLevel)
+        // Часы: только в поездке. Вне её HUD часов рисует «нет поездки» без
+        // цифр, а меняющаяся скорость пробивала дедуп и будила BT-радио ради
+        // данных, которые часы не показывают. Переход в «нет поездки» шлёт
+        // endTrip явными нулями.
+        if isTripActive {
+            watchBridge?.update(isTripActive: true, speedKmh: speedKmh,
+                                cameraTitle: nearestCamera?.displayTitle,
+                                distanceMeters: distanceToNearest,
+                                alertLevel: alertLevel)
+        }
     }
 
     /// Непрерывный уровень тревоги (та же лестница порогов, что в AlertEngine):
     /// 0 — тихо, 1…3 — эскалация. Его показывают часы и приборная панель CarPlay.
+    /// Без промежуточных массивов: читается каждый тик и на каждую перерисовку
+    /// часового моста и дока CarPlay.
     var alertLevel: Int {
         guard isTripActive, let d = distanceToNearest else { return 0 }
         let r = effectiveAlertRadius
-        return [r, r * 0.6, r * 0.3].filter { d <= $0 }.count
+        if d <= r * 0.3 { return 3 }
+        if d <= r * 0.6 { return 2 }
+        if d <= r { return 1 }
+        return 0
     }
 
     /// Текущее состояние для Live Activity.

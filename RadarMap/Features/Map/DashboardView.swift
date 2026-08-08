@@ -107,9 +107,11 @@ struct DashboardView: View {
         .statusBarHidden()
         // Тик GPS → точка зрения схемы (и изредка пересборка её растра).
         .onChange(of: env.location.locationTick) { sketch.refresh(env) }
-        // Приборка должна светиться всю поездку — не даём экрану погаснуть.
+        // Приборка светится всю поездку — но по тумблеру пользователя: раньше
+        // автопереход молча перебивал выключенное «не гасить экран», отменяя
+        // единственный рычаг против главного потребителя.
         .onAppear {
-            UIApplication.shared.isIdleTimerDisabled = true
+            UIApplication.shared.isIdleTimerDisabled = env.settings.keepScreenOn
             // Пока водитель смотрит на схему, фиксы нужны чаще: крейсерские
             // 25 м — это рывок раз в 2–3 секунды. Буст снимается сам при
             // закрытии и не включается в перегрев (см. tuneAdaptiveAccuracy).
@@ -117,9 +119,12 @@ struct DashboardView: View {
             sketch.refresh(env)
         }
         .onDisappear {
-            // Закрыли спидометр в активной поездке — экран продолжает держать поездка.
+            // Закрыли спидометр в активной поездке — экран продолжает держать
+            // поездка; за рулём CarPlay телефон показывает экран передачи и
+            // обязан уметь гаснуть.
             UIApplication.shared.isIdleTimerDisabled =
                 env.location.isTripActive && env.settings.keepScreenOn
+                && !env.isCarPlayConnected
             env.location.setDashboardVisible(false)
         }
         .accessibilityElement(children: .ignore)
@@ -197,8 +202,12 @@ struct DashboardView: View {
                 if let limit = env.speedLimits.currentLimit {
                     SpeedLimitSign(limit: limit, diameter: 84)
                         .scaleEffect(env.speedLimits.isOverspeeding ? 1.08 : 1)
+                        // Шесть качков и стоп: «пока превышаешь» на трассе —
+                        // это десятки минут, а вечная анимация на экране
+                        // экономии — GPU-композитинг часами (та же причина,
+                        // по которой кромка приборки без пульса).
                         .animation(env.speedLimits.isOverspeeding
-                                   ? .easeInOut(duration: 0.55).repeatForever(autoreverses: true)
+                                   ? .easeInOut(duration: 0.55).repeatCount(6, autoreverses: true)
                                    : .easeOut(duration: 0.25),
                                    value: env.speedLimits.isOverspeeding)
                 }

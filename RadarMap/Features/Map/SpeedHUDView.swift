@@ -78,7 +78,10 @@ struct SpeedHUDView: View {
             .shadow(color: over ? Theme.danger.opacity(0.9) : .black.opacity(0.3),
                     radius: over ? 10 : 3)
             .scaleEffect(over ? 1.08 : 1.0)
-            .animation(over ? .easeInOut(duration: 0.55).repeatForever(autoreverses: true)
+            // Шесть качков и стоп: «пока превышаешь» длится десятки минут, а
+            // вечный пульс с тенью поверх живой карты — офскрин-проход GPU
+            // каждый кадр. Красная тень остаётся — сигнал не исчезает.
+            .animation(over ? .easeInOut(duration: 0.55).repeatCount(6, autoreverses: true)
                             : .easeOut(duration: 0.25),
                        value: over)
     }

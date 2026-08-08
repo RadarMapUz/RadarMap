@@ -448,26 +448,15 @@ final class LocationService: NSObject {
             : .greatestFiniteMagnitude
         let nearest = min(cameraDistance, stepDistance)
 
-        // 0 — финал (Best, частые фиксы), 1 — подъезд (10 м), 2 — крейсер,
-        // 3 — стоянка (пробка/светофор >минуты ВДАЛИ от камер: тир 2 гарантирует,
-        // что до ближайшей камеры/манёвра больше 1.5 км — грубые фиксы безопасны).
-        var tier = nearest < AppConfig.gpsPreciseApproachMeters ? 0
-                 : nearest < AppConfig.gpsMidApproachMeters ? 1 : 2
-        if tier == 2, speedKmh < 3,
-           Date().timeIntervalSince(lastMovementAt) > AppConfig.gpsIdleAfterSeconds {
-            tier = 3
-        }
-        // Открытая приборка (или схема на экране CarPlay): водитель СМОТРИТ на
-        // схему, и фиксы раз в 25 м (2–3 с в городе) видны глазом как рывки.
-        // Поднимаем крейсерский тир до подъездного — но только пока телефон
-        // холодный: в перегрев плавность картинки проигрывает экономии (тот
-        // самый держатель под солнцем), а стоянку (тир 3) не трогаем вовсе —
-        // стоя анимировать нечего. Экран при этом уже горит и стоит на
-        // порядок дороже GPS.
-        if tier == 2, isForeground, isDashboardVisible || isCarPlaySketchVisible,
-           (thermal?.mode ?? .full) == .full {
-            tier = 1
-        }
+        // Порядок правил (стоянка бьёт близость вне 150 м, буст только с
+        // крейсера и на холодном телефоне) — в чистом GPSTiers под тестами.
+        let tier = GPSTiers.tier(.init(
+            nearestTargetMeters: nearest,
+            speedKmh: speedKmh,
+            idleSeconds: Date().timeIntervalSince(lastMovementAt),
+            sketchVisible: isDashboardVisible || isCarPlaySketchVisible,
+            isForeground: isForeground,
+            thermalIsFull: (thermal?.mode ?? .full) == .full))
         guard tier != accuracyTier else { return }
         accuracyTier = tier
         switch tier {
@@ -604,6 +593,10 @@ final class LocationService: NSObject {
     private(set) var displayCourse: CLLocationDirection = -1
     /// Когда машина в последний раз реально двигалась (для тира «стоянка»).
     @ObservationIgnored private var lastMovementAt = Date()
+    /// Последняя точка, по которой считали прогресс маршрута (гейт стоянки).
+    @ObservationIgnored private var lastRouteProgressCoordinate: CLLocationCoordinate2D?
+    /// Долгая стоянка (>dashboardDimIdleSeconds): приборка гасит яркость.
+    private(set) var isStandingStill = false
 
     /// Единственная точка входа фиксов: сначала гейт качества, потом обработка.
     /// Отброшенный фикс не двигает ни трек, ни алерты, ни спидометр.
@@ -747,9 +740,29 @@ final class LocationService: NSObject {
                                              hit: speedLimits?.currentRoadHit)
             displayCoordinate = snapped?.coordinate ?? coordinate
             displayCourse = snapped?.courseDegrees ?? currentCourse
-            route?.updateProgress(coordinate: coordinate, cameras: repository.cameras,
-                                  announce: isTripActive)
+            // Стоянка: точка не сдвинулась — прогресс маршрута не мог
+            // измениться, пересчёт (проекция, манёвры, префикс) пропускаем.
+            // Порог накопительный от последней ОБРАБОТАННОЙ точки: ползание
+            // набирает свои 2 м и проходит. У финиша (<300 м) не пропускаем
+            // никогда — прибытие ползком в радиус срабатывает тик в тик.
+            let progressMoved = lastRouteProgressCoordinate.map {
+                GeoMath.fastDistance($0.latitude, $0.longitude,
+                                     coordinate.latitude, coordinate.longitude)
+            } ?? .greatestFiniteMagnitude
+            if progressMoved >= RoadSketch.standstillMeters
+                || (route?.remainingDistance ?? .greatestFiniteMagnitude) < 300 {
+                lastRouteProgressCoordinate = coordinate
+                route?.updateProgress(coordinate: coordinate, cameras: repository.cameras,
+                                      announce: isTripActive)
+            }
             tuneAdaptiveAccuracy()
+            // Долгая стоянка (стояночное затемнение приборки): пишем только
+            // на смене — наблюдатели не будятся каждым тиком.
+            let standing = GPSTiers.isStanding(
+                speedKmh: speedKmh,
+                idleSeconds: Date().timeIntervalSince(lastMovementAt),
+                idleAfter: AppConfig.dashboardDimIdleSeconds)
+            if standing != isStandingStill { isStandingStill = standing }
             // Умный режим: детектор города/трассы (дёшево — пара сравнений).
             contextDetector.update(roadLimitKmh: speedLimits?.currentLimit,
                                    camerasWithin3km: cameraDensity3km,

@@ -55,7 +55,7 @@ struct DashboardView: View {
                         .frame(height: 200)
                         .padding(.horizontal, 28)
                         .padding(.top, 6)
-                        .opacity(sketchIsStale ? 0.45 : 1)
+                        .opacity(min(sketchIsStale ? 0.45 : 1, isParkedDim ? 0.4 : 1))
                         .animation(.easeOut(duration: 0.4), value: sketchIsStale)
                 }
 
@@ -63,8 +63,11 @@ struct DashboardView: View {
 
                 VStack(spacing: 18) {
                     speedHero
+                        .opacity(isParkedDim ? 0.4 : 1)
 
-                    // Ближайшая камера: дистанция крупно, цвет греется по уровню тревоги.
+                    // Ближайшая камера: дистанция крупно, цвет греется по
+                    // уровню тревоги. НЕ гаснет на стоянке никогда: камера —
+                    // то, ради чего приложение существует.
                     if let camera = env.location.nearestCamera,
                        let distance = env.location.distanceToNearest {
                         cameraBlock(camera: camera, distance: distance)
@@ -100,7 +103,12 @@ struct DashboardView: View {
                 }
                 .padding(.horizontal, 28)
                 .padding(.bottom, 12)
+                .opacity(isParkedDim ? 0.4 : 1)
             }
+            // Стояночное затемнение (как у Waze): стоим >30 с без тревоги —
+            // белые пиксели гаснут до 40%, на OLED это настоящие ватты.
+            // Тронулись — мгновенно ярко (isStandingStill пишется на смене).
+            .animation(.easeInOut(duration: 0.8), value: isParkedDim)
         }
         .contentShape(Rectangle())
         .onTapGesture { dismiss() }
@@ -395,6 +403,12 @@ struct DashboardView: View {
     private var isFineOverspeed: Bool {
         guard let limit = env.speedLimits.currentLimit else { return false }
         return FineSchedule.fine(overKmh: env.location.speedKmh - Double(limit)) > 0
+    }
+
+    /// Стояночное затемнение: долгая стоянка И тихо. Любая тревога возвращает
+    /// полную яркость — камера всегда важнее экономии.
+    private var isParkedDim: Bool {
+        env.location.isStandingStill && env.location.alertLevel == 0
     }
 
     private var alertColor: Color {

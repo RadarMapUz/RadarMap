@@ -600,15 +600,26 @@ final class TripStats {
         guard let startedAt,
               Date().timeIntervalSince(lastCheckpointAt) >= Self.checkpointInterval else { return }
         lastCheckpointAt = Date()
+        // В слепок — УПРОЩЁННЫЙ трек, как в finish(): сырой буфер за часовую
+        // поездку — тысячи точек, и каждые 20 с паковались, кодировались и
+        // писались ВСЕ (к концу часа ~90 КБ на запись, ~15 МБ во флеш за час,
+        // синхронно в GPS-тике). После упрощения слепок снова «единицы
+        // килобайт», а восстановлению большего и не нужно — finish() всё
+        // равно упрощает.
         let snapshot = InflightTrip(
             startedAt: startedAt, lastPointAt: lastPointAt ?? Date(),
             distanceMeters: distanceMeters, maxSpeedKmh: maxSpeedKmh,
             passed: passed, stops: stops,
-            track: Self.packTrack(trackBuffer) ?? [],
+            track: Self.packTrack(Self.simplify(trackBuffer,
+                                                tolerance: Self.trackTolerance,
+                                                maxPoints: Self.trackMaxPoints)) ?? [],
             endLat: lastCoordinate?.latitude, endLon: lastCoordinate?.longitude)
-        // Единицы килобайт атомарной записи раз в 20 секунд — дешевле любого
-        // хоп-танца; потерянная запись не страшна, придёт следующая.
-        JSONFile.save(snapshot, to: inflightURL, log: Log.trips)
+        // Кодирование и атомарная запись — не в тике: слепок — значимая копия,
+        // гонок с буфером нет, а потерянная запись не страшна — придёт следующая.
+        let url = inflightURL
+        Task.detached(priority: .utility) {
+            JSONFile.save(snapshot, to: url, log: Log.trips)
+        }
     }
 
     private func removeCheckpoint() {

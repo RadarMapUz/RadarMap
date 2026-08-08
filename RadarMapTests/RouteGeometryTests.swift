@@ -50,12 +50,52 @@ final class RouteGeometryTests: XCTestCase {
         var hint = 0
         // Точка около середины маршрута, смещена на ~55 м к северу.
         let probe = MKMapPoint(CLLocationCoordinate2D(latitude: 41.3005, longitude: 69.25))
-        let (along, deviation) = RouteService.project(probe, onto: pts, hint: &hint)
+        let (along, deviation) = RouteService.project(probe, onto: pts,
+                                                      cum: RouteService.cumulative(of: pts),
+                                                      hint: &hint)
 
         XCTAssertEqual(deviation, 55, accuracy: 10)
         // Пройдено ~половина из ~8.4 км.
         XCTAssertEqual(along, 4180, accuracy: 150)
         XCTAssertGreaterThan(hint, 0, "подсказка сегмента должна сдвинуться к середине")
+    }
+
+    /// Кумулятив — то же «пройдено», что и прямое суммирование от нуля: до
+    /// него project честно складывал длину на каждом тике (O(позиция) sqrt в
+    /// секунду на длинном маршруте — телефон грелся тем сильнее, чем дальше ехал).
+    func testCumulativeMatchesDirectSummation() {
+        let pts = straightRoute
+        let cum = RouteService.cumulative(of: pts)
+        XCTAssertEqual(cum.count, pts.count)
+        XCTAssertEqual(cum[0], 0)
+        var direct = 0.0
+        for i in 1..<pts.count {
+            direct += pts[i - 1].distance(to: pts[i])
+            XCTAssertEqual(cum[i], direct, accuracy: 0.001)
+        }
+    }
+
+    /// Запрет полного перебора не ломает оценку отклонения: вне окна подсказки
+    /// оценка остаётся «далеко» (логике перестроения этого достаточно), а с
+    /// разрешённым перебором сегмент находится точно. Маршрут плотный (201
+    /// точка): у обычной фикстуры окно hint±40 покрывало всю линию целиком.
+    func testProjectHonorsFullScanGate() {
+        let pts = stride(from: 69.20, through: 69.30, by: 0.0005).map {
+            MKMapPoint(CLLocationCoordinate2D(latitude: 41.30, longitude: $0))
+        }
+        let cum = RouteService.cumulative(of: pts)
+        // Точка на линии у финиша; подсказка у старта — окно её не достаёт.
+        let probe = MKMapPoint(CLLocationCoordinate2D(latitude: 41.30, longitude: 69.295))
+        var hint = 0
+        let windowed = RouteService.project(probe, onto: pts, cum: cum,
+                                            hint: &hint, allowFullScan: false)
+        XCTAssertGreaterThan(windowed.deviation, 200,
+                             "без полного перебора отклонение обязано остаться большим")
+        var freshHint = 0
+        let full = RouteService.project(probe, onto: pts, cum: cum,
+                                        hint: &freshHint, allowFullScan: true)
+        XCTAssertLessThan(full.deviation, 10, "полный перебор находит настоящий сегмент")
+        XCTAssertEqual(full.along, cum[cum.count - 1], accuracy: 600)
     }
 
     func testTraveledPrefixLength() {

@@ -145,12 +145,14 @@ final class LocationService: NSObject {
         manager.activityType = .automotiveNavigation
         hasFullAccuracy = manager.accuracyAuthorization == .fullAccuracy
 
+        // [weak self] и на ВНЕШНЕМ замыкании: чтобы внутренняя Task могла
+        // сослаться на self слабо, внешнее без списка захвата держало бы его
+        // сильно — NotificationCenter владел бы сервисом вечно (тот же паттерн,
+        // что в ThermalService).
         NotificationCenter.default.addObserver(
             forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: nil
-        ) { _ in
+        ) { [weak self] _ in
             let low = ProcessInfo.processInfo.isLowPowerModeEnabled
-            // Список захвата на самом `Task`: иначе внутреннее замыкание берёт
-            // `self` из внешнего повторно — гонка на захваченной переменной.
             Task { @MainActor [weak self] in self?.powerModeChanged(low) }
         }
     }
@@ -348,6 +350,10 @@ final class LocationService: NSObject {
     func endTrip(asPassenger: Bool = false, auto: Bool = false) {
         isTripActive = false
         UIApplication.shared.isIdleTimerDisabled = false
+        // Всю поездку геозоны не перерегистрировались (retile их пропускает —
+        // сработать они всё равно не могли). Возвращаясь в тихий фон, ставим
+        // их вокруг места парковки, а не города въезда.
+        if let coordinate = currentCoordinate { retile(around: coordinate) }
         alertEngine.reset()
         voicedInGroup.removeAll()
         postponedVoice = nil
@@ -540,7 +546,6 @@ final class LocationService: NSObject {
         // Якорь ставим здесь, а не только в retileIfNeeded: refreshMonitoring
         // зовёт retile напрямую, и без якоря следующий тик перетайлил бы повторно.
         anchor = coordinate
-        manager.monitoredRegions.forEach { manager.stopMonitoring(for: $0) }
 
         // Окно кандидатов на оповещение — широкое; геозоны — только 20 ближайших
         // из него (жёсткий лимит iOS). Раньше это был один список на двоих, и
@@ -562,6 +567,13 @@ final class LocationService: NSObject {
         // Считаем по всему окну: по двадцатке цифра упиралась в потолок.
         cameraDensity3km = tracked.count { distance(to: $0) <= 3000 }
 
+        // Геозоны — только вне поездки: в поездке handleEnter выходит первой
+        // строкой, то есть они не могут сработать в принципе, а ретайл каждые
+        // 300–1500 м гнал в locationd сотни пар stop/startMonitoring за поездку
+        // ради невозможного события. Окно кандидатов выше живёт как жило;
+        // геозоны пересинхронизирует endTrip.
+        guard !isTripActive else { return }
+        manager.monitoredRegions.forEach { manager.stopMonitoring(for: $0) }
         for camera in nearest {
             let region = CLCircularRegion(
                 center: camera.coordinate,
@@ -637,14 +649,20 @@ final class LocationService: NSObject {
     }
 
     /// Сторож потери сигнала: перезаряжается на каждом принятом фиксе, поэтому
-    /// срабатывает только если новых фиксов действительно не пришло (лишних
-    /// пробуждений нет — обычный тик GPS его гасит).
+    /// срабатывает только если новых фиксов действительно не пришло.
+    ///
+    /// Отменяемая Task, а не asyncAfter: тот отменить нельзя, и каждый его
+    /// блок ВСЁ РАВНО просыпался в свой дедлайн — при фиксе раз в 1.5 с и окне
+    /// 8 с это 5–6 висящих таймеров и лишнее пробуждение main на каждый фикс
+    /// всю поездку. Отмена Task будит его один раз сразу (в текущей работе),
+    /// а не по будильнику в будущем.
     ///
     /// Заряжается ТОЛЬКО в движении и с окном по ожидаемому интервалу фиксов:
     /// на стоянке и в пробке фиксы не приходят из-за distanceFilter, а не из-за
     /// спутников, и «нет сигнала» было бы прямой ложью водителю.
     private func armStaleWatchdog() {
         fixSequence &+= 1   // прошлый сторож обесценен даже если новый не ставим
+        staleWatchdogTask?.cancel()
         guard speedKmh >= AppConfig.staleWatchdogMinSpeedKmh else { return }
         let speedMps = speedKmh / 3.6
         let expected = speedMps > 0 ? manager.distanceFilter / speedMps : .infinity
@@ -652,13 +670,16 @@ final class LocationService: NSObject {
                          min(AppConfig.staleWatchdogMaxSeconds,
                              expected * AppConfig.staleWatchdogSlack))
         let sequence = fixSequence
-        DispatchQueue.main.asyncAfter(deadline: .now() + window) { [weak self] in
-            guard let self, self.fixSequence == sequence,
+        staleWatchdogTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(window))
+            guard !Task.isCancelled, let self, self.fixSequence == sequence,
                   self.isTripActive || self.isForeground else { return }
             self.isSignalStale = true
             Log.location.notice("нет фиксов \(window, format: .fixed(precision: 1), privacy: .public) с — сигнал потерян")
         }
     }
+
+    @ObservationIgnored private var staleWatchdogTask: Task<Void, Never>?
 
     private func handleLocation(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed, course: CLLocationDirection) {
         // Главный горячий путь приложения: всё, что происходит на GPS-точке, —

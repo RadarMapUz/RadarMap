@@ -39,6 +39,12 @@ final class RoadNetworkService {
     @ObservationIgnored private var downloading: Set<String> = []
     @ObservationIgnored private var snapshotKeys: Set<String> = []
     @ObservationIgnored private var started = false
+    /// Где проверяли покрытие в прошлый раз (гейт ensureCoverage).
+    @ObservationIgnored private var lastEnsureAt: CLLocationCoordinate2D?
+    /// Один клиент на сервис: новый APIClient — это новый URLSession без
+    /// keep-alive, т.е. свежее TCP+TLS-рукопожатие на каждый тайл к тому же
+    /// хосту, и никем не закрываемая сессия следом.
+    @ObservationIgnored private let api = APIClient(timeout: 30)
 
     private var directory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -79,7 +85,6 @@ final class RoadNetworkService {
         guard index == nil || lastCheck < weekAgo else { return }
 
         // Недельная фоновая проверка: сбой сети не критичен, попробуем позже.
-        let api = APIClient(timeout: 30)
         guard let data = try? await api.getData("roads_index.json",
                                                 cachePolicy: .reloadIgnoringLocalCacheData)
         else { return }
@@ -118,6 +123,16 @@ final class RoadNetworkService {
     /// когда всё на месте; скачивает только недостающее.
     func ensureCoverage(around coordinate: CLLocationCoordinate2D) {
         guard let index else { return }
+        // Гейт: тайл — 55 км, состав окрестности меняется раз в десятки минут,
+        // а тик приборки дёргает нас каждую секунду — и 9 строковых ключей с
+        // тремя Set'ами каждый раз выбрасывались. Пока не отъехали на километр
+        // и ничего не в полёте, выходим по одному сравнению расстояния.
+        if let last = lastEnsureAt, downloading.isEmpty, !snapshotKeys.isEmpty,
+           GeoMath.fastDistance(last.latitude, last.longitude,
+                                coordinate.latitude, coordinate.longitude) < 1000 {
+            return
+        }
+        lastEnsureAt = coordinate
         // Тайлы, которых нет в подписанном индексе, не существуют и не
         // запрашиваются: индекс — единственный источник правды о наборе.
         let wanted = Set(RoadTiles.neighborhood(of: coordinate,
@@ -157,7 +172,6 @@ final class RoadNetworkService {
             return
         }
 
-        let api = APIClient(timeout: 30)
         guard let data = try? await api.getData("roads/tile_\(key).json") else {
             // Сеть — не приговор: попробуем при следующем ensureCoverage.
             return

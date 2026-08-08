@@ -76,9 +76,25 @@ nonisolated enum TripHistory {
     /// сумму не входит.
     static func fineRisk(of passes: [PassedCamera]) -> Double {
         passes.reduce(0.0) { total, pass in
-            guard pass.limitIsCertain, let limit = pass.limitKmh else { return total }
+            guard pass.limitIsCertain, pass.countsTowardFines,
+                  let limit = pass.limitKmh else { return total }
             return total + FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
         }
+    }
+
+    /// Пометить проезд «штраф не пришёл» (или снять пометку). nil — проезда нет
+    /// в записи или он без штрафной ступени: отменять на нём нечего, и молчаливое
+    /// «успешно» тут скрывало бы рассинхрон экрана с данными.
+    static func settingFineDismissed(_ record: TripRecord, passID: UUID,
+                                     dismissed: Bool) -> TripRecord? {
+        guard let index = record.passed.firstIndex(where: { $0.id == passID }),
+              let limit = record.passed[index].limitKmh,
+              FineSchedule.fine(overKmh: record.passed[index].speedKmh - Double(limit)) > 0
+        else { return nil }
+        var updated = record
+        // nil, а не false: непомеченная запись не должна раздуваться полем.
+        updated.passed[index].fineDismissed = dismissed ? true : nil
+        return updated
     }
 
     // MARK: - Сводки для экрана Итогов

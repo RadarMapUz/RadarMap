@@ -79,7 +79,10 @@ nonisolated enum TripDayBook {
                 day.overPasses += 1
                 // Деньги — только по достоверному лимиту: сумма в сумах,
                 // названная по догадке о классе дороги, — это ложь про деньги.
-                if pass.limitIsCertain { day.fineRisk += fine }
+                // «Штраф не пришёл» тоже убирает из денег (но не из поведения);
+                // условие обязано совпадать с unfolded — иначе починка дня
+                // «снять старую запись, положить новую» разъедется на сумме.
+                if pass.limitIsCertain, pass.countsTowardFines { day.fineRisk += fine }
                 day.overByHour[calendar.component(.hour, from: pass.date)] += 1
             } else {
                 day.cleanPasses += 1
@@ -121,7 +124,10 @@ nonisolated enum TripDayBook {
             let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
             if fine > 0 {
                 day.overPasses = max(0, day.overPasses - 1)
-                if pass.limitIsCertain { day.fineRisk = max(0, day.fineRisk - fine) }
+                // Зеркально folded: вычитаем ровно то, что туда попало.
+                if pass.limitIsCertain, pass.countsTowardFines {
+                    day.fineRisk = max(0, day.fineRisk - fine)
+                }
                 let hour = calendar.component(.hour, from: pass.date)
                 day.overByHour[hour] = max(0, day.overByHour[hour] - 1)
             } else {

@@ -49,6 +49,8 @@ struct TripStatsSheet: View {
     @State private var sharePayload: ShareImagePayload?
     @State private var showRatingInfo = false
     @State private var showFinesInfo = false
+    /// Экран «Возможные штрафы» со строками проездов и пометкой «не пришёл».
+    @State private var showFines = false
     @State private var selectedBadge: Achievement?
     /// Вся сохранённая история отдельным экраном — вместо сегмента «Всё время»,
     /// который обещал показать всё, а показывал последние записи.
@@ -56,6 +58,12 @@ struct TripStatsSheet: View {
     /// Поездка, выбранная в «Всех поездках»: деталка откроется после того, как
     /// список ЗАКОНЧИТ закрываться (см. onDismiss у шита).
     @State private var pendingDetailRecord: TripRecord?
+    /// Список поездок показан целиком (иначе — первые statsTripsPreview).
+    @State private var tripsExpanded = false
+    /// Раскрыты ли «Детали периода» (KPI, график по дням, часы риска).
+    @State private var detailsExpanded = false
+    /// «Это разные» по карточке склейки — прячем её сразу (Storage не observable).
+    @State private var mergeSuggestionHidden = false
     /// Полноэкранная карта проездов (item — чтобы передать фокус зоны риска).
     @State private var mapPayload: PeriodMapPayload?
     /// Треки, маркеры и слой частоты — считаются на смену периода, а не в body.
@@ -118,15 +126,8 @@ struct TripStatsSheet: View {
                         mapCard
                             .entrance(3, appeared)
                             .id("map")
-                        KPIStrip(summary: summary,
-                                 activeDaysText: activeDaysText(summary))
+                        periodDetails(summary: summary)
                             .entrance(3, appeared)
-                        if let days = period.chartDays(containing: anchor) {
-                            dailyChart(days: days, summary: summary)
-                                .entrance(4, appeared)
-                        }
-                        RiskHoursCard(summary: summary)
-                            .entrance(4, appeared)
                         tripsSection(trip: trip, proxy: proxy)
                             .entrance(4, appeared)
                             .id("history")
@@ -188,11 +189,18 @@ struct TripStatsSheet: View {
                 if mapSelection == nil { framePeriod() }
             }
             .onChange(of: period) {
-                // Выбранная поездка могла не попасть в новый период.
-                withAnimation(.snappy(duration: 0.3)) { clearMapSelection() }
+                // Выбранная поездка могла не попасть в новый период; раскрытый
+                // список — тоже атрибут конкретного окна.
+                withAnimation(.snappy(duration: 0.3)) {
+                    clearMapSelection()
+                    tripsExpanded = false
+                }
             }
             .onChange(of: anchor) {
-                withAnimation(.snappy(duration: 0.3)) { clearMapSelection() }
+                withAnimation(.snappy(duration: 0.3)) {
+                    clearMapSelection()
+                    tripsExpanded = false
+                }
             }
             .onAppear {
                 appeared = true
@@ -205,6 +213,7 @@ struct TripStatsSheet: View {
                     if args.contains("-openFirstTrip") { selectedRecord = env.trip.history.first }
                     if args.contains("-showRatingInfo") { showRatingInfo = true }
                     if args.contains("-showSavingsInfo") { showFinesInfo = true }
+                    if args.contains("-showFines") { showFines = true }
                     if args.contains("-showPeriodMap") { openMap(focus: nil) }
                     if args.contains("-shareStats") {
                         share(summary: TripHistory.summary(days: env.trip.days,
@@ -244,6 +253,9 @@ struct TripStatsSheet: View {
                                                           period: period, anchor: anchor),
                              period: period,
                              interval: period.interval(containing: anchor))
+        }
+        .sheet(isPresented: $showFines) {
+            FinesSheet(period: period, anchor: anchor)
         }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
         // Деталка открывается из onDismiss, а не в один тик с закрытием списка:
@@ -502,9 +514,9 @@ struct TripStatsSheet: View {
                     if ok {
                         showFinesInfo = true
                     } else {
-                        // Фокус: самая «нарушаемая» камера периода.
-                        openMap(focus: mapData.markers.filter(\.hasViolation)
-                            .max { $0.overTimes < $1.overTimes })
+                        // Список проездов с суммами и пометкой «не пришёл»;
+                        // карта каждого проезда — внутри, тапом по строке.
+                        showFines = true
                     }
                 } label: {
                     HStack(spacing: 14) {
@@ -530,9 +542,8 @@ struct TripStatsSheet: View {
                                 .font(.rounded(11))
                                 .foregroundStyle(Theme.textTertiary)
                             if !ok {
-                                // Где именно и сколько раз — сказал разбор выше;
-                                // здесь остаётся только вход на карту.
-                                Label("Показать на карте", systemImage: "mappin.circle.fill")
+                                // Что за проезды и «не пришёл» — на своём экране.
+                                Label("Разобрать проезды", systemImage: "list.bullet.circle.fill")
                                     .font(.rounded(11, .medium))
                                     .foregroundStyle(Theme.warning)
                                     .lineLimit(1)
@@ -914,24 +925,190 @@ struct TripStatsSheet: View {
         .statCard()
     }
 
+    // MARK: - Детали периода (свёрнуты по умолчанию)
+
+    /// KPI-плитки, график по дням и «Когда рискуете» — под одной раскрывашкой.
+    /// Главную историю экран рассказывает выше (рейтинг → выводы → деньги →
+    /// карта); эти три блока — справка для любопытных, и развёрнутые всегда они
+    /// уводили список поездок за два экрана прокрутки. Свёрнутые они ещё и
+    /// бесплатны: dailyKm не считается, пока раскрывашку не открыли.
+    private func periodDetails(summary: PeriodSummary) -> some View {
+        VStack(spacing: 16) {
+            Button {
+                withAnimation(.snappy(duration: 0.3)) { detailsExpanded.toggle() }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "chart.bar.xaxis")
+                        .font(.rounded(13, .bold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 30, height: 30)
+                        .background(Theme.accent.opacity(0.12), in: Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Детали периода")
+                            .font(.rounded(14, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                        Text("Средние, график по дням, часы риска")
+                            .font(.rounded(11))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .font(.rounded(12, .bold))
+                        .foregroundStyle(Theme.textTertiary)
+                        .rotationEffect(.degrees(detailsExpanded ? 180 : 0))
+                }
+                .statCard(padding: 14, radius: Theme.cornerMedium)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(detailsExpanded
+                                     ? String(localized: "Скрыть детали периода")
+                                     : String(localized: "Показать детали периода")))
+            if detailsExpanded {
+                KPIStrip(summary: summary,
+                         activeDaysText: activeDaysText(summary))
+                if let days = period.chartDays(containing: anchor) {
+                    dailyChart(days: days, summary: summary)
+                }
+                RiskHoursCard(summary: summary)
+            }
+        }
+    }
+
     // MARK: - Список поездок периода
 
+    /// Первые statsTripsPreview строк + «Показать все поездки (N)»: неделя
+    /// активной езды — это 20+ записей, и без обрезки блок «За всё время»
+    /// приходилось искать археологией.
     private func tripsSection(trip: TripStats, proxy: ScrollViewProxy) -> some View {
-        TripHistorySection(
-            title: period.tripsTitle,
-            records: TripHistory.historyList(trip.history, period: period, anchor: anchor),
-            selectedID: mapSelection?.id,
-            onShowOnMap: { showOnMap($0, proxy: proxy) },
-            onOpenDetail: { selectedRecord = $0 },
-            onRepeat: onRoute.map { route in
-                { coord, name in dismiss(); route(coord, name) }
-            },
-            onDelete: { record in
-                withAnimation {
-                    if mapSelection?.id == record.id { clearMapSelection() }
-                    trip.deleteRecord(id: record.id)
+        let all = TripHistory.historyList(trip.history, period: period, anchor: anchor)
+        let shown = tripsExpanded ? all : Array(all.prefix(AppConfig.statsTripsPreview))
+        return VStack(spacing: 10) {
+            if let pair = mergeSuggestion {
+                mergeSuggestionCard(pair)
+            }
+            TripHistorySection(
+                title: period.tripsTitle,
+                records: shown,
+                total: all.count,
+                selectedID: mapSelection?.id,
+                onShowOnMap: { showOnMap($0, proxy: proxy) },
+                onOpenDetail: { selectedRecord = $0 },
+                onRepeat: onRoute.map { route in
+                    { coord, name in dismiss(); route(coord, name) }
+                },
+                onDelete: { record in
+                    withAnimation {
+                        if mapSelection?.id == record.id { clearMapSelection() }
+                        trip.deleteRecord(id: record.id)
+                    }
+                },
+                canMerge: { trip.canMergeWithPrevious(id: $0.id) },
+                onMerge: { merge(next: $0) })
+            if !tripsExpanded, all.count > AppConfig.statsTripsPreview {
+                Button {
+                    withAnimation(.snappy(duration: 0.3)) { tripsExpanded = true }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(String(format: String(localized: "Показать все поездки (%lld)"),
+                                    all.count))
+                            .font(.rounded(13, .semibold))
+                        Image(systemName: "chevron.down")
+                            .font(.rounded(10, .bold))
+                    }
+                    .foregroundStyle(Theme.accent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Theme.surface, in: Capsule())
+                    .contentShape(Capsule())
                 }
-            })
+                .buttonStyle(PressableStyle())
+            }
+        }
+    }
+
+    // MARK: - Предложение склейки
+
+    /// Пара «предыдущую завершили кнопкой, новая стартовала рядом и скоро»:
+    /// автосклейка не имела права (ручной стоп — намерение), но чаще всего это
+    /// заезд в магазин со стопом по привычке — предлагаем объединить одним тапом.
+    private var mergeSuggestion: (previous: TripRecord, next: TripRecord)? {
+        guard !mergeSuggestionHidden else { return nil }
+        let history = env.trip.history
+        guard history.count >= 2 else { return nil }
+        let next = history[0], previous = history[1]
+        // Уже отклоняли для этой пары — не пристаём.
+        guard Storage.double(.mergeSuggestDismissedID) != next.id else { return nil }
+        // Карточка живёт рядом со списком своего окна, а не во всех периодах.
+        guard period.interval(containing: anchor).contains(next.startedAt) else { return nil }
+        guard TripMerge.suggestsMerge(previous: previous, next: next,
+                                      savedPlaces: env.settings.savedPlaceCoordinates)
+        else { return nil }
+        return (previous, next)
+    }
+
+    private func mergeSuggestionCard(_ pair: (previous: TripRecord, next: TripRecord)) -> some View {
+        let gap = pair.next.startedAt.timeIntervalSince(pair.previous.endedAt)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.triangle.merge")
+                    .font(.rounded(14, .bold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 34, height: 34)
+                    .background(Theme.accent.opacity(0.14), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Похоже, это одна поездка")
+                        .font(.rounded(14, .bold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(String(format: String(localized: "%1$@ и %2$@ разделяет стоянка %3$@"),
+                                pair.previous.startedAt.formatted(date: .omitted, time: .shortened),
+                                pair.next.startedAt.formatted(date: .omitted, time: .shortened),
+                                Formatting.duration(gap)))
+                        .font(.rounded(12))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 10) {
+                Button {
+                    merge(next: pair.next)
+                } label: {
+                    Text("Объединить")
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.background)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Theme.accent.gradient, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(PressableStyle())
+                Button {
+                    Storage.set(pair.next.id, for: .mergeSuggestDismissedID)
+                    withAnimation(.snappy(duration: 0.3)) { mergeSuggestionHidden = true }
+                } label: {
+                    Text("Это разные")
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Theme.surface, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(PressableStyle())
+            }
+        }
+        .statCard()
+    }
+
+    /// Объединение из карточки и из контекстного меню — одним путём.
+    private func merge(next record: TripRecord) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withAnimation(.snappy(duration: 0.35)) {
+            // Любая из двух записей могла быть «применена» к карте — слепок
+            // после склейки не существует, выбор снимаем.
+            clearMapSelection()
+            env.trip.mergeWithPrevious(id: record.id)
+        }
     }
 
     /// Пожизненные цифры — единственная честная правда «за всё время»:

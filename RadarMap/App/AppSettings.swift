@@ -359,6 +359,12 @@ final class AppSettings {
     var homePlace: SavedPlace? { didSet { save(homePlace, forKey: Keys.home) } }
     var workPlace: SavedPlace? { didSet { save(workPlace, forKey: Keys.work) } }
 
+    /// Координаты сохранённых мест одним списком — для склейки поездок
+    /// (TripMerge) и её карточки-предложения в Итогах.
+    var savedPlaceCoordinates: [CLLocationCoordinate2D] {
+        [homePlace?.coordinate, workPlace?.coordinate].compactMap(\.self)
+    }
+
     // Маршрут и скорость — каждую функцию можно выключить.
     var routeAlternatives: Bool { didSet { store.set(routeAlternatives, forKey: Keys.alternatives) } }
     var turnByTurnVoice: Bool { didSet { store.set(turnByTurnVoice, forKey: Keys.turnByTurn) } }

@@ -314,7 +314,8 @@ extension TripHistory {
                     result.overPasses += 1
                     // Предположенный лимит считается нарушением (рейтинг это
                     // видит), но в сумму штрафов не входит — см. fineRisk.
-                    if pass.limitIsCertain { result.fineRisk += fine }
+                    // «Штраф не пришёл» убирает из суммы, но не из поведения.
+                    if pass.limitIsCertain, pass.countsTowardFines { result.fineRisk += fine }
                     result.overByHour[calendar.component(.hour, from: pass.date)] += 1
                     if !pass.location.isEmpty { overByLocation[pass.location, default: 0] += 1 }
                 } else {

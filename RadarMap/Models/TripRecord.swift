@@ -25,6 +25,11 @@ nonisolated struct PassedCamera: Codable, Identifiable {
     /// Опциональное поле: у записей, сделанных до появления фолбэка, его нет,
     /// и трактуем как «лимит настоящий» — раньше других и не было.
     var limitAssumed: Bool?
+    /// «Штраф не пришёл» — пометка владельца на экране возможных штрафов.
+    /// Убирает проезд из ДЕНЕГ (fineRisk во всех сводках), но не из поведения:
+    /// превышение было, рейтинг и зона риска его видят. nil у старых записей
+    /// и у непомеченных — считается в сумму.
+    var fineDismissed: Bool?
 
     var kind: CameraType { CameraType(raw: typeRaw) }
     var coordinate: CLLocationCoordinate2D? {
@@ -44,6 +49,9 @@ nonisolated struct PassedCamera: Codable, Identifiable {
     /// нет. Для рейтинга и голоса предположения достаточно (там цена ошибки —
     /// лишний совет), для суммы — нет.
     var limitIsCertain: Bool { limitKmh != nil && limitAssumed != true }
+
+    /// Идёт ли проезд в сумму возможных штрафов (не отменён владельцем).
+    var countsTowardFines: Bool { fineDismissed != true }
 }
 
 /// Остановка внутри склеенной поездки: заехал в магазин, на заправку, за человеком.
@@ -73,7 +81,9 @@ nonisolated struct TripRecord: Codable, Identifiable {
     let endedAt: Date
     let distanceMeters: CLLocationDistance
     let maxSpeedKmh: Double
-    let passed: [PassedCamera]
+    /// var — «штраф не пришёл» правит пометку прямо в записи (см. TripHistory
+    /// .settingFineDismissed); значимость value-семантики это не ослабляет.
+    var passed: [PassedCamera]
     // Точка финиша — чтобы повторить маршрут из истории (у старых записей отсутствует).
     var endLat: Double?
     var endLon: Double?

@@ -60,13 +60,18 @@ struct PassRow: View {
                 Text("\(Int(pass.speedKmh)) км/ч")
                     .font(.rounded(15, .bold))
                     .foregroundStyle(PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh))
-                // Превышение попало в штрафную ступень — показываем цену вопроса.
+                // Превышение попало в штрафную ступень — показываем цену
+                // вопроса; отменённый на экране штрафов проезд говорит об этом.
                 if let limit = pass.limitKmh {
                     let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
                     if fine > 0 {
-                        Text("риск ≈ \(Formatting.money(fine))")
+                        Text(pass.countsTowardFines
+                             ? String(format: String(localized: "риск ≈ %@"),
+                                      Formatting.money(fine))
+                             : String(localized: "штраф не пришёл"))
                             .font(.rounded(10, .medium))
-                            .foregroundStyle(Theme.danger)
+                            .foregroundStyle(pass.countsTowardFines ? Theme.danger
+                                                                    : Theme.textTertiary)
                     }
                 }
             }

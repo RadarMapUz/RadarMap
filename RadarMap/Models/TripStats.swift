@@ -151,6 +151,13 @@ final class TripStats {
             trackBuffer.append(TrackPoint(lat: coordinate.latitude,
                                           lon: coordinate.longitude, speedKmh: speedKmh))
         }
+        // Вне поездки буфер нужен только схеме приборки (хвост «откуда
+        // приехал», recentTrack ≤ 60 точек) — а рос он неограниченно: долгая
+        // пассажирская сессия с открытым приложением надувала массив, который
+        // никто не читал дальше хвоста.
+        if startedAt == nil, trackBuffer.count > 120 {
+            trackBuffer.removeFirst(trackBuffer.count - 120)
+        }
 
         checkpointIfDue()
     }

@@ -375,4 +375,127 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertEqual(index.byID[7]?.distanceAlong, 800)
         XCTAssertEqual(index.ids, [7])
     }
+
+    // MARK: - Пер-тиковые пути поездки (аудит нагрева: раньше без потолков)
+
+    /// Проекция на длинный маршрут — самый горячий пер-тик с активным
+    /// маршрутом. Кумулятив снял O(позиция)-суммирование; потолок сторожит,
+    /// чтобы оно не вернулось: 600 тиков по 10-тысячному маршруту.
+    func testRouteProjectionBudget() {
+        let pts = (0..<10_000).map {
+            MKMapPoint(CLLocationCoordinate2D(latitude: 41.30 + Double($0) * 0.00002,
+                                              longitude: 69.20 + Double($0) * 0.0001))
+        }
+        let cum = RouteService.cumulative(of: pts)
+        var hint = 0
+        var checksum = 0.0
+        let clock = ContinuousClock()
+        let start = clock.now
+        do {
+            for tick in 0..<600 {
+                // Едем вдоль маршрута: точка возле сегмента ~tick*15.
+                let base = pts[min(tick * 15, pts.count - 1)]
+                let probe = MKMapPoint(x: base.x + 5, y: base.y + 5)
+                let (along, _) = RouteService.project(probe, onto: pts, cum: cum,
+                                                      hint: &hint)
+                checksum += along
+            }
+        }
+        let elapsed = clock.now - start
+        XCTAssertGreaterThan(checksum, 0)
+        XCTAssertLessThan(elapsed, .milliseconds(250),
+                          "600 проекций на 10k-маршрут: \(elapsed)")
+    }
+
+    /// Учёт проездов на каждом тике: подход к камере, зона измерения, траверз.
+    func testPassTrackingBudget() {
+        let origin = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+        let camera = Camera(id: 1, region: "Т", city: "", location: "к",
+                            lat: GeoMath.destination(from: origin, bearing: 0,
+                                                     distanceMeters: 600).latitude,
+                            lon: origin.longitude, type: "Стационар радар",
+                            violations: [], needsReview: nil)
+        var tracking = PassTracking()
+        var passes = 0
+        let clock = ContinuousClock()
+        let start = clock.now
+        do {
+            for _ in 0..<5 {
+                for tick in 0..<120 {
+                    // 1785 м пути через камеру (тик = 15 м): конец лежит за
+                    // радиусом + гистерезисом отпускания — проезд завершается.
+                    let at = GeoMath.destination(from: origin, bearing: 0,
+                                                 distanceMeters: Double(tick) * 15)
+                    let d = GeoMath.fastDistance(at.latitude, at.longitude,
+                                                 camera.lat, camera.lon)
+                    passes += tracking.update(nearest: camera, nearestDistance: d,
+                                              coordinate: at, speedKmh: 58,
+                                              roadLimit: 60, radius: 600).count
+                }
+            }
+        }
+        let elapsed = clock.now - start
+        XCTAssertGreaterThan(passes, 0, "маршрут проходит камеру насквозь — проезд обязан записаться")
+        XCTAssertLessThan(elapsed, .milliseconds(250), "600 тиков учёта проездов: \(elapsed)")
+    }
+
+    /// Худший случай гейтов: в окне 150 камер и НИ ОДНОЙ на нашей дороге —
+    /// перебор доходит до конца на каждом тике (обычно выходит на первой).
+    func testGateWindowBudget() {
+        let me = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+        // Все камеры поперёк курса и в стороне: гейты обязаны отвергать каждую.
+        let window: [Camera] = (0..<150).map { i in
+            var at = GeoMath.destination(from: me, bearing: 0,
+                                         distanceMeters: 300 + Double(i) * 40)
+            at = GeoMath.destination(from: at, bearing: 90, distanceMeters: 400)
+            var deltas: [Int] = []
+            for step in [-200.0, 0, 200.0] {
+                let p = GeoMath.destination(from: at, bearing: 90, distanceMeters: step)
+                deltas.append(Int(((p.latitude - at.latitude) * 1e6).rounded()))
+                deltas.append(Int(((p.longitude - at.longitude) * 1e6).rounded()))
+            }
+            return Camera(id: i, region: "Т", city: "", location: "к",
+                          lat: at.latitude, lon: at.longitude, type: "Стационар радар",
+                          violations: [], needsReview: false, axis: 90, dir: nil,
+                          lanes: 2, cls: "primary", bridge: nil, road: deltas,
+                          split: nil, twin: nil)
+        }
+        let situation = LocationGates.Situation(coordinate: me, course: 0, speedKmh: 60,
+                                                horizontalAccuracy: 5, context: .city)
+        var kept = 0
+        let clock = ContinuousClock()
+        let start = clock.now
+        do {
+            for _ in 0..<60 {
+                kept += window.count { LocationGates.isOnOurRoad($0, in: situation,
+                                                                 isOnRoute: false) }
+            }
+        }
+        let elapsed = clock.now - start
+        XCTAssertEqual(kept, 0, "боковые камеры с поперечной дорогой — не наши")
+        XCTAssertLessThan(elapsed, .milliseconds(500), "60 тиков × 150 камер гейтов: \(elapsed)")
+    }
+
+    /// Чекпоинт поездки: упрощение + упаковка часового трека. Пишется раз в
+    /// 20 с — но на main-акторе, и до аудита паковался ВЕСЬ сырой буфер.
+    func testCheckpointPackBudget() {
+        let raw = (0..<3300).map {
+            TrackPoint(lat: 41.3 + Double($0) * 0.0001,
+                       lon: 69.2 + Double($0) * 0.00012,
+                       speedKmh: 60 + Double($0 % 30))
+        }
+        var total = 0
+        let clock = ContinuousClock()
+        let start = clock.now
+        do {
+            for _ in 0..<50 {
+                let packed = TripStats.packTrack(TripStats.simplify(
+                    raw, tolerance: 0.00022, maxPoints: 400)) ?? []
+                total += packed.count
+            }
+        }
+        let elapsed = clock.now - start
+        XCTAssertGreaterThan(total, 0)
+        XCTAssertLessThan(elapsed, .milliseconds(500), "50 чекпоинтов часового трека: \(elapsed)")
+    }
 }

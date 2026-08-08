@@ -49,6 +49,8 @@ struct TripStatsSheet: View {
     @State private var sharePayload: ShareImagePayload?
     @State private var showRatingInfo = false
     @State private var showFinesInfo = false
+    /// Экран «Возможные штрафы» со строками проездов и пометкой «не пришёл».
+    @State private var showFines = false
     @State private var selectedBadge: Achievement?
     /// Вся сохранённая история отдельным экраном — вместо сегмента «Всё время»,
     /// который обещал показать всё, а показывал последние записи.
@@ -209,6 +211,7 @@ struct TripStatsSheet: View {
                     if args.contains("-openFirstTrip") { selectedRecord = env.trip.history.first }
                     if args.contains("-showRatingInfo") { showRatingInfo = true }
                     if args.contains("-showSavingsInfo") { showFinesInfo = true }
+                    if args.contains("-showFines") { showFines = true }
                     if args.contains("-showPeriodMap") { openMap(focus: nil) }
                     if args.contains("-shareStats") {
                         share(summary: TripHistory.summary(days: env.trip.days,
@@ -248,6 +251,9 @@ struct TripStatsSheet: View {
                                                           period: period, anchor: anchor),
                              period: period,
                              interval: period.interval(containing: anchor))
+        }
+        .sheet(isPresented: $showFines) {
+            FinesSheet(period: period, anchor: anchor)
         }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
         // Деталка открывается из onDismiss, а не в один тик с закрытием списка:
@@ -506,9 +512,9 @@ struct TripStatsSheet: View {
                     if ok {
                         showFinesInfo = true
                     } else {
-                        // Фокус: самая «нарушаемая» камера периода.
-                        openMap(focus: mapData.markers.filter(\.hasViolation)
-                            .max { $0.overTimes < $1.overTimes })
+                        // Список проездов с суммами и пометкой «не пришёл»;
+                        // карта каждого проезда — внутри, тапом по строке.
+                        showFines = true
                     }
                 } label: {
                     HStack(spacing: 14) {
@@ -534,9 +540,8 @@ struct TripStatsSheet: View {
                                 .font(.rounded(11))
                                 .foregroundStyle(Theme.textTertiary)
                             if !ok {
-                                // Где именно и сколько раз — сказал разбор выше;
-                                // здесь остаётся только вход на карту.
-                                Label("Показать на карте", systemImage: "mappin.circle.fill")
+                                // Что за проезды и «не пришёл» — на своём экране.
+                                Label("Разобрать проезды", systemImage: "list.bullet.circle.fill")
                                     .font(.rounded(11, .medium))
                                     .foregroundStyle(Theme.warning)
                                     .lineLimit(1)

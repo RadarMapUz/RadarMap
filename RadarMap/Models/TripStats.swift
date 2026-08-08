@@ -245,6 +245,29 @@ final class TripStats {
         persistDays()
     }
 
+    /// «Штраф не пришёл» (или передумал — вернуть): пометка на проезде камеры.
+    /// Деньги уходят из всех сводок — записи и дневного агрегата (хирургически,
+    /// снять старую / положить новую). Рейтинг не трогается: он про езду,
+    /// а не про то, дошло ли постановление.
+    func setFineDismissed(_ dismissed: Bool, passID: UUID, tripID: Double) {
+        guard let index = history.firstIndex(where: { $0.id == tripID }),
+              let updated = TripHistory.settingFineDismissed(history[index], passID: passID,
+                                                             dismissed: dismissed)
+        else { return }
+        let original = history[index]
+        // Как в гео-чистке: день правим, только если его строка на месте —
+        // смена часового пояса могла увести ключ, и folded без парного
+        // unfolded задвоил бы поездку в агрегате.
+        let key = Calendar.current.startOfDay(for: original.startedAt)
+        if days.contains(where: { $0.day == key }) {
+            days = TripDayBook.unfolded(original, from: days)
+            days = TripDayBook.folded(updated, into: days)
+            persistDays()
+        }
+        history[index] = updated
+        persist()
+    }
+
     /// Одноразовая чистка «мостовых» проездов: направление трека у камеры против
     /// оси её дороги (появилась в базе v8). Вызывается из onDatabaseLoaded
     /// CameraRepository — база декодируется асинхронно, и на момент сборки

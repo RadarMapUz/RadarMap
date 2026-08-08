@@ -92,7 +92,7 @@ struct MapScreen: View {
             OverspeedVignetteGate()
 
             // Следование за GPS: единственный подписчик locationTick.
-            LocationFollowDriver(map: map)
+            LocationFollowDriver(map: map, isCovered: showDashboard)
         }
         .mapScope(mapScope)
         .fullScreenCover(isPresented: $showDashboard) { DashboardView() }

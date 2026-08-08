@@ -1,6 +1,22 @@
 {
   "sourceLanguage" : "ru",
   "strings" : {
+    "%1$@ и %2$@ разделяет стоянка %3$@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ и %2$@ разделяет стоянка %3$@"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ va %2$@ orasini %3$@ to'xtash ajratadi"
+          }
+        }
+      }
+    },
     "«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов. Спидометр — самый экономный экран: чёрный фон и схема вместо карты; закрыли его руками — до конца поездки не откроется сам." : {
       "localizations" : {
         "ru" : {
@@ -17,6 +33,294 @@
         }
       }
     },
+    "Открыть спидометр" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открыть спидометр"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spidometrni ochish"
+          }
+        }
+      }
+    },
+    "Объединить" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Объединить"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Birlashtirish"
+          }
+        }
+      }
+    },
+    "Похоже, это одна поездка" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Похоже, это одна поездка"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu bitta safarga o'xshaydi"
+          }
+        }
+      }
+    },
+    "Объединить с предыдущей" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Объединить с предыдущей"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oldingisi bilan birlashtirish"
+          }
+        }
+      }
+    },
+    "Разобрать проезды" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Разобрать проезды"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O'tishlarni ko'rib chiqish"
+          }
+        }
+      }
+    },
+    "Отмечать «не пришёл» можно только по сохранённым поездкам — история хранит последние 50." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отмечать «не пришёл» можно только по сохранённым поездкам — история хранит последние 50."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Kelmadi» belgisini faqat saqlangan safarlarga qo'yish mumkin — tarixda oxirgi 50 tasi saqlanadi."
+          }
+        }
+      }
+    },
+    "В сохранённых поездках периода нет проездов с риском штрафа" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "В сохранённых поездках периода нет проездов с риском штрафа"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Davrning saqlangan safarlarida jarima xavfi bo'lgan o'tishlar yo'q"
+          }
+        }
+      }
+    },
+    "Вернуть штраф в сумму" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вернуть штраф в сумму"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jarimani summaga qaytarish"
+          }
+        }
+      }
+    },
+    "Отметить: штраф не пришёл" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отметить: штраф не пришёл"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belgilash: jarima kelmadi"
+          }
+        }
+      }
+    },
+    "Вернуть" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вернуть"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qaytarish"
+          }
+        }
+      }
+    },
+    "Не пришёл" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не пришёл"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kelmadi"
+          }
+        }
+      }
+    },
+    "Прошло больше %lld дней — обычно уже не приходит" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Прошло больше %lld дней — обычно уже не приходит"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld kundan ko'p o'tdi — odatda endi kelmaydi"
+          }
+        }
+      }
+    },
+    "Не пришло: %lld — в сумме не считаются" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не пришло: %lld — в сумме не считаются"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kelmagani: %lld — summaga qo'shilmaydi"
+          }
+        }
+      }
+    },
+    "Проездов со ступенью штрафа: %lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проездов со ступенью штрафа: %lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jarima pog'onasiga tushgan o'tishlar: %lld"
+          }
+        }
+      }
+    },
+    "Показать все поездки (%lld)" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показать все поездки (%lld)"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hamma safarlarni ko'rsatish (%lld)"
+          }
+        }
+      }
+    },
+    "Показать детали периода" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Показать детали периода"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Davr tafsilotlarini ko'rsatish"
+          }
+        }
+      }
+    },
+    "Скрыть детали периода" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Скрыть детали периода"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Davr tafsilotlarini yashirish"
+          }
+        }
+      }
+    },
+    "Детали периода" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Детали периода"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Davr tafsilotlari"
+          }
+        }
+      }
+    },
     "Спидометр при старте поездки" : {
       "localizations" : {
         "ru" : {
@@ -29,6 +333,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Safar boshlanganda spidometr"
+          }
+        }
+      }
+    },
+    "Сумма — оценка по ступеням штрафов за превышение (в БРВ), только по камерам с достоверным лимитом. Постановление обычно приходит за несколько дней; не пришло — отметьте, и сумма уйдёт из Итогов. Рейтинг это не меняет." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сумма — оценка по ступеням штрафов за превышение (в БРВ), только по камерам с достоверным лимитом. Постановление обычно приходит за несколько дней; не пришло — отметьте, и сумма уйдёт из Итогов. Рейтинг это не меняет."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Summa — tezlikni oshirish jarimalari pog'onalari bo'yicha baho (BHM hisobida), faqat limiti aniq kameralar bo'yicha. Qaror odatda bir necha kun ichida keladi; kelmasa — belgilang, summa Yakunlardan chiqadi. Reytingga bu ta'sir qilmaydi."
+          }
+        }
+      }
+    },
+    "Средние, график по дням, часы риска" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Средние, график по дням, часы риска"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O'rtacha ko'rsatkichlar, kunlar grafigi, xavf soatlari"
           }
         }
       }
@@ -2589,6 +2925,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Toza"
+          }
+        }
+      }
+    },
+    "штраф не пришёл" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "штраф не пришёл"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "jarima kelmadi"
           }
         }
       }
@@ -8750,6 +9102,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Jarimalar va cheklovlar"
+          }
+        }
+      }
+    },
+    "Это разные" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Это разные"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bular har xil"
           }
         }
       }

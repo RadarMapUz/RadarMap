@@ -302,9 +302,7 @@ final class LocationService: NSObject {
         return true
     }
 
-    private var savedPlaces: [CLLocationCoordinate2D] {
-        [settings.homePlace?.coordinate, settings.workPlace?.coordinate].compactMap(\.self)
-    }
+    private var savedPlaces: [CLLocationCoordinate2D] { settings.savedPlaceCoordinates }
 
     /// Своя машина: CarPlay подключён или знакомая автомобильная магнитола (BT).
     private var isDriverRecognized: Bool {

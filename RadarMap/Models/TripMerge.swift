@@ -69,4 +69,96 @@ nonisolated enum TripMerge {
                 <= AppConfig.tripMergeSavedPlaceMeters
         }
     }
+
+    // MARK: - Ручное объединение записей (после факта)
+    //
+    // Автосклейка никогда не переигрывает ручное «Завершить» — и это правильно.
+    // Но водитель жмёт стоп у магазина по привычке, а через двадцать минут едет
+    // дальше: история получает две записи там, где была одна поездка. Ручное
+    // объединение — симметрия к TripHistory.split: то чинит лишнюю склейку,
+    // это — лишний разрез.
+
+    /// Можно ли объединить `next` с предыдущей по времени `previous`.
+    /// Ворота те же, что у автосклейки, кроме намерения: само объединение —
+    /// уже намерение, и «Завершить» его не блокирует.
+    static func manualMergeAllowed(previous: TripRecord, next: TripRecord,
+                                   calendar: Calendar = .current) -> Bool {
+        guard next.startedAt >= previous.endedAt else { return false }
+        guard calendar.isDate(previous.endedAt, inSameDayAs: next.startedAt) else { return false }
+        guard next.startedAt.timeIntervalSince(previous.endedAt)
+            <= AppConfig.tripMergeMaxStopSeconds else { return false }
+        // Стартовали далеко от финиша — точно разные поездки. Координаты старта
+        // у записи нет — берём первую точку трека; без треков (старые записи)
+        // решают только день и пауза.
+        if let end = previous.endCoordinate, let start = next.trackPoints.first {
+            guard GeoMath.fastDistance(end.latitude, end.longitude, start.lat, start.lon)
+                <= AppConfig.tripMergeMaxMeters else { return false }
+        }
+        // Те же страховки «одна поездка на весь день», что у автосклейки.
+        guard (previous.stops?.count ?? 0) + (next.stops?.count ?? 0)
+            < AppConfig.tripMergeMaxStops else { return false }
+        return next.endedAt.timeIntervalSince(previous.startedAt)
+            <= AppConfig.tripMergeMaxTotalSeconds
+    }
+
+    /// Предлагать ли объединение в Итогах само: пара склеилась бы автоматикой,
+    /// если бы не ручное «Завершить» у предыдущей. Остальные причины отказа —
+    /// не наши: там автоматика сказала «нет» по делу (другое место, полночь).
+    static func suggestsMerge(previous: TripRecord, next: TripRecord,
+                              savedPlaces: [CLLocationCoordinate2D],
+                              calendar: Calendar = .current) -> Bool {
+        guard previous.endedManually == true else { return false }
+        guard manualMergeAllowed(previous: previous, next: next,
+                                 calendar: calendar) else { return false }
+        // Серая зона автосклейки действует и тут: долгая стоянка у Дома/Работы —
+        // «приехал, дело сделано», ручной стоп это только подтверждает.
+        if let end = previous.endCoordinate,
+           next.startedAt.timeIntervalSince(previous.endedAt)
+               > AppConfig.tripMergeShortStopSeconds,
+           isNearSavedPlace(end, places: savedPlaces) { return false }
+        return true
+    }
+
+    /// Объединить две записи в одну поездку: пауза становится остановкой в
+    /// пути, треки сшиваются, балл пересчитывается по объединённым данным.
+    /// Ворота проверяет вызывающий (manualMergeAllowed).
+    static func merged(previous: TripRecord, next: TripRecord) -> TripRecord {
+        let gapStop = TripStop(
+            id: UUID(),
+            lat: previous.endLat ?? previous.trackPoints.last?.lat ?? 0,
+            lon: previous.endLon ?? previous.trackPoints.last?.lon ?? 0,
+            from: previous.endedAt, to: next.startedAt)
+        // Трек — простая сшивка: обе ноги уже упрощены при своих финишах,
+        // а живут треки всё равно неделю (чистка истории).
+        let track = previous.trackPoints + next.trackPoints
+        let passes = previous.passed + next.passed
+        return TripRecord(
+            id: previous.id,
+            startedAt: previous.startedAt,
+            endedAt: next.endedAt,
+            distanceMeters: previous.distanceMeters + next.distanceMeters,
+            maxSpeedKmh: max(previous.maxSpeedKmh, next.maxSpeedKmh),
+            passed: passes,
+            endLat: next.endLat ?? next.trackPoints.last?.lat,
+            endLon: next.endLon ?? next.trackPoints.last?.lon,
+            track: track.count >= 2 ? track.flatMap { [$0.lat, $0.lon, $0.speedKmh] } : nil,
+            // Балл — той же арифметикой, что у живого финиша: склейка не должна
+            // отличаться от поездки, которую не разрезали.
+            score: DrivingScore.tripScore(
+                passes: passes.map {
+                    DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh)
+                },
+                trackSpeeds: track.map(\.speedKmh)),
+            stops: (previous.stops ?? []) + [gapStop] + (next.stops ?? []),
+            endedManually: next.endedManually,
+            batteryDropPercent: mergedBatteryDrop(previous.batteryDropPercent,
+                                                  next.batteryDropPercent))
+    }
+
+    /// Сумма дельт заряда — только когда известны обе ноги: «−2 %» за поездку,
+    /// стоившую пять, хуже, чем промолчать (та же логика, что resumedStartPercent).
+    private static func mergedBatteryDrop(_ a: Int?, _ b: Int?) -> Int? {
+        guard let a, let b else { return nil }
+        return a + b
+    }
 }

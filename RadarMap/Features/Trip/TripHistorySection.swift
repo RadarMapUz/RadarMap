@@ -28,6 +28,9 @@ struct TripHistorySection: View {
     let onOpenDetail: (TripRecord) -> Void
     let onRepeat: ((CLLocationCoordinate2D, String) -> Void)?
     let onDelete: (TripRecord) -> Void
+    /// Ручная склейка: можно ли и объединить с предыдущей (см. TripMerge).
+    var canMerge: ((TripRecord) -> Bool)? = nil
+    var onMerge: ((TripRecord) -> Void)? = nil
 
     // Недельной карточки-сводки здесь больше нет: те же цифры (и глубже) даёт
     // герой периода наверху Итогов — двух источников правды быть не должно.
@@ -129,6 +132,15 @@ struct TripHistorySection: View {
                     onRepeat(end, String(localized: "Как в прошлый раз"))
                 } label: {
                     Label("Повторить маршрут", systemImage: "arrow.triangle.turn.up.right.circle")
+                }
+            }
+            // Починка лишнего разреза: стоп у магазина по привычке — и одна
+            // поездка стала двумя. Симметрия к «Разделить здесь» в деталке.
+            if let onMerge, canMerge?(record) == true {
+                Button {
+                    onMerge(record)
+                } label: {
+                    Label("Объединить с предыдущей", systemImage: "arrow.triangle.merge")
                 }
             }
             Button(role: .destructive) {

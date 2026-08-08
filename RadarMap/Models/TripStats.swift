@@ -245,6 +245,47 @@ final class TripStats {
         persistDays()
     }
 
+    /// Можно ли объединить запись с предыдущей по времени (для меню и карточки-
+    /// предложения в Итогах).
+    func canMergeWithPrevious(id: Double) -> Bool {
+        guard let index = history.firstIndex(where: { $0.id == id }),
+              index + 1 < history.count else { return false }
+        return TripMerge.manualMergeAllowed(previous: history[index + 1],
+                                            next: history[index])
+    }
+
+    /// Объединить запись с предыдущей — ручная склейка там, где автоматика не
+    /// имела права: ручное «Завершить» она не переигрывает никогда, а водитель
+    /// жмёт стоп у магазина по привычке. Симметрия к splitRecord.
+    func mergeWithPrevious(id: Double) {
+        guard let index = history.firstIndex(where: { $0.id == id }),
+              index + 1 < history.count else { return }
+        let next = history[index], previous = history[index + 1]
+        guard TripMerge.manualMergeAllowed(previous: previous, next: next) else { return }
+        let merged = TripMerge.merged(previous: previous, next: next)
+        // Дни: снять обе ноги, положить склейку — но только если строки обеих
+        // на месте (смена пояса могла увести ключ; unfolded тогда промахнётся,
+        // а folded добавит склейку целиком — день задвоится).
+        let calendar = Calendar.current
+        let keysPresent = [previous, next].allSatisfy { record in
+            days.contains { $0.day == calendar.startOfDay(for: record.startedAt) }
+        }
+        if keysPresent {
+            days = TripDayBook.unfolded(previous, from: days)
+            days = TripDayBook.unfolded(next, from: days)
+            days = TripDayBook.folded(merged, into: days)
+            persistDays()
+        }
+        history.replaceSubrange(index...(index + 1), with: [merged])
+        // Пожизненный счётчик: две записи стали одной поездкой. Серии чистых
+        // поездок не пересчитываем — задним числом их уже не восстановить,
+        // а километры и камеры от склейки не меняются.
+        lifetime.trips = max(0, lifetime.trips - 1)
+        persist()
+        persistLifetime()
+        Log.trips.info("поездки объединены вручную: \(Int(merged.distanceMeters), privacy: .public) м")
+    }
+
     /// «Штраф не пришёл» (или передумал — вернуть): пометка на проезде камеры.
     /// Деньги уходят из всех сводок — записи и дневного агрегата (хирургически,
     /// снять старую / положить новую). Рейтинг не трогается: он про езду,
@@ -407,6 +448,36 @@ final class TripStats {
         history = seeded
         // Агрегаты пересобираем вместе с историей: иначе экран считает рейтинг
         // по дням от прошлого запуска, а разложение — по свежим записям.
+        days = TripDayBook.rebuilt(from: history)
+        lifetime = LifetimeStats.rebuilt(from: history)
+        persist()
+        persistDays()
+        persistLifetime()
+    }
+
+    /// Пара «разрезанная магазином поездка» для карточки «Объединить?» в Итогах:
+    /// предыдущая завершена кнопкой, новая стартует там же через двадцать минут.
+    /// `simctl launch <app> -demoHistory -demoMergePair -showStats`.
+    func seedDemoMergePair() {
+        let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+        let firstStart = Date().addingTimeInterval(-70 * 60)
+        let firstTrack = Self.demoTrack(from: base, seed: 9, km: 6)
+        let splitPoint = CLLocationCoordinate2D(latitude: firstTrack[firstTrack.count - 3],
+                                                longitude: firstTrack[firstTrack.count - 2])
+        let secondTrack = Self.demoTrack(from: splitPoint, seed: 4, km: 4)
+        let first = TripRecord(id: firstStart.timeIntervalSince1970, startedAt: firstStart,
+                               endedAt: firstStart.addingTimeInterval(25 * 60),
+                               distanceMeters: 6000, maxSpeedKmh: 72, passed: [],
+                               endLat: splitPoint.latitude, endLon: splitPoint.longitude,
+                               track: firstTrack, score: 96, endedManually: true)
+        let secondStart = firstStart.addingTimeInterval(45 * 60)
+        let second = TripRecord(id: secondStart.timeIntervalSince1970, startedAt: secondStart,
+                                endedAt: secondStart.addingTimeInterval(15 * 60),
+                                distanceMeters: 4000, maxSpeedKmh: 64, passed: [],
+                                endLat: secondTrack[secondTrack.count - 3],
+                                endLon: secondTrack[secondTrack.count - 2],
+                                track: secondTrack, score: 98, endedManually: false)
+        history.insert(contentsOf: [second, first], at: 0)
         days = TripDayBook.rebuilt(from: history)
         lifetime = LifetimeStats.rebuilt(from: history)
         persist()

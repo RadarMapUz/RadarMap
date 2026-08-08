@@ -169,4 +169,172 @@ final class TripMergeTests: XCTestCase {
         XCTAssertEqual(TripHistory.split(record, at: stop).count, 1,
                        "делить нечего — возвращаем запись как есть")
     }
+
+    // MARK: - Ручное объединение записей
+
+    private let base = Date(timeIntervalSince1970: 1_800_000_000)   // 08:00 UTC
+    private let origin = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+    private var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+
+    /// Запись с прямым треком на север от `from` — конец трека и endLat совпадают.
+    private func record(start: Date, minutes: Double, km: Double,
+                        from: CLLocationCoordinate2D, manual: Bool = false,
+                        battery: Int? = nil, passes: [PassedCamera] = []) -> TripRecord {
+        let points = stride(from: 0.0, through: km * 1000, by: 200).flatMap { meters -> [Double] in
+            let p = GeoMath.destination(from: from, bearing: 0, distanceMeters: meters)
+            return [p.latitude, p.longitude, 55]
+        }
+        return TripRecord(id: start.timeIntervalSince1970, startedAt: start,
+                          endedAt: start.addingTimeInterval(minutes * 60),
+                          distanceMeters: km * 1000, maxSpeedKmh: 80,
+                          passed: passes,
+                          endLat: points[points.count - 3], endLon: points[points.count - 2],
+                          track: points, score: 90,
+                          endedManually: manual, batteryDropPercent: battery)
+    }
+
+    private func mergePass(_ id: Int, speed: Double, at date: Date) -> PassedCamera {
+        PassedCamera(id: UUID(), cameraID: id, typeRaw: "Стационар радар",
+                     location: "Юнусабад", speedKmh: speed, date: date,
+                     lat: 41.32, lon: 69.28, limitKmh: 60)
+    }
+
+    func testManualMergeAllowedForAdjacentSameDayPair() {
+        let previous = record(start: base, minutes: 30, km: 6, from: origin, manual: true)
+        let next = record(start: base.addingTimeInterval(50 * 60), minutes: 15, km: 4,
+                          from: previous.endCoordinate!)
+        XCTAssertTrue(TripMerge.manualMergeAllowed(previous: previous, next: next,
+                                                   calendar: utc),
+                      "20 минут стоянки на месте финиша — объединять можно")
+    }
+
+    func testManualMergeRefusesLongGapAndMidnight() {
+        let previous = record(start: base, minutes: 30, km: 6, from: origin, manual: true)
+        let late = record(start: base.addingTimeInterval((30 + 90) * 60), minutes: 15,
+                          km: 4, from: previous.endCoordinate!)
+        XCTAssertFalse(TripMerge.manualMergeAllowed(previous: previous, next: late,
+                                                    calendar: utc),
+                       "полтора часа — новая поездка, как и у автосклейки")
+
+        // 23:30 → 00:10: пауза короткая, но календарный день уже другой.
+        let evening = record(start: base.addingTimeInterval(15 * 3600), minutes: 30,
+                             km: 6, from: origin, manual: true)
+        let pastMidnight = record(start: evening.endedAt.addingTimeInterval(40 * 60),
+                                  minutes: 15, km: 4, from: evening.endCoordinate!)
+        XCTAssertFalse(TripMerge.manualMergeAllowed(previous: evening, next: pastMidnight,
+                                                    calendar: utc))
+    }
+
+    func testManualMergeRefusesFarStart() {
+        let previous = record(start: base, minutes: 30, km: 6, from: origin, manual: true)
+        let farPoint = GeoMath.destination(from: previous.endCoordinate!,
+                                           bearing: 90, distanceMeters: 900)
+        let far = record(start: base.addingTimeInterval(45 * 60), minutes: 15, km: 4,
+                         from: farPoint)
+        XCTAssertFalse(TripMerge.manualMergeAllowed(previous: previous, next: far,
+                                                    calendar: utc),
+                       "старт в 900 м от финиша — телефон приехал туда не этой машиной")
+    }
+
+    func testMergedKeepsTotalsAndGapBecomesStop() {
+        let passA = mergePass(1, speed: 55, at: base.addingTimeInterval(10 * 60))
+        let previous = record(start: base, minutes: 30, km: 6, from: origin,
+                              manual: true, battery: 3, passes: [passA])
+        let passB = mergePass(2, speed: 88, at: base.addingTimeInterval(55 * 60))
+        let next = record(start: base.addingTimeInterval(50 * 60), minutes: 15, km: 4,
+                          from: previous.endCoordinate!, battery: 2, passes: [passB])
+
+        let merged = TripMerge.merged(previous: previous, next: next)
+        XCTAssertEqual(merged.id, previous.id, "id остаётся старым — как у resume()")
+        XCTAssertEqual(merged.startedAt, previous.startedAt)
+        XCTAssertEqual(merged.endedAt, next.endedAt)
+        XCTAssertEqual(merged.distanceMeters, 10_000, accuracy: 0.1)
+        XCTAssertEqual(merged.maxSpeedKmh, 80, accuracy: 0.1)
+        XCTAssertEqual(merged.passed.map(\.cameraID), [1, 2])
+        XCTAssertEqual(merged.endLat!, next.endLat!, accuracy: 1e-9)
+        XCTAssertEqual(merged.batteryDropPercent, 5, "дельты заряда складываются")
+
+        // Пауза стала остановкой в пути ровно на её интервал.
+        XCTAssertEqual(merged.stops?.count, 1)
+        XCTAssertEqual(merged.stops![0].from, previous.endedAt)
+        XCTAssertEqual(merged.stops![0].to, next.startedAt)
+        XCTAssertEqual(merged.movingDuration,
+                       merged.duration - 20 * 60, accuracy: 1)
+
+        // Балл — той же арифметикой, что у неразрезанной поездки.
+        let direct = DrivingScore.tripScore(
+            passes: merged.passed.map {
+                DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh)
+            },
+            trackSpeeds: merged.trackPoints.map(\.speedKmh))
+        XCTAssertEqual(merged.score, direct)
+    }
+
+    func testMergedBatteryUnknownWhenLegUnknown() {
+        let previous = record(start: base, minutes: 30, km: 6, from: origin,
+                              manual: true, battery: nil)
+        let next = record(start: base.addingTimeInterval(50 * 60), minutes: 15, km: 4,
+                          from: previous.endCoordinate!, battery: 2)
+        XCTAssertNil(TripMerge.merged(previous: previous, next: next).batteryDropPercent,
+                     "неизвестна одна нога — неизвестна вся дельта, «−2 %» была бы ложью")
+    }
+
+    /// Карточка «Объединить?» появляется только там, где склейку заблокировало
+    /// РУЧНОЕ «Завершить»; остальные отказы автоматики — по делу, не пристаём.
+    func testSuggestsMergeOnlyWhenManualStopWasBlocker() {
+        let auto = record(start: base, minutes: 30, km: 6, from: origin, manual: false)
+        let previous = record(start: base, minutes: 30, km: 6, from: origin, manual: true)
+        let next = record(start: base.addingTimeInterval(50 * 60), minutes: 15, km: 4,
+                          from: previous.endCoordinate!)
+
+        XCTAssertFalse(TripMerge.suggestsMerge(previous: auto, next: next,
+                                               savedPlaces: [], calendar: utc),
+                       "автостоп не склеил — значит, отказала не кнопка, а геометрия")
+        XCTAssertTrue(TripMerge.suggestsMerge(previous: previous, next: next,
+                                              savedPlaces: [], calendar: utc))
+
+        // Двадцать минут у дома — «приехал»; та же пауза у магазина — заезд.
+        let home = previous.endCoordinate!
+        XCTAssertFalse(TripMerge.suggestsMerge(previous: previous, next: next,
+                                               savedPlaces: [home], calendar: utc))
+        let quick = record(start: previous.endedAt.addingTimeInterval(10 * 60),
+                           minutes: 15, km: 4, from: home)
+        XCTAssertTrue(TripMerge.suggestsMerge(previous: previous, next: quick,
+                                              savedPlaces: [home], calendar: utc),
+                      "короткая пауза сильнее места — как у автосклейки")
+    }
+
+    /// Починка дня «снять обе ноги, положить склейку»: сводка по дням снова
+    /// совпадает со сводкой по записям (главный инвариант TripDayTests).
+    func testMergedDayRepairKeepsRollupInvariant() {
+        let passA = mergePass(1, speed: 88, at: base.addingTimeInterval(10 * 60))
+        let previous = record(start: base, minutes: 30, km: 6, from: origin,
+                              manual: true, passes: [passA])
+        let next = record(start: base.addingTimeInterval(50 * 60), minutes: 15, km: 4,
+                          from: previous.endCoordinate!)
+        var days = TripDayBook.rebuilt(from: [next, previous], calendar: utc)
+
+        let merged = TripMerge.merged(previous: previous, next: next)
+        days = TripDayBook.unfolded(previous, from: days, calendar: utc)
+        days = TripDayBook.unfolded(next, from: days, calendar: utc)
+        days = TripDayBook.folded(merged, into: days, calendar: utc)
+
+        XCTAssertEqual(days.count, 1)
+        XCTAssertEqual(days[0].trips, 1, "две записи стали одной поездкой")
+
+        let byDays = TripHistory.summary(days: days, history: [merged], period: .week,
+                                         anchor: base, calendar: utc)
+        let byRecords = TripHistory.summary([merged], period: .week,
+                                            calendar: utc, now: base)
+        XCTAssertEqual(byDays.trips, byRecords.trips)
+        XCTAssertEqual(byDays.distance, byRecords.distance, accuracy: 0.1)
+        XCTAssertEqual(byDays.movingDuration, byRecords.movingDuration, accuracy: 0.1)
+        XCTAssertEqual(byDays.overPasses, byRecords.overPasses)
+        XCTAssertEqual(byDays.fineRisk, byRecords.fineRisk, accuracy: 0.1)
+        XCTAssertEqual(byDays.rating, byRecords.rating)
+    }
 }

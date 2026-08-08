@@ -46,10 +46,16 @@ final class WatchSession: NSObject {
     }
 
     private func apply(_ context: [String: Any]) {
-        isTripActive = context["active"] as? Bool ?? false
-        speedKmh = context["speed"] as? Int ?? 0
-        cameraTitle = context["title"] as? String
-        distanceMeters = context["dist"] as? Int
+        // Пишем только на смене: каждое присваивание @Observable будит HUD,
+        // а контекст с телефона приходит и с совпавшими значениями.
+        let active = context["active"] as? Bool ?? false
+        if active != isTripActive { isTripActive = active }
+        let speed = context["speed"] as? Int ?? 0
+        if speed != speedKmh { speedKmh = speed }
+        let title = context["title"] as? String
+        if title != cameraTitle { cameraTitle = title }
+        let distance = context["dist"] as? Int
+        if distance != distanceMeters { distanceMeters = distance }
         let level = context["level"] as? Int ?? 0
 
         // Тук на запястье при росте уровня; сброс серии — когда камера позади.
@@ -58,7 +64,7 @@ final class WatchSession: NSObject {
                                            : level == 2 ? .directionUp : .start)
         }
         lastHapticLevel = level == 0 ? 0 : max(lastHapticLevel, level)
-        if level == 0 { alertLevel = 0 } else { alertLevel = level }
+        if level != alertLevel { alertLevel = level }
     }
 }
 

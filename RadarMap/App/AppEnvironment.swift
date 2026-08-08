@@ -53,11 +53,33 @@ final class AppEnvironment {
     /// машина, телефонная карта уступает место дешёвому экрану передачи —
     /// рисовать MapKit на двух экранах разом значит греть телефон вдвое.
     private(set) var isCarPlayConnected = false
+    /// Телефонная сцена активна (ставит RootView). Вместе с isCarPlayConnected
+    /// отвечает на вопрос «смотрит ли кто-нибудь на экран»: опрос передвижных
+    /// радаров жив, пока жив ХОТЬ ОДИН экран, — раньше он был привязан только
+    /// к телефонной сцене и тёк в обе стороны (поездка «только CarPlay»
+    /// опрашивала сервер вечно, а телефон в кармане глушил отметки на экране
+    /// машины).
+    @ObservationIgnored private(set) var isPhoneSceneActive = false
 
     /// Ставит сцена CarPlay при подключении/отключении.
     func setCarPlayConnected(_ connected: Bool) {
         isCarPlayConnected = connected
         location.setCarPlayConnected(connected)
+        if connected {
+            mobile.startPolling()
+        } else if !isPhoneSceneActive {
+            mobile.stopPolling()
+        }
+    }
+
+    /// Ставит RootView по scenePhase телефона.
+    func setPhoneSceneActive(_ active: Bool) {
+        isPhoneSceneActive = active
+        if active {
+            mobile.startPolling()
+        } else if !isCarPlayConnected {
+            mobile.stopPolling()
+        }
     }
 
     init() {

@@ -1182,14 +1182,10 @@ final class LocationService: NSObject {
               settings.backgroundAlerts.allows(camera) else { return }
         alertedCameraIDs.insert(id)
         notifier.notifyApproaching(camera)
-        if !isForeground {
-            liveActivity?.update(state: CameraActivityAttributes.ContentState(
-                nearestTitle: camera.displayTitle,
-                nearestSymbol: camera.kind.symbolName,
-                distanceMeters: settings.alertRadius,
-                camerasNearby: nearbyCameras.count
-            ))
-        }
+        // Live Activity здесь не обновляем: она живёт только в поездке
+        // (startIfNeeded зовётся из startTrip), а сюда мы попадаем строго вне
+        // её — update() всегда выходил по guard, ветка была мёртвой и только
+        // читалась как живой путь.
     }
 
     private func handleExit(regionID: String) {

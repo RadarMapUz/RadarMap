@@ -45,8 +45,9 @@ final class SketchState {
     @ObservationIgnored private var minorsVisible = false
     @ObservationIgnored private var minorFlipTicks = 0
 
-    /// Тик GPS: дёргается из DashboardView по locationTick.
-    func refresh(_ env: AppEnvironment) {
+    /// Тик GPS: дёргается из DashboardView по locationTick. `now` — параметр
+    /// (не Date() внутри): ритм анимации детерминирован в тестах.
+    func refresh(_ env: AppEnvironment, now: Date = Date()) {
         // Схема на приборке — единственное, что считается на каждом тике ради
         // картинки. Она обязана быть самым дешёвым экраном, а не самым дорогим,
         // и проверять это надо приборами, а не на глаз.
@@ -109,7 +110,6 @@ final class SketchState {
         // фикса (лучшее предсказание интервала — предыдущий), а не жёсткую
         // секунду. С константой схема секунду ехала и две стояла — фиксы на
         // крейсере приходят раз в 15–25 метров.
-        let now = Date()
         let duration = TickPacing.animationDuration(
             sincePreviousTick: lastTickAt.map { now.timeIntervalSince($0) })
         lastTickAt = now

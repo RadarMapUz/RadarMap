@@ -57,6 +57,17 @@ nonisolated enum PerformanceMode: Int, Comparable, Sendable {
     /// которое считается по всему треку и в перегрев не нужно.
     var drawsHeatLines: Bool { self == .full }
 
+    /// Сколько маркеров рисует карта CarPlay — та же лестница ÷1/÷3/÷8, что у
+    /// телефонной карты: раньше CarPlay держал все 40 при любом перегреве, и
+    /// чип «Жарко — экономлю экран» рядом с ней просто врал.
+    var carPlayAnnotationBudget: Int {
+        switch self {
+        case .full:    return AppConfig.carPlayMaxCameraMarkers
+        case .reduced: return AppConfig.carPlayMaxCameraMarkers / 3
+        case .minimal: return AppConfig.carPlayMaxCameraMarkers / 8
+        }
+    }
+
     /// Сколько линий окрестной сети чертит схема на приборке. Сеть — контекст,
     /// а не предупреждение: при бюджете первыми выживают ближние к машине
     /// линии, а дорога камеры, маршрут и трек не режутся ни на одной ступени.

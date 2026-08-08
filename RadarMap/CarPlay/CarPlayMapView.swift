@@ -21,6 +21,7 @@ struct CarPlayMapView: UIViewRepresentable {
     let route: RouteService
     let location: LocationService
     let speedLimits: SpeedLimitService
+    let thermal: ThermalService
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
@@ -90,6 +91,14 @@ struct CarPlayMapView: UIViewRepresentable {
             coordinator.reloadCameras(on: map)
         }
 
+        // Смена термоступени меняет бюджет маркеров — применяем сразу, а не
+        // при следующем сдвиге карты.
+        let mode = thermal.mode
+        if mode != coordinator.thermalModeSeen {
+            coordinator.thermalModeSeen = mode
+            coordinator.reloadCameras(on: map, force: true)
+        }
+
         // Цель оповещения подсвечиваем на карте: крупнее и с пульсом.
         coordinator.applyTarget(location.isApproachingCamera ? location.nearestCamera?.id : nil,
                                 on: map)
@@ -97,7 +106,7 @@ struct CarPlayMapView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator(repository: repository, speedLimits: speedLimits,
-                    route: route, location: location)
+                    route: route, location: location, thermal: thermal)
     }
 
     // MARK: - Координатор
@@ -115,6 +124,7 @@ struct CarPlayMapView: UIViewRepresentable {
         var zoomOutHandled = 0
         var cameraCountSeen = -1
         var tripActiveSeen = false
+        var thermalModeSeen = PerformanceMode.full
         /// Показанные камеры по id — обновление области не пересоздаёт аннотации.
         private var shown: [Int: CameraAnnotation] = [:]
         /// Камера, к которой приближаемся (подсвеченный маркер).
@@ -129,12 +139,17 @@ struct CarPlayMapView: UIViewRepresentable {
         private var traveledProgress: CLLocationDistance = -1
 
         init(repository: CameraStore, speedLimits: SpeedLimitService,
-             route: RouteService, location: LocationService) {
+             route: RouteService, location: LocationService, thermal: ThermalService) {
             self.repository = repository
             self.speedLimits = speedLimits
             self.route = route
             self.location = location
+            self.thermal = thermal
         }
+
+        private let thermal: ThermalService
+        /// Область, для которой строился набор маркеров (порог перерисовки).
+        private var loadedRegion: MKCoordinateRegion?
 
         var preferredTracking: MKUserTrackingMode { tripActiveSeen ? .followWithHeading : .follow }
 
@@ -146,7 +161,28 @@ struct CarPlayMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            // В поездке followWithHeading доворачивает и перецентрует карту
+            // НЕПРЕРЫВНО — колбэк прилетал пачками в секунду, и каждый раз
+            // синхронно на main шёл запрос камер + пересчёт тиров всех
+            // маркеров. Телефонная карта давно живёт с буфером и порогом
+            // (MapState.needsRecompute) — теперь и эта.
+            guard needsReload(mapView.region) else { return }
             reloadCameras(on: mapView)
+        }
+
+        /// Тот же принцип, что у MapState.needsRecompute: заметная смена
+        /// масштаба или сдвиг центра дальше трети видимой области; в перегрев
+        /// порог растягивается — перерисовка реже, когда iOS уже режет CPU.
+        private func needsReload(_ region: MKCoordinateRegion) -> Bool {
+            guard let loaded = loadedRegion, loaded.span.latitudeDelta > 0 else { return true }
+            let ratio = region.span.latitudeDelta / loaded.span.latitudeDelta
+            if ratio < 0.6 || ratio > 1.6 { return true }
+            let threshold = min(1, AppConfig.recomputeThreshold
+                                * thermal.mode.recomputeFactor)
+            let movedLat = abs(region.center.latitude - loaded.center.latitude)
+            let movedLon = abs(region.center.longitude - loaded.center.longitude)
+            return movedLat > loaded.span.latitudeDelta / 2 * threshold
+                || movedLon > loaded.span.longitudeDelta / 2 * threshold
         }
 
         // MARK: Маршрут
@@ -196,6 +232,7 @@ struct CarPlayMapView: UIViewRepresentable {
                 map.removeAnnotations(Array(shown.values))
                 shown.removeAll()
             }
+            loadedRegion = map.region
             // На обзорном зуме камеры не показываем — это уровень «вся страна».
             guard map.region.span.latitudeDelta < AppConfig.carPlayCameraZoomThreshold else {
                 if !shown.isEmpty {
@@ -204,7 +241,10 @@ struct CarPlayMapView: UIViewRepresentable {
                 }
                 return
             }
-            let fresh = repository.cameras(in: map.region, limit: AppConfig.carPlayMaxCameraMarkers)
+            // Бюджет по перегреву — та же лестница, что у телефонной карты:
+            // чип «Жарко — экономлю экран» обязан быть правдой и здесь.
+            let fresh = repository.cameras(in: map.region,
+                                           limit: thermal.mode.carPlayAnnotationBudget)
             let freshIDs = Set(fresh.map(\.id))
             // Точка отсчёта важности: где машина, а не куда утащили карту.
             let focus = location.currentCoordinate ?? map.centerCoordinate

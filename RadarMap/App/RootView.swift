@@ -35,7 +35,6 @@ struct RootView: View {
                 } else {
                     MapScreen()
                         .transition(.opacity)
-                        .modifier(ReviewPromptModifier())   // оценка App Store после 3-й чистой поездки
                 }
             } else {
                 OnboardingView {
@@ -45,6 +44,11 @@ struct RootView: View {
                 .transition(.opacity)
             }
         }
+        // Оценка App Store — на корне, а не на MapScreen: за рулём CarPlay
+        // экран телефона показывает экран передачи, MapScreen не смонтирован,
+        // и конец поездки (единственный триггер) никто не видел — просьба об
+        // оценке была недостижима ровно для самого лояльного сегмента.
+        .modifier(ReviewPromptModifier())
         .animation(.easeInOut(duration: 0.3), value: env.isCarPlayConnected)
         // Вышли из машины — следующее подключение снова начнёт с экрана передачи.
         .onChange(of: env.isCarPlayConnected) { _, connected in
@@ -82,11 +86,11 @@ struct RootView: View {
             switch phase {
             case .active:
                 env.location.setForeground(true)
-                env.mobile.startPolling()
+                env.setPhoneSceneActive(true)   // опрос радаров: жив любой экран
                 env.motion.start()
             case .background:
                 env.location.setForeground(false)   // в поездке непрерывный GPS продолжит работать
-                env.mobile.stopPolling()             // в фоне не опрашиваем сервер — батарея
+                env.setPhoneSceneActive(false)       // опрос гаснет, если и CarPlay нет
                 snapshotForWidget()
             case .inactive:
                 // Шторка, Пункт управления, Face ID, переключатель приложений:

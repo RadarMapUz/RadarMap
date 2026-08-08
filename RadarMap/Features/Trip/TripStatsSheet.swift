@@ -56,6 +56,10 @@ struct TripStatsSheet: View {
     /// Поездка, выбранная в «Всех поездках»: деталка откроется после того, как
     /// список ЗАКОНЧИТ закрываться (см. onDismiss у шита).
     @State private var pendingDetailRecord: TripRecord?
+    /// Список поездок показан целиком (иначе — первые statsTripsPreview).
+    @State private var tripsExpanded = false
+    /// Раскрыты ли «Детали периода» (KPI, график по дням, часы риска).
+    @State private var detailsExpanded = false
     /// Полноэкранная карта проездов (item — чтобы передать фокус зоны риска).
     @State private var mapPayload: PeriodMapPayload?
     /// Треки, маркеры и слой частоты — считаются на смену периода, а не в body.
@@ -118,15 +122,8 @@ struct TripStatsSheet: View {
                         mapCard
                             .entrance(3, appeared)
                             .id("map")
-                        KPIStrip(summary: summary,
-                                 activeDaysText: activeDaysText(summary))
+                        periodDetails(summary: summary)
                             .entrance(3, appeared)
-                        if let days = period.chartDays(containing: anchor) {
-                            dailyChart(days: days, summary: summary)
-                                .entrance(4, appeared)
-                        }
-                        RiskHoursCard(summary: summary)
-                            .entrance(4, appeared)
                         tripsSection(trip: trip, proxy: proxy)
                             .entrance(4, appeared)
                             .id("history")
@@ -188,11 +185,18 @@ struct TripStatsSheet: View {
                 if mapSelection == nil { framePeriod() }
             }
             .onChange(of: period) {
-                // Выбранная поездка могла не попасть в новый период.
-                withAnimation(.snappy(duration: 0.3)) { clearMapSelection() }
+                // Выбранная поездка могла не попасть в новый период; раскрытый
+                // список — тоже атрибут конкретного окна.
+                withAnimation(.snappy(duration: 0.3)) {
+                    clearMapSelection()
+                    tripsExpanded = false
+                }
             }
             .onChange(of: anchor) {
-                withAnimation(.snappy(duration: 0.3)) { clearMapSelection() }
+                withAnimation(.snappy(duration: 0.3)) {
+                    clearMapSelection()
+                    tripsExpanded = false
+                }
             }
             .onAppear {
                 appeared = true
@@ -914,24 +918,101 @@ struct TripStatsSheet: View {
         .statCard()
     }
 
+    // MARK: - Детали периода (свёрнуты по умолчанию)
+
+    /// KPI-плитки, график по дням и «Когда рискуете» — под одной раскрывашкой.
+    /// Главную историю экран рассказывает выше (рейтинг → выводы → деньги →
+    /// карта); эти три блока — справка для любопытных, и развёрнутые всегда они
+    /// уводили список поездок за два экрана прокрутки. Свёрнутые они ещё и
+    /// бесплатны: dailyKm не считается, пока раскрывашку не открыли.
+    private func periodDetails(summary: PeriodSummary) -> some View {
+        VStack(spacing: 16) {
+            Button {
+                withAnimation(.snappy(duration: 0.3)) { detailsExpanded.toggle() }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "chart.bar.xaxis")
+                        .font(.rounded(13, .bold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 30, height: 30)
+                        .background(Theme.accent.opacity(0.12), in: Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Детали периода")
+                            .font(.rounded(14, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                        Text("Средние, график по дням, часы риска")
+                            .font(.rounded(11))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .font(.rounded(12, .bold))
+                        .foregroundStyle(Theme.textTertiary)
+                        .rotationEffect(.degrees(detailsExpanded ? 180 : 0))
+                }
+                .statCard(padding: 14, radius: Theme.cornerMedium)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(detailsExpanded
+                                     ? String(localized: "Скрыть детали периода")
+                                     : String(localized: "Показать детали периода")))
+            if detailsExpanded {
+                KPIStrip(summary: summary,
+                         activeDaysText: activeDaysText(summary))
+                if let days = period.chartDays(containing: anchor) {
+                    dailyChart(days: days, summary: summary)
+                }
+                RiskHoursCard(summary: summary)
+            }
+        }
+    }
+
     // MARK: - Список поездок периода
 
+    /// Первые statsTripsPreview строк + «Показать все поездки (N)»: неделя
+    /// активной езды — это 20+ записей, и без обрезки блок «За всё время»
+    /// приходилось искать археологией.
     private func tripsSection(trip: TripStats, proxy: ScrollViewProxy) -> some View {
-        TripHistorySection(
-            title: period.tripsTitle,
-            records: TripHistory.historyList(trip.history, period: period, anchor: anchor),
-            selectedID: mapSelection?.id,
-            onShowOnMap: { showOnMap($0, proxy: proxy) },
-            onOpenDetail: { selectedRecord = $0 },
-            onRepeat: onRoute.map { route in
-                { coord, name in dismiss(); route(coord, name) }
-            },
-            onDelete: { record in
-                withAnimation {
-                    if mapSelection?.id == record.id { clearMapSelection() }
-                    trip.deleteRecord(id: record.id)
+        let all = TripHistory.historyList(trip.history, period: period, anchor: anchor)
+        let shown = tripsExpanded ? all : Array(all.prefix(AppConfig.statsTripsPreview))
+        return VStack(spacing: 10) {
+            TripHistorySection(
+                title: period.tripsTitle,
+                records: shown,
+                total: all.count,
+                selectedID: mapSelection?.id,
+                onShowOnMap: { showOnMap($0, proxy: proxy) },
+                onOpenDetail: { selectedRecord = $0 },
+                onRepeat: onRoute.map { route in
+                    { coord, name in dismiss(); route(coord, name) }
+                },
+                onDelete: { record in
+                    withAnimation {
+                        if mapSelection?.id == record.id { clearMapSelection() }
+                        trip.deleteRecord(id: record.id)
+                    }
+                })
+            if !tripsExpanded, all.count > AppConfig.statsTripsPreview {
+                Button {
+                    withAnimation(.snappy(duration: 0.3)) { tripsExpanded = true }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(String(format: String(localized: "Показать все поездки (%lld)"),
+                                    all.count))
+                            .font(.rounded(13, .semibold))
+                        Image(systemName: "chevron.down")
+                            .font(.rounded(10, .bold))
+                    }
+                    .foregroundStyle(Theme.accent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Theme.surface, in: Capsule())
+                    .contentShape(Capsule())
                 }
-            })
+                .buttonStyle(PressableStyle())
+            }
+        }
     }
 
     /// Пожизненные цифры — единственная честная правда «за всё время»:

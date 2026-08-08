@@ -6,11 +6,10 @@
 //  сгруппированные по дням. Выборку и заголовок задаёт экран (список подчиняется
 //  фильтру периода), здесь только разметка и действия наверх.
 //
-//  Тап по строке «применяет» поездку к карте выше — это главный жест списка,
-//  поэтому иконка справа у таких строк не шеврон, а карта. Деталка открывается
-//  из шапки карты («Подробнее») и из контекстного меню; поездки, у которых трек
-//  уже не хранится (старше недели), рисовать на карте нечем — они открывают
-//  деталку сразу, как раньше.
+//  Тап по строке открывает деталку поездки — ровно то, чего от списка ждут.
+//  Раньше тап «применял» поездку к карте периода, а деталка пряталась за вторым
+//  тапом в подписи под картой — красиво, но никто не догадывался. «Показать на
+//  карте» осталось вторым жестом: в контекстном меню (для поездок с треком).
 //
 
 import SwiftUI
@@ -20,6 +19,9 @@ struct TripHistorySection: View {
     /// «Поездки за неделю» / «за месяц» / «Последние поездки» — приходит сверху.
     let title: String
     let records: [TripRecord]
+    /// Сколько поездок в периоде всего: список бывает обрезан до первых пяти,
+    /// а счётчик в шапке обязан говорить правду про весь период.
+    let total: Int
     /// Какая поездка сейчас показана на карте.
     let selectedID: Double?
     let onShowOnMap: (TripRecord) -> Void
@@ -32,7 +34,7 @@ struct TripHistorySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: title) {
-                Text(String(format: String(localized: "Всего: %lld"), records.count))
+                Text(String(format: String(localized: "Всего: %lld"), total))
                     .font(.rounded(12, .medium))
                     .foregroundStyle(Theme.textTertiary)
             }
@@ -59,7 +61,7 @@ struct TripHistorySection: View {
     private func row(_ record: TripRecord) -> some View {
         let selected = selectedID == record.id
         return Button {
-            record.hasTrack ? onShowOnMap(record) : onOpenDetail(record)
+            onOpenDetail(record)
         } label: {
             HStack(spacing: 12) {
                 trackThumbnail(record)
@@ -112,14 +114,15 @@ struct TripHistorySection: View {
                 .opacity(phase.isIdentity ? 1 : 0.4)
                 .scaleEffect(phase.isIdentity ? 1 : 0.96)
         }
-        .accessibilityLabel(Text(record.hasTrack
-                                 ? "Поездка. Показать на карте"
-                                 : "Поездка. Открыть подробности"))
+        .accessibilityLabel(Text("Поездка. Открыть подробности"))
         .contextMenu {
-            Button {
-                onOpenDetail(record)
-            } label: {
-                Label("Подробнее", systemImage: "info.circle")
+            // «Подробнее» из меню ушло: это теперь основной тап по строке.
+            if record.hasTrack {
+                Button {
+                    onShowOnMap(record)
+                } label: {
+                    Label("Показать на карте", systemImage: "map")
+                }
             }
             if let onRepeat, let end = record.endCoordinate {
                 Button {
@@ -136,13 +139,12 @@ struct TripHistorySection: View {
         }
     }
 
-    /// Иконка справа честно говорит, что сделает тап: трек есть — покажем на
-    /// карте, трека нет — откроем деталку.
+    /// Справа шеврон — тап открывает деталку. У поездки, «применённой» к карте
+    /// периода (через контекстное меню), вместо него залитая карта: видно, чей
+    /// трек сейчас наверху.
     private func trailingIcon(_ record: TripRecord, selected: Bool) -> some View {
-        Image(systemName: record.hasTrack
-              ? (selected ? "map.fill" : "map")
-              : "chevron.right")
-            .font(.rounded(record.hasTrack ? 14 : 12, .semibold))
+        Image(systemName: selected ? "map.fill" : "chevron.right")
+            .font(.rounded(selected ? 14 : 12, .semibold))
             .foregroundStyle(selected ? Theme.accent : Theme.textTertiary)
             .frame(width: 20)
     }

@@ -159,6 +159,23 @@ final class DrivingScoreTests: XCTestCase {
         XCTAssertFalse(badges.first { $0.id == "streak5" }!.earned)
         XCTAssertEqual(badges.first { $0.id == "streak5" }!.fraction, 0.6, accuracy: 0.01)
     }
+    /// Шкала цвета балла — одна на всё приложение (Theme.score поверх tier).
+    /// Тест существует из-за настоящего расхождения: карточка для шеринга
+    /// красила 55 жёлтым, а экран — красным, и наружу уходила оценка лучше
+    /// той, что видел сам водитель.
+    func testScoreColourScaleHasSingleSourceAndExactBoundaries() {
+        // Границы ровно там, где их ставит tier: 60 и 75.
+        XCTAssertEqual(Theme.score(59), Theme.score(0), "ниже 60 — одна зона")
+        XCTAssertNotEqual(Theme.score(59), Theme.score(60), "граница «жёлтого» — 60")
+        XCTAssertEqual(Theme.score(60), Theme.score(74))
+        XCTAssertNotEqual(Theme.score(74), Theme.score(75), "граница «зелёного» — 75")
+        XCTAssertEqual(Theme.score(75), Theme.score(100))
+        // 55 — красный, а не жёлтый: ровно тот случай, что разъезжался.
+        XCTAssertEqual(Theme.score(55), Theme.danger)
+        // Экран и списки берут цвет из того же места.
+        XCTAssertEqual(TripHistorySection.scoreColor(55), Theme.score(55))
+    }
+
 }
 
 // MARK: - Чистка истории

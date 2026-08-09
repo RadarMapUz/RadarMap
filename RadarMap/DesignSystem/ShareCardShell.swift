@@ -2,16 +2,50 @@
 //  ShareCardShell.swift
 //  RadarMap
 //
-//  Каркас шеринг-карточки (540×675, рендерится в 1080×1350): фирменная шапка
-//  RadarMap, центральный контент, футер + метрики. Заполняют TripShareCard
-//  (поездка) и PeriodShareCard (период).
+//  Каркас шеринг-карточки: фирменная шапка RadarMap, центральный контент,
+//  футер. Заполняют TripShareCard (поездка), PeriodShareCard (период) и
+//  AchievementShareCard (достижение).
+//
+//  Два формата, потому что делятся по-разному: лента (4:5) и сторис (9:16).
+//  Сторис — не другая вёрстка, а тот же макет в более высоком поле: иначе
+//  пришлось бы поддерживать две карточки на каждую тему и они бы разъехались.
 //
 
 import SwiftUI
 
+/// Куда пойдёт картинка. Размеры — в точках рендера; ImageRenderer со scale 2
+/// даёт привычные 1080×1350 и 1080×1920.
+enum ShareFormat: String, CaseIterable, Identifiable {
+    case feed, story
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .feed:  return String(localized: "Лента")
+        case .story: return String(localized: "Сторис")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .feed:  return "square"
+        case .story: return "rectangle.portrait"
+        }
+    }
+
+    var size: CGSize {
+        switch self {
+        case .feed:  return CGSize(width: 540, height: 675)
+        case .story: return CGSize(width: 540, height: 960)
+        }
+    }
+}
+
 struct ShareCardShell<Content: View>: View {
     /// Подпись справа в шапке («дата» / «Мои итоги»).
     let subtitle: String
+    var format: ShareFormat = .feed
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -37,8 +71,11 @@ struct ShareCardShell<Content: View>: View {
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.4))
                 .padding(.vertical, 14)
+                // В сторис нижняя треть перекрыта интерфейсом соцсети —
+                // поднимаем подпись, иначе она уедет под кнопку «Отправить».
+                .padding(.bottom, format == .story ? 96 : 0)
         }
-        .frame(width: 540, height: 675)
+        .frame(width: format.size.width, height: format.size.height)
         .background(
             ZStack {
                 Theme.background
@@ -59,5 +96,33 @@ extension View {
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(.white.opacity(0.08), lineWidth: 1))
             .padding(.horizontal, 16)
+    }
+}
+
+/// Карта на шеринг-карточке: размер задаёт КОНТЕЙНЕР, картинка живёт в
+/// `overlay` и обрезается по нему.
+///
+/// Прямой путь — `Image.resizable().aspectRatio(.fill).frame(...).clipShape(...)` —
+/// на деле не обрезает: при `.fill` картинка (1032 pt шириной) вылезает за
+/// рамку, и в вертикальном формате карта уезжала за края карточки, а шапка и
+/// футер выдавливались наружу. Здесь `Color.clear` фиксирует прямоугольник
+/// первым, поэтому обрезать уже нечему сопротивляться.
+struct ShareMapFrame: View {
+    let image: UIImage
+    let height: CGFloat
+    var corner: CGFloat = 18
+
+    var body: some View {
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .overlay {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .stroke(.white.opacity(0.08), lineWidth: 1))
     }
 }

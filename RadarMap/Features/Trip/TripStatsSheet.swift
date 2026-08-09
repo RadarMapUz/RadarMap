@@ -46,7 +46,7 @@ struct TripStatsSheet: View {
     @State private var selectedRecord: TripRecord?
     /// Каскадное появление секций при открытии (одноразовое).
     @State private var appeared = false
-    @State private var sharePayload: ShareImagePayload?
+    @State private var shareSubject: ShareSubjectBox?
     @State private var showRatingInfo = false
     @State private var showFinesInfo = false
     /// Экран «Возможные штрафы» со строками проездов и пометкой «не пришёл».
@@ -296,10 +296,8 @@ struct TripStatsSheet: View {
                 { coord, name in dismiss(); route(coord, name) }
             })
         }
-        .sheet(item: $sharePayload) { payload in
-            ActivityShareSheet(image: payload.image)
-                .presentationDetents([.medium, .large])
-                .ignoresSafeArea()
+        .sheet(item: $shareSubject) { box in
+            SharePreviewSheet(subject: box.subject)
         }
     }
 
@@ -1289,20 +1287,18 @@ struct TripStatsSheet: View {
     /// Рендерим карточку в момент тапа — данные всегда свежие, открытие не тормозим.
     private func share(summary: PeriodSummary) {
         guard !summary.isEmpty else { return }
-        let periodTitle = period.title
+        // Даты, а не одно слово: «Неделя» на картинке через месяц не значит
+        // ничего, «3–9 августа» остаётся понятным всегда.
+        let periodTitle = period.rangeTitle(containing: anchor)
         let tracks = mapData.tracks
         Task {
-            let passes = TripHistory.records(env.trip.history, period: period).flatMap(\.passed)
+            let passes = TripHistory.records(env.trip.history, period: period,
+                                             anchor: anchor).flatMap(\.passed)
             let map = await TripMapSnapshot.render(
                 track: tracks.flatMap { $0 }, passes: passes,
                 size: CGSize(width: 1032, height: 420))
-            let renderer = ImageRenderer(content: PeriodShareCard(
-                summary: summary, periodTitle: periodTitle, mapImage: map))
-            renderer.scale = 2
-            renderer.proposedSize = ProposedViewSize(width: 540, height: 675)
-            if let uiImage = renderer.uiImage {
-                sharePayload = ShareImagePayload(image: uiImage)
-            }
+            shareSubject = ShareSubjectBox(
+                subject: .period(summary, title: periodTitle, map: map))
         }
     }
 

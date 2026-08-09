@@ -188,7 +188,9 @@ struct SavingsInfoSheet: View {
 
 struct AchievementInfoSheet: View {
     let badge: Achievement
+    @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
+    @State private var shareSubject: ShareSubjectBox?
 
     var body: some View {
         VStack(spacing: 14) {
@@ -227,6 +229,21 @@ struct AchievementInfoSheet: View {
                     .font(.rounded(14, .bold))
                     .foregroundStyle(Theme.success)
                     .padding(.top, 2)
+                // Делиться можно только взятой планкой: «осталось 170 км»
+                // никому не интересно, а полоса прогресса наружу читается
+                // как жалоба, а не как достижение.
+                Button {
+                    shareSubject = ShareSubjectBox(
+                        subject: .achievement(badge, lifetime: env.trip.lifetime))
+                } label: {
+                    Label("Поделиться", systemImage: "square.and.arrow.up")
+                        .font(.rounded(15, .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 18).padding(.vertical, 10)
+                        .background(Theme.accent.opacity(0.12), in: Capsule())
+                }
+                .buttonStyle(PressableStyle())
+                .padding(.top, 4)
             } else {
                 VStack(spacing: 6) {
                     ProgressView(value: badge.fraction)
@@ -243,6 +260,9 @@ struct AchievementInfoSheet: View {
         }
         .frame(maxWidth: .infinity)
         .background(Theme.background)
+        .sheet(item: $shareSubject) { box in
+            SharePreviewSheet(subject: box.subject)
+        }
         .presentationDetents([.height(320)])
         .presentationDragIndicator(.visible)
     }

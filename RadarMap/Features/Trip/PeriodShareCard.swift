@@ -14,22 +14,16 @@ struct PeriodShareCard: View {
     let summary: PeriodSummary
     let periodTitle: String
     var mapImage: UIImage? = nil
+    var format: ShareFormat = .feed
 
     var body: some View {
-        ShareCardShell(subtitle: periodTitle) {
+        ShareCardShell(subtitle: periodTitle, format: format) {
             if let mapImage {
-                Image(uiImage: mapImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(height: 210)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(.white.opacity(0.08), lineWidth: 1))
+                ShareMapFrame(image: mapImage, height: format == .story ? 330 : 210)
                     .padding(.horizontal, 16)
                     .padding(.top, 18)
+                    .padding(.bottom, 22)
             }
-
-            Spacer()
 
             // Герой: километры + дельта к прошлому периоду + кольцо рейтинга.
             HStack(alignment: .center, spacing: 12) {
@@ -82,7 +76,10 @@ struct PeriodShareCard: View {
             }
             .padding(.top, 16)
 
-            Spacer()
+            // Одна растяжка вместо двух: раньше пробелы стояли и до героя, и
+            // после чипа — при коротком наборе данных (нет рейтинга или чипа)
+            // середина карточки зияла пустотой, что и было видно на дампе.
+            Spacer(minLength: 12)
 
             HStack(spacing: 0) {
                 ShareMetric(value: "\(summary.trips)",

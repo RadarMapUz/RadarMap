@@ -226,7 +226,7 @@ struct TripDetailContent: View {
     /// следующим уровнем.
     var onOpenPass: ((PassedCamera) -> Void)? = nil
 
-    @State private var sharePayload: ShareImagePayload?
+    @State private var shareSubject: ShareSubjectBox?
     @State private var appeared = false
 
     var body: some View {
@@ -290,10 +290,8 @@ struct TripDetailContent: View {
                     .accessibilityLabel(Text("Поделиться поездкой"))
             }
         }
-        .sheet(item: $sharePayload) { payload in
-            ActivityShareSheet(image: payload.image)
-                .presentationDetents([.medium, .large])
-                .ignoresSafeArea()
+        .sheet(item: $shareSubject) { box in
+            SharePreviewSheet(subject: box.subject)
         }
     }
 
@@ -522,20 +520,15 @@ struct TripDetailContent: View {
 
     // MARK: Шеринг-карточка
 
-    /// Рендерим карточку в момент тапа — данные всегда свежие, открытие не тормозим.
-    /// Сначала асинхронно снимаем карту с треком (информативно: виден район и улицы),
-    /// затем карточку в картинку. Карта не загрузилась (офлайн) — фолбэк на неоновый трек.
+    /// Готовим тему для превью: снимаем карту с треком (виден район и улицы),
+    /// а саму карточку рисует SharePreviewSheet — там же выбирается формат.
+    /// Карта не загрузилась (офлайн) — фолбэк на неоновый трек внутри карточки.
     private func share() {
         Task {
             let map = await TripMapSnapshot.render(track: record.trackPoints,
                                                    passes: record.passed,
                                                    size: CGSize(width: 1032, height: 840))
-            let renderer = ImageRenderer(content: TripShareCard(record: record, mapImage: map))
-            renderer.scale = 2
-            renderer.proposedSize = ProposedViewSize(width: 540, height: 675)
-            if let uiImage = renderer.uiImage {
-                sharePayload = ShareImagePayload(image: uiImage)
-            }
+            shareSubject = ShareSubjectBox(subject: .trip(record, map: map))
         }
     }
 }
@@ -545,22 +538,23 @@ struct TripDetailContent: View {
 struct TripShareCard: View {
     let record: TripRecord
     var mapImage: UIImage? = nil
+    var format: ShareFormat = .feed
 
     var body: some View {
-        ShareCardShell(subtitle: record.startedAt.formatted(date: .abbreviated, time: .shortened)) {
+        ShareCardShell(subtitle: record.startedAt.formatted(date: .abbreviated, time: .shortened),
+                       format: format) {
             Group {
                 if let mapImage {
-                    Image(uiImage: mapImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    ShareMapFrame(image: mapImage, height: format == .story ? 430 : 300)
                 } else {
                     TrackCanvas(points: record.trackPoints, passes: record.passed, lineWidth: 5)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: format == .story ? 430 : 300)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(.white.opacity(0.08), lineWidth: 1))
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(.white.opacity(0.08), lineWidth: 1))
             // Рейтинг — бейджем на карте: главная цифра поездки видна сразу.
             .overlay(alignment: .topTrailing) {
                 if let score = record.score { scoreBadge(Int(score)) }
@@ -568,6 +562,14 @@ struct TripShareCard: View {
             .padding(.horizontal, 16)
             .padding(.top, 18)
             .padding(.bottom, 14)
+
+            // Вывод одной строкой: четыре равнозначных числа ничего не
+            // рассказывают, а «все камеры в лимите» — рассказывает. Тот же
+            // приём, что у карточки периода: сначала итог, потом цифры.
+            Spacer(minLength: 12)
+
+            verdictChip
+                .padding(.bottom, 16)
 
             HStack(spacing: 0) {
                 ShareMetric(value: Formatting.duration(record.duration),
@@ -582,19 +584,50 @@ struct TripShareCard: View {
                 ShareMetric(value: "\(record.camerasPassed)",
                             label: String(localized: "камер"),
                             icon: "camera.fill", tint: Theme.Types.camera)
-                ShareMetricDivider()
-                ShareMetric(value: "\(Int(record.maxSpeedKmh))",
-                            label: String(localized: "макс. км/ч"),
-                            icon: "gauge.with.dots.needle.67percent", tint: Theme.warning)
+                // Максимальной скорости здесь больше нет: карточкой хвастаются,
+                // а «104 км/ч» — это не достижение приложения про штрафы.
+                // В деталке поездки она осталась, там это факт, а не витрина.
             }
             .shareMetricsTile()
             .padding(.bottom, 4)
         }
     }
 
+    /// «Все камеры в лимите» или «Риск ≈ … · место» — главный вывод поездки.
+    @ViewBuilder private var verdictChip: some View {
+        let risk = TripHistory.fineRisk(of: record.passed)
+        if risk > 0 {
+            let worst = TripHistorySection.worstPenalty(record)
+            chip(icon: "exclamationmark.triangle.fill",
+                 text: worst.map {
+                     String(format: String(localized: "Риск ≈ %1$@ · %2$@"),
+                            Formatting.money(risk), $0.place)
+                 } ?? String(format: String(localized: "Риск ≈ %@"), Formatting.money(risk)),
+                 tint: Theme.danger)
+        } else if record.camerasPassed > 0 {
+            chip(icon: "checkmark.seal.fill",
+                 text: String(localized: "Все камеры в лимите"),
+                 tint: Theme.success)
+        }
+    }
+
+    private func chip(icon: String, text: String, tint: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .bold))
+            Text(text)
+                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 22).padding(.vertical, 12)
+        .background(tint.opacity(0.12), in: Capsule())
+    }
+
     /// Круглый бейдж рейтинга в углу карты (зелёный/жёлтый/красный по величине).
     private func scoreBadge(_ score: Int) -> some View {
-        let tint: Color = score >= 80 ? Theme.success : score >= 55 ? Theme.warning : Theme.danger
+        let tint = Theme.score(score)
         return VStack(spacing: 0) {
             Text("\(score)")
                 .font(.system(size: 24, weight: .heavy, design: .rounded))

@@ -199,11 +199,5 @@ struct TripHistorySection: View {
         return worst.map { (Int($0.points.rounded()), $0.place) }
     }
 
-    static func scoreColor(_ score: Int) -> Color {
-        switch DrivingScore.tier(for: score) {
-        case 2: return Theme.success
-        case 1: return Theme.warning
-        default: return Theme.danger
-        }
-    }
+    static func scoreColor(_ score: Int) -> Color { Theme.score(score) }
 }

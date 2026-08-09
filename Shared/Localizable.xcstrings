@@ -65,6 +65,22 @@
         }
       }
     },
+    "Отметить: штраф пришёл" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отметить: штраф пришёл"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belgilash: jarima keldi"
+          }
+        }
+      }
+    },
     "Похоже, это одна поездка" : {
       "localizations" : {
         "ru" : {
@@ -93,6 +109,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Oldingisi bilan birlashtirish"
+          }
+        }
+      }
+    },
+    "Пришло: %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пришло: %@"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kelgani: %@"
+          }
+        }
+      }
+    },
+    "Пришёл" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пришёл"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keldi"
           }
         }
       }
@@ -2941,6 +2989,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "jarima kelmadi"
+          }
+        }
+      }
+    },
+    "Штраф не пришёл" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Штраф не пришёл"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jarima kelmadi"
+          }
+        }
+      }
+    },
+    "Штраф пришёл" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Штраф пришёл"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jarima keldi"
+          }
+        }
+      }
+    },
+    "штраф пришёл" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "штраф пришёл"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "jarima keldi"
+          }
+        }
+      }
+    },
+    "штраф ≈ %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "штраф ≈ %@"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "jarima ≈ %@"
           }
         }
       }

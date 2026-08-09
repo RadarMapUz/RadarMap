@@ -30,6 +30,10 @@ nonisolated struct PassedCamera: Codable, Identifiable {
     /// превышение было, рейтинг и зона риска его видят. nil у старых записей
     /// и у непомеченных — считается в сумму.
     var fineDismissed: Bool?
+    /// «Штраф пришёл» — риск стал фактом: из «возможных» сумма уходит,
+    /// в «пришло» (finesPaid) приходит. Взаимоисключимо с fineDismissed —
+    /// следит TripHistory.settingFineOutcome.
+    var finePaid: Bool?
 
     var kind: CameraType { CameraType(raw: typeRaw) }
     var coordinate: CLLocationCoordinate2D? {
@@ -50,8 +54,21 @@ nonisolated struct PassedCamera: Codable, Identifiable {
     /// лишний совет), для суммы — нет.
     var limitIsCertain: Bool { limitKmh != nil && limitAssumed != true }
 
-    /// Идёт ли проезд в сумму возможных штрафов (не отменён владельцем).
-    var countsTowardFines: Bool { fineDismissed != true }
+    /// Судьба штрафа за проезд — что с ним стало по словам владельца.
+    /// «Ожидается» — считаем в возможные; «пришёл» — риск стал фактом;
+    /// «не пришёл» — камера не сработала, суммы нет нигде.
+    enum FineOutcome: String {
+        case pending, paid, dismissed
+    }
+
+    var fineOutcome: FineOutcome {
+        if finePaid == true { return .paid }
+        if fineDismissed == true { return .dismissed }
+        return .pending
+    }
+
+    /// Идёт ли проезд в сумму ВОЗМОЖНЫХ штрафов (не отменён и не пришёл).
+    var countsTowardFines: Bool { fineOutcome == .pending }
 }
 
 /// Остановка внутри склеенной поездки: заехал в магазин, на заправку, за человеком.
@@ -82,7 +99,7 @@ nonisolated struct TripRecord: Codable, Identifiable {
     let distanceMeters: CLLocationDistance
     let maxSpeedKmh: Double
     /// var — «штраф не пришёл» правит пометку прямо в записи (см. TripHistory
-    /// .settingFineDismissed); значимость value-семантики это не ослабляет.
+    /// .settingFineOutcome); значимость value-семантики это не ослабляет.
     var passed: [PassedCamera]
     // Точка финиша — чтобы повторить маршрут из истории (у старых записей отсутствует).
     var endLat: Double?

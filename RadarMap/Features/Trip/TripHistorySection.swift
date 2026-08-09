@@ -87,6 +87,14 @@ struct TripHistorySection: View {
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
+                    // «Почему не 100» — прямо в строке: самая дорогая камера
+                    // поездки. Раньше балл 55 объяснялся только в деталке.
+                    if let worst = Self.worstPenalty(record) {
+                        Text(verbatim: "−\(worst.points) · \(worst.place)")
+                            .font(.rounded(11, .medium))
+                            .foregroundStyle(Theme.danger)
+                            .lineLimit(1)
+                    }
                     // Склеенная поездка: сразу видно, что внутри был заезд по пути.
                     if let stops = record.stops, !stops.isEmpty {
                         Label(stopsLabel(stops.count), systemImage: "pause.circle.fill")
@@ -175,6 +183,20 @@ struct TripHistorySection: View {
         .frame(width: 44, height: 44)
         .background(Theme.background.opacity(0.6),
                     in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    /// Самая дорогая камера поездки — короткий ответ на «почему не 100».
+    /// Считается по проездам (их единицы), трек не разбирается: строка списка
+    /// не имеет права стоить дороже, чем она читается.
+    static func worstPenalty(_ record: TripRecord) -> (points: Int, place: String)? {
+        var worst: (points: Double, place: String)?
+        for pass in record.passed {
+            guard let limit = pass.limitKmh else { continue }
+            let points = DrivingScore.penaltyPoints(overKmh: pass.speedKmh - Double(limit))
+            guard points > 0, points > (worst?.points ?? 0) else { continue }
+            worst = (points, pass.location.isEmpty ? pass.kind.displayName : pass.location)
+        }
+        return worst.map { (Int($0.points.rounded()), $0.place) }
     }
 
     static func scoreColor(_ score: Int) -> Color {

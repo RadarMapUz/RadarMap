@@ -3,3 +3,7 @@ schemes:
 - RadarMap
 - RadarMapWidgets
 - RadarWatch
+targets:
+- RadarMap
+- RadarMapWidgets
+- RadarWatch

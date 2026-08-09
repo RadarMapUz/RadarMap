@@ -33,6 +33,9 @@ nonisolated struct TripDay: Codable, Identifiable, Equatable {
     var cleanPasses = 0
     var overPasses = 0
     var fineRisk: Double = 0
+    /// Пришедшие штрафы дня. Опционал не от неуверенности, а ради Codable:
+    /// синтезированный декодер требует все ключи, а файлы дней уже на дисках.
+    var finePaid: Double? = nil
     var maxSpeedKmh: Double = 0
     /// Взвешенная по дистанции сумма баллов и её вес — чтобы средний балл за
     /// период считался так же, как weightedRating по записям.
@@ -79,10 +82,14 @@ nonisolated enum TripDayBook {
                 day.overPasses += 1
                 // Деньги — только по достоверному лимиту: сумма в сумах,
                 // названная по догадке о классе дороги, — это ложь про деньги.
-                // «Штраф не пришёл» тоже убирает из денег (но не из поведения);
-                // условие обязано совпадать с unfolded — иначе починка дня
-                // «снять старую запись, положить новую» разъедется на сумме.
+                // Судьба штрафа делит деньги («ожидается» — риск, «пришёл» —
+                // факт, «не пришёл» — никуда); условия обязаны совпадать с
+                // unfolded — иначе починка дня «снять старую запись, положить
+                // новую» разъедется на суммах.
                 if pass.limitIsCertain, pass.countsTowardFines { day.fineRisk += fine }
+                if pass.limitIsCertain, pass.finePaid == true {
+                    day.finePaid = (day.finePaid ?? 0) + fine
+                }
                 day.overByHour[calendar.component(.hour, from: pass.date)] += 1
             } else {
                 day.cleanPasses += 1
@@ -127,6 +134,9 @@ nonisolated enum TripDayBook {
                 // Зеркально folded: вычитаем ровно то, что туда попало.
                 if pass.limitIsCertain, pass.countsTowardFines {
                     day.fineRisk = max(0, day.fineRisk - fine)
+                }
+                if pass.limitIsCertain, pass.finePaid == true {
+                    day.finePaid = max(0, (day.finePaid ?? 0) - fine)
                 }
                 let hour = calendar.component(.hour, from: pass.date)
                 day.overByHour[hour] = max(0, day.overByHour[hour] - 1)
@@ -186,6 +196,7 @@ nonisolated enum TripDayBook {
             result.cleanPasses += day.cleanPasses
             result.overPasses += day.overPasses
             result.fineRisk += day.fineRisk
+            result.finesPaid += day.finePaid ?? 0
             result.maxSpeedKmh = max(result.maxSpeedKmh, day.maxSpeedKmh)
             scoreSum += day.scoreSum
             scoreWeight += day.scoreWeight

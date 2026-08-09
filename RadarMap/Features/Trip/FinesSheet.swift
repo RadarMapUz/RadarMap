@@ -4,7 +4,7 @@
 //
 //  «Возможные штрафы» периода: каждый проезд со штрафной ступенью — строкой
 //  с суммой и кнопкой «Не пришёл». Пометка убирает сумму из всех сводок
-//  (запись + дневной агрегат, см. TripStats.setFineDismissed) и отменяется
+//  (запись + дневной агрегат, см. TripStats.setFineOutcome) и отменяется
 //  той же кнопкой — деньги списываются только рукой владельца.
 //
 //  В список идут только проезды с ДОСТОВЕРНЫМ лимитом — как в fineRisk:
@@ -40,10 +40,11 @@ struct FinesSheet: View {
 
     var body: some View {
         // Пересчёт на каждую пометку: env.trip.history — @Observable, тап по
-        // «Не пришёл» обновляет и сумму в шапке, и вид строки.
+        // «Пришёл»/«Не пришёл» обновляет и шапку, и вид строки.
         let items = Self.items(env.trip.history, period: period, anchor: anchor)
-        let activeSum = items.filter(\.pass.countsTowardFines).reduce(0.0) { $0 + $1.fine }
-        let dismissedCount = items.count { !$0.pass.countsTowardFines }
+        let pendingSum = items.filter(\.pass.countsTowardFines).reduce(0.0) { $0 + $1.fine }
+        let paidSum = items.filter { $0.pass.fineOutcome == .paid }.reduce(0.0) { $0 + $1.fine }
+        let dismissedCount = items.count { $0.pass.fineOutcome == .dismissed }
 
         NavigationStack {
             ScrollView {
@@ -51,7 +52,7 @@ struct FinesSheet: View {
                     if items.isEmpty {
                         emptyHint
                     } else {
-                        header(sum: activeSum, total: items.count,
+                        header(sum: pendingSum, paid: paidSum, total: items.count,
                                dismissed: dismissedCount)
                         ForEach(items) { item in
                             row(item)
@@ -95,7 +96,7 @@ struct FinesSheet: View {
 
     // MARK: - Шапка
 
-    private func header(sum: Double, total: Int, dismissed: Int) -> some View {
+    private func header(sum: Double, paid: Double, total: Int, dismissed: Int) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(period.caption)
                 .font(.rounded(11, .medium))
@@ -109,6 +110,12 @@ struct FinesSheet: View {
             Text(String(format: String(localized: "Проездов со ступенью штрафа: %lld"), total))
                 .font(.rounded(11))
                 .foregroundStyle(Theme.textTertiary)
+            if paid > 0 {
+                Label(String(format: String(localized: "Пришло: %@"), Formatting.money(paid)),
+                      systemImage: "envelope.badge.fill")
+                    .font(.rounded(11, .medium))
+                    .foregroundStyle(Theme.warning)
+            }
             if dismissed > 0 {
                 Label(String(format: String(localized: "Не пришло: %lld — в сумме не считаются"),
                              dismissed),
@@ -125,8 +132,8 @@ struct FinesSheet: View {
     // MARK: - Строка проезда
 
     private func row(_ item: FineItem) -> some View {
-        let active = item.pass.countsTowardFines
-        let expired = active && Date().timeIntervalSince(item.pass.date)
+        let outcome = item.pass.fineOutcome
+        let expired = outcome == .pending && Date().timeIntervalSince(item.pass.date)
             > Double(AppConfig.fineExpiresDays) * 86400
         return VStack(spacing: 10) {
             // Верх — сам проезд, тап открывает его карту.
@@ -167,15 +174,20 @@ struct FinesSheet: View {
 
             Divider().overlay(Theme.stroke)
 
-            // Низ — деньги и пометка. Кнопка РЯДОМ с кнопкой проезда, не внутри:
-            // вложенные кнопки в SwiftUI ненадёжны (см. riskCard в Итогах).
-            HStack(spacing: 10) {
+            // Низ — деньги и судьба штрафа. Кнопки РЯДОМ с кнопкой проезда,
+            // не внутри: вложенные кнопки в SwiftUI ненадёжны (см. riskCard).
+            HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(String(format: String(localized: "риск ≈ %@"),
-                                Formatting.money(item.fine)))
+                    Text(outcome == .paid
+                         ? String(format: String(localized: "штраф ≈ %@"),
+                                  Formatting.money(item.fine))
+                         : String(format: String(localized: "риск ≈ %@"),
+                                  Formatting.money(item.fine)))
                         .font(.rounded(13, .bold))
-                        .strikethrough(!active)
-                        .foregroundStyle(active ? Theme.danger : Theme.textTertiary)
+                        .strikethrough(outcome == .dismissed)
+                        .foregroundStyle(outcome == .pending ? Theme.danger
+                                       : outcome == .paid ? Theme.warning
+                                       : Theme.textTertiary)
                     if expired {
                         Text(String(format: String(localized: "Прошло больше %lld дней — обычно уже не приходит"),
                                     AppConfig.fineExpiresDays))
@@ -184,31 +196,49 @@ struct FinesSheet: View {
                     }
                 }
                 Spacer(minLength: 8)
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    withAnimation(.snappy(duration: 0.3)) {
-                        env.trip.setFineDismissed(active, passID: item.pass.id,
-                                                  tripID: item.record.id)
-                    }
-                } label: {
-                    Label(active ? String(localized: "Не пришёл")
-                                 : String(localized: "Вернуть"),
-                          systemImage: active ? "checkmark.circle" : "arrow.uturn.backward.circle")
-                        .font(.rounded(12, .semibold))
-                        .foregroundStyle(active ? Theme.success : Theme.textSecondary)
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background((active ? Theme.success : Theme.textSecondary).opacity(0.12),
-                                    in: Capsule())
-                        .contentShape(Capsule())
+                if outcome == .pending {
+                    outcomeButton(item, set: .paid,
+                                  title: String(localized: "Пришёл"),
+                                  symbol: "envelope.badge", tint: Theme.warning,
+                                  hint: String(localized: "Отметить: штраф пришёл"))
+                    outcomeButton(item, set: .dismissed,
+                                  title: String(localized: "Не пришёл"),
+                                  symbol: "checkmark.circle", tint: Theme.success,
+                                  hint: String(localized: "Отметить: штраф не пришёл"))
+                } else {
+                    outcomeButton(item, set: .pending,
+                                  title: String(localized: "Вернуть"),
+                                  symbol: "arrow.uturn.backward.circle",
+                                  tint: Theme.textSecondary,
+                                  hint: String(localized: "Вернуть штраф в сумму"))
                 }
-                .buttonStyle(PressableStyle())
-                .accessibilityLabel(Text(active
-                                         ? String(localized: "Отметить: штраф не пришёл")
-                                         : String(localized: "Вернуть штраф в сумму")))
             }
         }
         .statCard(padding: 14, radius: Theme.cornerMedium)
-        .opacity(active ? 1 : 0.6)
+        .opacity(outcome == .dismissed ? 0.6 : 1)
+    }
+
+    /// Кнопка судьбы штрафа — один стиль на три состояния.
+    private func outcomeButton(_ item: FineItem, set outcome: PassedCamera.FineOutcome,
+                               title: String, symbol: String, tint: Color,
+                               hint: String) -> some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(.snappy(duration: 0.3)) {
+                env.trip.setFineOutcome(outcome, passID: item.pass.id,
+                                        tripID: item.record.id)
+            }
+        } label: {
+            Label(title, systemImage: symbol)
+                .font(.rounded(12, .semibold))
+                .foregroundStyle(tint)
+                .padding(.horizontal, 11).padding(.vertical, 7)
+                .background(tint.opacity(0.12), in: Capsule())
+                .contentShape(Capsule())
+                .lineLimit(1)
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityLabel(Text(hint))
     }
 
     // MARK: - Пустое состояние и сноска

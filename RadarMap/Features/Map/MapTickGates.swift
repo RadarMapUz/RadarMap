@@ -104,6 +104,17 @@ struct MobileConfirmGate: View {
     }
 }
 
+/// «Что это было?» на карте — та же дисциплина, что у MobileConfirmGate:
+/// пер-тиковую isApproachingCamera читает гейт, а не body MapScreen.
+struct ReportRefineGate: View {
+    @Environment(AppEnvironment.self) private var env
+    var dashboardShown: Bool
+
+    var body: some View {
+        ReportRefineBar(isCovered: env.location.isApproachingCamera || dashboardShown)
+    }
+}
+
 /// Проезд чужой передвижной отметки → вопрос «ещё стоял?». Тик читается
 /// здесь: onChange(locationTick) прямо в MapScreen был второй независимой
 /// подпиской body на тик — с ним тишина follow ничего не давала.

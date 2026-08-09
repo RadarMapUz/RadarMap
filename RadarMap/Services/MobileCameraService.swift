@@ -16,7 +16,7 @@ import Observation
 @MainActor
 @Observable
 final class MobileCameraService {
-    enum ReportResult { case created, confirmed, failed }
+    enum ReportResult { case created, confirmed, amended, failed }
 
     private(set) var reports: [Camera] = []
     private(set) var isRefreshing = false
@@ -92,6 +92,10 @@ final class MobileCameraService {
         let type: String?      // старый сервер поля не шлёт — трактуем как радар
         let up: Int?
         let created: Double?
+        /// Подтверждена ли независимым водителем (другое устройство и адрес).
+        /// Старый сервер поля не шлёт — nil трактуем как «подтверждена», чтобы
+        /// не рисовать призраками всю карту до обновления сервера.
+        let confirmed: Bool?
     }
     private struct MobileResponse: Decodable { let reports: [APIReport] }
 
@@ -99,6 +103,8 @@ final class MobileCameraService {
     struct Confirmation {
         let upvotes: Int
         let created: Date
+        /// false — точка на испытательном сроке, её ещё никто не подтвердил.
+        let confirmed: Bool
     }
     @ObservationIgnored private var confirmations: [Int: Confirmation] = [:]
 
@@ -116,7 +122,8 @@ final class MobileCameraService {
                 let kind = ReportKind(rawValue: report.type ?? "") ?? .radar
                 let id = Self.idOffset + report.id
                 fresh[id] = Confirmation(upvotes: report.up ?? 0,
-                                         created: Date(timeIntervalSince1970: report.created ?? 0))
+                                         created: Date(timeIntervalSince1970: report.created ?? 0),
+                                         confirmed: report.confirmed ?? true)
                 return Camera(
                     id: id,
                     region: kind.cameraType.displayName,
@@ -127,7 +134,8 @@ final class MobileCameraService {
                     lon: report.lon,
                     type: kind.cameraType.sourceString,
                     violations: Camera.defaultViolations(forType: kind.cameraType.sourceString),
-                    needsReview: nil
+                    needsReview: nil,
+                    mobileConfirmed: report.confirmed ?? true
                 )
             }
             confirmations = fresh
@@ -141,7 +149,7 @@ final class MobileCameraService {
 
     func report(at coordinate: CLLocationCoordinate2D,
                 kind: ReportKind = .radar) async -> ReportResult {
-        struct Response: Decodable { let id: Int; let merged: Bool }
+        struct Response: Decodable { let id: Int; let merged: Bool; let amended: Bool? }
         // Краудсорс погашен пультом — отправлять некуда, и честнее сказать это
         // сразу, чем ждать таймаута сети.
         guard isEnabled else { return .failed }
@@ -152,6 +160,9 @@ final class MobileCameraService {
             lastSent = ReportGuard.Sent(kind: kind, latitude: coordinate.latitude,
                                         longitude: coordinate.longitude, at: Date())
             await refresh()
+            // amended: сервер счёл это уточнением типа СВОЕЙ свежей отметки
+            // (другой тип в 400 м / 10 мин) и переписал её, а не создал вторую.
+            if response.amended == true { return .amended }
             return response.merged ? .confirmed : .created
         } catch {
             // Пользователь увидит «не удалось» — причина (таймаут/4xx) обязана
@@ -178,6 +189,7 @@ final class MobileCameraService {
             switch self {
             case .sent(.created):   return String(localized: "Принято, спасибо")
             case .sent(.confirmed): return String(localized: "Подтвердили, спасибо")
+            case .sent(.amended):   return String(localized: "Тип уточнён")
             case .sent(.failed):    return String(localized: "Не отправилось, нет связи")
             case .refused(.duplicate):  return String(localized: "Уже отметили здесь")
             case .refused(.noPosition): return String(localized: "Ждём спутники")
@@ -203,7 +215,43 @@ final class MobileCameraService {
             return .refused(refusal)
         }
         guard let coordinate else { return .refused(.noPosition) }
-        return .sent(await report(at: coordinate, kind: kind))
+        let result = await report(at: coordinate, kind: kind)
+        // Окно уточнения типа — только для СВОЕЙ свежесозданной точки:
+        // merged-точка чужая, и «уточнение» родило бы рядом вторую сущность.
+        if kind == .radar, result == .created {
+            refineOffer = lastSent
+        }
+        return .sent(result)
+    }
+
+    // MARK: - «Что это было?» после быстрой отметки
+
+    /// Предложение уточнить тип только что созданной отметки. Показывается
+    /// несколько секунд (AppConfig.reportRefineSeconds); молчание оставляет
+    /// «радар» — он покрывает почти все случаи.
+    private(set) var refineOffer: ReportGuard.Sent?
+
+    func dismissRefine() { refineOffer = nil }
+
+    /// Второй тап: «это была тренога/пост/ДТП». Сервер переписывает тип ТОЙ ЖЕ
+    /// точки (amend) — новая не создаётся, срок жизни не продлевается.
+    func refine(to kind: ReportKind, offer: ReportGuard.Sent) async -> Bool {
+        struct Response: Decodable { let id: Int; let merged: Bool; let amended: Bool? }
+        guard isEnabled else { return false }
+        do {
+            let payload = ["lat": offer.latitude, "lon": offer.longitude,
+                           "device": deviceID, "type": kind.rawValue] as [String: Any]
+            let response = try await api.post("api/report", json: payload, as: Response.self)
+            // Дубль-гейту важен итоговый тип, а время оставляем исходное:
+            // окно «а вдруг не нажалось» считается от первого тапа.
+            lastSent = ReportGuard.Sent(kind: kind, latitude: offer.latitude,
+                                        longitude: offer.longitude, at: offer.at)
+            await refresh()
+            return response.amended == true || response.merged
+        } catch {
+            Log.network.error("уточнение типа не ушло: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
     }
 
     // MARK: - «Радар ещё стоит?» после проезда
@@ -230,20 +278,51 @@ final class MobileCameraService {
         guard let camera = pendingConfirm else { return }
         pendingConfirm = nil
         guard let stillThere else { return }
-        Task { await vote(cameraID: camera.id, stillThere: stillThere) }
+        // origin="pass" — голос после реального проезда: сервер хранит пометку,
+        // модератор в админке отличает его от тапа в карточке с дивана.
+        Task { await vote(cameraID: camera.id, stillThere: stillThere, origin: "pass") }
     }
 
     /// value: true = «радар на месте» (продлевает жизнь), false = «радара нет».
-    func vote(cameraID: Int, stillThere: Bool) async {
+    /// `origin` — происхождение голоса ("pass" — после проезда), уходит серверу.
+    func vote(cameraID: Int, stillThere: Bool, origin: String = "") async {
         struct Response: Decodable { let ok: Bool }
-        let payload = ["id": cameraID - Self.idOffset, "device": deviceID,
+        var payload = ["id": cameraID - Self.idOffset, "device": deviceID,
                        "value": stillThere ? 1 : -1] as [String: Any]
+        if !origin.isEmpty { payload["kind"] = origin }
         // Голос — best-effort: не дошёл — не страшно, сервер дедуплицирует повторы.
         let _: Response? = try? await api.post("api/vote", json: payload, as: Response.self)
         await refresh()
     }
 
     func isMobile(_ camera: Camera) -> Bool { camera.id >= Self.idOffset }
+
+    #if DEBUG
+    /// Скриншот-хук `-demoMobileTrust`: подтверждённая отметка и призрак на
+    /// испытательном сроке плюс окно «Что это было?» — без сети и без
+    /// настоящего POST в общую базу (фейк на проде увидят живые водители).
+    func seedTrustDemo(near coordinate: CLLocationCoordinate2D) {
+        func demo(_ id: Int, dLat: Double, dLon: Double, confirmed: Bool) -> Camera {
+            Camera(id: Self.idOffset + id,
+                   region: CameraType.mobileRadar.displayName, city: "",
+                   location: String(format: String(localized: "Отмечен водителями, исчезнет ~%@"),
+                                    Self.expiryText(Date().addingTimeInterval(3600).timeIntervalSince1970)),
+                   lat: coordinate.latitude + dLat, lon: coordinate.longitude + dLon,
+                   type: CameraType.mobileRadar.sourceString,
+                   violations: Camera.defaultViolations(forType: CameraType.mobileRadar.sourceString),
+                   needsReview: nil, mobileConfirmed: confirmed)
+        }
+        reports = [demo(900_001, dLat: 0.004, dLon: 0.0015, confirmed: true),
+                   demo(900_002, dLat: 0.004, dLon: -0.0035, confirmed: false)]
+        confirmations = [
+            Self.idOffset + 900_001: Confirmation(upvotes: 3, created: Date(), confirmed: true),
+            Self.idOffset + 900_002: Confirmation(upvotes: 0, created: Date(), confirmed: false),
+        ]
+        store?.setMobileCameras(reports)
+        refineOffer = ReportGuard.Sent(kind: .radar, latitude: coordinate.latitude,
+                                       longitude: coordinate.longitude, at: Date())
+    }
+    #endif
 
     // MARK: - Внутреннее
 

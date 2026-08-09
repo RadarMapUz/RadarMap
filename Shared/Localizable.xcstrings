@@ -33,6 +33,86 @@
         }
       }
     },
+    "Возможно, %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Возможно, %@"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ehtimol, %@"
+          }
+        }
+      }
+    },
+    "Да" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Да"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ha"
+          }
+        }
+      }
+    },
+    "Ещё не подтверждена" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ещё не подтверждена"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hali tasdiqlanmagan"
+          }
+        }
+      }
+    },
+    "Не отправилось, нет связи" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не отправилось, нет связи"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yuborilmadi, aloqa yo'q"
+          }
+        }
+      }
+    },
+    "Нет" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yo'q"
+          }
+        }
+      }
+    },
     "Открыть спидометр" : {
       "localizations" : {
         "ru" : {
@@ -81,6 +161,38 @@
         }
       }
     },
+    "Отметка ставится в движении" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отметка ставится в движении"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belgi harakat paytida qo'yiladi"
+          }
+        }
+      }
+    },
+    "Подтвердили, спасибо" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подтвердили, спасибо"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tasdiqlandi, rahmat"
+          }
+        }
+      }
+    },
     "Похоже, это одна поездка" : {
       "localizations" : {
         "ru" : {
@@ -109,6 +221,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Oldingisi bilan birlashtirish"
+          }
+        }
+      }
+    },
+    "Принято, спасибо" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Принято, спасибо"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qabul qilindi, rahmat"
           }
         }
       }
@@ -337,6 +465,22 @@
         }
       }
     },
+    "Рейтинг, километры и выводы за период. Как считается рейтинг" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Рейтинг, километры и выводы за период. Как считается рейтинг"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Davr uchun reyting, kilometrlar va xulosalar. Reyting qanday hisoblanadi"
+          }
+        }
+      }
+    },
     "Скрыть детали периода" : {
       "localizations" : {
         "ru" : {
@@ -365,6 +509,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Davr tafsilotlari"
+          }
+        }
+      }
+    },
+    "Спасибо!" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Спасибо!"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rahmat!"
           }
         }
       }
@@ -669,6 +829,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Radar hali ham turibdimi?"
+          }
+        }
+      }
+    },
+    "Тип отметки уточнён" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тип отметки уточнён"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belgi turi aniqlashtirildi"
+          }
+        }
+      }
+    },
+    "Тип отметки уточнён." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тип отметки уточнён."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belgi turi aniqlashtirildi."
+          }
+        }
+      }
+    },
+    "Тип уточнён" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Тип уточнён"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turi aniqlashtirildi"
           }
         }
       }
@@ -2897,6 +3105,22 @@
         }
       }
     },
+    "Уже отметили здесь" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Уже отметили здесь"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu yerda allaqachon belgilangan"
+          }
+        }
+      }
+    },
     "Умно" : {
       "localizations" : {
         "ru" : {
@@ -2973,6 +3197,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Toza"
+          }
+        }
+      }
+    },
+    "Что это было?" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Что это было?"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu nima edi?"
           }
         }
       }

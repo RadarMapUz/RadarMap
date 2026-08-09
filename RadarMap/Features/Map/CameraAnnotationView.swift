@@ -38,6 +38,11 @@ struct CameraAnnotationView: View {
         tier == .background ? AppConfig.mapBackgroundCameraOpacity : 1
     }
 
+    /// Отметка водителей на испытательном сроке: никто независимый её ещё не
+    /// подтвердил. Рисуем призраком со знаком вопроса — слух не должен
+    /// выглядеть на карте так же уверенно, как проверенная точка.
+    private var isGhost: Bool { camera.isUnconfirmedMobile }
+
     var body: some View {
         Group {
             if compact && !selected {
@@ -56,7 +61,7 @@ struct CameraAnnotationView: View {
     private var dot: some View {
         let size: CGFloat = tier == .background ? 8 : 12
         return Circle()
-            .fill(camera.kind.tint)
+            .fill(camera.kind.tint.opacity(isGhost ? 0.45 : 1))
             .frame(width: size, height: size)
             .overlay(Circle().stroke(.white.opacity(0.75), lineWidth: 1))
             .frame(width: 30, height: 30)       // тап-мишень больше самой точки
@@ -105,21 +110,31 @@ struct CameraAnnotationView: View {
             }
             directionCone(radius: selected ? 30 : 24)
             Circle()
-                .fill(camera.kind.tint.gradient)
+                .fill(camera.kind.tint.opacity(isGhost ? 0.5 : 1).gradient)
                 .frame(width: selected ? 38 : 28, height: selected ? 38 : 28)
-                .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 2))
+                .overlay(Circle().stroke(.white.opacity(0.9),
+                                         style: StrokeStyle(lineWidth: 2,
+                                                            dash: isGhost ? [3, 3] : [])))
                 // Тень только у выбранного маркера: shadow = offscreen-проход рендера,
                 // на ~220 аннотациях при панорамировании это заметно.
                 .shadow(color: camera.kind.tint.opacity(selected ? 0.7 : 0), radius: selected ? 9 : 0)
 
             Image(systemName: camera.kind.symbolName)
                 .font(.rounded(selected ? 16 : 13, .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.white.opacity(isGhost ? 0.8 : 1))
 
             if camera.isApproximate {
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.warning)
+                    .background(Circle().fill(.black).frame(width: 10, height: 10))
+                    .offset(x: 13, y: -13)
+            } else if isGhost {
+                // «?» на плече — та же позиция, что у бейджа неточной камеры:
+                // у краудсорса needsReview не бывает, слот всегда свободен.
+                Image(systemName: "questionmark.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textSecondary)
                     .background(Circle().fill(.black).frame(width: 10, height: 10))
                     .offset(x: 13, y: -13)
             }

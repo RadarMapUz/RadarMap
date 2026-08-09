@@ -158,6 +158,183 @@ class APITest(unittest.TestCase):
         conn.close()
         self.assertEqual(left, 0, "голоса-сироты должны чиститься")
 
+    # --- жизненный цикл доверия ---
+
+    def _expires(self, rid):
+        conn = sqlite3.connect(api.DB_PATH)
+        expires = conn.execute("SELECT expires FROM reports WHERE id = ?",
+                               (rid,)).fetchone()[0]
+        conn.close()
+        return expires
+
+    def _feed_report(self, rid):
+        _, feed = _call(self.port, "GET", "/api/mobile")
+        return next(r for r in feed["reports"] if r["id"] == rid)
+
+    def test_new_report_lives_probation_not_full_ttl(self):
+        """Неподтверждённая отметка живёт испытательный срок: фейк, которого
+        никто не подтвердил, умирает сам — без модерации и кворума."""
+        now = time.time()
+        _, body = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "creator"},
+                        ip="10.2.0.1")
+        life = self._expires(body["id"]) - now
+        self.assertAlmostEqual(life, api.PROBATION_TTLS["radar"], delta=30)
+        self.assertFalse(self._feed_report(body["id"])["confirmed"])
+
+    def test_same_ip_votes_do_not_confirm_or_extend(self):
+        """Ротация UUID с одного адреса не превращает слух в факт: лайки со
+        своего же IP не продлевают жизнь и не дают флаг confirmed."""
+        _, body = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "creator"},
+                        ip="10.2.1.1")
+        rid = body["id"]
+        before = self._expires(rid)
+        for fake in ("rot1", "rot2", "rot3"):
+            status, _ = _call(self.port, "POST", "/api/vote",
+                              {"id": rid, "device": fake, "value": 1}, ip="10.2.1.1")
+            self.assertEqual(status, 200)
+        self.assertEqual(self._expires(rid), before,
+                         "свой адрес продлил собственную отметку")
+        self.assertFalse(self._feed_report(rid)["confirmed"])
+
+    def test_independent_confirmation_grants_full_ttl(self):
+        """Один голос с другого устройства И адреса — полный срок типа."""
+        now = time.time()
+        _, body = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "creator"},
+                        ip="10.2.2.1")
+        rid = body["id"]
+        _call(self.port, "POST", "/api/vote",
+              {"id": rid, "device": "stranger", "value": 1}, ip="10.2.2.2")
+        self.assertGreaterEqual(self._expires(rid) - now,
+                                api.REPORT_TTLS["radar"] - 30,
+                                "подтверждённая точка должна получить полный срок")
+        self.assertTrue(self._feed_report(rid)["confirmed"])
+
+    def test_merge_same_ip_keeps_probation_other_ip_confirms(self):
+        """Merge-подтверждение подчиняется тому же правилу независимости:
+        пассажир на том же Wi-Fi голос даёт, а испытательный срок не снимает."""
+        _, body = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "creator"},
+                        ip="10.2.3.1")
+        rid = body["id"]
+        before = self._expires(rid)
+        _, merged = _call(self.port, "POST", "/api/report",
+                          {"lat": 41.3101, "lon": 69.2501, "device": "passenger"},
+                          ip="10.2.3.1")
+        self.assertTrue(merged["merged"])
+        self.assertEqual(self._expires(rid), before,
+                         "merge с того же адреса продлил отметку")
+        _, merged = _call(self.port, "POST", "/api/report",
+                          {"lat": 41.3102, "lon": 69.2502, "device": "driver2"},
+                          ip="10.2.3.2")
+        self.assertTrue(merged["merged"])
+        self.assertTrue(self._feed_report(rid)["confirmed"],
+                        "независимый merge должен подтверждать")
+        self.assertGreater(self._expires(rid), before)
+
+    def test_downvote_from_new_ip_cuts_life_once(self):
+        """Дизлайк с нового адреса срезает 30 мин; повторы с того же адреса или
+        устройства не режут второй раз — и три дизлайка с ДВУХ адресов точку
+        не скрывают (кворум остаётся кворумом)."""
+        _, body = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "creator"},
+                        ip="10.2.4.1")
+        rid = body["id"]
+        start = self._expires(rid)
+        _call(self.port, "POST", "/api/vote",
+              {"id": rid, "device": "h1", "value": -1}, ip="10.2.4.2")
+        self.assertAlmostEqual(self._expires(rid), start - api.DOWN_PENALTY, delta=5)
+        # тот же адрес, другой UUID — не режет
+        _call(self.port, "POST", "/api/vote",
+              {"id": rid, "device": "h2", "value": -1}, ip="10.2.4.2")
+        self.assertAlmostEqual(self._expires(rid), start - api.DOWN_PENALTY, delta=5)
+        # то же устройство повторно — не режет
+        _call(self.port, "POST", "/api/vote",
+              {"id": rid, "device": "h1", "value": -1}, ip="10.2.4.2")
+        self.assertAlmostEqual(self._expires(rid), start - api.DOWN_PENALTY, delta=5)
+        # новый адрес — второй срез, но не скрытие (адресов два, кворум — три)
+        _, last = _call(self.port, "POST", "/api/vote",
+                        {"id": rid, "device": "h3", "value": -1}, ip="10.2.4.3")
+        self.assertAlmostEqual(self._expires(rid), start - 2 * api.DOWN_PENALTY,
+                               delta=5)
+        self.assertTrue(last["active"], "два адреса — не кворум на скрытие")
+
+    def test_amend_retypes_own_report_without_second_point(self):
+        """Второй тап с другим типом — уточнение своей отметки, не вторая точка.
+        Amend обязан стоять ДО лимита «120 с между отметками», иначе уточнение
+        сразу после «Радар!» получало бы 429."""
+        _, first = _call(self.port, "POST", "/api/report",
+                         {"lat": 41.31, "lon": 69.25, "device": "d"},
+                         ip="10.2.5.1")
+        status, second = _call(self.port, "POST", "/api/report",
+                               {"lat": 41.3101, "lon": 69.2501, "device": "d",
+                                "type": "tripod"}, ip="10.2.5.1")
+        self.assertEqual(status, 200)
+        self.assertTrue(second.get("amended"), "уточнение типа не сработало")
+        self.assertEqual(second["id"], first["id"])
+        conn = sqlite3.connect(api.DB_PATH)
+        count, rtype = conn.execute(
+            "SELECT COUNT(*), MAX(type) FROM reports").fetchone()
+        conn.close()
+        self.assertEqual(count, 1, "amend родил вторую точку")
+        self.assertEqual(rtype, "tripod")
+
+    def test_amend_is_only_for_own_device(self):
+        """Чужое устройство с другим типом рядом — новая сущность, не retype
+        чужой отметки (иначе конкурент перекрашивал бы радары в ДТП)."""
+        _call(self.port, "POST", "/api/report",
+              {"lat": 41.31, "lon": 69.25, "device": "d1"}, ip="10.2.6.1")
+        _, body = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.3101, "lon": 69.2501, "device": "d2",
+                         "type": "post"}, ip="10.2.6.2")
+        self.assertNotIn("amended", body)
+        self.assertFalse(body["merged"], "пост не должен сливаться с радаром")
+        conn = sqlite3.connect(api.DB_PATH)
+        count = conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0]
+        conn.close()
+        self.assertEqual(count, 2)
+
+    def test_per_ip_active_cap(self):
+        """Один адрес не может держать на карте больше MAX_ACTIVE_PER_IP живых
+        точек — суточный кап этому не мешал."""
+        for i in range(api.MAX_ACTIVE_PER_IP):
+            status, _ = _call(self.port, "POST", "/api/report",
+                              {"lat": 41.0 + i * 0.01, "lon": 69.25,
+                               "device": f"p{i}"}, ip="10.2.7.7")
+            self.assertEqual(status, 200, f"точка {i} должна пройти")
+        status, _ = _call(self.port, "POST", "/api/report",
+                          {"lat": 42.5, "lon": 69.25, "device": "extra"},
+                          ip="10.2.7.7")
+        self.assertEqual(status, 429, "кап активных точек по адресу не сработал")
+        status, _ = _call(self.port, "POST", "/api/report",
+                          {"lat": 42.5, "lon": 69.25, "device": "other"},
+                          ip="10.2.7.8")
+        self.assertEqual(status, 200, "чужой адрес страдает от чужого капа")
+
+    def test_vote_kind_pass_is_stored_garbage_is_not_fatal(self):
+        """kind="pass" (голос после реального проезда) сохраняется для админки;
+        мусор в поле не должен убивать сам голос."""
+        _, body = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "creator"},
+                        ip="10.2.8.1")
+        rid = body["id"]
+        status, _ = _call(self.port, "POST", "/api/vote",
+                          {"id": rid, "device": "v1", "value": 1, "kind": "pass"},
+                          ip="10.2.8.2")
+        self.assertEqual(status, 200)
+        status, _ = _call(self.port, "POST", "/api/vote",
+                          {"id": rid, "device": "v2", "value": 1,
+                           "kind": {"a": 1}}, ip="10.2.8.3")
+        self.assertEqual(status, 200, "мусорный kind уронил голос")
+        conn = sqlite3.connect(api.DB_PATH)
+        kinds = dict(conn.execute(
+            "SELECT device, kind FROM votes WHERE report_id = ?", (rid,)).fetchall())
+        conn.close()
+        self.assertEqual(kinds["v1"], "pass")
+        self.assertEqual(kinds["v2"], "")
+
     # --- камеры и фидбек ---
 
     def test_camera_report_dedup_per_device(self):

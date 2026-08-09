@@ -151,6 +151,11 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
     /// Рядом стоит камера обратного направления: стороны дороги поделены между
     /// двумя камерами, каждая смотрит свою.
     let twin: Bool?
+    /// Краудсорсинговая точка: подтвердил ли её независимый водитель (сервер,
+    /// /api/mobile). nil — не краудсорс (базовая или своя камера). false —
+    /// точка на испытательном сроке: рисуется призраком, голос говорит
+    /// «возможно». Предупреждаем в любом случае — тишина хуже.
+    let mobileConfirmed: Bool?
 
     /// Стороны дороги ДОКАЗАННО поделены — только тогда геометрии можно глушить
     /// камеру за то, что мы едем по обратной проезжей части.
@@ -188,6 +193,10 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
     /// стороны. Одно правило на карту телефона и на карту машины.
     var markerDirection: Int? { allowsDirectionGate ? dir : nil }
 
+    /// Отметка водителей, которую ещё никто независимый не подтвердил:
+    /// маркер-призрак и «возможно» в голосе. Для некраудсорса всегда false.
+    var isUnconfirmedMobile: Bool { mobileConfirmed == false }
+
     /// Класс дороги в разобранном виде.
     var roadClass: RoadClass { RoadClass(raw: cls) }
 
@@ -195,7 +204,8 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
          lat: Double, lon: Double, type: String, violations: [String],
          needsReview: Bool?, axis: Int? = nil, dir: Int? = nil,
          lanes: Int? = nil, cls: String? = nil, bridge: Bool? = nil,
-         road: [Int]? = nil, split: Bool? = nil, twin: Bool? = nil) {
+         road: [Int]? = nil, split: Bool? = nil, twin: Bool? = nil,
+         mobileConfirmed: Bool? = nil) {
         self.dir = dir
         self.lanes = lanes
         self.cls = cls
@@ -203,6 +213,7 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
         self.road = road
         self.split = split
         self.twin = twin
+        self.mobileConfirmed = mobileConfirmed
         self.id = id
         self.region = region
         self.city = city
@@ -235,6 +246,9 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
         road = try c.decodeIfPresent([Int].self, forKey: .road)
         split = try c.decodeIfPresent(Bool.self, forKey: .split)
         twin = try c.decodeIfPresent(Bool.self, forKey: .twin)
+        // В bundled/OTA-базе поля нет (не краудсорс) — nil; живые отметки
+        // строит MobileCameraService из /api/mobile, не через Codable.
+        mobileConfirmed = try c.decodeIfPresent(Bool.self, forKey: .mobileConfirmed)
         violations = try c.decodeIfPresent([String].self, forKey: .violations)
             ?? Self.defaultViolations(forType: type)
     }

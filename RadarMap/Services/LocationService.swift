@@ -1154,6 +1154,13 @@ final class LocationService: NSObject {
             phrase = String(format: String(localized: "%@ %@, %lld метров"),
                             camera.kind.displayName, directionPhrase, rounded)
         }
+        // Неподтверждённая отметка водителей: предупреждаем всегда (тишина
+        // хуже лишнего сигнала), но слух не выдаём за факт — фраза начинается
+        // с «возможно». Групповую фразу не трогаем: там несколько камер.
+        if camera.isUnconfirmedMobile, groupCount == 0 {
+            phrase = String(format: String(localized: "Возможно, %@"),
+                            phrase.prefix(1).lowercased() + phrase.dropFirst())
+        }
         // Срочно — полная картина: своя скорость и лимит. Иначе (трасса) —
         // только лимит: «здесь 60» помогает, перечисление своей скорости при
         // спокойной езде лишнее.

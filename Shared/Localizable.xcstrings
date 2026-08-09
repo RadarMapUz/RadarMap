@@ -33,6 +33,86 @@
         }
       }
     },
+    "Балл поездки: %lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Балл поездки: %lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Safar bali: %lld"
+          }
+        }
+      }
+    },
+    "Без камер и превышений" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Без камер и превышений"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kameralar ham, oshirish ham yo'q"
+          }
+        }
+      }
+    },
+    "Без штрафов" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Без штрафов"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jarimalarsiz"
+          }
+        }
+      }
+    },
+    "без штрафов" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "без штрафов"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "jarimalarsiz"
+          }
+        }
+      }
+    },
+    "в движении" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "в движении"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "harakatda"
+          }
+        }
+      }
+    },
     "Возможно, %@" : {
       "localizations" : {
         "ru" : {
@@ -65,6 +145,22 @@
         }
       }
     },
+    "Динамика по неделям" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Динамика по неделям"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Haftalar dinamikasi"
+          }
+        }
+      }
+    },
     "Ещё не подтверждена" : {
       "localizations" : {
         "ru" : {
@@ -77,6 +173,86 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hali tasdiqlanmagan"
+          }
+        }
+      }
+    },
+    "Ждут ответа: %lld" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ждут ответа: %lld"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Javob kutmoqda: %lld"
+          }
+        }
+      }
+    },
+    "Ждут ответа: %lld — отметьте, пришёл ли штраф" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ждут ответа: %lld — отметьте, пришёл ли штраф"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Javob kutmoqda: %lld — jarima keldimi, belgilang"
+          }
+        }
+      }
+    },
+    "Календарь месяца" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Календарь месяца"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oy kalendari"
+          }
+        }
+      }
+    },
+    "Камер: %lld — все в лимите" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Камер: %lld — все в лимите"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kameralar: %lld — barchasi cheklov ichida"
+          }
+        }
+      }
+    },
+    "Начните поездку — соберём статистику" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Начните поездку — соберём статистику"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Safarni boshlang — statistika yig'amiz"
           }
         }
       }
@@ -97,6 +273,22 @@
         }
       }
     },
+    "Недели без поездок пропущены" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Недели без поездок пропущены"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Safarsiz haftalar o'tkazib yuborilgan"
+          }
+        }
+      }
+    },
     "Нет" : {
       "localizations" : {
         "ru" : {
@@ -109,6 +301,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Yo'q"
+          }
+        }
+      }
+    },
+    "Объединить с поездкой в %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Объединить с поездкой в %@"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ dagi safar bilan birlashtirish"
           }
         }
       }
@@ -177,6 +385,22 @@
         }
       }
     },
+    "Отметьте: штраф пришёл или нет" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отметьте: штраф пришёл или нет"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belgilang: jarima keldimi yo'qmi"
+          }
+        }
+      }
+    },
     "Подтвердили, спасибо" : {
       "localizations" : {
         "ru" : {
@@ -189,6 +413,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tasdiqlandi, rahmat"
+          }
+        }
+      }
+    },
+    "Поездка сохранена" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поездка сохранена"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Safar saqlandi"
+          }
+        }
+      }
+    },
+    "Последняя поездка" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Последняя поездка"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oxirgi safar"
           }
         }
       }
@@ -221,6 +477,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Oldingisi bilan birlashtirish"
+          }
+        }
+      }
+    },
+    "Похоже, это продолжение прошлой" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Похоже, это продолжение прошлой"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu avvalgi safarning davomi ko'rinadi"
           }
         }
       }
@@ -465,6 +737,38 @@
         }
       }
     },
+    "рейтинг %1$lld (%2$@)" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "рейтинг %1$lld (%2$@)"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "reyting %1$lld (%2$@)"
+          }
+        }
+      }
+    },
+    "Рейтинг и километры недели" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Рейтинг и километры недели"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hafta reytingi va kilometrlari"
+          }
+        }
+      }
+    },
     "Рейтинг, километры и выводы за период. Как считается рейтинг" : {
       "localizations" : {
         "ru" : {
@@ -477,6 +781,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Davr uchun reyting, kilometrlar va xulosalar. Reyting qanday hisoblanadi"
+          }
+        }
+      }
+    },
+    "с превышением" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "с превышением"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "oshirish bilan"
           }
         }
       }
@@ -509,6 +829,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Davr tafsilotlari"
+          }
+        }
+      }
+    },
+    "Скрыть итог поездки" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Скрыть итог поездки"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Safar yakunini yashirish"
           }
         }
       }
@@ -829,6 +1165,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Radar hali ham turibdimi?"
+          }
+        }
+      }
+    },
+    "тап — день подробно" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "тап — день подробно"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "bosing — kun batafsil"
           }
         }
       }
@@ -3197,6 +3549,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Toza"
+          }
+        }
+      }
+    },
+    "чисто" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "чисто"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "toza"
           }
         }
       }
@@ -10878,6 +11246,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tovush va tebranish kamera haqida doim ogohlantiradi — ovoz alohida. «Avto» shahar va trassani o‘zi ajratadi: shaharda qisqa ibora, trassada to‘liq, tezlikni oshirsangiz — baland ovozda va cheklov bilan. Har kuni xotirjam o‘tadigan kameralaringiz haqida ilova jim turadi va faqat tebranish bilan belgilaydi — lekin tezlikni oshirib yaqinlashsangiz, gapiradi."
+          }
+        }
+      }
+    },
+    "≈ %.1f млн сум" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "≈ %.1f млн сум"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "≈ %.1f mln so'm"
+          }
+        }
+      }
+    },
+    "≈ %lld тыс сум" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "≈ %lld тыс сум"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "≈ %lld ming so'm"
           }
         }
       }

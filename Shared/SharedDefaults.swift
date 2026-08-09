@@ -19,6 +19,10 @@ enum SharedDefaults {
         static let tripCameras = "widget.tripCameras"
         static let tripMaxSpeed = "widget.tripMaxSpeed"
         static let tripDistance = "widget.tripDistance"
+        static let weekDistance = "widget.weekDistance"
+        static let weekTrips = "widget.weekTrips"
+        static let weekRating = "widget.weekRating"
+        static let weekFineRisk = "widget.weekFineRisk"
         static let updatedAt = "widget.updatedAt"
     }
 
@@ -29,6 +33,14 @@ enum SharedDefaults {
         var tripCameras = 0
         var tripMaxSpeed = 0.0
         var tripDistance = 0.0
+        /// Текущая календарная неделя — главное лицо виджета: статистика,
+        /// видимая вообще без открытия приложения.
+        var weekDistance = 0.0
+        var weekTrips = 0
+        /// −1 — рейтинга нет (на неделе не ездили): UserDefaults не отличает
+        /// «нет значения» от нуля, а ноль здесь был бы враньём про худшую езду.
+        var weekRating = -1
+        var weekFineRisk = 0.0
         var updatedAt: Date?
     }
 
@@ -40,6 +52,10 @@ enum SharedDefaults {
         store.set(snapshot.tripCameras, forKey: Keys.tripCameras)
         store.set(snapshot.tripMaxSpeed, forKey: Keys.tripMaxSpeed)
         store.set(snapshot.tripDistance, forKey: Keys.tripDistance)
+        store.set(snapshot.weekDistance, forKey: Keys.weekDistance)
+        store.set(snapshot.weekTrips, forKey: Keys.weekTrips)
+        store.set(snapshot.weekRating, forKey: Keys.weekRating)
+        store.set(snapshot.weekFineRisk, forKey: Keys.weekFineRisk)
         store.set(Date(), forKey: Keys.updatedAt)
     }
 
@@ -52,6 +68,13 @@ enum SharedDefaults {
             tripCameras: store.integer(forKey: Keys.tripCameras),
             tripMaxSpeed: store.double(forKey: Keys.tripMaxSpeed),
             tripDistance: store.double(forKey: Keys.tripDistance),
+            weekDistance: store.double(forKey: Keys.weekDistance),
+            weekTrips: store.integer(forKey: Keys.weekTrips),
+            // Ключа ещё нет (первый запуск после обновления) — integer даёт 0,
+            // а это «настоящий ноль» рейтинга; отличаем отсутствием ключа.
+            weekRating: store.object(forKey: Keys.weekRating) == nil
+                ? -1 : store.integer(forKey: Keys.weekRating),
+            weekFineRisk: store.double(forKey: Keys.weekFineRisk),
             updatedAt: store.object(forKey: Keys.updatedAt) as? Date
         )
     }

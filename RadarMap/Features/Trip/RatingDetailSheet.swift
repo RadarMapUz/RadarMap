@@ -65,6 +65,7 @@ struct RatingDetailSheet: View {
                         hero
                         formulaCard(proxy: proxy)
                         baselineCard
+                        trendCard
                         sourcesCard
                         contributionsCard
                         understandCard
@@ -121,6 +122,68 @@ struct RatingDetailSheet: View {
         else { return nil }
         return TripRatingContext(contribution: item, periodCaption: period.caption,
                                  periodDistance: summary.distance)
+    }
+
+    // MARK: - Динамика по неделям
+
+    /// «Я расту или падаю?» — рейтинг последних недель одной картинкой, ответ,
+    /// которого нет внутри одного окна. Считается из дневных агрегатов, поэтому
+    /// видит и месяцы, чьи полные записи давно вычищены. Меньше двух непустых
+    /// недель — не показываем: тренд из одной точки не тренд.
+    @ViewBuilder private var trendCard: some View {
+        let weeks = RatingTrend.weekly(days: env.trip.days,
+                                       count: AppConfig.ratingTrendWeeks)
+        let filled = weeks.filter { $0.rating != nil }
+        if filled.count >= 2 {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader(title: String(localized: "Динамика по неделям")) {
+                    if let last = filled.last?.rating,
+                       let previous = filled.dropLast().last?.rating,
+                       last != previous {
+                        Text(last > previous ? "+\(last - previous)" : "\(last - previous)")
+                            .font(.rounded(12, .bold).monospacedDigit())
+                            .foregroundStyle(last > previous ? Theme.success : Theme.danger)
+                    }
+                }
+                Chart(filled) { week in
+                    BarMark(x: .value("Неделя", week.start, unit: .weekOfYear),
+                            y: .value("Рейтинг", week.rating ?? 0),
+                            // Фиксированная ширина: при двух заполненных неделях
+                            // ratio растягивал колонки в плиты на полэкрана.
+                            width: .fixed(20))
+                        // Цвет колонки = цвет балла в списках: одна шкала на всё.
+                        .foregroundStyle(TripHistorySection
+                            .scoreColor(week.rating ?? 0).gradient)
+                        .opacity(week.id == filled.last?.id ? 1 : 0.65)
+                        .cornerRadius(4)
+                        .annotation(position: .top, spacing: 3) {
+                            // Число над колонкой — пока колонок мало и цифры
+                            // не слипаются; на длинном тренде ось скажет сама.
+                            if filled.count <= 8 {
+                                Text("\(week.rating ?? 0)")
+                                    .font(.rounded(9, .bold).monospacedDigit())
+                                    .foregroundStyle(Theme.textSecondary)
+                            }
+                        }
+                }
+                .chartYScale(domain: 0...112)
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .weekOfYear,
+                                              count: filled.count <= 4 ? 1 : 2)) { _ in
+                        AxisValueLabel(format: .dateTime.day().month(.defaultDigits),
+                                       centered: true)
+                            .foregroundStyle(Theme.textTertiary)
+                            .font(.rounded(9, .medium))
+                    }
+                }
+                .chartYAxis(.hidden)
+                .frame(height: 104)
+                Text("Недели без поездок пропущены")
+                    .font(.rounded(10))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .statCard()
+        }
     }
 
     // MARK: - Герой

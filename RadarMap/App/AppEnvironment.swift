@@ -7,6 +7,7 @@
 
 import Foundation
 import Observation
+import WidgetKit
 
 @MainActor
 @Observable
@@ -164,23 +165,30 @@ final class AppEnvironment {
         // читают как ответ на вопрос «что происходит в конце поездки», и ответ
         // обязан быть один.
         let usage = self.usage
-        trip.onTripFinished = { [weak trip, weak notifications, weak usage] in
+        trip.onTripFinished = { [weak self, weak trip, weak notifications, weak usage] in
             guard let trip else { return }
             // История приходит от новых к старым — только что закрытая поездка первая.
             if let last = trip.history.first {
                 usage?.noteTrip(distanceMeters: last.distanceMeters)
                 usage?.note { $0.passes += last.camerasPassed }
             }
+            // Виджет — сразу: автозавершение в фоне иначе оставляло бы его
+            // с цифрами «до поездки» до следующего открытия приложения.
+            self?.refreshWidgetSnapshot()
             guard let notifications else { return }
             // Тот же расчёт, что на экране Итогов: пуш и экран не имеют права
             // разойтись в цифрах (раньше здесь смешивались окна 7 и 30 дней).
             let week = TripHistory.summary(days: trip.days, history: trip.history, period: .week)
             guard !week.isEmpty else { return }
+            // Дельта — к прошлой календарной неделе, зависшие штрафы — по всей
+            // истории: пуш повторяет то, что показал бы экран.
+            let previous = TripHistory.summary(
+                days: trip.days, history: trip.history, period: .week,
+                anchor: Date().addingTimeInterval(-7 * 86400))
             notifications.scheduleWeeklyDigest(
-                distance: week.distance,
-                cameras: week.cameras,
-                rating: week.rating,
-                cleanMonth: week.overPasses == 0
+                week: week,
+                previousRating: previous.rating,
+                pendingChecks: TripHistory.pendingFineNudge(trip.history)?.count ?? 0
             )
         }
 
@@ -228,5 +236,27 @@ final class AppEnvironment {
         location.bootstrap()
         mobile.startPolling()
         motion.start()
+    }
+
+    /// Снимок для домашнего виджета: база, последняя поездка и текущая неделя.
+    /// Зовётся при уходе в фон (RootView) и в конце каждой поездки — виджет
+    /// показывает статистику недели вообще без открытия приложения, и после
+    /// автозавершения в кармане она обязана быть свежей.
+    func refreshWidgetSnapshot() {
+        let week = TripHistory.summary(days: trip.days, history: trip.history,
+                                       period: .week)
+        SharedDefaults.write(SharedDefaults.Snapshot(
+            dbCount: cameras.cameras.count,
+            dbVersion: cameras.dbVersion,
+            mobileCount: cameras.mobile.count,
+            tripCameras: trip.camerasPassed,
+            tripMaxSpeed: trip.maxSpeedKmh,
+            tripDistance: trip.distanceMeters,
+            weekDistance: week.distance,
+            weekTrips: week.trips,
+            weekRating: week.rating ?? -1,
+            weekFineRisk: week.fineRisk
+        ))
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }

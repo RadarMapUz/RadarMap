@@ -123,9 +123,23 @@ struct TripStatsSheet: View {
                             .entrance(1, appeared)
                         riskCard(summary: summary)
                             .entrance(2, appeared)
+                        pendingNudgeRow
+                            .entrance(2, appeared)
                         mapCard
                             .entrance(3, appeared)
                             .id("map")
+                        // Календарь — только в «Месяце»: неделя видна и в
+                        // столбиках, а месяц по клеткам читается одним взглядом.
+                        if period == .month {
+                            MonthCalendarCard(days: trip.days, anchor: anchor) { day in
+                                withAnimation(.snappy(duration: 0.3)) {
+                                    period = .day
+                                    anchor = day
+                                }
+                            }
+                            .entrance(3, appeared)
+                            .id("calendar")
+                        }
                         periodDetails(summary: summary)
                             .entrance(3, appeared)
                         tripsSection(trip: trip, proxy: proxy)
@@ -145,10 +159,17 @@ struct TripStatsSheet: View {
                 .padding(20)
                 #if DEBUG
                 .onAppear {
-                    // Скриншот-автоматизация: прокрутить к истории.
-                    guard ProcessInfo.processInfo.arguments.contains("-scrollHistory") else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        withAnimation { proxy.scrollTo("history", anchor: .top) }
+                    // Скриншот-автоматизация: прокрутить к истории или календарю.
+                    let args = ProcessInfo.processInfo.arguments
+                    if args.contains("-scrollHistory") {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            withAnimation { proxy.scrollTo("history", anchor: .top) }
+                        }
+                    }
+                    if args.contains("-scrollCalendar") {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            withAnimation { proxy.scrollTo("calendar", anchor: .center) }
+                        }
                     }
                 }
                 #endif
@@ -579,6 +600,47 @@ struct TripStatsSheet: View {
                     .accessibilityLabel(Text("Как считаются штрафы"))
                 }
             }
+        }
+    }
+
+    /// «Ждут ответа: N» — зависшие денежные ожидания старше месяца, по всей
+    /// истории, а не окну периода: зависший штраф остаётся зависшим, в каком
+    /// периоде на него ни смотри. Тап открывает штрафы того периода, где лежит
+    /// самый старый, — иначе кнопка вела бы в окно, где их не видно.
+    @ViewBuilder private var pendingNudgeRow: some View {
+        if let nudge = TripHistory.pendingFineNudge(env.trip.history) {
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(.snappy(duration: 0.3)) {
+                    period = .month
+                    anchor = nudge.oldest
+                }
+                showFines = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "envelope.badge.clock")
+                        .font(.rounded(13, .bold))
+                        .foregroundStyle(Theme.warning)
+                        .frame(width: 30, height: 30)
+                        .background(Theme.warning.opacity(0.12), in: Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(format: String(localized: "Ждут ответа: %lld"),
+                                    nudge.count))
+                            .font(.rounded(14, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                        Text("Отметьте: штраф пришёл или нет")
+                            .font(.rounded(11))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.rounded(12, .bold))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                .statCard(padding: 12, radius: Theme.cornerMedium)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 

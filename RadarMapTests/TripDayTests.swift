@@ -153,4 +153,73 @@ final class TripDayTests: XCTestCase {
         let decoded = try JSONDecoder().decode([TripDay].self, from: data)
         XCTAssertEqual(decoded, days)
     }
+    // MARK: - Динамика по неделям (RatingTrend)
+
+    /// Недельный тренд: взвешенная средняя каждой недели, пустая неделя — nil,
+    /// порядок старые → новые, количество колонок ровно как запрошено.
+    func testWeeklyTrendAggregatesByCalendarWeek() {
+        let history = [
+            record(daysAgo: 0.5, km: 10, score: 90),
+            record(daysAgo: 1.0, km: 30, score: 70),
+            // −9 дней — прошлая календарная неделя при любом её начале.
+            record(daysAgo: 9, km: 20, score: 100),
+        ]
+        let days = TripDayBook.rebuilt(from: history, calendar: utc)
+        let weeks = RatingTrend.weekly(days: days, count: 4, calendar: utc, now: now)
+
+        XCTAssertEqual(weeks.count, 4)
+        XCTAssertTrue(weeks.map(\.start) == weeks.map(\.start).sorted(),
+                      "порядок обязан быть старые → новые")
+        // Текущая неделя: (90·10к + 70·30к) / 40к = 75.
+        XCTAssertEqual(weeks.last?.rating, 75)
+        XCTAssertEqual(weeks.last?.distanceMeters ?? 0, 40_000, accuracy: 1)
+        // Прошлая неделя — одна поездка сотней.
+        XCTAssertEqual(weeks[weeks.count - 2].rating, 100)
+        // Недели без поездок — честный nil, не ноль.
+        XCTAssertNil(weeks[0].rating)
+        XCTAssertNil(weeks[1].rating)
+    }
+
+    /// Понедельник не двоится: день, равный началу следующей недели, не должен
+    /// попасть в предыдущую (DateInterval.contains включает конец — тренд
+    /// фильтрует полуинтервалом).
+    func testWeeklyTrendDoesNotDoubleCountWeekBoundary() {
+        guard let week = utc.dateInterval(of: .weekOfYear, for: now) else {
+            return XCTFail("не построился интервал недели")
+        }
+        // Поездка ровно в начале ТЕКУЩЕЙ недели.
+        let start = week.start.addingTimeInterval(3600)
+        let boundary = TripRecord(id: 1, startedAt: start,
+                                  endedAt: start.addingTimeInterval(1800),
+                                  distanceMeters: 10_000, maxSpeedKmh: 90, passed: [],
+                                  score: 80)
+        let days = TripDayBook.rebuilt(from: [boundary], calendar: utc)
+        let weeks = RatingTrend.weekly(days: days, count: 2, calendar: utc, now: now)
+        XCTAssertNil(weeks[0].rating, "поездка начала недели утекла в предыдущую")
+        XCTAssertEqual(weeks[1].rating, 80)
+    }
+
+    // MARK: - Сетка месяца (MonthGrid)
+
+    /// Все дни месяца присутствуют ровно по разу, строки по 7 клеток,
+    /// выравнивание по первому дню недели календаря.
+    func testMonthGridLaysOutAllDaysOnce() {
+        let weeks = MonthGrid.weeks(containing: now, calendar: utc)
+        XCTAssertFalse(weeks.isEmpty)
+        for week in weeks {
+            XCTAssertEqual(week.count, 7, "ряд календаря обязан быть из 7 клеток")
+        }
+        let daysInGrid = weeks.flatMap { $0 }.compactMap { $0 }
+        guard let month = utc.dateInterval(of: .month, for: now) else {
+            return XCTFail("не построился интервал месяца")
+        }
+        let expected = utc.dateComponents([.day], from: month.start, to: month.end).day ?? 0
+        XCTAssertEqual(daysInGrid.count, expected, "дней в сетке не столько, сколько в месяце")
+        XCTAssertEqual(Set(daysInGrid).count, expected, "день не имеет права повторяться")
+        // Первая непустая клетка — первое число, выровненное по дню недели.
+        let leading = weeks[0].prefix(while: { $0 == nil }).count
+        let weekday = utc.component(.weekday, from: month.start)
+        XCTAssertEqual(leading, (weekday - utc.firstWeekday + 7) % 7)
+    }
+
 }

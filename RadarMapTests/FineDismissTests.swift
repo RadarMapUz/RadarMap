@@ -181,4 +181,24 @@ final class FineDismissTests: XCTestCase {
         days = TripDayBook.folded(restored, into: days, calendar: utc)
         XCTAssertEqual(days[0].fineRisk, fine, accuracy: 0.01)
     }
+    /// Напоминание «отметьте исход»: считаются только денежные ожидания старше
+    /// порога; «пришёл»/«не пришёл», свежие и чистые проезды — нет. Дата —
+    /// самого старого зависшего: по ней напоминание открывает нужный период.
+    func testPendingFineNudgeCountsOnlyStalePending() {
+        let stale = pass(1, speed: 88, limit: 60, at: now.addingTimeInterval(-40 * day))
+        let older = pass(2, speed: 92, limit: 60, at: now.addingTimeInterval(-50 * day))
+        let fresh = pass(3, speed: 92, limit: 60, at: now.addingTimeInterval(-day))
+        let clean = pass(4, speed: 55, limit: 60, at: now.addingTimeInterval(-40 * day))
+        let record = record(daysAgo: 50, passes: [stale, older, fresh, clean])
+
+        let nudge = TripHistory.pendingFineNudge([record], olderThanDays: 30, now: now)
+        XCTAssertEqual(nudge?.count, 2)
+        XCTAssertEqual(nudge?.oldest, older.date)
+
+        var resolved = TripHistory.settingFineOutcome(record, passID: stale.id, outcome: .paid)!
+        resolved = TripHistory.settingFineOutcome(resolved, passID: older.id, outcome: .dismissed)!
+        XCTAssertNil(TripHistory.pendingFineNudge([resolved], olderThanDays: 30, now: now),
+                     "решённый штраф не имеет права напоминать о себе")
+    }
+
 }

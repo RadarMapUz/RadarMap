@@ -32,7 +32,7 @@ description: Полный проход качества RadarMap — архит�
    потом **обязательно `severity: "warning"`**: предупреждения concurrency/deprecation
    считаются долгом, а не шумом (последний проход чинил ровно их). `pattern`/`glob`
    сужают лог до нужного файла вместо чтения всего.
-4. `mcp__xcode__RunAllTests` — весь тест-план (**480 XCTest**: гео, скор, треки, лимиты,
+4. `mcp__xcode__RunAllTests` — весь тест-план (**484 XCTest**: гео, скор, треки, лимиты,
    алерт-пайплайн, периоды, склейка и штрафы). Разбор падений — `mcp__xcode__GetTestList`
    (полный grep-friendly список в `fullTestListPath`) + `mcp__xcode__RunSomeTests` по
    конкретному классу/тесту (таргет `RadarMapTests`, идентификатор `RoadCorridorTests`

@@ -212,3 +212,79 @@ nonisolated enum TripDayBook {
         return result
     }
 }
+
+/// Динамика рейтинга по календарным неделям — ответ на «я расту или падаю?»,
+/// которого нет внутри одного периода. Считается из дневных агрегатов, поэтому
+/// показывает и месяцы, чьи полные записи давно вычищены. Время — параметром,
+/// как везде в статистике (воспроизводимо в тестах).
+nonisolated enum RatingTrend {
+    struct Week: Identifiable, Equatable {
+        /// Начало календарной недели.
+        let start: Date
+        /// nil — на неделе не ездили; такую колонку график показывает пустой,
+        /// а не нулём: ноль был бы враньём про худшую езду в жизни.
+        let rating: Int?
+        let distanceMeters: Double
+        var id: Date { start }
+    }
+
+    /// Последние `count` календарных недель, старые → новые (порядок оси).
+    ///
+    /// Границы недель — полуинтервалы [start, end): `DateInterval.contains`
+    /// включает конец, и день, равный началу следующей недели, посчитался бы
+    /// в обеих. Для сводок периода это редкий пограничный шум, для графика
+    /// из 12 колонок — заметное враньё, поэтому здесь фильтр свой.
+    static func weekly(days: [TripDay], count: Int,
+                       calendar: Calendar = .current, now: Date = Date()) -> [Week] {
+        guard count > 0,
+              var interval = calendar.dateInterval(of: .weekOfYear, for: now)
+        else { return [] }
+        var result: [Week] = []
+        for _ in 0..<count {
+            let window = days.filter { $0.day >= interval.start && $0.day < interval.end }
+            let score = window.reduce((sum: 0.0, weight: 0.0)) {
+                ($0.sum + $1.scoreSum, $0.weight + $1.scoreWeight)
+            }
+            result.append(Week(
+                start: interval.start,
+                rating: score.weight > 0 ? Int((score.sum / score.weight).rounded()) : nil,
+                distanceMeters: window.reduce(0) { $0 + $1.distanceMeters }))
+            guard let previous = calendar.date(byAdding: .weekOfYear, value: -1,
+                                               to: interval.start),
+                  let previousInterval = calendar.dateInterval(of: .weekOfYear,
+                                                               for: previous)
+            else { break }
+            interval = previousInterval
+        }
+        return result.reversed()
+    }
+}
+
+/// Сетка календаря месяца: строки-недели по 7 клеток, nil — дни соседних
+/// месяцев (клетка рисуется пустой). Чистая раскладка для карточки «Месяц»
+/// в Итогах; выравнивание — по первому дню недели календаря пользователя.
+nonisolated enum MonthGrid {
+    static func weeks(containing anchor: Date,
+                      calendar: Calendar = .current) -> [[Date?]] {
+        guard let month = calendar.dateInterval(of: .month, for: anchor) else { return [] }
+        let firstWeekday = calendar.component(.weekday, from: month.start)
+        let leading = (firstWeekday - calendar.firstWeekday + 7) % 7
+        var weeks: [[Date?]] = []
+        var row: [Date?] = Array(repeating: nil, count: leading)
+        var cursor = month.start
+        while cursor < month.end {
+            row.append(cursor)
+            if row.count == 7 {
+                weeks.append(row)
+                row = []
+            }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        if !row.isEmpty {
+            row.append(contentsOf: Array(repeating: nil, count: 7 - row.count))
+            weeks.append(row)
+        }
+        return weeks
+    }
+}

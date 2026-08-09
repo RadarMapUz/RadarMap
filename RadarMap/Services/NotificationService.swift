@@ -119,22 +119,38 @@ final class NotificationService: NSObject {
 
     /// Пуш «Итоги недели» в воскресенье 19:00. Перепланируется после каждой поездки
     /// со свежими цифрами; без поездок на неделе дайджест сам не появится (не спамим).
-    func scheduleWeeklyDigest(distance: Double, cameras: Int, rating: Int?, cleanMonth: Bool) {
+    /// Дельта — к прошлой календарной неделе, зависшие штрафы — отдельной строкой:
+    /// это единственное напоминание отметить «пришёл/не пришёл», и оно едет в уже
+    /// существующем пуше, а не новым спамом.
+    func scheduleWeeklyDigest(week: PeriodSummary, previousRating: Int?,
+                              pendingChecks: Int) {
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [Self.digestID])
         guard settings.weeklyDigest else { return }
 
         let content = UNMutableNotificationContent()
         content.title = String(localized: "Итоги недели 🚗")
-        var parts = [Formatting.distance(distance),
-                     String(format: String(localized: "%lld камер"), cameras)]
-        if let rating {
-            parts.append(String(format: String(localized: "рейтинг %lld"), rating))
+        var parts = [Formatting.distance(week.distance),
+                     String(format: String(localized: "%lld камер"), week.cameras)]
+        if let rating = week.rating {
+            if let previousRating, rating != previousRating {
+                let delta = rating - previousRating
+                parts.append(String(format: String(localized: "рейтинг %1$lld (%2$@)"),
+                                    rating, delta > 0 ? "+\(delta)" : "\(delta)"))
+            } else {
+                parts.append(String(format: String(localized: "рейтинг %lld"), rating))
+            }
         }
-        if cleanMonth {
-            parts.append(String(localized: "0 штрафов за месяц"))
+        parts.append(week.fineRisk > 0
+                     ? String(format: String(localized: "риск ≈ %@"),
+                              Formatting.money(week.fineRisk))
+                     : String(localized: "без штрафов"))
+        var body = parts.joined(separator: " · ")
+        if pendingChecks > 0 {
+            body += "\n" + String(format: String(
+                localized: "Ждут ответа: %lld — отметьте, пришёл ли штраф"), pendingChecks)
         }
-        content.body = parts.joined(separator: " · ")
+        content.body = body
         content.sound = .default
 
         var when = DateComponents()

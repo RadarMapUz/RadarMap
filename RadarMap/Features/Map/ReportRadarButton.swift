@@ -129,6 +129,84 @@ struct ReportRadarButton: View {
     }
 }
 
+/// «Что это было?» — необязательное уточнение типа сразу после «Радар!».
+///
+/// Отметка уже ушла (радар покрывает почти все случаи) — это второй тап для
+/// точности: тренога, пост или ДТП живут на сервере разными сроками и рисуются
+/// разными значками. Один тап — тип переписан у ТОЙ ЖЕ точки (amend), молчание
+/// честно оставляет «радар». Плашка живёт несколько секунд и уходит сама —
+/// уточнение не должно требовать взгляда на экран, оно лишь пользуется тем,
+/// что взгляд и так упал на подтверждение отправки.
+struct ReportRefineBar: View {
+    @Environment(AppEnvironment.self) private var env
+    /// Экран занят предупреждением о камере — плашка ждёт (см. MobileConfirmBar:
+    /// отсчёт стартует с onAppear, ожидание бесплатно).
+    var isCovered = false
+
+    @State private var task: Task<Void, Never>?
+
+    var body: some View {
+        if let offer = env.mobile.refineOffer, !isCovered {
+            HStack(spacing: 8) {
+                Text("Что это было?")
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 4)
+                option(.tripod, offer: offer)
+                option(.post, offer: offer)
+                option(.accident, offer: offer)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .background(.ultraThinMaterial,
+                        in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
+                .stroke(Theme.stroke, lineWidth: 1))
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .onAppear {
+                task?.cancel()
+                task = Task {
+                    try? await Task.sleep(for: .seconds(AppConfig.reportRefineSeconds))
+                    guard !Task.isCancelled else { return }
+                    // Время вышло — молчание оставляет «радар».
+                    withAnimation { env.mobile.dismissRefine() }
+                }
+            }
+            .onDisappear { task?.cancel() }
+        }
+    }
+
+    private func option(_ kind: ReportKind, offer: ReportGuard.Sent) -> some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation { env.mobile.dismissRefine() }
+            Task {
+                // Итог звучит: молчаливый тап за рулём читается как несработавший.
+                if await env.mobile.refine(to: kind, offer: offer) {
+                    env.alerts.speak(kind.title)
+                } else {
+                    env.alerts.speak(String(localized: "Не отправилось, нет связи"))
+                }
+            }
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: kind.symbol)
+                    .font(.rounded(15, .bold))
+                Text(kind.title)
+                    .font(.rounded(9, .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(.white)
+            .frame(width: 62, height: 44)
+            .background(kind.cameraType.tint.gradient,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// «Радар ещё стоит?» — вопрос после проезда чужой отметки.
 ///
 /// Появляется сам, живёт двадцать секунд и молча уходит. Молчание — это не
@@ -184,6 +262,9 @@ struct MobileConfirmBar: View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withAnimation { env.mobile.answerConfirm(stillThere: value) }
+            // Ответ должен ощущаться работой, а не тапом в пустоту: короткое
+            // спасибо голосом — за рулём на экран не смотрят.
+            env.alerts.speak(String(localized: "Спасибо!"))
         } label: {
             Text(title)
                 .font(.rounded(15, .bold))

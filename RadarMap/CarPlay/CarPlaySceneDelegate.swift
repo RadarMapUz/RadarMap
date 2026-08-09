@@ -348,6 +348,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             switch result {
             case .created:   showToast(String(localized: "Отметка на карте — спасибо!"))
             case .confirmed: showToast(String(localized: "Отметку подтвердили — спасибо!"))
+            case .amended:   showToast(String(localized: "Тип отметки уточнён"))
             case .failed:    showToast(String(localized: "Не отправилось: нет связи"))
             }
         }

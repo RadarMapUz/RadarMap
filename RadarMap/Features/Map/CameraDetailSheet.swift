@@ -68,12 +68,21 @@ struct CameraDetailSheet: View {
                         .foregroundStyle(Theme.accent)
                 }
                 // Бейдж доверия: сколько водителей подтвердило краудсорс-отметку.
+                // Неподтверждённую не наряжаем в зелёное: точка на испытательном
+                // сроке — и карточка честно говорит, что это пока слух.
                 if let trust = env.mobile.confirmation(for: camera.id) {
-                    Label(String(format: String(localized: "Подтвердили: %@ водит."),
-                                 String(trust.upvotes + 1)),
-                          systemImage: "person.2.fill")
-                        .font(.rounded(12, .semibold))
-                        .foregroundStyle(Theme.success)
+                    if trust.confirmed {
+                        Label(String(format: String(localized: "Подтвердили: %@ водит."),
+                                     String(trust.upvotes + 1)),
+                              systemImage: "person.2.fill")
+                            .font(.rounded(12, .semibold))
+                            .foregroundStyle(Theme.success)
+                    } else {
+                        Label(String(localized: "Ещё не подтверждена"),
+                              systemImage: "questionmark.circle")
+                            .font(.rounded(12, .semibold))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
                 }
             }
             Spacer(minLength: 0)

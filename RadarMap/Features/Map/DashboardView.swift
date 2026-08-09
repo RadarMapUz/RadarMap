@@ -91,6 +91,9 @@ struct DashboardView: View {
                     // в держателе не видел его НИКОГДА. Здесь своя копия; на карте
                     // плашка в это время ждёт (isCovered), таймер не двоится.
                     MobileConfirmBar()
+                    // «Что это было?» — уточнение типа после «Радар!»: кнопка
+                    // прямо под этой плашкой, водитель смотрит именно сюда.
+                    ReportRefineBar()
 
                     if env.location.isTripActive {
                         tripRow

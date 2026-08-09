@@ -697,6 +697,9 @@ struct MapScreen: View {
                 // Условие «накрыто» — в гейте: isApproachingCamera читает
                 // пер-тиковые дистанцию и скорость (см. MapTickGates).
                 MobileConfirmGate(dashboardShown: showDashboard)
+                // «Что это было?» — уточнение типа сразу после «Радар!»:
+                // тот же гейт-паттерн и то же место над панелью поездки.
+                ReportRefineGate(dashboardShown: showDashboard)
                 if mode.showsTripBar {
                     // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
                     // максимум экрана отдан карте, и она не прячется вместе с кнопками.

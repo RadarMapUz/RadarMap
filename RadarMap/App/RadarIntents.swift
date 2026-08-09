@@ -77,6 +77,10 @@ struct ReportRadarIntent: AppIntent {
             return .result(dialog: IntentDialog("Радар отмечен. Спасибо, что предупредили!"))
         case .confirmed:
             return .result(dialog: IntentDialog("Радар здесь уже отмечен — подтвердили."))
+        case .amended:
+            // Интент шлёт только «радар», но своя свежая отметка другого типа
+            // рядом превращает его в уточнение — сервер переписал тип той же точки.
+            return .result(dialog: IntentDialog("Тип отметки уточнён."))
         case .failed:
             return .result(dialog: IntentDialog("Не получилось отправить — нет связи."))
         }

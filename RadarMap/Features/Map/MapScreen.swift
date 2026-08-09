@@ -1136,6 +1136,16 @@ struct MapScreen: View {
                 env.notifications.askDriverCheck()
             }
         }
+        // Краудсорс-доверие: призрак + подтверждённая отметка и «Что это было?»
+        // локально — настоящий POST с симулятора лёг бы фейком в общую базу.
+        if args.contains("-demoMobileTrust") {
+            Task {
+                await Task.pause(seconds: 2)
+                if let center = map.mapCenter ?? env.location.currentCoordinate {
+                    withAnimation { env.mobile.seedTrustDemo(near: center) }
+                }
+            }
+        }
         // Бар точки долгого тапа: жест на симуляторе из CLI не сымитировать.
         if args.contains("-mapMenu") {
             Task {

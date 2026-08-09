@@ -297,6 +297,33 @@ final class MobileCameraService {
 
     func isMobile(_ camera: Camera) -> Bool { camera.id >= Self.idOffset }
 
+    #if DEBUG
+    /// Скриншот-хук `-demoMobileTrust`: подтверждённая отметка и призрак на
+    /// испытательном сроке плюс окно «Что это было?» — без сети и без
+    /// настоящего POST в общую базу (фейк на проде увидят живые водители).
+    func seedTrustDemo(near coordinate: CLLocationCoordinate2D) {
+        func demo(_ id: Int, dLat: Double, dLon: Double, confirmed: Bool) -> Camera {
+            Camera(id: Self.idOffset + id,
+                   region: CameraType.mobileRadar.displayName, city: "",
+                   location: String(format: String(localized: "Отмечен водителями, исчезнет ~%@"),
+                                    Self.expiryText(Date().addingTimeInterval(3600).timeIntervalSince1970)),
+                   lat: coordinate.latitude + dLat, lon: coordinate.longitude + dLon,
+                   type: CameraType.mobileRadar.sourceString,
+                   violations: Camera.defaultViolations(forType: CameraType.mobileRadar.sourceString),
+                   needsReview: nil, mobileConfirmed: confirmed)
+        }
+        reports = [demo(900_001, dLat: 0.004, dLon: 0.0015, confirmed: true),
+                   demo(900_002, dLat: 0.004, dLon: -0.0035, confirmed: false)]
+        confirmations = [
+            Self.idOffset + 900_001: Confirmation(upvotes: 3, created: Date(), confirmed: true),
+            Self.idOffset + 900_002: Confirmation(upvotes: 0, created: Date(), confirmed: false),
+        ]
+        store?.setMobileCameras(reports)
+        refineOffer = ReportGuard.Sent(kind: .radar, latitude: coordinate.latitude,
+                                       longitude: coordinate.longitude, at: Date())
+    }
+    #endif
+
     // MARK: - Внутреннее
 
     private static func expiryText(_ expires: TimeInterval) -> String {

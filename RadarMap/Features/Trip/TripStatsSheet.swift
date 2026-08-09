@@ -91,7 +91,7 @@ struct TripStatsSheet: View {
         NavigationStack {
             ScrollView {
                 ScrollViewReader { proxy in
-                LazyVStack(spacing: 16) {
+                LazyVStack(spacing: 16, pinnedViews: [.sectionHeaders]) {
                     // Живая поездка — вне периодов: таймер, скорость, живые метрики.
                     // Отдельная вью: она читает скорость (меняется каждый тик GPS),
                     // и пока жила в body листа, каждый тик пересчитывал сводку
@@ -101,15 +101,12 @@ struct TripStatsSheet: View {
                             .entrance(0, appeared)
                     }
 
-                    // Пикер и стрелки — одна визуальная группа: два ряда
-                    // управления с полными отступами утяжеляли шапку раньше,
-                    // чем на экране появлялась первая цифра.
-                    VStack(spacing: 6) {
-                        periodPicker
-                        periodNavigator
-                    }
-                    .entrance(0, appeared)
-
+                    // Пикер и стрелки — одна визуальная группа и ЛИПКАЯ:
+                    // прокрутив до списка поездок, человек переставал видеть,
+                    // за какое окно эти цифры, и «3–9 августа» приходилось
+                    // искать обратной прокруткой. Section с pinnedViews держит
+                    // её на месте (LazyVStack умеет это без своей геометрии).
+                    Section {
                     if summary.isEmpty {
                         // Пусто может быть по двум причинам: поездок нет вообще
                         // или нет именно в этом периоде — это разные подсказки.
@@ -154,6 +151,29 @@ struct TripStatsSheet: View {
                             .entrance(5, appeared)
                         achievementsSection(trip: trip)
                             .entrance(5, appeared)
+                    }
+                    } header: {
+                        VStack(spacing: 6) {
+                            periodPicker
+                            periodNavigator
+                        }
+                        .padding(.vertical, 8)
+                        .background {
+                            // Под шапкой проезжают карточки — ей нужен свой
+                            // фон, иначе цифры наезжают на цифры. Волосяная
+                            // линия снизу делает срез карточки намеренным, а
+                            // не похожим на артефакт прокрутки.
+                            Rectangle()
+                                .fill(Theme.background)
+                                .padding(.horizontal, -20)
+                                .padding(.top, -20)
+                                .overlay(alignment: .bottom) {
+                                    Rectangle()
+                                        .fill(Theme.stroke)
+                                        .frame(height: 1)
+                                }
+                        }
+                        .entrance(0, appeared)
                     }
                 }
                 .padding(20)
@@ -541,12 +561,17 @@ struct TripStatsSheet: View {
                     }
                 } label: {
                     HStack(spacing: 14) {
+                        // Иконка спокойная даже у риска: красным на первом
+                        // экране имеет право быть ОДНА вещь — сама сумма.
+                        // Раньше с ней спорили красный значок и красная
+                        // подложка, и экран читался как авария.
                         Image(systemName: ok ? "shield.lefthalf.filled.badge.checkmark"
                                              : "exclamationmark.shield.fill")
                             .font(.rounded(22, .bold))
-                            .foregroundStyle(ok ? Theme.success : Theme.danger)
+                            .foregroundStyle(ok ? Theme.success : Theme.textSecondary)
                             .frame(width: 48, height: 48)
-                            .background((ok ? Theme.success : Theme.danger).opacity(0.12), in: Circle())
+                            .background((ok ? Theme.success : Theme.textSecondary).opacity(0.10),
+                                        in: Circle())
                         VStack(alignment: .leading, spacing: 3) {
                             Text(ok ? String(localized: "Зона риска")
                                     : String(localized: "Возможные штрафы"))

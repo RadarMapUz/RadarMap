@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""RadarMap camera DB auto-updater (server cron, stdlib only).
+"""RadarMap camera DB candidate builder (run manually or by cron, stdlib only).
 
 Pulls the MVD open-data set 1-008-0027 from data.egov.uz, dedups + normalizes,
-and if the result changed, writes /opt/radarmap/www/cameras.json (minified) and
-bumps version.json. Safe to run on a schedule; no-op when data is unchanged.
+and when the sha changed writes /opt/radarmap/www/cameras_candidate.json for
+review. It deliberately does NOT touch the live cameras.json/version.json: the
+Ed25519 signing key is not on the VPS, so publishing goes through the owner's
+`deploy_db.sh` after a diff of the candidate. Safe to run on a schedule;
+no-op when data is unchanged. Also watches the MVD accident dataset and logs
+loudly if it ever stops being empty.
 """
 import json, re, hashlib, urllib.request, os, sys, time
 

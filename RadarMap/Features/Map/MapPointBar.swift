@@ -74,55 +74,6 @@ struct MapPointBar: View {
     }
 }
 
-/// Компактная круглая кнопка Дом/Работа слева от «Начать поездку» — вся
-/// нижняя строка в одну линию: [🏠][💼][▶ Начать поездку]. Слот пуст —
-/// приглушённый круг с плюс-бейджем, тап открывает назначение адреса
-/// (иначе про «Мои места» в недрах Настроек никто не узнаёт, и «Куда»
-/// в CarPlay остаётся пустым).
-struct PlaceCircle: View {
-    @Environment(AppEnvironment.self) private var env
-    let slot: PlaceSlot
-    let onRoute: (CLLocationCoordinate2D, String) -> Void
-    let onAssign: (PlaceSlot) -> Void
-
-    var body: some View {
-        let place = env.settings.place(for: slot)
-        let noGPS = env.location.currentCoordinate == nil
-        ZStack(alignment: .topTrailing) {
-            CircleControl(systemName: slot.symbol,
-                          tint: place == nil ? Theme.textTertiary : Theme.accent,
-                          size: 52,
-                          accessibilityLabel: accessibilityLabel(assigned: place != nil)) {
-                if let place { onRoute(place.coordinate, slot.name) } else { onAssign(slot) }
-            }
-            if place == nil {
-                Image(systemName: "plus.circle.fill")
-                    .font(.rounded(12, .bold))
-                    .foregroundStyle(Theme.background, Theme.accent)
-                    .offset(x: 2, y: -2)
-                    .allowsHitTesting(false)
-            }
-        }
-        // Задано, но геопозиции нет — маршрут строить не из чего.
-        .opacity(place != nil && noGPS ? 0.4 : 1)
-        .disabled(place != nil && noGPS)
-        .contextMenu {
-            Button { onAssign(slot) } label: {
-                Label("Изменить адрес", systemImage: "pencil")
-            }
-        }
-    }
-
-    private func accessibilityLabel(assigned: Bool) -> LocalizedStringKey {
-        switch (slot, assigned) {
-        case (.home, true):  return "Домой"
-        case (.home, false): return "Задать дом"
-        case (.work, true):  return "На работу"
-        case (.work, false): return "Задать работу"
-        }
-    }
-}
-
 /// Пикер типа отметки: что впереди — радар, тренога, пост ДПС или ДТП.
 /// Больше типов → живее карта: этим живут Waze и водительские чаты.
 struct ReportPickerBar: View {

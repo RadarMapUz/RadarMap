@@ -175,6 +175,9 @@ final class AppEnvironment {
             // Виджет — сразу: автозавершение в фоне иначе оставляло бы его
             // с цифрами «до поездки» до следующего открытия приложения.
             self?.refreshWidgetSnapshot()
+            // Свежая поездка меняет распорядок — подсказка «Домой» обязана
+            // знать о новом доме сразу, а не со следующего запуска.
+            self?.refreshLearnedPlaces()
             guard let notifications else { return }
             // Тот же расчёт, что на экране Итогов: пуш и экран не имеют права
             // разойтись в цифрах (раньше здесь смешивались окна 7 и 30 дней).
@@ -221,6 +224,7 @@ final class AppEnvironment {
     /// движению. Все старты идемпотентны, повторный вызов из второй сцены
     /// ничего не дублирует.
     func startDrivingServices() {
+        refreshLearnedPlaces()
         // Пульт — первым: он может отменить всё, что запускается следом.
         Task { await config.refreshIfNeeded() }
         // Досылаем вчерашние счётчики (сегодняшние ещё не полны).
@@ -236,6 +240,21 @@ final class AppEnvironment {
         location.bootstrap()
         mobile.startPolling()
         motion.start()
+    }
+
+    /// Дом и работа, выученные по истории поездок (FrequentPlaces). Пересчёт —
+    /// событийный: на старте сцены и в конце поездки. Распорядок за 30 дней
+    /// меняется медленно, считать его в body главного экрана незачем.
+    private(set) var learnedPlaces: [FrequentPlaces.Place] = []
+
+    func refreshLearnedPlaces() {
+        guard settings.destinationSuggestions else {
+            // Выключили подсказки — забываем и выученное: держать в памяти
+            // домашний адрес, которым не пользуемся, незачем.
+            learnedPlaces = []
+            return
+        }
+        learnedPlaces = FrequentPlaces.learn(history: trip.history, now: Date())
     }
 
     /// Снимок для домашнего виджета: база, последняя поездка и текущая неделя.

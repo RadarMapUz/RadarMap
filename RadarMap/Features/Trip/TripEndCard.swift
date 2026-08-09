@@ -25,6 +25,8 @@ struct TripEndCard: View {
     var onMerged: () -> Void
     var onDismiss: () -> Void
 
+    @State private var shareSubject: ShareSubjectBox?
+
     var body: some View {
         VStack(spacing: 14) {
             HStack(spacing: 12) {
@@ -68,22 +70,38 @@ struct TripEndCard: View {
                 mergeRow(previous: previous)
             }
 
-            Button {
-                onDetail(record)
-            } label: {
-                HStack(spacing: 6) {
-                    Text("Подробнее")
-                        .font(.rounded(14, .bold))
-                    Image(systemName: "chevron.right")
-                        .font(.rounded(11, .bold))
+            HStack(spacing: 10) {
+                Button {
+                    onDetail(record)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Подробнее")
+                            .font(.rounded(14, .bold))
+                        Image(systemName: "chevron.right")
+                            .font(.rounded(11, .bold))
+                    }
+                    .foregroundStyle(Theme.background)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Theme.accent.gradient, in: Capsule())
+                    .contentShape(Capsule())
                 }
-                .foregroundStyle(Theme.background)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(Theme.accent.gradient, in: Capsule())
-                .contentShape(Capsule())
+                .buttonStyle(PressableStyle())
+
+                // Поделиться — здесь и сейчас: цифры свежие, и это тот самый
+                // момент, когда ими хочется похвастаться. Раньше за карточкой
+                // приходилось идти в деталку через Итоги.
+                Button(action: share) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.rounded(16, .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 46, height: 44)
+                        .background(Theme.surface, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(PressableStyle())
+                .accessibilityLabel(Text("Поделиться поездкой"))
             }
-            .buttonStyle(PressableStyle())
         }
         .padding(16)
         .background(.ultraThinMaterial,
@@ -91,6 +109,20 @@ struct TripEndCard: View {
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
             .stroke(Theme.stroke, lineWidth: 1))
         .transition(.move(edge: .bottom).combined(with: .opacity))
+        .sheet(item: $shareSubject) { box in
+            SharePreviewSheet(subject: box.subject)
+        }
+    }
+
+    /// Снимок карты с треком — как в деталке; сама карточка рисуется в превью.
+    private func share() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Task {
+            let map = await TripMapSnapshot.render(track: record.trackPoints,
+                                                   passes: record.passed,
+                                                   size: CGSize(width: 1032, height: 840))
+            shareSubject = ShareSubjectBox(subject: .trip(record, map: map))
+        }
     }
 
     // MARK: - Балл

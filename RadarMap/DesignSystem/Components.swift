@@ -244,13 +244,7 @@ struct RatingRing: View {
         _shown = State(initialValue: !animated)
     }
 
-    private var color: Color {
-        switch DrivingScore.tier(for: rating) {
-        case 2: return Theme.success
-        case 1: return Theme.warning
-        default: return Theme.danger
-        }
-    }
+    private var color: Color { Theme.score(rating) }
 
     var body: some View {
         ZStack {

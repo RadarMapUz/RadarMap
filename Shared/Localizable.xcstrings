@@ -17,6 +17,38 @@
         }
       }
     },
+    "+21…40 км/ч" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+21…40 км/ч"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+21…40 km/soat"
+          }
+        }
+      }
+    },
+    "+6…20 км/ч" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+6…20 км/ч"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+6…20 km/soat"
+          }
+        }
+      }
+    },
     "«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов. Спидометр — самый экономный экран: чёрный фон и схема вместо карты; закрыли его руками — до конца поездки не откроется сам." : {
       "localizations" : {
         "ru" : {
@@ -145,6 +177,38 @@
         }
       }
     },
+    "Все камеры в лимите" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Все камеры в лимите"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Barcha kameralar cheklov ichida"
+          }
+        }
+      }
+    },
+    "всего" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "всего"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "jami"
+          }
+        }
+      }
+    },
     "Да" : {
       "localizations" : {
         "ru" : {
@@ -173,6 +237,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Haftalar dinamikasi"
+          }
+        }
+      }
+    },
+    "Достижение" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Достижение"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yutuq"
+          }
+        }
+      }
+    },
+    "Достижение получено" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Достижение получено"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yutuq qo'lga kiritildi"
           }
         }
       }
@@ -301,6 +397,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bir oyda olti va undan ko'p marta, birorta ham tezlik oshirmasdan o'tgan kamerangizni ilova ovoz bilan aytishni to'xtatadi: xaritada unda belgi, panelda — «o'z kamerangiz», ogohlantirish esa qoladi. Bitta oshirish — va u yana gapiradi; ko'chma radar, trenoga va YTH haqida ovoz doim yangraydi. Uy va ish safarlar tartibiga qarab aniqlanadi — kechqurun qayerga kelasiz va ish kuni ertalab qayerdan chiqasiz. Hammasi telefonda hisoblanadi va hech qayerga yuborilmaydi."
+          }
+        }
+      }
+    },
+    "Лента" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Лента"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lenta"
           }
         }
       }
@@ -477,6 +589,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Belgilang: jarima keldimi yo'qmi"
+          }
+        }
+      }
+    },
+    "Поделиться" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поделиться"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ulashish"
           }
         }
       }
@@ -897,6 +1025,38 @@
         }
       }
     },
+    "Риск ≈ %1$@ · %2$@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Риск ≈ %1$@ · %2$@"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xavf ≈ %1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "Риск ≈ %@" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Риск ≈ %@"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Xavf ≈ %@"
+          }
+        }
+      }
+    },
     "с превышением" : {
       "localizations" : {
         "ru" : {
@@ -1005,6 +1165,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Safar boshlanganda spidometr"
+          }
+        }
+      }
+    },
+    "Сторис" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сторис"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Storis"
           }
         }
       }

@@ -1135,23 +1135,43 @@ struct MapScreen: View {
                 let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 let last = env.trip.fallbackRecord(isTripActive: env.location.isTripActive)
                     ?? env.trip.history.first
-                let map = await TripMapSnapshot.render(track: last?.trackPoints ?? [],
-                                                       passes: last?.passed ?? [],
-                                                       size: CGSize(width: 1032, height: 420))
-                let summary = TripHistory.summary(env.trip.history, period: .week)
-                let stats = ImageRenderer(content: PeriodShareCard(
-                    summary: summary, periodTitle: StatsPeriod.week.title, mapImage: map))
-                stats.scale = 2
-                stats.proposedSize = ProposedViewSize(width: 540, height: 675)
-                try? stats.uiImage?.pngData()?.write(to: docs.appendingPathComponent("share_stats.png"))
-                if let record = last {
-                    let tripMap = await TripMapSnapshot.render(track: record.trackPoints,
-                                                               passes: record.passed,
-                                                               size: CGSize(width: 1032, height: 840))
-                    let card = ImageRenderer(content: TripShareCard(record: record, mapImage: tripMap))
-                    card.scale = 2
-                    card.proposedSize = ProposedViewSize(width: 540, height: 675)
-                    try? card.uiImage?.pngData()?.write(to: docs.appendingPathComponent("share_trip.png"))
+                // Период берём тот, где данные ЕСТЬ: демо-история после
+                // полуночи попадает в прошлую календарную неделю, и дамп
+                // рисовал карточку из одних нулей (поймано на живом дампе).
+                let period: StatsPeriod = .month
+                let anchor = env.trip.history.first?.startedAt ?? Date()
+                let summary = TripHistory.summary(days: env.trip.days, history: env.trip.history,
+                                                  period: period, anchor: anchor)
+                let passes = TripHistory.records(env.trip.history, period: period,
+                                                 anchor: anchor).flatMap(\.passed)
+                let tracks = TripHistory.records(env.trip.history, period: period, anchor: anchor)
+                    .flatMap(\.trackPoints)
+                let periodMap = await TripMapSnapshot.render(
+                    track: tracks, passes: passes, size: CGSize(width: 1032, height: 420))
+                let tripMap = await TripMapSnapshot.render(
+                    track: last?.trackPoints ?? [], passes: last?.passed ?? [],
+                    size: CGSize(width: 1032, height: 840))
+                let badge = Achievements.all(for: env.trip.lifetime).first(where: \.earned)
+
+                // Оба формата: сторис ломается иначе, чем лента, и увидеть
+                // это нужно до отправки, а не у собеседника.
+                for format in ShareFormat.allCases {
+                    @MainActor func write(_ view: some View, _ name: String) {
+                        let renderer = ImageRenderer(content: view)
+                        renderer.scale = 2
+                        renderer.proposedSize = ProposedViewSize(format.size)
+                        try? renderer.uiImage?.pngData()?
+                            .write(to: docs.appendingPathComponent("\(name)_\(format.rawValue).png"))
+                    }
+                    write(PeriodShareCard(summary: summary, periodTitle: period.rangeTitle(containing: anchor),
+                                          mapImage: periodMap, format: format), "share_stats")
+                    if let record = last {
+                        write(TripShareCard(record: record, mapImage: tripMap, format: format), "share_trip")
+                    }
+                    if let badge {
+                        write(AchievementShareCard(badge: badge, lifetime: env.trip.lifetime,
+                                                   format: format), "share_badge")
+                    }
                 }
             }
         }

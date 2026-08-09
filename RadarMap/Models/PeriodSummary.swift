@@ -83,15 +83,6 @@ nonisolated enum StatsPeriod: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Заголовок блока выводов — разбор всегда о том же окне, что и цифры.
-    var insightsTitle: String {
-        switch self {
-        case .day:   return String(localized: "Разбор дня")
-        case .week:  return String(localized: "Разбор недели")
-        case .month: return String(localized: "Разбор месяца")
-        }
-    }
-
     /// Подпись «вашей нормы»: по скольким прошлым окнам она посчитана.
     /// Меньше трёх окон норму не показываем (см. ratingBaselineMinPeriods),
     /// поэтому падежных вариантов на единицу здесь не нужно.

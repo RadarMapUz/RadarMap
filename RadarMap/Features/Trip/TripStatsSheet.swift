@@ -101,10 +101,14 @@ struct TripStatsSheet: View {
                             .entrance(0, appeared)
                     }
 
-                    periodPicker
-                        .entrance(0, appeared)
-                    periodNavigator
-                        .entrance(0, appeared)
+                    // Пикер и стрелки — одна визуальная группа: два ряда
+                    // управления с полными отступами утяжеляли шапку раньше,
+                    // чем на экране появлялась первая цифра.
+                    VStack(spacing: 6) {
+                        periodPicker
+                        periodNavigator
+                    }
+                    .entrance(0, appeared)
 
                     if summary.isEmpty {
                         // Пусто может быть по двум причинам: поездок нет вообще
@@ -116,10 +120,6 @@ struct TripStatsSheet: View {
                         }
                     } else {
                         heroCard(trip: trip, summary: summary)
-                            .entrance(1, appeared)
-                        // Разбор идёт сразу за рейтингом: сначала вывод, потом
-                        // цифры, на которых он построен, — а не наоборот.
-                        insightsCard(summary: summary)
                             .entrance(1, appeared)
                         riskCard(summary: summary)
                             .entrance(2, appeared)
@@ -338,8 +338,10 @@ struct TripStatsSheet: View {
             Image(systemName: symbol)
                 .font(.rounded(13, .bold))
                 .foregroundStyle(enabled ? Theme.accent : Theme.textTertiary.opacity(0.4))
+                // Голая стрелка, мишень прежняя: капсулы-подложки делали из
+                // строки периода третий ряд «кнопочной» мебели подряд.
                 .frame(width: 36, height: 32)
-                .background(Theme.surface, in: Capsule())
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
         .disabled(!enabled)
@@ -357,70 +359,86 @@ struct TripStatsSheet: View {
         }
     }
 
-    // MARK: - Герой: рейтинг + километры периода
+    // MARK: - Герой: рейтинг + километры + выводы периода
 
-    /// Одна карточка вместо двух: кольцо рейтинга (тап — как считается) и
-    /// главная цифра периода с дельтой к прошлому такому же.
+    /// Одна карточка-рассказ: кольцо рейтинга, главная цифра периода с дельтой
+    /// и — под тонкой чертой — выводы (PeriodInsights). Раньше выводы жили
+    /// своей коробкой с заголовком «Разбор недели»: три отдельных карточки
+    /// подряд читались тяжело, а выводы и есть объяснение рейтинга, поэтому
+    /// им место в его карточке, и тап по любому месту ведёт в расшифровку.
     private func heroCard(trip: TripStats, summary: PeriodSummary) -> some View {
         Button {
             showRatingInfo = true
         } label: {
-            HStack(spacing: 16) {
-                if let rating = summary.rating {
-                    VStack(spacing: 6) {
-                        RatingRing(rating: rating)
-                            .frame(width: 88, height: 88)
-                        // Рейтинг сам по себе — абстракция. Движение к прошлому
-                        // такому же периоду делает его понятным.
-                        if let delta = summary.ratingDelta,
-                           abs(delta) >= AppConfig.insightRatingStep {
-                            ratingDeltaBadge(delta)
-                        }
+            VStack(spacing: 14) {
+                heroTopRow(trip: trip, summary: summary)
+                let insights = PeriodInsights.build(summary)
+                if !insights.isEmpty {
+                    Divider().overlay(Theme.stroke)
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(insights) { insightRow($0) }
                     }
                 }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(period.caption)
-                        .font(.rounded(11, .medium))
-                        .foregroundStyle(Theme.textTertiary)
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(Formatting.distance(summary.distance))
-                            .font(.rounded(30, .heavy))
-                            .foregroundStyle(Theme.textPrimary)
-                            .contentTransition(.numericText())
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                        if let delta = summary.distanceDeltaPercent {
-                            deltaBadge(delta)
-                        }
-                    }
-                    if let rating = summary.rating {
-                        Text(DrivingScore.level(for: rating))
-                            .font(.rounded(14, .bold))
-                            .foregroundStyle(Theme.textPrimary)
-                    }
-                    Text(heroSubtitle(summary))
-                        .font(.rounded(12))
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)               // «за рулём» уезжало на вторую
-                        .minimumScaleFactor(0.75)   // строку и рвало ритм карточки
-                    if trip.lifetime.cleanStreak >= 2 {
-                        Label(String(format: String(localized: "чистая серия: %lld подряд"),
-                                     trip.lifetime.cleanStreak),
-                              systemImage: "flame.fill")
-                            .font(.rounded(11, .semibold))
-                            .foregroundStyle(Theme.warning)
-                    }
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(Theme.textTertiary)
             }
             .statCard()
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text("Рейтинг и километры за период. Как считается рейтинг"))
+        .accessibilityLabel(Text("Рейтинг, километры и выводы за период. Как считается рейтинг"))
+    }
+
+    private func heroTopRow(trip: TripStats, summary: PeriodSummary) -> some View {
+        HStack(spacing: 16) {
+            if let rating = summary.rating {
+                VStack(spacing: 6) {
+                    RatingRing(rating: rating)
+                        .frame(width: 88, height: 88)
+                    // Рейтинг сам по себе — абстракция. Движение к прошлому
+                    // такому же периоду делает его понятным.
+                    if let delta = summary.ratingDelta,
+                       abs(delta) >= AppConfig.insightRatingStep {
+                        ratingDeltaBadge(delta)
+                    }
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(period.caption)
+                    .font(.rounded(11, .medium))
+                    .foregroundStyle(Theme.textTertiary)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(Formatting.distance(summary.distance))
+                        .font(.rounded(30, .heavy))
+                        .foregroundStyle(Theme.textPrimary)
+                        .contentTransition(.numericText())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    if let delta = summary.distanceDeltaPercent {
+                        deltaBadge(delta)
+                    }
+                }
+                if let rating = summary.rating {
+                    Text(DrivingScore.level(for: rating))
+                        .font(.rounded(14, .bold))
+                        .foregroundStyle(Theme.textPrimary)
+                }
+                Text(heroSubtitle(summary))
+                    .font(.rounded(12))
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)               // «за рулём» уезжало на вторую
+                    .minimumScaleFactor(0.75)   // строку и рвало ритм карточки
+                if trip.lifetime.cleanStreak >= 2 {
+                    Label(String(format: String(localized: "чистая серия: %lld подряд"),
+                                 trip.lifetime.cleanStreak),
+                          systemImage: "flame.fill")
+                        .font(.rounded(11, .semibold))
+                        .foregroundStyle(Theme.warning)
+                }
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.rounded(13, .semibold))
+                .foregroundStyle(Theme.textTertiary)
+        }
     }
 
     private func heroSubtitle(_ summary: PeriodSummary) -> String {
@@ -443,23 +461,7 @@ struct TripStatsSheet: View {
                                         : String(localized: "Рейтинг снизился")))
     }
 
-    // MARK: - Разбор периода
-
-    /// Два-три вывода вместо стены цифр: стало лучше или хуже, где и когда
-    /// рискуете. Всё формулирует модель (PeriodInsights) — вьюха только красит.
-    @ViewBuilder
-    private func insightsCard(summary: PeriodSummary) -> some View {
-        let insights = PeriodInsights.build(summary)
-        if !insights.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(period.insightsTitle)
-                ForEach(insights) { insight in
-                    insightRow(insight)
-                }
-            }
-            .statCard()
-        }
-    }
+    // MARK: - Строка вывода (живёт в герой-карточке)
 
     private func insightRow(_ insight: Insight) -> some View {
         let tint = Self.insightTint(insight.kind)
@@ -1018,9 +1020,10 @@ struct TripStatsSheet: View {
                     }
                     .foregroundStyle(Theme.accent)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Theme.surface, in: Capsule())
-                    .contentShape(Capsule())
+                    // Голая строка-ссылка: капсула на всю ширину выглядела ещё
+                    // одной карточкой в и без того плотном столбце.
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(PressableStyle())
             }

@@ -113,6 +113,22 @@
         }
       }
     },
+    "Ваш обычный маршрут" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ваш обычный маршрут"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Odatdagi yo'nalishingiz"
+          }
+        }
+      }
+    },
     "Возможно, %@" : {
       "localizations" : {
         "ru" : {
@@ -209,6 +225,22 @@
         }
       }
     },
+    "Знакомые камеры больше не называю вслух — вы их знаете" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Знакомые камеры больше не называю вслух — вы их знаете"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanish kameralarni endi ovoz bilan aytmayman — siz ularni bilasiz"
+          }
+        }
+      }
+    },
     "Календарь месяца" : {
       "localizations" : {
         "ru" : {
@@ -241,6 +273,38 @@
         }
       }
     },
+    "Камера, триста метров" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Камера, триста метров"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kamera, uch yuz metr"
+          }
+        }
+      }
+    },
+    "Камеру, которую вы проезжаете шесть и больше раз за месяц и ни разу с превышением, приложение перестаёт называть вслух: на карте у неё галочка, в панели — «своя камера», предупреждение остаётся. Одно превышение — и она снова говорит; о передвижных радарах, треногах и ДТП голос звучит всегда. Дом и работа определяются по распорядку поездок — куда вы приезжаете вечером и куда утром буднего дня. Всё считается на телефоне и никуда не отправляется." : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Камеру, которую вы проезжаете шесть и больше раз за месяц и ни разу с превышением, приложение перестаёт называть вслух: на карте у неё галочка, в панели — «своя камера», предупреждение остаётся. Одно превышение — и она снова говорит; о передвижных радарах, треногах и ДТП голос звучит всегда. Дом и работа определяются по распорядку поездок — куда вы приезжаете вечером и куда утром буднего дня. Всё считается на телефоне и никуда не отправляется."
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bir oyda olti va undan ko'p marta, birorta ham tezlik oshirmasdan o'tgan kamerangizni ilova ovoz bilan aytishni to'xtatadi: xaritada unda belgi, panelda — «o'z kamerangiz», ogohlantirish esa qoladi. Bitta oshirish — va u yana gapiradi; ko'chma radar, trenoga va YTH haqida ovoz doim yangraydi. Uy va ish safarlar tartibiga qarab aniqlanadi — kechqurun qayerga kelasiz va ish kuni ertalab qayerdan chiqasiz. Hammasi telefonda hisoblanadi va hech qayerga yuborilmaydi."
+          }
+        }
+      }
+    },
     "Начните поездку — соберём статистику" : {
       "localizations" : {
         "ru" : {
@@ -269,6 +333,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Yuborilmadi, aloqa yo'q"
+          }
+        }
+      }
+    },
+    "Не предлагать" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не предлагать"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Taklif qilinmasin"
           }
         }
       }
@@ -401,6 +481,22 @@
         }
       }
     },
+    "Подсказка «Домой» и «На работу»" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подсказка «Домой» и «На работу»"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Uyga» va «Ishga» maslahati"
+          }
+        }
+      }
+    },
     "Подтвердили, спасибо" : {
       "localizations" : {
         "ru" : {
@@ -493,6 +589,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bu avvalgi safarning davomi ko'rinadi"
+          }
+        }
+      }
+    },
+    "Приложение учится" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Приложение учится"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ilova o'rganadi"
           }
         }
       }
@@ -797,6 +909,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "oshirish bilan"
+          }
+        }
+      }
+    },
+    "своя камера — без голоса" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "своя камера — без голоса"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "o'z kamerangiz — ovozsiz"
           }
         }
       }
@@ -3469,6 +3597,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bu yerda allaqachon belgilangan"
+          }
+        }
+      }
+    },
+    "Умная тишина у знакомых камер" : {
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Умная тишина у знакомых камер"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tanish kameralarda aqlli sukunat"
           }
         }
       }

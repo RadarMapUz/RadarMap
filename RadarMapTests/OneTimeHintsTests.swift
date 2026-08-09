@@ -35,4 +35,15 @@ final class OneTimeHintsTests: XCTestCase {
         XCTAssertEqual(Set(texts).count, texts.count)
         XCTAssertFalse(texts.contains(where: \.isEmpty))
     }
+
+    /// Умная тишина объясняется только когда она уже случилась: пока своих
+    /// камер нет, объяснять нечего — как и с невидимой жёлтой кнопкой.
+    func testSilenceHintWaitsForFirstFamiliarCamera() {
+        let seen: Set<OneTimeHints.Hint> = [.dashboard, .toggles, .radar]
+        XCTAssertNil(OneTimeHints.next(shown: seen, radarVisible: true,
+                                       hasFamiliarCameras: false))
+        XCTAssertEqual(OneTimeHints.next(shown: seen, radarVisible: true,
+                                         hasFamiliarCameras: true), .smartSilence)
+    }
+
 }

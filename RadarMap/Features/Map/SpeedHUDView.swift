@@ -212,6 +212,12 @@ struct SpeedHUDView: View {
         if env.location.isPositionCoarse {
             return String(localized: "уточняем положение")
         }
+        // «Своя» камера: голоса о ней не будет, и человек должен видеть
+        // почему — иначе тишина читается как поломка. Предупреждение при этом
+        // никуда не делось: расстояние и значок на месте.
+        if env.location.familiarCameraIDs.contains(camera.id) {
+            return String(localized: "своя камера — без голоса")
+        }
         if env.location.isDirectionalFilteringActive {
             return String(format: String(localized: "%@ по курсу"), camera.kind.genitivePhrase)
         }

@@ -350,6 +350,9 @@ struct MapScreen: View {
             // строить Set заново на каждую пересборку слоя.
             let targetID = env.location.nearestCamera?.id
             let routeIDs = env.route.routeCameraIDs
+            // Множество читается один раз на сборку слоя, а не на маркер:
+            // оно меняется раз в поездку, а маркеров на экране до двух сотен.
+            let familiarIDs = env.location.familiarCameraIDs
             ForEach(map.visibleCameras) { camera in
                 Annotation(camera.displayTitle, coordinate: camera.coordinate, anchor: .center) {
                     // Средний зум: точки; близкий — мини-знак лимита («60»);
@@ -363,7 +366,8 @@ struct MapScreen: View {
                         limit: map.isDotZoom ? nil : map.visibleLimits[camera.id],
                         tier: CameraMapContent.tier(camera: camera, focus: map.focus,
                                                     targetID: targetID, routeIDs: routeIDs),
-                        mapHeading: map.mapHeading
+                        mapHeading: map.mapHeading,
+                        isFamiliar: familiarIDs.contains(camera.id)
                     )
                     .onTapGesture { map.select(camera) }
                 }
@@ -434,13 +438,17 @@ struct MapScreen: View {
         if Storage.bool(.hintDashboardShown) { shown.insert(.dashboard) }
         if Storage.bool(.hintTogglesShown) { shown.insert(.toggles) }
         if Storage.bool(.hintRadarShown) { shown.insert(.radar) }
-        guard let hint = OneTimeHints.next(shown: shown,
-                                           radarVisible: mode.showsReportButton) else { return }
+        if Storage.bool(.hintSilenceShown) { shown.insert(.smartSilence) }
+        guard let hint = OneTimeHints.next(
+            shown: shown,
+            radarVisible: mode.showsReportButton,
+            hasFamiliarCameras: !env.location.familiarCameraIDs.isEmpty) else { return }
         hintConsumedThisLaunch = true
         switch hint {
         case .dashboard: Storage.set(true, for: .hintDashboardShown)
         case .toggles:   Storage.set(true, for: .hintTogglesShown)
         case .radar:     Storage.set(true, for: .hintRadarShown)
+        case .smartSilence: Storage.set(true, for: .hintSilenceShown)
         }
         withAnimation(.spring(duration: 0.3)) { activeHint = hint }
         Task {
@@ -1166,6 +1174,22 @@ struct MapScreen: View {
             Task {
                 await Task.pause(seconds: 2)
                 env.notifications.askDriverCheck()
+            }
+        }
+        // Умная тишина: демо-история даёт спокойные проезды одних и тех же
+        // камер, после пересчёта у них появляется галочка «своя».
+        if args.contains("-demoFamiliar") {
+            Task {
+                await Task.pause(seconds: 2)
+                // Камеру берём без бейджа «неточная»: у него приоритет на
+                // плече маркера, и галочку «своя» он бы перекрыл.
+                guard let coordinate = env.location.currentCoordinate,
+                      let camera = env.cameras.nearest(to: coordinate, limit: 12)
+                          .first(where: { !$0.isApproximate })
+                else { return }
+                env.trip.seedDemoFamiliar(cameraID: camera.id, at: camera.coordinate)
+                env.location.refreshFamiliarCameras()
+                map.focus(on: camera)
             }
         }
         // Карточка «Поездка сохранена» — поверх карты, с демо-историей.

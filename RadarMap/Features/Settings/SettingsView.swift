@@ -99,6 +99,26 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                // Что приложение выучивает само. Обе вещи меняют поведение
+                // молча (камера перестала называться вслух, на экране появилась
+                // подсказка «Домой»), поэтому им нужен и тумблер, и объяснение:
+                // необъяснённая догадка читается как сбой.
+                Section {
+                    Toggle("Умная тишина у знакомых камер", isOn: $settings.smartSilence)
+                        .onChange(of: settings.smartSilence) { _, _ in
+                            env.location.refreshFamiliarCameras()
+                        }
+                    Toggle("Подсказка «Домой» и «На работу»", isOn: $settings.destinationSuggestions)
+                        .onChange(of: settings.destinationSuggestions) { _, _ in
+                            env.refreshLearnedPlaces()
+                        }
+                } header: {
+                    Text("Приложение учится")
+                } footer: {
+                    Text("Камеру, которую вы проезжаете шесть и больше раз за месяц и ни разу с превышением, приложение перестаёт называть вслух: на карте у неё галочка, в панели — «своя камера», предупреждение остаётся. Одно превышение — и она снова говорит; о передвижных радарах, треногах и ДТП голос звучит всегда. Дом и работа определяются по распорядку поездок — куда вы приезжаете вечером и куда утром буднего дня. Всё считается на телефоне и никуда не отправляется.")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 Section {
                     Picker("Старт поездки", selection: $settings.tripStartMode) {
                         ForEach(TripStartMode.allCases) { Text($0.title).tag($0) }

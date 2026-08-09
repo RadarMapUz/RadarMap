@@ -485,6 +485,35 @@ final class TripStats {
         persistLifetime()
     }
 
+    /// Демо-история для умной тишины: одна и та же камера у дома, пройденная
+    /// спокойно много раз за месяц, — ровно тот случай, ради которого
+    /// CameraFamiliarity и существует (проверка галочки на маркере и строки
+    /// «своя камера» в панели без двух недель реальной езды).
+    func seedDemoFamiliar(cameraID: Int, at coordinate: CLLocationCoordinate2D) {
+        let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+        var seeded: [TripRecord] = []
+        for index in 0..<(CameraFamiliarity.minPasses + 2) {
+            let start = Date().addingTimeInterval(-Double(index + 1) * 86400)
+            let pass = PassedCamera(id: UUID(), cameraID: cameraID,
+                                    typeRaw: CameraType.stationaryRadar.sourceString,
+                                    location: "", speedKmh: 52, date: start.addingTimeInterval(600),
+                                    lat: coordinate.latitude, lon: coordinate.longitude,
+                                    limitKmh: 60)
+            seeded.append(TripRecord(id: start.timeIntervalSince1970, startedAt: start,
+                                     endedAt: start.addingTimeInterval(1500),
+                                     distanceMeters: 8000, maxSpeedKmh: 58, passed: [pass],
+                                     endLat: base.latitude, endLon: base.longitude,
+                                     track: Self.demoTrack(from: base, seed: 1, km: 8),
+                                     score: 100))
+        }
+        history = seeded
+        days = TripDayBook.rebuilt(from: history)
+        lifetime = LifetimeStats.rebuilt(from: history)
+        persist()
+        persistDays()
+        persistLifetime()
+    }
+
     /// Демо-трек: ломаная «по улицам» — мелкое петляние плюс поворот на каждом
     /// шестом шаге. Прямой луч из одной точки (как было раньше) на карте
     /// превращался в звезду, которой у живого пользователя не бывает.

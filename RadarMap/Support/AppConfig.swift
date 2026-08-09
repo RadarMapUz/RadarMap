@@ -352,6 +352,24 @@ nonisolated enum AppConfig {
     /// колонки ещё различимы на ширине телефона.
     nonisolated static let ratingTrendWeeks = 12
 
+    // MARK: - Выученные места (дом/работа)
+
+    /// Радиус кластера визитов. 150 м — двор с несколькими парковочными
+    /// местами и въездами: меньше — и один дом рассыплется на три «места».
+    nonisolated static let placeClusterMeters: CLLocationDistance = 150
+
+    /// Насколько близко нужно стоять, чтобы считать «мы уже здесь» и не
+    /// предлагать это место. Шире кластера: подсказка «Домой», когда ты во
+    /// дворе дома, — худшая из возможных.
+    nonisolated static let placeAtRadiusMeters: CLLocationDistance = 250
+
+    /// Сколько РАЗНЫХ дней должны подтвердить место. Шесть заездов за одну
+    /// субботу — это один день, а не привычка.
+    nonisolated static let placeMinDistinctDays = 3
+
+    /// Окно истории для обучения местам.
+    nonisolated static let placeLearningWindowDays = 30
+
     // MARK: - Обновление базы камер (OTA)
 
     /// Сервер с актуальной базой. TODO: перейти на домен + HTTPS перед публикацией в App Store.

@@ -93,6 +93,32 @@ nonisolated enum TripHistory {
         }
     }
 
+    /// Зависшие штрафы: денежные ожидания без ответа дольше `olderThanDays` —
+    /// сколько их и с какого самого старого проезда. nil — напоминать не о чем.
+    /// Трёхсостояние работает, только если человек отмечает исход, — а он
+    /// забывает; без напоминания «риск» копит суммы, давно решившиеся на почте.
+    /// Считается по всей истории, не по окну периода: зависший штраф остаётся
+    /// зависшим, в каком периоде на него ни смотри; дата самого старого нужна,
+    /// чтобы напоминание открывало именно тот период, где он лежит.
+    static func pendingFineNudge(_ history: [TripRecord],
+                                 olderThanDays: Int = AppConfig.finePendingNudgeDays,
+                                 now: Date = Date()) -> (count: Int, oldest: Date)? {
+        let threshold = now.addingTimeInterval(-Double(olderThanDays) * 86400)
+        var count = 0
+        var oldest = Date.distantFuture
+        for record in history {
+            for pass in record.passed {
+                guard pass.limitIsCertain, pass.fineOutcome == .pending,
+                      let limit = pass.limitKmh, pass.date < threshold,
+                      FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0
+                else { continue }
+                count += 1
+                oldest = min(oldest, pass.date)
+            }
+        }
+        return count > 0 ? (count, oldest) : nil
+    }
+
     /// Задать судьбу штрафа проезда: ожидается / пришёл / не пришёл.
     /// Состояния взаимоисключимы — «пришёл» снимает «не пришёл» и наоборот.
     /// nil — проезда нет в записи или он без штрафной ступени: отмечать нечего,

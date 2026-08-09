@@ -238,14 +238,28 @@ final class TripAnalyticsTests: XCTestCase {
     }
 
     func testWeekSummaryCountsOnlyRecentTrips() {
-        let history = [record(daysAgo: 1, km: 10), record(daysAgo: 20, km: 99)]
+        // Время фиксировано, как во всей статистике: на живых часах «вчера»
+        // каждый понедельник оказывался прошлой календарной неделёй, и тест
+        // падал ровно раз в неделю. 1 800 000 000 — пятница, вчера — четверг.
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func fixed(daysAgo: Double, km: Double) -> TripRecord {
+            let start = now.addingTimeInterval(-daysAgo * 86400)
+            return TripRecord(id: start.timeIntervalSince1970, startedAt: start,
+                              endedAt: start.addingTimeInterval(1800),
+                              distanceMeters: km * 1000, maxSpeedKmh: 90,
+                              passed: [], score: 90)
+        }
+        let history = [fixed(daysAgo: 1, km: 10), fixed(daysAgo: 20, km: 99)]
         // Единый источник вместо снятого weekSummary: пуш-дайджест берёт те же
         // цифры, что экран Итогов.
-        let week = TripHistory.summary(history, period: .week)
+        let week = TripHistory.summary(history, period: .week, calendar: utc, now: now)
 
         XCTAssertEqual(week.trips, 1)
         XCTAssertEqual(week.distance, 10_000, accuracy: 0.01)
-        XCTAssertTrue(TripHistory.summary([record(daysAgo: 20, km: 99)], period: .week).isEmpty)
+        XCTAssertTrue(TripHistory.summary([fixed(daysAgo: 20, km: 99)], period: .week,
+                                          calendar: utc, now: now).isEmpty)
     }
 
     func testFallbackRecordOnlyWhenSessionIsCold() {

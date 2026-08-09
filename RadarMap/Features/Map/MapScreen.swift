@@ -35,6 +35,10 @@ struct MapScreen: View {
     @State private var assignSlot: PlaceSlot?
     /// Быстрые тумблеры оповещений (долгий тап по HUD).
     @State private var showQuickToggles = false
+    /// Итог только что завершённой поездки («Поездка сохранена») и деталка из него.
+    @State private var tripEndRecord: TripRecord?
+    @State private var tripEndDetail: TripRecord?
+    @Environment(\.scenePhase) private var scenePhase
     /// Пикер типа отметки (радар/тренога/пост/ДТП) для выбранной точки.
     @State private var reportPoint: MapPoint?
     /// Область карты для системных контролов MapKit. Своих в ней не осталось
@@ -163,6 +167,13 @@ struct MapScreen: View {
                 buildRoute(to: coord, name: name)
             })
         }
+        // Деталка из карточки «Поездка сохранена» — без захода в Итоги.
+        .sheet(item: $tripEndDetail) { record in
+            TripDetailSheet(record: record,
+                            onRoute: env.location.currentCoordinate == nil ? nil : { coord, name in
+                buildRoute(to: coord, name: name)
+            })
+        }
         .overlay { loadErrorOverlay }
         .overlay { approachOverlay }
         .overlay { arrivalOverlay }
@@ -195,6 +206,7 @@ struct MapScreen: View {
                       coordinate: env.location.currentCoordinate,
                       course: env.location.currentCourse, inTrip: active)
             if active {
+                withAnimation { tripEndRecord = nil }   // поехали снова — старый итог не актуален
                 scheduleControlsHide()
                 // Поездка = спидометр: он строился ради батареи (чёрный OLED и
                 // растр вместо тайлов с двумя сотнями маркеров), но был
@@ -213,6 +225,7 @@ struct MapScreen: View {
                 revealControls()
                 dashboardDismissedInTrip = false   // новая поездка — с чистого листа
                 showDashboard = false              // поездка кончилась — спидометр не нужен
+                maybeShowTripEnd()
             }
         }
         // Закрыли спидометр руками во время поездки — запоминаем и до её конца
@@ -700,6 +713,20 @@ struct MapScreen: View {
                 // «Что это было?» — уточнение типа сразу после «Радар!»:
                 // тот же гейт-паттерн и то же место над панелью поездки.
                 ReportRefineGate(dashboardShown: showDashboard)
+                // Итог поездки — сразу после стопа, в момент, когда цифры
+                // интереснее всего (см. maybeShowTripEnd про условия показа).
+                if let record = tripEndRecord {
+                    TripEndCard(
+                        record: record,
+                        onDetail: { chosen in
+                            withAnimation(.spring(duration: 0.3)) { tripEndRecord = nil }
+                            tripEndDetail = chosen
+                        },
+                        onMerged: { tripEndRecord = env.trip.history.first },
+                        onDismiss: {
+                            withAnimation(.spring(duration: 0.3)) { tripEndRecord = nil }
+                        })
+                }
                 if mode.showsTripBar {
                     // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
                     // максимум экрана отдан карте, и она не прячется вместе с кнопками.
@@ -785,6 +812,18 @@ struct MapScreen: View {
             env.location.startTrip()
         }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    /// Показать «Поездка сохранена» после стопа. Только на переднем плане
+    /// (автозавершение в кармане обслуживает уведомление, а не карточка,
+    /// которую никто не видит), только для свежесохранённой записи (короче
+    /// 100 м поездка не пишется вовсе — свежести нет, карточки нет) и не
+    /// поверх открытых Итогов — там те же цифры уже на экране.
+    private func maybeShowTripEnd() {
+        guard scenePhase == .active, !map.showStats,
+              let record = env.trip.history.first,
+              Date().timeIntervalSince(record.endedAt) < 60 else { return }
+        withAnimation(.spring(duration: 0.4)) { tripEndRecord = record }
     }
 
     /// Построить авто-маршрут от текущей позиции и показать все варианты целиком.
@@ -1134,6 +1173,16 @@ struct MapScreen: View {
             Task {
                 await Task.pause(seconds: 2)
                 env.notifications.askDriverCheck()
+            }
+        }
+        // Карточка «Поездка сохранена» — поверх карты, с демо-историей.
+        if args.contains("-demoTripEnd") {
+            Task {
+                await Task.pause(seconds: 2)
+                env.trip.seedDemoHistory()
+                if let record = env.trip.history.first {
+                    withAnimation(.spring(duration: 0.4)) { tripEndRecord = record }
+                }
             }
         }
         // Краудсорс-доверие: призрак + подтверждённая отметка и «Что это было?»

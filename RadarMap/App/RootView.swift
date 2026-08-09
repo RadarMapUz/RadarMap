@@ -106,16 +106,10 @@ struct RootView: View {
         }
     }
 
-    /// Снимок данных для домашнего виджета (через App Group).
+    /// Снимок данных для домашнего виджета (через App Group). Сам расчёт — в
+    /// AppEnvironment: тот же снимок пишется и в конце поездки, писателей два,
+    /// а формула обязана быть одна.
     private func snapshotForWidget() {
-        SharedDefaults.write(SharedDefaults.Snapshot(
-            dbCount: env.cameras.cameras.count,
-            dbVersion: env.cameras.dbVersion,
-            mobileCount: env.cameras.mobile.count,
-            tripCameras: env.trip.camerasPassed,
-            tripMaxSpeed: env.trip.maxSpeedKmh,
-            tripDistance: env.trip.distanceMeters
-        ))
-        WidgetCenter.shared.reloadAllTimelines()
+        env.refreshWidgetSnapshot()
     }
 }

@@ -33,6 +33,9 @@ struct PassDetailView: View {
     @State private var appeared = false
     @State private var isSendingMissed = false
     @State private var missedSent = false
+    /// Судьба штрафа — локальная копия: `pass` здесь слепок, а после тапа
+    /// «Пришёл»/«Не пришёл» экран обязан показать новое состояние сразу.
+    @State private var fineOutcome: PassedCamera.FineOutcome = .pending
     /// «А если бы» — из .task, не из body: пересчёт рейтинга периода попадал в
     /// кадры анимации подлёта (Map пишет position обратно на каждом кадре).
     @State private var whatIf: (tripScore: Int, periodRating: Int?, currentRating: Int?)?
@@ -88,6 +91,7 @@ struct PassDetailView: View {
             whatIf = (tripScore, periodRating, current)
         }
         .onAppear {
+            fineOutcome = pass.fineOutcome
             guard let coordinate = pass.coordinate else { return }
             // Подлёт: с высоты — к камере, с лёгким наклоном для объёма.
             withAnimation(.spring(duration: 1.6, bounce: 0.12).delay(0.25)) {
@@ -223,13 +227,67 @@ struct PassDetailView: View {
                             value: "−\(Int(penalty))")
                 }
                 if fine > 0 {
-                    costRow(icon: "banknote", tint: Theme.danger,
-                            title: String(localized: "Возможный штраф"),
+                    costRow(icon: "banknote",
+                            tint: fineOutcome == .paid ? Theme.warning
+                                : fineOutcome == .dismissed ? Theme.textTertiary
+                                : Theme.danger,
+                            title: fineTitle,
                             value: Formatting.money(fine))
+                    // Судьба штрафа отмечается и отсюда: человек смотрит на
+                    // конкретный проезд — незачем гонять его в общий список.
+                    if record != nil {
+                        fineOutcomeRow
+                    }
                 }
             }
             .statCard()
         }
+    }
+
+    private var fineTitle: String {
+        switch fineOutcome {
+        case .pending:   return String(localized: "Возможный штраф")
+        case .paid:      return String(localized: "Штраф пришёл")
+        case .dismissed: return String(localized: "Штраф не пришёл")
+        }
+    }
+
+    /// Кнопки «Пришёл» / «Не пришёл» / «Вернуть» — тот же путь и та же
+    /// хирургия сводок, что на экране возможных штрафов (TripStats).
+    private var fineOutcomeRow: some View {
+        HStack(spacing: 8) {
+            if fineOutcome == .pending {
+                fineButton(String(localized: "Пришёл"), symbol: "envelope.badge",
+                           tint: Theme.warning, set: .paid)
+                fineButton(String(localized: "Не пришёл"), symbol: "checkmark.circle",
+                           tint: Theme.success, set: .dismissed)
+            } else {
+                fineButton(String(localized: "Вернуть"),
+                           symbol: "arrow.uturn.backward.circle",
+                           tint: Theme.textSecondary, set: .pending)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func fineButton(_ title: String, symbol: String, tint: Color,
+                            set outcome: PassedCamera.FineOutcome) -> some View {
+        Button {
+            guard let record else { return }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(.snappy(duration: 0.3)) {
+                env.trip.setFineOutcome(outcome, passID: pass.id, tripID: record.id)
+                fineOutcome = outcome
+            }
+        } label: {
+            Label(title, systemImage: symbol)
+                .font(.rounded(12, .semibold))
+                .foregroundStyle(tint)
+                .padding(.horizontal, 11).padding(.vertical, 7)
+                .background(tint.opacity(0.12), in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressableStyle())
     }
 
     private func costRow(icon: String, tint: Color, title: String, value: String) -> some View {

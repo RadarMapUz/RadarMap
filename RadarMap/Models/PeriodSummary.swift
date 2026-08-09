@@ -160,8 +160,12 @@ nonisolated struct PeriodSummary: Equatable {
     var maxSpeedKmh: Double = 0
     /// Средний балл за период, взвешенный по дистанции.
     var rating: Int?
-    /// Возможные штрафы за период (по реальным ступеням BRV).
+    /// Возможные штрафы за период (по реальным ступеням BRV) — только те,
+    /// чья судьба ещё «ожидается»: пришедшие и не пришедшие сюда не входят.
     var fineRisk: Double = 0
+    /// Пришедшие штрафы периода — риск, ставший фактом («пришёл» на экране
+    /// возможных штрафов).
+    var finesPaid: Double = 0
     /// Камера, где превышали чаще всего — «зона риска».
     var topOverLocation: String?
     /// Сколько превышений пришлось на эту камеру — без числа совет «сбавьте там»
@@ -314,8 +318,10 @@ extension TripHistory {
                     result.overPasses += 1
                     // Предположенный лимит считается нарушением (рейтинг это
                     // видит), но в сумму штрафов не входит — см. fineRisk.
-                    // «Штраф не пришёл» убирает из суммы, но не из поведения.
+                    // Судьба штрафа делит деньги: «ожидается» — в риск,
+                    // «пришёл» — в факт, «не пришёл» — никуда.
                     if pass.limitIsCertain, pass.countsTowardFines { result.fineRisk += fine }
+                    if pass.limitIsCertain, pass.finePaid == true { result.finesPaid += fine }
                     result.overByHour[calendar.component(.hour, from: pass.date)] += 1
                     if !pass.location.isEmpty { overByLocation[pass.location, default: 0] += 1 }
                 } else {

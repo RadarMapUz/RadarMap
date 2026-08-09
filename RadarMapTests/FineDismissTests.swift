@@ -42,13 +42,13 @@ final class FineDismissTests: XCTestCase {
         let other = pass(2, speed: 92, limit: 60, at: now.addingTimeInterval(-day))
         let original = record(daysAgo: 1, passes: [over, other])
 
-        let dismissed = TripHistory.settingFineDismissed(original, passID: over.id,
-                                                         dismissed: true)
+        let dismissed = TripHistory.settingFineOutcome(original, passID: over.id,
+                                                       outcome: .dismissed)
         XCTAssertEqual(dismissed?.passed.first { $0.id == over.id }?.fineDismissed, true)
         XCTAssertNil(dismissed?.passed.first { $0.id == other.id }?.fineDismissed)
 
-        let restored = TripHistory.settingFineDismissed(dismissed!, passID: over.id,
-                                                        dismissed: false)
+        let restored = TripHistory.settingFineOutcome(dismissed!, passID: over.id,
+                                                     outcome: .pending)
         XCTAssertNil(restored?.passed.first { $0.id == over.id }?.fineDismissed)
     }
 
@@ -57,10 +57,10 @@ final class FineDismissTests: XCTestCase {
     func testSettingFineDismissedRefusesCleanPassAndUnknownID() {
         let clean = pass(1, speed: 55, limit: 60, at: now.addingTimeInterval(-day))
         let original = record(daysAgo: 1, passes: [clean])
-        XCTAssertNil(TripHistory.settingFineDismissed(original, passID: clean.id,
-                                                      dismissed: true))
-        XCTAssertNil(TripHistory.settingFineDismissed(original, passID: UUID(),
-                                                      dismissed: true))
+        XCTAssertNil(TripHistory.settingFineOutcome(original, passID: clean.id,
+                                                     outcome: .dismissed))
+        XCTAssertNil(TripHistory.settingFineOutcome(original, passID: UUID(),
+                                                    outcome: .dismissed))
     }
 
     /// fineRisk записи падает ровно на сумму отменённого проезда.
@@ -72,8 +72,8 @@ final class FineDismissTests: XCTestCase {
         XCTAssertGreaterThan(fine, 0)
 
         let before = TripHistory.fineRisk(of: original.passed)
-        let updated = TripHistory.settingFineDismissed(original, passID: over.id,
-                                                       dismissed: true)!
+        let updated = TripHistory.settingFineOutcome(original, passID: over.id,
+                                                     outcome: .dismissed)!
         XCTAssertEqual(TripHistory.fineRisk(of: updated.passed), before - fine,
                        accuracy: 0.01)
     }
@@ -83,8 +83,8 @@ final class FineDismissTests: XCTestCase {
     func testSummaryExcludesDismissedFromMoneyButKeepsBehavior() {
         let over = pass(1, speed: 88, limit: 60, at: now.addingTimeInterval(-day))
         let original = record(daysAgo: 1, passes: [over])
-        let updated = TripHistory.settingFineDismissed(original, passID: over.id,
-                                                       dismissed: true)!
+        let updated = TripHistory.settingFineOutcome(original, passID: over.id,
+                                                     outcome: .dismissed)!
 
         let before = TripHistory.summary([original], period: .week, calendar: utc, now: now)
         let after = TripHistory.summary([updated], period: .week, calendar: utc, now: now)
@@ -94,6 +94,57 @@ final class FineDismissTests: XCTestCase {
         XCTAssertEqual(after.cleanPasses, before.cleanPasses)
         XCTAssertEqual(after.rating, before.rating)
         XCTAssertEqual(after.overByHour, before.overByHour)
+    }
+
+    /// «Пришёл»: риск становится фактом — уходит из fineRisk, приходит в
+    /// finesPaid; состояния взаимоисключимы — «пришёл» поверх «не пришёл»
+    /// снимает старую пометку.
+    func testPaidMovesMoneyFromRiskToFact() {
+        let over = pass(1, speed: 88, limit: 60, at: now.addingTimeInterval(-day))
+        let original = record(daysAgo: 1, passes: [over])
+        let fine = FineSchedule.fine(overKmh: 88 - 60)
+
+        let paid = TripHistory.settingFineOutcome(original, passID: over.id,
+                                                  outcome: .paid)!
+        XCTAssertEqual(paid.passed[0].fineOutcome, .paid)
+        XCTAssertEqual(TripHistory.fineRisk(of: paid.passed), 0, accuracy: 0.01)
+        XCTAssertEqual(TripHistory.finesPaid(of: paid.passed), fine, accuracy: 0.01)
+
+        let summary = TripHistory.summary([paid], period: .week, calendar: utc, now: now)
+        XCTAssertEqual(summary.fineRisk, 0, accuracy: 0.01)
+        XCTAssertEqual(summary.finesPaid, fine, accuracy: 0.01)
+        XCTAssertEqual(summary.overPasses, 1, "поведение не меняется: превышение было")
+
+        // «Пришёл» поверх «не пришёл» — старая пометка снята, не обе разом.
+        let dismissed = TripHistory.settingFineOutcome(original, passID: over.id,
+                                                       outcome: .dismissed)!
+        let flipped = TripHistory.settingFineOutcome(dismissed, passID: over.id,
+                                                     outcome: .paid)!
+        XCTAssertEqual(flipped.passed[0].fineOutcome, .paid)
+        XCTAssertNil(flipped.passed[0].fineDismissed)
+    }
+
+    /// Дневной агрегат ведёт «пришло» отдельной строкой и чинится той же парой
+    /// unfolded/folded — сводка по дням совпадает со сводкой по записям.
+    func testPaidDayRepairKeepsRollupInvariant() {
+        let over = pass(1, speed: 88, limit: 60, at: now.addingTimeInterval(-day))
+        let original = record(daysAgo: 1, passes: [over])
+        let fine = FineSchedule.fine(overKmh: 88 - 60)
+        var days = TripDayBook.rebuilt(from: [original], calendar: utc)
+
+        let paid = TripHistory.settingFineOutcome(original, passID: over.id,
+                                                  outcome: .paid)!
+        days = TripDayBook.unfolded(original, from: days, calendar: utc)
+        days = TripDayBook.folded(paid, into: days, calendar: utc)
+
+        XCTAssertEqual(days[0].fineRisk, 0, accuracy: 0.01)
+        XCTAssertEqual(days[0].finePaid ?? 0, fine, accuracy: 0.01)
+
+        let byDays = TripHistory.summary(days: days, history: [paid], period: .week,
+                                         anchor: now, calendar: utc)
+        let byRecords = TripHistory.summary([paid], period: .week, calendar: utc, now: now)
+        XCTAssertEqual(byDays.fineRisk, byRecords.fineRisk, accuracy: 0.01)
+        XCTAssertEqual(byDays.finesPaid, byRecords.finesPaid, accuracy: 0.01)
     }
 
     /// Починка дня «снять старую запись, положить новую»: сумма падает ровно на
@@ -106,8 +157,8 @@ final class FineDismissTests: XCTestCase {
         let fine = FineSchedule.fine(overKmh: 88 - 60)
         var days = TripDayBook.rebuilt(from: [original], calendar: utc)
 
-        let updated = TripHistory.settingFineDismissed(original, passID: over.id,
-                                                       dismissed: true)!
+        let updated = TripHistory.settingFineOutcome(original, passID: over.id,
+                                                     outcome: .dismissed)!
         days = TripDayBook.unfolded(original, from: days, calendar: utc)
         days = TripDayBook.folded(updated, into: days, calendar: utc)
 
@@ -124,8 +175,8 @@ final class FineDismissTests: XCTestCase {
         XCTAssertEqual(byDays.overPasses, byRecords.overPasses)
 
         // Обратный ход: «Вернуть» восстанавливает сумму той же парой.
-        let restored = TripHistory.settingFineDismissed(updated, passID: over.id,
-                                                        dismissed: false)!
+        let restored = TripHistory.settingFineOutcome(updated, passID: over.id,
+                                                     outcome: .pending)!
         days = TripDayBook.unfolded(updated, from: days, calendar: utc)
         days = TripDayBook.folded(restored, into: days, calendar: utc)
         XCTAssertEqual(days[0].fineRisk, fine, accuracy: 0.01)

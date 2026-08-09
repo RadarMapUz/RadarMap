@@ -286,14 +286,14 @@ final class TripStats {
         Log.trips.info("поездки объединены вручную: \(Int(merged.distanceMeters), privacy: .public) м")
     }
 
-    /// «Штраф не пришёл» (или передумал — вернуть): пометка на проезде камеры.
-    /// Деньги уходят из всех сводок — записи и дневного агрегата (хирургически,
-    /// снять старую / положить новую). Рейтинг не трогается: он про езду,
-    /// а не про то, дошло ли постановление.
-    func setFineDismissed(_ dismissed: Bool, passID: UUID, tripID: Double) {
+    /// Судьба штрафа проезда: ожидается / пришёл / не пришёл. Деньги
+    /// переезжают между «возможными» и «пришедшими» во всех сводках — записи
+    /// и дневном агрегате (хирургически, снять старую / положить новую).
+    /// Рейтинг не трогается: он про езду, а не про почту.
+    func setFineOutcome(_ outcome: PassedCamera.FineOutcome, passID: UUID, tripID: Double) {
         guard let index = history.firstIndex(where: { $0.id == tripID }),
-              let updated = TripHistory.settingFineDismissed(history[index], passID: passID,
-                                                             dismissed: dismissed)
+              let updated = TripHistory.settingFineOutcome(history[index], passID: passID,
+                                                           outcome: outcome)
         else { return }
         let original = history[index]
         // Как в гео-чистке: день правим, только если его строка на месте —

@@ -389,6 +389,13 @@ final class AppSettings {
     /// строился ради батареи — но был секретным: попасть на него можно было,
     /// только зная про тап по HUD. Ручное закрытие уважается до конца поездки.
     var dashboardAutoOpens: Bool { didSet { store.set(dashboardAutoOpens, forKey: Keys.dashboardAuto) } }
+    /// Подсказка «Домой / На работу» на главном экране по выученному
+    /// распорядку. Выключается целиком — обучение молчит вместе с ней.
+    var destinationSuggestions: Bool { didSet { store.set(destinationSuggestions, forKey: Keys.destinationHints) } }
+    /// Умная тишина: камеры, которые вы проезжаете регулярно и спокойно,
+    /// перестают называться вслух (см. CameraFamiliarity). Выключенная —
+    /// приложение говорит обо всех камерах, как в первый день.
+    var smartSilence: Bool { didSet { store.set(smartSilence, forKey: Keys.smartSilence) } }
 
     /// Отправлять обезличенную статистику использования (см. `UsageStats`).
     /// Хранится инвертированно («выключено»), чтобы значение по умолчанию у
@@ -462,6 +469,8 @@ final class AppSettings {
         static let mapAppearance = "mapAppearance"
         static let keepScreenOn = "keepScreenOn"
         static let dashboardAuto = "dashboardAutoOpens"
+        static let destinationHints = "destinationSuggestions"
+        static let smartSilence = "smartSilence"
         static let mapTraffic = "mapTraffic"
         static let mapPlaces = "mapPlaces"
         static let alertMode = "alertMode"
@@ -497,6 +506,8 @@ final class AppSettings {
             Keys.haptics: true,
             Keys.keepScreenOn: true,
             Keys.dashboardAuto: true,
+            Keys.destinationHints: true,
+            Keys.smartSilence: true,
             Keys.mapPlaces: true,
         ])
         soundEnabled = store.bool(forKey: Keys.sound)
@@ -535,6 +546,8 @@ final class AppSettings {
         showNextCamera = store.bool(forKey: Keys.nextCamera)
         keepScreenOn = store.bool(forKey: Keys.keepScreenOn)
         dashboardAutoOpens = store.bool(forKey: Keys.dashboardAuto)
+        destinationSuggestions = store.bool(forKey: Keys.destinationHints)
+        smartSilence = store.bool(forKey: Keys.smartSilence)
         mapTraffic = store.bool(forKey: Keys.mapTraffic)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)
         alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto

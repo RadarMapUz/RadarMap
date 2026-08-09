@@ -31,8 +31,6 @@ struct MapScreen: View {
     @State private var showBatterySaverHint = false
     @State private var legendExpanded = false
     @State private var legendCollapseTask: Task<Void, Never>?
-    /// Чип «Задать Дом и Работу» → поиск сразу в режиме назначения слота.
-    @State private var assignSlot: PlaceSlot?
     /// Быстрые тумблеры оповещений (долгий тап по HUD).
     @State private var showQuickToggles = false
     /// Итог только что завершённой поездки («Поездка сохранена») и деталка из него.
@@ -158,9 +156,6 @@ struct MapScreen: View {
         .sheet(isPresented: $showRouteCameras) {
             RouteCamerasSheet(onSelect: { map.focus(on: $0) })
         }
-        .sheet(item: $assignSlot) { slot in
-            SearchView(initialAssign: slot)
-        }
         .sheet(isPresented: $map.showSettings) { SettingsView() }
         .sheet(isPresented: $map.showStats) {
             TripStatsSheet(onRoute: env.location.currentCoordinate == nil ? nil : { coord, name in
@@ -188,7 +183,6 @@ struct MapScreen: View {
             map.showSearch = false
             map.showSettings = false
             showRouteCameras = false
-            assignSlot = nil
             showDashboard = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 map.showStats = true
@@ -356,6 +350,9 @@ struct MapScreen: View {
             // строить Set заново на каждую пересборку слоя.
             let targetID = env.location.nearestCamera?.id
             let routeIDs = env.route.routeCameraIDs
+            // Множество читается один раз на сборку слоя, а не на маркер:
+            // оно меняется раз в поездку, а маркеров на экране до двух сотен.
+            let familiarIDs = env.location.familiarCameraIDs
             ForEach(map.visibleCameras) { camera in
                 Annotation(camera.displayTitle, coordinate: camera.coordinate, anchor: .center) {
                     // Средний зум: точки; близкий — мини-знак лимита («60»);
@@ -369,7 +366,8 @@ struct MapScreen: View {
                         limit: map.isDotZoom ? nil : map.visibleLimits[camera.id],
                         tier: CameraMapContent.tier(camera: camera, focus: map.focus,
                                                     targetID: targetID, routeIDs: routeIDs),
-                        mapHeading: map.mapHeading
+                        mapHeading: map.mapHeading,
+                        isFamiliar: familiarIDs.contains(camera.id)
                     )
                     .onTapGesture { map.select(camera) }
                 }
@@ -440,13 +438,17 @@ struct MapScreen: View {
         if Storage.bool(.hintDashboardShown) { shown.insert(.dashboard) }
         if Storage.bool(.hintTogglesShown) { shown.insert(.toggles) }
         if Storage.bool(.hintRadarShown) { shown.insert(.radar) }
-        guard let hint = OneTimeHints.next(shown: shown,
-                                           radarVisible: mode.showsReportButton) else { return }
+        if Storage.bool(.hintSilenceShown) { shown.insert(.smartSilence) }
+        guard let hint = OneTimeHints.next(
+            shown: shown,
+            radarVisible: mode.showsReportButton,
+            hasFamiliarCameras: !env.location.familiarCameraIDs.isEmpty) else { return }
         hintConsumedThisLaunch = true
         switch hint {
         case .dashboard: Storage.set(true, for: .hintDashboardShown)
         case .toggles:   Storage.set(true, for: .hintTogglesShown)
         case .radar:     Storage.set(true, for: .hintRadarShown)
+        case .smartSilence: Storage.set(true, for: .hintSilenceShown)
         }
         withAnimation(.spring(duration: 0.3)) { activeHint = hint }
         Task {
@@ -528,6 +530,10 @@ struct MapScreen: View {
             // Выше всего, потому что человек должен узнать причину раньше, чем
             // упрётся в неё сам и решит, что приложение сломалось.
             MapStatusBanner(onOpenDashboard: { showDashboard = true })
+            // Доступ к геопозиции — сразу под объявлениями сервера, а не внизу
+            // поверх карты: это причина, по которой приложение не предупреждает
+            // в фоне, и место ей рядом с остальными «почему не в полную силу».
+            permissionBanner
             // Тап по HUD — «Спидометр»; долгий тап — быстрые тумблеры оповещений.
             // В навигации главный элемент — манёвр, поэтому HUD уходит на
             // второй план: одного «главного» на экране достаточно, два спорят
@@ -638,9 +644,18 @@ struct MapScreen: View {
                 }
                 .transition(.scale.combined(with: .opacity))
             }
+            // Слои карты — здесь же, а не отдельным кружком в другом углу:
+            // всё, что управляет КАРТОЙ, живёт одной колонкой справа под
+            // большим пальцем. Раньше эта кнопка висела слева внизу и читалась
+            // как случайно забытый элемент.
+            if mode.showsLegend, !controlsHidden {
+                smartLegend
+                    .transition(.scale.combined(with: .opacity))
+            }
             // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
         .animation(.spring(duration: 0.3), value: mode.showsReportButton)
+        .animation(.spring(duration: 0.3), value: mode.showsLegend)
     }
 
     // MARK: - Низ: панель действий / режим добавления
@@ -691,16 +706,6 @@ struct MapScreen: View {
                     onCancel: { withAnimation { reportPoint = nil } }
                 )
             } else {
-                permissionBanner
-                // Легенда типов — справочная информация: за рулём её место
-                // не на экране (MapMode.showsLegend).
-                if mode.showsLegend, !controlsHidden {
-                    HStack(alignment: .bottom) {
-                        smartLegend
-                        Spacer()
-                    }
-                    .transition(.move(edge: .leading).combined(with: .opacity))
-                }
                 // «Радар ещё стоял?» — над панелью поездки: вопрос живёт
                 // двадцать секунд и уходит сам, ничего не отправляя. Пока на
                 // экране предупреждение о камере, вопрос ждёт: камера важнее,
@@ -765,19 +770,15 @@ struct MapScreen: View {
                     }
                     // Отдельная вью: условие читает скорость (каждый тик GPS).
                     DrivingHintChip()
-                    // Одна линия: Дом и Работа компактной парой слева,
-                    // «Начать поездку» занимает остальную ширину справа.
-                    // Только в покое — в движении выбирать цель поздно.
+                    // Куда поедем — одной строкой и только когда есть уверенная
+                    // догадка. Два круга Дом/Работа стояли здесь всегда, и
+                    // незаданные выглядели невыполненным заданием от приложения
+                    // человеку; распорядок оно знает само (FrequentPlaces).
                     if mode.showsQuickDestinations {
-                    HStack(spacing: 10) {
-                        PlaceCircle(slot: .home,
-                                    onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
-                                    onAssign: { assignSlot = $0 })
-                        PlaceCircle(slot: .work,
-                                    onRoute: { coordinate, name in buildRoute(to: coordinate, name: name) },
-                                    onAssign: { assignSlot = $0 })
+                        DestinationSuggestionBar { coordinate, name in
+                            buildRoute(to: coordinate, name: name)
+                        }
                         tripButton
-                    }
                     }
                 }
                 if mode.showsActionBar, !controlsHidden {
@@ -959,13 +960,13 @@ struct MapScreen: View {
             .padding(12)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
-            .transition(.scale(scale: 0.7, anchor: .bottomLeading).combined(with: .opacity))
+            .transition(.scale(scale: 0.7, anchor: .topTrailing).combined(with: .opacity))
         } else {
             CircleControl(systemName: "square.3.layers.3d", size: 44,
                           accessibilityLabel: "Слои карты") {
                 toggleLegend()
             }
-            .transition(.scale(scale: 0.7, anchor: .bottomLeading).combined(with: .opacity))
+            .transition(.scale(scale: 0.7, anchor: .topTrailing).combined(with: .opacity))
         }
     }
 
@@ -1173,6 +1174,22 @@ struct MapScreen: View {
             Task {
                 await Task.pause(seconds: 2)
                 env.notifications.askDriverCheck()
+            }
+        }
+        // Умная тишина: демо-история даёт спокойные проезды одних и тех же
+        // камер, после пересчёта у них появляется галочка «своя».
+        if args.contains("-demoFamiliar") {
+            Task {
+                await Task.pause(seconds: 2)
+                // Камеру берём без бейджа «неточная»: у него приоритет на
+                // плече маркера, и галочку «своя» он бы перекрыл.
+                guard let coordinate = env.location.currentCoordinate,
+                      let camera = env.cameras.nearest(to: coordinate, limit: 12)
+                          .first(where: { !$0.isApproximate })
+                else { return }
+                env.trip.seedDemoFamiliar(cameraID: camera.id, at: camera.coordinate)
+                env.location.refreshFamiliarCameras()
+                map.focus(on: camera)
             }
         }
         // Карточка «Поездка сохранена» — поверх карты, с демо-историей.

@@ -43,6 +43,12 @@ struct CameraAnnotationView: View {
     /// выглядеть на карте так же уверенно, как проверенная точка.
     private var isGhost: Bool { camera.isUnconfirmedMobile }
 
+    /// «Своя» камера: проезжаем регулярно и спокойно, голос о ней молчит.
+    /// Молчание обязано быть видимым — иначе оно читается как поломка
+    /// («камера на карте есть, а приложение молчит»). Спокойная галочка на
+    /// плече отвечает на этот вопрос до того, как он возникнет.
+    var isFamiliar: Bool = false
+
     var body: some View {
         Group {
             if compact && !selected {
@@ -135,6 +141,14 @@ struct CameraAnnotationView: View {
                 Image(systemName: "questionmark.circle.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textSecondary)
+                    .background(Circle().fill(.black).frame(width: 10, height: 10))
+                    .offset(x: 13, y: -13)
+            } else if isFamiliar {
+                // «Своя»: галочка вместо голоса. Тот же слот на плече —
+                // у своей камеры не бывает ни needsReview, ни призрака.
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.success)
                     .background(Circle().fill(.black).frame(width: 10, height: 10))
                     .offset(x: 13, y: -13)
             }

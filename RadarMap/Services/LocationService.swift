@@ -114,7 +114,10 @@ final class LocationService: NSObject {
     /// «Свои» камеры: проезжаем регулярно и спокойно — в городе они молчат
     /// (см. CameraFamiliarity). Пересчитывается на старте поездки: история за
     /// 30 дней меняется медленно, а на тике это была бы лишняя работа.
-    @ObservationIgnored private var familiarCameraIDs: Set<Int> = []
+    /// «Свои» камеры: проезжаем регулярно и спокойно — голос о них молчит.
+    /// Наблюдаемое намеренно: маркер на карте и HUD показывают спокойное
+    /// состояние, иначе тишина выглядит поломкой, а не заботой.
+    private(set) var familiarCameraIDs: Set<Int> = []
     /// Текущий контекст для чипа на HUD (в режиме «Авто»).
     private(set) var alertContext: AlertPolicy.Context = .city
     // Два независимых «передних плана»: телефонная сцена и CarPlay. Один флаг
@@ -165,6 +168,9 @@ final class LocationService: NSObject {
     // MARK: - Разрешения / запуск
 
     func bootstrap() {
+        // «Свои» камеры нужны и вне поездки: карта рисует их спокойными, и
+        // список обязан быть готов до первого показа маркеров.
+        refreshFamiliarCameras()
         switch manager.authorizationStatus {
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
@@ -1017,7 +1023,13 @@ final class LocationService: NSObject {
 
     /// Пересчитать «свои» камеры по истории. Зовётся на старте поездки:
     /// история за 30 дней меняется медленно, на каждом тике это лишняя работа.
-    private func refreshFamiliarCameras() {
+    func refreshFamiliarCameras() {
+        // Выключили умную тишину — забываем список: гейт в VoiceDirector
+        // работает по нему, и пустое множество и есть «говорить обо всех».
+        guard settings.smartSilence else {
+            familiarCameraIDs = []
+            return
+        }
         familiarCameraIDs = CameraFamiliarity.familiarIDs(history: trip.history, now: Date())
     }
 

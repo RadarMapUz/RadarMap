@@ -23,6 +23,9 @@ nonisolated enum OneTimeHints {
         case dashboard
         case toggles
         case radar
+        /// Появляется, только когда первая камера уже стала «своей»: объяснять
+        /// тишину заранее нечего, а вот когда голос впервые пропал — нужно.
+        case smartSilence
 
         var text: String {
             switch self {
@@ -32,16 +35,21 @@ nonisolated enum OneTimeHints {
                 return String(localized: "Долгий тап по скорости — быстрые переключатели")
             case .radar:
                 return String(localized: "Жёлтая кнопка — отметить радар для других")
+            case .smartSilence:
+                return String(localized: "Знакомые камеры больше не называю вслух — вы их знаете")
             }
         }
     }
 
     /// Какую подсказку показать сейчас. `radarVisible` — жёлтая кнопка на
     /// экране (режим карты её прячет вне поездки): подсказывать про кнопку,
-    /// которой не видно, значит путать, а не помогать.
-    static func next(shown: Set<Hint>, radarVisible: Bool) -> Hint? {
+    /// которой не видно, значит путать, а не помогать. `hasFamiliarCameras` —
+    /// то же правило для умной тишины: пока своих камер нет, объяснять нечего.
+    static func next(shown: Set<Hint>, radarVisible: Bool,
+                     hasFamiliarCameras: Bool = false) -> Hint? {
         for hint in Hint.allCases where !shown.contains(hint) {
             if hint == .radar, !radarVisible { continue }
+            if hint == .smartSilence, !hasFamiliarCameras { continue }
             return hint
         }
         return nil

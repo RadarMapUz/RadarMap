@@ -6,9 +6,11 @@ Stdlib-only (sqlite3 + http.server): без pip-зависимостей на о
 
 Endpoints:
   GET  /api/health         -> {"ok": true}
-  GET  /api/mobile         -> {"reports": [{id, lat, lon, created, expires, up, down}]}
-  POST /api/report         {lat, lon, device}        -> {"id": N, "merged": bool}
-  POST /api/vote           {id, device, value: 1|-1} -> {"ok": true}
+  GET  /api/mobile         -> {"reports": [{id, lat, lon, created, expires, up, down,
+                                            type, confirmed}]}
+  POST /api/report         {lat, lon, device, type}  -> {"id": N, "merged": bool
+                                                         [, "amended": true]}
+  POST /api/vote           {id, device, value: 1|-1 [, kind: "pass"]} -> {"ok": true}
   POST /api/metrics        {device, kind, payload}   -> {"ok": true}   (MetricKit)
   POST /api/camera_report  {camera_id, reason, lat, lon, db_version, device} -> {"ok": true}
   POST /api/feedback       {message, contact, app_version, device}     -> {"ok": true}
@@ -16,11 +18,19 @@ Endpoints:
                             trips, km, alerts, passes, reports, screens} -> {"ok": true}
                            (обезличенный суточный агрегат: ни координат, ни времени событий)
 
-Правила передвижных радаров:
-  * отметка живёт 3 ч; подтверждение (+1) продлевает на 30 мин (максимум 6 ч)
-  * новая отметка в 300 м от активной считается подтверждением (дедупликация)
-  * 3+ дизлайков и дизлайков больше лайков -> отметка скрывается
-  * на устройство: максимум 3 активных отметки, минимум 120 с между отметками
+Правила передвижных радаров (жизненный цикл доверия):
+  * новая отметка — на испытательном сроке (радар/тренога 75 мин, пост 2 ч):
+    фейк, которого никто не подтвердил, умирает сам
+  * полный срок (3 ч / 6 ч) даёт только НЕЗАВИСИМОЕ подтверждение — другое
+    устройство И другой адрес: ротация UUID не превращает слух в факт
+  * подтверждение (+1) продлевает на 30 мин (максимум 6 ч от создания)
+  * новая отметка в 300 м от активной того же типа — подтверждение (merge)
+  * та же точка от того же устройства с ДРУГИМ типом в 400 м / 10 мин —
+    уточнение типа своей отметки (amend), а не вторая точка
+  * дизлайк с нового адреса срезает 30 мин жизни; полное скрытие — по кворуму:
+    3+ дизлайков, больше лайков, с >=3 разных адресов
+  * на устройство: максимум 3 активных отметки, минимум 120 с между отметками;
+    на адрес: максимум 12 активных отметок
 
 Модерация — в панели (server/admin.py, отдельный процесс на :8092, наружу
 через nginx /admin/ с basic auth). Она же проставляет camera_reports.resolved
@@ -44,8 +54,24 @@ BUSY_TIMEOUT_MS = 5000
 TTL = 3 * 3600
 EXTEND = 30 * 60
 MAX_LIFE = 6 * 3600
-# Время жизни по типам отметки: пост стоит долго, ДТП рассасывается за час.
+# ПОЛНЫЙ срок жизни по типам — его отметка получает только после независимого
+# подтверждения. Пост стоит долго, ДТП рассасывается за час.
 REPORT_TTLS = {"radar": TTL, "tripod": TTL, "post": 6 * 3600, "accident": 3600}
+# Испытательный срок новой отметки. Ставить фейки должно быть бессмысленно:
+# точка, которую не подтвердил ни один независимый водитель, умирает сама —
+# ни модерации, ни кворума не нужно. Цена: одинокая честная тренога на пустой
+# дороге живёт 75 мин вместо трёх часов — но там её и видят единицы.
+PROBATION_TTLS = {"radar": 75 * 60, "tripod": 75 * 60, "post": 2 * 3600,
+                  "accident": 3600}
+# Дизлайк с нового адреса срезает жизнь: два честных «Нет» после проезда
+# убирают пустышку задолго до кворума на полное скрытие. Пол — 5 минут:
+# мгновенное снятие остаётся привилегией кворума разных адресов.
+DOWN_PENALTY = 30 * 60
+DOWN_FLOOR = 300
+# Уточнение типа своей отметки: радиус тот же, что у окна дублей в приложении
+# (ReportGuard, 400 м); окно шире клиентских секунд — уточнить можно и из меню.
+AMEND_WINDOW = 10 * 60
+AMEND_METERS = 400
 MERGE_METERS = 300
 UZ_LAT = (37.0, 46.0)
 UZ_LON = (55.0, 74.0)
@@ -67,6 +93,10 @@ MAX_USAGE_ROWS = 2_000_000   # ~90 дней × 20 000 устройств: пот
 # Скрытие отметки требует дизлайков с РАЗНЫХ адресов: три свежих UUID с одного
 # телефона больше не снимают чужую отметку с карты.
 HIDE_DISTINCT_IPS = 3
+# Активных отметок с одного адреса. Суточный кап (30) не мешал одному адресу
+# держать на карте десяток живых фейков разом. CGNAT помним: за одним адресом
+# оператора — десятки честных водителей, поэтому не 3, а 12.
+MAX_ACTIVE_PER_IP = 12
 
 def db():
     """Соединение для обработки одного запроса.
@@ -153,6 +183,10 @@ def init_db():
     # системы. Кворум на скрытие считается по РАЗНЫМ адресам (см. admin.py).
     for table in ("votes", "reports", "camera_reports"):
         migrate(conn, table, "ip TEXT DEFAULT ''")
+    # Происхождение голоса: "pass" — после реального проезда (MobilePassWatch),
+    # "merge" — повторная отметка тем же местом. Вес не меняет — проезд сервер
+    # проверить не может, — но модератор в админке видит, какому сигналу верить.
+    migrate(conn, "votes", "kind TEXT DEFAULT ''")
 
     # --- индексы ---
     # Раньше не было ни одного: каждая проверка суточного капа была полным
@@ -160,6 +194,7 @@ def init_db():
     for statement in (
         "CREATE INDEX IF NOT EXISTS idx_reports_live ON reports(active, expires)",
         "CREATE INDEX IF NOT EXISTS idx_reports_device ON reports(device, active, expires)",
+        "CREATE INDEX IF NOT EXISTS idx_reports_ip ON reports(ip, active, expires)",
         # votes(report_id, …) уже покрыт индексом первичного ключа
         "CREATE INDEX IF NOT EXISTS idx_votes_device ON votes(device, ts)",
         "CREATE INDEX IF NOT EXISTS idx_camrep_camera ON camera_reports(camera_id, resolved)",
@@ -245,8 +280,34 @@ def haversine(lat1, lon1, lat2, lon2):
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
     return 2 * r * math.asin(math.sqrt(a))
 
+
+def confirmed_independently(conn, rid, owner_device, owner_ip):
+    """Есть ли у отметки лайк с ДРУГОГО устройства и ДРУГОГО адреса.
+
+    Только такой голос превращает испытательный срок в полный: свой UUID
+    ротируется бесплатно, свой адрес — нет. Старые голоса без ip ('') не в
+    счёт — консервативно: лучше недодержать отметку, чем продлить фейк его же
+    рукой. За CGNAT второй честный водитель может не подтвердить (адрес общий) —
+    эта цена ниже, чем самоподтверждение фейков ротацией UUID.
+    """
+    return conn.execute(
+        "SELECT 1 FROM votes WHERE report_id = ? AND value = 1 "
+        "AND device != ? AND ip != '' AND ip != ? LIMIT 1",
+        (rid, owner_device, owner_ip)).fetchone() is not None
+
+
+def lifecycle_expires(created, expires, rtype, confirmed, now):
+    """Новый expires после лайка. Неподтверждённой точке лайк жизнь НЕ
+    продлевает (испытательный срок идёт), подтверждённой — полный срок её типа
+    плюс 30 мин за голос, но не дальше MAX_LIFE от создания."""
+    if not confirmed:
+        return expires
+    new_exp = max(max(expires, now) + EXTEND,
+                  created + REPORT_TTLS.get(rtype, TTL))
+    return min(created + MAX_LIFE, new_exp)
+
 class Handler(BaseHTTPRequestHandler):
-    server_version = "RadarMapAPI/1.2"
+    server_version = "RadarMapAPI/1.3"
     timeout = 10  # slow-POST не должен держать поток вечно
 
     def log_message(self, fmt, *args):
@@ -311,14 +372,20 @@ class Handler(BaseHTTPRequestHandler):
                     # голоса удалённых отметок — сироты, без чистки таблица растёт вечно
                     conn.execute("DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)")
                     conn.commit()
+                # confirmed — по разным устройству И адресу (см.
+                # confirmed_independently): клиент рисует неподтверждённые
+                # полупрозрачными и говорит «возможно, радар», а не «радар».
                 rows = conn.execute(
-                    "SELECT id, lat, lon, created, expires, up, down, type FROM reports "
-                    "WHERE active = 1 AND expires > ?", (now,)).fetchall()
+                    "SELECT r.id, r.lat, r.lon, r.created, r.expires, r.up, r.down, r.type, "
+                    "EXISTS(SELECT 1 FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
+                    "AND v.device != r.device AND v.ip != '' AND v.ip != r.ip) "
+                    "FROM reports r WHERE r.active = 1 AND r.expires > ?", (now,)).fetchall()
             finally:
                 conn.close()
             return self._json(200, {"reports": [
                 {"id": r[0], "lat": r[1], "lon": r[2], "created": r[3],
-                 "expires": r[4], "up": r[5], "down": r[6], "type": r[7]} for r in rows]})
+                 "expires": r[4], "up": r[5], "down": r[6], "type": r[7],
+                 "confirmed": bool(r[8])} for r in rows]})
         self._json(404, {"error": "not found"})
 
     def do_POST(self):
@@ -557,6 +624,26 @@ class Handler(BaseHTTPRequestHandler):
         now = time.time()
         conn = db()
         try:
+            # Уточнение типа СВОЕЙ свежей отметки. «Радар!» уходит сразу, тип
+            # человек выбирает следующим тапом — раньше второй тап с другим
+            # типом рождал ВТОРУЮ точку рядом. Проверка стоит ДО лимитов:
+            # amend не создаёт новых точек, и глушить его капом «минимум 120 с
+            # между отметками» значило бы сломать само уточнение.
+            own = conn.execute(
+                "SELECT id, lat, lon, type FROM reports "
+                "WHERE device = ? AND active = 1 AND expires > ? AND created > ?",
+                (device, now, now - AMEND_WINDOW)).fetchall()
+            for r in own:
+                if r[3] != rtype and haversine(lat, lon, r[1], r[2]) <= AMEND_METERS:
+                    # Срок не трогаем: уточнение типа — не подтверждение, иначе
+                    # amend был бы бесплатным продлением собственной отметки.
+                    conn.execute("UPDATE reports SET type = ? WHERE id = ?",
+                                 (rtype, r[0]))
+                    conn.commit()
+                    # merged=True — для старых клиентов, знающих только это поле.
+                    return self._json(200, {"id": r[0], "merged": True,
+                                            "amended": True})
+
             # rate limits per device
             recent = conn.execute(
                 "SELECT COUNT(*), MAX(created) FROM reports WHERE device = ? AND active = 1 AND expires > ?",
@@ -569,21 +656,26 @@ class Handler(BaseHTTPRequestHandler):
             # dedupe: nearby active report of the SAME type -> treat as confirmation
             # (пост ДПС и радар в 100 м друг от друга — разные сущности)
             active_rows = conn.execute(
-                "SELECT id, lat, lon, created, expires, type FROM reports "
+                "SELECT id, lat, lon, created, expires, type, device, ip FROM reports "
                 "WHERE active = 1 AND expires > ?", (now,)).fetchall()
             for r in active_rows:
                 if r[5] == rtype and haversine(lat, lon, r[1], r[2]) <= MERGE_METERS:
-                    new_exp = min(r[3] + MAX_LIFE, max(r[4], now) + EXTEND)
                     # Подтверждение — через votes, как обычный лайк: _vote
                     # пересчитывает up/down только из votes, инкремент в
                     # reports первый же голос стёр бы.
                     conn.execute(
-                        "INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip) "
-                        "VALUES(?,?,1,?,?)",
+                        "INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip, kind) "
+                        "VALUES(?,?,1,?,?,'merge')",
                         (r[0], device, now, ip))
                     up = conn.execute(
                         "SELECT COUNT(*) FROM votes WHERE report_id = ? AND value = 1",
                         (r[0],)).fetchone()[0]
+                    # Продление — привилегия НЕЗАВИСИМОГО подтверждения: merge
+                    # с того же адреса (свой второй UUID, пассажир на том же
+                    # Wi-Fi) засчитывается голосом, но испытательный срок не
+                    # снимает — иначе фейк продлевал бы сам себя ротацией.
+                    confirmed = confirmed_independently(conn, r[0], r[6], r[7])
+                    new_exp = lifecycle_expires(r[3], r[4], rtype, confirmed, now)
                     conn.execute("UPDATE reports SET up = ?, expires = ? WHERE id = ?",
                                  (up, new_exp, r[0]))
                     conn.commit()
@@ -593,10 +685,20 @@ class Handler(BaseHTTPRequestHandler):
             # фейками, ни раздувать O(N)-скан дедупликации выше.
             if len(active_rows) >= MAX_ACTIVE_REPORTS:
                 return self._json(429, {"error": "too many active"})
+            # Пер-IP кап активных точек: суточный кап не мешал одному адресу
+            # держать на карте десяток живых фейков одновременно.
+            if ip:
+                mine = conn.execute(
+                    "SELECT COUNT(*) FROM reports WHERE ip = ? AND active = 1 AND expires > ?",
+                    (ip, now)).fetchone()[0]
+                if mine >= MAX_ACTIVE_PER_IP:
+                    return self._json(429, {"error": "too many active"})
+            # Новая отметка живёт испытательный срок, полный получит после
+            # независимого подтверждения (см. lifecycle_expires).
             cur = conn.execute(
                 "INSERT INTO reports(lat, lon, created, expires, device, type, ip) "
                 "VALUES(?,?,?,?,?,?,?)",
-                (lat, lon, now, now + REPORT_TTLS[rtype], device, rtype, ip))
+                (lat, lon, now, now + PROBATION_TTLS[rtype], device, rtype, ip))
             conn.commit()
             return self._json(200, {"id": cur.lastrowid, "merged": False})
         finally:
@@ -626,19 +728,42 @@ class Handler(BaseHTTPRequestHandler):
                 (device, now - 86400)).fetchone()[0]
             if voted >= MAX_VOTES_PER_DAY:
                 return self._json(429, {"error": "too many"})
-            row = conn.execute("SELECT created, expires FROM reports WHERE id = ? AND active = 1",
-                               (rid,)).fetchone()
+            row = conn.execute(
+                "SELECT created, expires, device, ip, type FROM reports "
+                "WHERE id = ? AND active = 1", (rid,)).fetchone()
             if not row:
                 return self._json(404, {"error": "no report"})
-            conn.execute("INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip) "
-                         "VALUES(?,?,?,?,?)",
-                         (rid, device, value, now, ip))
+            created, expires, owner_device, owner_ip, rtype = row
+            # kind="pass" — голос после реального проезда (MobilePassWatch).
+            # Вес не меняет (проезд сервер проверить не может), но модератор
+            # видит, какому сигналу верить. Мусор в поле не убивает сам голос.
+            try:
+                kind = as_str(data.get("kind"), default="")[:16]
+            except TypeError:
+                kind = ""
+            prior = conn.execute(
+                "SELECT value FROM votes WHERE report_id = ? AND device = ?",
+                (rid, device)).fetchone()
+            conn.execute("INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip, kind) "
+                         "VALUES(?,?,?,?,?,?)",
+                         (rid, device, value, now, ip, kind))
             up, down = conn.execute(
                 "SELECT COALESCE(SUM(value = 1), 0), COALESCE(SUM(value = -1), 0) "
                 "FROM votes WHERE report_id = ?", (rid,)).fetchone()
-            expires = row[1]
             if value == 1:
-                expires = min(row[0] + MAX_LIFE, max(expires, now) + EXTEND)
+                # Продление и полный срок — только за независимое подтверждение
+                # (другое устройство И другой адрес): см. lifecycle_expires.
+                confirmed = confirmed_independently(conn, rid, owner_device, owner_ip)
+                expires = lifecycle_expires(created, expires, rtype, confirmed, now)
+            elif ip and (prior is None or prior[0] != -1):
+                # Первый дизлайк с НОВОГО адреса срезает жизнь: два честных
+                # «Нет» после проезда снимают пустышку задолго до кворума.
+                # Повтор с того же устройства или адреса не режет второй раз.
+                seen = conn.execute(
+                    "SELECT COUNT(*) FROM votes WHERE report_id = ? AND value = -1 "
+                    "AND ip = ? AND device != ?", (rid, ip, device)).fetchone()[0]
+                if seen == 0:
+                    expires = max(now + DOWN_FLOOR, expires - DOWN_PENALTY)
             # Скрытие — по числу РАЗНЫХ адресов среди дизлайков: device
             # ротируется бесплатно, и три свежих UUID с одного телефона гасили
             # любую отметку. Старые голоса (ip = '') в кворум не входят —

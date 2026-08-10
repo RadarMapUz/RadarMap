@@ -248,6 +248,9 @@ final class MobileCameraService {
         }
         guard let coordinate else { return .refused(.noPosition) }
         let result = await report(at: coordinate, kind: kind)
+        // Считаем только созданную отметку, и только здесь: уточнение типа
+        // (refine) переписывает ту же точку и второй отметкой не является.
+        onReportSent?()
         // Окно уточнения типа — только для СВОЕЙ свежесозданной точки:
         // merged-точка чужая, и «уточнение» родило бы рядом вторую сущность.
         if kind == .radar, result == .created {
@@ -257,6 +260,13 @@ final class MobileCameraService {
     }
 
     // MARK: - «Что это было?» после быстрой отметки
+
+    /// Водитель отметил радар — дневной счётчик воронки. Хук, а не прямая
+    /// ссылка на статистику: сервис отметок о ней знать не должен.
+    @ObservationIgnored var onReportSent: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onReportSent,
+                                               "MobileCameraService.onReportSent") }
+    }
 
     /// Предложение уточнить тип только что созданной отметки. Показывается
     /// несколько секунд (AppConfig.reportRefineSeconds); молчание оставляет

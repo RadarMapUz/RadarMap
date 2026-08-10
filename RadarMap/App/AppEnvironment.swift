@@ -163,6 +163,14 @@ final class AppEnvironment {
         // базе v8 — старые «проезды» поперёк оси (мост над камерой) выкидываем.
         // Строго ПОСЛЕ загрузки базы: она декодируется асинхронно, и вызов
         // прямо отсюда получал пустой список камер — миграция молча выключалась.
+        // История приезжает с диска уже после первого кадра, поэтому всё,
+        // что из неё выводится, пересчитывается по этому сигналу, а не один
+        // раз на старте сцены.
+        mobile.onReportSent = { [weak usage] in usage?.noteReport() }
+        trip.onHistoryLoaded = { [weak self] in
+            self?.refreshLearnedPlaces()
+            self?.refreshWidgetSnapshot()
+        }
         cameras.onDatabaseLoaded = { [weak cameras, weak trip] in
             guard let cameras, let trip else { return }
             trip.axisCleanupIfNeeded(axisByID: Dictionary(

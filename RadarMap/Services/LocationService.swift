@@ -238,6 +238,14 @@ final class LocationService: NSObject {
         if foreground, let coordinate = currentCoordinate {
             recomputeNearest(from: coordinate)
         }
+        // Поездка, начатая в фоне (автостарт по CoreMotion в кармане), Live
+        // Activity не получала вовсе: ActivityKit не даёт запрашивать её из
+        // фона, а повторной попытки не было — водитель открывал приложение и
+        // не находил на локскрине ничего. Метод идемпотентен (guard activity
+        // == nil), поэтому одна попытка на поездку, не чаще.
+        if foreground, isTripActive {
+            liveActivity?.startIfNeeded(state: activityState)
+        }
     }
 
     /// Экран в машине подключён/отключён — самостоятельный «передний план»,

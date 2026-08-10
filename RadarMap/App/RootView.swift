@@ -38,7 +38,15 @@ struct RootView: View {
                 }
             } else {
                 OnboardingView {
-                    env.location.bootstrap()
+                    // Полный старт, а не только bootstrap: `.task` корня уже
+                    // отработал и вышел по guard hasCompletedOnboarding, а
+                    // второй раз он не выполнится — идентичность ZStack при
+                    // смене флага не меняется. Без этого ПЕРВАЯ сессия жила в
+                    // тихом фоне: без опроса отметок, без CoreMotion и без
+                    // отметки «экран на виду».
+                    env.startDrivingServices()
+                    env.location.setForeground(true)
+                    env.setPhoneSceneActive(true)
                     withAnimation(.easeInOut) { hasCompletedOnboarding = true }
                 }
                 .transition(.opacity)
@@ -88,6 +96,12 @@ struct RootView: View {
                 env.location.setForeground(true)
                 env.setPhoneSceneActive(true)   // опрос радаров: жив любой экран
                 env.motion.start()
+                // Пульт, правки модератора и база камер проверялись только на
+                // ХОЛОДНОМ старте: телефон живёт неделями без перезапуска
+                // приложения, и стоп-кран, включённый вчера, доезжал бы до
+                // такого пользователя лишь после ручного убийства процесса.
+                // Свои интервалы (6 ч / 3 ч / сутки) сервисы держат сами.
+                env.refreshRemoteIfNeeded()
             case .background:
                 env.location.setForeground(false)   // в поездке непрерывный GPS продолжит работать
                 env.setPhoneSceneActive(false)       // опрос гаснет, если и CarPlay нет

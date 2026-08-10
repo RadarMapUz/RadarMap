@@ -122,7 +122,13 @@ struct DashboardView: View {
         .sheet(isPresented: $showSettings) { SettingsView() }
         .statusBarHidden()
         // Тик GPS → точка зрения схемы (и изредка пересборка её растра).
-        .onChange(of: env.location.locationTick) { sketch.refresh(env) }
+        // Только пока экран телефона действительно на виду: fullScreenCover в
+        // фоне не размонтируется, и без этого гейта приборка всю поездку в
+        // кармане пересчитывала схему дороги раз в секунду — рисуя в никуда.
+        .onChange(of: env.location.locationTick) {
+            guard env.isPhoneSceneActive else { return }
+            sketch.refresh(env)
+        }
         // Приборка светится всю поездку — но по тумблеру пользователя: раньше
         // автопереход молча перебивал выключенное «не гасить экран», отменяя
         // единственный рычаг против главного потребителя.

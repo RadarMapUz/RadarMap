@@ -375,6 +375,12 @@ nonisolated enum AppConfig {
     /// Сервер с актуальной базой. TODO: перейти на домен + HTTPS перед публикацией в App Store.
     static let syncBaseURL = URL(string: "http://45.130.148.94:8090")!
 
+    /// Правдоподобный диапазон дорожного лимита. База лимитов — единственные
+    /// данные, которые применяются молча и БЕЗ подписи (см. SpeedLimitService),
+    /// поэтому у неё есть хотя бы этот забор: за ним заведомо испорченные
+    /// значения, а не редкая дорога.
+    nonisolated static let plausibleSpeedLimits = 5...150
+
     /// Как часто автоматически проверять обновления базы.
     static let syncCheckInterval: TimeInterval = 24 * 60 * 60
 

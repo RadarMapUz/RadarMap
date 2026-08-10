@@ -344,8 +344,17 @@ struct LimitIndex: Sendable, RoadNetworkSource {
         var grid: [Int: [Int32]] = [:]
 
         for entry in raw {
+            // Границы значения — единственная защита этого файла: он
+            // приезжает по HTTP без подписи, в отличие от базы камер, пульта,
+            // правок модератора и дорожных тайлов. Подписать его — работа на
+            // стороне владельца (см. server/HTTPS.md); пока же явно отвергаем
+            // невозможные лимиты: в Узбекистане минимум 20 (дворы), максимум
+            // 110–130, и «5» с «300» означают испорченные данные, а не дорогу.
+            // Отвергаем СЕГМЕНТ, а не файл: один битый лимит не должен
+            // выключить двадцать тысяч честных.
             guard entry.count == 2,
                   let limit = (entry[0] as? NSNumber)?.intValue,
+                  AppConfig.plausibleSpeedLimits.contains(limit),
                   let flat = entry[1] as? [NSNumber], flat.count >= 4 else { continue }
 
             var pts: [MKMapPoint] = []

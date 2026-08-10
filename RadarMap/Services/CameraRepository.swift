@@ -78,8 +78,21 @@ final class CameraStore: CameraRepository {
     }
 
     /// Обновить список передвижных радаров (вызывается MobileCameraService).
+    ///
+    /// Сравниваем по СОДЕРЖИМОМУ, а не через `==` списков: `Camera` равна по
+    /// одному id (см. Camera.swift), и уточнение типа отметки (amend — сервер
+    /// переписывает ТУ ЖЕ строку) или её подтверждение независимым водителем
+    /// меняли только тип и `mobileConfirmed`, а id оставляли прежним. Для
+    /// такого списка `==` возвращал true, и обновление до карты не доезжало:
+    /// призрак-маркер оставался призраком, а «тренога» на экране — «радаром».
     func setMobileCameras(_ cameras: [Camera]) {
-        guard cameras != mobile else { return }
+        let changed = cameras.count != mobile.count
+            || zip(cameras, mobile).contains { new, old in
+                new.id != old.id || new.type != old.type
+                    || new.mobileConfirmed != old.mobileConfirmed
+                    || new.lat != old.lat || new.lon != old.lon
+            }
+        guard changed else { return }
         mobile = cameras
         dataChanged()
     }

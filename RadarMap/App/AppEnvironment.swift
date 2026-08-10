@@ -281,24 +281,64 @@ final class AppEnvironment {
         learnedPlaces = FrequentPlaces.learn(history: trip.history, now: Date())
     }
 
-    /// Снимок для домашнего виджета: база, последняя поездка и текущая неделя.
-    /// Зовётся при уходе в фон (RootView) и в конце каждой поездки — виджет
-    /// показывает статистику недели вообще без открытия приложения, и после
-    /// автозавершения в кармане она обязана быть свежей.
+    /// Снимок для домашнего виджета: текущая неделя целиком, включая форму по
+    /// дням и место наибольшего риска. Зовётся при уходе в фон (RootView) и в
+    /// конце каждой поездки — виджет показывает статистику вообще без
+    /// открытия приложения, и после автозавершения в кармане она обязана быть
+    /// свежей. Считаем ЗДЕСЬ: виджет не имеет права вычислять — у него нет ни
+    /// истории, ни права тратить батарею.
     func refreshWidgetSnapshot() {
+        let calendar = Calendar.current
+        let now = Date()
         let week = TripHistory.summary(days: trip.days, history: trip.history,
                                        period: .week)
+        let weekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start
+        // Форма недели по дням — из тех же дневных сводок, что и календарь в
+        // Итогах. День без поездок остаётся нулём на своём месте, а не
+        // выпадает: иначе неделя на виджете выглядела бы короче, чем была.
+        var distances = [Double](repeating: 0, count: 7)
+        var overspeed = [Bool](repeating: false, count: 7)
+        if let weekStart {
+            for day in trip.days {
+                guard let index = calendar.dateComponents([.day], from: weekStart,
+                                                          to: calendar.startOfDay(for: day.day)).day,
+                      (0...6).contains(index) else { continue }
+                distances[index] = day.distanceMeters
+                overspeed[index] = day.overPasses > 0
+            }
+        }
+        // «Обычная неделя» — медиана километров за предыдущие восемь, без
+        // текущей: она ещё не кончилась и занижала бы норму каждый понедельник.
+        // Медиана, а не среднее: одна поездка в Самарканд не должна сделать
+        // все следующие недели «провальными».
+        var previousWeeks: [Double] = []
+        if let weekStart {
+            for back in 1...8 {
+                let anchor = weekStart.addingTimeInterval(-Double(back) * 7 * 86400)
+                guard let interval = calendar.dateInterval(of: .weekOfYear, for: anchor)
+                else { continue }
+                let sum = trip.days
+                    .filter { $0.day >= interval.start && $0.day < interval.end }
+                    .reduce(0) { $0 + $1.distanceMeters }
+                if sum > 0 { previousWeeks.append(sum) }
+            }
+        }
+        let month = TripHistory.summary(days: trip.days, history: trip.history, period: .month)
         SharedDefaults.write(SharedDefaults.Snapshot(
-            dbCount: cameras.cameras.count,
-            dbVersion: cameras.dbVersion,
-            mobileCount: cameras.mobile.count,
-            tripCameras: trip.camerasPassed,
-            tripMaxSpeed: trip.maxSpeedKmh,
-            tripDistance: trip.distanceMeters,
+            weekStart: weekStart,
             weekDistance: week.distance,
             weekTrips: week.trips,
             weekRating: week.rating ?? -1,
-            weekFineRisk: week.fineRisk
+            weekFineRisk: week.fineRisk,
+            weekDeltaPercent: week.distanceDeltaPercent,
+            dayDistances: distances,
+            dayOverspeed: overspeed,
+            topRiskPlace: week.topOverLocation,
+            topRiskPasses: week.topOverCount,
+            usualWeekDistance: WidgetWeek.median(previousWeeks),
+            monthDistance: month.distance,
+            lifetimeDistance: trip.lifetime.distanceMeters,
+            weekMovingDuration: week.movingDuration
         ))
         WidgetCenter.shared.reloadAllTimelines()
     }

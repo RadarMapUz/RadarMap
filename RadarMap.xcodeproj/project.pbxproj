@@ -82,6 +82,13 @@
 			);
 			target = 4B1546C1300649860097B8CA /* RadarMapWidgets */;
 		};
+		6F0A0CFF302A452F00844CD9 /* Exceptions for "RadarMap" folder in "RadarWatch" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Resources/Icons/Radar.icon,
+			);
+			target = 4BFACE02300649860097B8CA /* RadarWatch */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -89,6 +96,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				4B1546AA300649860097B8CA /* Exceptions for "RadarMap" folder in "RadarMap" target */,
+				6F0A0CFF302A452F00844CD9 /* Exceptions for "RadarMap" folder in "RadarWatch" target */,
 			);
 			path = RadarMap;
 			sourceTree = "<group>";
@@ -513,7 +521,7 @@
 		4B1546A1300649870097B8CA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Radar;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = RadarMap/RadarMap.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = RadarMap/RadarMapCarPlay.entitlements;
@@ -554,7 +562,7 @@
 		4B1546A2300649870097B8CA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Radar;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = RadarMap/RadarMap.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = RadarMap/RadarMapCarPlay.entitlements;
@@ -703,6 +711,7 @@
 		4BFACE04300649860097B8CA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = Radar;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = RadarWatch/RadarWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -734,6 +743,7 @@
 		4BFACE05300649860097B8CA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = Radar;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = RadarWatch/RadarWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;

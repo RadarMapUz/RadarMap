@@ -37,6 +37,8 @@ enum SharedDefaults {
         static let monthDistance = "widget.monthDistance"
         static let lifetimeDistance = "widget.lifetimeDistance"
         static let weekMovingDuration = "widget.weekMovingDuration"
+        static let lastTripDistance = "widget.lastTripDistance"
+        static let lastTripAt = "widget.lastTripAt"
         static let updatedAt = "widget.updatedAt"
     }
 
@@ -70,7 +72,16 @@ enum SharedDefaults {
         /// только растёт, и потому приятное.
         var lifetimeDistance = 0.0
         var weekMovingDuration: TimeInterval = 0
+        /// Последняя поездка — единственное, что можно честно показать, пока
+        /// неделя ещё не набралась: сравнивать не с чем, а факт уже есть.
+        var lastTripDistance = 0.0
+        var lastTripAt: Date?
         var updatedAt: Date?
+        /// Доступен ли общий контейнер. false — App Group не выдан подписью
+        /// (личная команда его не даёт), и виджет обязан сказать это прямо, а
+        /// не показывать нули: «вы не ездили» и «мне не дали данные» — разные
+        /// вещи с разными действиями пользователя.
+        var hasAccess = true
     }
 
     static func write(_ snapshot: Snapshot) {
@@ -94,11 +105,13 @@ enum SharedDefaults {
         store.set(snapshot.monthDistance, forKey: Keys.monthDistance)
         store.set(snapshot.lifetimeDistance, forKey: Keys.lifetimeDistance)
         store.set(snapshot.weekMovingDuration, forKey: Keys.weekMovingDuration)
+        store.set(snapshot.lastTripDistance, forKey: Keys.lastTripDistance)
+        store.set(snapshot.lastTripAt, forKey: Keys.lastTripAt)
         store.set(Date(), forKey: Keys.updatedAt)
     }
 
     static func read() -> Snapshot {
-        guard let store else { return Snapshot() }
+        guard let store else { return Snapshot(hasAccess: false) }
         return Snapshot(
             weekStart: store.object(forKey: Keys.weekStart) as? Date,
             weekDistance: store.double(forKey: Keys.weekDistance),
@@ -117,6 +130,8 @@ enum SharedDefaults {
             monthDistance: store.double(forKey: Keys.monthDistance),
             lifetimeDistance: store.double(forKey: Keys.lifetimeDistance),
             weekMovingDuration: store.double(forKey: Keys.weekMovingDuration),
+            lastTripDistance: store.double(forKey: Keys.lastTripDistance),
+            lastTripAt: store.object(forKey: Keys.lastTripAt) as? Date,
             updatedAt: store.object(forKey: Keys.updatedAt) as? Date
         )
     }
@@ -127,7 +142,50 @@ enum SharedDefaults {
 /// Всё, что виджету надо РЕШИТЬ, а не нарисовать. Отдельно и без SwiftUI:
 /// виджет не имеет права считать данные, но обязан правильно понимать, что
 /// ему прислали (см. `WidgetSnapshotTests`).
+/// Что виджету вообще есть сказать. Проектировать надо было отсюда: полная
+/// неделя выглядит хорошо и сама, а живёт виджет в основном в двух других
+/// состояниях — понедельник, первая неделя, отпуск.
+nonisolated enum WidgetState: Equatable {
+    /// App Group не выдан подписью — данных нет и не будет, пока это не чинят.
+    case noAccess
+    /// Поездок не было. Ноль километров — не факт, а его отсутствие.
+    case empty
+    /// Поездки есть, но нормы и формы недели ещё нет: сравнивать не с чем.
+    case few
+    /// Полная неделя: столбики, норма, дельта.
+    case full
+}
+
 nonisolated enum WidgetWeek {
+    /// Сколько дней недели были ездовыми.
+    static func activeDayCount(_ distances: [Double]) -> Int {
+        padded(distances).filter { $0 > 0 }.count
+    }
+
+    /// Состояние виджета. Порог «мало данных» — меньше двух ездовых дней ИЛИ
+    /// нет накопленной нормы: и то и другое означает, что сравнивать не с чем,
+    /// а значит ни «в среднем», ни «из обычных» показывать нельзя.
+    static func state(_ snapshot: SharedDefaults.Snapshot) -> WidgetState {
+        guard snapshot.hasAccess else { return .noAccess }
+        guard snapshot.weekTrips > 0 || snapshot.weekDistance > 0 else { return .empty }
+        let days = activeDayCount(snapshot.dayDistances)
+        return days >= 2 && snapshot.usualWeekDistance > 1000 ? .full : .few
+    }
+
+    /// Красить день красным есть смысл, только когда в неделе есть с чем его
+    /// сравнить. Единственный столбик красным превращает виджет в аварийный
+    /// щит, хотя случилось обычное.
+    static func marksOverspeedDays(_ distances: [Double]) -> Bool {
+        activeDayCount(distances) >= 2
+    }
+
+    /// Показывать ли «всего». Пока пожизненный пробег не ощутимо больше
+    /// месячного, это то же число другими словами — а у нового пользователя
+    /// так всегда: счёт начался с установки.
+    static func showsLifetime(month: Double, lifetime: Double) -> Bool {
+        lifetime > month * 1.5 && lifetime > 0
+    }
+
     /// Ровно семь значений: короткий массив дополняется, длинный обрезается.
     /// Данные приходят из App Group, то есть из другого процесса и, возможно,
     /// из прошлой версии приложения — доверять их длине нельзя.

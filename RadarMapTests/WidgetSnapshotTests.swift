@@ -162,6 +162,60 @@ final class WidgetSnapshotTests: XCTestCase {
         XCTAssertEqual(WidgetWeek.averagePerActiveDay([0, 0, 0, 0, 0, 0, 0]), 0, accuracy: 0.001)
     }
 
+    // MARK: - Состояния
+
+    private func snapshot(trips: Int, days: [Double], usual: Double = 0,
+                          access: Bool = true) -> SharedDefaults.Snapshot {
+        SharedDefaults.Snapshot(weekStart: thisWeekStart,
+                                weekDistance: days.reduce(0, +), weekTrips: trips,
+                                dayDistances: days, usualWeekDistance: usual,
+                                updatedAt: now, hasAccess: access)
+    }
+
+    func testNoAccessIsNotConfusedWithNoTrips() {
+        // Самая дорогая ошибка виджета: «мне не дали данные» выглядело как
+        // «вы не ездили», и человек шёл искать поездки вместо подписи.
+        let blocked = snapshot(trips: 0, days: [0, 0, 0, 0, 0, 0, 0], access: false)
+        XCTAssertEqual(WidgetWeek.state(blocked), .noAccess)
+        XCTAssertEqual(WidgetWeek.state(snapshot(trips: 0, days: [0, 0, 0, 0, 0, 0, 0])), .empty)
+    }
+
+    func testOneDayIsFewNotFull() {
+        // Один столбик и шесть прочерков — это не форма недели, а её отсутствие.
+        let s = snapshot(trips: 1, days: [12_400, 0, 0, 0, 0, 0, 0], usual: 100_000)
+        XCTAssertEqual(WidgetWeek.state(s), .few)
+    }
+
+    func testWeekWithoutNormIsFewEvenWithManyDays() {
+        // Норма ещё не накопилась — сравнивать не с чем, значит ни кольца,
+        // ни «в среднем» показывать нельзя.
+        let s = snapshot(trips: 5, days: [10_000, 12_000, 8_000, 0, 0, 0, 0])
+        XCTAssertEqual(WidgetWeek.state(s), .few)
+    }
+
+    func testTwoDaysWithNormIsFull() {
+        let s = snapshot(trips: 3, days: [10_000, 12_000, 0, 0, 0, 0, 0], usual: 100_000)
+        XCTAssertEqual(WidgetWeek.state(s), .full)
+    }
+
+    func testSingleDayIsNotPaintedRed() {
+        // Единственный ездовой день красным превращает виджет в аварийный щит.
+        XCTAssertFalse(WidgetWeek.marksOverspeedDays([12_400, 0, 0, 0, 0, 0, 0]))
+        XCTAssertTrue(WidgetWeek.marksOverspeedDays([12_400, 8_000, 0, 0, 0, 0, 0]))
+    }
+
+    func testLifetimeTileHiddenWhileItRepeatsTheMonth() {
+        // У нового пользователя пожизненный счёт начался с установки: «всего»
+        // равно месяцу и занимает место, ничего не добавляя.
+        XCTAssertFalse(WidgetWeek.showsLifetime(month: 12_400, lifetime: 12_400))
+        XCTAssertTrue(WidgetWeek.showsLifetime(month: 486_000, lifetime: 12_400_000))
+    }
+
+    func testActiveDayCount() {
+        XCTAssertEqual(WidgetWeek.activeDayCount([1, 0, 2, 0, 0, 3, 0]), 3)
+        XCTAssertEqual(WidgetWeek.activeDayCount([]), 0)
+    }
+
     // MARK: - Контракт снимка
 
     func testDefaultSnapshotHasNoRatingAndSevenDays() {

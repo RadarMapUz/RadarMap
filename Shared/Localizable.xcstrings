@@ -2497,6 +2497,22 @@
         }
       }
     },
+    "Готов к поездке": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готов к поездке"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarga tayyor"
+          }
+        }
+      }
+    },
     "Готово": {
       "localizations": {
         "ru": {
@@ -5153,22 +5169,6 @@
         }
       }
     },
-    "Начните поездку — соберём статистику": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Начните поездку — соберём статистику"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Safarni boshlang — statistika yig'amiz"
-          }
-        }
-      }
-    },
     "Начните с камер из блока «Где теряете баллы» — там теряется больше всего.": {
       "localizations": {
         "ru": {
@@ -5181,6 +5181,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "«Ballarni qayerda yo'qotasiz» blokidagi kameralardan boshlang — eng ko'p yo'qotish o'sha yerda."
+          }
+        }
+      }
+    },
+    "Начнём считать километры": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начнём считать километры"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kilometrlarni sanay boshlaymiz"
           }
         }
       }
@@ -5473,6 +5489,22 @@
         }
       }
     },
+    "Неделя только началась": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неделя только началась"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hafta endi boshlandi"
+          }
+        }
+      }
+    },
     "Недобор %1$lld баллов × доля %2$lld %% (%3$@ из %4$@ %5$@)": {
       "localizations": {
         "ru": {
@@ -5517,6 +5549,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Geolokatsiyaga ruxsat yo'q. RadarMap'ni oching va «Doim»ga ruxsat bering."
+          }
+        }
+      }
+    },
+    "Нет доступа к данным": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа к данным"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ma’lumotlarga ruxsat yo‘q"
           }
         }
       }
@@ -5917,6 +5965,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "iPhone'da RadarMap'ni oching."
+          }
+        }
+      }
+    },
+    "Откройте приложение — виджет оживёт": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Откройте приложение — виджет оживёт"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ilovani oching — vidjet ishlaydi"
           }
         }
       }
@@ -11010,6 +11074,22 @@
         }
       }
     },
+    "на %lld%% меньше обычного": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на %lld%% меньше обычного"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatdagidan %lld%% kam"
+          }
+        }
+      }
+    },
     "на кольце %lld-й съезд": {
       "localizations": {
         "ru": {
@@ -11294,6 +11374,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "jami safarlar"
+          }
+        }
+      }
+    },
+    "последняя — %@, %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "последняя — %@, %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oxirgisi — %@, %@"
           }
         }
       }

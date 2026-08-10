@@ -1,0 +1,31 @@
+status,id,region,city,location,type,lat,lon
+added,3496,Jizzax viloyati,Jizzax shahri,I. Karimov Shoh – To‘ychiyev Ko‘chalari kesishmasi,Стационар радар,40.107979,67.858435
+added,3497,Namangan viloyati,Davlatobod tumani,I.karimov ko‘chasi,Стационар радар,40.997128,71.596652
+added,3498,Sirdaryo viloyati,Guliston shahri,"Birlashgan ko‘chasi, Guliston shahar Iib Binosi Qarshisi",Стационар радар,40.507138,68.770133
+added,3499,Sirdaryo viloyati,Guliston shahri,"I. Karimov Shoh ko‘chasi, 9-MAKTAB Qarshisi",Стационар радар,40.50758,68.773542
+added,3500,Toshkent shahar,Uchtepa tumani,Kxay – Lutfiy Ko‘chalari kesishmasi,Стационар камера,41.292431,69.194793
+added,3501,Toshkent shahar,Yakkasaroy tumani,"Shota Rustaveli ko‘chasi, Janubiy Vokzal oldi",Стационар камера,41.259172,69.222529
+added,3502,Xorazm viloyati,Urganch shahri,Urganch Temiryo‘l Vokzal oldi.,Стационар камера,41.537724,60.632071
+added,3503,Xorazm viloyati,Urganch shahri,Urganch Temiryo‘l Vokzali Avtoturargoh oldi.,Стационар камера,41.538091,60.63205
+vanished,252,Buxoro viloyati,Buxoro shahri,"M-37 Samarqand-buxoro-turkmanboshi avtomobil Yo‘lining 263,750 km",Стационар камера,39.80734,64.429468
+vanished,1874,Sirdaryo viloyati,Oqoltin tumani,"M-39 ""Toshkent-termiz"" avtomobil Yoʼli 928-KM. (Aholi Yashash Punktidan Tashqarida)",Стационар радар,40.493687,68.300541
+vanished,3342,Toshkent viloyati,Yuqorichirchiq tumani,"Parkent-yangibozor Avtomobil Yo‘lining 68,5 KM Piyodalar Svetofori (dehqon Bozori Oldida)",Стационар камера,41.313393,69.522907
+vanished,3343,Qoraqalpog‘iston Respublikasi,Xojeli tumani,"Xalqlar Do‘stligi Ko‘chasi, 4N-119A Avtomobil Yo‘lining 1-KM.",Стационар камера,42.409698,59.445085
+vanished,3344,Buxoro viloyati,Romitan tumani,"Obodturmush (goronshox) Axoli Yashash Punkti 4R-48 ""zarafshon-trakti"" Avtomobil Yo‘li 331 KM",Стационар камера,39.946993,64.377144
+vanished,3345,Toshkent shahar,Mirzo Ulug‘bek tumani,"Mirzo Ulug‘bek Tumani, Movarounnaxr ko‘chasi 16-UY Qarshisida, (gandi ko‘chasi Bilan Chorraxa)",Стационар камера,41.314733,69.295583
+vanished,3346,Toshkent shahar,Mirzo Ulug‘bek tumani,Uzbekiston Ovozi VA Shastri Kuchalari Chorraxasi,Стационар камера,41.311918,69.29173
+vanished,3347,Qashqadaryo viloyati,Muborak tumani,"Muborak Shahri, Zanjirsaroy Ko‘chasi, IIB Atrofida",Стационар камера,39.262598,65.15517
+vanished,3348,Qashqadaryo viloyati,Qamashi tumani,"Qamashi Shahri, A.temur VA Ma’rifat ko‘chalari Kesishgan Chorrahasi",Стационар камера,38.817703,66.46587
+vanished,3349,Sirdaryo viloyati,Guliston shahri,“obod Yurt” MFY Ibn-sino ko‘chasi 79 UY Oldi,Стационар камера,40.52012,68.762975
+vanished,3350,Toshkent shahar,Uchtepa tumani,Bog‘iston MFY 14-MAVZE 62-MAKTAB Oldi,Стационар радар,41.293854,69.189506
+vanished,3351,Buxoro viloyati,Peshku tumani,"4R-68 A.Y 37,5 KM Yangibozor A\P",Стационар радар,40.037988,64.390423
+vanished,3352,Toshkent shahar,Bektemir tumani,Bektemir ShOX ko‘chasi (qanot Kafesi Qarshisi),Стационар радар,41.205364,69.333033
+vanished,3354,Andijon viloyati,Asaka Tuman,"A-373 ""toshkent-o‘sh"" 321 KM",Стационар радар,40.734776,72.183244
+vanished,3355,Qashqadaryo viloyati,Qarshi tumani,"D153 ""qarshi Sh.-beshkent Sh.-qamashi Q.- Qasbi Q.-koson Sh."" Avtomobil Yo‘lining 5 KM Mirmiron Qishlog‘i",Стационар радар,38.851607,66.050945
+vanished,3356,Navoiy viloyati,Nurota tumani,"D074 ""mitan Q -qushrobod Q - Nurota Sh"" Avtomobil Yo‘lning 100-101 KM Oralig‘i",Стационар радар,40.502268,65.950916
+vanished,3357,Navoiy viloyati,Nurota tumani,"D191 ""qizilqum Xalqa Yo‘li"" (karmana Sh.-nurota Sh.-uchtepa Q-otamurot Q- Tomdibuloq Q.-qizilquduq Temir YO‘L Stantsiya) A/Y 66 KM",Стационар радар,40.626572,65.727469
+vanished,3358,Navoiy viloyati,Navoiy shahri,G‘alaba ShOX ko‘chasi Darxon Bozori Qarshisi,Стационар радар,40.11142,65.376817
+vanished,3359,Andijon viloyati,Oltinko‘l Tuman,”ijtimoyat” MFY Xududidan Oʻtgan D105 Fargona Xalqa YuLI Aylanma Yoʻlining -138 KM,Стационар радар,40.794524,72.206988
+vanished,3360,Sirdaryo viloyati,Guliston tumani,Do‘stlik MFY.4R-27. 5-KM. (oktyabr),Стационар радар,40.493961,68.804179
+vanished,3362,Xorazm viloyati,Bog‘ot tumani,4R156 A/Y 35 KM (dexkonbozor Axoli Yashash Punkti),Стационар радар,41.342241,60.867943
+vanished,3363,Xorazm viloyati,Xonqa tumani,4R156 A/Y 21 KM (durvadik Axoli Yashash Punkti),Стационар радар,41.42376,60.817303

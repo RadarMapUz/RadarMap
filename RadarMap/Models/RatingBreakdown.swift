@@ -121,6 +121,10 @@ nonisolated struct RatingScreen: Equatable {
     var sources = RatingSources()
     var daily: [RatingDayPoint] = []
     var baseline: RatingBaseline?
+    /// Динамика по неделям — всегда последние недели ОТ СЕГОДНЯ, а не от
+    /// листаемого периода: график отвечает «я расту или падаю», и он не должен
+    /// уезжать в прошлое вместе со стрелкой «назад».
+    var trend: [RatingTrend.Week] = []
     /// Поездок окна, не вошедших в рейтинг (нет ни лимитных камер, ни трека).
     var unrated = 0
 
@@ -379,6 +383,8 @@ nonisolated enum RatingBreakdown {
             sources: sources(records: records, days: days, in: interval),
             daily: dailyRatings(days: days, in: interval),
             baseline: baseline(days: days, period: period, anchor: anchor, calendar: calendar),
+            trend: RatingTrend.weekly(days: days, count: AppConfig.ratingTrendWeeks,
+                                      calendar: calendar),
             unrated: unratedTrips(records: records, in: interval))
     }
 

@@ -131,9 +131,7 @@ struct RatingDetailSheet: View {
     /// видит и месяцы, чьи полные записи давно вычищены. Меньше двух непустых
     /// недель — не показываем: тренд из одной точки не тренд.
     @ViewBuilder private var trendCard: some View {
-        let weeks = RatingTrend.weekly(days: env.trip.days,
-                                       count: AppConfig.ratingTrendWeeks)
-        let filled = weeks.filter { $0.rating != nil }
+        let filled = data.trend.filter { $0.rating != nil }
         if filled.count >= 2 {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(title: String(localized: "Динамика по неделям")) {

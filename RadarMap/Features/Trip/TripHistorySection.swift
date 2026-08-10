@@ -175,7 +175,10 @@ struct TripHistorySection: View {
     /// Мини-силуэт трека — поездку узнаёшь с одного взгляда.
     @ViewBuilder private func trackThumbnail(_ record: TripRecord) -> some View {
         Group {
-            if record.trackPoints.count >= 2 {
+            // hasTrack существует ровно для этого: trackPoints разбирает
+            // плоский массив заново, и без него строка списка делала это
+            // дважды — на проверку и на отрисовку.
+            if record.hasTrack {
                 TrackCanvas(points: record.trackPoints, lineWidth: 2)
             } else {
                 Image(systemName: "car.side")

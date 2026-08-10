@@ -140,7 +140,7 @@ nonisolated enum TripHistory {
 
     struct DayGroup {
         let day: Date
-        let records: [TripRecord]
+        fileprivate(set) var records: [TripRecord]
     }
 
     /// История приходит от новых к старым — группировка по календарным дням
@@ -151,7 +151,9 @@ nonisolated enum TripHistory {
         for record in history {
             let day = calendar.startOfDay(for: record.startedAt)
             if let last = groups.indices.last, groups[last].day == day {
-                groups[last] = DayGroup(day: day, records: groups[last].records + [record])
+                // Через subscript массив мутируется на месте: `+ [record]`
+                // копировал весь день заново на каждую его поездку.
+                groups[last].records.append(record)
             } else {
                 groups.append(DayGroup(day: day, records: [record]))
             }

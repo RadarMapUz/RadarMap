@@ -92,6 +92,12 @@ final class MapState {
     /// Перегрев: под ним карта рисует меньше и пересчитывается реже. Оповещения
     /// о камерах это не трогает — за рулём голос важнее картинки.
     @ObservationIgnored private weak var thermal: ThermalService?
+    /// Память о треногах. Не камеры: отдельный слой, отдельный тон, отдельная
+    /// настройка — и рисуется только на близком зуме.
+    @ObservationIgnored private weak var hotspots: HotspotService?
+    /// Горячие точки в текущей области. Их десятки, а не тысячи, поэтому
+    /// пространственный индекс тут был бы дороже самого перебора.
+    private(set) var visibleHotspots: [TripodHotspots.Spot] = []
     private var currentRegion: MKCoordinateRegion?
     private var loadedRegion: MKCoordinateRegion?   // область, для которой посчитаны точки (с буфером)
 
@@ -101,10 +107,11 @@ final class MapState {
     var performance: PerformanceMode { thermal?.mode ?? .full }
 
     func configure(_ repository: CameraRepository, speedLimits: SpeedLimitService? = nil,
-                   thermal: ThermalService? = nil) {
+                   thermal: ThermalService? = nil, hotspots: HotspotService? = nil) {
         if self.repository == nil { self.repository = repository }
         if self.speedLimits == nil { self.speedLimits = speedLimits }
         if self.thermal == nil { self.thermal = thermal }
+        if self.hotspots == nil { self.hotspots = hotspots }
     }
 
     /// Первый GPS-фикс после запуска: показываем окрестности (~2.5 км), а не всю страну —
@@ -187,6 +194,9 @@ final class MapState {
         guard needsRecompute(for: region) else { return }
 
         let buffered = region.scaled(by: AppConfig.annotationBufferFactor)
+        // Горячие точки — в том же такте, что и камеры: список короткий,
+        // фильтр по рамке дешевле, чем ещё один повод пересобирать слой.
+        visibleHotspots = (hotspots?.spots ?? []).filter { buffered.contains($0.coordinate) }
         layerGeneration &+= 1
         let generation = layerGeneration
         let cameras = repository.cameras
@@ -454,6 +464,12 @@ extension MKCoordinateRegion {
         let oLonMin = other.center.longitude - other.span.longitudeDelta / 2
         let oLonMax = other.center.longitude + other.span.longitudeDelta / 2
         return oLatMin >= latMin && oLatMax <= latMax && oLonMin >= lonMin && oLonMax <= lonMax
+    }
+
+    /// Попадает ли точка в рамку региона.
+    func contains(_ coordinate: CLLocationCoordinate2D) -> Bool {
+        abs(coordinate.latitude  - center.latitude)  <= span.latitudeDelta  / 2 &&
+        abs(coordinate.longitude - center.longitude) <= span.longitudeDelta / 2
     }
 
     func scaled(by factor: Double) -> MKCoordinateRegion {

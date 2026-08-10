@@ -104,7 +104,8 @@ struct MapScreen: View {
         .mapScope(mapScope)
         .fullScreenCover(isPresented: $showDashboard) { DashboardView() }
         .task {
-            map.configure(env.cameras, speedLimits: env.speedLimits, thermal: env.thermal)
+            map.configure(env.cameras, speedLimits: env.speedLimits, thermal: env.thermal,
+                          hotspots: env.hotspots)
             map.filter = env.settings.filter
             // Если карта уже отдала регион до конфигурации (статичный старт без геопозиции) —
             // пересчитываем принудительно, иначе аннотации не появятся до первого движения карты.
@@ -342,6 +343,20 @@ struct MapScreen: View {
                         .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 2))
                 }
                 .annotationTitles(.hidden)
+            }
+
+            // Память о треногах — НЕ камеры и рисуются не как камеры: мягкая
+            // зона без значка и без клина. Кружок-камера здесь означал бы «тут
+            // прибор», а прибора может не быть — есть привычка его ставить.
+            // Только на близком зуме: на обзорном это шум поверх настоящих
+            // точек, а решение сбросить скорость принимают вблизи.
+            if env.settings.tripodHints, !map.isDotZoom {
+                ForEach(map.visibleHotspots, id: \.key) { spot in
+                    MapCircle(center: spot.coordinate, radius: AppConfig.hotspotZoneRadiusMeters)
+                        .foregroundStyle(Theme.Types.radar.opacity(0.10))
+                        .stroke(Theme.Types.radar.opacity(0.5),
+                                style: StrokeStyle(lineWidth: 1.5, dash: [5, 5]))
+                }
             }
 
             // Важность считается один раз на пересборку: id цели и камеры
@@ -1229,6 +1244,17 @@ struct MapScreen: View {
                 await Task.pause(seconds: 2)
                 if let center = map.mapCenter ?? env.location.currentCoordinate {
                     withAnimation { env.mobile.seedTrustDemo(near: center) }
+                }
+            }
+        }
+        // Память о треногах: подписанного файла на симуляторе нет, а зоны на
+        // карте увидеть надо — сеем две точки локально.
+        if args.contains("-demoHotspots") {
+            Task {
+                await Task.pause(seconds: 2)
+                if let center = map.mapCenter ?? env.location.currentCoordinate {
+                    env.hotspots.seedDemo(near: center)
+                    withAnimation { map.invalidateVisible() }
                 }
             }
         }

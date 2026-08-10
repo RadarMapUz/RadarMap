@@ -43,6 +43,17 @@ struct CameraAnnotationView: View {
     /// выглядеть на карте так же уверенно, как проверенная точка.
     private var isGhost: Bool { camera.isUnconfirmedMobile }
 
+    /// Силуэт маркера. Тренога отличается от стационарного радара ФОРМОЙ, а не
+    /// одним цветом: цвет у них общий (одна семья «радар»), а за рулём боковым
+    /// зрением читается именно силуэт. Круг — всё стационарное, скруглённый
+    /// квадрат — тренога: её ставят на час, и путать её с постоянной точкой
+    /// нельзя ни на карте, ни в голове.
+    private var pinShape: AnyShape {
+        camera.kind == .tripod
+            ? AnyShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            : AnyShape(Circle())
+    }
+
     /// «Своя» камера: проезжаем регулярно и спокойно, голос о ней молчит.
     /// Молчание обязано быть видимым — иначе оно читается как поломка
     /// («камера на карте есть, а приложение молчит»). Спокойная галочка на
@@ -66,10 +77,10 @@ struct CameraAnnotationView: View {
     /// там, где на весь маркер приходится десяток пикселей.
     private var dot: some View {
         let size: CGFloat = tier == .background ? 8 : 12
-        return Circle()
+        return pinShape
             .fill(camera.kind.tint.opacity(isGhost ? 0.45 : 1))
             .frame(width: size, height: size)
-            .overlay(Circle().stroke(.white.opacity(0.75), lineWidth: 1))
+            .overlay(pinShape.stroke(.white.opacity(0.75), lineWidth: 1))
             .frame(width: 30, height: 30)       // тап-мишень больше самой точки
             .contentShape(Circle())
     }
@@ -115,10 +126,10 @@ struct CameraAnnotationView: View {
                     .frame(width: selected ? 54 : 46, height: selected ? 54 : 46)
             }
             directionCone(radius: selected ? 30 : 24)
-            Circle()
+            pinShape
                 .fill(camera.kind.tint.opacity(isGhost ? 0.5 : 1).gradient)
                 .frame(width: selected ? 38 : 28, height: selected ? 38 : 28)
-                .overlay(Circle().stroke(.white.opacity(0.9),
+                .overlay(pinShape.stroke(.white.opacity(0.9),
                                          style: StrokeStyle(lineWidth: 2,
                                                             dash: isGhost ? [3, 3] : [])))
                 // Тень только у выбранного маркера: shadow = offscreen-проход рендера,

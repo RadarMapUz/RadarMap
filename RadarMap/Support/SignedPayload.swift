@@ -17,7 +17,11 @@
 
 import Foundation
 
-nonisolated struct SignedPayload<Value: Decodable & Sendable>: Decodable, Sendable {
+/// Encodable — чтобы конверт можно было положить в кэш НЕ разбирая: на диске
+/// он лежит вместе с подписью и проверяется при каждом чтении. Хранить уже
+/// разобранное значение означало бы доверять файлу в Documents, который виден
+/// и бэкапу, и файловому менеджеру, — а он ничем не надёжнее сети.
+nonisolated struct SignedPayload<Value: Decodable & Sendable>: Codable, Sendable {
     let payload: String
     let sig: String?
 

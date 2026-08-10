@@ -28,6 +28,7 @@ enum Storage {
         case cameraDBVersion        // версия локальной базы камер
         case speedLimitsLastCheck   // дата последней проверки базы лимитов
         case roadsIndexLastCheck    // дата последней проверки индекса дорожных тайлов
+        case hotspotsLastCheck      // дата последней проверки горячих точек треног
         case hasCompletedOnboarding // онбординг пройден (@AppStorage)
         case reviewAskedVersion     // версия, в которой уже просили оценку App Store
         case hintDashboardShown     // разовая подсказка «тап — спидометр» показана

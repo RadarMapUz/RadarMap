@@ -62,6 +62,7 @@ private struct RadarWeekView: View {
     private var isCurrentWeek: Bool {
         WidgetWeek.isCurrentWeek(snapshot.weekStart, now: entry.date)
     }
+    private var state: WidgetState { WidgetWeek.state(snapshot) }
     private var value: String { rating >= 0 && isCurrentWeek ? "\(rating)" : "—" }
     /// На локскрине герой тоже километры: балл ушёл внутрь кольца.
     private var distance: String { isCurrentWeek ? km(snapshot.weekDistance) : "—" }
@@ -124,6 +125,7 @@ private struct RadarWeekView: View {
     /// «как обычно» или «из обычных 115 км» — норма, а не абстрактная цель.
     private var usualLine: String {
         let usual = snapshot.usualWeekDistance
+        if state == .noAccess { return String(localized: "Нет доступа к данным") }
         guard isCurrentWeek, usual > 1000, snapshot.weekDistance > 0 else {
             return String(localized: "Неделя за рулём")
         }

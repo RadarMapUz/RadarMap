@@ -281,6 +281,44 @@ final class AppEnvironment {
         learnedPlaces = FrequentPlaces.learn(history: trip.history, now: Date())
     }
 
+    #if DEBUG
+    /// Снимок под скриншот состояния виджета. `-widgetState empty|few|full`.
+    /// Состояние «нет доступа» подделать нечем и не нужно: оно наступает само,
+    /// когда App Group не выдан подписью.
+    private static func demoWidgetSnapshot() -> SharedDefaults.Snapshot? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let index = args.firstIndex(of: "-widgetState"), index + 1 < args.count
+        else { return nil }
+        let start = Calendar.current.dateInterval(of: .weekOfYear, for: Date())?.start
+        switch args[index + 1] {
+        case "empty":
+            return SharedDefaults.Snapshot(weekStart: start, updatedAt: Date())
+        case "few":
+            return SharedDefaults.Snapshot(
+                weekStart: start, weekDistance: 12_400, weekTrips: 1, weekRating: 55,
+                weekFineRisk: 2_200_000,
+                dayDistances: [12_400, 0, 0, 0, 0, 0, 0],
+                dayOverspeed: [true, false, false, false, false, false, false],
+                topRiskPlace: "Юнусабад", topRiskPasses: 1,
+                monthDistance: 12_400, lifetimeDistance: 12_400,
+                weekMovingDuration: 18 * 60,
+                lastTripDistance: 12_400,
+                lastTripAt: Date().addingTimeInterval(-4 * 3600), updatedAt: Date())
+        default:   // full — богатая неделя
+            return SharedDefaults.Snapshot(
+                weekStart: start, weekDistance: 128_400, weekTrips: 9, weekRating: 67,
+                weekFineRisk: 2_200_000, weekDeltaPercent: 12,
+                dayDistances: [14_000, 22_000, 31_000, 9_000, 27_000, 0, 25_400],
+                dayOverspeed: [false, false, true, false, true, false, false],
+                topRiskPlace: "Юнусабад, Амира Темура", topRiskPasses: 4,
+                usualWeekDistance: 115_000, monthDistance: 486_000,
+                lifetimeDistance: 12_400_000, weekMovingDuration: 4.5 * 3600,
+                lastTripDistance: 25_400,
+                lastTripAt: Date().addingTimeInterval(-3600), updatedAt: Date())
+        }
+    }
+    #endif
+
     /// Снимок для домашнего виджета: текущая неделя целиком, включая форму по
     /// дням и место наибольшего риска. Зовётся при уходе в фон (RootView) и в
     /// конце каждой поездки — виджет показывает статистику вообще без
@@ -288,6 +326,16 @@ final class AppEnvironment {
     /// свежей. Считаем ЗДЕСЬ: виджет не имеет права вычислять — у него нет ни
     /// истории, ни права тратить батарею.
     func refreshWidgetSnapshot() {
+        #if DEBUG
+        // Скриншот-хук `-widgetState empty|few|full`: виджет живёт в основном
+        // не на полной неделе, а посмотреть скудные состояния иначе нечем —
+        // ждать понедельника или чистить историю каждый раз слишком дорого.
+        if let demo = Self.demoWidgetSnapshot() {
+            SharedDefaults.write(demo)
+            WidgetCenter.shared.reloadAllTimelines()
+            return
+        }
+        #endif
         let calendar = Calendar.current
         let now = Date()
         let week = TripHistory.summary(days: trip.days, history: trip.history,
@@ -338,7 +386,9 @@ final class AppEnvironment {
             usualWeekDistance: WidgetWeek.median(previousWeeks),
             monthDistance: month.distance,
             lifetimeDistance: trip.lifetime.distanceMeters,
-            weekMovingDuration: week.movingDuration
+            weekMovingDuration: week.movingDuration,
+            lastTripDistance: trip.history.first?.distanceMeters ?? 0,
+            lastTripAt: trip.history.first?.startedAt
         ))
         WidgetCenter.shared.reloadAllTimelines()
     }

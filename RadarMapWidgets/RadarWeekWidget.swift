@@ -93,7 +93,7 @@ private struct RadarWeekView: View {
             }
             .gaugeStyle(.accessoryCircularCapacity)
         }
-        .widgetURL(URL(string: "radarmap://stats"))
+        .widgetURL(URL(string: "radarmap://trip"))
     }
 
     private var rectangular: some View {
@@ -113,13 +113,13 @@ private struct RadarWeekView: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .widgetURL(URL(string: "radarmap://stats"))
+        .widgetURL(URL(string: "radarmap://trip"))
     }
 
     private var inline: some View {
         // Строка над часами: одна короткая мысль, без иконок и без цвета.
         Text(String(format: String(localized: "Неделя %@ · балл %@"), distance, value))
-            .widgetURL(URL(string: "radarmap://stats"))
+            .widgetURL(URL(string: "radarmap://trip"))
     }
 
     /// «как обычно» или «из обычных 115 км» — норма, а не абстрактная цель.

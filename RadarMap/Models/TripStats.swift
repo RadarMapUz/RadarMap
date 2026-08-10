@@ -376,7 +376,11 @@ final class TripStats {
     /// в релизную сборку не попадает.
     /// `shiftDays` сдвигает всю демо-историю в прошлое — так проверяется состояние
     /// «поездки есть, но не в этом периоде» (открыл Итоги после недели без езды).
-    func seedDemoHistory(shiftDays: Double = 0) {
+    /// `scale` — множитель километров для проверки вёрстки на НАСТОЯЩИХ числах.
+    /// Обычное демо даёт 12,4 км и 130 км за всё время, и на таких цифрах экран
+    /// выглядит компактнее, чем в жизни: четырёхзначные километры и разделитель
+    /// разрядов вылезали из плиток уже у реальных водителей, а на демо — нет.
+    func seedDemoHistory(shiftDays: Double = 0, scale: Double = 1) {
         let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
         let now = Date().addingTimeInterval(-shiftDays * 86400)
 
@@ -430,7 +434,8 @@ final class TripStats {
             (4.5, 31.0, 1, false, 8),  (5.4, 14.8, 4, true,  18),
         ]
         for (index, item) in week.enumerated() {
-            seeded.append(makeRecord(index: index, daysAgo: item.daysAgo, km: item.km,
+            seeded.append(makeRecord(index: index, daysAgo: item.daysAgo,
+                                     km: item.km * scale,
                                      seed: item.seed, over: item.over, hour: item.hour,
                                      withStop: index == 2))
         }
@@ -442,7 +447,8 @@ final class TripStats {
             (11.2, 7.4, 2, true, 18), (12.7, 6.1, 3, false, 10),
         ]
         for (index, item) in previous.enumerated() {
-            seeded.append(makeRecord(index: 6 + index, daysAgo: item.daysAgo, km: item.km,
+            seeded.append(makeRecord(index: 6 + index, daysAgo: item.daysAgo,
+                                     km: item.km * scale,
                                      seed: item.seed, over: item.over, hour: item.hour))
         }
         history = seeded

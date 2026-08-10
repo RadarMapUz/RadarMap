@@ -15,12 +15,21 @@ enum Formatting {
     }
 
     /// «850 м» / «1.4 км» (uz: m/km — единицы тоже локализуются)
+    /// До сотни километров — с десятой (12,4 км читается точнее, чем 12),
+    /// дальше без неё и с разделителем разрядов: «129,5 км» лезло из плитки, а
+    /// «12400,0 км» выглядело сырым числом из отладки. Одно правило на всё
+    /// приложение и виджет — раньше их было три, и цифры расходились.
     static func distance(_ meters: CLLocationDistance) -> String {
         if meters < 1000 {
             return String(format: String(localized: "%@ м"), String(Int(meters.rounded())))
         }
-        let km = String(format: "%.1f", locale: .current, meters / 1000)
-        return String(format: String(localized: "%@ км"), km)
+        let km = meters / 1000
+        guard km < 100 else {
+            return String(format: String(localized: "%@ км"),
+                          km.formatted(.number.precision(.fractionLength(0))))
+        }
+        return String(format: String(localized: "%@ км"),
+                      String(format: "%.1f", locale: .current, km))
     }
 
     /// «440 000 сум» / «1,2 млн сум» — суммы штрафов и экономии.

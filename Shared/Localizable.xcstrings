@@ -11026,6 +11026,22 @@
         }
       }
     },
+    "макс. км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "макс. км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "maks. km/soat"
+          }
+        }
+      }
+    },
     "на %lld км/ч": {
       "localizations": {
         "ru": {
@@ -11486,6 +11502,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "o'tishlar: %lld"
+          }
+        }
+      }
+    },
+    "пройдено": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пройдено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bosib o‘tildi"
           }
         }
       }

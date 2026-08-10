@@ -429,16 +429,8 @@ struct TripStatsSheet: View {
     private func heroTopRow(trip: TripStats, summary: PeriodSummary) -> some View {
         HStack(spacing: 16) {
             if let rating = summary.rating {
-                VStack(spacing: 6) {
-                    RatingRing(rating: rating)
-                        .frame(width: 88, height: 88)
-                    // Рейтинг сам по себе — абстракция. Движение к прошлому
-                    // такому же периоду делает его понятным.
-                    if let delta = summary.ratingDelta,
-                       abs(delta) >= AppConfig.insightRatingStep {
-                        ratingDeltaBadge(delta)
-                    }
-                }
+                RatingRing(rating: rating)
+                    .frame(width: 88, height: 88)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(period.caption)
@@ -456,9 +448,20 @@ struct TripStatsSheet: View {
                     }
                 }
                 if let rating = summary.rating {
-                    Text(DrivingScore.level(for: rating))
-                        .font(.rounded(14, .bold))
-                        .foregroundStyle(Theme.textPrimary)
+                    // Уровень и движение рейтинга — в одной строке. Раньше
+                    // бейдж «−16» висел под кольцом и прижимался к его обводке:
+                    // круг держал сразу три вещи — число, подпись и дельту.
+                    HStack(spacing: 8) {
+                        Text(DrivingScore.level(for: rating))
+                            .font(.rounded(14, .bold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        if let delta = summary.ratingDelta,
+                           abs(delta) >= AppConfig.insightRatingStep {
+                            ratingDeltaBadge(delta)
+                        }
+                    }
                 }
                 Text(heroSubtitle(summary))
                     .font(.rounded(12))
@@ -1202,19 +1205,32 @@ struct TripStatsSheet: View {
     /// Пожизненные цифры — единственная честная правда «за всё время»:
     /// история чистится, а эти счётчики нет. Отсюда же вход во все поездки.
     private func lifetimeStrip(trip: TripStats) -> some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 0) {
-                StatStripCell(value: "\(trip.lifetime.trips)", label: "поездок",
-                              icon: "car.side")
-                StatStripDivider()
-                StatStripCell(value: Formatting.distance(trip.lifetime.distanceMeters),
-                              label: "пройдено", icon: "point.topleft.down.to.point.bottomright.curvepath")
-                StatStripDivider()
-                StatStripCell(value: "\(trip.lifetime.camerasInLimit)", label: "камер в лимите",
-                              icon: "checkmark.shield")
-                StatStripDivider()
-                StatStripCell(value: "\(trip.lifetime.bestStreak)", label: "лучшая серия",
-                              icon: "flame")
+        let cells: [(String, LocalizedStringKey, String)] = [
+            ("\(trip.lifetime.trips)", "поездок", "car.side"),
+            (Formatting.distance(trip.lifetime.distanceMeters), "пройдено",
+             "point.topleft.down.to.point.bottomright.curvepath"),
+            ("\(trip.lifetime.camerasInLimit)", "камер в лимите", "checkmark.shield"),
+            ("\(trip.lifetime.bestStreak)", "лучшая серия", "flame"),
+        ]
+        return VStack(spacing: 12) {
+            // Две на две, а не четыре в ряд. Четыре колонки на 390 pt дают по
+            // 87 pt: узбекские подписи там переносились, а «2 590 км» просто
+            // обрезалось троеточием. ViewThatFits тут не помогает — любой
+            // maxWidth: .infinity внутри кандидата делает его «влезающим»
+            // всегда, и мерить оказывается нечего. Сетка 2×2 честно даёт
+            // каждому числу половину ширины и выглядит одинаково на обоих
+            // языках; цена — сорок точек высоты.
+            VStack(spacing: 14) {
+                HStack(spacing: 0) {
+                    StatStripCell(value: cells[0].0, label: cells[0].1, icon: cells[0].2)
+                    StatStripDivider()
+                    StatStripCell(value: cells[1].0, label: cells[1].1, icon: cells[1].2)
+                }
+                HStack(spacing: 0) {
+                    StatStripCell(value: cells[2].0, label: cells[2].1, icon: cells[2].2)
+                    StatStripDivider()
+                    StatStripCell(value: cells[3].0, label: cells[3].1, icon: cells[3].2)
+                }
             }
             Button {
                 showAllTrips = true
@@ -1274,14 +1290,19 @@ struct TripStatsSheet: View {
                     .frame(width: 38, height: 38)
                     .background(Theme.accent.opacity(0.12), in: Circle())
                 VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
+                    // Подпись и название — в столбик: на узбекском «Eng yaqin
+                    // maqsad» и «Ketma-ket 5 toza» вставали вплотную и читались
+                    // как одна слипшаяся фраза.
+                    VStack(alignment: .leading, spacing: 1) {
                         Text("Ближайшая цель")
                             .font(.rounded(11, .medium))
                             .foregroundStyle(Theme.textTertiary)
+                            .lineLimit(1)
                         Text(badge.title)
                             .font(.rounded(13, .bold))
                             .foregroundStyle(Theme.textPrimary)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
                     Capsule()
                         .fill(Theme.stroke)

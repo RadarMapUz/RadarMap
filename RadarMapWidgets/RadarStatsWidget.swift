@@ -39,7 +39,7 @@ struct RadarStatsProvider: TimelineProvider {
     func placeholder(in context: Context) -> RadarStatsEntry {
         // Плейсхолдер галереи — красивая живая неделя, а не нули.
         RadarStatsEntry(date: .now, snapshot: .init(
-            dbCount: 3467, dbVersion: 10, mobileCount: 2,
+            dbCount: 3475, dbVersion: 11, mobileCount: 2,
             tripCameras: 6, tripMaxSpeed: 92, tripDistance: 12_400,
             weekDistance: 95_200, weekTrips: 6, weekRating: 84,
             weekFineRisk: 0, updatedAt: nil))

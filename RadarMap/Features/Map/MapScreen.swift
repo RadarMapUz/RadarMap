@@ -957,6 +957,24 @@ struct MapScreen: View {
         @Bindable var settings = env.settings
         if legendExpanded {
             VStack(alignment: .leading, spacing: 8) {
+                // Панель занимает место кнопки, которая её открыла, — значит
+                // сама и обязана предложить выход. Без этого закрыть её можно
+                // было только ожиданием: двенадцать секунд смотреть на карту,
+                // которую она закрывает.
+                HStack {
+                    Spacer(minLength: 0)
+                    Button { toggleLegend() } label: {
+                        Image(systemName: "xmark")
+                            .font(.rounded(11, .bold))
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(width: 26, height: 26)
+                            .background(Theme.surface, in: Circle())
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Закрыть слои"))
+                }
+                .padding(.bottom, 2)
                 LegendChip(color: Theme.Types.camera, symbol: "camera.fill", text: "Камера")
                 LegendChip(color: Theme.Types.radar, symbol: "speedometer", text: "Радар")
                 LegendChip(color: Theme.Types.intelligent, symbol: "camera.metering.matrix", text: "Интеллект.")

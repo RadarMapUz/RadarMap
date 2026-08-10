@@ -22,6 +22,16 @@ enum SharedDefaults {
 
     static var store: UserDefaults? { UserDefaults(suiteName: appGroup) }
 
+    /// Выдан ли App Group на самом деле. Проверять `store == nil` НЕЛЬЗЯ:
+    /// `UserDefaults(suiteName:)` возвращает рабочий объект и без права на
+    /// группу — просто пишет мимо общего контейнера. Именно поэтому виджет на
+    /// телефоне показывал «Готов к поездке» вместо «Нет доступа»: он видел
+    /// пустое хранилище и честно считал, что поездок не было. Контейнер же
+    /// без entitlement недоступен, и это единственная надёжная проверка.
+    static var hasAppGroup: Bool {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) != nil
+    }
+
     enum Keys {
         static let weekStart = "widget.weekStart"
         static let weekDistance = "widget.weekDistance"
@@ -111,7 +121,7 @@ enum SharedDefaults {
     }
 
     static func read() -> Snapshot {
-        guard let store else { return Snapshot(hasAccess: false) }
+        guard hasAppGroup, let store else { return Snapshot(hasAccess: false) }
         return Snapshot(
             weekStart: store.object(forKey: Keys.weekStart) as? Date,
             weekDistance: store.double(forKey: Keys.weekDistance),

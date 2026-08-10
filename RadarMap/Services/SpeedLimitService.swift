@@ -104,6 +104,11 @@ final class SpeedLimitService {
     /// SwiftUI-подписчиков этой записью было бы ежесекундной перерисовкой.
     @ObservationIgnored private(set) var currentRoadHit: LimitIndex.RoadHit?
 
+    /// Один клиент на сервис: APIClient держит собственную URLSession, а та
+    /// живёт до инвалидации — создавать её на вызов значит оставлять по сессии
+    /// на каждую проверку.
+    @ObservationIgnored private let api = APIClient(timeout: 30)
+
     // MARK: - Загрузка базы
 
     /// Вызывается при старте приложения: локальный файл сразу, сервер — раз в 7 дней.
@@ -142,7 +147,6 @@ final class SpeedLimitService {
         isDownloading = true
         defer { isDownloading = false }
         // Недельная фоновая проверка: сбой сети не критичен, попробуем в следующий раз.
-        let api = APIClient(timeout: 30)
         guard let data = try? await api.getData("speed_limits.json",
                                                 cachePolicy: .reloadIgnoringLocalCacheData) else { return }
 

@@ -89,6 +89,11 @@ struct QuickTogglesBar: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(PressableStyle())
+        // Состояние тумблера закодировано только цветом: без .isSelected
+        // VoiceOver называет его «кнопка Звук» и включённый неотличим от
+        // выключенного.
+        .accessibilityAddTraits(isOn.wrappedValue ? .isSelected : [])
+        .accessibilityValue(isOn.wrappedValue ? Text("включено") : Text("выключено"))
     }
 
     /// Строка-галочка на всю ширину: для тумблеров, чьё название не влезает в круг.
@@ -112,6 +117,8 @@ struct QuickTogglesBar: View {
             .background(Theme.surface, in: Capsule())
         }
         .buttonStyle(PressableStyle())
+        .accessibilityAddTraits(isOn.wrappedValue ? .isSelected : [])
+        .accessibilityValue(isOn.wrappedValue ? Text("включено") : Text("выключено"))
     }
 
     /// Чип режима голоса — та же форма, что была у города/трассы.

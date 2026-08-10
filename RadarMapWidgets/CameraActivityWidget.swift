@@ -17,8 +17,13 @@ private enum WTheme {
     static let secondary = Color.white.opacity(0.62)
 }
 
+/// Единицы — через каталог: плашка живёт на экране блокировки в том же
+/// языке, что и приложение, и «м»/«км» строкой в коде на узбекском остались
+/// бы русскими.
 private func format(_ meters: Double) -> String {
-    meters < 1000 ? "\(Int(meters.rounded())) м" : String(format: "%.1f км", meters / 1000)
+    meters < 1000
+        ? String(format: String(localized: "%lld м"), Int(meters.rounded()))
+        : String(format: String(localized: "%.1f км"), meters / 1000)
 }
 
 struct CameraActivityWidget: Widget {

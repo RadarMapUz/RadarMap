@@ -87,6 +87,17 @@ struct MonthCalendarCard: View {
                     .frame(height: 34)
                     .background(state.fill,
                                 in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(alignment: .bottom) {
+                        // День с превышением помечен ещё и точкой: цвет один
+                        // при дальтонизме и на солнце в держателе неотличим,
+                        // а разница между «чисто» и «штраф» — весь смысл сетки.
+                        if state.hasOverspeed {
+                            Circle()
+                                .fill(Theme.danger)
+                                .frame(width: 4, height: 4)
+                                .padding(.bottom, 3)
+                        }
+                    }
                     .overlay {
                         // Сегодня — кольцо акцента: точка отсчёта видна всегда,
                         // даже если сегодня ещё не ездили.
@@ -99,6 +110,9 @@ struct MonthCalendarCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(day.formatted(date: .abbreviated, time: .omitted)))
+            .accessibilityValue(state.hasTrips
+                ? (state.hasOverspeed ? Text("превышения") : Text("чисто"))
+                : Text("без поездок"))
         } else {
             // День соседнего месяца — пустое место, не клетка.
             Color.clear.frame(maxWidth: .infinity).frame(height: 34)

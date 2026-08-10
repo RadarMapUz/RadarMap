@@ -115,7 +115,10 @@ final class LocationService: NSObject {
     @ObservationIgnored private var lastAcceptedAt: Date?
     /// Погрешность последнего принятого фикса (метры): на ней смягчаются
     /// геометрические проверки — на плохом фиксе они не должны ничего отбрасывать.
-    private(set) var horizontalAccuracy: Double = -1
+    /// @ObservationIgnored намеренно: пишется каждый тик, а читается только
+    /// изнутри сервиса — будить SwiftUI-подписчиков этой записью значило бы
+    /// перерисовывать экран раз в секунду ради числа, которого нет на экране.
+    @ObservationIgnored private(set) var horizontalAccuracy: Double = -1
     /// Пороги приближения (передний план): чистый движок, покрыт тестами.
     @ObservationIgnored private var alertEngine = AlertEngine()
     /// Учёт прохождения камер (траверз + зона измерения): чистый модуль, покрыт тестами.

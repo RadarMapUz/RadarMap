@@ -263,7 +263,7 @@ struct AchievementInfoSheet: View {
         .sheet(item: $shareSubject) { box in
             SharePreviewSheet(subject: box.subject)
         }
-        .presentationDetents([.height(320)])
+        .presentationDetents([.height(320), .medium])
         .presentationDragIndicator(.visible)
     }
 

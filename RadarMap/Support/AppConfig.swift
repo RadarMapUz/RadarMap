@@ -246,10 +246,6 @@ nonisolated enum AppConfig {
     /// шум GPS-курса + кривые подъезды не должны глушить свою камеру.
     nonisolated static let cameraAxisMaxAngle: Double = 55
 
-    /// Скорость, с которой считаем «поездка началась» — стартуем Live Activity
-    /// (iOS позволяет запускать её только пока приложение на переднем плане).
-    static let liveActivityStartSpeedKmh: Double = 15
-
     /// Умный радиус: предупреждаем за N секунд до камеры, а не за фиксированные метры.
     /// На 110 км/ч радиус растёт до ~670 м, в городе остаётся базовым из настроек.
     static let alertLeadTimeSeconds: Double = 22

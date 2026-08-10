@@ -40,8 +40,12 @@ nonisolated struct AlertEngine {
             announcedLevel[cameraID] = 0
             return nil
         }
-        let thresholds = [radius, radius * 0.6, radius * 0.3]   // по убыванию
-        let level = thresholds.filter { distance <= $0 }.count
+        // Пороги по убыванию, без массива: решение принимается по каждой
+        // камере в радиусе на каждом тике GPS.
+        var level = 0
+        if distance <= radius { level += 1 }
+        if distance <= radius * 0.6 { level += 1 }
+        if distance <= radius * 0.3 { level += 1 }
         let previous = announcedLevel[cameraID] ?? 0
         guard level > previous else { return nil }
         announcedLevel[cameraID] = level

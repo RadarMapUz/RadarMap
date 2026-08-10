@@ -385,6 +385,40 @@
         }
       }
     },
+    "%@, без превышений, проездов: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, без превышений, проездов: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, tezlik oshirilmagan, o‘tishlar: %lld"
+          }
+        }
+      }
+    },
+    "%@, превышений: %lld из %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, превышений: %lld из %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, tezlik oshirilgan: %lld / %lld"
+          }
+        }
+      }
+    },
     "%lld": {
       "localizations": {
         "ru": {
@@ -5425,6 +5459,23 @@
         }
       }
     },
+    "Не удалось открыть адрес": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось открыть адрес"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzilni ochib bo‘lmadi"
+          }
+        }
+      }
+    },
     "Неверное место": {
       "localizations": {
         "ru": {
@@ -5709,6 +5760,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hech qachon"
+          }
+        }
+      }
+    },
+    "Ничего не найдено": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ничего не найдено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hech narsa topilmadi"
           }
         }
       }
@@ -6481,6 +6549,23 @@
         }
       }
     },
+    "Первая появится здесь сразу после того, как вы доедете.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Первая появится здесь сразу после того, как вы доедете."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Birinchisi manzilga yetganingizdan so‘ng shu yerda paydo bo‘ladi."
+          }
+        }
+      }
+    },
     "Первые ~%lld км/ч сверх лимита камеры обычно не штрафуют. Суммы — первая фиксация, повторные нарушения заметно дороже.": {
       "localizations": {
         "ru": {
@@ -6993,6 +7078,23 @@
         }
       }
     },
+    "Поездок пока нет": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездок пока нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozircha safarlar yo‘q"
+          }
+        }
+      }
+    },
     "Поездок: %1$lld · %2$@": {
       "localizations": {
         "ru": {
@@ -7309,6 +7411,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ma'lumotlarni tushunish"
+          }
+        }
+      }
+    },
+    "Попробуйте название улицы или ближайший ориентир.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попробуйте название улицы или ближайший ориентир."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ko‘cha nomini yoki eng yaqin mo‘ljalni kiriting."
           }
         }
       }
@@ -7645,6 +7764,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yangilanishlarni tekshirish"
+          }
+        }
+      }
+    },
+    "Проверьте связь и попробуйте ещё раз.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверьте связь и попробуйте ещё раз."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aloqani tekshiring va qaytadan urinib ko‘ring."
           }
         }
       }
@@ -10274,6 +10410,23 @@
         }
       }
     },
+    "без поездок": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "без поездок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "safarlarsiz"
+          }
+        }
+      }
+    },
     "без риска штрафов": {
       "localizations": {
         "ru": {
@@ -10450,6 +10603,23 @@
         }
       }
     },
+    "включено": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "включено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yoqilgan"
+          }
+        }
+      }
+    },
     "возможные штрафы ≈ %@": {
       "localizations": {
         "ru": {
@@ -10558,6 +10728,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "yetib keldingiz"
+          }
+        }
+      }
+    },
+    "выключено": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "выключено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘chirilgan"
           }
         }
       }
@@ -11534,6 +11721,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "tezlik oshirishlar: %lld"
+          }
+        }
+      }
+    },
+    "превышения": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "превышения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tezlik oshirilgan"
           }
         }
       }

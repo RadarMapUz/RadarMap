@@ -477,12 +477,8 @@ struct MapScreen: View {
     /// включается на один замер и тут же гасится — держать его постоянно ради
     /// подсказки было бы иронией на тему экономии.
     private func maybeSuggestDashboardForBattery() {
-        let device = UIDevice.current
-        device.isBatteryMonitoringEnabled = true
-        let level = device.batteryLevel
-        let charging = device.batteryState == .charging || device.batteryState == .full
-        device.isBatteryMonitoringEnabled = false
-        guard level >= 0, level < 0.3, !charging else { return }
+        let battery = BatteryProbe.snapshot()
+        guard let percent = battery.percent, percent < 30, !battery.isCharging else { return }
         withAnimation(.spring(duration: 0.3)) { showBatterySaverHint = true }
         Task {
             await Task.pause(seconds: 8)
@@ -1025,6 +1021,9 @@ struct MapScreen: View {
                     .font(.rounded(13))
                     .foregroundStyle(isOn.wrappedValue ? Theme.accent : Theme.textTertiary)
             }
+            // Мишень до 44 pt: сам ряд остаётся тонким, растёт только область
+            // касания — отсюда padding ДО contentShape.
+            .padding(.vertical, 11)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

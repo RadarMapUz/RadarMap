@@ -46,6 +46,10 @@ final class AppEnvironment {
     /// классы дорог и мосты. Пустой источник, пока не приехали, — схема тогда
     /// берёт сеть из индекса лимитов (FallbackRoadNetwork).
     let roads = RoadNetworkService()
+    /// Горячие точки треног: подписанный список мест, где водители отмечали
+    /// радар снова и снова. Не камеры и не отметки — память, поэтому и живут
+    /// отдельным сервисом с недельным обновлением и своим тихим тоном.
+    let hotspots = HotspotService()
     /// Обезличенная статистика использования: без неё неизвестно даже, сколько
     /// людей выдаёт геолокацию «Всегда» — а без неё не работает половина продукта.
     let usage: UsageStatsService
@@ -68,7 +72,7 @@ final class AppEnvironment {
         location.setCarPlayConnected(connected)
         if connected {
             mobile.startPolling()
-        } else if !isPhoneSceneActive {
+        } else if !isPhoneSceneActive, !mobile.isTripActive {
             mobile.stopPolling()
         }
     }
@@ -78,7 +82,9 @@ final class AppEnvironment {
         isPhoneSceneActive = active
         if active {
             mobile.startPolling()
-        } else if !isCarPlayConnected {
+        } else if !isCarPlayConnected, !mobile.isTripActive {
+            // Экран погас, но человек едет — опрос продолжается: это и есть
+            // единственный момент, когда чужая отметка чего-то стоит.
             mobile.stopPolling()
         }
     }
@@ -110,6 +116,7 @@ final class AppEnvironment {
         self.location.liveActivity = liveActivity
         self.location.route = route
         self.location.speedLimits = speedLimits
+        self.location.hotspots = hotspots
         self.location.watchBridge = watchBridge
         self.location.thermal = thermal   // буст GPS приборки — только пока холодно
 
@@ -136,6 +143,16 @@ final class AppEnvironment {
             // auto: поездку закрыла автоматика, а не человек — значит её ещё можно
             // продолжить как заезд по пути (TripMerge).
             location.endTrip(auto: true)
+        }
+        // Опрос чужих отметок живёт по поездке, а не по экрану: за рулём телефон
+        // обычно в кармане или экран погашен — а это ровно тот момент, когда
+        // отметка о треноге впереди и должна доехать.
+        location.onTripStateChanged = { [weak self] active in
+            guard let self else { return }
+            self.mobile.setTripActive(active)
+            if !active, !self.isPhoneSceneActive, !self.isCarPlayConnected {
+                self.mobile.stopPolling()
+            }
         }
         // Ответ на «Вы за рулём?»: пассажир — гасим поездку без следа,
         // водитель — запоминаем магнитолу машины, чтобы не переспрашивать.
@@ -235,6 +252,13 @@ final class AppEnvironment {
         Task { await feedback.flushPending() }
         speedLimits.start()   // база лимитов: локально сразу, сервер раз в неделю
         roads.start()         // дорожные тайлы: индекс локально сразу, сервер раз в неделю
+        // Горячие точки треног: кэш поднят в init, с сервера — раз в неделю.
+        // Настройка выключена — не тянем вовсе и чистим то, что уже лежит.
+        if settings.tripodHints {
+            Task { await hotspots.refreshIfNeeded() }
+        } else {
+            hotspots.clear()
+        }
         metrics.start()       // MetricKit: суточные отчёты о батарее/крашах
         guard Storage.bool(.hasCompletedOnboarding) else { return }
         location.bootstrap()

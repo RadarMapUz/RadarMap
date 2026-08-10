@@ -396,6 +396,11 @@ final class AppSettings {
     /// перестают называться вслух (см. CameraFamiliarity). Выключенная —
     /// приложение говорит обо всех камерах, как в первый день.
     var smartSilence: Bool { didSet { store.set(smartSilence, forKey: Keys.smartSilence) } }
+    /// Подсказки по памяти: «здесь часто ставят треногу» в местах, где водители
+    /// отмечали радар снова и снова. Отдельно от отметок в реальном времени —
+    /// это разные вещи по природе: там факт от живого человека, здесь догадка
+    /// о прошлом, и выключать их хочется по отдельности.
+    var tripodHints: Bool { didSet { store.set(tripodHints, forKey: Keys.tripodHints) } }
 
     /// Отправлять обезличенную статистику использования (см. `UsageStats`).
     /// Хранится инвертированно («выключено»), чтобы значение по умолчанию у
@@ -471,6 +476,7 @@ final class AppSettings {
         static let dashboardAuto = "dashboardAutoOpens"
         static let destinationHints = "destinationSuggestions"
         static let smartSilence = "smartSilence"
+        static let tripodHints = "tripodHints"
         static let mapTraffic = "mapTraffic"
         static let mapPlaces = "mapPlaces"
         static let alertMode = "alertMode"
@@ -508,6 +514,7 @@ final class AppSettings {
             Keys.dashboardAuto: true,
             Keys.destinationHints: true,
             Keys.smartSilence: true,
+            Keys.tripodHints: true,
             Keys.mapPlaces: true,
         ])
         soundEnabled = store.bool(forKey: Keys.sound)
@@ -548,6 +555,7 @@ final class AppSettings {
         dashboardAutoOpens = store.bool(forKey: Keys.dashboardAuto)
         destinationSuggestions = store.bool(forKey: Keys.destinationHints)
         smartSilence = store.bool(forKey: Keys.smartSilence)
+        tripodHints = store.bool(forKey: Keys.tripodHints)
         mapTraffic = store.bool(forKey: Keys.mapTraffic)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)
         alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto

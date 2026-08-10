@@ -112,6 +112,17 @@ struct SettingsView: View {
                         .onChange(of: settings.destinationSuggestions) { _, _ in
                             env.refreshLearnedPlaces()
                         }
+                    // Выключенная настройка не должна оставлять данные лежать:
+                    // человек выключил подсказки — значит и списку мест на
+                    // диске взяться неоткуда.
+                    Toggle("Подсказки о треногах по памяти", isOn: $settings.tripodHints)
+                        .onChange(of: settings.tripodHints) { _, enabled in
+                            if enabled {
+                                Task { await env.hotspots.refresh() }
+                            } else {
+                                env.hotspots.clear()
+                            }
+                        }
                 } header: {
                     Text("Приложение учится")
                 } footer: {

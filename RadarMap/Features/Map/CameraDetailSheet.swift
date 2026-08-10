@@ -83,6 +83,16 @@ struct CameraDetailSheet: View {
                             .font(.rounded(12, .semibold))
                             .foregroundStyle(Theme.textSecondary)
                     }
+                    // Возраст отметки — половина её ценности: тренога стоит
+                    // час-полтора, и «10 минут назад» против «два часа назад»
+                    // меняет решение водителя сильнее, чем число голосов.
+                    // Старый сервер поля created не шлёт: там эпоха, и вместо
+                    // возраста получилось бы «55 лет назад» — молчим.
+                    if trust.created.timeIntervalSince1970 > 0 {
+                        Text(trust.created.formatted(.relative(presentation: .named)))
+                            .font(.rounded(11))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
                 }
             }
             Spacer(minLength: 0)

@@ -33,6 +33,11 @@ final class LocationService: NSObject {
     @ObservationIgnored weak var watchBridge: WatchBridgeService?
     @ObservationIgnored weak var route: RouteService?
     @ObservationIgnored weak var speedLimits: SpeedLimitService?
+    /// Память о треногах: места, где водители отмечали радар снова и снова.
+    @ObservationIgnored weak var hotspots: HotspotService?
+    /// О каких точках уже сказали в этой поездке. Живёт только в памяти:
+    /// повторяться нельзя внутри поездки, а завтра то же место — снова новость.
+    @ObservationIgnored private var voicedHotspots: Set<Int64> = []
     /// Перегрев: буст GPS для открытой приборки разрешён только пока телефон
     /// холодный — в жару экономия важнее плавности картинки.
     @ObservationIgnored weak var thermal: ThermalService?
@@ -81,6 +86,14 @@ final class LocationService: NSObject {
     private(set) var isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
     /// Режим «Поездка»: непрерывная геолокация + активные оповещения даже в свёрнутом виде.
     private(set) var isTripActive = false
+
+    /// Поездка началась/закончилась. Нужен тем, чей режим работы зависит от
+    /// того, за рулём человек или нет, — а не от того, открыт ли экран
+    /// (краудсорс опрашивает сервер и с погашенным экраном, пока идёт поездка).
+    @ObservationIgnored var onTripStateChanged: ((Bool) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onTripStateChanged,
+                                               "LocationService.onTripStateChanged") }
+    }
 
     /// Точка последнего пере-тайлинга. Координата, а не `CLLocation`: расстояние
     /// до неё меряется тем же `GeoMath.fastDistance`, что и всё остальное в
@@ -258,6 +271,7 @@ final class LocationService: NSObject {
         }
         if !auto { isPassengerSession = false }  // ручной старт — точно за рулём
         isTripActive = true
+        onTripStateChanged?(true)
         lastMovementAt = Date()   // не проваливаться в тир «стоянка» со старым штампом
         // Телефон в держателе — экран не гаснет всю поездку (как у навигаторов).
         // Кроме поездки за рулём CarPlay: там телефон показывает экран передачи,
@@ -269,6 +283,7 @@ final class LocationService: NSObject {
         speedSmoother.reset()
         roadSnapper.reset()
         voicedInGroup.removeAll()
+        voicedHotspots.removeAll()
         postponedVoice = nil
         // Заезд по пути — не новая поездка: если пауза похожа на «забежал в
         // магазин», поднимаем прошлую запись обратно в живую сессию.
@@ -353,6 +368,7 @@ final class LocationService: NSObject {
     /// потом продолжить как заезд по пути.
     func endTrip(asPassenger: Bool = false, auto: Bool = false) {
         isTripActive = false
+        onTripStateChanged?(false)
         UIApplication.shared.isIdleTimerDisabled = false
         // Всю поездку геозоны не перерегистрировались (retile их пропускает —
         // сработать они всё равно не могли). Возвращаясь в тихий фон, ставим
@@ -742,6 +758,9 @@ final class LocationService: NSObject {
                 announce: isTripActive && !willSpeakAboutCameraAhead
                     && settings.overspeedVoice.allows(cameraAhead: cameraAhead),
                 fallbackClass: nearestCamera?.roadClass ?? .unknown)
+            // Память о треногах — строго ПОСЛЕ speedLimits.update: подсказка
+            // звучит только при превышении, а знает о нём именно он.
+            announceHotspotIfNeeded(from: coordinate)
             // Прижим КАРТИНКИ к оси дороги — тем же RoadHit, что нашёл лимит,
             // без второго запроса. Строго после speedLimits.update и строго
             // только для отображения (см. RoadSnapper): гейты выше уже
@@ -1140,6 +1159,29 @@ final class LocationService: NSObject {
                                   groupCount: group.count))
     }
 
+    /// «Здесь часто ставят треногу» — один раз за поездку на точку и только
+    /// при превышении. Решение целиком в чистом `HotspotAlert` (тесты там же);
+    /// здесь — доступ к живым данным и собственно голос.
+    ///
+    /// Почему это НЕ ведёт себя как камера: у камеры молчание хуже лишнего
+    /// сигнала, поэтому она предупреждает и при сомнении. Здесь сомнение
+    /// означает молчание — подсказка про прошлое, выданная за факт, стоит
+    /// доверия ко всему приложению. Точка при этом остаётся на карте: показать
+    /// и сказать — разные вещи.
+    private func announceHotspotIfNeeded(from coordinate: CLLocationCoordinate2D) {
+        guard let hotspots, !hotspots.spots.isEmpty, settings.voiceMode != .off else { return }
+        let situation = HotspotAlert.Situation(
+            coordinate: coordinate,
+            course: currentCourse,   // уже прошёл LocationFilter; < 0 — курса нет
+            isTripActive: isTripActive,
+            isOverspeeding: speedLimits?.isOverspeeding ?? false,
+            hintsEnabled: settings.tripodHints)
+        guard let spot = HotspotAlert.spotToAnnounce(in: hotspots.spots, situation: situation,
+                                                     alreadyVoiced: voicedHotspots) else { return }
+        voicedHotspots.insert(spot.key)
+        alerts.speak(HotspotAlert.phrase(for: spot))
+    }
+
     /// Фраза предупреждения. Спокойная — как у навигатора, только тип и округлённое
     /// расстояние; про скорость и лимит говорим лишь в срочном режиме, потому что
     /// именно превышение и есть причина повышать голос.
@@ -1167,10 +1209,14 @@ final class LocationService: NSObject {
                             camera.kind.displayName, directionPhrase, rounded)
         }
         // Неподтверждённая отметка водителей: предупреждаем всегда (тишина
-        // хуже лишнего сигнала), но слух не выдаём за факт — фраза начинается
-        // с «возможно». Групповую фразу не трогаем: там несколько камер.
+        // хуже лишнего сигнала), но слух не выдаём за факт — называем источник.
+        // Атрибуция честнее «возможно»: она объясняет, откуда точка взялась, и
+        // заодно делает сообщество видимым — водитель слышит, что чужие отметки
+        // работают, и начинает отмечать сам. Множественное число безопасно:
+        // «отметка водителей» — это категория источника, а не счёт людей.
+        // Групповую фразу не трогаем: там несколько камер.
         if camera.isUnconfirmedMobile, groupCount == 0 {
-            phrase = String(format: String(localized: "Возможно, %@"),
+            phrase = String(format: String(localized: "Отметка водителей: %@"),
                             phrase.prefix(1).lowercased() + phrase.dropFirst())
         }
         // Срочно — полная картина: своя скорость и лимит. Иначе (трасса) —

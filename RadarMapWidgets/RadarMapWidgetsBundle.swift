@@ -10,6 +10,7 @@ import SwiftUI
 struct RadarMapWidgetsBundle: WidgetBundle {
     var body: some Widget {
         RadarStatsWidget()
+        RadarWeekWidget()
         CameraActivityWidget()
     }
 }

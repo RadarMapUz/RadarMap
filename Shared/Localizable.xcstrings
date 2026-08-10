@@ -177,6 +177,22 @@
         }
       }
     },
+    "%@ · поездок: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · поездок: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · safarlar: %lld"
+          }
+        }
+      }
+    },
     "%@ из %@": {
       "localizations": {
         "ru": {
@@ -189,6 +205,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ / %@"
+          }
+        }
+      }
+    },
+    "%@ из обычных %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ из обычных %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatdagi %2$@ dan %1$@"
           }
         }
       }
@@ -321,6 +353,22 @@
         }
       }
     },
+    "%@%lld%% к прошлой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%lld%% к прошлой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘tganiga %@%lld%%"
+          }
+        }
+      }
+    },
     "%@, ": {
       "localizations": {
         "ru": {
@@ -445,6 +493,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld m"
+          }
+        }
+      }
+    },
+    "%lld мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld daq"
+          }
+        }
+      }
+    },
+    "%lld проезда с превышением — здесь теряете больше всего": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld проезда с превышением — здесь теряете больше всего"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld marta tezlik oshirilgan — eng ko‘p shu yerda yo‘qotasiz"
+          }
+        }
+      }
+    },
+    "%lld ч %lld мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ч %lld мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld soat %lld daq"
           }
         }
       }
@@ -1133,6 +1229,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bal har bir safar uchun yoziladi — tarixda ko‘ring."
+          }
+        }
+      }
+    },
+    "Балл и километры недели на экране блокировки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Балл и километры недели на экране блокировки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qulflangan ekranda haftalik ball va kilometrlar"
           }
         }
       }
@@ -4241,6 +4353,22 @@
         }
       }
     },
+    "Километры недели, дни и привычная норма": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Километры недели, дни и привычная норма"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haftalik kilometrlar, kunlar va odatiy me’yor"
+          }
+        }
+      }
+    },
     "Километры по дням": {
       "localizations": {
         "ru": {
@@ -5313,6 +5441,38 @@
         }
       }
     },
+    "Неделя %@ · балл %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неделя %@ · балл %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hafta %@ · ball %@"
+          }
+        }
+      }
+    },
+    "Неделя за рулём": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неделя за рулём"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haftalik yo‘l"
+          }
+        }
+      }
+    },
     "Недобор %1$lld баллов × доля %2$lld %% (%3$@ из %4$@ %5$@)": {
       "localizations": {
         "ru": {
@@ -5757,6 +5917,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "iPhone'da RadarMap'ni oching."
+          }
+        }
+      }
+    },
+    "Откройте приложение — обновим": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Откройте приложение — обновим"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ilovani oching — yangilaymiz"
           }
         }
       }
@@ -7041,22 +7217,6 @@
         }
       }
     },
-    "Последняя поездка": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Последняя поездка"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oxirgi safar"
-          }
-        }
-      }
-    },
     "Последняя проверка: %@": {
       "localizations": {
         "ru": {
@@ -8109,22 +8269,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Davr uchun reyting va kilometrlar. Reyting qanday hisoblanadi"
-          }
-        }
-      }
-    },
-    "Рейтинг и километры недели": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Рейтинг и километры недели"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hafta reytingi va kilometrlari"
           }
         }
       }
@@ -9970,6 +10114,22 @@
         }
       }
     },
+    "балл %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "балл %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ball %@"
+          }
+        }
+      }
+    },
     "балл %lld": {
       "localizations": {
         "ru": {
@@ -10142,6 +10302,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "yo‘lda"
+          }
+        }
+      }
+    },
+    "в среднем %@ за день": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "в среднем %@ за день"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kuniga o‘rtacha %@"
           }
         }
       }
@@ -10509,7 +10685,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "oy davomida"
+            "value": "oyiga"
           }
         }
       }
@@ -10562,6 +10738,22 @@
         }
       }
     },
+    "из обычных %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "из обычных %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatdagi %@ dan"
+          }
+        }
+      }
+    },
     "как в прошлый период": {
       "localizations": {
         "ru": {
@@ -10578,18 +10770,18 @@
         }
       }
     },
-    "камер": {
+    "как обычно": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "камер"
+            "value": "как обычно"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "kamera"
+            "value": "odatdagidek"
           }
         }
       }
@@ -10786,22 +10978,6 @@
         }
       }
     },
-    "макс. км/ч": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "макс. км/ч"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "maks. km/soat"
-          }
-        }
-      }
-    },
     "на %lld км/ч": {
       "localizations": {
         "ru": {
@@ -10814,6 +10990,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld km/soatga"
+          }
+        }
+      }
+    },
+    "на %lld%% больше обычного": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на %lld%% больше обычного"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatdagidan %lld%% ko‘p"
           }
         }
       }
@@ -11218,22 +11410,6 @@
         }
       }
     },
-    "пройдено": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "пройдено"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "bosib o'tildi"
-          }
-        }
-      }
-    },
     "пройдено пути": {
       "localizations": {
         "ru": {
@@ -11454,6 +11630,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "+40 km/soatdan ortiq"
+          }
+        }
+      }
+    },
+    "сегодня %@ · в среднем %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сегодня %@ · в среднем %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bugun %@ · o‘rtacha %@"
           }
         }
       }

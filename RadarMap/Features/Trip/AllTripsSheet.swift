@@ -24,7 +24,26 @@ struct AllTripsSheet: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
-                    retentionNote
+                    if months.isEmpty {
+                        // История очищена или её ещё нет: экран, открывшийся
+                        // пустым, читается как сбой, а не как «поездок нет».
+                        VStack(spacing: 8) {
+                            Image(systemName: "car.side")
+                                .font(.rounded(34))
+                                .foregroundStyle(Theme.textTertiary)
+                            Text("Поездок пока нет")
+                                .font(.rounded(17, .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                            Text("Первая появится здесь сразу после того, как вы доедете.")
+                                .font(.rounded(13))
+                                .foregroundStyle(Theme.textSecondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 60)
+                    } else {
+                        retentionNote
+                    }
                     ForEach(months, id: \.title) { month in
                         Text(month.title)
                             .font(.rounded(12, .semibold))

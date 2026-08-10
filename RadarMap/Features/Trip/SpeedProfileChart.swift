@@ -65,8 +65,13 @@ struct SpeedProfileChart: View {
         }
     }
 
+    /// Профиль считается один раз на поездку, а не в body: линейка под пальцем
+    /// меняет @State и прогоняет body десятки раз в секунду, а трек при этом
+    /// не меняется никогда — он у записи в истории уже закрыт.
+    @State private var samples: [SpeedSample] = []
+
     var body: some View {
-        let samples = speedSamples()
+        Group {
         if samples.count >= 8 {
             let topSpeed = samples.map(\.speedKmh).max() ?? 60
             VStack(alignment: .leading, spacing: 12) {
@@ -165,6 +170,8 @@ struct SpeedProfileChart: View {
             }
             .statCard()
         }
+        }
+        .task(id: record.id) { samples = speedSamples() }
     }
 
     private func nearestSample(to km: Double, in samples: [SpeedSample]) -> SpeedSample? {

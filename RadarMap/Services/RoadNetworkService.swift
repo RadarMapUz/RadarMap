@@ -108,6 +108,9 @@ final class RoadNetworkService {
         guard let fresh else { return }
         let replacing = index != nil && index != fresh
         index = fresh
+        // Новый индекс — новый набор тайлов; проверить покрытие заново, не
+        // дожидаясь, пока машина отъедет на километр.
+        lastEnsureAt = nil
         Storage.set(Date().timeIntervalSince1970, for: .roadsIndexLastCheck)
         if replacing {
             // Хэши могли смениться — всё загруженное перечитается и переверится.
@@ -127,7 +130,13 @@ final class RoadNetworkService {
         // а тик приборки дёргает нас каждую секунду — и 9 строковых ключей с
         // тремя Set'ами каждый раз выбрасывались. Пока не отъехали на километр
         // и ничего не в полёте, выходим по одному сравнению расстояния.
-        if let last = lastEnsureAt, downloading.isEmpty, !snapshotKeys.isEmpty,
+        // Условия «есть снимок» тут намеренно НЕТ: там, где под машиной
+        // тайлов нет вовсе (сеть молчала, sha не сошлась), snapshotKeys
+        // остаётся пустым — и гейт, зависящий от него, не срабатывал бы
+        // никогда, то есть ровно в самом плохом случае мы бы и работали
+        // каждую секунду. Пересборку снимка после долетевшего тайла даёт
+        // finish(), он же сбрасывает lastEnsureAt.
+        if let last = lastEnsureAt, downloading.isEmpty,
            GeoMath.fastDistance(last.latitude, last.longitude,
                                 coordinate.latitude, coordinate.longitude) < 1000 {
             return
@@ -199,6 +208,9 @@ final class RoadNetworkService {
 
     private func finish(key: String, lines: [RoadLine]) {
         loaded[key] = lines
+        // Состав окрестности изменился — следующий тик обязан пройти гейт,
+        // иначе новый тайл ждал бы километра пути.
+        lastEnsureAt = nil
         // Снимок собираем один раз, когда долетела вся пачка; следующий
         // ensureCoverage сузит его до окрестности и выселит дальние тайлы.
         guard downloading.isEmpty else { return }

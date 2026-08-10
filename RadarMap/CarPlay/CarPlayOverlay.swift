@@ -248,7 +248,9 @@ struct CarPlayOverlay: View {
     /// Сколько камер маршрута ещё впереди (пройденные не считаем).
     private var camerasAhead: Int {
         let progress = env.route.progressAlong
-        return env.route.camerasOnRoute.filter { $0.distanceAlong > progress }.count
+        // count(where:) вместо filter().count: считается на каждый тик GPS, а
+        // промежуточный массив камер маршрута тут не нужен никому.
+        return env.route.camerasOnRoute.count { $0.distanceAlong > progress }
     }
 
     // MARK: - Верхние баннеры

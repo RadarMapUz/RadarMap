@@ -269,7 +269,8 @@ struct MobileConfirmBar: View {
             Text(title)
                 .font(.rounded(15, .bold))
                 .foregroundStyle(.white)
-                .frame(width: 62, height: 38)
+                // 44 pt — минимум Apple для пальца; за рулём это не педантизм.
+                .frame(width: 62, height: 44)
                 .background(tint.gradient,
                             in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }

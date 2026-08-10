@@ -104,6 +104,11 @@ final class SpeedLimitService {
     /// SwiftUI-подписчиков этой записью было бы ежесекундной перерисовкой.
     @ObservationIgnored private(set) var currentRoadHit: LimitIndex.RoadHit?
 
+    /// Один клиент на сервис: APIClient держит собственную URLSession, а та
+    /// живёт до инвалидации — создавать её на вызов значит оставлять по сессии
+    /// на каждую проверку.
+    @ObservationIgnored private let api = APIClient(timeout: 30)
+
     // MARK: - Загрузка базы
 
     /// Вызывается при старте приложения: локальный файл сразу, сервер — раз в 7 дней.
@@ -142,7 +147,6 @@ final class SpeedLimitService {
         isDownloading = true
         defer { isDownloading = false }
         // Недельная фоновая проверка: сбой сети не критичен, попробуем в следующий раз.
-        let api = APIClient(timeout: 30)
         guard let data = try? await api.getData("speed_limits.json",
                                                 cachePolicy: .reloadIgnoringLocalCacheData) else { return }
 
@@ -344,8 +348,17 @@ struct LimitIndex: Sendable, RoadNetworkSource {
         var grid: [Int: [Int32]] = [:]
 
         for entry in raw {
+            // Границы значения — единственная защита этого файла: он
+            // приезжает по HTTP без подписи, в отличие от базы камер, пульта,
+            // правок модератора и дорожных тайлов. Подписать его — работа на
+            // стороне владельца (см. server/HTTPS.md); пока же явно отвергаем
+            // невозможные лимиты: в Узбекистане минимум 20 (дворы), максимум
+            // 110–130, и «5» с «300» означают испорченные данные, а не дорогу.
+            // Отвергаем СЕГМЕНТ, а не файл: один битый лимит не должен
+            // выключить двадцать тысяч честных.
             guard entry.count == 2,
                   let limit = (entry[0] as? NSNumber)?.intValue,
+                  AppConfig.plausibleSpeedLimits.contains(limit),
                   let flat = entry[1] as? [NSNumber], flat.count >= 4 else { continue }
 
             var pts: [MKMapPoint] = []

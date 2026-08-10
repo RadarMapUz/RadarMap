@@ -245,6 +245,9 @@ struct TripStatsSheet: View {
             }
             .onAppear {
                 appeared = true
+                // Дневная воронка: какие экраны вообще открывают. Только имя
+                // экрана и счётчик — ни времени, ни содержимого.
+                env.usage.noteScreen("stats")
                 #if DEBUG
                 // Скриншот-автоматизация: открыть вложенные экраны (с паузой —
                 // sheet поверх ещё анимирующегося sheet молча не показывается).
@@ -423,7 +426,11 @@ struct TripStatsSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text("Рейтинг, километры и выводы за период. Как считается рейтинг"))
+        // combine, а не свой label: у Button собственная подпись ЗАМЕНЯЕТ
+        // производную, и VoiceOver терял ровно то, ради чего сюда смотрят —
+        // балл, километры, дельту и вывод. Назначение кнопки говорит hint.
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(Text("Как считается рейтинг"))
     }
 
     private func heroTopRow(trip: TripStats, summary: PeriodSummary) -> some View {

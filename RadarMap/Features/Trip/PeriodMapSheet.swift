@@ -122,7 +122,11 @@ struct PeriodMapSheet: View {
                                  lineWidth: isSelected ? 3 : 1.5))
         .scaleEffect(isSelected ? 1.25 : 1)
         .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
-        .accessibilityLabel(Text(marker.location))
+        // Цвет маркера — единственное, что говорит о превышении; имя места
+        // без этого не отвечает на вопрос, ради которого открыли карту.
+        .accessibilityLabel(marker.hasViolation
+            ? Text("\(marker.location), превышений: \(marker.overTimes) из \(marker.times)")
+            : Text("\(marker.location), без превышений, проездов: \(marker.times)"))
     }
 
     /// Карточка выбранной камеры: место, проезды, макс скорость против лимита.

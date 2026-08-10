@@ -8,9 +8,10 @@
 //  ИМЕННО в этом приложении: приборка строилась ради батареи, и её экран —
 //  то место, где экономия должна быть видна, а не предполагаться.
 //
-//  Мониторинг батареи включается ТОЛЬКО пока чип на экране и выключается в
-//  onDisappear: держать его постоянно — значит будить процесс уведомлениями
-//  системы ради цифры, на которую никто не смотрит.
+//  Мониторинг батареи включается ТОЛЬКО пока чип на экране: держать его
+//  постоянно — значит будить процесс уведомлениями системы ради цифры, на
+//  которую никто не смотрит. Владелец флага один — `BatteryProbe`, чипов на
+//  экране бывает два, и уходящий не должен гасить мониторинг под живым.
 //
 
 import SwiftUI
@@ -41,10 +42,10 @@ struct BatteryChip: View {
             }
         }
         .onAppear {
-            UIDevice.current.isBatteryMonitoringEnabled = true
+            BatteryProbe.retain()
             refresh()
         }
-        .onDisappear { UIDevice.current.isBatteryMonitoringEnabled = false }
+        .onDisappear { BatteryProbe.release() }
         .onReceive(NotificationCenter.default.publisher(
             for: UIDevice.batteryLevelDidChangeNotification)) { _ in refresh() }
         .onReceive(NotificationCenter.default.publisher(

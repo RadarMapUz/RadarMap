@@ -122,7 +122,13 @@ struct DashboardView: View {
         .sheet(isPresented: $showSettings) { SettingsView() }
         .statusBarHidden()
         // Тик GPS → точка зрения схемы (и изредка пересборка её растра).
-        .onChange(of: env.location.locationTick) { sketch.refresh(env) }
+        // Только пока экран телефона действительно на виду: fullScreenCover в
+        // фоне не размонтируется, и без этого гейта приборка всю поездку в
+        // кармане пересчитывала схему дороги раз в секунду — рисуя в никуда.
+        .onChange(of: env.location.locationTick) {
+            guard env.isPhoneSceneActive else { return }
+            sketch.refresh(env)
+        }
         // Приборка светится всю поездку — но по тумблеру пользователя: раньше
         // автопереход молча перебивал выключенное «не гасить экран», отменяя
         // единственный рычаг против главного потребителя.
@@ -143,9 +149,14 @@ struct DashboardView: View {
                 && !env.isCarPlayConnected
             env.location.setDashboardVisible(false)
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Спидометр"))
-        .accessibilityHint(Text("Нажмите, чтобы вернуться к карте"))
+        // Раньше .ignore висел на КОРНЕ приборки, и вместе с россыпью цифр
+        // VoiceOver терял всё живое внутри: настройки, «Стоп», кнопку отметки
+        // радара и вопрос «радар ещё стоял?» с ответами «Да / Нет». Экран,
+        // который сам открывается в поездке, оказывался для незрячего
+        // водителя одним неподвижным словом «Спидометр».
+        // Теперь корень элементом не делаем — сводку цифр берёт на себя сам
+        // блок скорости, а кнопки остаются кнопками.
+        .accessibilityAction(named: Text("Вернуться к карте")) { dismiss() }
     }
 
     /// Тонкая строка статуса над направлениями: спутники и жара слева, заряд
@@ -244,6 +255,22 @@ struct DashboardView: View {
                 // подтягиваем подпись под сами цифры, а не под строку.
                 .padding(.top, -26)
         }
+        // Одна фраза вместо россыпи цифр — но только на этом блоке, а не на
+        // всей приборке: кнопки внутри неё обязаны остаться кнопками.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(speedSummary))
+    }
+
+    /// «62 километра в час, ограничение 60, превышение» — то, что человек
+    /// прочитал бы с экрана сам.
+    private var speedSummary: String {
+        var parts = [String(format: String(localized: "%lld километров в час"),
+                            Int(env.location.speedKmh.rounded()))]
+        if let limit = env.speedLimits.currentLimit {
+            parts.append(String(format: String(localized: "ограничение %lld"), limit))
+            if env.speedLimits.isOverspeeding { parts.append(String(localized: "превышение")) }
+        }
+        return parts.joined(separator: ", ")
     }
 
     /// Строка поездки: время · путь · камеры, заряд и «Стоп». Приборка — экран

@@ -7,14 +7,23 @@
 
 import SwiftUI
 import MapKit
+import os
 
 @MainActor
 @Observable
 final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
     var query = "" {
-        didSet { completer.queryFragment = query }
+        didSet {
+            answered = false
+            completer.queryFragment = query
+        }
     }
     private(set) var results: [MKLocalSearchCompletion] = []
+
+    /// Завершитель ответил на текущий запрос. Без этого флага пустой список
+    /// нельзя показать как «ничего не найдено»: ровно так же он выглядит,
+    /// пока ответа ещё нет, и надпись мигала бы на каждой набранной букве.
+    private(set) var answered = false
 
     private let completer = MKLocalSearchCompleter()
 
@@ -27,6 +36,16 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
     nonisolated func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
         MainActor.assumeIsolated {   // MKLocalSearchCompleter вызывает делегат на главном потоке
             self.results = completer.results
+            self.answered = true
+        }
+    }
+
+    nonisolated func completer(_ completer: MKLocalSearchCompleter,
+                               didFailWithError error: any Error) {
+        MainActor.assumeIsolated {
+            Log.app.error("поиск не ответил: \(error.localizedDescription, privacy: .public)")
+            self.results = []
+            self.answered = true
         }
     }
 
@@ -42,6 +61,9 @@ struct SearchView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppEnvironment.self) private var env
     @State private var model = SearchModel()
+    /// Адрес не удалось развернуть в координату — тап отработал вхолостую, и
+    /// об этом надо сказать: молчание здесь неотличимо от сломанной кнопки.
+    @State private var resolveFailed = false
     var onSelect: ((CLLocationCoordinate2D) -> Void)? = nil
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
     /// Открытие сразу в режиме «выбрать адрес для Дом/Работа» (из Настроек).
@@ -76,6 +98,11 @@ struct SearchView: View {
         }
         .presentationDetents([.large])
         .onAppear { assigning = initialAssign }
+        .alert("Не удалось открыть адрес", isPresented: $resolveFailed) {
+            Button("Понятно", role: .cancel) { }
+        } message: {
+            Text("Проверьте связь и попробуйте ещё раз.")
+        }
     }
 
     // MARK: - Мои места
@@ -228,6 +255,21 @@ struct SearchView: View {
                 }
             }
             .listRowBackground(Theme.surface)
+        } else if !model.query.isEmpty, model.answered {
+            // Пустой список без единого слова читается как зависшее
+            // приложение: человек ждёт результата, которого уже не будет.
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Ничего не найдено")
+                        .font(.rounded(15, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("Попробуйте название улицы или ближайший ориентир.")
+                        .font(.rounded(12))
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .padding(.vertical, 4)
+            }
+            .listRowBackground(Theme.surface)
         }
     }
 
@@ -235,7 +277,10 @@ struct SearchView: View {
         HStack(spacing: 10) {
             Button {
                 Task {
-                    guard let coordinate = await model.resolve(result) else { return }
+                    guard let coordinate = await model.resolve(result) else {
+                        resolveFailed = true
+                        return
+                    }
                     if let slot = assigning {
                         assign(slot, coordinate: coordinate, title: result.title)
                     } else {
@@ -264,6 +309,8 @@ struct SearchView: View {
                         if let coordinate = await model.resolve(result) {
                             onRoute(coordinate, result.title)
                             dismiss()
+                        } else {
+                            resolveFailed = true
                         }
                     }
                 } label: {

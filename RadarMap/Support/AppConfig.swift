@@ -246,10 +246,6 @@ nonisolated enum AppConfig {
     /// шум GPS-курса + кривые подъезды не должны глушить свою камеру.
     nonisolated static let cameraAxisMaxAngle: Double = 55
 
-    /// Скорость, с которой считаем «поездка началась» — стартуем Live Activity
-    /// (iOS позволяет запускать её только пока приложение на переднем плане).
-    static let liveActivityStartSpeedKmh: Double = 15
-
     /// Умный радиус: предупреждаем за N секунд до камеры, а не за фиксированные метры.
     /// На 110 км/ч радиус растёт до ~670 м, в городе остаётся базовым из настроек.
     static let alertLeadTimeSeconds: Double = 22
@@ -374,6 +370,12 @@ nonisolated enum AppConfig {
 
     /// Сервер с актуальной базой. TODO: перейти на домен + HTTPS перед публикацией в App Store.
     static let syncBaseURL = URL(string: "http://45.130.148.94:8090")!
+
+    /// Правдоподобный диапазон дорожного лимита. База лимитов — единственные
+    /// данные, которые применяются молча и БЕЗ подписи (см. SpeedLimitService),
+    /// поэтому у неё есть хотя бы этот забор: за ним заведомо испорченные
+    /// значения, а не редкая дорога.
+    nonisolated static let plausibleSpeedLimits = 5...150
 
     /// Как часто автоматически проверять обновления базы.
     static let syncCheckInterval: TimeInterval = 24 * 60 * 60

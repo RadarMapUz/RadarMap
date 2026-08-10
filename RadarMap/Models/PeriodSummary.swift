@@ -604,6 +604,20 @@ nonisolated struct HeatLine: Identifiable {
     let id: Int
     let points: [TrackPoint]
     let times: Int
+    /// Готовые координаты для `MapPolyline`. Считаются вместе с самой линией
+    /// вне main: на месяце это десятки тысяч точек, а карта рисует каждую
+    /// линию дважды (подложка + сама линия), то есть перевод шёл бы дважды
+    /// на каждый проход body.
+    let coordinates: [CLLocationCoordinate2D]
+
+    init(id: Int, points: [TrackPoint], times: Int) {
+        self.id = id
+        self.points = points
+        self.times = times
+        self.coordinates = points.map {
+            CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+        }
+    }
 
     /// 0 — разовый участок, 1 — повторяющийся, 2 — постоянный коридор.
     var tier: Int { Self.tier(times: times) }
@@ -612,10 +626,6 @@ nonisolated struct HeatLine: Identifiable {
         if times >= AppConfig.heatFrequentTimes { return 2 }
         if times >= AppConfig.heatRepeatedTimes { return 1 }
         return 0
-    }
-
-    var coordinates: [CLLocationCoordinate2D] {
-        points.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
     }
 }
 

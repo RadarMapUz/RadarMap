@@ -110,7 +110,11 @@ enum Theme {
 
     static let textPrimary   = Color.white
     static let textSecondary = Color.white.opacity(0.62)
-    static let textTertiary  = Color.white.opacity(0.38)
+    /// 0.50, а не 0.38: на почти чёрном фоне приложения прежняя ступень давала
+    /// контраст 3.5:1 при пороге WCAG AA 4.5:1 — и это не абстракция, а 117
+    /// подписей под цифрами, которые читают на ходу, в машине, через блик.
+    /// 0.50 даёт 5.3:1 и всё ещё отличается от textSecondary на глаз.
+    static let textTertiary  = Color.white.opacity(0.50)
 
     // MARK: - Метрики
     static let cornerLarge: CGFloat  = 24

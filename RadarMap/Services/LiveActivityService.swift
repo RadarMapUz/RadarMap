@@ -24,13 +24,22 @@ final class LiveActivityService {
 
     var isActive: Bool { activity != nil }
 
+    /// Момент, после которого показанная дистанция перестаёт быть правдой.
+    /// Без staleDate система считает плашку вечно свежей: приложение убили или
+    /// GPS замолчал, а на экране блокировки всё ещё «камера 300 м» — цифра,
+    /// на которую водитель смотрит и верит. Пять минут — заведомо больше
+    /// обычного интервала обновления и заведомо меньше поездки.
+    private static func staleDate() -> Date {
+        Date().addingTimeInterval(300)
+    }
+
     func startIfNeeded(state: CameraActivityAttributes.ContentState) {
         guard activity == nil, ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let quantized = Self.quantize(state)
         do {
             activity = try Activity.request(
                 attributes: CameraActivityAttributes(),
-                content: .init(state: quantized, staleDate: nil)
+                content: .init(state: quantized, staleDate: Self.staleDate())
             )
         } catch {
             // Пользователь мог выключить Live Activities — работаем без плашки.
@@ -51,7 +60,8 @@ final class LiveActivityService {
            Date().timeIntervalSince(lastSentAt) < Self.minInterval { return }
         lastSentState = quantized
         lastSentAt = Date()
-        Task { await activity.update(.init(state: quantized, staleDate: nil)) }
+        Task { await activity.update(.init(state: quantized,
+                                           staleDate: Self.staleDate())) }
     }
 
     func end() {

@@ -163,6 +163,14 @@ final class AppEnvironment {
         // базе v8 — старые «проезды» поперёк оси (мост над камерой) выкидываем.
         // Строго ПОСЛЕ загрузки базы: она декодируется асинхронно, и вызов
         // прямо отсюда получал пустой список камер — миграция молча выключалась.
+        // История приезжает с диска уже после первого кадра, поэтому всё,
+        // что из неё выводится, пересчитывается по этому сигналу, а не один
+        // раз на старте сцены.
+        mobile.onReportSent = { [weak usage] in usage?.noteReport() }
+        trip.onHistoryLoaded = { [weak self] in
+            self?.refreshLearnedPlaces()
+            self?.refreshWidgetSnapshot()
+        }
         cameras.onDatabaseLoaded = { [weak cameras, weak trip] in
             guard let cameras, let trip else { return }
             trip.axisCleanupIfNeeded(axisByID: Dictionary(
@@ -318,6 +326,20 @@ final class AppEnvironment {
         }
     }
     #endif
+
+    /// Перепроверить всё, что приходит с сервера, при возврате в приложение.
+    /// Каждый сервис держит СВОЙ интервал (пульт 6 ч, правки модератора 3 ч,
+    /// база камер сутки), поэтому частые переключения между приложениями
+    /// сеть не будят: refreshIfNeeded выйдет сразу. Раньше эта проверка жила
+    /// только в холодном старте — а телефон работает неделями без него, и
+    /// стоп-кран, включённый вчера, до такого пользователя не доезжал.
+    func refreshRemoteIfNeeded() {
+        Task { await config.refreshIfNeeded() }
+        Task { await sync.autoCheckIfNeeded() }
+        if settings.tripodHints {
+            Task { await hotspots.refreshIfNeeded() }
+        }
+    }
 
     /// Снимок для домашнего виджета: текущая неделя целиком, включая форму по
     /// дням и место наибольшего риска. Зовётся при уходе в фон (RootView) и в

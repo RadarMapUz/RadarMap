@@ -58,7 +58,26 @@ final class TripStats {
     nonisolated private static let trackTolerance = 0.00022   // ~22 м — упрощение Дугласа-Пекера
     nonisolated private static let trackMaxPoints = 400
 
-    init() { loadHistory() }
+    /// Пожизненные счётчики читаются синхронно: это одна запись UserDefaults,
+    /// зато она обязана быть на месте раньше, чем поездка успеет её изменить.
+    /// Историю и дневные сводки — с диска и вне main: это мегабайты JSON, и
+    /// раньше их разбор стоял между запуском и первым кадром.
+    init() {
+        loadLifetime()
+        Task { await loadFromDisk() }
+    }
+
+    /// История доехала с диска. AppEnvironment пересчитывает по этому сигналу
+    /// то, что зависит от неё (выученные места, снимок виджета): к первому
+    /// кадру истории в памяти ещё нет.
+    @ObservationIgnored var onHistoryLoaded: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onHistoryLoaded,
+                                               "TripStats.onHistoryLoaded") }
+    }
+
+    /// Пока история не приехала, писать её на диск нельзя: запись, сделанная
+    /// в этом окне, затёрла бы файл огрызком.
+    @ObservationIgnored private var isLoaded = false
 
     var camerasPassed: Int { passed.count }
 
@@ -631,21 +650,47 @@ final class TripStats {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("trips.json")
     }
-    private func loadHistory() {
-        if let decoded = JSONFile.load([TripRecord].self, from: storeURL, log: Log.trips) {
-            history = decoded
+    private func loadLifetime() {
+        guard let data = Storage.data(.lifetimeStats) else { return }
+        do {
+            lifetime = try JSONDecoder().decode(LifetimeStats.self, from: data)
+        } catch {
+            // Не читается — ниже восстановим из истории (backfill).
+            Log.trips.error("lifetimeStats не декодировались: \(error.localizedDescription, privacy: .public)")
         }
-        if let data = Storage.data(.lifetimeStats) {
-            do {
-                lifetime = try JSONDecoder().decode(LifetimeStats.self, from: data)
-            } catch {
-                // Не читается — ниже восстановим из истории (backfill).
-                Log.trips.error("lifetimeStats не декодировались: \(error.localizedDescription, privacy: .public)")
-            }
+    }
+
+    /// Разбор двух файлов вне main.
+    @concurrent private nonisolated static func decodeStore(
+        trips: URL, days: URL
+    ) async -> (trips: [TripRecord], days: [TripDay]) {
+        (JSONFile.load([TripRecord].self, from: trips, log: Log.trips) ?? [],
+         JSONFile.load([TripDay].self, from: days, log: Log.trips) ?? [])
+    }
+
+    private func loadFromDisk() async {
+        let decoded = await Self.decodeStore(trips: storeURL, days: daysURL)
+        // Пока читали, поездка могла закончиться — окно крошечное, но цена
+        // ошибки здесь это потерянная история, поэтому приехавшее за время
+        // чтения не выбрасываем, а ставим впереди (история — от новых к
+        // старым) и заново складываем в дневные сводки.
+        let arrived = history
+        history = arrived + decoded.trips
+        if arrived.isEmpty {
+            days = decoded.days
+        } else {
+            days = arrived.reduce(decoded.days) { TripDayBook.folded($1, into: $0) }
         }
-        if let decoded = JSONFile.load([TripDay].self, from: daysURL, log: Log.trips) {
-            days = decoded
+        isLoaded = true
+        if !arrived.isEmpty {
+            persist()
+            persistDays()
         }
+        finishLoading()
+        onHistoryLoaded?()
+    }
+
+    private func finishLoading() {
         // Обновились с версии без дневных агрегатов — собираем из того, что
         // ещё осталось в истории. Полнее уже не будет: удалённые записи не
         // воскресить, зато дальше история копится честно.
@@ -819,6 +864,7 @@ final class TripStats {
     }
 
     private func persistDays() {
+        guard isLoaded else { return }
         JSONFile.save(days, to: daysURL, log: Log.trips)
     }
 
@@ -830,6 +876,9 @@ final class TripStats {
         }
     }
     private func persist() {
+        // См. isLoaded: пока история не приехала с диска, в файле лежит
+        // правда, а в памяти — пусто; запись в этом окне была бы потерей.
+        guard isLoaded else { return }
         JSONFile.save(history, to: storeURL, log: Log.trips)
     }
 }

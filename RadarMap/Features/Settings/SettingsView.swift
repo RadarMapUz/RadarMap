@@ -293,6 +293,7 @@ struct SettingsView: View {
             .scrollContentBackground(.hidden)
             .background(Theme.background)
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
+            .onAppear { env.usage.noteScreen("settings") }
             .navigationTitle("Настройки")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

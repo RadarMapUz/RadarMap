@@ -17,22 +17,6 @@
         }
       }
     },
-    "%.0f км": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%.0f км"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%.0f km"
-          }
-        }
-      }
-    },
     "%.1f км": {
       "localizations": {
         "ru": {

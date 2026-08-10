@@ -19,15 +19,45 @@
 
 import WidgetKit
 import SwiftUI
+import UIKit
 
+/// Палитра виджета. В отличие от самого приложения — тёмного намеренно, ради
+/// радар-детекторного вида за рулём, — виджет живёт на ЧУЖОМ экране: рядом с
+/// «Погодой» и «Календарём», поверх светлых обоев. Вечно чёрный прямоугольник
+/// среди них читается дырой, поэтому здесь цвета динамические и следуют теме
+/// системы. Значения тёмной темы — те же, что в Theme приложения.
 enum SW {
-    static let accent = Color(red: 0.235, green: 0.863, blue: 1.0)
-    static let camera = Color(red: 1.0, green: 0.27, blue: 0.38)
-    static let bgTop = Color(red: 0.05, green: 0.08, blue: 0.16)
-    static let bgBottom = Color(red: 0.02, green: 0.04, blue: 0.07)
-    static let secondary = Color.white.opacity(0.6)
-    static let success = Color(red: 0.30, green: 0.87, blue: 0.56)
-    static let warning = Color(red: 1.0, green: 0.72, blue: 0.25)
+    private static func adaptive(light: Color, dark: Color) -> Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light)
+        })
+    }
+
+    /// Акценты в светлой теме темнее: неоновый циан на белом не читается
+    /// вовсе, а красный «риска» на светлом фоне слепит.
+    static let accent = adaptive(light: Color(red: 0.02, green: 0.45, blue: 0.60),
+                                 dark: Color(red: 0.235, green: 0.863, blue: 1.0))
+    static let camera = adaptive(light: Color(red: 0.80, green: 0.10, blue: 0.22),
+                                 dark: Color(red: 1.0, green: 0.27, blue: 0.38))
+    static let success = adaptive(light: Color(red: 0.08, green: 0.55, blue: 0.33),
+                                  dark: Color(red: 0.30, green: 0.87, blue: 0.56))
+    static let warning = adaptive(light: Color(red: 0.70, green: 0.47, blue: 0.03),
+                                  dark: Color(red: 1.0, green: 0.72, blue: 0.25))
+
+    static let bgTop = adaptive(light: Color(red: 0.97, green: 0.98, blue: 1.0),
+                                dark: Color(red: 0.05, green: 0.08, blue: 0.16))
+    static let bgBottom = adaptive(light: Color(red: 0.90, green: 0.93, blue: 0.97),
+                                   dark: Color(red: 0.02, green: 0.04, blue: 0.07))
+
+    /// Текст. `primary` намеренно не `.white`: в светлой теме белым по белому
+    /// исчезала бы ровно та цифра, ради которой виджет и ставят.
+    static let primary = adaptive(light: Color(red: 0.06, green: 0.08, blue: 0.12),
+                                  dark: .white)
+    static let secondary = adaptive(light: Color(red: 0.06, green: 0.08, blue: 0.12).opacity(0.6),
+                                    dark: Color.white.opacity(0.6))
+    /// Нейтральный столбик дня и подложки плиток — «чернила» темы, а не белый.
+    static let ink = adaptive(light: Color(red: 0.06, green: 0.08, blue: 0.12),
+                              dark: .white)
 
     /// Те же пороги, что у баллов в приложении (DrivingScore.tier): виджет не
     /// имеет права красить 70 иначе, чем список поездок.
@@ -136,7 +166,7 @@ private struct RadarStatsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: 17, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SW.primary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.7)
                 Text(detail)
@@ -247,7 +277,7 @@ private struct RadarStatsView: View {
                 .foregroundStyle(risk > 0 ? SW.camera : SW.success)
             Text(risk > 0 ? money(risk) : String(localized: "Без штрафов"))
                 .font(.system(size: size, weight: .bold, design: .rounded))
-                .foregroundStyle(risk > 0 ? SW.camera : .white)
+                .foregroundStyle(risk > 0 ? SW.camera : SW.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -285,17 +315,17 @@ private struct RadarStatsView: View {
                     // Столбик уже ячейки: на семь дней ячейка ~40 pt, и во всю
                     // ширину столбик читается блоком, а не графиком.
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(overspeed[index] ? SW.camera : Color.white.opacity(0.28))
+                        .fill(overspeed[index] ? SW.camera : SW.ink.opacity(0.28))
                         .frame(width: 14, height: max(3, heights[index] * height))
                         .overlay {
                             if today == index {
                                 RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                    .stroke(.white.opacity(0.85), lineWidth: 1.5)
+                                    .stroke(SW.ink.opacity(0.85), lineWidth: 1.5)
                             }
                         }
                     Text(labels[index])
                         .font(.system(size: 9, design: .rounded))
-                        .foregroundStyle(today == index ? .white : SW.secondary.opacity(0.7))
+                        .foregroundStyle(today == index ? SW.primary : SW.secondary.opacity(0.7))
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -316,7 +346,7 @@ private struct RadarStatsView: View {
                 .lineLimit(1)
             Text(km(snapshot.weekDistance))
                 .font(.system(size: size, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(SW.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             if let heroSubtitle {
@@ -423,7 +453,7 @@ private struct RadarStatsView: View {
                     tile(duration(snapshot.weekMovingDuration), String(localized: "за рулём"))
                 }
                 .padding(.vertical, 9)
-                .background(.white.opacity(0.06),
+                .background(SW.ink.opacity(0.06),
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 if let place = snapshot.topRiskPlace, snapshot.topRiskPasses > 0 {
                     riskRow(place: place, passes: snapshot.topRiskPasses)
@@ -442,7 +472,7 @@ private struct RadarStatsView: View {
         VStack(spacing: 1) {
             Text(value)
                 .font(.system(size: 15, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(SW.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text(label)
@@ -453,7 +483,7 @@ private struct RadarStatsView: View {
     }
 
     private var tileDivider: some View {
-        Rectangle().fill(.white.opacity(0.12)).frame(width: 1, height: 24)
+        Rectangle().fill(SW.ink.opacity(0.12)).frame(width: 1, height: 24)
     }
 
     private func riskRow(place: String, passes: Int) -> some View {
@@ -464,7 +494,7 @@ private struct RadarStatsView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(place)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(SW.primary)
                     .lineLimit(1)
                 Text(String(format: String(localized: "%lld проезда с превышением — здесь теряете больше всего"),
                             passes))
@@ -512,9 +542,17 @@ private struct RadarStatsView: View {
 
     // MARK: - Форматирование
 
+    /// Километры. До сотни — с десятой (12.4 км читается точнее, чем 12),
+    /// дальше без неё и с разделителем разрядов: «12400.0 km» в плитке
+    /// «всего» выглядело сырым числом из отладки, а не пробегом.
     private func km(_ meters: Double) -> String {
-        meters < 1000 ? String(format: String(localized: "%lld м"), Int(meters))
-                      : String(format: String(localized: "%.1f км"), meters / 1000)
+        if meters < 1000 { return String(format: String(localized: "%lld м"), Int(meters)) }
+        let value = meters / 1000
+        guard value < 100 else {
+            return String(format: String(localized: "%@ км"),
+                          value.formatted(.number.precision(.fractionLength(0))))
+        }
+        return String(format: String(localized: "%.1f км"), value)
     }
 
     private func duration(_ seconds: TimeInterval) -> String {

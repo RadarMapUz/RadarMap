@@ -125,7 +125,10 @@ struct TripHistorySection: View {
                 .opacity(phase.isIdentity ? 1 : 0.4)
                 .scaleEffect(phase.isIdentity ? 1 : 0.96)
         }
-        .accessibilityLabel(Text("Поездка. Открыть подробности"))
+        // Своя подпись затирала время, километры, балл и место — всё, что в
+        // строке и написано. Оставляем производную, назначение — в hint.
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(Text("Открыть подробности"))
         .contextMenu {
             // «Подробнее» из меню ушло: это теперь основной тап по строке.
             if record.hasTrack {

@@ -423,7 +423,11 @@ struct TripStatsSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text("Рейтинг, километры и выводы за период. Как считается рейтинг"))
+        // combine, а не свой label: у Button собственная подпись ЗАМЕНЯЕТ
+        // производную, и VoiceOver терял ровно то, ради чего сюда смотрят —
+        // балл, километры, дельту и вывод. Назначение кнопки говорит hint.
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(Text("Как считается рейтинг"))
     }
 
     private func heroTopRow(trip: TripStats, summary: PeriodSummary) -> some View {

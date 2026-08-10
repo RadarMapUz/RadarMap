@@ -1110,7 +1110,12 @@ struct MapScreen: View {
     private func openScreenFromLaunchArguments() {
         let args = ProcessInfo.processInfo.arguments
         // Демо-история для визуальной проверки Итогов и отчёта за период.
-        if args.contains("-demoHistory") { env.trip.seedDemoHistory() }
+        // -demoBigNumbers: та же история, но с четырёхзначными километрами —
+        // вёрстку Итогов надо проверять на числах, которые бывают в жизни, а не
+        // на демонстрационных 12,4 км.
+        if args.contains("-demoHistory") {
+            env.trip.seedDemoHistory(scale: args.contains("-demoBigNumbers") ? 20 : 1)
+        }
         if args.contains("-demoMergePair") { env.trip.seedDemoMergePair() }
         // Демо-история двухнедельной давности: проверка «в этом периоде поездок нет».
         if args.contains("-demoHistoryOld") { env.trip.seedDemoHistory(shiftDays: 14) }

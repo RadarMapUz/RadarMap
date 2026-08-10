@@ -36,11 +36,15 @@ struct AchievementBadge: View {
             }
             .frame(width: 56, height: 56)
 
+            // Две строки всегда: «Лимитда 50 камера» переносилось, соседи нет,
+            // и нижняя граница ряда получалась рваной.
             Text(badge.title)
                 .font(.rounded(10, .medium))
                 .foregroundStyle(badge.earned ? Theme.textPrimary : Theme.textTertiary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .frame(height: 26, alignment: .top)
         }
         .frame(width: 82)
     }
@@ -89,18 +93,29 @@ struct StatStripCell: View {
             Image(systemName: icon)
                 .font(.rounded(11, .semibold))
                 .foregroundStyle(Theme.textTertiary)
+            // Число — главное: не переносится и сжимается не ниже 0.8. Ниже
+            // оно перестаёт читаться с расстояния вытянутой руки, а ради этого
+            // плитку и смотрят. Не влезает — режем подпись, а не число.
             Text(value)
                 .font(.rounded(21, .heavy).monospacedDigit())
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.6)
+                .minimumScaleFactor(0.8)
+            // Высота подписи фиксирована под две строки: иначе «лучшая серия»
+            // переносится, «поездок» нет, и нижняя граница ряда получается
+            // рваной — именно это и было видно на узбекском.
             Text(label)
                 .font(.rounded(10, .medium))
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
+                .frame(height: 26, alignment: .top)
         }
+        // Воздух по бокам входит в идеальную ширину ячейки: без него
+        // ViewThatFits считал, что четыре колонки «влезают», и подписи
+        // «limitdagi kamera» и «eng yaxshi seriya» стояли вплотную.
+        .padding(.horizontal, 5)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("\(value), ") + Text(label))

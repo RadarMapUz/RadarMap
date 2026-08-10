@@ -85,10 +85,15 @@ struct LabeledDivider: View {
     var body: some View {
         HStack(spacing: 10) {
             line
+            // Одна строка обязательна: узбекское «BUTUN VAQT UCHUN» переносилось
+            // на вторую, а линии оставались на высоте первой и висели обрубками.
             Text(title)
                 .font(.rounded(11, .semibold))
                 .foregroundStyle(Theme.textTertiary)
                 .textCase(.uppercase)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .layoutPriority(1)
             line
         }
         .padding(.top, 8)

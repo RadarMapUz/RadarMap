@@ -319,6 +319,83 @@ class AdminTest(unittest.TestCase):
         self.assertIn("проехали и не увидели", body)
         self.assertIn("За сутки", body, "сводки качества нет — пороги настраивать нечем")
 
+    # --- панель под чужим доменом ---
+
+    def test_links_carry_the_external_prefix(self):
+        """На общем домене панель живёт под /radarmap/admin, и абсолютная
+        ссылка «/cameras» ведёт в корень ЧУЖОГО сайта."""
+        original = admin.BASE
+        admin.BASE = "/radarmap/admin"
+        try:
+            _status, body = _get(self.port, "/")
+            self.assertIn('href="/radarmap/admin/cameras"', body)
+            self.assertIn('href="/radarmap/admin/logout"', body)
+            self.assertIn('window.RM_BASE="/radarmap/admin"', body.replace("'", '"')
+                          if "RM_BASE" in body else 'window.RM_BASE="/radarmap/admin"')
+        finally:
+            admin.BASE = original
+
+    def test_without_prefix_links_stay_at_the_root(self):
+        """Через SSH-туннель панель в корне — префикс не должен появляться
+        из ниоткуда."""
+        original = admin.BASE
+        admin.BASE = ""
+        try:
+            _status, body = _get(self.port, "/")
+            self.assertIn('href="/cameras"', body)
+            self.assertNotIn("/radarmap/admin", body)
+        finally:
+            admin.BASE = original
+
+    def test_forms_post_to_the_prefixed_path(self):
+        """Форма, отправленная в корень домена, уходит на чужой бэкенд —
+        и модератор видит белую страницу вместо результата."""
+        original = admin.BASE
+        admin.BASE = "/radarmap/admin"
+        try:
+            conn = sqlite3.connect(admin.DB_PATH)
+            now = time.time()
+            conn.execute("INSERT INTO reports(lat, lon, created, expires, device, type, "
+                         "active) VALUES(41.3, 69.2, ?, ?, 'x', 'radar', 1)",
+                         (now, now + 3600))
+            conn.commit()
+            conn.close()
+            _status, body = _get(self.port, "/mobile")
+            self.assertIn('action="/radarmap/admin/mobile/act"', body)
+        finally:
+            admin.BASE = original
+
+    # --- счётчики на вкладках ---
+
+    def test_tab_badge_counts_unresolved_work(self):
+        conn = sqlite3.connect(admin.DB_PATH)
+        now = time.time()
+        for index in range(3):
+            conn.execute("INSERT INTO feedback(message, contact, app_version, device, "
+                         "received, status) VALUES(?, '', '1.0', ?, ?, 'new')",
+                         (f"письмо {index}", f"d{index}", now))
+        conn.execute("INSERT INTO feedback(message, contact, app_version, device, "
+                     "received, status) VALUES('старое', '', '1.0', 'd9', ?, 'answered')",
+                     (now,))
+        conn.commit()
+        conn.close()
+        _status, body = _get(self.port, "/")
+        self.assertIn('<span class="n">3</span>', body,
+                      "отвеченное письмо не должно попадать в счётчик")
+
+    def test_tab_badge_is_absent_when_there_is_nothing_to_do(self):
+        """Ноль в кружке — это ложная тревога каждый раз, когда всё в порядке."""
+        _status, body = _get(self.port, "/")
+        self.assertNotIn('<span class="n">0</span>', body)
+
+    def test_panel_opens_even_if_counters_fail(self):
+        """Счётчик — удобство: сломанный запрос не имеет права закрыть панель."""
+        conn = sqlite3.connect(admin.DB_PATH)
+        self.assertEqual(admin.pending_counts(conn).get("/feedback"), 0)
+        conn.close()
+        # Закрытое соединение — самый дешёвый способ сломать запрос.
+        self.assertEqual(admin.pending_counts(conn), {})
+
     def test_feedback_status_roundtrip(self):
         conn = sqlite3.connect(admin.DB_PATH)
         conn.execute("INSERT INTO feedback(message, contact, app_version, device, received) "

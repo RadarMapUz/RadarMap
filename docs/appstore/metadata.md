@@ -81,8 +81,9 @@ Hisob ochish shart emas, reklama yo‘q, shaxsiy ma’lumotlar yig‘ilmaydi.
 ## Возраст: 4+
 
 ## URL
-- Privacy Policy: http://45.130.148.94:8090/privacy.html  ← ЗАМЕНИТЬ на домен до сабмита!
-- Support URL: страница на том же домене (или GitHub repo)
+- Privacy Policy: https://soulmed.uz/radarmap/privacy.html
+- Support URL: https://soulmed.uz/radarmap/
+- Marketing URL: https://soulmed.uz/radarmap/
 
 ## Скриншоты (docs/appstore/screenshots/)
 - 0_onboarding.png (uz), 1_map.png (uz), 1_map_ru.png, 2_hud_speed.png,

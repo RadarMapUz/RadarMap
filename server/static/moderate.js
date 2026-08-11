@@ -1,3 +1,8 @@
+// Базовый префикс панели: на общем домене она живёт под /radarmap/admin, и
+// абсолютный '/api/cameras' ушёл бы в корень чужого сайта. Значение кладёт
+// сама страница (window.RM_BASE), пусто — панель в корне (SSH-туннель).
+var BASE = (typeof window !== 'undefined' && window.RM_BASE) || '';
+
 // Модерация положения камер: одна карта на всю страну.
 //
 // Прежний экран стоил семи действий и двух перезагрузок на одну камеру —
@@ -57,7 +62,7 @@ ymaps.ready(function () {
   // --- загрузка ------------------------------------------------------------
 
   function load() {
-    fetch('/api/cameras', { credentials: 'same-origin' })
+    fetch(BASE + '/api/cameras', { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         objects.add({
@@ -83,7 +88,7 @@ ymaps.ready(function () {
   });
 
   function select(id, fly) {
-    fetch('/api/camera/' + id, { credentials: 'same-origin' })
+    fetch(BASE + '/api/camera/' + id, { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
         if (!data) return;
@@ -142,7 +147,7 @@ ymaps.ready(function () {
     if (!current || !editor || els.save.disabled) return;
     const point = editor.geometry.getCoordinates();
     const id = current.id;
-    post('/api/move', { id: id, lat: point[0], lon: point[1] }, function (data) {
+    post(BASE + '/api/move', { id: id, lat: point[0], lon: point[1] }, function (data) {
       objects.objects.setObjectOptions(id, {
         preset: PRESET[STATE_DECIDED], iconOpacity: 1,
       });
@@ -157,7 +162,7 @@ ymaps.ready(function () {
   function undo() {
     if (!lastSaved) return;
     const id = lastSaved;
-    post('/api/undo', { id: id }, function (data) {
+    post(BASE + '/api/undo', { id: id }, function (data) {
       if (data.origin && data.origin[0]) {
         objects.objects.setObjectGeometry(id, {
           type: 'Point', coordinates: data.origin,
@@ -243,7 +248,7 @@ ymaps.ready(function () {
     const value = els.query.value.trim();
     if (value.length < 2) { els.found.style.display = 'none'; return; }
     searchTimer = setTimeout(function () {
-      fetch('/api/search?q=' + encodeURIComponent(value), { credentials: 'same-origin' })
+      fetch(BASE + '/api/search?q=' + encodeURIComponent(value), { credentials: 'same-origin' })
         .then(function (r) { return r.json(); })
         .then(function (data) {
           els.found.innerHTML = '';

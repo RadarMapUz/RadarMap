@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RadarMap — камеры и радары Узбекистана</title>
+<meta name="description" content="Голосовой антирадар и карта камер видеофиксации Узбекистана. Работает без интернета, предупреждает голосом, треноги находим вместе.">
+<meta property="og:title" content="RadarMap — камеры и радары Узбекистана">
+<meta property="og:description" content="Предупреждает голосом о камерах. Работает без интернета. Треноги находим вместе.">
+<meta property="og:type" content="website">
+<style>
+/* Страница проекта. Тот же язык, что у приложения: тёмный фон радар-детектора,
+   один акцентный голубой, скруглённые карточки. Всё внутри одного файла —
+   ни шрифтов, ни скриптов со стороны: страница обязана открываться на плохой
+   мобильной связи в дороге, а не тянуть полмегабайта. */
+:root {
+  --bg:#05070c; --surface:#0c1017; --stroke:#1b2231;
+  --text:#e8ecf3; --text-2:#8ea0bb; --text-3:#5f6c80;
+  --accent:#3cdcff; --ok:#38e58c; --warn:#ffb527;
+  color-scheme: dark;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text);
+       font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       -webkit-text-size-adjust:100%; }
+.wrap { max-width:760px; margin:0 auto; padding:0 20px 64px; }
+a { color:var(--accent); }
+
+/* Шапка с «радаром»: чистый CSS, без картинок. */
+header { text-align:center; padding:56px 0 36px; }
+.radar { width:104px; height:104px; margin:0 auto 22px; border-radius:50%;
+         background:radial-gradient(circle at 50% 50%, rgba(60,220,255,.20), transparent 68%);
+         border:1px solid rgba(60,220,255,.35); position:relative; }
+.radar::before, .radar::after { content:""; position:absolute; border-radius:50%;
+         border:1px solid rgba(60,220,255,.22); inset:16px; }
+.radar::after { inset:32px; }
+.dot { position:absolute; width:13px; height:13px; border-radius:50%;
+       background:var(--accent); left:50%; top:50%; transform:translate(-50%,-50%);
+       box-shadow:0 0 18px rgba(60,220,255,.85); }
+h1 { font-size:38px; margin:0 0 10px; letter-spacing:-.8px; }
+.sub { color:var(--text-2); font-size:18px; margin:0 auto; max-width:520px; }
+
+.cta { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin:30px 0 6px; }
+.btn { display:inline-flex; align-items:center; gap:9px; text-decoration:none;
+       padding:14px 24px; border-radius:14px; font-weight:600; font-size:16px;
+       border:1px solid var(--stroke); background:var(--surface); color:var(--text); }
+.btn.primary { background:linear-gradient(180deg,#3cdcff,#1eb4dd); color:#03202a;
+               border-color:transparent; }
+.btn.support { border-color:#3a2f10; color:var(--warn); background:#171208; }
+.btn:active { transform:translateY(1px); }
+.note { text-align:center; color:var(--text-3); font-size:13px; margin-top:14px; }
+
+h2 { font-size:22px; margin:44px 0 16px; letter-spacing:-.3px; }
+.grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
+.card { background:var(--surface); border:1px solid var(--stroke);
+        border-radius:16px; padding:18px 20px; }
+.card h3 { margin:0 0 6px; font-size:16px; }
+.card p { margin:0; color:var(--text-2); font-size:14.5px; }
+.ico { font-size:22px; display:block; margin-bottom:10px; }
+
+.strip { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+.pill { background:var(--surface); border:1px solid var(--stroke);
+        border-radius:999px; padding:7px 14px; font-size:13.5px; color:var(--text-2); }
+.pill b { color:var(--text); }
+
+.support-box { background:linear-gradient(180deg,#171208,#0c1017);
+               border:1px solid #2b2412; border-radius:18px; padding:24px;
+               text-align:center; }
+.support-box p { color:var(--text-2); margin:8px auto 18px; max-width:460px; }
+
+footer { margin-top:52px; padding-top:22px; border-top:1px solid var(--stroke);
+         color:var(--text-3); font-size:14px; text-align:center; }
+footer a { margin:0 8px; white-space:nowrap; }
+
+.lang { text-align:center; margin-top:34px; }
+.lang a { color:var(--text-2); font-size:14px; text-decoration:none;
+          border:1px solid var(--stroke); border-radius:999px; padding:6px 14px; }
+
+@media (max-width:520px) {
+  header { padding:38px 0 26px; }
+  h1 { font-size:30px; }
+  .sub { font-size:16px; }
+  .btn { width:100%; justify-content:center; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="radar"><span class="dot"></span></div>
+  <h1>RadarMap</h1>
+  <p class="sub">Голосовой антирадар и карта камер видеофиксации Узбекистана.
+     Работает без интернета.</p>
+
+  <div class="cta">
+    <a class="btn primary" href="https://apps.apple.com/app/id6792473173">Скачать в App&nbsp;Store</a>
+    <a class="btn support" href="https://taps.uz/radarmapuz" rel="noopener">Поддержать проект</a>
+  </div>
+  <p class="note">iPhone · iOS 18 и новее · CarPlay и Apple Watch</p>
+</header>
+
+<h2>Что делает</h2>
+<div class="grid">
+  <div class="card">
+    <span class="ico">🛰</span>
+    <h3>Предупреждает голосом</h3>
+    <p>Называет камеру заранее — с учётом вашей скорости, а не за фиксированные метры.
+       В городе коротко, на трассе полностью, в пробке молчит.</p>
+  </div>
+  <div class="card">
+    <span class="ico">📴</span>
+    <h3>Работает без сети</h3>
+    <p>База камер лежит в телефоне. На трассе Ташкент — Бухара карта может стать серой,
+       но предупреждения продолжают работать.</p>
+  </div>
+  <div class="card">
+    <span class="ico">👥</span>
+    <h3>Треноги находим вместе</h3>
+    <p>Расписание передвижных радаров закрыто с 2022 года. Одна кнопка — и водители
+       впереди узнают о засаде. Отметку проверяет другой водитель.</p>
+  </div>
+  <div class="card">
+    <span class="ico">📊</span>
+    <h3>Итоги поездок</h3>
+    <p>Скорость на каждой камере, рейтинг вождения и честный счёт: сколько штрафов
+       вы не получили за месяц.</p>
+  </div>
+  <div class="card">
+    <span class="ico">🔋</span>
+    <h3>Бережёт батарею</h3>
+    <p>В фоне работает на геозонах, а не на постоянном GPS. Точность подстраивается
+       под расстояние до ближайшей камеры.</p>
+  </div>
+  <div class="card">
+    <span class="ico">🔒</span>
+    <h3>Без слежки</h3>
+    <p>Ни аккаунтов, ни рекламы, ни трекеров. Телефон не сообщает серверу, где вы
+       находитесь — он забирает все отметки и решает сам.</p>
+  </div>
+</div>
+
+<div class="strip">
+  <span class="pill"><b>3475</b> камер в базе</span>
+  <span class="pill">Данные <b>data.egov.uz</b></span>
+  <span class="pill">Русский и <b>o‘zbekcha</b></span>
+  <span class="pill">Без регистрации</span>
+</div>
+
+<h2>Поддержать</h2>
+<div class="support-box">
+  <p>Приложение бесплатное и без рекламы. Сервер, карты и обновление базы камер
+     оплачиваются из своего кармана — если оно вам пригодилось, можно помочь.</p>
+  <a class="btn support" href="https://taps.uz/radarmapuz" rel="noopener">taps.uz/radarmapuz</a>
+</div>
+
+<div class="lang"><a href="#uz">O‘zbekcha</a></div>
+
+<h2 id="uz">O‘zbekcha</h2>
+<div class="grid">
+  <div class="card">
+    <span class="ico">🛰</span>
+    <h3>Ovoz bilan ogohlantiradi</h3>
+    <p>Kamerani oldindan aytadi — belgilangan masofada emas, tezligingizga qarab.
+       Shaharda qisqa, trassada to‘liq, tirbandlikda jim.</p>
+  </div>
+  <div class="card">
+    <span class="ico">📴</span>
+    <h3>Internetsiz ishlaydi</h3>
+    <p>Kameralar bazasi telefonda saqlanadi. Xarita kulrang bo‘lib qolishi mumkin,
+       lekin ogohlantirishlar ishlashda davom etadi.</p>
+  </div>
+  <div class="card">
+    <span class="ico">👥</span>
+    <h3>Trenogalarni birga topamiz</h3>
+    <p>Ko‘chma radarlar jadvali 2022 yildan yopiq. Bitta tugma — va oldindagi
+       haydovchilar pistirma haqida biladi.</p>
+  </div>
+  <div class="card">
+    <span class="ico">🔒</span>
+    <h3>Kuzatuvsiz</h3>
+    <p>Hisob ham, reklama ham, kuzatuv ham yo‘q. Telefon serverga qayerdaligingizni
+       aytmaydi.</p>
+  </div>
+</div>
+
+<footer>
+  <a href="privacy.html">Политика конфиденциальности</a> ·
+  <a href="mailto:rasul.sadullaev@gmail.com">Написать разработчику</a> ·
+  <a href="https://taps.uz/radarmapuz" rel="noopener">Поддержать</a>
+  <p style="margin-top:16px">Камеры — открытые данные data.egov.uz (1-008-0027).<br>
+     Карты и ограничения скорости — © участники
+     <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p>
+</footer>
+
+</div>
+</body>
+</html>

@@ -291,6 +291,43 @@ final class AppEnvironment {
     /// меняется медленно, считать его в body главного экрана незачем.
     private(set) var learnedPlaces: [FrequentPlaces.Place] = []
 
+    // MARK: - Копия своих данных
+
+    /// Собрать копию. Живёт в композиционном корне, потому что данные лежат в
+    /// трёх разных сервисах, и сшивать их — не дело ни одного из них.
+    func makeBackup() -> TripBackup {
+        var backup = TripBackup()
+        backup.appVersion = Bundle.main
+            .infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        backup.history = trip.history
+        backup.days = trip.days
+        backup.lifetime = trip.lifetime
+        backup.customCameras = cameras.custom
+        backup.hiddenCameraIDs = Array(cameras.hiddenIDs).sorted()
+        return backup
+    }
+
+    /// Влить копию. Возвращает, сколько записей реально добавилось — это и
+    /// показываем человеку вместо безликого «готово».
+    @discardableResult
+    func restore(from backup: TripBackup) -> (trips: Int, days: Int) {
+        let merged = TripBackupMerge.merge(backup,
+                                           history: trip.history,
+                                           days: trip.days,
+                                           lifetime: trip.lifetime,
+                                           customCameras: cameras.custom,
+                                           hiddenCameraIDs: cameras.hiddenIDs)
+        trip.applyRestored(history: merged.history, days: merged.days,
+                           lifetime: merged.lifetime)
+        cameras.applyRestored(custom: merged.customCameras,
+                              hidden: merged.hiddenCameraIDs)
+        // Виджет и выученные места считаются из истории — после вливания они
+        // устарели мгновенно.
+        refreshLearnedPlaces()
+        refreshWidgetSnapshot()
+        return (merged.addedTrips, merged.addedDays)
+    }
+
     func refreshLearnedPlaces() {
         guard settings.destinationSuggestions else {
             // Выключили подсказки — забываем и выученное: держать в памяти

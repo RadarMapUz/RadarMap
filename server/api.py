@@ -66,6 +66,60 @@ REPORT_TTLS = {"radar": TTL, "tripod": TTL, "post": 6 * 3600, "accident": 3600}
 # дороге живёт 75 мин вместо трёх часов — но там её и видят единицы.
 PROBATION_TTLS = {"radar": 75 * 60, "tripod": 75 * 60, "post": 2 * 3600,
                   "accident": 3600}
+
+# --- Испытательный срок и холодный старт --------------------------------------
+#
+# Испытательный срок держится на допущении, которого в первые недели нет:
+# что рядом есть ДРУГОЙ водитель, способный подтвердить отметку. Пока
+# приложение только запустили, честная тренога умирает через 75 минут просто
+# потому, что подтверждать её некому, — и первый же человек, нажавший кнопку,
+# видит, что ничего не произошло, и больше не нажимает. Так фильтр от фейков
+# убивает ровно ту функцию, которую защищает.
+#
+# Поэтому испытательный срок включается САМ, когда плотность появилась, а не
+# по флагу, который однажды поставят и забудут: если за последнюю неделю
+# отметки ставили меньше PROBATION_MIN_DEVICES разных устройств, подтверждать
+# всё равно некому — новая точка сразу получает полный срок.
+#
+# Ручное переопределение оставлено на случай волны фейков: переменная
+# окружения RADARMAP_PROBATION = auto (по умолчанию) | on | off.
+PROBATION_MIN_DEVICES = 25
+PROBATION_WINDOW = 7 * 86400
+PROBATION_CACHE_TTL = 300
+PROBATION_MODE = os.environ.get("RADARMAP_PROBATION", "auto").strip().lower()
+
+_probation_cache = (0.0, None)
+_probation_lock = threading.Lock()
+
+
+def probation_active(conn, now):
+    """Работает ли испытательный срок прямо сейчас.
+
+    Решает плотность, а не календарь: считаем РАЗНЫЕ устройства, ставившие
+    отметки за неделю. Результат кэшируется на пять минут — запрос дешёвый и
+    по индексу, но он на горячем пути создания отметки.
+    """
+    if PROBATION_MODE == "on":
+        return True
+    if PROBATION_MODE == "off":
+        return False
+    global _probation_cache
+    with _probation_lock:
+        stamp, cached = _probation_cache
+        if cached is not None and now - stamp < PROBATION_CACHE_TTL:
+            return cached
+    try:
+        devices = conn.execute(
+            "SELECT COUNT(DISTINCT device) FROM reports WHERE created > ?",
+            (now - PROBATION_WINDOW,)).fetchone()[0]
+    except sqlite3.Error:
+        # Сомнение трактуем в пользу защиты: лучше короткий срок жизни
+        # у честной отметки, чем открытая дверь фейкам.
+        return True
+    active = devices >= PROBATION_MIN_DEVICES
+    with _probation_lock:
+        _probation_cache = (now, active)
+    return active
 # Дизлайк с нового адреса срезает жизнь: два честных «Нет» после проезда
 # убирают пустышку задолго до кворума на полное скрытие. Пол — 5 минут:
 # мгновенное снятие остаётся привилегией кворума разных адресов.
@@ -775,10 +829,14 @@ class Handler(BaseHTTPRequestHandler):
             blocked = is_blocked(conn, ip, device, now)
             # Новая отметка живёт испытательный срок, полный получит после
             # независимого подтверждения (см. lifecycle_expires).
+            # Срок жизни новой точки: испытательный, только пока в стране
+            # есть кому подтверждать (см. probation_active).
+            ttl = PROBATION_TTLS[rtype] if probation_active(conn, now) \
+                else REPORT_TTLS[rtype]
             cur = conn.execute(
                 "INSERT INTO reports(lat, lon, created, expires, device, type, ip, cls, "
                 "active, closed) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                (lat, lon, now, now + PROBATION_TTLS[rtype], device, rtype, ip, cls,
+                (lat, lon, now, now + ttl, device, rtype, ip, cls,
                  0 if blocked else 1, "blocked" if blocked else ""))
             conn.commit()
             return self._json(200, {"id": cur.lastrowid, "merged": False})

@@ -934,15 +934,46 @@ class Handler(BaseHTTPRequestHandler):
         try:
             report_id = int(field("id"))
         except ValueError:
-            return
+            report_id = 0   # «Снять блокировку» приходит без отметки
         action = field("action")
         if action == "kill":
-            conn.execute("UPDATE reports SET active = 0 WHERE id = ?", (report_id,))
+            conn.execute("UPDATE reports SET active = 0, closed = 'moderator' WHERE id = ?",
+                         (report_id,))
             log_action(conn, None, "mobile_kill", f"отметка {report_id}")
         elif action == "extend":
             conn.execute("UPDATE reports SET expires = ? WHERE id = ?",
                          (time.time() + 3 * 3600, report_id))
             log_action(conn, None, "mobile_extend", f"отметка {report_id}")
+        elif action == "block":
+            # Блокируем оба ключа сразу: адрес переживает ротацию UUID,
+            # устройство — смену сети. Сутки, а не навсегда: за адресом в
+            # Узбекистане стоит CGNAT, и вечный бан выключил бы вместе со
+            # спамером район города. Возврат — кнопкой «Снять».
+            row = conn.execute("SELECT device, ip FROM reports WHERE id = ?",
+                               (report_id,)).fetchone()
+            if row:
+                until = time.time() + 86400
+                for kind, value in (("device", row["device"]), ("ip", row["ip"])):
+                    if not value:
+                        continue
+                    conn.execute(
+                        "INSERT OR REPLACE INTO blocked(kind, value, until, note, created) "
+                        "VALUES(?,?,?,?,?)",
+                        (kind, value, until, f"отметка {report_id}", time.time()))
+                # Живые отметки источника уводим с карты тем же движением:
+                # оставить их значит блокировать на будущее и терпеть в
+                # настоящем.
+                conn.execute(
+                    "UPDATE reports SET active = 0, closed = 'blocked' "
+                    "WHERE active = 1 AND (device = ? OR (ip != '' AND ip = ?))",
+                    (row["device"], row["ip"]))
+                log_action(conn, None, "mobile_block", f"источник отметки {report_id}")
+        elif action == "unblock":
+            kind, value = field("block_kind"), field("block_value")
+            if kind in ("ip", "device") and value:
+                conn.execute("DELETE FROM blocked WHERE kind = ? AND value = ?",
+                             (kind, value))
+                log_action(conn, None, "mobile_unblock", f"{kind} {value}")
         conn.commit()
 
     def feedback_action(self, conn, field):
@@ -1119,35 +1150,112 @@ class Handler(BaseHTTPRequestHandler):
             applied = f"<h1>Действующие правки ({len(overrides)})</h1>{rows}"
         return page("/cameras", "Камеры", f"<h1>Очередь ({len(queue)})</h1>{body}{applied}")
 
+    def mobile_quality(self, conn, now, days=1):
+        """Качество краудсорса за окно: сколько отметок дошло до подтверждения
+        и сколько было снесено. Без этих двух долей пороги (испытательный срок,
+        кворум, штраф за дизлайк) настраиваются вслепую — по ощущению, что
+        «вроде работает»."""
+        since = now - days * 86400
+        total = conn.execute("SELECT COUNT(*) FROM reports WHERE created > ?",
+                             (since,)).fetchone()[0]
+        if not total:
+            return None
+        confirmed = conn.execute(
+            "SELECT COUNT(*) FROM reports r WHERE r.created > ? AND EXISTS("
+            "  SELECT 1 FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
+            "  AND v.device != r.device AND v.ip != '' AND v.ip != r.ip)",
+            (since,)).fetchone()[0]
+        by_reason = dict(conn.execute(
+            "SELECT COALESCE(closed, ''), COUNT(*) FROM reports WHERE created > ? "
+            "GROUP BY 1", (since,)).fetchall())
+        return {"total": total, "confirmed": confirmed,
+                "quorum": by_reason.get("quorum", 0),
+                "author": by_reason.get("author", 0),
+                "moderator": by_reason.get("moderator", 0),
+                "blocked": by_reason.get("blocked", 0)}
+
     def mobile_page(self, conn):
         now = time.time()
         rows = conn.execute("""
             SELECT r.id, r.lat, r.lon, r.type, r.created, r.expires, r.up, r.down, r.ip,
+                   r.device, r.cls,
                    (SELECT COUNT(DISTINCT v.ip) FROM votes v
-                     WHERE v.report_id = r.id AND v.ip != '') AS vote_ips
+                     WHERE v.report_id = r.id AND v.ip != '') AS vote_ips,
+                   (SELECT COUNT(*) FROM votes v
+                     WHERE v.report_id = r.id AND v.value = -1 AND v.kind = 'pass')
+                     AS pass_no,
+                   (SELECT COUNT(*) FROM votes v
+                     WHERE v.report_id = r.id AND v.kind = 'misplaced') AS misplaced,
+                   (SELECT COUNT(*) FROM reports o
+                     WHERE o.ip = r.ip AND r.ip != '' AND o.created > ?) AS from_ip
             FROM reports r WHERE r.active = 1 AND r.expires > ?
-            ORDER BY r.created DESC""", (now,)).fetchall()
+            ORDER BY r.created DESC""", (now - 86400, now)).fetchall()
+
+        quality = self.mobile_quality(conn, now)
+        summary = ""
+        if quality:
+            share = round(100 * quality["confirmed"] / quality["total"])
+            summary = (f'<div class="card"><b>За сутки:</b> отметок {quality["total"]}'
+                       f' · подтверждено независимо {quality["confirmed"]} ({share}%)'
+                       f' · снято кворумом {quality["quorum"]}'
+                       f' · отозвано авторами {quality["author"]}'
+                       f' · убрано вручную {quality["moderator"]}'
+                       f' · не опубликовано (бан) {quality["blocked"]}</div>')
+
+        blocks = conn.execute(
+            "SELECT kind, value, until, note FROM blocked WHERE until > ? ORDER BY until DESC",
+            (now,)).fetchall()
+        blocked_html = ""
+        if blocks:
+            items = "".join(
+                f'<div class="row"><span class="tag bad">{esc(b["kind"])}</span>'
+                f'<code>{esc(b["value"])}</code>'
+                f'<span class="muted">ещё {int((b["until"] - now) // 3600)} ч ·'
+                f' {esc(b["note"] or "без причины")}</span>'
+                f'<form method="post" action="/mobile/act">'
+                f'<input type="hidden" name="block_kind" value="{esc(b["kind"])}">'
+                f'<input type="hidden" name="block_value" value="{esc(b["value"])}">'
+                f'<button name="action" value="unblock">Снять</button></form></div>'
+                for b in blocks)
+            blocked_html = f'<div class="card"><b>Блокировки ({len(blocks)})</b>{items}</div>'
+
         if not rows:
-            return page("/mobile", "Передвижные", '<div class="empty">Живых отметок нет</div>')
+            return page("/mobile", "Передвижные",
+                        f'{summary}{blocked_html}<div class="empty">Живых отметок нет</div>')
         cards = []
         for row in rows:
             # Голоса с одного адреса — это один человек, а не кворум. Показываем
             # оба числа рядом: расхождение и есть признак накрутки.
             suspicious = (row["up"] or 0) >= 3 and (row["vote_ips"] or 0) <= 1
+            # Дизлайк ПОСЛЕ реального проезда весит больше тапа из карточки:
+            # человек был на месте и не увидел радара.
+            pass_no = row["pass_no"] or 0
+            misplaced = row["misplaced"] or 0
+            from_ip = row["from_ip"] or 0
+            flags = ""
+            if pass_no:
+                flags += (f'<span class="tag bad">проехали и не увидели: {pass_no}</span>')
+            if misplaced:
+                flags += f'<span class="tag bad">стоит не там: {misplaced}</span>'
+            if from_ip >= 5:
+                flags += f'<span class="tag bad">с этого адреса за сутки: {from_ip}</span>'
             cards.append(f"""<div class="card">
   <div class="row"><b>{esc(row['type'] or 'radar')}</b>
     <span class="tag">+{row['up']} / −{row['down']}</span>
     <span class="tag {'bad' if suspicious else ''}">адресов среди голосов: {row['vote_ips']}</span>
-    {'<span class="tag bad">похоже на накрутку</span>' if suspicious else ''}</div>
+    {'<span class="tag bad">похоже на накрутку</span>' if suspicious else ''}{flags}</div>
   <div class="muted">поставлена {esc(ago(row['created']))} ·
-    исчезнет через {int(max(0, row['expires'] - now) // 60)} мин · {osm_link(row['lat'], row['lon'])}</div>
+    исчезнет через {int(max(0, row['expires'] - now) // 60)} мин ·
+    {esc(row['cls'] or 'класс дороги неизвестен')} · {osm_link(row['lat'], row['lon'])}</div>
   <form method="post" action="/mobile/act">
     <input type="hidden" name="id" value="{row['id']}">
     <button class="danger" name="action" value="kill">Убрать с карты</button>
     <button name="action" value="extend">Продлить на 3 ч</button>
+    <button class="danger" name="action" value="block">Заблокировать источник на сутки</button>
   </form></div>""")
         return page("/mobile", "Передвижные",
-                    f"<h1>Живые отметки ({len(rows)})</h1>{''.join(cards)}")
+                    f"{summary}{blocked_html}<h1>Живые отметки ({len(rows)})</h1>"
+                    f"{''.join(cards)}")
 
     def feedback_page(self, conn):
         rows = conn.execute("""SELECT id, message, contact, app_version, received,

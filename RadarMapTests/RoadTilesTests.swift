@@ -157,6 +157,29 @@ final class RoadTilesTests: XCTestCase {
         XCTAssertEqual(network.lines.count, 1)
     }
 
+    func testSameEndsDifferentRoadsAreBothKept() {
+        // Мост над одноимённым участком: те же крайние точки, другой класс.
+        // Ключ схлопывания обязан различать их — иначе «оптимизация» ключа до
+        // пары координат молча стирает со схемы настоящие дороги. Тест стоит
+        // здесь именно как забор от такой оптимизации.
+        let ground = line(latitude: 41.31, kind: .secondary)
+        let bridge = line(latitude: 41.31, kind: .motorway)
+        let network = TileRoadNetwork.build([[ground, bridge]])
+        XCTAssertEqual(network.lines.count, 2,
+                       "разные дороги с общими концами схлопывать нельзя")
+    }
+
+    func testSameEndsDifferentPointCountAreBothKept() {
+        // Второй различающий признак ключа: число точек. Развязка и прямой
+        // съезд между теми же узлами — разная геометрия при одинаковых концах.
+        var detailed = line(latitude: 41.31)
+        detailed.points.insert(CLLocationCoordinate2D(latitude: 41.3105,
+                                                      longitude: 69.2512),
+                               at: 1)
+        let network = TileRoadNetwork.build([[line(latitude: 41.31), detailed]])
+        XCTAssertEqual(network.lines.count, 2)
+    }
+
     func testFallbackUsedOnlyWhereNoCoverage() {
         struct Fixed: RoadNetworkSource {
             var lines: [RoadLine]

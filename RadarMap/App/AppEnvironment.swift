@@ -167,6 +167,10 @@ final class AppEnvironment {
         // что из неё выводится, пересчитывается по этому сигналу, а не один
         // раз на старте сцены.
         mobile.onReportSent = { [weak usage] in usage?.noteReport() }
+        // Счётчик оповещений уходил на сервер вечным нулём: метод существовал,
+        // а звать его было некому. Главная цифра воронки — «сколько раз в день
+        // приложение реально предупредило» — была ложью.
+        location.onAlertFired = { [weak usage] in usage?.noteAlert() }
         // Снап отметки на ось дороги и очередь без сети — обе зависимости
         // слабые: отметка обязана уходить и когда тайлов нет, и когда сеть
         // молчит.
@@ -182,13 +186,19 @@ final class AppEnvironment {
         trip.onHistoryLoaded = { [weak self] in
             self?.refreshLearnedPlaces()
             self?.refreshWidgetSnapshot()
+            // «Свои камеры» считаются ПО ИСТОРИИ, а bootstrap() успевает
+            // раньше, чем она приедет с диска: список выходил пустым, и до
+            // первой поездки на карте не было ни одной зелёной галочки, а
+            // умная тишина не работала для фоновых оповещений по геозонам.
+            self?.location.refreshFamiliarCameras()
+            // Чистка мостовых проездов ждёт ОБА источника: базу камер и
+            // историю. Кто из них приедет вторым — заранее не известно,
+            // поэтому пробуем с каждого; метод идемпотентен и выходит по
+            // своему флагу.
+            self?.runAxisCleanupIfPossible()
         }
-        cameras.onDatabaseLoaded = { [weak cameras, weak trip] in
-            guard let cameras, let trip else { return }
-            trip.axisCleanupIfNeeded(axisByID: Dictionary(
-                uniqueKeysWithValues: cameras.cameras.compactMap { cam in
-                    cam.axis.map { (cam.id, $0) }
-                }))
+        cameras.onDatabaseLoaded = { [weak self] in
+            self?.runAxisCleanupIfPossible()
         }
 
         // Конец поездки: обезличенные счётчики и недельный дайджест.
@@ -290,6 +300,15 @@ final class AppEnvironment {
     /// событийный: на старте сцены и в конце поездки. Распорядок за 30 дней
     /// меняется медленно, считать его в body главного экрана незачем.
     private(set) var learnedPlaces: [FrequentPlaces.Place] = []
+
+    /// Разовая чистка проездов, засчитанных с моста над камерой. Нужны и оси
+    /// камер, и прочитанная история; порядок их прихода не определён.
+    private func runAxisCleanupIfPossible() {
+        let axes = Dictionary(uniqueKeysWithValues: cameras.cameras.compactMap { camera in
+            camera.axis.map { (camera.id, $0) }
+        })
+        trip.axisCleanupIfNeeded(axisByID: axes)
+    }
 
     // MARK: - Копия своих данных
 

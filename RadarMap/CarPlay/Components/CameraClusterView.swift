@@ -46,8 +46,15 @@ final class CameraClusterView: MKAnnotationView {
 
     private static var cache: [String: UIImage] = [:]
 
-    /// Кружок с числом. Размер растёт ступенями, а не плавно: за рулём важно
-    /// «мало / много», а не точная площадь.
+    /// Значок группы с числом.
+    ///
+    /// Форма намеренно ДРУГАЯ, чем у одиночной камеры: та — круг, эта —
+    /// скруглённый квадрат. Раньше отличие держалось на цвете и цифре внутри,
+    /// и на карте пятнадцать почти одинаковых кружков конкурировали друг с
+    /// другом; силуэт различается боковым зрением, а оттенок — нет.
+    ///
+    /// Размер растёт ступенями, а не плавно: за рулём важно «мало / много»,
+    /// а не точная площадь.
     private static func badge(count: Int, tint: UIColor) -> UIImage {
         let side: CGFloat = count >= 20 ? 44 : (count >= 8 ? 40 : 36)
         let text = count > 99 ? "99+" : "\(count)"
@@ -57,12 +64,15 @@ final class CameraClusterView: MKAnnotationView {
         let size = CGSize(width: side, height: side)
         let rendered = UIGraphicsImageRenderer(size: size).image { _ in
             let rect = CGRect(origin: .zero, size: size)
+            let radius = side * 0.30
             UIColor.black.withAlphaComponent(0.55).setFill()
-            UIBezierPath(ovalIn: rect).fill()
+            UIBezierPath(roundedRect: rect, cornerRadius: radius).fill()
             tint.setFill()
-            UIBezierPath(ovalIn: rect.insetBy(dx: 3, dy: 3)).fill()
+            UIBezierPath(roundedRect: rect.insetBy(dx: 3, dy: 3),
+                         cornerRadius: radius - 2).fill()
             UIColor.white.withAlphaComponent(0.92).setStroke()
-            let ring = UIBezierPath(ovalIn: rect.insetBy(dx: 3.8, dy: 3.8))
+            let ring = UIBezierPath(roundedRect: rect.insetBy(dx: 3.8, dy: 3.8),
+                                    cornerRadius: radius - 2.8)
             ring.lineWidth = 1.6
             ring.stroke()
 

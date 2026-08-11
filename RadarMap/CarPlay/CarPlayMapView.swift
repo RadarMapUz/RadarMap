@@ -52,6 +52,11 @@ struct CarPlayMapView: UIViewRepresentable {
         // в бюджет или наложилось на соседа, просто исчезало с экрана.
         map.register(CameraClusterView.self,
                      forAnnotationViewWithReuseIdentifier: CameraClusterView.reuseID)
+        // Своя метка машины: системная синяя точка — чужая в тёмном языке
+        // приложения, да и направление движения она на повёрнутой карте не
+        // показывает.
+        map.register(CarPlayUserMarker.self,
+                     forAnnotationViewWithReuseIdentifier: CarPlayUserMarker.reuseID)
 
         // Старт: вокруг себя, если позиция уже есть; иначе — Ташкент.
         let center = location.currentCoordinate
@@ -340,6 +345,10 @@ struct CarPlayMapView: UIViewRepresentable {
             _ mapView: MKMapView,
             viewFor annotation: any MKAnnotation
         ) -> MKAnnotationView? {
+            if annotation is MKUserLocation {
+                return mapView.dequeueReusableAnnotationView(
+                    withIdentifier: CarPlayUserMarker.reuseID, for: annotation)
+            }
             guard let camera = annotation as? CameraAnnotation else { return nil }
             let view = mapView.dequeueReusableAnnotationView(
                 withIdentifier: CameraMarkerView.reuseID,

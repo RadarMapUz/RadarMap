@@ -41,10 +41,7 @@ struct CarPlayOverlay: View {
                 Spacer(minLength: 0)
             }
             Spacer(minLength: 0)
-            HStack(spacing: 0) {
-                dock
-                Spacer(minLength: 0)
-            }
+            dock
         }
         // Колонку своих кнопок CarPlay кладёт в safe area, и сторона зависит от
         // системы машины. Раньше здесь стоял отступ 76 pt справа — в машине с
@@ -72,7 +69,11 @@ struct CarPlayOverlay: View {
             dockRow(showRoute: true)
             dockRow(showRoute: false)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 18)
+        // Во всю ширину, а не «плашкой в углу»: прижатая влево панель
+        // оставляла справа полэкрана пустоты и читалась как незаконченная
+        // вёрстка — на широком экране машины особенно.
+        .frame(maxWidth: .infinity)
         .frame(height: AppConfig.carPlayDockHeight)
         .background(Theme.background.opacity(0.88),
                     in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -84,14 +85,24 @@ struct CarPlayOverlay: View {
         .animation(.easeOut(duration: 0.3), value: env.location.alertLevel)
     }
 
+    /// Три зоны: скорость — камера — прибытие.
+    ///
+    /// Главное правило — акцент отдаётся СРОЧНОМУ, а не постоянному. Пока
+    /// едем спокойно, крупная цифра одна: скорость. Как только впереди камера,
+    /// центральная зона получает заливку и вес, а скорость уходит на второй
+    /// план — за рулём глаз должен сразу знать, что читать первым, а до этого
+    /// обе цифры были набраны почти одинаково и конкурировали.
     private func dockRow(showRoute: Bool) -> some View {
         HStack(spacing: 0) {
             speedCell
+                .frame(maxWidth: .infinity, alignment: .leading)
             cellDivider
             cameraCell
+                .frame(maxWidth: .infinity, alignment: .leading)
             if showRoute, env.route.isActive {
                 cellDivider
                 etaCell
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -107,8 +118,13 @@ struct CarPlayOverlay: View {
     private var speedCell: some View {
         HStack(spacing: 12) {
             VStack(spacing: -1) {
+                // Пока едем спокойно — крупная цифра на экране одна, и это
+                // скорость. Впереди камера — акцент уходит ей, а скорость
+                // становится меньше: два одинаково крупных числа рядом за
+                // рулём читаются дольше, чем одно.
                 Text("\(Int(env.location.speedKmh.rounded()))")
-                    .font(.rounded(38, .heavy).monospacedDigit())
+                    .font(.rounded(env.location.isApproachingCamera ? 30 : 38, .heavy)
+                        .monospacedDigit())
                     .foregroundStyle(speedColor)
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.25), value: Int(env.location.speedKmh.rounded()))
@@ -127,6 +143,7 @@ struct CarPlayOverlay: View {
             }
         }
         .animation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
+        .animation(.easeOut(duration: 0.25), value: env.location.isApproachingCamera)
     }
 
     /// Ближайшая камера — три честных состояния: нет сигнала, есть цель, чисто.
@@ -171,7 +188,8 @@ struct CarPlayOverlay: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(Formatting.distance(distance))
-                    .font(.rounded(24, .heavy).monospacedDigit())
+                    .font(.rounded(env.location.isApproachingCamera ? 30 : 24, .heavy)
+                        .monospacedDigit())
                     .foregroundStyle(env.location.isApproachingCamera ? Theme.danger : Theme.textPrimary)
                     .contentTransition(.numericText())
                     .animation(.easeOut(duration: 0.3), value: Int(distance))
@@ -184,7 +202,19 @@ struct CarPlayOverlay: View {
                 }
             }
         }
-        .frame(width: 190, alignment: .leading)
+        // Подложка появляется только на подходе: она и есть сигнал «читай
+        // сюда». В спокойной езде зона выглядит так же тихо, как соседние.
+        .padding(.horizontal, env.location.isApproachingCamera ? 12 : 0)
+        .padding(.vertical, env.location.isApproachingCamera ? 6 : 0)
+        .background {
+            if env.location.isApproachingCamera {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Theme.danger.opacity(0.14))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Theme.danger.opacity(0.45), lineWidth: 1))
+            }
+        }
+        .animation(.easeOut(duration: 0.25), value: env.location.isApproachingCamera)
     }
 
     private func statusCell(symbol: String, tint: Color,
@@ -204,7 +234,6 @@ struct CarPlayOverlay: View {
                     .lineLimit(1)
             }
         }
-        .frame(width: 190, alignment: .leading)
     }
 
     /// Прибытие: во сколько будем, сколько осталось и сколько камер впереди

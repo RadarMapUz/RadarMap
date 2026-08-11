@@ -323,10 +323,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     // MARK: - Отметка засады из машины
 
-    /// Радар, тренога, пост, ДТП — четыре крупные плитки, один тап и обратно
-    /// на карту. Координата берётся текущая, ничего уточнять не нужно.
+    /// Радар, тренога, ДТП — крупные плитки, один тап и обратно на карту.
+    /// Координата берётся текущая, ничего уточнять не нужно. Набор типов —
+    /// общий с телефоном (`ReportKind.offered`), чтобы из машины нельзя было
+    /// поставить то, чего нет на экране.
     private func presentReport() {
-        let buttons = ReportKind.allCases.map { kind in
+        let buttons = ReportKind.offered.map { kind in
             gridButton(symbol: kind.symbol, titles: [kind.title]) { [weak self] in
                 self?.submitReport(kind)
             }
@@ -344,7 +346,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         popToMap()
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let result = await env.mobile.report(at: coordinate, kind: kind)
+            let result = await env.mobile.report(at: coordinate, kind: kind,
+                                                 course: env.location.currentCourse)
             switch result {
             case .created:   showToast(String(localized: "Отметка на карте — спасибо!"))
             case .confirmed: showToast(String(localized: "Отметку подтвердили — спасибо!"))

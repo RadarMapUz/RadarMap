@@ -38,6 +38,22 @@ nonisolated enum RoadClass: Equatable {
         }
     }
 
+    /// Обратно в значение OSM — его понимает сервер отметок (радиус слияния
+    /// зависит от класса дороги). Обобщённые классы отдают своего
+    /// представителя: точных подтипов сервер и не различает.
+    var osmValue: String {
+        switch self {
+        case .motorway:   return "motorway"
+        case .trunk:      return "trunk"
+        case .primary:    return "primary"
+        case .secondary:  return "secondary"
+        case .tertiary:   return "tertiary"
+        case .residential: return "residential"
+        case .service:    return "service"
+        case .pedestrian, .unknown: return ""
+        }
+    }
+
     /// Проезжая часть. Камера стоит над дорогой, а не над тротуаром, поэтому
     /// пешеходный класс — это признак ошибки сопоставления в снапе (в базе v10
     /// таких 39). Профилю такой «дороги» верить нельзя: её направление и

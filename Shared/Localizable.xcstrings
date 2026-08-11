@@ -17,6 +17,23 @@
         }
       }
     },
+    "%.0f км": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f км"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f km"
+          }
+        }
+      }
+    },
     "%.1f км": {
       "localizations": {
         "ru": {
@@ -435,6 +452,40 @@
         }
       }
     },
+    "%lld · ждут подтверждения": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld · ждут подтверждения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld · tasdiqlanishini kutmoqda"
+          }
+        }
+      }
+    },
+    "%lld · подтвердили другие: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld · подтвердили другие: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld · boshqalar tasdiqladi: %lld"
+          }
+        }
+      }
+    },
     "%lld БРВ": {
       "localizations": {
         "ru": {
@@ -447,6 +498,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld BHM"
+          }
+        }
+      }
+    },
+    "%lld ждёт связи": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ждёт связи"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ta aloqani kutmoqda"
           }
         }
       }
@@ -1663,6 +1731,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sizning odatiy darajangiz"
+          }
+        }
+      }
+    },
+    "Ваши отметки за 30 дней": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваши отметки за 30 дней"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 kundagi belgilaringiz"
+          }
+        }
+      }
+    },
+    "Вашу отметку подтвердили": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вашу отметку подтвердили"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgingiz tasdiqlandi"
           }
         }
       }
@@ -3011,6 +3113,23 @@
         }
       }
     },
+    "Другой водитель проехал и подтвердил: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Другой водитель проехал и подтвердил: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa haydovchi o‘tib tasdiqladi: %@"
+          }
+        }
+      }
+    },
     "Едем в CarPlay": {
       "localizations": {
         "ru": {
@@ -3407,6 +3526,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "E’lonni yopish"
+          }
+        }
+      }
+    },
+    "Закрыть слои": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закрыть слои"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qatlamlarni yopish"
           }
         }
       }
@@ -5027,6 +5163,23 @@
         }
       }
     },
+    "Нажали случайно — «Отменить» рядом. Нет связи — отправлю, когда появится": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нажали случайно — «Отменить» рядом. Нет связи — отправлю, когда появится"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasodifan bosdingizmi — «Bekor qilish» yonida. Aloqa yo‘q bo‘lsa, paydo bo‘lganda yuboraman"
+          }
+        }
+      }
+    },
     "Нажмите «Начать поездку» на карте — соберём трек, скорость у каждой камеры и статистику.": {
       "localizations": {
         "ru": {
@@ -5668,6 +5821,23 @@
         }
       }
     },
+    "Нет связи, отправлю позже": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет связи, отправлю позже"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aloqa yo‘q, keyinroq yuboraman"
+          }
+        }
+      }
+    },
     "Нет сигнала": {
       "localizations": {
         "ru": {
@@ -6181,6 +6351,23 @@
         }
       }
     },
+    "Открыть приборку": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть приборку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asboblar panelini ochish"
+          }
+        }
+      }
+    },
     "Открыть спидометр": {
       "localizations": {
         "ru": {
@@ -6229,6 +6416,23 @@
         }
       }
     },
+    "Отменить": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekor qilish"
+          }
+        }
+      }
+    },
     "Отменить маршрут": {
       "localizations": {
         "ru": {
@@ -6241,6 +6445,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrutni bekor qilish"
+          }
+        }
+      }
+    },
+    "Отменить мою отметку": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить мою отметку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mening belgimni bekor qilish"
           }
         }
       }
@@ -6357,6 +6578,23 @@
         }
       }
     },
+    "Отметка убрана": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметка убрана"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgi olib tashlandi"
+          }
+        }
+      }
+    },
     "Отметку подтвердили — спасибо!": {
       "localizations": {
         "ru": {
@@ -6369,6 +6607,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Belgi tasdiqlandi — rahmat!"
+          }
+        }
+      }
+    },
+    "Отметку проверяет другой водитель. Пока не проверил — рисую пунктиром и честно говорю «отметка водителей»": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметку проверяет другой водитель. Пока не проверил — рисую пунктиром и честно говорю «отметка водителей»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgini boshqa haydovchi tekshiradi. Tekshirilmaguncha punktir bilan chizaman va halol aytaman: «haydovchilar belgisi»"
           }
         }
       }
@@ -9065,6 +9320,23 @@
         }
       }
     },
+    "Спасибо — разберёмся": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Спасибо — разберёмся"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rahmat — ko‘rib chiqamiz"
+          }
+        }
+      }
+    },
     "Спасибо!": {
       "localizations": {
         "ru": {
@@ -9317,6 +9589,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Statsionar radar"
+          }
+        }
+      }
+    },
+    "Стоит не там": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стоит не там"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noto‘g‘ri joyda turibdi"
           }
         }
       }
@@ -9673,6 +9962,40 @@
         }
       }
     },
+    "Треноги находим вместе": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Треноги находим вместе"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trenogalarni birga topamiz"
+          }
+        }
+      }
+    },
+    "Треноги нет ни в одной официальной базе — расписание закрыто с 2022 года": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Треноги нет ни в одной официальной базе — расписание закрыто с 2022 года"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trenogalar biror rasmiy bazada yo‘q — jadval 2022 yildan yopiq"
+          }
+        }
+      }
+    },
     "Тёмная": {
       "localizations": {
         "ru": {
@@ -9721,6 +10044,23 @@
         }
       }
     },
+    "Убрать мою отметку": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Убрать мою отметку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mening belgimni olib tashlash"
+          }
+        }
+      }
+    },
     "Уведомления": {
       "localizations": {
         "ru": {
@@ -9765,6 +10105,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ishonchli, lekin xavfli"
+          }
+        }
+      }
+    },
+    "Увидели засаду — одна жёлтая кнопка, не глядя на экран. Всё остальное я сделаю сам": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Увидели засаду — одна жёлтая кнопка, не глядя на экран. Всё остальное я сделаю сам"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pistirmani ko‘rdingizmi — ekranga qaramay sariq tugmani bosing. Qolganini o‘zim qilaman"
           }
         }
       }
@@ -10102,6 +10459,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bu nima edi?"
+          }
+        }
+      }
+    },
+    "Что-то не так с этим проездом?": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что-то не так с этим проездом?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu o‘tish bilan nimadir noto‘g‘rimi?"
           }
         }
       }
@@ -11085,6 +11459,23 @@
         }
       }
     },
+    "камер": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kamera"
+          }
+        }
+      }
+    },
     "камер в лимите": {
       "localizations": {
         "ru": {
@@ -11449,6 +11840,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "cheklov %lld"
+          }
+        }
+      }
+    },
+    "отметка": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "отметка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "belgi"
           }
         }
       }
@@ -12074,6 +12482,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "orqada o'ngda"
+          }
+        }
+      }
+    },
+    "скорость менялась в среднем на %1$lld км/ч между точками трека, спокойная езда — до %2$lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "скорость менялась в среднем на %1$lld км/ч между точками трека, спокойная езда — до %2$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "trek nuqtalari orasida tezlik o‘rtacha %1$lld km/soatga o‘zgargan, xotirjam haydash — %2$lld gacha"
           }
         }
       }

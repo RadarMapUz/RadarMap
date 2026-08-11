@@ -167,6 +167,18 @@ final class AppEnvironment {
         // что из неё выводится, пересчитывается по этому сигналу, а не один
         // раз на старте сцены.
         mobile.onReportSent = { [weak usage] in usage?.noteReport() }
+        // Снап отметки на ось дороги и очередь без сети — обе зависимости
+        // слабые: отметка обязана уходить и когда тайлов нет, и когда сеть
+        // молчит.
+        mobile.roads = roads
+        mobile.network = network
+        // Единственная новость, ради которой стоит трогать человека по поводу
+        // краудсорса: она отвечает на вопрос «работает ли мой тап вообще».
+        mobile.onMyReportConfirmed = { [weak notifications] report in
+            let kind = ReportKind(rawValue: report.kind)?.title
+                ?? String(localized: "отметка")
+            notifications?.notifyReportConfirmed(kind: kind)
+        }
         trip.onHistoryLoaded = { [weak self] in
             self?.refreshLearnedPlaces()
             self?.refreshWidgetSnapshot()

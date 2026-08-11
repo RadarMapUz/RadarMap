@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import os
 
 enum Storage {
     enum Key: String {
@@ -36,6 +37,8 @@ enum Storage {
         case hintRadarShown         // разовая подсказка «жёлтая кнопка — радар» показана
         case hintSilenceShown       // разовая подсказка «знакомые камеры не называю вслух» показана
         case mergeSuggestDismissedID // id поездки, для которой «Объединить?» отклонили
+        case pendingReports         // отметки, ждущие связи (ReportQueue)
+        case myReports              // свои отметки и их судьба (счётчик в Итогах)
         // Тишина, включённая кнопкой в CarPlay. Хранится, а не живёт в делегате:
         // при переподключении делегат создаётся заново и «что было до тишины»
         // терялось — восстановление включало звук тем, кто выключал его намеренно.
@@ -64,6 +67,28 @@ enum Storage {
     static func set(_ value: Date, for key: Key) { defaults.set(value, forKey: key.rawValue) }
     static func set(_ value: Data, for key: Key) { defaults.set(value, forKey: key.rawValue) }
     static func set(_ value: Double, for key: Key) { defaults.set(value, forKey: key.rawValue) }
+
+    // MARK: - Codable
+
+    /// Значение из JSON под ключом. Битые данные логируются и трактуются как
+    /// отсутствие: пережившая обновление структура не должна ронять запуск.
+    static func decoded<T: Decodable>(_ type: T.Type, for key: Key) -> T? {
+        guard let data = data(key) else { return nil }
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            Log.app.error("\(key.rawValue, privacy: .public) не декодировался: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    static func encode<T: Encodable>(_ value: T, for key: Key) {
+        do {
+            set(try JSONEncoder().encode(value), for: key)
+        } catch {
+            Log.app.error("\(key.rawValue, privacy: .public) не закодировался: \(error.localizedDescription, privacy: .public)")
+        }
+    }
 
     /// Анонимный идентификатор устройства: создаётся при первом обращении,
     /// дальше стабилен. Не связан с Apple ID/рекламными идентификаторами.

@@ -210,6 +210,35 @@ struct CameraDetailSheet: View {
                         .background(Theme.danger.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
                 }
             }
+            // «Радар есть, но стоит не там» — третий, отдельный ответ. Раньше
+            // его приходилось выражать через «Уже нет», то есть гасить точку
+            // целиком: отметка в двухстах метрах от истины всё равно
+            // предупреждает о засаде, и стирать её за неточность — потерять
+            // предупреждение. Сервер считает этот голос обычным дизлайком по
+            // сроку жизни, но показывает модератору отдельно, и тот двигает.
+            Button {
+                Task {
+                    await env.mobile.vote(cameraID: camera.id, stillThere: false,
+                                          origin: "misplaced")
+                }
+                dismiss()
+            } label: {
+                Label("Стоит не там", systemImage: "mappin.slash")
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Theme.surface,
+                                in: RoundedRectangle(cornerRadius: Theme.cornerMedium,
+                                                     style: .continuous))
+            }
+            if let mine = env.mobile.cancellableReportID(),
+               env.mobile.idOffsetApplied(mine) == camera.id {
+                destructiveButton(title: "Убрать мою отметку", icon: "trash") {
+                    Task { await env.mobile.cancelReport(id: mine) }
+                    dismiss()
+                }
+            }
         } else if env.cameras.isCustom(camera) {
             destructiveButton(title: "Удалить камеру", icon: "trash") {
                 env.cameras.deleteCustom(camera)   // revision → MapScreen обновит карту и мониторинг

@@ -4343,7 +4343,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bir oyda olti va undan ko'p marta, birorta ham tezlik oshirmasdan o'tgan kamerangizni ilova ovoz bilan aytishni to'xtatadi: xaritada unda belgi, panelda — «o'z kamerangiz», ogohlantirish esa qoladi. Bitta oshirish — va u yana gapiradi; ko'chma radar, trenoga va YTH haqida ovoz doim yangraydi. Uy va ish safarlar tartibiga qarab aniqlanadi — kechqurun qayerga kelasiz va ish kuni ertalab qayerdan chiqasiz. Hammasi telefonda hisoblanadi va hech qayerga yuborilmaydi."
+            "value": "Bir oyda olti va undan ko'p marta, birorta ham tezlik oshirmasdan o'tgan kamerangizni ilova ovoz bilan aytishni to'xtatadi: xaritada unda belgi, panelda — «o'z kamerangiz», ogohlantirish esa qoladi. Bitta oshirish — va u yana gapiradi; ko'chma radar, uch oyoq kamera va YTH haqida ovoz doim yangraydi. Uy va ish safarlar tartibiga qarab aniqlanadi — kechqurun qayerga kelasiz va ish kuni ertalab qayerdan chiqasiz. Hammasi telefonda hisoblanadi va hech qayerga yuborilmaydi."
           }
         }
       }
@@ -5064,7 +5064,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Limitda ketayotganingizda jim turadi. Ovoz — faqat oshirganda va kutilmagan nuqtalar haqida: ko'chma radar, trenoga, YTH."
+            "value": "Limitda ketayotganingizda jim turadi. Ovoz — faqat oshirganda va kutilmagan nuqtalar haqida: ko'chma radar, uch oyoq kamera, YTH."
           }
         }
       }
@@ -10025,7 +10025,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trenoga"
+            "value": "Uch oyoq kamera"
           }
         }
       }
@@ -10042,7 +10042,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trenogalarni birga topamiz"
+            "value": "Uch oyoq kameralarni birga topamiz"
           }
         }
       }
@@ -10059,7 +10059,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trenogalar biror rasmiy bazada yo‘q — jadval 2022 yildan yopiq"
+            "value": "Uch oyoq kameralar biror rasmiy bazada yo‘q — jadval 2022 yildan yopiq"
           }
         }
       }
@@ -11378,7 +11378,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "trenogagacha"
+            "value": "uch oyoq kameragacha"
           }
         }
       }

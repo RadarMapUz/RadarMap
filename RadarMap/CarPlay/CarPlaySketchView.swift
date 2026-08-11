@@ -31,9 +31,11 @@ struct CarPlaySketchView: View {
                     .animation(.easeOut(duration: 0.4),
                                value: env.location.currentCourse < 0)
             } else {
-                Label("Схема появится с началом движения", systemImage: "road.lanes")
-                    .font(.rounded(15, .medium))
-                    .foregroundStyle(Theme.textTertiary)
+                // Оформленное состояние, а не строка серого текста посреди
+                // чёрного: последнее читается как ошибка приложения, хотя
+                // ничего не сломано — схема просто ждёт курса, которого у
+                // стоящей машины нет.
+                sketchWaiting
                     .padding(.bottom, AppConfig.carPlayDockBottomInset)
             }
         }
@@ -47,6 +49,33 @@ struct CarPlaySketchView: View {
         }
         .onDisappear { env.location.setCarPlaySketchVisible(false) }
         .accessibilityHidden(true)   // цифры дока CarPlay уже озвучены
+    }
+
+    /// Схема ждёт движения. Значок и ритм вместо одинокой строки: состояние
+    /// должно выглядеть состоянием, а не сбоем.
+    private var sketchWaiting: some View {
+        VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .stroke(Theme.stroke, lineWidth: 1)
+                    .frame(width: 84, height: 84)
+                Circle()
+                    .stroke(Theme.accent.opacity(0.25), lineWidth: 1)
+                    .frame(width: 56, height: 56)
+                Image(systemName: "road.lanes")
+                    .font(.rounded(26, .medium))
+                    .foregroundStyle(Theme.accent.opacity(0.9))
+            }
+            VStack(spacing: 4) {
+                Text("Схема появится в движении")
+                    .font(.rounded(18, .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                Text("Пока машина стоит, направление неизвестно")
+                    .font(.rounded(13))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .multilineTextAlignment(.center)
+        }
     }
 
     /// То же правило близости, что у приборки телефона: схема и док не должны

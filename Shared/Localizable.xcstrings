@@ -7599,6 +7599,23 @@
         }
       }
     },
+    "Пока машина стоит, направление неизвестно": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пока машина стоит, направление неизвестно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina turganda yo‘nalish noma’lum"
+          }
+        }
+      }
+    },
     "Пока нет сохранённых мест": {
       "localizations": {
         "ru": {
@@ -9877,18 +9894,19 @@
         }
       }
     },
-    "Схема появится с началом движения": {
+    "Схема появится в движении": {
+      "extractionState": "manual",
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Схема появится с началом движения"
+            "value": "Схема появится в движении"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sxema harakat boshlanishi bilan paydo bo‘ladi"
+            "value": "Sxema harakatda paydo bo‘ladi"
           }
         }
       }

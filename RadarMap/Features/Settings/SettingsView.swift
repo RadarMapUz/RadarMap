@@ -10,6 +10,14 @@ import UIKit
 
 struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
+
+    /// Версия и номер сборки: первое, что спрашивают в ответ на письмо.
+    private static var appVersion: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "\(version) (\(build))"
+    }
     @Environment(\.dismiss) private var dismiss
     @State private var assignSlot: PlaceSlot?
     @State private var showFeedback = false
@@ -287,6 +295,37 @@ struct SettingsView: View {
                     Text("Обратная связь")
                 } footer: {
                     Text("Ошибки, идеи, неточные камеры — мы читаем каждое сообщение и правим базу.")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                // Страница проекта: что это, откуда данные, политика,
+                // возможность помочь. Внутрь приложения платёжная кнопка не
+                // ставится намеренно — App Review отдельно смотрит на ссылки,
+                // уводящие на стороннюю оплату (Guideline 3.1.1). Здесь —
+                // обычная ссылка на сайт проекта, а поддержка живёт на нём.
+                Section {
+                    Link(destination: AppConfig.projectPageURL) {
+                        HStack {
+                            Label("Страница проекта", systemImage: "safari.fill")
+                                .foregroundStyle(Theme.textPrimary)
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                                .font(.rounded(12, .semibold))
+                                .foregroundStyle(Theme.textTertiary)
+                        }
+                    }
+                    HStack {
+                        Label("Версия", systemImage: "number")
+                            .foregroundStyle(Theme.textSecondary)
+                        Spacer()
+                        Text(Self.appVersion)
+                            .font(.rounded(14).monospacedDigit())
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                } header: {
+                    Text("О приложении")
+                } footer: {
+                    Text("Карты и ограничения скорости — © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки.")
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

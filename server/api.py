@@ -39,11 +39,14 @@ server/publish_overrides.sh — ключ подписи на VPS не храни
 """
 import json
 import math
+import os
 import re
 import sqlite3
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import notify
 
 DB_PATH = "/opt/radarmap/api/reports.db"
 # Потолок одновременных обработчиков. У ThreadingHTTPServer предела нет: поток
@@ -87,6 +90,9 @@ MERGE_METERS_BY_CLASS = {
 # «я только что нажал, дайте исправить», а не право распоряжаться точкой,
 # которую уже подтвердили другие.
 CANCEL_WINDOW = 10 * 60
+# Адрес панели — чтобы уведомление в Telegram вело на запись, а не заставляло
+# искать её глазами. Пусто — ссылки в сообщении просто не будет.
+ADMIN_URL = os.environ.get("RADARMAP_ADMIN_URL", "")
 UZ_LAT = (37.0, 46.0)
 UZ_LON = (55.0, 74.0)
 # Глобальные капы — потолок ущерба от ротации device (лимиты per-device
@@ -616,6 +622,10 @@ class Handler(BaseHTTPRequestHandler):
             conn.commit()
         finally:
             conn.close()
+        # Жалоба на камеру — вторая вещь, о которой владелец обязан узнать
+        # быстро: «камеры нет» и «стоит не там» ведут к молчанию там, где
+        # камера стоит, либо к предупреждению там, где её нет.
+        notify.camera_report(camera_id, reason)
         return self._json(200, {"ok": True})
 
     def _feedback(self):
@@ -650,13 +660,19 @@ class Handler(BaseHTTPRequestHandler):
                 (now - 86400,)).fetchone()[0]
             if daily >= MAX_DAILY_ROWS:  # глобальный кап против ротации device
                 return self._json(429, {"error": "too many"})
-            conn.execute(
+            cur = conn.execute(
                 "INSERT INTO feedback(message, contact, app_version, device, received) "
                 "VALUES(?,?,?,?,?)",
                 (message, contact, app_version, device, now))
             conn.commit()
+            row_id = cur.lastrowid
         finally:
             conn.close()
+        # В бот — ПОСЛЕ коммита и в фоне. Письмо уже сохранено, бот лишь способ
+        # узнать о нём быстрее; лежащий telegram не имеет права превратиться в
+        # таймаут у человека, который и так чем-то недоволен.
+        notify.feedback(message, contact, app_version,
+                        admin_url=f"{ADMIN_URL}/feedback#f{row_id}" if ADMIN_URL else None)
         return self._json(200, {"ok": True})
 
     def _report(self):

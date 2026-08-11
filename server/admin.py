@@ -42,6 +42,7 @@ import json
 import os
 import sqlite3
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -174,46 +175,121 @@ def camera_point(camera_id):
 # --------------------------------------------------------------------------
 
 CSS = """
-:root { color-scheme: dark; }
-* { box-sizing: border-box; }
-body { margin:0; background:#05070c; color:#e8ecf3; font:15px/1.45 -apple-system,
-       BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; padding-bottom:40px; }
-header { position:sticky; top:0; background:#0b0f18; border-bottom:1px solid #1b2231;
-         padding:10px 14px; display:flex; gap:6px; flex-wrap:wrap; z-index:5; }
-header a { color:#8ea0bb; text-decoration:none; padding:6px 10px; border-radius:8px;
-           font-size:14px; white-space:nowrap; }
-header a.on { background:#101f2e; color:#3cdcff; }
-header a.out { margin-left:auto; color:#6b7482; }
-main { padding:14px; max-width:900px; margin:0 auto; }
-h1 { font-size:19px; margin:18px 0 10px; }
-.card { background:#0c1017; border:1px solid #1b2231; border-radius:14px;
-        padding:12px 14px; margin-bottom:10px; }
+/* Панель модератора. Один язык с приложением: тот же тёмный фон, тот же
+   акцентный голубой, те же скруглённые карточки — человек ходит между ними
+   в один день и не должен переключаться.
+
+   Мобильная вёрстка не украшение: очередь разбирают с телефона (в дороге, в
+   перерыве), а таблицы уезжали за экран, и «Убрать с карты» приходилось
+   искать горизонтальной прокруткой. */
+:root {
+  color-scheme: dark;
+  --bg:#05070c; --surface:#0c1017; --surface-2:#101725; --stroke:#1b2231;
+  --text:#e8ecf3; --text-2:#8ea0bb; --text-3:#5f6c80;
+  --accent:#3cdcff; --ok:#38e58c; --warn:#ffb527; --bad:#ff4560;
+  --r:14px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { margin:0; background:var(--bg); color:var(--text);
+       font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       padding-bottom:40px; -webkit-text-size-adjust:100%; }
+
+/* Шапка: горизонтальная прокрутка вместо переноса — семь вкладок в две
+   строки на телефоне съедали треть экрана. */
+header { position:sticky; top:0; z-index:5; background:rgba(11,15,24,.92);
+         backdrop-filter:saturate(160%) blur(12px);
+         border-bottom:1px solid var(--stroke); padding:8px 10px;
+         display:flex; gap:4px; align-items:center;
+         overflow-x:auto; scrollbar-width:none; }
+header::-webkit-scrollbar { display:none; }
+header a { color:var(--text-2); text-decoration:none; padding:7px 11px;
+           border-radius:10px; font-size:14px; white-space:nowrap;
+           display:inline-flex; align-items:center; gap:6px; }
+header a:hover { background:var(--surface-2); }
+header a.on { background:#0e2434; color:var(--accent); font-weight:600; }
+header a.out { margin-left:auto; color:var(--text-3); }
+/* Счётчик необработанного прямо на вкладке: иначе про очередь узнаёшь,
+   только если в неё зайти. */
+header .n { background:var(--bad); color:#fff; border-radius:999px;
+            padding:1px 6px; font-size:11px; font-weight:700; line-height:1.5; }
+header a.on .n { background:var(--accent); color:#04222c; }
+
+main { padding:14px; max-width:920px; margin:0 auto; }
+h1 { font-size:19px; margin:18px 0 10px; letter-spacing:-.2px; }
+h1:first-child { margin-top:4px; }
+
+.card { background:var(--surface); border:1px solid var(--stroke);
+        border-radius:var(--r); padding:13px 15px; margin-bottom:10px; }
+.card:hover { border-color:#243044; }
 .row { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
-.muted { color:#7c8aa0; font-size:13px; }
-.big { font-size:26px; font-weight:600; }
-.tag { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px;
-       background:#16202f; color:#8ea0bb; }
-.warn { background:#3a2410; color:#ffb527; }
-.bad  { background:#3a1220; color:#ff4560; }
-.ok   { background:#0f2f1e; color:#38e58c; }
+.muted { color:var(--text-2); font-size:13px; }
+.big { font-size:26px; font-weight:650; letter-spacing:-.5px; }
+
+/* Плитки сводки: то, ради чего панель открывают, — сверху и крупно. */
+.tiles { display:grid; gap:10px; margin-bottom:14px;
+         grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
+.tile { background:var(--surface); border:1px solid var(--stroke);
+        border-radius:var(--r); padding:12px 14px; text-decoration:none;
+        color:inherit; display:block; }
+.tile:hover { border-color:#243044; }
+.tile .k { color:var(--text-2); font-size:12px; text-transform:uppercase;
+           letter-spacing:.4px; }
+.tile .v { font-size:27px; font-weight:650; letter-spacing:-.6px; margin-top:3px; }
+.tile .s { color:var(--text-3); font-size:12px; margin-top:2px; }
+
+.tag { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px;
+       background:var(--surface-2); color:var(--text-2); white-space:nowrap; }
+.warn { background:#3a2410; color:var(--warn); }
+.bad  { background:#3a1220; color:var(--bad); }
+.ok   { background:#0f2f1e; color:var(--ok); }
 /* Тон для крупной цифры: только цвет текста — заливка тега на числе
    превращается в непрочитываемый прямоугольник. */
-.t-warn { color:#ffb527; }
-.t-bad  { color:#ff4560; }
+.t-warn { color:var(--warn); }
+.t-bad  { color:var(--bad); }
+.t-ok   { color:var(--ok); }
+
 form.inline { display:inline; }
-button { font:inherit; padding:7px 12px; border-radius:9px; border:1px solid #263349;
-         background:#16202f; color:#cfe0f5; cursor:pointer; margin:3px 3px 0 0; }
+button { font:inherit; padding:9px 13px; border-radius:10px;
+         border:1px solid #263349; background:var(--surface-2); color:#cfe0f5;
+         cursor:pointer; margin:4px 4px 0 0; min-height:38px; }
+button:hover { background:#16202f; border-color:#2f3f58; }
+button:active { transform:translateY(1px); }
 button.danger { border-color:#5a2030; color:#ff8092; }
-button.primary { border-color:#1d4a5e; color:#3cdcff; }
-input, select, textarea { font:inherit; background:#0b111a; color:#e8ecf3;
-       border:1px solid #263349; border-radius:8px; padding:6px 8px; }
-a.map { color:#3cdcff; font-size:13px; }
-.empty { color:#5f6c80; padding:24px 0; text-align:center; }
+button.danger:hover { background:#2a1119; }
+button.primary { border-color:#1d4a5e; color:var(--accent); }
+input, select, textarea { font:inherit; background:#0b111a; color:var(--text);
+       border:1px solid #263349; border-radius:10px; padding:8px 10px;
+       max-width:100%; }
+input:focus, textarea:focus { outline:none; border-color:#2f6f88; }
+a.map { color:var(--accent); font-size:13px; }
+a { color:var(--accent); }
+.empty { color:var(--text-3); padding:26px 0; text-align:center; }
+
+@media (max-width:520px) {
+  main { padding:10px; }
+  .card { padding:11px 12px; border-radius:12px; }
+  .tile .v { font-size:23px; }
+  button { width:100%; margin:5px 0 0 0; }
+  button + button { margin-top:6px; }
+  form.inline { display:block; }
+}
 """
 
 TABS = (("/", "Сводка"), ("/map", "Карта"), ("/cameras", "Камеры"),
         ("/mobile", "Передвижные"), ("/feedback", "Обращения"),
         ("/usage", "Люди"), ("/health", "Здоровье"))
+
+# Префикс, под которым панель видна снаружи: "/radarmap/admin" на общем домене
+# или пусто при доступе через SSH-туннель. Внутрь запросы приходят уже без
+# него (слеш на конце proxy_pass снимает префикс), поэтому маршрутизатор не
+# меняется — префикс подставляется только в ССЫЛКИ, которые панель отдаёт
+# браузеру. Без этого «Камеры» на общем домене ведут в корень чужого сайта.
+BASE = os.environ.get("RADARMAP_ADMIN_BASE", "").rstrip("/")
+
+
+def u(path):
+    """Внешний адрес внутреннего пути."""
+    return f"{BASE}{path}" if BASE else path
 
 
 def esc(value):
@@ -222,15 +298,52 @@ def esc(value):
     return html.escape(str(value if value is not None else ""), quote=True)
 
 
-def page(active, title, body):
-    tabs = "".join(
-        f'<a href="{esc(path)}" class="{"on" if path == active else ""}">{esc(name)}</a>'
-        for path, name in TABS)
+def pending_counts(conn):
+    """Сколько необработанного за каждой вкладкой. Пустой словарь при любой
+    ошибке: счётчик — удобство, и панель обязана открыться без него."""
+    now = time.time()
+    try:
+        return {
+            "/cameras": conn.execute(
+                "SELECT COUNT(DISTINCT camera_id) FROM camera_reports "
+                "WHERE resolved = 0").fetchone()[0],
+            "/feedback": conn.execute(
+                "SELECT COUNT(*) FROM feedback "
+                "WHERE COALESCE(status,'new') = 'new'").fetchone()[0],
+            "/mobile": conn.execute(
+                "SELECT COUNT(*) FROM reports WHERE active = 1 AND expires > ?",
+                (now,)).fetchone()[0],
+        }
+    except sqlite3.Error:
+        return {}
+
+
+# Счётчики вкладок считаются один раз на запрос и лежат в переменной потока:
+# протаскивать их через девять page(...) значило бы девять раз не забыть.
+# ThreadingHTTPServer даёт поток на запрос, так что гонки тут нет.
+_request = threading.local()
+
+
+def page(active, title, body, counts=None):
+    counts = counts if counts is not None else getattr(_request, "counts", {})
+    # Адреса — заранее в переменные: вложенные кавычки внутри f-строки
+    # разрешены только с Python 3.12, а на сервере 3.10.
+    logout_url = u("/logout")
+
+    def tab(path, name):
+        # Счётчик прямо на вкладке: без него про очередь узнаёшь, только если
+        # в неё зайти, а очередь — единственная причина открывать панель.
+        number = counts.get(path) or 0
+        badge = f'<span class="n">{number}</span>' if number else ""
+        on = "on" if path == active else ""
+        return f'<a href="{esc(u(path))}" class="{on}">{esc(name)}{badge}</a>'
+
+    tabs = "".join(tab(path, name) for path, name in TABS)
     return f"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>{esc(title)} · RadarMap</title><style>{CSS}</style></head>
-<body><header>{tabs}<a href="/logout" class="out">Выход</a></header>
+<body><header>{tabs}<a href="{logout_url}" class="out">Выход</a></header>
 <main>{body}</main></body></html>"""
 
 
@@ -247,7 +360,7 @@ def login_page(message="", secure=True, configured=True):
         note = ("Пароль ещё не задан. На сервере: python3 admin.py --set-password")
         form = f'<div class="empty">{esc(note)}</div>'
     else:
-        form = ('<form method="post" action="/login">'
+        form = (f'<form method="post" action="{u("/login")}">'
                 '<input type="password" name="password" placeholder="Пароль" '
                 'autofocus autocomplete="current-password" required>'
                 '<button type="submit">Войти</button></form>')
@@ -408,6 +521,7 @@ def search_cameras(query, limit=20):
 
 
 def render_moderation_map(api_key, pending, camera_count):
+    logout_url, moderate_js = u("/logout"), u("/static/moderate.js")
     """Главный экран модерации: одна карта на все камеры.
 
     Прежний путь «список → страница камеры → перетащить → назад» стоил семи
@@ -454,8 +568,8 @@ color:#8ea0bb;line-height:1.7}}
 .dot{{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}}
 </style></head>
 <body><header>{"".join(
-    f'<a href="{esc(path)}" class="{"on" if path == "/map" else ""}">{esc(name)}</a>'
-    for path, name in TABS)}<a href="/logout" class="out">Выход</a></header>
+    f'<a href="{esc(u(path))}" class="{"on" if path == "/map" else ""}">{esc(name)}</a>'
+    for path, name in TABS)}<a href="{logout_url}" class="out">Выход</a></header>
 <div id="map"></div>
 
 <div class="tools">
@@ -496,7 +610,8 @@ color:#8ea0bb;line-height:1.7}}
 </div>
 
 <script src="https://api-maps.yandex.ru/2.1/?apikey={esc(api_key)}&lang=ru_RU"></script>
-<script src="/static/moderate.js"></script>
+<script>window.RM_BASE={json.dumps(BASE)};</script>
+<script src="{moderate_js}"></script>
 </body></html>"""
 
 
@@ -560,6 +675,7 @@ def suggests_hide(item, now):
 
 
 def render_camera_item(item, override):
+    cameras_act = u("/cameras/act")
     counts = item["counts"]
     tags = []
     if item["suggest_hide"]:
@@ -593,7 +709,7 @@ def render_camera_item(item, override):
     <span class="muted">первый {esc(ago(item['oldest']))}, последний {esc(ago(item['newest']))}</span>
   </div>
   {reported}
-  <form method="post" action="/cameras/act">
+  <form method="post" action="{cameras_act}">
     <input type="hidden" name="camera_id" value="{camera_id}">
     <button class="danger" name="action" value="hide"
       onclick="return confirm('Скрыть камеру у всех пользователей? Она перестанет предупреждать.')"
@@ -602,7 +718,7 @@ def render_camera_item(item, override):
     <button name="action" value="snooze">Отложить на 30 дн</button>
     <button name="action" value="resolve">Разобрано</button>
   </form>
-  <form method="post" action="/cameras/act" style="margin-top:6px">
+  <form method="post" action="{cameras_act}" style="margin-top:6px">
     <input type="hidden" name="camera_id" value="{camera_id}">
     <input name="lat" placeholder="широта" size="10" inputmode="decimal">
     <input name="lon" placeholder="долгота" size="10" inputmode="decimal">
@@ -772,6 +888,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_login(code=401)
         conn = db()
         try:
+            _request.counts = pending_counts(conn)
             if path == "/":
                 return self._send(200, self.dashboard(conn))
             if path == "/cameras":
@@ -799,9 +916,9 @@ class Handler(BaseHTTPRequestHandler):
             # Старые адреса ведут на карту: два способа делать одно и то же —
             # это рассинхронизация, а ссылки из очереди жалоб должны работать.
             if path == "/positions":
-                return self._redirect("/map")
+                return self._redirect(u("/map"))
             if path.startswith("/cameras/") and path.endswith("/map"):
-                return self._redirect("/map#" + path.split("/")[2])
+                return self._redirect(u("/map#" + path.split("/")[2]))
         finally:
             conn.close()
         self._send(404, page("/", "Не найдено", '<div class="empty">Такой страницы нет</div>'))
@@ -848,13 +965,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self.undo_json(conn, self._json_body(raw))
             if path == "/cameras/act":
                 self.camera_action(conn, field)
-                return self._redirect("/cameras")
+                return self._redirect(u("/cameras"))
             if path == "/mobile/act":
                 self.mobile_action(conn, field)
-                return self._redirect("/mobile")
+                return self._redirect(u("/mobile"))
             if path == "/feedback/act":
                 self.feedback_action(conn, field)
-                return self._redirect("/feedback")
+                return self._redirect(u("/feedback"))
         finally:
             conn.close()
         self._send(404, page("/", "Не найдено", '<div class="empty">Нет такого действия</div>'))
@@ -1127,6 +1244,7 @@ class Handler(BaseHTTPRequestHandler):
                             "WHERE published_at IS NULL").fetchone()["n"]
 
     def cameras_page(self, conn):
+        cameras_act = u("/cameras/act")
         queue = camera_queue(conn)
         overrides = {row["camera_id"]: row for row in
                      conn.execute("SELECT * FROM overrides").fetchall()}
@@ -1143,7 +1261,7 @@ class Handler(BaseHTTPRequestHandler):
                 <span class="tag warn">{esc(row['op'])}</span>
                 <span class="muted">{esc(ago(row['decided_at']))}
                 {'· опубликовано' if row['published_at'] else '· ЖДЁТ ПУБЛИКАЦИИ'}</span></div>
-                <form method="post" action="/cameras/act" class="inline">
+                <form method="post" action="{cameras_act}" class="inline">
                   <input type="hidden" name="camera_id" value="{row['camera_id']}">
                   <button name="action" value="restore">Вернуть камеру</button>
                 </form></div>""" for row in overrides.values())
@@ -1175,6 +1293,7 @@ class Handler(BaseHTTPRequestHandler):
                 "blocked": by_reason.get("blocked", 0)}
 
     def mobile_page(self, conn):
+        mobile_act = u("/mobile/act")
         now = time.time()
         rows = conn.execute("""
             SELECT r.id, r.lat, r.lon, r.type, r.created, r.expires, r.up, r.down, r.ip,
@@ -1212,7 +1331,7 @@ class Handler(BaseHTTPRequestHandler):
                 f'<code>{esc(b["value"])}</code>'
                 f'<span class="muted">ещё {int((b["until"] - now) // 3600)} ч ·'
                 f' {esc(b["note"] or "без причины")}</span>'
-                f'<form method="post" action="/mobile/act">'
+                f'<form method="post" action="{mobile_act}">'
                 f'<input type="hidden" name="block_kind" value="{esc(b["kind"])}">'
                 f'<input type="hidden" name="block_value" value="{esc(b["value"])}">'
                 f'<button name="action" value="unblock">Снять</button></form></div>'
@@ -1247,7 +1366,7 @@ class Handler(BaseHTTPRequestHandler):
   <div class="muted">поставлена {esc(ago(row['created']))} ·
     исчезнет через {int(max(0, row['expires'] - now) // 60)} мин ·
     {esc(row['cls'] or 'класс дороги неизвестен')} · {osm_link(row['lat'], row['lon'])}</div>
-  <form method="post" action="/mobile/act">
+  <form method="post" action="{mobile_act}">
     <input type="hidden" name="id" value="{row['id']}">
     <button class="danger" name="action" value="kill">Убрать с карты</button>
     <button name="action" value="extend">Продлить на 3 ч</button>
@@ -1258,6 +1377,7 @@ class Handler(BaseHTTPRequestHandler):
                     f"{''.join(cards)}")
 
     def feedback_page(self, conn):
+        feedback_act = u("/feedback/act")
         rows = conn.execute("""SELECT id, message, contact, app_version, received,
                                COALESCE(status,'new') AS status, COALESCE(note,'') AS note
                                FROM feedback ORDER BY
@@ -1279,7 +1399,7 @@ class Handler(BaseHTTPRequestHandler):
   </div>
   <div style="margin:8px 0; white-space:pre-wrap">{esc(row['message'])}</div>
   <div class="muted">Контакт: {esc(row['contact'] or 'не оставлен')}</div>
-  <form method="post" action="/feedback/act" style="margin-top:6px">
+  <form method="post" action="{feedback_act}" style="margin-top:6px">
     <input type="hidden" name="id" value="{row['id']}">
     <select name="status">{options}</select>
     <input name="note" value="{esc(row['note'])}" placeholder="заметка" size="24">

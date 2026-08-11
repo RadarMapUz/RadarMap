@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RadarMap — камеры и радары Узбекистана</title>
+<meta name="description" content="Голосовой антирадар и карта камер видеофиксации Узбекистана. Работает без интернета, предупреждает голосом, треноги находим вместе.">
+<meta name="theme-color" content="#05070c">
+<meta property="og:title" content="RadarMap — камеры и радары Узбекистана">
+<meta property="og:description" content="Предупреждает голосом о камерах. Работает без интернета. Треноги находим вместе.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%2305070c'/><circle cx='16' cy='16' r='11' fill='none' stroke='%233cdcff' stroke-opacity='.4'/><circle cx='16' cy='16' r='6' fill='none' stroke='%233cdcff' stroke-opacity='.6'/><circle cx='16' cy='16' r='3' fill='%233cdcff'/></svg>">
+<style>
+/* ==========================================================================
+   Страница проекта RadarMap.
+
+   Три правила, из которых следует всё остальное.
+
+   1. ОДИН ФАЙЛ. Ни шрифтов, ни библиотек, ни картинок со стороны: страницу
+      открывают в дороге на плохой мобильной связи, и она обязана появиться
+      сразу, а не тянуть полмегабайта ради красоты.
+
+   2. ДВИЖЕНИЕ ТОЛЬКО НА transform И opacity. Их считает композитор, а не
+      главный поток, поэтому анимации не дёргаются на среднем телефоне.
+      Никакого canvas с частицами: греть батарею на странице приложения,
+      которое хвастается экономией батареи, — анекдот.
+
+   3. АНИМАЦИЯ ОБЯЗАНА ЧТО-ТО ОБЪЯСНЯТЬ. Здесь их две крупные, и обе
+      показывают продукт вместо того, чтобы его описывать: сам момент
+      предупреждения и то, как чужая отметка становится доверенной.
+
+   prefers-reduced-motion выключает движение целиком — у части людей от таких
+   страниц кружится голова, и это не повод лишать их содержимого.
+   ========================================================================== */
+
+:root {
+  --bg:#05070c; --surface:#0c1017; --surface-2:#111826; --stroke:#1b2231;
+  --text:#e8ecf3; --text-2:#93a3bd; --text-3:#606d82;
+  --accent:#3cdcff; --ok:#38e58c; --warn:#ffb527; --bad:#ff4560;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  color-scheme: dark;
+}
+* { box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body {
+  margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  -webkit-text-size-adjust:100%; -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+.wrap { max-width:1000px; margin:0 auto; padding:0 20px; }
+a { color:var(--accent); }
+h2 { font-size:clamp(24px,4vw,32px); margin:0 0 12px; letter-spacing:-.6px; }
+.lead { color:var(--text-2); font-size:17px; max-width:560px; margin:0 0 28px; }
+section { padding:72px 0; }
+
+/* --- Липкая шапка: кнопка «скачать» всегда под рукой, а не только вверху --- */
+.bar {
+  position:fixed; inset:0 0 auto 0; z-index:50; height:56px;
+  display:flex; align-items:center; gap:12px;
+  padding:0 20px; background:rgba(5,7,12,.72);
+  backdrop-filter:saturate(180%) blur(14px);
+  border-bottom:1px solid transparent;
+  transform:translateY(-100%); transition:transform .35s var(--ease), border-color .35s;
+}
+.bar.show { transform:none; border-bottom-color:var(--stroke); }
+.bar .name { font-weight:700; letter-spacing:-.3px; margin-right:auto; }
+.bar .mini { display:inline-flex; align-items:center; gap:6px; }
+.bar .mini svg { width:18px; height:18px; }
+
+/* --- Переключатель языка --- */
+.lang { display:inline-flex; background:var(--surface-2); border:1px solid var(--stroke);
+        border-radius:999px; padding:2px; }
+.lang button { all:unset; cursor:pointer; padding:5px 12px; border-radius:999px;
+               font-size:13px; font-weight:600; color:var(--text-3); }
+.lang button[aria-pressed="true"] { background:var(--accent); color:#04222c; }
+
+/* --- Первый экран --- */
+.hero { text-align:center; padding:118px 0 64px; position:relative; }
+.hero h1 { font-size:clamp(42px,9vw,76px); margin:0 0 14px; letter-spacing:-2.4px;
+           line-height:1.02; font-weight:750; }
+.hero .sub { color:var(--text-2); font-size:clamp(17px,2.4vw,21px); max-width:600px;
+             margin:0 auto 34px; }
+
+/* Радар: развёртка через conic-gradient, «пинги» вспыхивают за лучом.
+   Подпись продукта — первое, что видит человек. */
+.radar { width:172px; height:172px; margin:0 auto 34px; position:relative;
+         border-radius:50%; border:1px solid rgba(60,220,255,.28);
+         background:radial-gradient(circle,rgba(60,220,255,.10),transparent 70%); }
+.radar i { position:absolute; border-radius:50%; border:1px solid rgba(60,220,255,.16);
+           inset:26px; }
+.radar i:nth-child(2) { inset:52px; }
+.radar .sweep { position:absolute; inset:0; border-radius:50%; overflow:hidden; }
+.radar .sweep::before {
+  content:""; position:absolute; inset:0; border-radius:50%;
+  background:conic-gradient(from 0deg, rgba(60,220,255,.42), rgba(60,220,255,.06) 42deg, transparent 90deg);
+  animation:sweep 3.4s linear infinite;
+}
+@keyframes sweep { to { transform:rotate(360deg); } }
+.radar .core { position:absolute; left:50%; top:50%; width:14px; height:14px;
+               margin:-7px 0 0 -7px; border-radius:50%; background:var(--accent);
+               box-shadow:0 0 22px rgba(60,220,255,.9); }
+.ping { position:absolute; width:7px; height:7px; border-radius:50%; background:var(--accent);
+        opacity:0; animation:ping 3.4s linear infinite; }
+@keyframes ping { 0%,4% { opacity:0; transform:scale(.4) } 8% { opacity:1; transform:scale(1) }
+                  45% { opacity:.5 } 70%,100% { opacity:0 } }
+.ping.a { left:74%; top:30%; animation-delay:.35s; }
+.ping.b { left:26%; top:62%; animation-delay:1.5s; }
+.ping.c { left:60%; top:76%; animation-delay:2.4s; }
+
+.cta { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:9px;
+       text-decoration:none; padding:15px 26px; border-radius:15px; font-weight:650;
+       font-size:16px; border:1px solid var(--stroke); background:var(--surface);
+       color:var(--text); transition:transform .18s var(--ease), border-color .18s, background .18s; }
+.btn:hover { transform:translateY(-2px); border-color:#2b3a52; }
+.btn:active { transform:translateY(0); }
+.btn.primary { background:linear-gradient(180deg,#54e2ff,#17aed8); color:#02202b;
+               border-color:transparent; box-shadow:0 10px 30px -12px rgba(60,220,255,.7); }
+.btn.support { border-color:#3a2f10; color:var(--warn); background:#16110a; }
+.btn svg { width:19px; height:19px; }
+.note { color:var(--text-3); font-size:13.5px; margin-top:16px; }
+
+/* --- Сцена: как выглядит предупреждение -------------------------------------
+   Показать момент, а не описать его. Телефон, дорога уезжает вниз, скорость
+   набирается, впереди загорается камера, выезжает карточка, дистанция сбегает
+   к нулю. Числа анимируются через @property + counter — без единой строки JS,
+   поэтому сцена живёт и при выключенных скриптах. */
+/* inherits:true обязателен: счётчик живёт в ::after, а анимация — на самом
+   элементе. При inherits:false псевдоэлемент не видит анимированное значение
+   и показывает initial-value, то есть застывшее число вместо бегущего. */
+@property --spd { syntax:'<integer>'; initial-value:0; inherits:true; }
+@property --dst { syntax:'<integer>'; initial-value:300; inherits:true; }
+
+.demo { display:grid; gap:44px; align-items:center;
+        grid-template-columns:minmax(0,1fr) 300px; }
+.phone { width:300px; height:600px; border-radius:44px; padding:11px; justify-self:center;
+         background:linear-gradient(160deg,#232b3a,#0b0f16); border:1px solid #2a3446;
+         box-shadow:0 40px 90px -40px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.03) inset; }
+.screen { position:relative; height:100%; border-radius:34px; overflow:hidden;
+          background:#070c14; }
+
+/* Дорога с перспективой. Плоская полоса читалась как полоска на фоне, а не
+   как вид из машины: экран был наполовину пуст. Трапеция + штрихи, которые
+   растут и светлеют по мере приближения, дают глубину без 3D-трансформаций
+   (те на слабом GPU дают дрожание краёв). */
+.road { position:absolute; inset:0; background:
+        radial-gradient(120% 70% at 50% 0%, #16233a 0%, #0a111c 55%, #070c14 100%); }
+
+/* Горизонт: тонкое свечение вдали — взгляд цепляется за него и читает глубину. */
+.horizon { position:absolute; left:0; right:0; top:16%; height:70px; z-index:1;
+           background:radial-gradient(60% 100% at 50% 100%, rgba(60,220,255,.16), transparent 70%); }
+
+/* Полотно — трапеция: узкое у горизонта, широкое под машиной. */
+.asphalt { position:absolute; inset:16% 0 0; z-index:1; background:
+           linear-gradient(180deg, #101a29 0%, #172336 100%);
+           clip-path:polygon(41% 0, 59% 0, 128% 100%, -28% 100%); }
+.asphalt::before, .asphalt::after { content:""; position:absolute; top:0; bottom:0; width:2px;
+           background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.22)); }
+.asphalt::before { left:41%; transform:skewX(-19deg); transform-origin:top; }
+.asphalt::after  { right:41%; transform:skewX(19deg); transform-origin:top; }
+
+/* Разметка: каждый штрих едет от горизонта к низу, вырастая и светлея. */
+.dash { position:absolute; left:50%; top:16%; width:5px; height:16px; margin-left:-2.5px;
+        border-radius:3px; background:#fff; opacity:0; transform-origin:top center;
+        z-index:2;   /* выше полотна (.asphalt), иначе разметки просто не видно */
+        animation:dash 2.4s linear infinite; }
+@keyframes dash {
+  0%   { opacity:0;  transform:translateY(0)    scale(.35); }
+  12%  { opacity:.5; }
+  70%  { opacity:.85; }
+  100% { opacity:0;  transform:translateY(430px) scale(3.4); }
+}
+/* nth-of-type, а не nth-child: nth-child считает всех соседей, а перед
+   штрихами в .screen лежат дорога, горизонт, полотно и две обочины — задержки
+   доставались не тем элементам, и разметка шла рывками. */
+.dash:nth-of-type(1) { animation-delay:0s }    .dash:nth-of-type(2) { animation-delay:.4s }
+.dash:nth-of-type(3) { animation-delay:.8s }   .dash:nth-of-type(4) { animation-delay:1.2s }
+.dash:nth-of-type(5) { animation-delay:1.6s }  .dash:nth-of-type(6) { animation-delay:2s }
+
+/* Обочина: намёк на застройку, чтобы по краям не было пустоты. */
+.side { position:absolute; top:16%; bottom:0; width:34%; z-index:1; overflow:hidden; opacity:.5; }
+.side.l { left:0 } .side.r { right:0 }
+.side b { position:absolute; display:block; border-radius:3px 3px 0 0;
+          background:linear-gradient(180deg,#1b2739,#0d1420); opacity:0;
+          animation:side 2.4s linear infinite; }
+.side.l b { right:8% } .side.r b { left:8% }
+@keyframes side { 0% { opacity:0; transform:translateY(0) scale(.3) }
+                  20% { opacity:.85 } 75% { opacity:.85 }
+                  100% { opacity:0; transform:translateY(400px) scale(2.6) } }
+.side b:nth-child(1) { width:26px; height:34px; animation-delay:.2s }
+.side b:nth-child(2) { width:20px; height:52px; animation-delay:1.1s }
+.side b:nth-child(3) { width:30px; height:28px; animation-delay:1.9s }
+
+.hud { position:absolute; left:0; right:0; top:0; padding:16px 16px 0;
+       display:flex; align-items:flex-start; gap:10px; z-index:5; }
+.spd { background:rgba(10,15,24,.82); border:1px solid var(--stroke); border-radius:16px;
+       padding:9px 14px; backdrop-filter:blur(8px); }
+.spd b { font-size:30px; font-weight:700; letter-spacing:-1px; display:block; line-height:1;
+         animation:speed 8s var(--ease) infinite; }
+.spd b::after { counter-reset:s var(--spd); content:counter(s); }
+.spd span { font-size:10.5px; color:var(--text-3); text-transform:uppercase; letter-spacing:.6px; }
+@keyframes speed { 0% { --spd:0 } 30%,64% { --spd:78 } 80% { --spd:57 } 100% { --spd:57 } }
+
+.limit { margin-left:auto; width:46px; height:46px; border-radius:50%; background:#fff;
+         border:4px solid var(--bad); display:grid; place-items:center; color:#111;
+         font-weight:800; font-size:17px; animation:limitPulse 8s var(--ease) infinite; }
+@keyframes limitPulse { 0%,40% { transform:scale(1) } 50% { transform:scale(1.14) }
+                        60%,100% { transform:scale(1) } }
+
+/* Камера: пин с конусом обзора — сразу видно, что она смотрит на дорогу. */
+.pin { position:absolute; left:63%; top:20%; margin-left:-19px; width:38px; height:38px;
+       border-radius:50%; background:var(--bad); display:grid; place-items:center; z-index:4;
+       box-shadow:0 0 0 8px rgba(255,69,96,.14), 0 8px 24px rgba(255,69,96,.35); opacity:0;
+       animation:pin 8s var(--ease) infinite; }
+.pin svg { width:20px; height:20px; fill:#fff; }
+.pin::before { content:""; position:absolute; top:26px; left:50%; width:120px; height:150px;
+       margin-left:-60px; z-index:-1; clip-path:polygon(50% 0, 100% 100%, 0 100%);
+       background:linear-gradient(180deg, rgba(255,69,96,.26), transparent 78%); }
+@keyframes pin { 0%,18% { opacity:0; transform:translateY(-30px) scale(.5) }
+                 27% { opacity:1; transform:translateY(0) scale(1) }
+                 62% { opacity:1; transform:translateY(300px) scale(1.5) }
+                 70%,100% { opacity:0; transform:translateY(360px) scale(1.7) } }
+
+/* Машина: стоит на месте, движется мир — так и воспринимается за рулём. */
+.car { position:absolute; left:50%; bottom:104px; margin-left:-17px; width:34px; height:58px;
+       border-radius:13px; z-index:4;
+       background:linear-gradient(180deg,#6ee3ff,#1aa9d4);
+       box-shadow:0 0 30px rgba(60,220,255,.45), 0 10px 20px rgba(0,0,0,.5); }
+.car::after { content:""; position:absolute; inset:8px 6px auto; height:15px; border-radius:6px;
+       background:rgba(4,20,28,.6); }
+/* Свет фар вперёд — низ экрана перестаёт быть плоским. */
+.car::before { content:""; position:absolute; bottom:100%; left:50%; width:150px; height:210px;
+       margin-left:-75px; clip-path:polygon(50% 100%, 100% 0, 0 0);
+       background:linear-gradient(0deg, rgba(60,220,255,.16), transparent 72%); }
+
+/* Карточка предупреждения — то, ради чего вся сцена. */
+.alert { position:absolute; left:12px; right:12px; bottom:16px; z-index:6;
+         background:rgba(22,11,16,.94); border:1px solid rgba(255,69,96,.5);
+         border-radius:20px; padding:14px 16px; display:flex; gap:12px; align-items:center;
+         backdrop-filter:blur(10px); opacity:0;
+         box-shadow:0 18px 40px -18px rgba(255,69,96,.5);
+         animation:alert 8s var(--ease) infinite; }
+@keyframes alert { 0%,30% { opacity:0; transform:translateY(26px) }
+                   38%,64% { opacity:1; transform:none }
+                   72%,100% { opacity:0; transform:translateY(26px) } }
+.alert .ic { width:40px; height:40px; border-radius:12px; background:rgba(255,69,96,.18);
+             display:grid; place-items:center; flex:none; }
+.alert .ic svg { width:22px; height:22px; fill:var(--bad); }
+.alert > div:nth-child(2) { min-width:0; }
+.alert .t { font-weight:650; font-size:15px; line-height:1.2; }
+.alert .d { color:var(--text-2); font-size:12.5px; white-space:nowrap;
+            overflow:hidden; text-overflow:ellipsis; }
+.alert .m { margin-left:auto; font-size:22px; font-weight:750; color:var(--bad);
+            letter-spacing:-.8px; white-space:nowrap; flex:none;
+            animation:dist 8s linear infinite; }
+.alert .m::before { counter-reset:d var(--dst); content:counter(d) "\00a0"; }
+@keyframes dist { 0%,30% { --dst:300 } 64%,100% { --dst:0 } }
+
+/* Волна голоса под карточкой: приложение говорит, а не пищит. */
+.wave { position:absolute; left:0; right:0; bottom:0; height:64px; z-index:5;
+        display:flex; align-items:flex-end; justify-content:center; gap:4px; padding-bottom:10px;
+        opacity:0; animation:alert 8s var(--ease) infinite; }
+.wave b { width:3px; border-radius:2px; background:var(--accent); height:8px;
+          animation:bar .9s ease-in-out infinite alternate; }
+.wave b:nth-child(2) { animation-delay:.1s } .wave b:nth-child(3) { animation-delay:.2s }
+.wave b:nth-child(4) { animation-delay:.3s } .wave b:nth-child(5) { animation-delay:.15s }
+.wave b:nth-child(6) { animation-delay:.25s } .wave b:nth-child(7) { animation-delay:.05s }
+@keyframes bar { to { height:24px; } }
+
+.steps { list-style:none; padding:0; margin:0; }
+.steps li { display:flex; gap:14px; padding:14px 0; border-top:1px solid var(--stroke); }
+.steps li:first-child { border-top:0; }
+.steps .n { flex:none; width:28px; height:28px; border-radius:9px; background:var(--surface-2);
+            border:1px solid var(--stroke); display:grid; place-items:center;
+            font-size:13px; font-weight:700; color:var(--accent); }
+.steps h3 { margin:0 0 3px; font-size:16px; }
+.steps p { margin:0; color:var(--text-2); font-size:14.5px; }
+
+/* --- Сцена: как отметка становится доверенной ------------------------------- */
+.trust { display:grid; gap:44px; align-items:center; grid-template-columns:340px minmax(0,1fr); }
+.stage { height:300px; border-radius:24px; border:1px solid var(--stroke); position:relative;
+         background:radial-gradient(120% 90% at 50% 0%,#111a28,#080d15); overflow:hidden; }
+.stage .lane { position:absolute; left:50%; top:0; bottom:0; width:2px; margin-left:-1px;
+        background:repeating-linear-gradient(180deg,rgba(255,255,255,.18) 0 18px,transparent 18px 40px); }
+.mark { position:absolute; left:50%; top:44%; margin-left:-26px; width:52px; height:52px;
+        border-radius:50%; display:grid; place-items:center;
+        border:2px dashed rgba(255,181,39,.8); color:var(--warn); background:rgba(255,181,39,.10);
+        font-weight:800; font-size:20px; opacity:0; animation:mark 9s var(--ease) infinite; }
+@keyframes mark {
+  0%,8% { opacity:0; transform:scale(.5) }
+  14%,52% { opacity:1; transform:scale(1);
+            border-style:dashed; border-color:rgba(255,181,39,.8);
+            background:rgba(255,181,39,.10); color:var(--warn) }
+  60%,92% { opacity:1; transform:scale(1);
+            border-style:solid; border-color:rgba(56,229,140,.9);
+            background:rgba(56,229,140,.14); color:var(--ok) }
+  100% { opacity:0; transform:scale(1) }
+}
+.dot-car { position:absolute; left:50%; margin-left:-11px; width:22px; height:36px;
+           border-radius:8px; background:linear-gradient(180deg,#4fd8ff,#1aa9d4); }
+.dot-car.one { animation:pass1 9s var(--ease) infinite; }
+.dot-car.two { animation:pass2 9s var(--ease) infinite; background:linear-gradient(180deg,#8de8b6,#2bbd7b); }
+@keyframes pass1 { 0% { top:100%; opacity:0 } 6% { opacity:1 } 16% { top:44% } 30% { top:-20%; opacity:0 }
+                   100% { top:-20%; opacity:0 } }
+@keyframes pass2 { 0%,44% { top:100%; opacity:0 } 50% { opacity:1 } 60% { top:44% }
+                   74% { top:-20%; opacity:0 } 100% { top:-20%; opacity:0 } }
+.stage .cap { position:absolute; left:0; right:0; bottom:0; padding:12px 14px;
+              font-size:13px; color:var(--text-2); background:linear-gradient(0deg,#080d15,transparent);
+              text-align:center; }
+.stage .cap b { color:var(--text); }
+
+/* --- Карточки --- */
+.grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+.card { background:var(--surface); border:1px solid var(--stroke); border-radius:18px;
+        padding:22px; transition:transform .3s var(--ease), border-color .3s; }
+.card:hover { transform:translateY(-3px); border-color:#26344a; }
+.card h3 { margin:0 0 7px; font-size:16.5px; }
+.card p { margin:0; color:var(--text-2); font-size:14.5px; }
+.card .ico { width:38px; height:38px; border-radius:12px; background:var(--surface-2);
+             display:grid; place-items:center; margin-bottom:14px; }
+.card .ico svg { width:20px; height:20px; stroke:var(--accent); fill:none; stroke-width:1.7; }
+
+/* --- Цифры со счётчиком --- */
+.nums { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
+.num { background:var(--surface); border:1px solid var(--stroke); border-radius:18px;
+       padding:22px; text-align:center; }
+.num b { display:block; font-size:34px; font-weight:750; letter-spacing:-1.4px;
+         font-variant-numeric:tabular-nums; }
+.num span { color:var(--text-3); font-size:13px; }
+
+/* --- Приватность --- */
+.priv { background:var(--surface); border:1px solid var(--stroke); border-radius:22px; padding:26px; }
+.priv ul { list-style:none; margin:0 0 18px; padding:0; }
+.priv li { display:flex; gap:12px; padding:11px 0; border-top:1px solid var(--stroke);
+           color:var(--text-2); font-size:14.5px; }
+.priv li:first-child { border-top:0; }
+.priv li b { color:var(--text); font-weight:600; }
+.priv .out { color:var(--ok); flex:none; font-weight:700; }
+.priv .foot { color:var(--text); font-size:15px; border-top:1px solid var(--stroke);
+              padding-top:16px; }
+
+/* --- Поддержка --- */
+.support { background:linear-gradient(160deg,#191308,#0b0f16); border:1px solid #2e2614;
+           border-radius:24px; padding:34px; text-align:center; }
+.support p { color:var(--text-2); max-width:480px; margin:10px auto 22px; }
+
+footer { border-top:1px solid var(--stroke); padding:34px 0 56px; color:var(--text-3);
+         font-size:14px; text-align:center; }
+footer .links { display:flex; gap:22px; justify-content:center; flex-wrap:wrap; margin-bottom:18px; }
+footer a { text-decoration:none; }
+footer a:hover { text-decoration:underline; }
+
+/* --- Превью «Итогов»: показать экран, а не перечислить цифры ------------------
+   Четыре плитки с числами ничего не объясняли. Здесь — тот же экран, что в
+   приложении: кольцо рейтинга, километры и неделя столбиками. Анимация
+   запускается один раз при появлении блока (класс .in), а не крутится по
+   кругу: отчёт, который дёргается, читается как ошибка. */
+.stats { display:grid; gap:44px; align-items:center; grid-template-columns:340px minmax(0,1fr); }
+.sheet { background:linear-gradient(180deg,#101725,#0a0e16); border:1px solid var(--stroke);
+         border-radius:26px; padding:22px; box-shadow:0 30px 70px -40px rgba(0,0,0,.9); }
+.sheet .top { display:flex; align-items:center; gap:18px; }
+.ring { position:relative; width:104px; height:104px; flex:none; }
+.ring svg { width:104px; height:104px; transform:rotate(-90deg); }
+.ring circle { fill:none; stroke-width:9; stroke-linecap:round; }
+.ring .bg { stroke:#1b2231; }
+.ring .fg { stroke:var(--ok); stroke-dasharray:295; stroke-dashoffset:295; }
+.in .ring .fg { animation:ring 1.3s var(--ease) .2s forwards; }
+@keyframes ring { to { stroke-dashoffset:65; } }
+.ring .val { position:absolute; inset:0; display:grid; place-items:center; align-content:center; }
+.ring .val b { font-size:30px; font-weight:750; letter-spacing:-1.2px; line-height:1; }
+.ring .val span { font-size:10.5px; color:var(--text-3); text-transform:uppercase;
+                  letter-spacing:.5px; }
+.sheet .km { font-size:34px; font-weight:750; letter-spacing:-1.4px; line-height:1;
+             font-variant-numeric:tabular-nums; }
+.sheet .cap { color:var(--text-3); font-size:12.5px; margin-top:4px; }
+.sheet .save { margin-top:8px; display:inline-block; background:rgba(56,229,140,.12);
+               color:var(--ok); border-radius:999px; padding:4px 11px; font-size:12.5px;
+               font-weight:600; }
+.week { display:flex; align-items:flex-end; gap:7px; height:74px; margin-top:22px;
+        padding-top:14px; border-top:1px solid var(--stroke); }
+.week i { flex:1; border-radius:5px 5px 2px 2px; background:linear-gradient(180deg,#3cdcff,#1b7f9e);
+          height:4px; transform-origin:bottom; }
+.in .week i { animation:grow .8s var(--ease) forwards; }
+@keyframes grow { to { height:var(--h); } }
+.week i:nth-child(1) { --h:26px; animation-delay:.30s } .week i:nth-child(2) { --h:44px; animation-delay:.36s }
+.week i:nth-child(3) { --h:18px; animation-delay:.42s } .week i:nth-child(4) { --h:58px; animation-delay:.48s }
+.week i:nth-child(5) { --h:36px; animation-delay:.54s } .week i:nth-child(6) { --h:12px; animation-delay:.60s }
+.week i:nth-child(7) { --h:50px; animation-delay:.66s;
+                       background:linear-gradient(180deg,#ff6d81,#c22a3e) }
+.days { display:flex; gap:7px; margin-top:7px; }
+.days span { flex:1; text-align:center; font-size:10.5px; color:var(--text-3); }
+
+@media (max-width:860px) {
+  .stats { grid-template-columns:1fr; }
+  .stats > .sheet { order:-1; }
+}
+
+/* --- Проявление на прокрутке --- */
+.rise { opacity:0; transform:translateY(22px);
+        transition:opacity .6s var(--ease), transform .6s var(--ease); }
+.rise.in { opacity:1; transform:none; }
+
+@media (max-width:860px) {
+  .demo, .trust { grid-template-columns:1fr; }
+  .trust > .stage { order:-1; }
+  section { padding:56px 0; }
+  .hero { padding:96px 0 48px; }
+  .phone { width:270px; height:540px; }
+  .btn { width:100%; }
+}
+
+/* Движение — украшение. Содержимое обязано остаться и без него.
+   Здесь недостаточно погасить анимации: половина сцен стартует с opacity:0
+   или с нулевой высотой и БЕЗ анимации осталась бы невидимой — экран телефона
+   стал бы пустой трапецией, а карточка итогов — пустым кольцом. Поэтому всё
+   движущееся получает осмысленный статичный кадр. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior:auto; }
+  *, *::before, *::after { animation:none !important; transition:none !important; }
+  .rise { opacity:1 !important; transform:none !important; }
+  .bar { transform:none; }
+
+  /* Сцена предупреждения — застывший «момент истины». */
+  .pin, .alert, .wave { opacity:1; }
+  .pin { transform:translateY(150px) scale(1.2); }
+  .dash { opacity:.7; }
+  .dash:nth-of-type(1) { transform:translateY(40px)  scale(1.2) }
+  .dash:nth-of-type(2) { transform:translateY(130px) scale(1.8) }
+  .dash:nth-of-type(3) { transform:translateY(230px) scale(2.4) }
+  .dash:nth-of-type(4) { transform:translateY(340px) scale(3) }
+  .dash:nth-of-type(5), .dash:nth-of-type(6) { opacity:0 }
+  .side b { opacity:.7 }
+  .side b:nth-child(1) { transform:translateY(90px)  scale(1.4) }
+  .side b:nth-child(2) { transform:translateY(220px) scale(2) }
+  .side b:nth-child(3) { opacity:0 }
+  .spd b::after { content:"78"; }
+  .alert .m::before { content:"300\00a0"; }
+
+  /* Сцена доверия — обе стадии сразу, как на схеме. */
+  .mark { opacity:1; border-style:solid; border-color:rgba(56,229,140,.9);
+          background:rgba(56,229,140,.14); color:var(--ok); }
+  .dot-car { opacity:1 }
+  .dot-car.one { top:14% } .dot-car.two { top:70% }
+
+  /* Итоги — готовый отчёт, а не пустой бланк. */
+  .ring .fg { stroke-dashoffset:65; }
+  .week i { height:var(--h); }
+}
+</style>
+<noscript><style>
+/* Скрипты выключены (или не доехали на плохой связи) — блоки, ждущие
+   появления на экране, показываем сразу. Иначе ниже первого экрана пусто:
+   движение здесь украшение, а не носитель содержимого. */
+.rise { opacity:1 !important; transform:none !important; }
+</style></noscript>
+</head>
+<body>
+
+<div class="bar" id="bar">
+  <span class="name">RadarMap</span>
+  <div class="lang" id="lang">
+    <button type="button" data-set="ru" aria-pressed="true">RU</button>
+    <button type="button" data-set="uz" aria-pressed="false">UZ</button>
+  </div>
+  <a class="btn primary mini" href="https://apps.apple.com/app/id6792473173"
+     style="padding:9px 16px;font-size:14px"
+     data-ru="Скачать" data-uz="Yuklab olish">Скачать</a>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="radar" aria-hidden="true">
+      <div class="sweep"></div>
+      <i></i><i></i>
+      <span class="ping a"></span><span class="ping b"></span><span class="ping c"></span>
+      <span class="core"></span>
+    </div>
+    <h1>RadarMap</h1>
+    <p class="sub"
+       data-ru="Карта дорожных камер Узбекистана и голосовое предупреждение. Работает без интернета."
+       data-uz="O‘zbekiston yo‘llaridagi kameralar xaritasi va ovozli ogohlantirish. Internetsiz ishlaydi.">
+      Карта дорожных камер Узбекистана и голосовое предупреждение. Работает без интернета.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://apps.apple.com/app/id6792473173">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.8c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.9-3-.8-1.5 0-2.9.9-3.7 2.3-1.6 2.7-.4 6.8 1.1 9 .8 1.1 1.6 2.4 2.8 2.3 1.1 0 1.6-.7 3-.7s1.8.7 3 .7c1.2 0 2-1.1 2.8-2.2.9-1.3 1.2-2.5 1.3-2.6-.1 0-2.4-.9-2.4-3.6zM14.2 5.9c.6-.8 1-1.8.9-2.9-.9 0-2 .6-2.6 1.4-.6.7-1.1 1.7-1 2.7 1 .1 2-.5 2.7-1.2z"/></svg>
+        <span data-ru="Скачать в App Store" data-uz="App Store’dan yuklab olish">Скачать в App Store</span>
+      </a>
+      <a class="btn support" href="https://taps.uz/radarmapuz" rel="noopener">
+        <span data-ru="Поддержать проект" data-uz="Loyihani qo‘llab-quvvatlash">Поддержать проект</span>
+      </a>
+    </div>
+    <p class="note" data-ru="iPhone · iOS 18 и новее · CarPlay и Apple Watch"
+       data-uz="iPhone · iOS 18 va undan yuqori · CarPlay va Apple Watch">
+      iPhone · iOS 18 и новее · CarPlay и Apple Watch</p>
+  </header>
+
+  <!-- ===== Сцена 1: сам момент предупреждения ===== -->
+  <section class="demo rise">
+    <div>
+      <h2 data-ru="Скажет раньше, чем вы увидите"
+          data-uz="Siz ko‘rishingizdan oldin ogohlantiradi">Скажет раньше, чем вы увидите</h2>
+      <p class="lead"
+         data-ru="Расстояние считается от вашей скорости, а не задано в метрах: на 110 км/ч предупреждение уходит за 670 метров, в городе — за 300."
+         data-uz="Ogohlantirish masofasi oldindan belgilangan metrga emas, tezligingizga qarab hisoblanadi: soatiga 110 km tezlikda 670 metr qolganda, shahar ichida 300 metr qolganda aytiladi.">
+        Расстояние считается от вашей скорости, а не задано в метрах: на 110 км/ч предупреждение уходит за 670 метров, в городе — за 300.</p>
+      <ul class="steps">
+        <li><span class="n">1</span><div>
+          <h3 data-ru="В городе — коротко" data-uz="Shaharda — qisqa">В городе — коротко</h3>
+          <p data-ru="«Камера, 300 метров». Камеры на перекрёстке назову одной фразой, а не четырьмя."
+             data-uz="«Kamera, 300 metr». Chorrahadagi bir nechta kamerani to‘rt marta emas, bir marta aytaman.">
+            «Камера, 300 метров». Камеры на перекрёстке назову одной фразой, а не четырьмя.</p></div></li>
+        <li><span class="n">2</span><div>
+          <h3 data-ru="На трассе — полностью" data-uz="Yo‘lda — batafsil">На трассе — полностью</h3>
+          <p data-ru="Тип камеры и сторона: там счёт идёт на секунды, и подробность окупается."
+             data-uz="Kamera turi va qaysi tomonda ekani: yo‘lda vaqt soniyalar bilan o‘lchanadi, shuning uchun tafsilot asqotadi.">
+            Тип камеры и сторона: там счёт идёт на секунды, и подробность окупается.</p></div></li>
+        <li><span class="n">3</span><div>
+          <h3 data-ru="В пробке — молчу" data-uz="Tirbandlikda — jim turaman">В пробке — молчу</h3>
+          <p data-ru="И свои камеры, мимо которых вы ездите каждый день, тоже перестаю называть."
+             data-uz="Har kuni yoningizdan o‘tadigan tanish kameralarni ham aytmay qo‘yaman.">
+            И свои камеры, мимо которых вы ездите каждый день, тоже перестаю называть.</p></div></li>
+      </ul>
+    </div>
+
+    <div class="phone" aria-hidden="true">
+      <div class="screen">
+        <div class="road"></div>
+        <div class="horizon"></div>
+        <div class="asphalt"></div>
+        <div class="side l"><b></b><b></b><b></b></div>
+        <div class="side r"><b></b><b></b><b></b></div>
+        <span class="dash"></span><span class="dash"></span><span class="dash"></span>
+        <span class="dash"></span><span class="dash"></span><span class="dash"></span>
+        <div class="hud">
+          <div class="spd"><b></b><span data-ru="км/ч" data-uz="km/soat">км/ч</span></div>
+          <div class="limit">60</div>
+        </div>
+        <div class="pin">
+          <svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8-3h-3.2l-1.4-2H8.6L7.2 5H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V7a2 2 0 00-2-2z"/></svg>
+        </div>
+        <div class="car"></div>
+        <div class="alert">
+          <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8-3h-3.2l-1.4-2H8.6L7.2 5H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V7a2 2 0 00-2-2z"/></svg></div>
+          <div><div class="t" data-ru="Камера" data-uz="Kamera">Камера</div><div class="d" data-ru="впереди справа" data-uz="oldinda, o‘ngda">впереди справа</div></div>
+          <div class="m"><span data-ru="м" data-uz="m">м</span></div>
+        </div>
+        <div class="wave"><b></b><b></b><b></b><b></b><b></b><b></b><b></b></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Сцена 2: доверие к отметке ===== -->
+  <section class="trust rise">
+    <div class="stage" aria-hidden="true">
+      <div class="lane"></div>
+      <div class="mark">?</div>
+      <div class="dot-car one"></div>
+      <div class="dot-car two"></div>
+      <div class="cap"
+           data-ru="Пунктир — пока никто не подтвердил. Сплошная — проверено другим водителем."
+           data-uz="Uzuq chiziq — hali hech kim tasdiqlamagan. To‘liq chiziq — boshqa haydovchi tekshirgan.">
+        Пунктир — пока никто не подтвердил. Сплошная — проверено другим водителем.</div>
+    </div>
+    <div>
+      <h2 data-ru="Треноги находим вместе"
+          data-uz="Uch oyoq kameralarni birgalikda topamiz">Треноги находим вместе</h2>
+      <p class="lead"
+         data-ru="Расписание передвижных радаров утверждается ежедневно и не публикуется — с 2022 года его не увидеть даже на обочине. Единственный способ узнать о засаде — предупредить друг друга."
+         data-uz="Ko‘chma radarlarning joylashuv jadvali har kuni tasdiqlanadi, ammo e’lon qilinmaydi — 2022 yildan beri uni yo‘l chetida ham ko‘rib bo‘lmaydi. Pistirma haqida bilishning yagona yo‘li — bir-birimizni ogohlantirish.">
+        Расписание передвижных радаров утверждается ежедневно и не публикуется — с 2022 года его не увидеть даже на обочине. Единственный способ узнать о засаде — предупредить друг друга.</p>
+      <ul class="steps">
+        <li><span class="n">1</span><div>
+          <h3 data-ru="Одна кнопка, не глядя на экран"
+              data-uz="Bitta tugma, ekranga qaramasdan">Одна кнопка, не глядя на экран</h3>
+          <p data-ru="Нажали случайно — рядом «Отменить». Нет связи — отправлю, когда появится."
+             data-uz="Tasodifan bosildimi — yonida «Bekor qilish» turadi. Aloqa bo‘lmasa, paydo bo‘lishi bilan yuboraman.">
+            Нажали случайно — рядом «Отменить». Нет связи — отправлю, когда появится.</p></div></li>
+        <li><span class="n">2</span><div>
+          <h3 data-ru="Слух не выдаётся за факт"
+              data-uz="Taxmin fakt o‘rnida ko‘rsatilmaydi">Слух не выдаётся за факт</h3>
+          <p data-ru="Неподтверждённую отметку рисую пунктиром и честно говорю: «отметка водителей»."
+             data-uz="Tasdiqlanmagan belgini uzuq chiziq bilan chizaman va ochiq aytaman: «haydovchilar belgisi».">
+            Неподтверждённую отметку рисую пунктиром и честно говорю: «отметка водителей».</p></div></li>
+        <li><span class="n">3</span><div>
+          <h3 data-ru="Фейк умирает сам" data-uz="Soxta belgi o‘z-o‘zidan yo‘qoladi">Фейк умирает сам</h3>
+          <p data-ru="Отметку, которую не подтвердил ни один независимый водитель, снимать не нужно — она исчезает."
+             data-uz="Birorta mustaqil haydovchi tasdiqlamagan belgini o‘chirish shart emas — u o‘zi yo‘qoladi.">
+            Отметку, которую не подтвердил ни один независимый водитель, снимать не нужно — она исчезает.</p></div></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== Сцена 3: итоги поездок ===== -->
+  <section class="stats rise">
+    <div class="sheet" aria-hidden="true">
+      <div class="top">
+        <div class="ring">
+          <svg viewBox="0 0 104 104">
+            <circle class="bg" cx="52" cy="52" r="47"></circle>
+            <circle class="fg" cx="52" cy="52" r="47"></circle>
+          </svg>
+          <div class="val"><b>78</b><span data-ru="рейтинг" data-uz="reyting">рейтинг</span></div>
+        </div>
+        <div>
+          <div class="km" data-ru="486 км" data-uz="486 km">486 км</div>
+          <div class="cap" data-ru="за неделю · 12 поездок" data-uz="hafta davomida · 12 safar">за неделю · 12 поездок</div>
+          <span class="save" data-ru="−2,4 млн сум штрафов" data-uz="−2,4 mln so‘m jarima">−2,4 млн сум штрафов</span>
+        </div>
+      </div>
+      <div class="week"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="days">
+        <span data-ru="пн" data-uz="du">пн</span><span data-ru="вт" data-uz="se">вт</span>
+        <span data-ru="ср" data-uz="ch">ср</span><span data-ru="чт" data-uz="pa">чт</span>
+        <span data-ru="пт" data-uz="ju">пт</span><span data-ru="сб" data-uz="sh">сб</span>
+        <span data-ru="вс" data-uz="ya">вс</span></div>
+    </div>
+    <div>
+      <h2 data-ru="После каждой поездки — разбор"
+          data-uz="Har bir safardan keyin — tahlil">После каждой поездки — разбор</h2>
+      <p class="lead"
+         data-ru="Не «вы проехали 40 километров», а где именно вы теряете деньги: скорость на каждой камере, повторяющиеся места и счёт штрафов, которых удалось избежать."
+         data-uz="«Siz 40 kilometr yurdingiz» emas, balki aynan qayerda pul yo‘qotayotganingiz: har bir kameradagi tezlik, takrorlanadigan joylar va oldini olingan jarimalar hisobi.">
+        Не «вы проехали 40 километров», а где именно вы теряете деньги: скорость на каждой камере, повторяющиеся места и счёт штрафов, которых удалось избежать.</p>
+      <ul class="steps">
+        <li><span class="n">1</span><div>
+          <h3 data-ru="Рейтинг, который можно проверить"
+              data-uz="Tekshirib ko‘rsa bo‘ladigan reyting">Рейтинг, который можно проверить</h3>
+          <p data-ru="Каждый вычет разложен по поездкам и камерам и в сумме сходится до балла."
+             data-uz="Har bir ayirma safarlar va kameralar bo‘yicha yoyilgan hamda ballgacha aniq jamlanadi.">
+            Каждый вычет разложен по поездкам и камерам и в сумме сходится до балла.</p></div></li>
+        <li><span class="n">2</span><div>
+          <h3 data-ru="Деньги, а не абстракция" data-uz="Mavhumlik emas, aniq pul">Деньги, а не абстракция</h3>
+          <p data-ru="Штрафы считаются по действующей шкале в БРВ — сумма настоящая."
+             data-uz="Jarimalar amaldagi BHM shkalasi bo‘yicha hisoblanadi — summa haqiqiy.">
+            Штрафы считаются по действующей шкале в БРВ — сумма настоящая.</p></div></li>
+        <li><span class="n">3</span><div>
+          <h3 data-ru="История остаётся у вас" data-uz="Tarix sizda qoladi">История остаётся у вас</h3>
+          <p data-ru="Поездки, треки и проезды камер хранятся в телефоне и на сервер не уходят."
+             data-uz="Safarlar, treklar va kameralardan o‘tishlar telefonda saqlanadi, serverga yuborilmaydi.">
+            Поездки, треки и проезды камер хранятся в телефоне и на сервер не уходят.</p></div></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== Возможности ===== -->
+  <section class="rise">
+    <h2 data-ru="Что ещё умеет" data-uz="Yana nima qila oladi">Что ещё умеет</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div>
+        <h3 data-ru="Работает без сети" data-uz="Tarmoqsiz ishlaydi">Работает без сети</h3>
+        <p data-ru="База камер лежит в телефоне. На трассе карта может не открыться — предупреждения продолжают работать."
+           data-uz="Kameralar bazasi telefon xotirasida. Yo‘lda xarita ochilmasligi mumkin, lekin ogohlantirishlar ishlayveradi.">
+          База камер лежит в телефоне. На трассе карта может не открыться — предупреждения продолжают работать.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M5 11V8a7 7 0 0114 0v3"/></svg></div>
+        <h3 data-ru="Без регистрации" data-uz="Ro‘yxatdan o‘tish shart emas">Без регистрации</h3>
+        <p data-ru="Ни аккаунта, ни номера телефона, ни почты. Установили — работает."
+           data-uz="Na hisob, na telefon raqami, na pochta kerak. O‘rnatdingiz — ishlaydi.">
+          Ни аккаунта, ни номера телефона, ни почты. Установили — работает.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="7" width="16" height="10" rx="3"/><path d="M22 11v2"/></svg></div>
+        <h3 data-ru="Бережёт батарею" data-uz="Batareyani tejaydi">Бережёт батарею</h3>
+        <p data-ru="В фоне работает на геозонах, а не на постоянном GPS. Точность подстраивается под расстояние до ближайшей камеры."
+           data-uz="Fon rejimida doimiy GPS emas, geozonalar orqali ishlaydi. Aniqlik eng yaqin kameragacha bo‘lgan masofaga moslashadi.">
+          В фоне работает на геозонах, а не на постоянном GPS. Точность подстраивается под расстояние до ближайшей камеры.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="13" rx="2"/><path d="M8 21h8"/></svg></div>
+        <h3 data-ru="CarPlay и Apple Watch" data-uz="CarPlay va Apple Watch">CarPlay и Apple Watch</h3>
+        <p data-ru="Полноценная карта на экране машины и предупреждение вибрацией на запястье."
+           data-uz="Avtomobil ekranida to‘liq xarita, bilakda esa tebranishli ogohlantirish.">
+          Полноценная карта на экране машины и предупреждение вибрацией на запястье.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18 15 15 0 010-18"/></svg></div>
+        <h3 data-ru="Русский и узбекский" data-uz="Rus va o‘zbek tillari">Русский и узбекский</h3>
+        <p data-ru="Язык переключается внутри приложения, независимо от языка телефона."
+           data-uz="Til ilova ichida almashtiriladi — telefon tilidan qat’i nazar.">
+          Язык переключается внутри приложения, независимо от языка телефона.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 4v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10V6z"/></svg></div>
+        <h3 data-ru="Без рекламы" data-uz="Reklamasiz">Без рекламы</h3>
+        <p data-ru="Ни баннеров, ни подписок, ни трекеров. За рулём это не мелочь."
+           data-uz="Na banner, na obuna, na kuzatuv. Rul ortida bu arzimas narsa emas.">
+          Ни баннеров, ни подписок, ни трекеров. За рулём это не мелочь.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Приватность ===== -->
+  <section class="rise">
+    <h2 data-ru="Что уходит на сервер" data-uz="Serverga nima yuboriladi">Что уходит на сервер</h2>
+    <p class="lead" data-ru="Полный список. Больше ничего нет — ни истории поездок, ни маршрутов, ни адресов."
+       data-uz="To‘liq ro‘yxat. Bundan boshqa hech narsa yuborilmaydi — na safarlar tarixi, na marshrutlar, na manzillar.">
+      Полный список. Больше ничего нет — ни истории поездок, ни маршрутов, ни адресов.</p>
+    <div class="priv">
+      <ul>
+        <li><span class="out">→</span><div><b data-ru="Отметки радаров" data-uz="Radar belgilari">Отметки радаров</b>
+          <div data-ru="Только когда вы сами нажали кнопку: координата точки и случайный номер устройства."
+               data-uz="Faqat o‘zingiz tugmani bosganingizda: belgi koordinatasi va tasodifiy qurilma raqami.">
+            Только когда вы сами нажали кнопку: координата точки и случайный номер устройства.</div></div></li>
+        <li><span class="out">→</span><div><b data-ru="Запрос маршрута" data-uz="Marshrut so‘rovi">Запрос маршрута</b>
+          <div data-ru="Точки «откуда» и «куда» в момент построения. Не сохраняются."
+               data-uz="Marshrut qurilayotgan paytdagi boshlanish va tugash nuqtalari. Saqlanmaydi.">
+            Точки «откуда» и «куда» в момент построения. Не сохраняются.</div></div></li>
+        <li><span class="out">→</span><div><b data-ru="Счётчики за сутки" data-uz="Kunlik hisoblagichlar">Счётчики за сутки</b>
+          <div data-ru="Сколько поездок и километров — только числа, без координат и времени. Выключается в настройках."
+               data-uz="Nechta safar va necha kilometr — faqat raqamlar, koordinata va vaqtsiz. Sozlamalarda o‘chirib qo‘yiladi.">
+            Сколько поездок и километров — только числа, без координат и времени. Выключается в настройках.</div></div></li>
+      </ul>
+      <div class="foot"
+           data-ru="Номер устройства случайный и обновляется каждые 30 дней — связать ваши поездки в одну длинную историю невозможно даже нам."
+           data-uz="Qurilma raqami tasodifiy va har 30 kunda yangilanadi — safarlaringizni bitta uzun tarixga bog‘lash bizning ham qo‘limizdan kelmaydi.">
+        Номер устройства случайный и обновляется каждые 30 дней — связать ваши поездки в одну длинную историю невозможно даже нам.</div>
+    </div>
+  </section>
+
+  <!-- ===== Поддержка ===== -->
+  <section class="rise">
+    <div class="support">
+      <h2 style="margin:0" data-ru="Поддержать проект"
+          data-uz="Loyihani qo‘llab-quvvatlash">Поддержать проект</h2>
+      <p data-ru="Приложение бесплатное, без рекламы и без подписок. Сервер, карты и обновление базы камер оплачиваются из своего кармана — если оно вам пригодилось, можно помочь."
+         data-uz="Ilova bepul, reklamasiz va obunasiz. Server, xaritalar va kameralar bazasini yangilash o‘z hisobimizdan qoplanadi — agar ilova asqotgan bo‘lsa, yordam berishingiz mumkin.">
+        Приложение бесплатное, без рекламы и без подписок. Сервер, карты и обновление базы камер оплачиваются из своего кармана — если оно вам пригодилось, можно помочь.</p>
+      <a class="btn support" href="https://taps.uz/radarmapuz" rel="noopener">taps.uz/radarmapuz</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="links">
+      <a href="privacy.html" data-ru="Политика конфиденциальности" data-uz="Maxfiylik siyosati">Политика конфиденциальности</a>
+      <a href="mailto:rasul.sadullaev@gmail.com" data-ru="Написать разработчику" data-uz="Dasturchiga yozish">Написать разработчику</a>
+      <a href="https://taps.uz/radarmapuz" rel="noopener" data-ru="Поддержать" data-uz="Qo‘llab-quvvatlash">Поддержать</a>
+      <a href="https://www.openstreetmap.org/copyright" rel="noopener">© OpenStreetMap</a>
+    </div>
+    <p data-ru="Карты и ограничения скорости — © участники OpenStreetMap."
+       data-uz="Xaritalar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari.">
+      Карты и ограничения скорости — © участники OpenStreetMap.</p>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // --- Язык. Выбор запоминается, по умолчанию берётся из браузера: страницу
+  //     открывают из мессенджера, и лишний тап на старте не нужен.
+  var LANGS = ['ru', 'uz'];
+  function apply(lang) {
+    document.documentElement.lang = lang;
+    var nodes = document.querySelectorAll('[data-' + lang + ']');
+    for (var i = 0; i < nodes.length; i++) {
+      var value = nodes[i].getAttribute('data-' + lang);
+      if (value) { nodes[i].textContent = value; }
+    }
+    var buttons = document.querySelectorAll('#lang button');
+    for (var j = 0; j < buttons.length; j++) {
+      buttons[j].setAttribute('aria-pressed', String(buttons[j].dataset.set === lang));
+    }
+    try { localStorage.setItem('rm-lang', lang); } catch (e) { /* приватный режим */ }
+  }
+  var saved = null;
+  try { saved = localStorage.getItem('rm-lang'); } catch (e) { /* нет доступа */ }
+  var initial = saved || ((navigator.language || '').slice(0, 2) === 'uz' ? 'uz' : 'ru');
+  if (LANGS.indexOf(initial) < 0) { initial = 'ru'; }
+  if (initial !== 'ru') { apply(initial); } else { apply('ru'); }
+  document.getElementById('lang').addEventListener('click', function (event) {
+    var button = event.target.closest('button');
+    if (button) { apply(button.dataset.set); }
+  });
+
+  // --- Липкая шапка после первого экрана.
+  var bar = document.getElementById('bar');
+  function onScroll() {
+    bar.classList.toggle('show', window.scrollY > 420);
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  if (!('IntersectionObserver' in window)) {
+    // Старый браузер: показываем всё сразу — содержимое важнее появления.
+    var all = document.querySelectorAll('.rise');
+    for (var k = 0; k < all.length; k++) { all[k].classList.add('in'); }
+    return;
+  }
+
+  // --- Проявление блоков.
+  var revealer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) { return; }
+      entry.target.classList.add('in');
+      revealer.unobserve(entry.target);
+    });
+  }, { rootMargin: '0px 0px -12% 0px' });
+  document.querySelectorAll('.rise').forEach(function (node) { revealer.observe(node); });
+
+  // --- Счётчики: добегают до значения, когда блок появился на экране.
+  var counter = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) { return; }
+      counter.unobserve(entry.target);
+      var node = entry.target;
+      var target = parseInt(node.dataset.count, 10) || 0;
+      if (reduced || target === 0) { node.textContent = String(target); return; }
+      var started = null;
+      var duration = 900;
+      requestAnimationFrame(function step(now) {
+        if (started === null) { started = now; }
+        var progress = Math.min(1, (now - started) / duration);
+        // Замедление к концу: равномерный счёт выглядит машинным.
+        var eased = 1 - Math.pow(1 - progress, 3);
+        node.textContent = String(Math.round(target * eased));
+        if (progress < 1) { requestAnimationFrame(step); }
+      });
+    });
+  }, { threshold: 0.6 });
+  document.querySelectorAll('[data-count]').forEach(function (node) { counter.observe(node); });
+})();
+</script>
+</body>
+</html>

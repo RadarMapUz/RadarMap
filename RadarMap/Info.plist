@@ -60,13 +60,5 @@
 		<key>CameraAlerts</key>
 		<string>Точная геопозиция нужна, чтобы вовремя предупреждать о камерах именно на вашей дороге.</string>
 	</dict>
-	<!-- База камер обновляется с сервера по IP (HTTP). ATS-исключения не работают для
-	     IP-адресов, поэтому временно разрешаем произвольные загрузки.
-	     TODO: перед App Store — домен + HTTPS и убрать этот ключ. -->
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-	</dict>
 </dict>
 </plist>

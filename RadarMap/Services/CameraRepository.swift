@@ -352,6 +352,15 @@ final class CameraStore: CameraRepository {
         persist()
     }
 
+    /// Влить восстановленное из копии: свои камеры и скрытые. Слияние сделано
+    /// чистым движком (TripBackupMerge) — здесь только присвоение и запись.
+    func applyRestored(custom: [Camera], hidden: Set<Int>) {
+        self.custom = custom
+        self.hiddenIDs = hidden
+        dataChanged()
+        persist()
+    }
+
     func isCustom(_ camera: Camera) -> Bool { camera.id >= Self.firstCustomID }
 
     // MARK: - Скрытие / жалоба

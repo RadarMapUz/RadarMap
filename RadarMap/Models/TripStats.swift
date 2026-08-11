@@ -749,6 +749,17 @@ final class TripStats {
         }
     }
 
+    /// Влить восстановленное из копии. Слияние уже сделано чистым движком
+    /// (TripBackupMerge) — здесь только присвоение и запись на диск.
+    func applyRestored(history: [TripRecord], days: [TripDay], lifetime: LifetimeStats) {
+        self.history = history
+        self.days = days
+        self.lifetime = lifetime
+        persist()
+        persistDays()
+        persistLifetime()
+    }
+
     // MARK: - Чекпоинт живой поездки
 
     /// Слепок незавершённой поездки на диске. Живая поездка держалась только в

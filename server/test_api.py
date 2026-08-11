@@ -59,6 +59,77 @@ class APITest(unittest.TestCase):
 
     # --- передвижные радары ---
 
+    # --- холодный старт: испытательный срок по плотности ---
+
+    def test_new_report_gets_full_life_while_nobody_can_confirm(self):
+        """Первые недели подтверждать некому: испытательный срок убивал бы
+        честную отметку просто потому, что рядом нет второго водителя."""
+        api._probation_cache = (0.0, None)
+        _, made = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "first", "type": "tripod"})
+        conn = sqlite3.connect(api.DB_PATH)
+        created, expires = conn.execute(
+            "SELECT created, expires FROM reports WHERE id = ?", (made["id"],)).fetchone()
+        conn.close()
+        self.assertAlmostEqual(expires - created, api.REPORT_TTLS["tripod"], delta=5)
+
+    def test_probation_switches_on_by_itself_once_density_appears(self):
+        """Флаг, который однажды поставят и забудут, — не защита. Срок
+        включается сам, как только отметки ставят достаточно разных людей."""
+        conn = sqlite3.connect(api.DB_PATH)
+        now = time.time()
+        for index in range(api.PROBATION_MIN_DEVICES):
+            conn.execute("INSERT INTO reports(lat, lon, created, expires, device, type, "
+                         "active) VALUES(41.0, 69.0, ?, ?, ?, 'radar', 0)",
+                         (now - 3600, now - 60, "driver-%d" % index))
+        conn.commit()
+        conn.close()
+        api._probation_cache = (0.0, None)
+        _, made = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.5, "lon": 69.9, "device": "fresh", "type": "tripod"})
+        conn = sqlite3.connect(api.DB_PATH)
+        created, expires = conn.execute(
+            "SELECT created, expires FROM reports WHERE id = ?", (made["id"],)).fetchone()
+        conn.close()
+        self.assertAlmostEqual(expires - created, api.PROBATION_TTLS["tripod"], delta=5)
+
+    def test_old_activity_does_not_count_as_density(self):
+        """Плотность — это «есть кому подтвердить СЕЙЧАС», а не «когда-то
+        было оживлённо»."""
+        conn = sqlite3.connect(api.DB_PATH)
+        now = time.time()
+        for index in range(api.PROBATION_MIN_DEVICES + 5):
+            conn.execute("INSERT INTO reports(lat, lon, created, expires, device, type, "
+                         "active) VALUES(41.0, 69.0, ?, ?, ?, 'radar', 0)",
+                         (now - api.PROBATION_WINDOW - 86400, now - 86400, "old-%d" % index))
+        conn.commit()
+        conn.close()
+        api._probation_cache = (0.0, None)
+        _, made = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.5, "lon": 69.9, "device": "fresh", "type": "tripod"})
+        conn = sqlite3.connect(api.DB_PATH)
+        created, expires = conn.execute(
+            "SELECT created, expires FROM reports WHERE id = ?", (made["id"],)).fetchone()
+        conn.close()
+        self.assertAlmostEqual(expires - created, api.REPORT_TTLS["tripod"], delta=5)
+
+    def test_manual_override_wins_over_density(self):
+        """Волна фейков — единственный случай, когда владельцу нужно включить
+        срок руками, не дожидаясь расчёта."""
+        api._probation_cache = (0.0, None)
+        original = api.PROBATION_MODE
+        api.PROBATION_MODE = "on"
+        try:
+            _, made = _call(self.port, "POST", "/api/report",
+                            {"lat": 41.31, "lon": 69.25, "device": "solo", "type": "tripod"})
+            conn = sqlite3.connect(api.DB_PATH)
+            created, expires = conn.execute(
+                "SELECT created, expires FROM reports WHERE id = ?", (made["id"],)).fetchone()
+            conn.close()
+            self.assertAlmostEqual(expires - created, api.PROBATION_TTLS["tripod"], delta=5)
+        finally:
+            api.PROBATION_MODE = original
+
     # --- отзыв своей отметки ---
 
     def test_author_cancels_own_fresh_report(self):
@@ -338,9 +409,26 @@ class APITest(unittest.TestCase):
         _, feed = _call(self.port, "GET", "/api/mobile")
         return next(r for r in feed["reports"] if r["id"] == rid)
 
+    def _seed_density(self):
+        """Плотность, при которой испытательный срок вообще имеет смысл:
+        подтверждать отметку должно быть кому (см. probation_active)."""
+        conn = sqlite3.connect(api.DB_PATH)
+        now = time.time()
+        for index in range(api.PROBATION_MIN_DEVICES):
+            conn.execute("INSERT INTO reports(lat, lon, created, expires, device, type, "
+                         "active) VALUES(41.0, 69.0, ?, ?, ?, 'radar', 0)",
+                         (now - 3600, now - 60, "seed-%d" % index))
+        conn.commit()
+        conn.close()
+        api._probation_cache = (0.0, None)
+
     def test_new_report_lives_probation_not_full_ttl(self):
         """Неподтверждённая отметка живёт испытательный срок: фейк, которого
-        никто не подтвердил, умирает сам — без модерации и кворума."""
+        никто не подтвердил, умирает сам — без модерации и кворума.
+
+        Плотность засеваем явно: с пустой базой срок не включается вовсе, и
+        это отдельное поведение со своим тестом (холодный старт)."""
+        self._seed_density()
         now = time.time()
         _, body = _call(self.port, "POST", "/api/report",
                         {"lat": 41.31, "lon": 69.25, "device": "creator"},

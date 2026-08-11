@@ -308,7 +308,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             buttons.append(placeButton(slot: slot))
         }
 
-        for place in env.settings.recentPlaces.prefix(max(0, 8 - buttons.count)) {
+        // Дом и Работа уже стоят своими плитками выше — в «недавних» они
+        // дублируются и съедают места из восьми, которые есть у сетки.
+        // Сравниваем по координате, а не по названию: одно и то же место
+        // может называться по-разному.
+        let pinned = PlaceSlot.allCases.compactMap { env.settings.place(for: $0)?.coordinate }
+        let recent = env.settings.recentPlaces.filter { place in
+            !pinned.contains { GeoMath.fastDistance($0.latitude, $0.longitude,
+                                                    place.coordinate.latitude,
+                                                    place.coordinate.longitude) < 120 }
+        }
+        for place in recent.prefix(max(0, 8 - buttons.count)) {
             buttons.append(gridButton(symbol: "clock.arrow.circlepath",
                                       titles: [place.title, Self.shortTitle(place.title)]) { [weak self] in
                 self?.route(to: place)

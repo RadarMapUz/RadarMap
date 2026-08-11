@@ -39,6 +39,11 @@ struct CarPlayMapView: UIViewRepresentable {
         map.isPitchEnabled = false          // плоская карта читается за рулём быстрее
         map.showsUserLocation = true
         map.userTrackingMode = .follow
+        // Вернулись из схемы — тот же масштаб, что был. Регион ставим ДО
+        // слежения: иначе следование тут же перезапишет его умолчанием.
+        if let region = model.lastRegion {
+            map.setRegion(region, animated: false)
+        }
         // Логотип и «Правовые документы» живут в левом нижнем углу — ровно там,
         // где приборная панель. Поджимаем поля карты на её высоту, иначе панель
         // накрывает обязательную атрибуцию Apple.
@@ -127,7 +132,7 @@ struct CarPlayMapView: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(repository: repository, speedLimits: speedLimits,
+        Coordinator(model: model, repository: repository, speedLimits: speedLimits,
                     route: route, location: location, thermal: thermal)
     }
 
@@ -164,8 +169,13 @@ struct CarPlayMapView: UIViewRepresentable {
         private var traveledLine: MKPolyline?
         private var traveledProgress: CLLocationDistance = -1
 
-        init(repository: CameraStore, speedLimits: SpeedLimitService,
+        /// Модель нужна ровно за одним: запомнить регион, чтобы возврат из
+        /// схемы не сбрасывал масштаб.
+        private let model: CarPlayMapModel
+
+        init(model: CarPlayMapModel, repository: CameraStore, speedLimits: SpeedLimitService,
              route: RouteService, location: LocationService, thermal: ThermalService) {
+            self.model = model
             self.repository = repository
             self.speedLimits = speedLimits
             self.route = route
@@ -187,6 +197,10 @@ struct CarPlayMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            // Запоминаем, чтобы возврат из схемы вернул тот же масштаб:
+            // MKMapView там выгружается целиком, и без этого он вставал в
+            // умолчание, стирая то, что водитель выставил руками.
+            model.lastRegion = mapView.region
             // В поездке followWithHeading доворачивает и перецентрует карту
             // НЕПРЕРЫВНО — колбэк прилетал пачками в секунду, и каждый раз
             // синхронно на main шёл запрос камер + пересчёт тиров всех

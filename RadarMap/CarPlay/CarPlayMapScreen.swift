@@ -30,6 +30,14 @@ final class CarPlayMapModel {
     /// (та же иерархия, что у кнопки тишины: человек старше автоматики).
     @ObservationIgnored var userChoseView: Bool
 
+    /// Последний регион карты. Схема выгружает MKMapView целиком — в этом и
+    /// смысл режима, — но при возврате карта создавалась заново и вставала в
+    /// умолчание, теряя масштаб, который водитель выставил руками. Держать
+    /// карту живой ради этого нельзя: невидимая, она продолжает тянуть тайлы,
+    /// то есть ровно то, от чего схема и спасает. Поэтому помним не карту,
+    /// а её регион — четыре числа.
+    @ObservationIgnored var lastRegion: MKCoordinateRegion?
+
     init() {
         showsSketch = Storage.bool(.carPlayShowsSketch)
         userChoseView = Storage.bool(.carPlayViewChosen)

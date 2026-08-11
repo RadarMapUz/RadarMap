@@ -8835,6 +8835,23 @@
         }
       }
     },
+    "Расстояние пока приблизительное": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расстояние пока приблизительное"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masofa hozircha taxminiy"
+          }
+        }
+      }
+    },
     "Режим оповещений": {
       "localizations": {
         "ru": {
@@ -10487,6 +10504,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sekinlashmasligi uchun xaritani soddalashtirdik. Ogohlantirishlar to‘liq ishlaydi"
+          }
+        }
+      }
+    },
+    "Уточняем положение": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уточняем положение"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joylashuv aniqlanmoqda"
           }
         }
       }

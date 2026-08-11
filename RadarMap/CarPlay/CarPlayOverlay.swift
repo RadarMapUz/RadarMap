@@ -146,7 +146,14 @@ struct CarPlayOverlay: View {
         .animation(.easeOut(duration: 0.25), value: env.location.isApproachingCamera)
     }
 
-    /// Ближайшая камера — три честных состояния: нет сигнала, есть цель, чисто.
+    /// Ближайшая камера — честные состояния: нет сигнала, уточняем положение,
+    /// есть цель, чисто.
+    ///
+    /// «Уточняем положение» появилось потому, что дистанция считается и от
+    /// грубой координаты — от фикса, который в алерты не пустили. Телефонный
+    /// HUD такое расстояние приглушает и подписывает, а док машины показывал
+    /// его так же уверенно, как живое. Зелёный щит «Чисто» при этом ещё хуже
+    /// неверной цифры: это утверждение, а не число.
     @ViewBuilder
     private var cameraCell: some View {
         if env.location.isSignalStale {
@@ -157,6 +164,10 @@ struct CarPlayOverlay: View {
                   let distance = env.location.distanceToNearest,
                   distance <= AppConfig.carPlayNearestCameraMeters {
             nearestCameraCell(camera: camera, distance: distance)
+        } else if env.location.isPositionCoarse {
+            statusCell(symbol: "location.magnifyingglass", tint: Theme.warning,
+                       title: String(localized: "Уточняем положение"),
+                       subtitle: String(localized: "Расстояние пока приблизительное"))
         } else {
             statusCell(symbol: "checkmark.shield.fill", tint: Theme.success,
                        title: String(localized: "Чисто"),
@@ -190,14 +201,21 @@ struct CarPlayOverlay: View {
                 Text(Formatting.distance(distance))
                     .font(.rounded(env.location.isApproachingCamera ? 30 : 24, .heavy)
                         .monospacedDigit())
-                    .foregroundStyle(env.location.isApproachingCamera ? Theme.danger : Theme.textPrimary)
+                    .foregroundStyle(env.location.isPositionCoarse ? Theme.textSecondary
+                                     : (env.location.isApproachingCamera ? Theme.danger
+                                                                         : Theme.textPrimary))
                     .contentTransition(.numericText())
                     .animation(.easeOut(duration: 0.3), value: Int(distance))
-                Text(camera.kind.genitivePhrase)
+                Text(env.location.isPositionCoarse
+                     ? String(localized: "уточняем положение")
+                     : camera.kind.genitivePhrase)
                     .font(.rounded(11, .medium))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(env.location.isPositionCoarse ? Theme.warning
+                                                                   : Theme.textSecondary)
                     .lineLimit(1)
-                if let progress = env.location.approachProgress {
+                // Полоса приближения считается от живой точки: по грубой она
+                // рисовала бы уверенный прогресс там, где его никто не мерил.
+                if !env.location.isPositionCoarse, let progress = env.location.approachProgress {
                     approachBar(progress)
                 }
             }

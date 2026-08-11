@@ -50,6 +50,18 @@ if [ -d /opt/radarmap/backups ] && [ -z "$newest_backup" ]; then
     problems+=("бэкапа reports.db нет за последние двое суток")
 fi
 
+# Токен и chat_id — из общего конфига (там же хэш пароля панели и ключ карт).
+# В crontab их класть нельзя: crontab читается любым процессом владельца, а
+# менять секрет пришлось бы в двух местах.
+CONF="${RADARMAP_ADMIN_CONF:-/opt/radarmap/admin.conf}"
+if [ -f "$CONF" ]; then
+    [ -z "${RADARMAP_TG_TOKEN:-}" ] && \
+        RADARMAP_TG_TOKEN=$(grep -E '^tg_token=' "$CONF" | cut -d= -f2-)
+    [ -z "${RADARMAP_TG_CHAT:-}" ] && \
+        RADARMAP_TG_CHAT=$(grep -E '^tg_chat=' "$CONF" | cut -d= -f2-)
+    export RADARMAP_TG_TOKEN RADARMAP_TG_CHAT
+fi
+
 notify() {
     local text="$1"
     if [ -n "${RADARMAP_TG_TOKEN:-}" ] && [ -n "${RADARMAP_TG_CHAT:-}" ]; then

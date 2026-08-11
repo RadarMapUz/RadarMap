@@ -326,6 +326,9 @@ _request = threading.local()
 
 def page(active, title, body, counts=None):
     counts = counts if counts is not None else getattr(_request, "counts", {})
+    # Адреса — заранее в переменные: вложенные кавычки внутри f-строки
+    # разрешены только с Python 3.12, а на сервере 3.10.
+    logout_url = u("/logout")
 
     def tab(path, name):
         # Счётчик прямо на вкладке: без него про очередь узнаёшь, только если
@@ -340,7 +343,7 @@ def page(active, title, body, counts=None):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>{esc(title)} · RadarMap</title><style>{CSS}</style></head>
-<body><header>{tabs}<a href="{u('/logout')}" class="out">Выход</a></header>
+<body><header>{tabs}<a href="{logout_url}" class="out">Выход</a></header>
 <main>{body}</main></body></html>"""
 
 
@@ -518,6 +521,7 @@ def search_cameras(query, limit=20):
 
 
 def render_moderation_map(api_key, pending, camera_count):
+    logout_url, moderate_js = u("/logout"), u("/static/moderate.js")
     """Главный экран модерации: одна карта на все камеры.
 
     Прежний путь «список → страница камеры → перетащить → назад» стоил семи
@@ -565,7 +569,7 @@ color:#8ea0bb;line-height:1.7}}
 </style></head>
 <body><header>{"".join(
     f'<a href="{esc(u(path))}" class="{"on" if path == "/map" else ""}">{esc(name)}</a>'
-    for path, name in TABS)}<a href="{u('/logout')}" class="out">Выход</a></header>
+    for path, name in TABS)}<a href="{logout_url}" class="out">Выход</a></header>
 <div id="map"></div>
 
 <div class="tools">
@@ -607,7 +611,7 @@ color:#8ea0bb;line-height:1.7}}
 
 <script src="https://api-maps.yandex.ru/2.1/?apikey={esc(api_key)}&lang=ru_RU"></script>
 <script>window.RM_BASE={json.dumps(BASE)};</script>
-<script src="{u('/static/moderate.js')}"></script>
+<script src="{moderate_js}"></script>
 </body></html>"""
 
 
@@ -671,6 +675,7 @@ def suggests_hide(item, now):
 
 
 def render_camera_item(item, override):
+    cameras_act = u("/cameras/act")
     counts = item["counts"]
     tags = []
     if item["suggest_hide"]:
@@ -704,7 +709,7 @@ def render_camera_item(item, override):
     <span class="muted">первый {esc(ago(item['oldest']))}, последний {esc(ago(item['newest']))}</span>
   </div>
   {reported}
-  <form method="post" action="{u('/cameras/act')}">
+  <form method="post" action="{cameras_act}">
     <input type="hidden" name="camera_id" value="{camera_id}">
     <button class="danger" name="action" value="hide"
       onclick="return confirm('Скрыть камеру у всех пользователей? Она перестанет предупреждать.')"
@@ -713,7 +718,7 @@ def render_camera_item(item, override):
     <button name="action" value="snooze">Отложить на 30 дн</button>
     <button name="action" value="resolve">Разобрано</button>
   </form>
-  <form method="post" action="{u('/cameras/act')}" style="margin-top:6px">
+  <form method="post" action="{cameras_act}" style="margin-top:6px">
     <input type="hidden" name="camera_id" value="{camera_id}">
     <input name="lat" placeholder="широта" size="10" inputmode="decimal">
     <input name="lon" placeholder="долгота" size="10" inputmode="decimal">
@@ -1239,6 +1244,7 @@ class Handler(BaseHTTPRequestHandler):
                             "WHERE published_at IS NULL").fetchone()["n"]
 
     def cameras_page(self, conn):
+        cameras_act = u("/cameras/act")
         queue = camera_queue(conn)
         overrides = {row["camera_id"]: row for row in
                      conn.execute("SELECT * FROM overrides").fetchall()}
@@ -1255,7 +1261,7 @@ class Handler(BaseHTTPRequestHandler):
                 <span class="tag warn">{esc(row['op'])}</span>
                 <span class="muted">{esc(ago(row['decided_at']))}
                 {'· опубликовано' if row['published_at'] else '· ЖДЁТ ПУБЛИКАЦИИ'}</span></div>
-                <form method="post" action="{u('/cameras/act')}" class="inline">
+                <form method="post" action="{cameras_act}" class="inline">
                   <input type="hidden" name="camera_id" value="{row['camera_id']}">
                   <button name="action" value="restore">Вернуть камеру</button>
                 </form></div>""" for row in overrides.values())
@@ -1287,6 +1293,7 @@ class Handler(BaseHTTPRequestHandler):
                 "blocked": by_reason.get("blocked", 0)}
 
     def mobile_page(self, conn):
+        mobile_act = u("/mobile/act")
         now = time.time()
         rows = conn.execute("""
             SELECT r.id, r.lat, r.lon, r.type, r.created, r.expires, r.up, r.down, r.ip,
@@ -1324,7 +1331,7 @@ class Handler(BaseHTTPRequestHandler):
                 f'<code>{esc(b["value"])}</code>'
                 f'<span class="muted">ещё {int((b["until"] - now) // 3600)} ч ·'
                 f' {esc(b["note"] or "без причины")}</span>'
-                f'<form method="post" action="{u('/mobile/act')}">'
+                f'<form method="post" action="{mobile_act}">'
                 f'<input type="hidden" name="block_kind" value="{esc(b["kind"])}">'
                 f'<input type="hidden" name="block_value" value="{esc(b["value"])}">'
                 f'<button name="action" value="unblock">Снять</button></form></div>'
@@ -1359,7 +1366,7 @@ class Handler(BaseHTTPRequestHandler):
   <div class="muted">поставлена {esc(ago(row['created']))} ·
     исчезнет через {int(max(0, row['expires'] - now) // 60)} мин ·
     {esc(row['cls'] or 'класс дороги неизвестен')} · {osm_link(row['lat'], row['lon'])}</div>
-  <form method="post" action="{u('/mobile/act')}">
+  <form method="post" action="{mobile_act}">
     <input type="hidden" name="id" value="{row['id']}">
     <button class="danger" name="action" value="kill">Убрать с карты</button>
     <button name="action" value="extend">Продлить на 3 ч</button>
@@ -1370,6 +1377,7 @@ class Handler(BaseHTTPRequestHandler):
                     f"{''.join(cards)}")
 
     def feedback_page(self, conn):
+        feedback_act = u("/feedback/act")
         rows = conn.execute("""SELECT id, message, contact, app_version, received,
                                COALESCE(status,'new') AS status, COALESCE(note,'') AS note
                                FROM feedback ORDER BY
@@ -1391,7 +1399,7 @@ class Handler(BaseHTTPRequestHandler):
   </div>
   <div style="margin:8px 0; white-space:pre-wrap">{esc(row['message'])}</div>
   <div class="muted">Контакт: {esc(row['contact'] or 'не оставлен')}</div>
-  <form method="post" action="{u('/feedback/act')}" style="margin-top:6px">
+  <form method="post" action="{feedback_act}" style="margin-top:6px">
     <input type="hidden" name="id" value="{row['id']}">
     <select name="status">{options}</select>
     <input name="note" value="{esc(row['note'])}" placeholder="заметка" size="24">

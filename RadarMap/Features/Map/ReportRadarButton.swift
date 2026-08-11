@@ -117,7 +117,10 @@ struct ReportRadarButton: View {
             let outcome = await env.mobile.quickReport(
                 coordinate: env.location.currentCoordinate,
                 speedKmh: env.location.speedKmh,
-                isTripActive: env.location.isTripActive)
+                isTripActive: env.location.isTripActive,
+                // Курс нужен снапу: на разделённой трассе без него отметка с
+                // равной вероятностью садится на встречное полотно.
+                course: env.location.currentCourse)
             isSending = false
             flash = outcome.isSuccess ? .ok : .no
             env.alerts.speak(outcome.spoken)
@@ -137,6 +140,12 @@ struct ReportRadarButton: View {
 /// честно оставляет «радар». Плашка живёт несколько секунд и уходит сама —
 /// уточнение не должно требовать взгляда на экран, оно лишь пользуется тем,
 /// что взгляд и так упал на подтверждение отправки.
+///
+/// Здесь же живёт «Отменить»: тип поменять было можно, а отозвать случайный
+/// тап — нет, и единственным выходом оставалось найти свой маркер на карте и
+/// голосовать против себя (что в одиночку и не работает — на скрытие нужен
+/// кворум трёх адресов). Пока отметка своя, свежая и никем не подтверждённая,
+/// автор вправе снять её целиком.
 struct ReportRefineBar: View {
     @Environment(AppEnvironment.self) private var env
     /// Экран занят предупреждением о камере — плашка ждёт (см. MobileConfirmBar:
@@ -155,8 +164,8 @@ struct ReportRefineBar: View {
                     .minimumScaleFactor(0.8)
                 Spacer(minLength: 4)
                 option(.tripod, offer: offer)
-                option(.post, offer: offer)
                 option(.accident, offer: offer)
+                if env.mobile.cancellableReportID() != nil { cancelOption }
             }
             .padding(.horizontal, 14).padding(.vertical, 8)
             .background(.ultraThinMaterial,
@@ -175,6 +184,37 @@ struct ReportRefineBar: View {
             }
             .onDisappear { task?.cancel() }
         }
+    }
+
+    /// «Не то» — отзыв собственной отметки. Отдельным цветом и последней в
+    /// ряду: это выход из ошибки, а не пятый тип засады.
+    private var cancelOption: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            guard let id = env.mobile.cancellableReportID() else { return }
+            withAnimation { env.mobile.dismissRefine() }
+            Task {
+                if await env.mobile.cancelReport(id: id) {
+                    env.alerts.speak(String(localized: "Отметка убрана"))
+                } else {
+                    env.alerts.speak(String(localized: "Не отправилось, нет связи"))
+                }
+            }
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: "arrow.uturn.backward")
+                    .font(.rounded(15, .bold))
+                Text("Отменить")
+                    .font(.rounded(9, .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(Theme.textTertiary)
+            .frame(width: 56, height: 44)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Отменить мою отметку"))
     }
 
     private func option(_ kind: ReportKind, offer: ReportGuard.Sent) -> some View {

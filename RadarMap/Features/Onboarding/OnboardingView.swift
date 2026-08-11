@@ -14,7 +14,7 @@ struct OnboardingView: View {
     let onFinish: () -> Void
 
     @State private var page = 0
-    private let lastPage = 5
+    private let lastPage = 6
 
     var body: some View {
         ZStack {
@@ -26,8 +26,9 @@ struct OnboardingView: View {
                     alertsPage.tag(1)
                     voicePage.tag(2)
                     navigatorPage.tag(3)
-                    companionPage.tag(4)
-                    permissionsPage.tag(5)
+                    communityPage.tag(4)
+                    companionPage.tag(5)
+                    permissionsPage.tag(6)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(.easeInOut(duration: 0.3), value: page)
@@ -102,6 +103,26 @@ struct OnboardingView: View {
                 ("road.lanes", "На трассе полностью: «по маршруту камера через 800 метров»"),
                 ("exclamationmark.triangle.fill", "Громко — только когда реально превышаете или впереди внезапный радар"),
                 ("car.side.and.exclamationmark", "В пробке молчу: скажу, когда поедете"),
+            ]
+        )
+    }
+
+    // MARK: - Страница 5: сообщество
+
+    /// Про кнопку «Радар!» не знал никто. Она живёт в панели поездки и на
+    /// приборке, то есть её видит только тот, кто уже едет и уже нашёл панель,
+    /// а единственным объяснением была разовая подсказка в одну строку.
+    /// Краудсорс без этой страницы не стартует: треноги приезжают в приложение
+    /// только через людей, а люди должны сперва узнать, что их об этом просят.
+    private var communityPage: some View {
+        featurePage(
+            icon: "person.2.wave.2.fill",
+            title: "Треноги находим вместе",
+            rows: [
+                ("exclamationmark.triangle.fill", "Треноги нет ни в одной официальной базе — расписание закрыто с 2022 года"),
+                ("hand.tap.fill", "Увидели засаду — одна жёлтая кнопка, не глядя на экран. Всё остальное я сделаю сам"),
+                ("checkmark.seal.fill", "Отметку проверяет другой водитель. Пока не проверил — рисую пунктиром и честно говорю «отметка водителей»"),
+                ("clock.arrow.circlepath", "Нажали случайно — «Отменить» рядом. Нет связи — отправлю, когда появится"),
             ]
         )
     }

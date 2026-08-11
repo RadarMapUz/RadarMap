@@ -73,6 +73,20 @@ DOWN_FLOOR = 300
 AMEND_WINDOW = 10 * 60
 AMEND_METERS = 400
 MERGE_METERS = 300
+# Радиус слияния зависит от дороги, а не один на страну. На трассе две
+# настоящие треноги в 300 м — это две разные засады, и схлопывать их нельзя;
+# в квартале 300 м — соседняя улица, и туда отметка попадать не должна.
+# Класс приходит от клиента: он снапает точку на ось по своим дорожным тайлам
+# и знает, по чему едет. Нет класса (старый клиент) — прежние 300 м.
+MERGE_METERS_BY_CLASS = {
+    "motorway": 400, "trunk": 400, "primary": 300, "secondary": 250,
+    "tertiary": 200, "residential": 120, "service": 120,
+    "living_street": 120, "unclassified": 200,
+}
+# Окно отзыва своей отметки. Совпадает с окном уточнения типа: и то и другое —
+# «я только что нажал, дайте исправить», а не право распоряжаться точкой,
+# которую уже подтвердили другие.
+CANCEL_WINDOW = 10 * 60
 UZ_LAT = (37.0, 46.0)
 UZ_LON = (55.0, 74.0)
 # Глобальные капы — потолок ущерба от ротации device (лимиты per-device
@@ -130,6 +144,16 @@ def init_db():
         created REAL NOT NULL, expires REAL NOT NULL,
         device TEXT NOT NULL, up INTEGER DEFAULT 0, down INTEGER DEFAULT 0,
         active INTEGER DEFAULT 1)""")
+    # Теневой бан. Единственный рычаг против системного фейкомёта был капом,
+    # а кап обходится ожиданием: UUID ротируется сам раз в 30 дней, адрес —
+    # переподключением. Блокировка «тихая» намеренно: отметка принимается и
+    # ложится в базу с active = 0. Автор видит «принято» и не начинает искать
+    # обход, модератор видит строку целиком, а на карту она не попадает.
+    conn.execute("""CREATE TABLE IF NOT EXISTS blocked(
+        kind TEXT NOT NULL, value TEXT NOT NULL,
+        until REAL NOT NULL, note TEXT DEFAULT '',
+        created REAL NOT NULL,
+        PRIMARY KEY(kind, value))""")
     conn.execute("""CREATE TABLE IF NOT EXISTS votes(
         report_id INTEGER, device TEXT, value INTEGER,
         PRIMARY KEY(report_id, device))""")
@@ -187,6 +211,19 @@ def init_db():
     # "merge" — повторная отметка тем же местом. Вес не меняет — проезд сервер
     # проверить не может, — но модератор в админке видит, какому сигналу верить.
     migrate(conn, "votes", "kind TEXT DEFAULT ''")
+    # Почему отметка перестала быть живой. Без этого «доля дошедших до
+    # подтверждения» и «доля снесённых» неотличимы друг от друга: в таблице
+    # видно только active = 0, а причин у него пять.
+    #   ''        — ещё жива либо истекла сама (по expires)
+    #   author    — автор отозвал свой случайный тап
+    #   quorum    — кворум дизлайков с разных адресов
+    #   moderator — решение из админки
+    #   blocked   — теневой бан, точка не публиковалась вовсе
+    migrate(conn, "reports", "closed TEXT DEFAULT ''")
+    # Класс дороги от клиента (он уже снапнул точку на ось по своим тайлам).
+    # Нужен радиусу слияния: 300 м на трассе — соседние треноги, 300 м в
+    # квартале — та же самая.
+    migrate(conn, "reports", "cls TEXT DEFAULT ''")
 
     # --- индексы ---
     # Раньше не было ни одного: каждая проверка суточного капа была полным
@@ -195,6 +232,8 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_reports_live ON reports(active, expires)",
         "CREATE INDEX IF NOT EXISTS idx_reports_device ON reports(device, active, expires)",
         "CREATE INDEX IF NOT EXISTS idx_reports_ip ON reports(ip, active, expires)",
+        "CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created)",
+        "CREATE INDEX IF NOT EXISTS idx_blocked_until ON blocked(until)",
         # votes(report_id, …) уже покрыт индексом первичного ключа
         "CREATE INDEX IF NOT EXISTS idx_votes_device ON votes(device, ts)",
         "CREATE INDEX IF NOT EXISTS idx_camrep_camera ON camera_reports(camera_id, resolved)",
@@ -296,6 +335,21 @@ def confirmed_independently(conn, rid, owner_device, owner_ip):
         (rid, owner_device, owner_ip)).fetchone() is not None
 
 
+def is_blocked(conn, ip, device, now):
+    """Источник под теневым баном. Проверяются оба ключа: адрес переживает
+    ротацию UUID, устройство — смену сети."""
+    row = conn.execute(
+        "SELECT 1 FROM blocked WHERE until > ? AND "
+        "((kind = 'ip' AND value = ?) OR (kind = 'device' AND value = ?)) LIMIT 1",
+        (now, ip or "\x00", device)).fetchone()
+    return row is not None
+
+
+def merge_radius(cls):
+    """Радиус слияния по классу дороги; неизвестный класс — прежние 300 м."""
+    return MERGE_METERS_BY_CLASS.get(cls or "", MERGE_METERS)
+
+
 def lifecycle_expires(created, expires, rtype, confirmed, now):
     """Новый expires после лайка. Неподтверждённой точке лайк жизнь НЕ
     продлевает (испытательный срок идёт), подтверждённой — полный срок её типа
@@ -392,6 +446,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0].rstrip("/")
         if path == "/api/report":
             return self._report()
+        if path == "/api/report/cancel":
+            return self._report_cancel()
         if path == "/api/vote":
             return self._vote()
         if path == "/api/metrics":
@@ -611,6 +667,7 @@ class Handler(BaseHTTPRequestHandler):
             lat, lon = float(data["lat"]), float(data["lon"])
             device = as_str(data["device"])[:64]
             rtype = as_str(data.get("type"), default="radar")
+            cls = as_str(data.get("cls"), default="")[:24]
         except (KeyError, TypeError, ValueError):
             return self._json(400, {"error": "bad fields"})
         if not (UZ_LAT[0] <= lat <= UZ_LAT[1] and UZ_LON[0] <= lon <= UZ_LON[1]) or not device:
@@ -656,10 +713,13 @@ class Handler(BaseHTTPRequestHandler):
             # dedupe: nearby active report of the SAME type -> treat as confirmation
             # (пост ДПС и радар в 100 м друг от друга — разные сущности)
             active_rows = conn.execute(
-                "SELECT id, lat, lon, created, expires, type, device, ip FROM reports "
+                "SELECT id, lat, lon, created, expires, type, device, ip, cls FROM reports "
                 "WHERE active = 1 AND expires > ?", (now,)).fetchall()
+            # Радиус берём максимальный из двух классов: если хоть одна из
+            # точек стоит на трассе, «рядом» здесь измеряется по-трассовому.
             for r in active_rows:
-                if r[5] == rtype and haversine(lat, lon, r[1], r[2]) <= MERGE_METERS:
+                radius = max(merge_radius(cls), merge_radius(r[8]))
+                if r[5] == rtype and haversine(lat, lon, r[1], r[2]) <= radius:
                     # Подтверждение — через votes, как обычный лайк: _vote
                     # пересчитывает up/down только из votes, инкремент в
                     # reports первый же голос стёр бы.
@@ -693,14 +753,64 @@ class Handler(BaseHTTPRequestHandler):
                     (ip, now)).fetchone()[0]
                 if mine >= MAX_ACTIVE_PER_IP:
                     return self._json(429, {"error": "too many active"})
+            # Теневой бан: строка ложится в базу мёртвой. Ответ обычный —
+            # заблокированный не должен узнать, что он заблокирован, иначе
+            # начнёт подбирать обход вместо того, чтобы бросить.
+            blocked = is_blocked(conn, ip, device, now)
             # Новая отметка живёт испытательный срок, полный получит после
             # независимого подтверждения (см. lifecycle_expires).
             cur = conn.execute(
-                "INSERT INTO reports(lat, lon, created, expires, device, type, ip) "
-                "VALUES(?,?,?,?,?,?,?)",
-                (lat, lon, now, now + PROBATION_TTLS[rtype], device, rtype, ip))
+                "INSERT INTO reports(lat, lon, created, expires, device, type, ip, cls, "
+                "active, closed) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (lat, lon, now, now + PROBATION_TTLS[rtype], device, rtype, ip, cls,
+                 0 if blocked else 1, "blocked" if blocked else ""))
             conn.commit()
             return self._json(200, {"id": cur.lastrowid, "merged": False})
+        finally:
+            conn.close()
+
+    def _report_cancel(self):
+        """Отзыв своей случайной отметки.
+
+        Право автора кончается там, где начинается чужое доверие: как только
+        отметку подтвердил кто-то ещё, она больше не его — она общая, и снять
+        её можно только кворумом или модератором. Плюс окно в десять минут:
+        это исправление промаха пальцем, а не пульт управления точкой, мимо
+        которой уже едут люди.
+        """
+        data = self._body()
+        if not data:
+            return self._json(400, {"error": "bad json"})
+        try:
+            rid = int(data["id"])
+            device = as_str(data["device"])[:64]
+        except (KeyError, TypeError, ValueError):
+            return self._json(400, {"error": "bad fields"})
+        if not device or not 0 < rid < MAX_ID:
+            return self._json(400, {"error": "bad fields"})
+        now = time.time()
+        conn = db()
+        try:
+            row = conn.execute(
+                "SELECT device, created, active FROM reports WHERE id = ?", (rid,)).fetchone()
+            if not row:
+                return self._json(404, {"error": "no such report"})
+            if row[0] != device:
+                return self._json(403, {"error": "not yours"})
+            if not row[2]:
+                # Уже не на карте — считаем задачу выполненной, чтобы клиент
+                # не показывал ошибку там, где результат ровно тот, что нужен.
+                return self._json(200, {"ok": True, "already": True})
+            if now - row[1] > CANCEL_WINDOW:
+                return self._json(409, {"error": "too late"})
+            others = conn.execute(
+                "SELECT COUNT(*) FROM votes WHERE report_id = ? AND value = 1 AND device != ?",
+                (rid, device)).fetchone()[0]
+            if others:
+                return self._json(409, {"error": "confirmed by others"})
+            conn.execute("UPDATE reports SET active = 0, closed = 'author' WHERE id = ?", (rid,))
+            conn.commit()
+            return self._json(200, {"ok": True})
         finally:
             conn.close()
 
@@ -738,6 +848,12 @@ class Handler(BaseHTTPRequestHandler):
             # Вес не меняет (проезд сервер проверить не может), но модератор
             # видит, какому сигналу верить. Мусор в поле не убивает сам голос.
             try:
+                # "pass" — голос после реального проезда, "merge" — повторная
+                # отметка тем же местом, "misplaced" — «радар есть, но стоит
+                # не там». Последний намеренно считается обычным дизлайком по
+                # сроку жизни: точка в двухстах метрах от истины всё равно
+                # предупреждает о засаде, гасить её мгновенно нельзя. Но
+                # модератор видит именно этот сигнал и может подвинуть.
                 kind = as_str(data.get("kind"), default="")[:16]
             except TypeError:
                 kind = ""
@@ -772,8 +888,9 @@ class Handler(BaseHTTPRequestHandler):
                 "SELECT COUNT(DISTINCT ip) FROM votes "
                 "WHERE report_id = ? AND value = -1 AND ip != ''", (rid,)).fetchone()[0]
             active = 0 if (down >= 3 and down > up and down_ips >= HIDE_DISTINCT_IPS) else 1
-            conn.execute("UPDATE reports SET up = ?, down = ?, expires = ?, active = ? WHERE id = ?",
-                         (up, down, expires, active, rid))
+            conn.execute("UPDATE reports SET up = ?, down = ?, expires = ?, active = ?, "
+                         "closed = CASE WHEN ? = 0 THEN 'quorum' ELSE closed END WHERE id = ?",
+                         (up, down, expires, active, active, rid))
             conn.commit()
             return self._json(200, {"ok": True, "up": up, "down": down, "active": bool(active)})
         finally:

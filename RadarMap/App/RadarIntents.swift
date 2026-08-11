@@ -72,7 +72,8 @@ struct ReportRadarIntent: AppIntent {
         guard let coordinate = await env.location.awaitCoordinate() else {
             return .result(dialog: IntentDialog("Не вижу геопозицию — попробуйте ещё раз."))
         }
-        switch await env.mobile.report(at: coordinate) {
+        switch await env.mobile.report(at: coordinate,
+                                       course: env.location.currentCourse) {
         case .created:
             return .result(dialog: IntentDialog("Радар отмечен. Спасибо, что предупредили!"))
         case .confirmed:

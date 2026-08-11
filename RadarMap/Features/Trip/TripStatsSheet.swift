@@ -144,6 +144,9 @@ struct TripStatsSheet: View {
                             .id("history")
                     }
 
+                    contributionRow
+                        .entrance(5, appeared)
+
                     if !trip.lifetime.isEmpty {
                         LabeledDivider(title: String(localized: "За всё время"))
                             .entrance(5, appeared)
@@ -1255,6 +1258,51 @@ struct TripStatsSheet: View {
             .buttonStyle(PressableStyle())
         }
         .statCard(padding: 14)
+    }
+
+    // MARK: - Вклад в общую карту
+
+    /// «Ваши отметки». Единственное место, где автору возвращается результат
+    /// его тапов: сколько поставил и сколько из них подтвердили другие
+    /// водители. Без этой строки краудсорс односторонний — человек отдаёт
+    /// сигнал и никогда не узнаёт, дошёл ли он.
+    ///
+    /// Ничего не отмечал — строки нет вовсе: нулевой счётчик читается как
+    /// упрёк, а звать в краудсорс должна кнопка на карте, а не Итоги.
+    @ViewBuilder private var contributionRow: some View {
+        let mine = env.mobile.mineSummary()
+        if mine.total > 0 {
+            HStack(spacing: 12) {
+                Image(systemName: "person.2.wave.2.fill")
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 34, height: 34)
+                    .background(Theme.accent.opacity(0.12), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ваши отметки за 30 дней")
+                        .font(.rounded(12))
+                        .foregroundStyle(Theme.textSecondary)
+                    Text(mine.confirmed > 0
+                         ? String(format: String(localized: "%lld · подтвердили другие: %lld"),
+                                  mine.total, mine.confirmed)
+                         : String(format: String(localized: "%lld · ждут подтверждения"),
+                                  mine.total))
+                        .font(.rounded(15, .semibold).monospacedDigit())
+                        .foregroundStyle(Theme.textPrimary)
+                }
+                Spacer(minLength: 0)
+                if env.mobile.pendingCount > 0 {
+                    // Честно про очередь: иначе «отправлю позже» звучит один
+                    // раз в поездке и больше нигде не подтверждается.
+                    Text(String(format: String(localized: "%lld ждёт связи"),
+                                env.mobile.pendingCount))
+                        .font(.rounded(11, .semibold))
+                        .foregroundStyle(Theme.warning)
+                }
+            }
+            .statCard()
+            .accessibilityElement(children: .combine)
+        }
     }
 
     // MARK: - Достижения

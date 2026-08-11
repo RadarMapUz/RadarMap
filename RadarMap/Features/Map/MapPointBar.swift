@@ -95,7 +95,7 @@ struct ReportPickerBar: View {
                 .accessibilityLabel(Text("Закрыть"))
             }
             HStack(spacing: 8) {
-                ForEach(ReportKind.allCases) { kind in
+                ForEach(ReportKind.offered) { kind in
                     Button {
                         onPick(kind)
                     } label: {

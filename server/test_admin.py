@@ -128,7 +128,7 @@ class AdminTest(unittest.TestCase):
 
     def setUp(self):
         conn = sqlite3.connect(admin.DB_PATH)
-        for table in ("camera_reports", "feedback", "reports", "votes",
+        for table in ("camera_reports", "feedback", "reports", "votes", "blocked",
                       "metrics", "overrides", "moderation_log", "usage_stats"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
@@ -261,6 +261,63 @@ class AdminTest(unittest.TestCase):
         active = conn.execute("SELECT active FROM reports WHERE id = ?", (report_id,)).fetchone()[0]
         conn.close()
         self.assertEqual(active, 0, "фейк убирается с карты сразу — подпись тут не нужна")
+
+    def test_mobile_block_kills_every_live_report_of_the_source(self):
+        """Заблокировать на будущее и терпеть в настоящем — половина работы:
+        живые отметки источника уходят с карты тем же движением."""
+        conn = sqlite3.connect(admin.DB_PATH)
+        now = time.time()
+        for lat in (41.3, 41.4):
+            conn.execute("INSERT INTO reports(lat, lon, created, expires, device, type, "
+                         "active, ip) VALUES(?, 69.2, ?, ?, 'spammer', 'radar', 1, '10.7.7.7')",
+                         (lat, now, now + 3600))
+        conn.commit()
+        report_id = conn.execute("SELECT id FROM reports").fetchone()[0]
+        conn.close()
+        self.assertEqual(_post(self.port, "/mobile/act",
+                               {"id": report_id, "action": "block"}), 303)
+        conn = sqlite3.connect(admin.DB_PATH)
+        live = conn.execute("SELECT COUNT(*) FROM reports WHERE active = 1").fetchone()[0]
+        kinds = {r[0] for r in conn.execute("SELECT kind FROM blocked").fetchall()}
+        reason = conn.execute("SELECT DISTINCT closed FROM reports").fetchone()[0]
+        conn.close()
+        self.assertEqual(live, 0, "живые отметки заблокированного остались на карте")
+        self.assertEqual(kinds, {"ip", "device"},
+                         "адрес переживает ротацию UUID, устройство — смену сети")
+        self.assertEqual(reason, "blocked")
+
+    def test_mobile_unblock_restores_the_source(self):
+        conn = sqlite3.connect(admin.DB_PATH)
+        conn.execute("INSERT INTO blocked(kind, value, until, note, created) "
+                     "VALUES('ip', '10.7.7.7', ?, '', ?)",
+                     (time.time() + 86400, time.time()))
+        conn.commit()
+        conn.close()
+        self.assertEqual(_post(self.port, "/mobile/act",
+                               {"action": "unblock", "block_kind": "ip",
+                                "block_value": "10.7.7.7"}), 303)
+        conn = sqlite3.connect(admin.DB_PATH)
+        left = conn.execute("SELECT COUNT(*) FROM blocked").fetchone()[0]
+        conn.close()
+        self.assertEqual(left, 0)
+
+    def test_mobile_page_shows_quality_and_pass_signal(self):
+        """Модератор обязан видеть, что человек ПРОЕХАЛ и не увидел радара:
+        такой голос весит больше тапа из карточки с дивана."""
+        conn = sqlite3.connect(admin.DB_PATH)
+        now = time.time()
+        conn.execute("INSERT INTO reports(lat, lon, created, expires, device, type, "
+                     "active, ip) VALUES(41.3, 69.2, ?, ?, 'x', 'radar', 1, '10.1.1.1')",
+                     (now, now + 3600))
+        conn.commit()
+        report_id = conn.execute("SELECT id FROM reports").fetchone()[0]
+        conn.execute("INSERT INTO votes(report_id, device, value, ts, ip, kind) "
+                     "VALUES(?, 'driver', -1, ?, '10.2.2.2', 'pass')", (report_id, now))
+        conn.commit()
+        conn.close()
+        _status, body = _get(self.port, "/mobile")
+        self.assertIn("проехали и не увидели", body)
+        self.assertIn("За сутки", body, "сводки качества нет — пороги настраивать нечем")
 
     def test_feedback_status_roundtrip(self):
         conn = sqlite3.connect(admin.DB_PATH)

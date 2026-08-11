@@ -99,6 +99,27 @@ final class NotificationService: NSObject {
             UNNotificationRequest(identifier: Self.tripSummaryID, content: content, trigger: nil))
     }
 
+    private static let reportConfirmedID = "report-confirmed"
+
+    /// «Вашу отметку подтвердил другой водитель».
+    ///
+    /// Единственная новость, ради которой стоит трогать человека по поводу
+    /// краудсорса: она отвечает на вопрос «работает ли вообще мой тап», без
+    /// которого отмечать перестают на второй неделе. Один идентификатор на
+    /// все подтверждения — вторая новость заменяет первую, а не копится
+    /// стопкой; звука нет, потому что человек, скорее всего, за рулём.
+    func notifyReportConfirmed(kind: String) {
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Вашу отметку подтвердили")
+        content.body = String(format: String(localized: "Другой водитель проехал и подтвердил: %@"),
+                              kind)
+        content.sound = nil
+        content.userInfo = ["deeplink": "radarmap://map"]
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: Self.reportConfirmedID, content: content,
+                                  trigger: nil))
+    }
+
     func requestAuthorization() {
         Task {
             // Отказ пользователя — валидный ответ, не ошибка: статус перечитаем ниже.

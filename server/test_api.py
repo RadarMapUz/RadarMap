@@ -48,7 +48,7 @@ class APITest(unittest.TestCase):
     def setUp(self):
         conn = sqlite3.connect(api.DB_PATH)
         for table in ("reports", "votes", "metrics", "camera_reports", "feedback",
-                      "usage_stats"):
+                      "usage_stats", "blocked"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -58,6 +58,173 @@ class APITest(unittest.TestCase):
             api._last_cleanup = 0.0
 
     # --- передвижные радары ---
+
+    # --- отзыв своей отметки ---
+
+    def test_author_cancels_own_fresh_report(self):
+        """Промах пальцем должен отзываться, иначе единственный выход —
+        голосовать против себя, а в одиночку это и не работает."""
+        _, made = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "me"})
+        status, body = _call(self.port, "POST", "/api/report/cancel",
+                             {"id": made["id"], "device": "me"})
+        self.assertEqual(status, 200)
+        self.assertTrue(body["ok"])
+        _, live = _call(self.port, "GET", "/api/mobile")
+        self.assertEqual(live["reports"], [], "отозванная отметка осталась на карте")
+
+    def test_cancel_refuses_someone_elses_report(self):
+        _, made = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "me"})
+        status, _body = _call(self.port, "POST", "/api/report/cancel",
+                              {"id": made["id"], "device": "stranger"})
+        self.assertEqual(status, 403, "чужую отметку снимать нельзя")
+        _, live = _call(self.port, "GET", "/api/mobile")
+        self.assertEqual(len(live["reports"]), 1)
+
+    def test_cancel_refuses_after_someone_confirmed(self):
+        """Право автора кончается там, где начинается чужое доверие: точку,
+        которую подтвердил другой водитель, снимает кворум, а не автор."""
+        _, made = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "me"})
+        _call(self.port, "POST", "/api/vote",
+              {"id": made["id"], "device": "other", "value": 1}, ip="10.1.1.1")
+        status, _body = _call(self.port, "POST", "/api/report/cancel",
+                              {"id": made["id"], "device": "me"})
+        self.assertEqual(status, 409)
+
+    def test_cancel_is_idempotent_on_already_dead_report(self):
+        """Повтор после обрыва сети не должен выглядеть ошибкой: результат
+        ровно тот, которого просили."""
+        _, made = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "me"})
+        _call(self.port, "POST", "/api/report/cancel", {"id": made["id"], "device": "me"})
+        status, body = _call(self.port, "POST", "/api/report/cancel",
+                             {"id": made["id"], "device": "me"})
+        self.assertEqual(status, 200)
+        self.assertTrue(body.get("already"))
+
+    def test_cancel_refuses_stale_report(self):
+        _, made = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "me"})
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("UPDATE reports SET created = ? WHERE id = ?",
+                     (time.time() - api.CANCEL_WINDOW - 60, made["id"]))
+        conn.commit()
+        conn.close()
+        status, _body = _call(self.port, "POST", "/api/report/cancel",
+                              {"id": made["id"], "device": "me"})
+        self.assertEqual(status, 409, "через час это уже не промах пальцем")
+
+    # --- теневой бан ---
+
+    def test_blocked_source_gets_normal_answer_but_empty_map(self):
+        """Заблокированный не должен узнать, что он заблокирован: иначе он
+        подбирает обход вместо того, чтобы бросить."""
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("INSERT INTO blocked(kind, value, until, note, created) "
+                     "VALUES('ip', '10.9.9.9', ?, 'спам', ?)",
+                     (time.time() + 3600, time.time()))
+        conn.commit()
+        conn.close()
+        status, body = _call(self.port, "POST", "/api/report",
+                             {"lat": 41.31, "lon": 69.25, "device": "spammer"},
+                             ip="10.9.9.9")
+        self.assertEqual(status, 200, "ответ обязан быть обычным")
+        self.assertIn("id", body)
+        _, live = _call(self.port, "GET", "/api/mobile")
+        self.assertEqual(live["reports"], [], "отметка заблокированного попала на карту")
+
+    def test_block_by_device_survives_new_network(self):
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("INSERT INTO blocked(kind, value, until, note, created) "
+                     "VALUES('device', 'badguy', ?, '', ?)",
+                     (time.time() + 3600, time.time()))
+        conn.commit()
+        conn.close()
+        _call(self.port, "POST", "/api/report",
+              {"lat": 41.31, "lon": 69.25, "device": "badguy"}, ip="10.5.5.5")
+        _, live = _call(self.port, "GET", "/api/mobile")
+        self.assertEqual(live["reports"], [])
+
+    def test_expired_block_lets_reports_through(self):
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("INSERT INTO blocked(kind, value, until, note, created) "
+                     "VALUES('ip', '10.9.9.9', ?, '', ?)",
+                     (time.time() - 60, time.time() - 3600))
+        conn.commit()
+        conn.close()
+        _call(self.port, "POST", "/api/report",
+              {"lat": 41.31, "lon": 69.25, "device": "reformed"}, ip="10.9.9.9")
+        _, live = _call(self.port, "GET", "/api/mobile")
+        self.assertEqual(len(live["reports"]), 1, "срок блокировки истёк — отметка должна жить")
+
+    # --- радиус слияния по классу дороги ---
+
+    def test_two_tripods_on_a_highway_stay_two_points(self):
+        """250 м на трассе — две разные засады. Раньше вторая молча
+        засчитывалась подтверждением первой."""
+        _call(self.port, "POST", "/api/report",
+              {"lat": 41.0, "lon": 65.0, "device": "a", "type": "tripod",
+               "cls": "residential"})
+        status, body = _call(self.port, "POST", "/api/report",
+                             {"lat": 41.00225, "lon": 65.0, "device": "b",
+                              "type": "tripod", "cls": "residential"})
+        self.assertFalse(body["merged"], "в квартале 250 м — разные точки")
+
+    def test_same_spot_on_a_highway_still_merges(self):
+        _call(self.port, "POST", "/api/report",
+              {"lat": 41.0, "lon": 65.0, "device": "a", "type": "tripod",
+               "cls": "motorway"})
+        _, body = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.00225, "lon": 65.0, "device": "b",
+                         "type": "tripod", "cls": "motorway"})
+        self.assertTrue(body["merged"], "250 м на трассе — та же тренога")
+
+    def test_unknown_class_keeps_the_old_radius(self):
+        """Старый клиент класс не шлёт — поведение обязано остаться прежним."""
+        _call(self.port, "POST", "/api/report",
+              {"lat": 41.0, "lon": 65.0, "device": "a"})
+        _, body = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.00225, "lon": 65.0, "device": "b"})
+        self.assertTrue(body["merged"])
+
+    # --- причина закрытия (для метрик качества) ---
+
+    def test_closed_reason_records_who_ended_the_report(self):
+        """Без причины «доля подтверждённых» и «доля снесённых» неотличимы:
+        в таблице видно только active = 0."""
+        _, mine = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "me"})
+        _call(self.port, "POST", "/api/report/cancel", {"id": mine["id"], "device": "me"})
+        _, other = _call(self.port, "POST", "/api/report",
+                         {"lat": 41.5, "lon": 69.9, "device": "creator"})
+        for i, device in enumerate(("h1", "h2", "h3")):
+            _call(self.port, "POST", "/api/vote",
+                  {"id": other["id"], "device": device, "value": -1}, ip=f"10.0.0.{i + 1}")
+        conn = sqlite3.connect(api.DB_PATH)
+        reasons = dict(conn.execute("SELECT id, closed FROM reports").fetchall())
+        conn.close()
+        self.assertEqual(reasons[mine["id"]], "author")
+        self.assertEqual(reasons[other["id"]], "quorum")
+
+    def test_misplaced_vote_is_kept_apart_for_the_moderator(self):
+        """«Стоит не там» — не «радара нет»: точка в двухстах метрах всё равно
+        предупреждает, гасить её мгновенно нельзя, но модератор обязан видеть
+        именно этот сигнал."""
+        _, made = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "creator"})
+        status, body = _call(self.port, "POST", "/api/vote",
+                             {"id": made["id"], "device": "driver", "value": -1,
+                              "kind": "misplaced"}, ip="10.2.2.2")
+        self.assertEqual(status, 200)
+        self.assertTrue(body["active"], "один голос не гасит отметку")
+        conn = sqlite3.connect(api.DB_PATH)
+        kind = conn.execute("SELECT kind FROM votes WHERE report_id = ?",
+                            (made["id"],)).fetchone()[0]
+        conn.close()
+        self.assertEqual(kind, "misplaced")
+
 
     def test_report_and_merge_then_vote_keeps_confirmations(self):
         """Главный сценарий: merge-подтверждения должны переживать дизлайк."""

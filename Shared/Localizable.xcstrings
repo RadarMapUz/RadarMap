@@ -194,6 +194,23 @@
         }
       }
     },
+    "%@ ещё на месте?": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ещё на месте?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ hali ham joyidami?"
+          }
+        }
+      }
+    },
     "%@ из %@": {
       "localizations": {
         "ru": {
@@ -3227,6 +3244,23 @@
         }
       }
     },
+    "Ещё на месте?": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ещё на месте?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hali ham joyidami?"
+          }
+        }
+      }
+    },
     "Ещё не подтверждена": {
       "localizations": {
         "ru": {
@@ -5823,6 +5857,40 @@
         }
       }
     },
+    "Нет доступа к геопозиции": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа к геопозиции"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joylashuvga ruxsat yo‘q"
+          }
+        }
+      }
+    },
+    "Нет доступа к геопозиции — разрешите на телефоне": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа к геопозиции — разрешите на телефоне"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joylashuvga ruxsat yo‘q — telefonda ruxsat bering"
+          }
+        }
+      }
+    },
     "Нет доступа к данным": {
       "localizations": {
         "ru": {
@@ -5868,6 +5936,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aloqa yo‘q, keyinroq yuboraman"
+          }
+        }
+      }
+    },
+    "Нет сети — карта не грузится, о камерах предупреждаю": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет сети — карта не грузится, о камерах предупреждаю"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarmoq yo‘q — xarita yuklanmayapti, kameralar haqida ogohlantiraman"
           }
         }
       }
@@ -6286,6 +6371,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "iPhone'da RadarMap'ni oching."
+          }
+        }
+      }
+    },
+    "Откройте RadarMap на телефоне и разрешите доступ «Всегда» — без него я не вижу дорогу и молчу о камерах.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Откройте RadarMap на телефоне и разрешите доступ «Всегда» — без него я не вижу дорогу и молчу о камерах."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonda RadarMap’ni oching va «Doim» ruxsatini bering — usiz men yo‘lni ko‘rmayman va kameralar haqida jim turaman."
           }
         }
       }
@@ -8247,6 +8349,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bu kameradan %lld km/soat bilan o'tganingizda:"
+          }
+        }
+      }
+    },
+    "Пропустить": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропустить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘tkazib yuborish"
           }
         }
       }

@@ -1,0 +1,96 @@
+//
+//  CarPlayStatusChips.swift
+//  RadarMap
+//
+//  Честные плашки состояния на экране машины.
+//
+//  До этого CarPlay сообщал ровно об одном состоянии — о жаре. Ни «нет сети»,
+//  ни объявления пульта в машине не показывались вообще: карта становилась
+//  серой, приложение молчало, и водителю оставалось решать, что сломалось.
+//  На телефоне такие плашки есть с самого начала, и разница между
+//  «приложение сломалось» и «карта не грузится, но я предупреждаю» стоит
+//  ровно одной строки текста.
+//
+//  Порядок жёсткий и осмысленный: сверху то, что отнимает у водителя защиту
+//  (нет разрешения), ниже то, что портит картинку (нет сети), ниже то, что
+//  экономит ресурс (жара), и в конце — слово владельца (объявление пульта).
+//  Больше двух плашек разом не показываем: экран машины — не лента.
+//
+
+import SwiftUI
+
+struct CarPlayStatusChips: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        // Только две верхние по важности: третья уже не читается за рулём.
+        let shown = chips.prefix(2)
+        if !shown.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(shown) { chip in
+                    CarPlayStatusChip(chip: chip)
+                }
+            }
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .animation(.easeOut(duration: 0.3), value: shown.map(\.id))
+        }
+    }
+
+    private var chips: [CarPlayChip] {
+        var result: [CarPlayChip] = []
+        // Без разрешения экран машины мёртв целиком — это важнее всего
+        // остального вместе взятого.
+        if !env.location.isAuthorized {
+            result.append(CarPlayChip(id: "auth", symbol: "location.slash.fill",
+                                      tint: Theme.danger,
+                                      text: String(localized: "Нет доступа к геопозиции — разрешите на телефоне")))
+        }
+        // Тайлы карты требуют сети, база камер — нет. Сказать об этом обязаны:
+        // серая карта без объяснения читается как сломанное приложение.
+        if !env.network.isOnline {
+            result.append(CarPlayChip(id: "offline", symbol: "wifi.slash",
+                                      tint: Theme.warning,
+                                      text: String(localized: "Нет сети — карта не грузится, о камерах предупреждаю")))
+        }
+        // Жара: бюджеты уже урезаны (маркеры карты, сеть схемы) — но молча.
+        if env.thermal.mode != .full {
+            result.append(CarPlayChip(id: "thermal", symbol: "thermometer.sun.fill",
+                                      tint: Theme.warning,
+                                      text: String(localized: "Жарко — экономлю экран")))
+        }
+        // Слово владельца: то же объявление, что видит телефон. В машине —
+        // только заголовок: тело сообщения за рулём всё равно не прочитают,
+        // а обрезанная фраза хуже короткой.
+        if let banner = env.config.banner {
+            result.append(CarPlayChip(id: "banner", symbol: "megaphone.fill",
+                                      tint: Theme.accent, text: banner.title))
+        }
+        return result
+    }
+}
+
+/// Одна плашка. Значение — чтобы список можно было сравнивать и анимировать.
+struct CarPlayChip: Identifiable, Equatable {
+    let id: String
+    let symbol: String
+    let tint: Color
+    let text: String
+}
+
+/// Внешний вид плашки — один на все состояния: за рулём разный вид у
+/// однотипных сообщений заставляет читать каждое заново.
+struct CarPlayStatusChip: View {
+    let chip: CarPlayChip
+
+    var body: some View {
+        Label(chip.text, systemImage: chip.symbol)
+            .font(.rounded(12, .medium))
+            .foregroundStyle(chip.tint)
+            .lineLimit(1)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .background(Theme.background.opacity(0.88), in: Capsule())
+            .overlay(Capsule().stroke(chip.tint.opacity(0.35), lineWidth: 1))
+    }
+}

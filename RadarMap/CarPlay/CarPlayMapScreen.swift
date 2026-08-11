@@ -72,7 +72,8 @@ struct CarPlayMapScreen: View {
                                route: env.route,
                                location: env.location,
                                speedLimits: env.speedLimits,
-                               thermal: env.thermal)
+                               thermal: env.thermal,
+                               filter: env.settings.filter)
                     .ignoresSafeArea()
             }
 
@@ -80,6 +81,14 @@ struct CarPlayMapScreen: View {
             // скорость/дистанции читаются там, и тик пересобирает маленький
             // HUD, а не это дерево с UIViewRepresentable карты.
             CarPlayOverlay()
+
+            // «Радар ещё стоял?» после реального проезда. Раньше этот вопрос
+            // жил только в телефонном MapScreen, а при подключённом CarPlay
+            // телефонная сцена уступает место экрану передачи — то есть в
+            // машине водитель краудсорс ТОЛЬКО потреблял и ничего не возвращал.
+            // Драйвер тот же, что на телефоне; сам вопрос показывает
+            // CarPlayOverlay.
+            MobilePassDriver()
         }
         // Жара: схема сама, пока водитель не выбрал режим кнопкой. Проверка и
         // на подключении тоже — в машину можно сесть с уже горячим телефоном.

@@ -17,16 +17,16 @@ import CarPlay
 import SwiftUI
 
 final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
-    private var interfaceController: CPInterfaceController?
+    var interfaceController: CPInterfaceController?
     private var mapTemplate: CPMapTemplate?
     private let model = CarPlayMapModel()
     /// Поколение сессии CarPlay: подписки withObservationTracking из прошлых
     /// подключений сверяются с ним и не пересобирают кнопки повторно.
-    private var session = 0
+    var session = 0
     /// Таймер автозакрытия всплывающего подтверждения («Отметка принята»).
-    private var toastTask: Task<Void, Never>?
+    var toastTask: Task<Void, Never>?
 
-    private var env: AppEnvironment { AppEnvironment.shared }
+    var env: AppEnvironment { AppEnvironment.shared }
 
     // MARK: - Жизненный цикл сцены
 
@@ -58,6 +58,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         env.startDrivingServices()
         session += 1
         syncTemplate()
+        // Сразу, а не по первому тапу: без разрешения экран машины не покажет
+        // ни скорости, ни камер, и молчание тут неотличимо от поломки.
+        if !env.location.isAuthorized { showNoPermissionAlert() }
+        observePendingConfirm()
     }
 
     func templateApplicationScene(_ scene: CPTemplateApplicationScene,
@@ -114,6 +118,26 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
     }
 
+    // MARK: - Уход с экрана машины
+
+    /// Наше приложение ушло с экрана машины (водитель открыл другое), но
+    /// сцена жива и подключена.
+    ///
+    /// Схема при этом продолжала считать точку зрения на каждый GPS-тик и
+    /// докачивать дорожные тайлы для картинки, которой никто не видит:
+    /// `setCarPlaySketchVisible(true)` снимался только через `onDisappear`, а
+    /// он при перекрытии чужим приложением не приходит. Батарея — приоритет
+    /// номер один, и считать невидимое ей противоречит.
+    func sceneWillResignActive(_ scene: UIScene) {
+        AppEnvironment.shared.location.setCarPlaySketchVisible(false)
+    }
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        // Вернулись на экран машины — схема снова имеет смысл, но только если
+        // она и выбрана: в режиме карты частые фиксы ей не нужны.
+        AppEnvironment.shared.location.setCarPlaySketchVisible(model.showsSketch)
+    }
+
     // MARK: - Кнопки бара
 
     /// «Поездка» / «Завершить» — главный тумблер: включает активные оповещения.
@@ -122,8 +146,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                                   : String(localized: "Поездка")) { [weak self] _ in
             guard let self else { return }
             let location = env.location
+            // Без разрешения startTrip выходит первой строкой и молча ничего
+            // не делает: заголовок кнопки остаётся «Поездка», водитель жмёт
+            // ещё раз и решает, что приложение сломано. Говорим вслух.
+            guard location.isAuthorized else { return self.showNoPermissionAlert() }
             if location.isTripActive { location.endTrip() } else { location.startTrip() }
         }
+    }
+
+    /// Единственная причина, по которой экран машины может быть мёртв целиком.
+    /// Настройки iOS с CarPlay не открыть, поэтому честно объясняем, что
+    /// сделать на телефоне.
+    private func showNoPermissionAlert() {
+        showAlert(title: String(localized: "Нет доступа к геопозиции"),
+                  message: String(localized: "Откройте RadarMap на телефоне и разрешите доступ «Всегда» — без него я не вижу дорогу и молчу о камерах."))
     }
 
     /// «Схема» ⇄ «Карта»: режим экрана машины. Схема — самый дешёвый рендер
@@ -212,16 +248,28 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Возвращаем ровно то, что было до заглушения. Если тишину включили не
     /// кнопкой машины (всё выключено руками в настройках), «размучивание» —
     /// осознанное желание слышать: включаем разумный минимум.
+    ///
+    /// Восстановление слепым быть не может. Пока водитель ехал молча, он мог
+    /// на светофоре взять телефон и поменять настройки сам — например выбрать
+    /// профиль, который ставит свой `voiceMode`. Вернуть тогда «как было до
+    /// кнопки» значит затереть его же осознанный выбор более поздним
+    /// прошлым. Поэтому откатываем только то, что с тех пор никто не трогал:
+    /// поле восстанавливается, лишь если оно и сейчас в том состоянии, в
+    /// которое его поставила кнопка машины (звук выключен, голос молчит).
     private func unmute() {
-        if Storage.bool(.carPlayMuted) {
-            env.settings.soundEnabled = Storage.bool(.carPlaySoundBeforeMute)
-            env.settings.voiceMode = Storage.string(.carPlayVoiceBeforeMute)
-                .flatMap(VoiceMode.init(rawValue:)) ?? .smart
-        } else {
+        defer { Storage.set(false, for: .carPlayMuted) }
+        guard Storage.bool(.carPlayMuted) else {
             env.settings.soundEnabled = true
             env.settings.voiceMode = .smart
+            return
         }
-        Storage.set(false, for: .carPlayMuted)
+        if env.settings.soundEnabled == false {
+            env.settings.soundEnabled = Storage.bool(.carPlaySoundBeforeMute)
+        }
+        if env.settings.voiceMode == .off {
+            env.settings.voiceMode = Storage.string(.carPlayVoiceBeforeMute)
+                .flatMap(VoiceMode.init(rawValue:)) ?? .smart
+        }
     }
 
     private static func buttonImage(_ symbol: String) -> UIImage? {
@@ -337,55 +385,28 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         interfaceController?.pushTemplate(grid, animated: true) { _, _ in }
     }
 
+    /// Отметка засады из машины.
+    ///
+    /// Идёт тем же путём, что тап на телефоне (`quickReport`), а не прямым
+    /// `report(at:)`. Разница не косметическая: прямой вызов проходил мимо
+    /// `ReportGuard` — не работала защита от повтора (не понял, нажалось ли, —
+    /// поставил вторую точку рядом), отметка не попадала в дневную статистику,
+    /// и главное: при отсутствии сети она УЖЕ ложилась в очередь и уходила
+    /// позже, а водителю говорили «не отправилось». Врать про потерю того,
+    /// что не потеряно, — худший из ответов.
     private func submitReport(_ kind: ReportKind) {
-        guard let coordinate = env.location.currentCoordinate else {
-            showAlert(title: String(localized: "Ждём спутники"),
-                      message: String(localized: "Положение ещё не определено — отметку ставить не по чему."))
-            return
-        }
         popToMap()
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let result = await env.mobile.report(at: coordinate, kind: kind,
-                                                 course: env.location.currentCourse)
-            switch result {
-            case .created:   showToast(String(localized: "Отметка на карте — спасибо!"))
-            case .confirmed: showToast(String(localized: "Отметку подтвердили — спасибо!"))
-            case .amended:   showToast(String(localized: "Тип отметки уточнён"))
-            case .failed:    showToast(String(localized: "Не отправилось: нет связи"))
-            }
-        }
-    }
-
-    // MARK: - Всплывающие сообщения
-
-    private func popToMap() {
-        interfaceController?.popToRootTemplate(animated: true) { _, _ in }
-    }
-
-    private func showAlert(title: String, message: String) {
-        let alert = CPAlertTemplate(titleVariants: [title, message],
-                                    actions: [CPAlertAction(title: String(localized: "Понятно"),
-                                                            style: .cancel) { [weak self] _ in
-            self?.interfaceController?.dismissTemplate(animated: true) { _, _ in }
-        }])
-        interfaceController?.presentTemplate(alert, animated: true) { _, _ in }
-    }
-
-    /// Короткое подтверждение без единого тапа: само гаснет через пару секунд —
-    /// водителю нечего нажимать.
-    private func showToast(_ text: String) {
-        let alert = CPAlertTemplate(titleVariants: [text],
-                                    actions: [CPAlertAction(title: String(localized: "ОК"),
-                                                            style: .default) { [weak self] _ in
-            self?.interfaceController?.dismissTemplate(animated: true) { _, _ in }
-        }])
-        interfaceController?.presentTemplate(alert, animated: true) { _, _ in }
-        toastTask?.cancel()
-        toastTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled else { return }
-            self?.interfaceController?.dismissTemplate(animated: true) { _, _ in }
+            let outcome = await env.mobile.quickReport(
+                kind: kind,
+                coordinate: env.location.currentCoordinate,
+                speedKmh: env.location.speedKmh,
+                isTripActive: env.location.isTripActive,
+                course: env.location.currentCourse)
+            // Фраза одна и та же, что звучит голосом на телефоне: экран машины
+            // и голос не имеют права расходиться в оценке того, что случилось.
+            showToast(outcome.spoken)
         }
     }
 }

@@ -325,7 +325,7 @@ struct SettingsView: View {
                 } header: {
                     Text("О приложении")
                 } footer: {
-                    Text("Камеры — открытые данные data.egov.uz. Карты и ограничения скорости — © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки.")
+                    Text("Карты и ограничения скорости — © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки.")
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

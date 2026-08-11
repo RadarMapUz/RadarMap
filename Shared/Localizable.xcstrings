@@ -4444,23 +4444,6 @@
         }
       }
     },
-    "Камеры — открытые данные data.egov.uz. Карты и ограничения скорости — © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки.": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Камеры — открытые данные data.egov.uz. Карты и ограничения скорости — © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kameralar — data.egov.uz ochiq ma’lumotlari. Xaritalar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari. Ilova bepul, reklamasiz va kuzatuvsiz."
-          }
-        }
-      }
-    },
     "Карта": {
       "localizations": {
         "ru": {
@@ -4601,6 +4584,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Xarita sizni kuzatmoqda"
+          }
+        }
+      }
+    },
+    "Карты и ограничения скорости — © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карты и ограничения скорости — © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xaritalar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari. Ilova bepul, reklamasiz va kuzatuvsiz."
           }
         }
       }

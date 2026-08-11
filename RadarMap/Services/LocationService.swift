@@ -90,6 +90,14 @@ final class LocationService: NSObject {
     /// Поездка началась/закончилась. Нужен тем, чей режим работы зависит от
     /// того, за рулём человек или нет, — а не от того, открыт ли экран
     /// (краудсорс опрашивает сервер и с погашенным экраном, пока идёт поездка).
+    /// Первое оповещение о камере — дневной счётчик воронки. Хук, а не прямая
+    /// ссылка на статистику: гейты не должны знать, что кто-то считает.
+    /// Считаем именно ПЕРВОЕ: эскалация по уровням — то же оповещение.
+    @ObservationIgnored var onAlertFired: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onAlertFired,
+                                               "LocationService.onAlertFired") }
+    }
+
     @ObservationIgnored var onTripStateChanged: ((Bool) -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onTripStateChanged,
                                                "LocationService.onTripStateChanged") }
@@ -779,7 +787,14 @@ final class LocationService: NSObject {
                 <= effectiveAlertRadius
             speedLimits?.update(
                 coordinate: coordinate, course: course, speedKmh: speedKmh,
-                announce: isTripActive && !willSpeakAboutCameraAhead
+                // settings.voiceEnabled — общий выключатель голоса («Молча»,
+                // в том числе кнопкой глушилки в машине). Его здесь не было:
+                // камеры замолкали, а фраза о превышении продолжала звучать,
+                // хотя человек только что попросил тишины. Настройка
+                // overspeedVoice уточняет КОГДА говорить, но не отменяет
+                // решения «не говорить вовсе».
+                announce: isTripActive && settings.voiceEnabled
+                    && !willSpeakAboutCameraAhead
                     && settings.overspeedVoice.allows(cameraAhead: cameraAhead),
                 fallbackClass: nearestCamera?.roadClass ?? .unknown)
             // Память о треногах — строго ПОСЛЕ speedLimits.update: подсказка
@@ -1133,6 +1148,7 @@ final class LocationService: NSObject {
         // перед ней, возврат сигнала, соседняя была ближе) — она входит сразу на
         // втором-третьем уровне, и приложение молчало о ней совсем.
         guard decision.isFirst else { return }
+        onAlertFired?()
         // В свёрнутом виде (поездка в фоне) — уведомление зажигает экран и вибрирует.
         // Пользователь управляет: все камеры / только радары / выключено.
         if !isForeground, settings.backgroundAlerts.allows(camera) {

@@ -333,7 +333,12 @@ final class TripStats {
     /// CameraRepository — база декодируется асинхронно, и на момент сборки
     /// сервисов осей ещё нет (пустой словарь тут молча выключал миграцию).
     func axisCleanupIfNeeded(axisByID: [Int: Int]) {
-        guard !Storage.bool(.passAxisCleanup1), !axisByID.isEmpty else { return }
+        // isLoaded обязателен: чистка приходит из onDatabaseLoaded, а база
+        // камер декодируется быстрее истории. На непрочитанной истории она
+        // «ничего не нашла», ставила свой флаг — и больше не запускалась
+        // никогда, оставив мостовые проезды в Итогах навсегда. Остальной файл
+        // этот флаг уважает (persist, persistDays), а миграция — нет.
+        guard isLoaded, !Storage.bool(.passAxisCleanup1), !axisByID.isEmpty else { return }
         let before = history
         let (cleaned, changed) = TripHistory.axisSanitized(history, axisByID: axisByID)
         if changed {

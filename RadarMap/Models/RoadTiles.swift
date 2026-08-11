@@ -139,20 +139,51 @@ nonisolated struct TileRoadNetwork: RoadNetworkSource {
         Int((lat + 90) * 100) * 40_000 + Int((lon + 180) * 100)
     }
 
+    /// Ключ схлопывания дублей на границе тайлов.
+    ///
+    /// Все шесть полей исходного ключа обязаны остаться: одни и те же концы
+    /// бывают у РАЗНЫХ дорог — мостовой сегмент над одноимённым участком имеет
+    /// те же крайние точки, но другой класс и другое число точек. Ужать ключ
+    /// до пары чисел, выбросив класс и счётчик, значит молча стереть со схемы
+    /// сотню настоящих дорог ради трёх мегабайт.
+    private struct LineKey: Hashable {
+        let cls: UInt8
+        let count: Int32
+        let ax, ay, bx, by: Int32
+
+        init(line: RoadLine, first: CLLocationCoordinate2D, last: CLLocationCoordinate2D) {
+            // truncatingIfNeeded, а не ловушечный Int32(): тайл сверен по
+            // sha256 с подписанным индексом, но дельты в формате ничем не
+            // ограничены, и накопленная координата в кривом-но-подписанном
+            // тайле уронила бы приложение прямо в поездке.
+            cls = UInt8(truncatingIfNeeded: line.kind.hashValue)
+            count = Int32(truncatingIfNeeded: line.points.count)
+            ax = Int32(truncatingIfNeeded: Int(first.latitude * RoadTiles.scale))
+            ay = Int32(truncatingIfNeeded: Int(first.longitude * RoadTiles.scale))
+            bx = Int32(truncatingIfNeeded: Int(last.latitude * RoadTiles.scale))
+            by = Int32(truncatingIfNeeded: Int(last.longitude * RoadTiles.scale))
+        }
+    }
+
     /// Собрать индекс. Дорога на границе лежит в обоих тайлах целиком
     /// (так дешевле серверу и клиенту) — дубли схлопываются здесь, иначе
     /// граница съедала бы бюджет линий дважды.
     static func build(_ tileLines: [[RoadLine]]) -> TileRoadNetwork {
         var lines: [RoadLine] = []
         var grid: [Int: [Int32]] = [:]
-        var seen = Set<String>()
+        var seen = Set<LineKey>()
+        // Окрестность 3×3 над Ташкентом — это больше ста тысяч линий, и на
+        // каждую строился строковый ключ длиной под полсотни символов, то есть
+        // отдельная аллокация в куче. Всплеск доходил до четырнадцати
+        // мегабайт — ради схлопывания четырёх сотен дублей. Тот же урок в
+        // проекте уже выучен: ключ ячейки в CameraMapContent пакуется в целое,
+        // а не собирается интерполяцией.
+        seen.reserveCapacity(tileLines.reduce(0) { $0 + $1.count })
 
         for tile in tileLines {
             for line in tile {
                 guard let first = line.points.first, let last = line.points.last else { continue }
-                let key = "\(line.kind):\(line.points.count):" +
-                    "\(Int(first.latitude * RoadTiles.scale)):\(Int(first.longitude * RoadTiles.scale)):" +
-                    "\(Int(last.latitude * RoadTiles.scale)):\(Int(last.longitude * RoadTiles.scale))"
+                let key = LineKey(line: line, first: first, last: last)
                 guard seen.insert(key).inserted else { continue }
 
                 let index = Int32(lines.count)

@@ -33,19 +33,12 @@ struct CarPlayOverlay: View {
                     approachBanner(camera: camera, distance: distance)
                 }
             }
-            // Жара: бюджеты уже урезаны (маркеры карты, сеть схемы) — но молча.
-            // Тот же чип честности, что на приборке телефона.
-            if env.thermal.mode != .full {
-                HStack {
-                    Label("Жарко — экономлю экран", systemImage: "thermometer.sun.fill")
-                        .font(.rounded(12, .medium))
-                        .foregroundStyle(Theme.warning)
-                        .padding(.horizontal, 11).padding(.vertical, 6)
-                        .background(Theme.background.opacity(0.88), in: Capsule())
-                        .overlay(Capsule().stroke(Theme.warning.opacity(0.35), lineWidth: 1))
-                    Spacer(minLength: 0)
-                }
-                .padding(.top, 8)
+            // Состояния, о которых водитель обязан узнать: нет разрешения,
+            // нет сети, жара, объявление владельца. Раньше здесь был только
+            // чип жары — про серую карту без сети машина молчала.
+            HStack {
+                CarPlayStatusChips()
+                Spacer(minLength: 0)
             }
             Spacer(minLength: 0)
             HStack(spacing: 0) {

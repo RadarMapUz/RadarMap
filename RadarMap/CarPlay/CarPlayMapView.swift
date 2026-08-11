@@ -22,6 +22,10 @@ struct CarPlayMapView: UIViewRepresentable {
     let location: LocationService
     let speedLimits: SpeedLimitService
     let thermal: ThermalService
+    /// Фильтр вида из настроек. Значение, а не сервис: SwiftUI обязан увидеть
+    /// его смену и дёрнуть updateUIView, иначе спрятанный тип останется на
+    /// карте до следующего разворота региона.
+    let filter: CameraFilter
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
@@ -42,6 +46,12 @@ struct CarPlayMapView: UIViewRepresentable {
             top: 0, leading: 0, bottom: AppConfig.carPlayDockBottomInset, trailing: 0)
         map.register(CameraMarkerView.self,
                      forAnnotationViewWithReuseIdentifier: CameraMarkerView.reuseID)
+        // Кластеры. На телефоне правило прямое: камера НИКОГДА не пропадает
+        // молча — если её не видно отдельным маркером, она часть посчитанной
+        // группы. На карте машины кластеров не было вовсе: всё, что не влезло
+        // в бюджет или наложилось на соседа, просто исчезало с экрана.
+        map.register(CameraClusterView.self,
+                     forAnnotationViewWithReuseIdentifier: CameraClusterView.reuseID)
 
         // Старт: вокруг себя, если позиция уже есть; иначе — Ташкент.
         let center = location.currentCoordinate
@@ -91,6 +101,13 @@ struct CarPlayMapView: UIViewRepresentable {
             coordinator.reloadCameras(on: map)
         }
 
+        // Смена фильтра вида в настройках — применяем сразу: иначе спрятанный
+        // тип остаётся на карте машины до следующего разворота региона.
+        if filter != coordinator.filterSeen {
+            coordinator.filterSeen = filter
+            coordinator.reloadCameras(on: map, force: true)
+        }
+
         // Смена термоступени меняет бюджет маркеров — применяем сразу, а не
         // при следующем сдвиге карты.
         let mode = thermal.mode
@@ -132,6 +149,10 @@ struct CarPlayMapView: UIViewRepresentable {
 
         // Линия маршрута рисуется в три слоя: тёмная подложка (читается на любом
         // фоне), яркая линия и серая «пройденная» поверх неё.
+        /// Фильтр, с которым собран текущий набор маркеров. Без него смена
+        /// настройки не доходит до карты: reloadCameras зовётся только по
+        /// смене региона, счётчика камер, термоступени и старта поездки.
+        var filterSeen: CameraFilter?
         private var routeSource: MKPolyline?
         private var routeCasing: MKPolyline?
         private var routeLine: MKPolyline?
@@ -243,8 +264,17 @@ struct CarPlayMapView: UIViewRepresentable {
             }
             // Бюджет по перегреву — та же лестница, что у телефонной карты:
             // чип «Жарко — экономлю экран» обязан быть правдой и здесь.
-            let fresh = repository.cameras(in: map.region,
-                                           limit: thermal.mode.carPlayAnnotationBudget)
+            let all = repository.cameras(in: map.region,
+                                         limit: thermal.mode.carPlayAnnotationBudget)
+            // Фильтр вида из настроек. Раньше карта машины его не читала
+            // вовсе: спрятанный на телефоне тип в машине всё равно рисовался —
+            // причём режим «Схема» фильтр применял, а «Карта» нет.
+            // Исключение одно и обязательное: камеру, о которой говорит
+            // панель, не прячем никогда — иначе голос предупреждает о том,
+            // чего на карте нет.
+            let alertID = location.nearestCamera?.id
+            let active = filterSeen ?? .all
+            let fresh = all.filter { active.matches($0) || $0.id == alertID }
             let freshIDs = Set(fresh.map(\.id))
             // Точка отсчёта важности: где машина, а не куда утащили карту.
             let focus = location.currentCoordinate ?? map.centerCoordinate
@@ -259,7 +289,13 @@ struct CarPlayMapView: UIViewRepresentable {
             // быстрый, но дёргать его на каждой перерисовке маркера незачем.
             let added = fresh.filter { shown[$0.id] == nil }.map { camera in
                 CameraAnnotation(camera: camera,
-                                 limit: speedLimits.limit(near: camera.coordinate),
+                                 // На карте машины знак ограничения у КАЖДОЙ
+                                 // камеры не рисуем. Лимит текущей дороги уже
+                                 // показан в доке крупно и рядом со скоростью,
+                                 // а сорок маленьких «60» по экрану не
+                                 // добавляют знания и делают карту нечитаемой
+                                 // — ровно на это и жаловались из машины.
+                                 limit: nil,
                                  tier: CameraMapContent.tier(camera: camera, focus: focus,
                                                              targetID: targetID,
                                                              routeIDs: routeIDs),
@@ -333,198 +369,6 @@ struct CarPlayMapView: UIViewRepresentable {
                 renderer.lineWidth = 7
             }
             return renderer
-        }
-    }
-}
-
-// MARK: - Аннотация и маркер камеры
-
-final class CameraAnnotation: NSObject, MKAnnotation {
-    let camera: Camera
-    /// Лимит дороги у камеры (OSM): есть — маркер рисуется знаком «60».
-    let limit: Int?
-    /// Рисовать ли клин направления: false в поездке — карта повёрнута по
-    /// курсу, а клин в кэшированной картинке нарисован для севера вверху.
-    let showsDirection: Bool
-    /// Важность прямо сейчас — та же шкала, что на телефоне (CameraTier).
-    /// Дальние камеры на экране машины гасятся: смотрят на него боковым
-    /// зрением и долю секунды, и всё, что не про ближайший километр, — помеха.
-    var tier: CameraTier = .near
-    var coordinate: CLLocationCoordinate2D {
-        CLLocationCoordinate2D(latitude: camera.lat, longitude: camera.lon)
-    }
-
-    init(camera: Camera, limit: Int? = nil, tier: CameraTier = .near,
-         showsDirection: Bool = true) {
-        self.camera = camera
-        self.limit = limit
-        self.tier = tier
-        self.showsDirection = showsDirection
-    }
-}
-
-/// Маркер камеры: знак ограничения там, где лимит известен, иначе цветной круг
-/// с глифом типа. Картинки кэшируются по паре «тип + лимит».
-final class CameraMarkerView: MKAnnotationView {
-    nonisolated static let reuseID = "camera"
-    private static var cache: [String: UIImage] = [:]
-    private var halo: CAShapeLayer?
-
-    override var annotation: (any MKAnnotation)? {
-        didSet {
-            guard let annotation = annotation as? CameraAnnotation else { return }
-            image = Self.marker(for: annotation.camera.kind, limit: annotation.limit,
-                                direction: annotation.showsDirection
-                                    ? annotation.camera.markerDirection : nil)
-            centerOffset = .zero
-            collisionMode = .circle
-            displayPriority = .defaultHigh
-            applyTier(annotation.tier)
-        }
-    }
-
-    override func prepareForReuse() {
-        super.prepareForReuse()
-        setTarget(false)
-        applyTier(.near)
-    }
-
-    /// Важность маркера: дальние гасим, но не убираем — пропавшая камера хуже
-    /// лишней. Плотность, а не удаление.
-    func applyTier(_ tier: CameraTier) {
-        alpha = tier == .background ? AppConfig.mapBackgroundCameraOpacity : 1
-    }
-
-    /// Цель оповещения: крупнее, поверх соседей и с пульсирующим кольцом —
-    /// на карте сразу видно, о какой именно точке говорит панель.
-    func setTarget(_ isTarget: Bool) {
-        transform = isTarget ? CGAffineTransform(scaleX: 1.3, y: 1.3) : .identity
-        displayPriority = isTarget ? .required : .defaultHigh
-        zPriority = isTarget ? .max : .defaultUnselected
-
-        guard isTarget else {
-            halo?.removeFromSuperlayer()
-            halo = nil
-            return
-        }
-        guard halo == nil else { return }
-        let tint = (annotation as? CameraAnnotation)?.camera.kind.tint ?? Theme.danger
-        let ring = CAShapeLayer()
-        let side = max(bounds.width, bounds.height) + 14
-        ring.frame = CGRect(x: bounds.midX - side / 2, y: bounds.midY - side / 2,
-                            width: side, height: side)
-        ring.path = UIBezierPath(ovalIn: CGRect(origin: .zero,
-                                                size: CGSize(width: side, height: side))).cgPath
-        ring.fillColor = UIColor.clear.cgColor
-        ring.strokeColor = UIColor(tint).cgColor
-        ring.lineWidth = 3
-
-        let scale = CABasicAnimation(keyPath: "transform.scale")
-        scale.fromValue = 0.7
-        scale.toValue = 1.35
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 0.9
-        fade.toValue = 0
-        let pulse = CAAnimationGroup()
-        pulse.animations = [scale, fade]
-        pulse.duration = 1.5
-        pulse.repeatCount = .infinity
-        pulse.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        ring.add(pulse, forKey: "pulse")
-
-        layer.addSublayer(ring)
-        halo = ring
-    }
-
-    /// Направление квантуем шагом 15°: глазом разницы не видно, а кэш вместо
-    /// 360 вариантов на каждый тип держит 24.
-    private static func marker(for kind: CameraType, limit: Int?, direction: Int?) -> UIImage {
-        let step = direction.map { (Int((Double($0) / 15).rounded()) * 15) % 360 }
-        let key = "\(kind.sourceString)|\(limit ?? -1)|\(step ?? -1)"
-        if let cached = cache[key] { return cached }
-        let rendered = limit.map { limitMarker(kind: kind, limit: $0, direction: step) }
-            ?? glyphMarker(kind: kind, direction: step)
-        cache[key] = rendered
-        return rendered
-    }
-
-    /// Клин «камера смотрит туда» — та же деталь, что на телефоне. Рисуется
-    /// только там, где направление доказано (см. Camera.markerDirection):
-    /// половина базы доказать его не может, и клин у такой камеры был бы ложью.
-    private static func drawCone(direction: Int?, kind: CameraType,
-                                 center: CGPoint, radius: CGFloat) {
-        guard let direction else { return }
-        let spread = AppConfig.mapDirectionConeDegrees * .pi / 180
-        // Ноль градусов — на север, то есть вверх по экрану карты.
-        let heading = Double(direction) * .pi / 180 - .pi / 2
-        let path = UIBezierPath()
-        path.move(to: center)
-        path.addArc(withCenter: center, radius: radius,
-                    startAngle: CGFloat(heading - spread / 2),
-                    endAngle: CGFloat(heading + spread / 2), clockwise: true)
-        path.close()
-        UIColor(kind.tint).withAlphaComponent(0.45).setFill()
-        path.fill()
-    }
-
-    /// Знак «ограничение скорости» с цветной точкой типа внизу — тот же язык,
-    /// что на карте телефона.
-    private static func limitMarker(kind: CameraType, limit: Int, direction: Int?) -> UIImage {
-        let size = CGSize(width: 46, height: 52)
-        return UIGraphicsImageRenderer(size: size).image { _ in
-            let sign = CGRect(x: 7, y: 6, width: 32, height: 32)
-            drawCone(direction: direction, kind: kind,
-                     center: CGPoint(x: sign.midX, y: sign.midY), radius: 22)
-            UIColor.white.setFill()
-            UIBezierPath(ovalIn: sign).fill()
-            UIColor(red: 0.85, green: 0.1, blue: 0.1, alpha: 1).setStroke()
-            let rim = UIBezierPath(ovalIn: sign.insetBy(dx: 2.4, dy: 2.4))
-            rim.lineWidth = 4.8
-            rim.stroke()
-
-            let text = "\(limit)"
-            let font = UIFont.systemFont(ofSize: limit >= 100 ? 13 : 15, weight: .heavy)
-            let attributes: [NSAttributedString.Key: Any] = [.font: font,
-                                                             .foregroundColor: UIColor.black]
-            let bounds = text.size(withAttributes: attributes)
-            text.draw(at: CGPoint(x: sign.midX - bounds.width / 2,
-                                  y: sign.midY - bounds.height / 2),
-                      withAttributes: attributes)
-
-            let dot = CGRect(x: size.width / 2 - 6, y: 33, width: 12, height: 12)
-            UIColor(kind.tint).setFill()
-            UIBezierPath(ovalIn: dot).fill()
-            UIColor.white.setStroke()
-            let dotRing = UIBezierPath(ovalIn: dot.insetBy(dx: 0.8, dy: 0.8))
-            dotRing.lineWidth = 1.6
-            dotRing.stroke()
-        }
-    }
-
-    /// Лимит неизвестен — цветной круг с глифом типа: тёмная кайма держит
-    /// маркер читаемым и на светлых участках карты.
-    private static func glyphMarker(kind: CameraType, direction: Int?) -> UIImage {
-        let size = CGSize(width: 44, height: 44)
-        return UIGraphicsImageRenderer(size: size).image { _ in
-            let rect = CGRect(x: 6, y: 6, width: 32, height: 32)
-            drawCone(direction: direction, kind: kind,
-                     center: CGPoint(x: rect.midX, y: rect.midY), radius: 21)
-            UIColor.black.withAlphaComponent(0.55).setFill()
-            UIBezierPath(ovalIn: rect).fill()
-            UIColor(kind.tint).setFill()
-            UIBezierPath(ovalIn: rect.insetBy(dx: 2.5, dy: 2.5)).fill()
-            UIColor.white.withAlphaComponent(0.92).setStroke()
-            let ring = UIBezierPath(ovalIn: rect.insetBy(dx: 3.2, dy: 3.2))
-            ring.lineWidth = 1.6
-            ring.stroke()
-
-            let config = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
-            if let glyph = UIImage(systemName: kind.symbolName, withConfiguration: config)?
-                .withTintColor(.white, renderingMode: .alwaysOriginal) {
-                glyph.draw(in: CGRect(x: (size.width - glyph.size.width) / 2,
-                                      y: (size.height - glyph.size.height) / 2,
-                                      width: glyph.size.width, height: glyph.size.height))
-            }
         }
     }
 }

@@ -444,10 +444,23 @@ final class LocationService: NSObject {
             displayCourse = -1
             return
         }
-        // В поездке паузу отдавать системе нельзя — она может не возобновить.
-        manager.pausesLocationUpdatesAutomatically = !isTripActive
+        // Паузу отдавать системе нельзя ни в поездке, ни в машине: iOS ставит
+        // поток фиксов на паузу сама и сама его НЕ возобновляет. В поездке это
+        // знали и запрещали давно; на CarPlay запрет забыли — и экран машины
+        // замирал на нуле, потому что телефон лежит в держателе неподвижно
+        // относительно себя, а система считает это «пользователь остановился».
+        manager.pausesLocationUpdatesAutomatically = !(isTripActive || isCarPlayConnected)
         if isTripActive {
             // Поездка: высокая точность, разрешаем работу в фоне (нужен доступ «Всегда»).
+            manager.desiredAccuracy = isLowPowerMode ? kCLLocationAccuracyNearestTenMeters : kCLLocationAccuracyBest
+            manager.distanceFilter = isLowPowerMode ? 20 : 5
+            manager.allowsBackgroundLocationUpdates = (manager.authorizationStatus == .authorizedAlways)
+            manager.showsBackgroundLocationIndicator = true
+        } else if isCarPlayConnected {
+            // Экран машины без начатой поездки — это тоже вождение: цифры на
+            // нём обязаны быть живыми. Точность как в поездке; фон разрешаем,
+            // потому что телефон при этом обычно заблокирован в держателе, и
+            // без флага система вправе перестать слать фиксы.
             manager.desiredAccuracy = isLowPowerMode ? kCLLocationAccuracyNearestTenMeters : kCLLocationAccuracyBest
             manager.distanceFilter = isLowPowerMode ? 20 : 5
             manager.allowsBackgroundLocationUpdates = (manager.authorizationStatus == .authorizedAlways)

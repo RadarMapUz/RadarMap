@@ -27,6 +27,10 @@ struct RoadSketchView: View {
     /// Цвет тревоги — тот же, что у дистанции рядом: схема и цифра не должны
     /// расходиться в оценке близости.
     var tint: Color = Theme.accent
+    /// Во сколько раз толще линии. На телефоне 1: он в 30 см от глаз. Экран
+    /// машины дальше вдвое, и те же полторы точки на нём уже не видны — там
+    /// приходит AppConfig.carPlaySketchStrokeScale.
+    var strokeScale: CGFloat = 1
 
     var body: some View {
         GeometryReader { geometry in
@@ -49,7 +53,7 @@ struct RoadSketchView: View {
                 MeArrow()
                     .fill(.white)
                     .shadow(color: .black.opacity(0.6), radius: 3)
-                    .frame(width: 26, height: 30)
+                    .frame(width: 26 * strokeScale, height: 30 * strokeScale)
                     .position(pivot)
                 scaleBar(height: size.height)
             }
@@ -62,7 +66,7 @@ struct RoadSketchView: View {
     /// кольцо живёт в мировых координатах и движется вместе с дорогами само.
     private func world(side: CGFloat, k: CGFloat) -> some View {
         ZStack {
-            SketchRaster(scene: scene, k: k)
+            SketchRaster(scene: scene, k: k, strokeScale: strokeScale)
                 .equatable()
                 .frame(width: side, height: side)
             if let camera = scene.alertCamera {
@@ -70,11 +74,11 @@ struct RoadSketchView: View {
                                  y: side / 2 - camera.y * k)
                 Circle()
                     .fill(tint.opacity(0.20))
-                    .frame(width: 44, height: 44)
+                    .frame(width: 44 * strokeScale, height: 44 * strokeScale)
                     .position(at)
                 Circle()
-                    .stroke(tint, lineWidth: 3)
-                    .frame(width: 24, height: 24)
+                    .stroke(tint, lineWidth: 3 * strokeScale)
+                    .frame(width: 24 * strokeScale, height: 24 * strokeScale)
                     .position(at)
             }
         }
@@ -155,9 +159,11 @@ private struct MeArrow: Shape {
 private struct SketchRaster: View, Equatable {
     let scene: RoadSketch.Scene
     let k: CGFloat
+    /// Множитель толщин: экран машины смотрят с вдвое большего расстояния.
+    var strokeScale: CGFloat = 1
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.k == rhs.k && lhs.scene == rhs.scene
+        lhs.k == rhs.k && lhs.strokeScale == rhs.strokeScale && lhs.scene == rhs.scene
     }
 
     var body: some View {
@@ -193,7 +199,7 @@ private struct SketchRaster: View, Equatable {
                 if level > 0 {
                     for line in lines {
                         context.stroke(path(line.points), with: .color(.black),
-                                       style: .init(lineWidth: width(for: line) + 8,
+                                       style: .init(lineWidth: width(for: line) + 8 * strokeScale,
                                                     lineCap: .butt, lineJoin: .round))
                     }
                 }
@@ -203,7 +209,7 @@ private struct SketchRaster: View, Equatable {
                 for line in lines where line.isDetailed && level >= 0 {
                     context.stroke(path(line.points),
                                    with: .color(.white.opacity(0.08)),
-                                   style: .init(lineWidth: width(for: line) + 4,
+                                   style: .init(lineWidth: width(for: line) + 4 * strokeScale,
                                                 lineCap: .round, lineJoin: .round))
                 }
                 for line in lines {
@@ -225,7 +231,7 @@ private struct SketchRaster: View, Equatable {
             if scene.track.count >= 2 {
                 context.stroke(path(scene.track),
                                with: .color(.white.opacity(0.18)),
-                               style: .init(lineWidth: 5, lineCap: .round,
+                               style: .init(lineWidth: 5 * strokeScale, lineCap: .round,
                                             lineJoin: .round))
             }
 
@@ -234,12 +240,12 @@ private struct SketchRaster: View, Equatable {
             if scene.road.count >= 2 {
                 context.stroke(path(scene.road),
                                with: .color(.white.opacity(scene.roadIsMeasured ? 0.30 : 0.16)),
-                               style: .init(lineWidth: 22, lineCap: .round,
+                               style: .init(lineWidth: 22 * strokeScale, lineCap: .round,
                                             lineJoin: .round,
                                             dash: scene.roadIsMeasured ? [] : [14, 10]))
                 context.stroke(path(scene.road),
                                with: .color(.white.opacity(0.10)),
-                               style: .init(lineWidth: 1.5, lineCap: .round,
+                               style: .init(lineWidth: 1.5 * strokeScale, lineCap: .round,
                                             dash: [10, 12]))   // осевая разметка
             }
 
@@ -247,7 +253,7 @@ private struct SketchRaster: View, Equatable {
             if scene.route.count >= 2 {
                 context.stroke(path(scene.route),
                                with: .color(Theme.success.opacity(0.9)),
-                               style: .init(lineWidth: 9, lineCap: .round,
+                               style: .init(lineWidth: 9 * strokeScale, lineCap: .round,
                                             lineJoin: .round))
             }
 
@@ -260,7 +266,7 @@ private struct SketchRaster: View, Equatable {
             for dot in scene.cameras {
                 let point = at(dot.point)
                 let isAlert = dot.id == scene.alertCameraID
-                let r: CGFloat = isAlert ? 6 : 4.5
+                let r: CGFloat = (isAlert ? 6 : 4.5) * strokeScale
                 let rect = CGRect(x: point.x - r, y: point.y - r,
                                   width: r * 2, height: r * 2)
                 context.fill(Path(ellipseIn: rect),
@@ -280,6 +286,10 @@ private struct SketchRaster: View, Equatable {
     /// выдавать предположение за измеренное — здесь это так же недопустимо,
     /// как в оповещениях.
     private func width(for line: RoadSketch.Line) -> CGFloat {
+        strokeScale * base(for: line)
+    }
+
+    private func base(for line: RoadSketch.Line) -> CGFloat {
         guard line.isDetailed else { return 9 }
         switch line.kind {
         case .motorway, .trunk: return 15

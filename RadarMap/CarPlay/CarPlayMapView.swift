@@ -26,14 +26,25 @@ struct CarPlayMapView: UIViewRepresentable {
     /// его смену и дёрнуть updateUIView, иначе спрятанный тип останется на
     /// карте до следующего разворота региона.
     let filter: CameraFilter
+    /// Пробки и вид карты водитель уже настроил на телефоне. Оба значения, а
+    /// не сервис: SwiftUI обязан увидеть смену и дёрнуть updateUIView.
+    let showsTraffic: Bool
+    let isDaylight: Bool
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
         map.delegate = context.coordinator
-        map.overrideUserInterfaceStyle = .dark
+        // Тёмная карта днём под солнцем за стеклом машины не читается вовсе —
+        // это худший экран из всех, что приложение показывает. Настройка вида
+        // (тёмная / светлая / по солнцу) в приложении есть с самого начала, но
+        // до машины не доходила: здесь стояло жёсткое .dark.
+        map.overrideUserInterfaceStyle = isDaylight ? .light : .dark
         map.mapType = .mutedStandard
         map.pointOfInterestFilter = .excludingAll
-        map.showsTraffic = false
+        // Пробки — тоже настройка водителя, и тоже была прибита в false. Это
+        // ровно те красные полосы, из-за которых чужие навигаторы выглядят
+        // живыми: карта перестаёт быть схемой и начинает знать про дорогу.
+        map.showsTraffic = showsTraffic
         map.showsBuildings = false
         map.showsCompass = false
         map.isPitchEnabled = false          // плоская карта читается за рулём быстрее
@@ -126,6 +137,20 @@ struct CarPlayMapView: UIViewRepresentable {
             coordinator.reloadCameras(on: map, force: true)
         }
 
+        // Настройки водителя: пробки и день/ночь. Применяем при смене, а не
+        // каждый кадр — присваивание showsTraffic перезапрашивает слой.
+        if showsTraffic != coordinator.trafficSeen {
+            coordinator.trafficSeen = showsTraffic
+            map.showsTraffic = showsTraffic
+        }
+        let style: UIUserInterfaceStyle = isDaylight ? .light : .dark
+        if style != map.overrideUserInterfaceStyle {
+            map.overrideUserInterfaceStyle = style
+            // Иконки маркеров нарисованы под свой фон: на светлой карте те же
+            // тёмные обводки сливаются с дорогой.
+            coordinator.reloadCameras(on: map, force: true)
+        }
+
         // Цель оповещения подсвечиваем на карте: крупнее и с пульсом.
         coordinator.applyTarget(location.isApproachingCamera ? location.nearestCamera?.id : nil,
                                 on: map)
@@ -152,6 +177,7 @@ struct CarPlayMapView: UIViewRepresentable {
         var cameraCountSeen = -1
         var tripActiveSeen = false
         var thermalModeSeen = PerformanceMode.full
+        var trafficSeen: Bool?
         /// Показанные камеры по id — обновление области не пересоздаёт аннотации.
         private var shown: [Int: CameraAnnotation] = [:]
         /// Камера, к которой приближаемся (подсвеченный маркер).
@@ -166,6 +192,8 @@ struct CarPlayMapView: UIViewRepresentable {
         private var routeSource: MKPolyline?
         private var routeCasing: MKPolyline?
         private var routeLine: MKPolyline?
+        /// Светлая жила внутри ленты — верхний слой её объёма.
+        private var routeCore: MKPolyline?
         private var traveledLine: MKPolyline?
         private var traveledProgress: CLLocationDistance = -1
 
@@ -231,8 +259,10 @@ struct CarPlayMapView: UIViewRepresentable {
         func applyRoute(_ route: RouteService, on map: MKMapView) {
             let polyline = route.polyline
             if polyline !== routeSource {
-                [routeCasing, routeLine, traveledLine].compactMap { $0 }.forEach(map.removeOverlay)
+                [routeCasing, routeLine, routeCore, traveledLine]
+                    .compactMap { $0 }.forEach(map.removeOverlay)
                 routeCasing = nil
+                routeCore = nil
                 routeLine = nil
                 traveledLine = nil
                 traveledProgress = -1
@@ -246,6 +276,12 @@ struct CarPlayMapView: UIViewRepresentable {
                     map.addOverlay(polyline, level: .aboveRoads)
                     routeCasing = casing
                     routeLine = polyline
+                    // Ядро ленты — светлая жила поверх цвета: она и даёт
+                    // ощущение объёма, из-за которого лента читается дорогой,
+                    // а не чертой.
+                    let core = Self.copy(of: polyline)
+                    map.addOverlay(core, level: .aboveRoads)
+                    routeCore = core
                 }
             }
             guard routeLine != nil else { return }
@@ -381,15 +417,24 @@ struct CarPlayMapView: UIViewRepresentable {
             let renderer = MKPolylineRenderer(polyline: polyline)
             renderer.lineCap = .round
             renderer.lineJoin = .round
-            if polyline === routeCasing {
-                renderer.strokeColor = UIColor(Theme.background).withAlphaComponent(0.9)
-                renderer.lineWidth = 12
+            // Лента, а не линия. Была обводка 12 и ядро 7 — на экране машины
+            // это читается как проведённая по карте черта. Настоящий навигатор
+            // рисует маршрут полосой: тёмная кайма отделяет его от дороги,
+            // светлое ядро внутри даёт объём, и лента ложится НА полотно, а не
+            // поверх карты вообще.
+            if polyline === routeCore {
+                renderer.strokeColor = UIColor.white.withAlphaComponent(0.28)
+                renderer.lineWidth = 4
+            } else if polyline === routeCasing {
+                renderer.strokeColor = UIColor(Theme.background).withAlphaComponent(0.92)
+                renderer.lineWidth = 18
             } else if polyline === traveledLine {
-                renderer.strokeColor = UIColor.white.withAlphaComponent(0.22)
-                renderer.lineWidth = 7
+                // Пройденное гасим: оно уже не решение, а память.
+                renderer.strokeColor = UIColor.white.withAlphaComponent(0.20)
+                renderer.lineWidth = 12
             } else {
                 renderer.strokeColor = UIColor(Theme.accent)
-                renderer.lineWidth = 7
+                renderer.lineWidth = 12
             }
             return renderer
         }

@@ -46,9 +46,15 @@ struct CarPlayOverlay: View {
         // Колонку своих кнопок CarPlay кладёт в safe area, и сторона зависит от
         // системы машины. Раньше здесь стоял отступ 76 pt справа — в машине с
         // кнопками слева панель уехала бы прямо под них.
+        //
+        // Отступ по ВСЕМ сторонам, а не только по горизонтали: свои кнопки
+        // («Куда», предупреждение) CarPlay держит в верхних углах и резервирует
+        // под них верхнюю safe area. Пока мы уважали только горизонталь, баннер
+        // приближения заезжал под них и обрезался ровно на самом важном — на
+        // типе камеры и знаке ограничения.
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .safeAreaPadding(.horizontal)
+        .safeAreaPadding()
         .animation(.spring(duration: 0.35), value: env.location.isApproachingCamera)
         .animation(.spring(duration: 0.35), value: env.route.isActive)
         // HUD — только показывает: жесты карты (тап, панорама, щипок) должны
@@ -92,17 +98,23 @@ struct CarPlayOverlay: View {
     /// центральная зона получает заливку и вес, а скорость уходит на второй
     /// план — за рулём глаз должен сразу знать, что читать первым, а до этого
     /// обе цифры были набраны почти одинаково и конкурировали.
+    /// Выравнивание зависит от места зоны: первая жмётся влево, последняя —
+    /// вправо, средняя стоит по центру. Все три были прижаты влево, и на
+    /// широком экране машины правая треть панели пустовала всегда — панель
+    /// выглядела недовёрстанной ровно там, где взгляд ищет прибытие.
     private func dockRow(showRoute: Bool) -> some View {
-        HStack(spacing: 0) {
+        let withRoute = showRoute && env.route.isActive
+        return HStack(spacing: 0) {
             speedCell
                 .frame(maxWidth: .infinity, alignment: .leading)
             cellDivider
             cameraCell
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if showRoute, env.route.isActive {
+                .frame(maxWidth: .infinity,
+                       alignment: withRoute ? .center : .trailing)
+            if withRoute {
                 cellDivider
                 etaCell
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
     }
@@ -311,12 +323,24 @@ struct CarPlayOverlay: View {
                 Text(Formatting.distance(distance))
                     .font(.rounded(28, .heavy).monospacedDigit())
                     .foregroundStyle(.white)
+                    // Не переносить и не сжимать. Когда рядом стоит баннер
+                    // манёвра, места на двоих может не хватить, и без этого
+                    // «378 м» рассыпалось по одной цифре в строку. Уступать
+                    // место обязан манёвр (у него ellipsis), а не цифра, ради
+                    // которой баннер существует.
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .contentTransition(.numericText())
                     .animation(.easeOut(duration: 0.3), value: Int(distance))
-                Text(camera.kind.displayName)
-                    .font(.rounded(11, .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
+                // shortName, а не displayName: последнее для «интеллектуальной
+                // камеры + радара» даёт 31 символ, баннер растягивался под них
+                // до угла экрана и уезжал под кнопки CarPlay. Тип нужен одним
+                // словом — подробности водитель за рулём не читает.
+                Text(camera.kind.shortName)
+                    .font(.rounded(13, .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
                     .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
 
             if let limit = env.speedLimits.limit(near: camera.coordinate) {
@@ -325,6 +349,11 @@ struct CarPlayOverlay: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        // Потолок ширины — как у баннера манёвра. Без него баннер рос по
+        // содержимому и упирался в системные кнопки.
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(maxWidth: 340, alignment: .trailing)
+        .layoutPriority(1)
         .background(tint.gradient,
                     in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: tint.opacity(0.55), radius: 16, y: 6)
@@ -354,7 +383,8 @@ struct CarPlayOverlay: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .frame(maxWidth: 340, alignment: .leading)
+        .frame(maxWidth: 320, alignment: .leading)
+        .layoutPriority(0)
         .background(Theme.background.opacity(0.88),
                     in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)

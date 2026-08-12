@@ -82,6 +82,17 @@
         }
       }
     },
+    "%1$lld · до %2$@": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld · %2$@ gacha"
+          }
+        }
+      }
+    },
     "%1$lld × %2$lld %%": {
       "localizations": {
         "ru": {
@@ -2126,6 +2137,28 @@
         }
       }
     },
+    "Впереди": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda"
+          }
+        }
+      }
+    },
+    "Впереди чисто": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda toza"
+          }
+        }
+      }
+    },
     "Время риска — %1$@: там %2$lld из %3$lld превышений": {
       "localizations": {
         "ru": {
@@ -3410,6 +3443,17 @@
         }
       }
     },
+    "Ждём движения": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Harakatni kutamiz"
+          }
+        }
+      }
+    },
     "Ждём спутники": {
       "localizations": {
         "ru": {
@@ -4304,6 +4348,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Oy kalendari"
+          }
+        }
+      }
+    },
+    "Камер в двух километрах нет": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikki kilometr ichida kamera yo‘q"
           }
         }
       }
@@ -5476,6 +5531,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dasturchiga yozish"
+          }
+        }
+      }
+    },
+    "Направление пока неизвестно": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘nalish hozircha noma’lum"
           }
         }
       }

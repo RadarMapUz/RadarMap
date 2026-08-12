@@ -20,23 +20,32 @@ struct CarPlaySketchView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if let scene = sketch.scene, sketch.hasCourse, !scene.isEmpty {
-                RoadSketchView(scene: scene, state: sketch, tint: alertColor)
-                    // Схема живёт над доком: линейка масштаба и нижний край
-                    // не должны утонуть под панелью скорости.
-                    .padding(.bottom, AppConfig.carPlayDockBottomInset)
-                    // Стоим и курса нет: рисуем «последнее, что знали»,
-                    // приглушённо — как на приборке телефона.
-                    .opacity(env.location.currentCourse < 0 ? 0.45 : 1)
-                    .animation(.easeOut(duration: 0.4),
-                               value: env.location.currentCourse < 0)
-            } else {
-                // Оформленное состояние, а не строка серого текста посреди
-                // чёрного: последнее читается как ошибка приложения, хотя
-                // ничего не сломано — схема просто ждёт курса, которого у
-                // стоящей машины нет.
-                sketchWaiting
-                    .padding(.bottom, AppConfig.carPlayDockBottomInset)
+            // Экран машины — не растянутый телефон. Он в два-три раза шире,
+            // чем высок, а схема — вид ВПЕРЁД: полезное живёт на вертикальной
+            // оси. Масштаб схемы считается от высоты, поэтому на всю ширину
+            // она показывала втрое больше метров вбок, чем вперёд, и дорога
+            // превращалась в нитку посреди чёрного поля. Поэтому широкий экран
+            // делим: схеме — её пропорция, остальное отдаём ленте «что
+            // впереди», которая отвечает на вопрос, не покрытый ничем другим:
+            // а что будет ПОСЛЕ ближайшей камеры.
+            GeometryReader { geometry in
+                let wide = geometry.size.width >= AppConfig.carPlayWidePointsThreshold
+                    || Self.forceWide
+                let sketchHeight = geometry.size.height - AppConfig.carPlayDockBottomInset
+                HStack(spacing: 14) {
+                    canvas
+                        .frame(maxWidth: wide
+                               ? min(geometry.size.width - AppConfig.carPlayAheadPanelWidth - 14,
+                                     sketchHeight * AppConfig.carPlaySketchMaxAspect)
+                               : .infinity)
+                    if wide {
+                        CarPlayAheadPanel()
+                            .frame(width: AppConfig.carPlayAheadPanelWidth)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.bottom, AppConfig.carPlayDockBottomInset)
+                .padding(.horizontal, 12)
             }
         }
         // Тик GPS → точка зрения схемы (гейт неподвижности внутри refresh).
@@ -49,6 +58,35 @@ struct CarPlaySketchView: View {
         }
         .onDisappear { env.location.setCarPlaySketchVisible(false) }
         .accessibilityHidden(true)   // цифры дока CarPlay уже озвучены
+    }
+
+    /// Широкая раскладка принудительно. Превью CarPlay на симуляторе имеет
+    /// форму телефона — портрет, — и деления экрана в нём не увидеть вовсе,
+    /// хотя именно оно и есть весь смысл правки. Хук позволяет снять
+    /// композицию, не садясь в машину.
+    private static var forceWide: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-carplayWide")
+        #else
+        false
+        #endif
+    }
+
+    /// Сама схема или её ожидание — в одном месте, чтобы раскладка выше не
+    /// повторяла условие дважды.
+    @ViewBuilder
+    private var canvas: some View {
+        if let scene = sketch.scene, sketch.hasCourse, !scene.isEmpty {
+            RoadSketchView(scene: scene, state: sketch, tint: alertColor,
+                           strokeScale: AppConfig.carPlaySketchStrokeScale)
+                // Стоим и курса нет: рисуем «последнее, что знали»,
+                // приглушённо — как на приборке телефона.
+                .opacity(env.location.currentCourse < 0 ? 0.45 : 1)
+                .animation(.easeOut(duration: 0.4),
+                           value: env.location.currentCourse < 0)
+        } else {
+            sketchWaiting
+        }
     }
 
     /// Схема ждёт движения. Значок и ритм вместо одинокой строки: состояние

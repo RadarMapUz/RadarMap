@@ -81,7 +81,9 @@ struct CarPlayMapScreen: View {
                                location: env.location,
                                speedLimits: env.speedLimits,
                                thermal: env.thermal,
-                               filter: env.settings.filter)
+                               filter: env.settings.filter,
+                               showsTraffic: env.settings.mapTraffic,
+                               isDaylight: isDaylight)
                     .ignoresSafeArea()
             }
 
@@ -103,6 +105,21 @@ struct CarPlayMapScreen: View {
         .onAppear { model.autoSwitch(for: env.thermal.mode) }
         .onChange(of: env.thermal.mode) { _, mode in
             withAnimation(.easeInOut(duration: 0.3)) { model.autoSwitch(for: mode) }
+        }
+    }
+
+    /// Светлая подложка карты — по той же настройке, что на телефоне, и по
+    /// тому же солнцу. Правило «Авто» считает восход и закат в точке водителя,
+    /// а не по часам: в декабре в 18:30 уже темно, и белая карта слепит.
+    ///
+    /// Координата берётся живая, а не троттленная как на телефоне: тут она
+    /// читается не в body карты, а один раз при пересборке экрана, и NOAA-счёт
+    /// на этом пути не идёт каждым фиксом.
+    private var isDaylight: Bool {
+        switch env.settings.mapAppearance {
+        case .dark:  return false
+        case .light: return true
+        case .auto:  return Sun.isDaytime(at: env.location.currentCoordinate, now: Date())
         }
     }
 }

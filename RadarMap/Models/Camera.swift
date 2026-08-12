@@ -98,13 +98,24 @@ nonisolated enum CameraType: Hashable {
     }
 
     /// SF Symbol для аннотации на карте.
+    /// Значок типа. Критерий здесь один и он не про красоту: РАЗЛИЧИМОСТЬ
+    /// силуэта на 11 пунктах. Значок живёт в маркере карты, в ленте машины и
+    /// в доке, его смотрят боковым зрением доли секунды, и если два типа дают
+    /// одинаковое пятно — значок не работает вовсе.
+    ///
+    /// Две «метрические» иконки фотоаппарата (camera.metering.matrix у
+    /// интеллектуальной и camera.metering.spot у треноги) этот критерий
+    /// проваливали: обе — круг с мелочью внутри, на маленьком кегле сливаются
+    /// и друг с другом, и с обычной камерой. Заменены на силуэты, которые
+    /// различаются издалека: тег с волнами (устройство, которое ещё и меряет)
+    /// и маяк на стойке (прибор у обочины).
     var symbolName: String {
         switch self {
         case .stationaryCamera: return "camera.fill"
         case .stationaryRadar:  return "speedometer"
-        case .intelligentRadar: return "camera.metering.matrix"
+        case .intelligentRadar: return "sensor.tag.radiowaves.forward.fill"
         case .mobileRadar:      return "dot.radiowaves.left.and.right"
-        case .tripod:           return "camera.metering.spot"
+        case .tripod:           return "light.beacon.max.fill"
         case .dpsPost:          return "shield.lefthalf.filled"
         case .accident:         return "exclamationmark.triangle.fill"
         case .other:            return "mappin"

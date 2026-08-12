@@ -32,6 +32,7 @@ struct CarPlaySketchView: View {
                 let wide = geometry.size.width >= AppConfig.carPlayWidePointsThreshold
                     || Self.forceWide
                 let sketchHeight = geometry.size.height - AppConfig.carPlayDockBottomInset
+                    - AppConfig.carPlayContentGap
                 HStack(spacing: 14) {
                     canvas
                         .frame(maxWidth: wide
@@ -44,7 +45,7 @@ struct CarPlaySketchView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.bottom, AppConfig.carPlayDockBottomInset)
+                .padding(.bottom, AppConfig.carPlayDockBottomInset + AppConfig.carPlayContentGap)
                 .padding(.horizontal, 12)
             }
         }

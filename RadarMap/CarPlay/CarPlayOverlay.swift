@@ -98,23 +98,25 @@ struct CarPlayOverlay: View {
     /// центральная зона получает заливку и вес, а скорость уходит на второй
     /// план — за рулём глаз должен сразу знать, что читать первым, а до этого
     /// обе цифры были набраны почти одинаково и конкурировали.
-    /// Выравнивание зависит от места зоны: первая жмётся влево, последняя —
-    /// вправо, средняя стоит по центру. Все три были прижаты влево, и на
-    /// широком экране машины правая треть панели пустовала всегда — панель
-    /// выглядела недовёрстанной ровно там, где взгляд ищет прибытие.
+    /// Каждая зона стоит по центру своей доли панели.
+    ///
+    /// Прижатыми влево они оставляли пустой правую треть; прижатыми к краям —
+    /// дыру посередине, и на настоящем экране машины эта дыра оказалась в
+    /// семьсот точек, то есть шире любой из зон. Центрирование в своей доле
+    /// даёт единственную раскладку, которая ровна при любом числе зон: поля
+    /// распределяются симметрично, а не собираются в одном месте.
     private func dockRow(showRoute: Bool) -> some View {
         let withRoute = showRoute && env.route.isActive
         return HStack(spacing: 0) {
             speedCell
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity)
             cellDivider
             cameraCell
-                .frame(maxWidth: .infinity,
-                       alignment: withRoute ? .center : .trailing)
+                .frame(maxWidth: .infinity)
             if withRoute {
                 cellDivider
                 etaCell
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .frame(maxWidth: .infinity)
             }
         }
     }

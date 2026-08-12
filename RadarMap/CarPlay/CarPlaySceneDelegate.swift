@@ -34,6 +34,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                                   didConnect interfaceController: CPInterfaceController,
                                   to window: CPWindow) {
         self.interfaceController = interfaceController
+        // Режим меняет не только кнопка, но и автоматика жары — из вью.
+        // Кнопки шаблона обязаны пойти следом в обоих случаях.
+        if model.onViewModeChanged == nil {
+            model.onViewModeChanged = { [weak self] in self?.syncTemplate() }
+        }
 
         let host = UIHostingController(rootView: CarPlayMapScreen(model: model)
             .environment(env))
@@ -91,7 +96,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Единая пересборка кнопок: и бар, и кнопки карты зависят от состояния
     /// (идёт поездка, построен маршрут, включён звук). Читаем состояние внутри
     /// withObservationTracking — при любом изменении собираем заново.
-    private func syncTemplate() {
+    func syncTemplate() {
         guard let mapTemplate else { return }
         let session = session   // подписка живёт до первого изменения — привязываем к сессии
 
@@ -168,8 +173,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// автоматика предпочитает схему, но нажатая кнопка старше автоматики.
     private func viewButton(sketchShown: Bool) -> CPBarButton {
         CPBarButton(title: sketchShown ? String(localized: "Карта")
-                                       : String(localized: "Схема")) { [model] _ in
-            model.toggleView()
+                                       : String(localized: "Схема")) { [weak self] _ in
+            self?.model.toggleView()
+            // Пересобираем шаблон СРАЗУ, не полагаясь на наблюдение.
+            //
+            // Кнопки живут вне цикла обновления SwiftUI: их держит CPMapTemplate,
+            // и обновляются они только этой пересборкой. Наблюдение
+            // (withObservationTracking) её обычно и вызывает, но у него есть
+            // окно: подписка одноразовая и восстанавливается асинхронно, а
+            // изменения, случившиеся в этом промежутке, теряются. В машине это
+            // выглядело так: содержимое уже схема, а на кнопке всё ещё «Схема»
+            // и рядом четыре кнопки карты — то есть шаблон остался в прежнем
+            // режиме. Прямой вызов делает состояние кнопок следствием нажатия,
+            // а не гонки.
+            self?.syncTemplate()
         }
     }
 

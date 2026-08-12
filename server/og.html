@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>RadarMap — карточка для мессенджеров</title>
+<style>
+/* Исходник картинки og.png (1200×630) — той, что видно, когда ссылку на
+   страницу присылают в Telegram или WhatsApp. Держим его в репозитории, а не
+   только готовый PNG: карточку придётся переснимать при смене названия,
+   слогана или палитры, и рисовать её заново с нуля будет дороже, чем
+   поправить здесь одну строку.
+
+   Пересъёмка (Chrome умеет снимать страницу без окна):
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+       --headless --disable-gpu --hide-scrollbars \
+       --screenshot=/tmp/og_src.png --window-size=1200,630 server/og.html
+     python3 -c "from PIL import Image; Image.open('/tmp/og_src.png') \
+       .convert('RGB').save('server/og.jpg', quality=95, optimize=True, \
+       progressive=True, subsampling=0)"
+
+   JPEG, а не PNG: снимок — сплошные градиенты, PNG весит 305 КБ против 93 КБ
+   при отклонении максимум 18 из 255, то есть незаметном глазу. Без цветовой
+   субдискретизации (subsampling=0), иначе голубой текст на тёмном фоне
+   расползается по краям.
+
+   Размеры заданы жёстко в пикселях: это не страница, а холст. */
+* { box-sizing:border-box; margin:0; }
+:root { --bg:#05070c; --text:#e8ecf3; --text-2:#93a3bd; --accent:#3cdcff; }
+body {
+  width:1200px; height:630px; overflow:hidden;
+  background:
+    radial-gradient(900px 620px at 22% 50%, rgba(60,220,255,.14), transparent 62%),
+    radial-gradient(700px 520px at 92% 8%, rgba(60,220,255,.07), transparent 60%),
+    var(--bg);
+  color:var(--text); display:flex; align-items:center; gap:74px; padding:0 86px;
+  font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* Радар — тот же предмет, что в шапке страницы: человек, перешедший по
+   ссылке, должен узнать картинку, которую только что видел в превью. */
+.radar { position:relative; width:300px; height:300px; flex:none; border-radius:50%;
+         border:1px solid rgba(60,220,255,.3);
+         background:radial-gradient(circle, rgba(60,220,255,.12), transparent 70%); }
+.radar i { position:absolute; border-radius:50%; border:1px solid rgba(60,220,255,.17);
+           inset:46px; }
+.radar i + i { inset:92px; }
+.radar .sweep { position:absolute; inset:0; border-radius:50%; overflow:hidden;
+                background:conic-gradient(from 200deg, transparent 0deg,
+                          rgba(60,220,255,.07) 48deg, rgba(60,220,255,.44) 90deg,
+                          transparent 90.5deg); }
+.radar .core { position:absolute; left:50%; top:50%; width:24px; height:24px;
+               margin:-12px 0 0 -12px; border-radius:50%; background:var(--accent);
+               box-shadow:0 0 40px rgba(60,220,255,.95); }
+.radar b { position:absolute; width:13px; height:13px; border-radius:50%;
+           background:var(--accent); box-shadow:0 0 18px rgba(60,220,255,.8); }
+.radar b.a { left:73%; top:29% } .radar b.b { left:25%; top:61% }
+
+.text { min-width:0; }
+h1 { font-size:104px; letter-spacing:-4.4px; font-weight:750; line-height:1; }
+p { font-size:34px; line-height:1.32; color:var(--text-2); margin-top:22px; max-width:640px; }
+.row { display:flex; gap:12px; margin-top:38px; flex-wrap:wrap; }
+.row span { font-size:23px; font-weight:600; color:var(--accent);
+            border:1px solid rgba(60,220,255,.34); border-radius:999px; padding:9px 20px;
+            background:rgba(60,220,255,.07); }
+</style>
+</head>
+<body>
+  <div class="radar">
+    <div class="sweep"></div>
+    <i></i><i></i>
+    <b class="a"></b><b class="b"></b>
+    <span class="core"></span>
+  </div>
+  <div class="text">
+    <h1>RadarMap</h1>
+    <p>Камеры Узбекистана и голосовое предупреждение.<br>Работает без интернета.</p>
+    <div class="row"><span>Бесплатно</span><span>Без рекламы</span><span>Без регистрации</span></div>
+  </div>
+</body>
+</html>

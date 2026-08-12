@@ -9,6 +9,15 @@
 <meta property="og:title" content="RadarMap — камеры и радары Узбекистана">
 <meta property="og:description" content="Предупреждает голосом о камерах. Работает без интернета. Треноги находим вместе.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://soulmed.uz/radarmap/">
+<!-- Ссылку шлют в мессенджеры — без картинки Telegram и WhatsApp рисуют голую
+     текстовую строку, и приложение выглядит как случайная ссылка. -->
+<meta property="og:image" content="https://soulmed.uz/radarmap/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<!-- Safari на iPhone показывает нативную плашку «Открыть» вместо нашей кнопки. -->
+<meta name="apple-itunes-app" content="app-id=6792473173">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%2305070c'/><circle cx='16' cy='16' r='11' fill='none' stroke='%233cdcff' stroke-opacity='.4'/><circle cx='16' cy='16' r='6' fill='none' stroke='%233cdcff' stroke-opacity='.6'/><circle cx='16' cy='16' r='3' fill='%233cdcff'/></svg>">
 <style>
 /* ==========================================================================
@@ -35,7 +44,11 @@
 
 :root {
   --bg:#05070c; --surface:#0c1017; --surface-2:#111826; --stroke:#1b2231;
-  --text:#e8ecf3; --text-2:#93a3bd; --text-3:#606d82;
+  /* Третья ступень текста подтянута с #606d82: та давала 3.4:1 к самой светлой
+     панели и не проходила AA нигде, где применена, — а это строка требований
+     под кнопкой и весь подвал. #7c8ba6 даёт 5.2:1 и остаётся заметно тише
+     второй ступени (7.0:1), то есть иерархия сохранилась. */
+  --text:#e8ecf3; --text-2:#93a3bd; --text-3:#7c8ba6;
   --accent:#3cdcff; --ok:#38e58c; --warn:#ffb527; --bad:#ff4560;
   --ease:cubic-bezier(.22,.61,.36,1);
   color-scheme: dark;
@@ -50,7 +63,20 @@ body {
 }
 .wrap { max-width:1000px; margin:0 auto; padding:0 20px; }
 a { color:var(--accent); }
-h2 { font-size:clamp(24px,4vw,32px); margin:0 0 12px; letter-spacing:-.6px; }
+
+/* Видимый фокус. Тёмная тема прощает его отсутствие хуже светлой: без кольца
+   человек, идущий по странице с клавиатуры или через Switch Control, просто
+   теряет каретку. Ниже кнопки языка сбрасываются точечно, а не через
+   all:unset — тот стирал в том числе outline, и вернуть его было нечем. */
+:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+
+/* Заголовку нужен свой интерлиньяж: от body наследовался 1.55, и как только
+   заголовок переносился на две строки — а узбекский длиннее русского и
+   переносится чаще, — он распадался на два отдельных высказывания.
+   Трекинг в em, а не в px: кегль задан через clamp(), и фиксированные
+   пиксели зажимали заголовок на телефоне вдвое сильнее, чем на десктопе. */
+h2 { font-size:clamp(24px,4vw,32px); margin:0 0 12px; letter-spacing:-.019em;
+     line-height:1.16; }
 .lead { color:var(--text-2); font-size:17px; max-width:560px; margin:0 0 28px; }
 section { padding:72px 0; }
 
@@ -61,18 +87,43 @@ section { padding:72px 0; }
   padding:0 20px; background:rgba(5,7,12,.72);
   backdrop-filter:saturate(180%) blur(14px);
   border-bottom:1px solid transparent;
-  transform:translateY(-100%); transition:transform .35s var(--ease), border-color .35s;
+  /* visibility, а не только сдвиг. Сдвинутая трансформом шапка остаётся в
+     дереве доступности: первые три Tab на странице уходили в неё — на язык,
+     на язык и на ссылку в App Store, — а показать фокус браузеру негде,
+     доскроллить до position:fixed он не может. Задержка 0s .35s гасит
+     элемент после того, как он уехал, иначе пропадёт сама анимация ухода. */
+  visibility:hidden;
+  transform:translateY(-100%);
+  transition:transform .35s var(--ease), border-color .35s, visibility 0s .35s;
 }
-.bar.show { transform:none; border-bottom-color:var(--stroke); }
+.bar.show { transform:none; border-bottom-color:var(--stroke); visibility:visible;
+            transition:transform .35s var(--ease), border-color .35s; }
 .bar .name { font-weight:700; letter-spacing:-.3px; margin-right:auto; }
 .bar .mini { display:inline-flex; align-items:center; gap:6px; }
 .bar .mini svg { width:18px; height:18px; }
+/* Кнопка шапки не тянется и не переносится. На узких экранах общее правило
+   .btn { width:100% } делало её флекс-элементом во всю панель, тот сжимался,
+   и «Yuklab olish» вставало в две строки высотой 63px — в панели высотой 56.
+   Ниже 400 точек ещё и прячем название: язык плюс призыв важнее подписи,
+   которая через сантиметр повторена заголовком героя. */
+.bar .btn { width:auto; white-space:nowrap; }
+@media (max-width:400px) {
+  .bar .name { display:none; }
+  .bar .lang { margin-right:auto; }
+}
 
 /* --- Переключатель языка --- */
 .lang { display:inline-flex; background:var(--surface-2); border:1px solid var(--stroke);
         border-radius:999px; padding:2px; }
-.lang button { all:unset; cursor:pointer; padding:5px 12px; border-radius:999px;
-               font-size:13px; font-weight:600; color:var(--text-3); }
+/* Сброс точечный: all:unset заодно стирал outline, и кольцо фокуса на
+   единственном переключателе страницы вернуть было нечем. Паддинг поднят с
+   5px до 8px — цель выросла с 30 до 36 точек по высоте и всё ещё помещается
+   в 56-пиксельную шапку. */
+.lang button { appearance:none; margin:0; padding:8px 14px; background:none; border:0;
+               font:inherit; cursor:pointer; border-radius:999px;
+               font-size:13px; font-weight:600; color:var(--text-3);
+               transition:color .18s; }
+.lang button[aria-pressed="false"]:hover { color:var(--text); }
 .lang button[aria-pressed="true"] { background:var(--accent); color:#04222c; }
 
 /* --- Первый экран --- */
@@ -93,7 +144,12 @@ section { padding:72px 0; }
 .radar .sweep { position:absolute; inset:0; border-radius:50%; overflow:hidden; }
 .radar .sweep::before {
   content:""; position:absolute; inset:0; border-radius:50%;
-  background:conic-gradient(from 0deg, rgba(60,220,255,.42), rgba(60,220,255,.06) 42deg, transparent 90deg);
+  /* Яркая кромка — ВЕДУЩАЯ, хвост тянется за ней. Было наоборот: сектор
+     занимает углы [φ, φ+90], вращение по часовой, значит впереди идёт край
+     φ+90 — а яркость стояла на φ, то есть хвост летел впереди луча. */
+  background:conic-gradient(from 0deg, transparent 0deg,
+                            rgba(60,220,255,.06) 48deg, rgba(60,220,255,.42) 90deg,
+                            transparent 90.5deg);
   animation:sweep 3.4s linear infinite;
 }
 @keyframes sweep { to { transform:rotate(360deg); } }
@@ -104,9 +160,14 @@ section { padding:72px 0; }
         opacity:0; animation:ping 3.4s linear infinite; }
 @keyframes ping { 0%,4% { opacity:0; transform:scale(.4) } 8% { opacity:1; transform:scale(1) }
                   45% { opacity:.5 } 70%,100% { opacity:0 } }
-.ping.a { left:74%; top:30%; animation-delay:.35s; }
-.ping.b { left:26%; top:62%; animation-delay:1.5s; }
-.ping.c { left:60%; top:76%; animation-delay:2.4s; }
+/* Задержки посчитаны, а не подобраны: угол каждой точки от центра круга
+   переведён во время, за которое до неё доходит ведущая кромка луча, минус
+   0.27s — столько идёт от старта анимации до пика вспышки. Раньше числа были
+   взяты на глаз, и три огонька мигали сами по себе, отдельно от развёртки:
+   первое, что человек видит на странице, не работало как механизм. */
+.ping.a { left:74%; top:30%; animation-delay:2.79s; }  /*  55° от «12 часов» */
+.ping.b { left:26%; top:62%; animation-delay:1.12s; }  /* 237° */
+.ping.c { left:60%; top:76%; animation-delay:0.36s; }  /* 157° */
 
 .cta { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
 .btn { display:inline-flex; align-items:center; justify-content:center; gap:9px;
@@ -117,7 +178,16 @@ section { padding:72px 0; }
 .btn:active { transform:translateY(0); }
 .btn.primary { background:linear-gradient(180deg,#54e2ff,#17aed8); color:#02202b;
                border-color:transparent; box-shadow:0 10px 30px -12px rgba(60,220,255,.7); }
+/* Вторая кнопка обязана быть тише первой: на первом экране у страницы одна
+   работа — установка, а просьба о деньгах до того, как человек что-то
+   получил, эту работу перебивает. Тише — но не невидимо: рамка и тёплый
+   акцент оставляют её кнопкой, а не примечанием.
+   Раньше геометрию этой кнопки забирал класс .support секции поддержки: имена
+   совпадали, вес в каскаде тоже, а секция объявлена ниже — и кнопка получала
+   её padding:34px с радиусом 24 вместо 15/26 и 15. Секция теперь
+   .support-card, и совпадать нечему. */
 .btn.support { border-color:#3a2f10; color:var(--warn); background:#16110a; }
+.btn.support:hover { border-color:#5a4718; background:#1c150b; }
 .btn svg { width:19px; height:19px; }
 .note { color:var(--text-3); font-size:13.5px; margin-top:16px; }
 
@@ -157,19 +227,27 @@ section { padding:72px 0; }
            clip-path:polygon(41% 0, 59% 0, 128% 100%, -28% 100%); }
 .asphalt::before, .asphalt::after { content:""; position:absolute; top:0; bottom:0; width:2px;
            background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.22)); }
-.asphalt::before { left:41%; transform:skewX(-19deg); transform-origin:top; }
-.asphalt::after  { right:41%; transform:skewX(19deg); transform-origin:top; }
+/* 21.6°, а не 19°: полотно сходится от 41%/59% к −28%/128% на своей высоте,
+   и это его настоящий наклон. При 19° кромка уползала внутрь асфальта, и
+   у нижнего края экрана вдоль неё тянулся клин дороги ЗА краем дороги. */
+.asphalt::before { left:41%; transform:skewX(-21.6deg); transform-origin:top; }
+.asphalt::after  { right:41%; transform:skewX(21.6deg); transform-origin:top; }
 
-/* Разметка: каждый штрих едет от горизонта к низу, вырастая и светлея. */
-.dash { position:absolute; left:50%; top:16%; width:5px; height:16px; margin-left:-2.5px;
+/* Разметка: каждый штрих едет от горизонта к низу, вырастая и светлея.
+   Едет НЕ строго вниз, а расходится от точки схода — иначе осевая остаётся
+   осевой на всём протяжении и проходит ровно через машину. Уход влево делает
+   её левой границей правого ряда, в котором машина и едет.
+   Уже, чем была (4px против 5): при увеличении в 3.4 раза штрих у нижнего
+   края догонял машину по ширине, и силуэты переставали различаться. */
+.dash { position:absolute; left:50%; top:16%; width:4px; height:16px; margin-left:-2px;
         border-radius:3px; background:#fff; opacity:0; transform-origin:top center;
         z-index:2;   /* выше полотна (.asphalt), иначе разметки просто не видно */
         animation:dash 2.4s linear infinite; }
 @keyframes dash {
-  0%   { opacity:0;  transform:translateY(0)    scale(.35); }
-  12%  { opacity:.5; }
-  70%  { opacity:.85; }
-  100% { opacity:0;  transform:translateY(430px) scale(3.4); }
+  0%   { opacity:0;  transform:translate(0,0)         scale(.35); }
+  12%  { opacity:.45; }
+  70%  { opacity:.8; }
+  100% { opacity:0;  transform:translate(-68px,430px) scale(3.4); }
 }
 /* nth-of-type, а не nth-child: nth-child считает всех соседей, а перед
    штрихами в .screen лежат дорога, горизонт, полотно и две обочины — задержки
@@ -183,11 +261,18 @@ section { padding:72px 0; }
 .side.l { left:0 } .side.r { right:0 }
 .side b { position:absolute; display:block; border-radius:3px 3px 0 0;
           background:linear-gradient(180deg,#1b2739,#0d1420); opacity:0;
-          animation:side 2.4s linear infinite; }
-.side.l b { right:8% } .side.r b { left:8% }
-@keyframes side { 0% { opacity:0; transform:translateY(0) scale(.3) }
-                  20% { opacity:.85 } 75% { opacity:.85 }
-                  100% { opacity:0; transform:translateY(400px) scale(2.6) } }
+          animation-duration:2.4s; animation-timing-function:linear;
+          animation-iteration-count:infinite; }
+.side.l b { right:8%; animation-name:sideL } .side.r b { left:8%; animation-name:sideR }
+/* Дома тоже расходятся от точки схода. Пока они ехали строго вниз, а дорога
+   под ними расширялась, ближний план заезжал на асфальт — тёмные пятна
+   ползли по полотну и читались как грязь. */
+@keyframes sideL { 0% { opacity:0; transform:translate(0,0) scale(.3) }
+                   20% { opacity:.85 } 75% { opacity:.85 }
+                   100% { opacity:0; transform:translate(-46px,400px) scale(2.6) } }
+@keyframes sideR { 0% { opacity:0; transform:translate(0,0) scale(.3) }
+                   20% { opacity:.85 } 75% { opacity:.85 }
+                   100% { opacity:0; transform:translate(46px,400px) scale(2.6) } }
 .side b:nth-child(1) { width:26px; height:34px; animation-delay:.2s }
 .side b:nth-child(2) { width:20px; height:52px; animation-delay:1.1s }
 .side b:nth-child(3) { width:30px; height:28px; animation-delay:1.9s }
@@ -200,13 +285,19 @@ section { padding:72px 0; }
          animation:speed 8s var(--ease) infinite; }
 .spd b::after { counter-reset:s var(--spd); content:counter(s); }
 .spd span { font-size:10.5px; color:var(--text-3); text-transform:uppercase; letter-spacing:.6px; }
-@keyframes speed { 0% { --spd:0 } 30%,64% { --spd:78 } 80% { --spd:57 } 100% { --spd:57 } }
+/* Порядок событий в цикле — это и есть обещание продукта, поэтому он выверен
+   по кадрам: разгон до 78 → на 30% появляется карточка → торможение начинается
+   сразу за ней и заканчивается к 54% → камера проходит мимо на 62% уже при 57
+   при знаке 60. Раньше торможение стояло на 64–80%, то есть ПОСЛЕ камеры:
+   единственная демонстрация продукта на всей странице показывала водителя,
+   который получил предупреждение, ничего не сделал и уехал со штрафом. */
+@keyframes speed { 0% { --spd:0 } 22%,36% { --spd:78 } 54%,100% { --spd:57 } }
 
 .limit { margin-left:auto; width:46px; height:46px; border-radius:50%; background:#fff;
          border:4px solid var(--bad); display:grid; place-items:center; color:#111;
          font-weight:800; font-size:17px; animation:limitPulse 8s var(--ease) infinite; }
-@keyframes limitPulse { 0%,40% { transform:scale(1) } 50% { transform:scale(1.14) }
-                        60%,100% { transform:scale(1) } }
+@keyframes limitPulse { 0%,30% { transform:scale(1) } 38% { transform:scale(1.14) }
+                        46%,100% { transform:scale(1) } }
 
 /* Камера: пин с конусом обзора — сразу видно, что она смотрит на дорогу. */
 .pin { position:absolute; left:63%; top:20%; margin-left:-19px; width:38px; height:38px;
@@ -217,22 +308,33 @@ section { padding:72px 0; }
 .pin::before { content:""; position:absolute; top:26px; left:50%; width:120px; height:150px;
        margin-left:-60px; z-index:-1; clip-path:polygon(50% 0, 100% 100%, 0 100%);
        background:linear-gradient(180deg, rgba(255,69,96,.26), transparent 78%); }
-@keyframes pin { 0%,18% { opacity:0; transform:translateY(-30px) scale(.5) }
-                 27% { opacity:1; transform:translateY(0) scale(1) }
-                 62% { opacity:1; transform:translateY(300px) scale(1.5) }
-                 70%,100% { opacity:0; transform:translateY(360px) scale(1.7) } }
+/* Камера уходит вправо по мере приближения — она стоит справа от оси, и от
+   точки схода её разносит так же, как разметку и дома. Пока смещения не было,
+   она подъезжала строго по вертикали и ныряла сквозь машину вместо того,
+   чтобы пройти мимо; заодно карточка обещала «впереди справа», а картинка
+   показывала «прямо по курсу». */
+@keyframes pin { 0%,18% { opacity:0; transform:translate(0,-30px) scale(.5) }
+                 27% { opacity:1; transform:translate(0,0) scale(1) }
+                 62% { opacity:1; transform:translate(52px,300px) scale(1.5) }
+                 70%,100% { opacity:0; transform:translate(64px,360px) scale(1.7) } }
 
-/* Машина: стоит на месте, движется мир — так и воспринимается за рулём. */
-.car { position:absolute; left:50%; bottom:104px; margin-left:-17px; width:34px; height:58px;
-       border-radius:13px; z-index:4;
-       background:linear-gradient(180deg,#6ee3ff,#1aa9d4);
-       box-shadow:0 0 30px rgba(60,220,255,.45), 0 10px 20px rgba(0,0,0,.5); }
-.car::after { content:""; position:absolute; inset:8px 6px auto; height:15px; border-radius:6px;
-       background:rgba(4,20,28,.6); }
+/* Машина: стоит на месте, движется мир — так и воспринимается за рулём.
+   Была скруглённым прямоугольником с тёмным прямоугольником сверху и читалась
+   как капсула: силуэт совпадал со штрихами разметки, по которым она к тому же
+   ехала верхом. Теперь это рисунок — вид сзади-сверху, сужение к носу, стёкла
+   отдельными плоскостями, зеркала и габариты. Форма важнее детализации:
+   на 36 точках ширины узнаётся именно силуэт. */
+.car { position:absolute; left:50%; bottom:126px; margin-left:-18px; width:36px; height:62px;
+       z-index:4; filter:drop-shadow(0 0 22px rgba(60,220,255,.4))
+                        drop-shadow(0 8px 14px rgba(0,0,0,.55)); }
+.car svg { width:100%; height:100%; display:block; }
 /* Свет фар вперёд — низ экрана перестаёт быть плоским. */
-.car::before { content:""; position:absolute; bottom:100%; left:50%; width:150px; height:210px;
+.car::before { content:""; position:absolute; bottom:96%; left:50%; width:150px; height:210px;
        margin-left:-75px; clip-path:polygon(50% 100%, 100% 0, 0 0);
-       background:linear-gradient(0deg, rgba(60,220,255,.16), transparent 72%); }
+       background:linear-gradient(0deg, rgba(60,220,255,.16), transparent 72%);
+       /* Размытие вместо резаных кромок: свет фар с чёткой границей читается
+          как нарисованный треугольник, а не как свет. */
+       filter:blur(7px); }
 
 /* Карточка предупреждения — то, ради чего вся сцена. */
 .alert { position:absolute; left:12px; right:12px; bottom:16px; z-index:6;
@@ -241,32 +343,41 @@ section { padding:72px 0; }
          backdrop-filter:blur(10px); opacity:0;
          box-shadow:0 18px 40px -18px rgba(255,69,96,.5);
          animation:alert 8s var(--ease) infinite; }
-@keyframes alert { 0%,30% { opacity:0; transform:translateY(26px) }
-                   38%,64% { opacity:1; transform:none }
-                   72%,100% { opacity:0; transform:translateY(26px) } }
+@keyframes alert { 0%,24% { opacity:0; transform:translateY(26px) }
+                   30%,66% { opacity:1; transform:none }
+                   74%,100% { opacity:0; transform:translateY(26px) } }
 .alert .ic { width:40px; height:40px; border-radius:12px; background:rgba(255,69,96,.18);
              display:grid; place-items:center; flex:none; }
 .alert .ic svg { width:22px; height:22px; fill:var(--bad); }
 .alert > div:nth-child(2) { min-width:0; }
 .alert .t { font-weight:650; font-size:15px; line-height:1.2; }
-.alert .d { color:var(--text-2); font-size:12.5px; white-space:nowrap;
-            overflow:hidden; text-overflow:ellipsis; }
+/* Без nowrap: на телефоне карточка узкая, и многоточие съедало ровно слово
+   «справа» — то самое, которое соседний абзац обещает как «тип камеры и
+   сторона». Демонстрация опровергала текст рядом с собой. */
+.alert .d { color:var(--text-2); font-size:12.5px; line-height:1.25; }
 .alert .m { margin-left:auto; font-size:22px; font-weight:750; color:var(--bad);
             letter-spacing:-.8px; white-space:nowrap; flex:none;
             animation:dist 8s linear infinite; }
 .alert .m::before { counter-reset:d var(--dst); content:counter(d) "\00a0"; }
-@keyframes dist { 0%,30% { --dst:300 } 64%,100% { --dst:0 } }
+/* Ноль ровно к 62% — к моменту, когда камера равняется с машиной. */
+@keyframes dist { 0%,30% { --dst:300 } 62%,100% { --dst:0 } }
 
-/* Волна голоса под карточкой: приложение говорит, а не пищит. */
-.wave { position:absolute; left:0; right:0; bottom:0; height:64px; z-index:5;
-        display:flex; align-items:flex-end; justify-content:center; gap:4px; padding-bottom:10px;
+/* Волна голоса НАД карточкой: приложение говорит, а не пищит.
+   Стояла у самого низа (bottom:0) и на три четверти пряталась за карточкой
+   предупреждения — из-под неё торчали огрызки столбиков, читавшиеся как
+   артефакт вёрстки. Единственная визуализация голоса на всей странице.
+   Столбики растут через scaleY, а не через height: height — это раскладка
+   на каждом кадре, бесконечно, на странице про экономию батареи. */
+.wave { position:absolute; left:0; right:0; bottom:98px; height:20px; z-index:5;
+        display:flex; align-items:flex-end; justify-content:center; gap:4px;
         opacity:0; animation:alert 8s var(--ease) infinite; }
-.wave b { width:3px; border-radius:2px; background:var(--accent); height:8px;
+.wave b { width:3px; height:20px; border-radius:2px; background:var(--accent);
+          transform:scaleY(.3); transform-origin:bottom;
           animation:bar .9s ease-in-out infinite alternate; }
 .wave b:nth-child(2) { animation-delay:.1s } .wave b:nth-child(3) { animation-delay:.2s }
 .wave b:nth-child(4) { animation-delay:.3s } .wave b:nth-child(5) { animation-delay:.15s }
 .wave b:nth-child(6) { animation-delay:.25s } .wave b:nth-child(7) { animation-delay:.05s }
-@keyframes bar { to { height:24px; } }
+@keyframes bar { to { transform:scaleY(1); } }
 
 .steps { list-style:none; padding:0; margin:0; }
 .steps li { display:flex; gap:14px; padding:14px 0; border-top:1px solid var(--stroke); }
@@ -297,14 +408,22 @@ section { padding:72px 0; }
             background:rgba(56,229,140,.14); color:var(--ok) }
   100% { opacity:0; transform:scale(1) }
 }
-.dot-car { position:absolute; left:50%; margin-left:-11px; width:22px; height:36px;
+/* Сцена 300px высотой: 100% = 300, 44% = 132, −20% = −60. Раньше эти позиции
+   гнались через top — то есть раскладка пересчитывалась на каждом кадре
+   девятисекундного бесконечного цикла. Те же числа в translateY считает
+   композитор. */
+.dot-car { position:absolute; left:50%; top:0; margin-left:-11px; width:22px; height:36px;
            border-radius:8px; background:linear-gradient(180deg,#4fd8ff,#1aa9d4); }
 .dot-car.one { animation:pass1 9s var(--ease) infinite; }
 .dot-car.two { animation:pass2 9s var(--ease) infinite; background:linear-gradient(180deg,#8de8b6,#2bbd7b); }
-@keyframes pass1 { 0% { top:100%; opacity:0 } 6% { opacity:1 } 16% { top:44% } 30% { top:-20%; opacity:0 }
-                   100% { top:-20%; opacity:0 } }
-@keyframes pass2 { 0%,44% { top:100%; opacity:0 } 50% { opacity:1 } 60% { top:44% }
-                   74% { top:-20%; opacity:0 } 100% { top:-20%; opacity:0 } }
+@keyframes pass1 { 0% { transform:translateY(300px); opacity:0 } 6% { opacity:1 }
+                   16% { transform:translateY(132px) }
+                   30% { transform:translateY(-60px); opacity:0 }
+                   100% { transform:translateY(-60px); opacity:0 } }
+@keyframes pass2 { 0%,44% { transform:translateY(300px); opacity:0 } 50% { opacity:1 }
+                   60% { transform:translateY(132px) }
+                   74% { transform:translateY(-60px); opacity:0 }
+                   100% { transform:translateY(-60px); opacity:0 } }
 .stage .cap { position:absolute; left:0; right:0; bottom:0; padding:12px 14px;
               font-size:13px; color:var(--text-2); background:linear-gradient(0deg,#080d15,transparent);
               text-align:center; }
@@ -321,16 +440,13 @@ section { padding:72px 0; }
              display:grid; place-items:center; margin-bottom:14px; }
 .card .ico svg { width:20px; height:20px; stroke:var(--accent); fill:none; stroke-width:1.7; }
 
-/* --- Цифры со счётчиком --- */
-.nums { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
-.num { background:var(--surface); border:1px solid var(--stroke); border-radius:18px;
-       padding:22px; text-align:center; }
-.num b { display:block; font-size:34px; font-weight:750; letter-spacing:-1.4px;
-         font-variant-numeric:tabular-nums; }
-.num span { color:var(--text-3); font-size:13px; }
-
 /* --- Приватность --- */
 .priv { background:var(--surface); border:1px solid var(--stroke); border-radius:22px; padding:26px; }
+/* Мера строки. Блок раздавался на всю тысячу пикселей обёртки и набирался в
+   ~120 знаков — вдвое шире комфортных 45–75, которые страница держит везде
+   ещё. Платила этим самая важная фраза раздела: про то, что связать поездки
+   в одну историю невозможно даже нам. */
+.priv li div, .priv .foot { max-width:68ch; }
 .priv ul { list-style:none; margin:0 0 18px; padding:0; }
 .priv li { display:flex; gap:12px; padding:11px 0; border-top:1px solid var(--stroke);
            color:var(--text-2); font-size:14.5px; }
@@ -340,10 +456,14 @@ section { padding:72px 0; }
 .priv .foot { color:var(--text); font-size:15px; border-top:1px solid var(--stroke);
               padding-top:16px; }
 
-/* --- Поддержка --- */
-.support { background:linear-gradient(160deg,#191308,#0b0f16); border:1px solid #2e2614;
-           border-radius:24px; padding:34px; text-align:center; }
-.support p { color:var(--text-2); max-width:480px; margin:10px auto 22px; }
+/* --- Поддержка ---
+   Класс называется .support-card, а не .support: последнее совпадало с
+   модификатором кнопки .btn.support и молча забирало у неё геометрию. */
+.support-card { background:linear-gradient(160deg,#191308,#0b0f16); border:1px solid #2e2614;
+                border-radius:24px; padding:34px; text-align:center; }
+.support-card p { color:var(--text-2); max-width:480px; margin:10px auto 22px; }
+.support-card .btn { display:inline-flex; width:auto; }
+.support-card .note { margin-top:12px; }
 
 footer { border-top:1px solid var(--stroke); padding:34px 0 56px; color:var(--text-3);
          font-size:14px; text-align:center; }
@@ -379,10 +499,14 @@ footer a:hover { text-decoration:underline; }
                font-weight:600; }
 .week { display:flex; align-items:flex-end; gap:7px; height:74px; margin-top:22px;
         padding-top:14px; border-top:1px solid var(--stroke); }
+/* Рост через scaleY при заранее заданной высоте: анимация height пересчитывала
+   раскладку всей карточки на каждом кадре. Базовое scaleY(0) означает, что без
+   скрипта столбиков не было бы вовсе, — поэтому в <noscript> они и кольцо
+   получают готовый вид. */
 .week i { flex:1; border-radius:5px 5px 2px 2px; background:linear-gradient(180deg,#3cdcff,#1b7f9e);
-          height:4px; transform-origin:bottom; }
+          height:var(--h); transform:scaleY(0); transform-origin:bottom; }
 .in .week i { animation:grow .8s var(--ease) forwards; }
-@keyframes grow { to { height:var(--h); } }
+@keyframes grow { to { transform:scaleY(1); } }
 .week i:nth-child(1) { --h:26px; animation-delay:.30s } .week i:nth-child(2) { --h:44px; animation-delay:.36s }
 .week i:nth-child(3) { --h:18px; animation-delay:.42s } .week i:nth-child(4) { --h:58px; animation-delay:.48s }
 .week i:nth-child(5) { --h:36px; animation-delay:.54s } .week i:nth-child(6) { --h:12px; animation-delay:.60s }
@@ -419,33 +543,47 @@ footer a:hover { text-decoration:underline; }
   html { scroll-behavior:auto; }
   *, *::before, *::after { animation:none !important; transition:none !important; }
   .rise { opacity:1 !important; transform:none !important; }
-  .bar { transform:none; }
+  .bar { transform:none; visibility:visible; }
 
-  /* Сцена предупреждения — застывший «момент истины». */
+  /* Радар в герое: без вспышек он показывал пустое кольцо — то есть радар,
+     который ничего не нашёл. А это лицо продукта и первое, что видит человек.
+     Точки зажжены все три, развёртка остановлена так, чтобы её яркая кромка
+     стояла на первой из них. */
+  .radar .sweep::before { transform:rotate(325deg); }
+  .ping { opacity:1; transform:scale(1); }
+  .ping.b, .ping.c { opacity:.55; }
+
+  /* Сцена предупреждения — застывший «момент истины». Позиции повторяют
+     живую траекторию: всё расходится от точки схода, а не едет строго вниз. */
   .pin, .alert, .wave { opacity:1; }
-  .pin { transform:translateY(150px) scale(1.2); }
-  .dash { opacity:.7; }
-  .dash:nth-of-type(1) { transform:translateY(40px)  scale(1.2) }
-  .dash:nth-of-type(2) { transform:translateY(130px) scale(1.8) }
-  .dash:nth-of-type(3) { transform:translateY(230px) scale(2.4) }
-  .dash:nth-of-type(4) { transform:translateY(340px) scale(3) }
+  .pin { transform:translate(26px,150px) scale(1.2); }
+  .wave b { transform:scaleY(.6) }
+  .wave b:nth-child(3), .wave b:nth-child(5) { transform:scaleY(1) }
+  .dash { opacity:.65; }
+  .dash:nth-of-type(1) { transform:translate(-5px,40px)   scale(1.2) }
+  .dash:nth-of-type(2) { transform:translate(-16px,130px) scale(1.8) }
+  .dash:nth-of-type(3) { transform:translate(-28px,230px) scale(2.4) }
+  .dash:nth-of-type(4) { transform:translate(-41px,340px) scale(3) }
   .dash:nth-of-type(5), .dash:nth-of-type(6) { opacity:0 }
   .side b { opacity:.7 }
-  .side b:nth-child(1) { transform:translateY(90px)  scale(1.4) }
-  .side b:nth-child(2) { transform:translateY(220px) scale(2) }
+  .side.l b:nth-child(1) { transform:translate(-10px,90px)  scale(1.4) }
+  .side.l b:nth-child(2) { transform:translate(-25px,220px) scale(2) }
+  .side.r b:nth-child(1) { transform:translate(10px,90px)   scale(1.4) }
+  .side.r b:nth-child(2) { transform:translate(25px,220px)  scale(2) }
   .side b:nth-child(3) { opacity:0 }
-  .spd b::after { content:"78"; }
+  /* Скорость уже сброшена под знак — тот же вывод, что и в живой сцене. */
+  .spd b::after { content:"57"; }
   .alert .m::before { content:"300\00a0"; }
 
   /* Сцена доверия — обе стадии сразу, как на схеме. */
   .mark { opacity:1; border-style:solid; border-color:rgba(56,229,140,.9);
           background:rgba(56,229,140,.14); color:var(--ok); }
   .dot-car { opacity:1 }
-  .dot-car.one { top:14% } .dot-car.two { top:70% }
+  .dot-car.one { transform:translateY(42px) } .dot-car.two { transform:translateY(210px) }
 
   /* Итоги — готовый отчёт, а не пустой бланк. */
   .ring .fg { stroke-dashoffset:65; }
-  .week i { height:var(--h); }
+  .week i { transform:none; }
 }
 </style>
 <noscript><style>
@@ -453,13 +591,19 @@ footer a:hover { text-decoration:underline; }
    появления на экране, показываем сразу. Иначе ниже первого экрана пусто:
    движение здесь украшение, а не носитель содержимого. */
 .rise { opacity:1 !important; transform:none !important; }
+/* Третьей сцене мало проявиться: и кольцо рейтинга, и столбики недели ждут
+   класса .in, который ставит только скрипт. Без него человек видел «78
+   рейтинг» внутри пустого кольца и семь плоских огрызков вместо недели —
+   отчёт, похожий на сломанный. Здесь он приходит уже заполненным. */
+.ring .fg { stroke-dashoffset:65 !important; }
+.week i { transform:none !important; }
 </style></noscript>
 </head>
 <body>
 
 <div class="bar" id="bar">
   <span class="name">RadarMap</span>
-  <div class="lang" id="lang">
+  <div class="lang" id="lang" role="group" aria-label="Язык / Til">
     <button type="button" data-set="ru" aria-pressed="true">RU</button>
     <button type="button" data-set="uz" aria-pressed="false">UZ</button>
   </div>
@@ -488,6 +632,7 @@ footer a:hover { text-decoration:underline; }
         <span data-ru="Скачать в App Store" data-uz="App Store’dan yuklab olish">Скачать в App Store</span>
       </a>
       <a class="btn support" href="https://taps.uz/radarmapuz" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 20.7l-1.4-1.3C5.6 14.9 2.5 12 2.5 8.5 2.5 6 4.5 4 7 4c1.6 0 3.1.8 4 2 .9-1.2 2.4-2 4-2 2.5 0 4.5 2 4.5 4.5 0 3.5-3.1 6.4-8.1 10.9L12 20.7z"/></svg>
         <span data-ru="Поддержать проект" data-uz="Loyihani qo‘llab-quvvatlash">Поддержать проект</span>
       </a>
     </div>
@@ -540,7 +685,37 @@ footer a:hover { text-decoration:underline; }
         <div class="pin">
           <svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8-3h-3.2l-1.4-2H8.6L7.2 5H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V7a2 2 0 00-2-2z"/></svg>
         </div>
-        <div class="car"></div>
+        <div class="car">
+          <svg viewBox="0 0 36 62" aria-hidden="true">
+            <defs>
+              <linearGradient id="carBody" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#7fe8ff"/><stop offset=".55" stop-color="#3cc4ec"/>
+                <stop offset="1" stop-color="#1794bd"/>
+              </linearGradient>
+              <linearGradient id="carGlass" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#0a2430" stop-opacity=".95"/>
+                <stop offset="1" stop-color="#10394a" stop-opacity=".85"/>
+              </linearGradient>
+            </defs>
+            <!-- Зеркала: без них силуэт остаётся брусковым -->
+            <rect x="0.5" y="21" width="4.5" height="4" rx="2" fill="#1794bd"/>
+            <rect x="31" y="21" width="4.5" height="4" rx="2" fill="#1794bd"/>
+            <!-- Корпус: уже у носа, шире у кормы -->
+            <path fill="url(#carBody)" d="M18 1c4.6 0 7.9 3.2 9.1 8.4l1.6 7.2c1 4.6 1.4 9.4 1.2 14.2l-.5 12.6c-.15 4-.7 7.9-1.6 11.7-.4 1.7-1.5 2.7-3.2 2.9-4.4.5-8.8.5-13.2 0-1.7-.2-2.8-1.2-3.2-2.9-.9-3.8-1.45-7.7-1.6-11.7l-.5-12.6c-.2-4.8.2-9.6 1.2-14.2l1.6-7.2C10.1 4.2 13.4 1 18 1z"/>
+            <!-- Лобовое: смотрим сзади-сверху, поэтому оно дальше и уже -->
+            <path fill="url(#carGlass)" d="M18 9.5c2.8 0 4.8 1.6 5.7 4.6l.9 3.1c-4.4-.9-8.8-.9-13.2 0l.9-3.1c.9-3 2.9-4.6 5.7-4.6z"/>
+            <!-- Крыша -->
+            <rect x="8.6" y="20" width="18.8" height="19" rx="5" fill="#2bb2da" opacity=".65"/>
+            <!-- Заднее стекло -->
+            <path fill="url(#carGlass)" d="M10.4 41.5c5-.9 10.2-.9 15.2 0l.5 6.5c-5.4-.8-10.8-.8-16.2 0z"/>
+            <!-- Блик по левому ребру: без него корпус читается плоским -->
+            <path d="M9.6 12.5C8.4 18 7.9 24 8 30l.3 8" stroke="#c9f4ff" stroke-opacity=".5"
+                  stroke-width="1.2" fill="none" stroke-linecap="round"/>
+            <!-- Габариты: мы смотрим машине вслед, значит видим корму -->
+            <rect x="9.4" y="52.4" width="6.4" height="2.6" rx="1.3" fill="#ff5f74"/>
+            <rect x="20.2" y="52.4" width="6.4" height="2.6" rx="1.3" fill="#ff5f74"/>
+          </svg>
+        </div>
         <div class="alert">
           <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8-3h-3.2l-1.4-2H8.6L7.2 5H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V7a2 2 0 00-2-2z"/></svg></div>
           <div><div class="t" data-ru="Камера" data-uz="Kamera">Камера</div><div class="d" data-ru="впереди справа" data-uz="oldinda, o‘ngda">впереди справа</div></div>
@@ -723,13 +898,19 @@ footer a:hover { text-decoration:underline; }
 
   <!-- ===== Поддержка ===== -->
   <section class="rise">
-    <div class="support">
-      <h2 style="margin:0" data-ru="Поддержать проект"
-          data-uz="Loyihani qo‘llab-quvvatlash">Поддержать проект</h2>
+    <div class="support-card">
+      <h2 style="margin:0" data-ru="Проект живёт на свои"
+          data-uz="Loyiha o‘z hisobidan yashaydi">Проект живёт на свои</h2>
       <p data-ru="Приложение бесплатное, без рекламы и без подписок. Сервер, карты и обновление базы камер оплачиваются из своего кармана — если оно вам пригодилось, можно помочь."
          data-uz="Ilova bepul, reklamasiz va obunasiz. Server, xaritalar va kameralar bazasini yangilash o‘z hisobimizdan qoplanadi — agar ilova asqotgan bo‘lsa, yordam berishingiz mumkin.">
         Приложение бесплатное, без рекламы и без подписок. Сервер, карты и обновление базы камер оплачиваются из своего кармана — если оно вам пригодилось, можно помочь.</p>
-      <a class="btn support" href="https://taps.uz/radarmapuz" rel="noopener">taps.uz/radarmapuz</a>
+      <a class="btn support" href="https://taps.uz/radarmapuz" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 20.7l-1.4-1.3C5.6 14.9 2.5 12 2.5 8.5 2.5 6 4.5 4 7 4c1.6 0 3.1.8 4 2 .9-1.2 2.4-2 4-2 2.5 0 4.5 2 4.5 4.5 0 3.5-3.1 6.4-8.1 10.9L12 20.7z"/></svg>
+        <span data-ru="Поддержать проект" data-uz="Loyihani qo‘llab-quvvatlash">Поддержать проект</span>
+      </a>
+      <p class="note" data-ru="Откроется taps.uz — любая сумма, без регистрации"
+         data-uz="taps.uz ochiladi — istalgan summa, ro‘yxatdan o‘tmasdan">
+        Откроется taps.uz — любая сумма, без регистрации</p>
     </div>
   </section>
 
@@ -737,7 +918,9 @@ footer a:hover { text-decoration:underline; }
     <div class="links">
       <a href="privacy.html" data-ru="Политика конфиденциальности" data-uz="Maxfiylik siyosati">Политика конфиденциальности</a>
       <a href="mailto:rasul.sadullaev@gmail.com" data-ru="Написать разработчику" data-uz="Dasturchiga yozish">Написать разработчику</a>
-      <a href="https://taps.uz/radarmapuz" rel="noopener" data-ru="Поддержать" data-uz="Qo‘llab-quvvatlash">Поддержать</a>
+      <!-- Третьей ссылки «Поддержать» здесь больше нет: просьба звучала на
+           странице трижды — в герое, в блоке и тут, — и разбавляла призыв,
+           который должен побеждать. Блок с ней стоит прямо над подвалом. -->
       <a href="https://www.openstreetmap.org/copyright" rel="noopener">© OpenStreetMap</a>
     </div>
     <p data-ru="Карты и ограничения скорости — © участники OpenStreetMap."
@@ -750,8 +933,6 @@ footer a:hover { text-decoration:underline; }
 <script>
 (function () {
   'use strict';
-  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
   // --- Язык. Выбор запоминается, по умолчанию берётся из браузера: страницу
   //     открывают из мессенджера, и лишний тап на старте не нужен.
   var LANGS = ['ru', 'uz'];
@@ -778,15 +959,31 @@ footer a:hover { text-decoration:underline; }
     if (button) { apply(button.dataset.set); }
   });
 
-  // --- Липкая шапка после первого экрана.
+  // --- Липкая шапка. Показываем её ровно тогда, когда кнопка героя ушла
+  //     вверх за край экрана. Раньше порог был числом 420, взятым на глаз и
+  //     ни с чем в разметке не связанным: на телефоне шапка выезжала, когда
+  //     кнопка «Скачать» ещё была на экране, и ложилась поверх неё — один и
+  //     тот же призыв показывался дважды, причём копия наезжала на оригинал.
   var bar = document.getElementById('bar');
-  function onScroll() {
-    bar.classList.toggle('show', window.scrollY > 420);
-  }
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
+  var cta = document.querySelector('.hero .cta');
+  var hasObserver = 'IntersectionObserver' in window;
 
-  if (!('IntersectionObserver' in window)) {
+  if (hasObserver && cta) {
+    new IntersectionObserver(function (entries) {
+      var e = entries[0];
+      // top < 0 — кнопка ушла именно ВВЕРХ, а не ещё не доехала снизу.
+      bar.classList.toggle('show', !e.isIntersecting && e.boundingClientRect.top < 0);
+    }, { threshold: 0 }).observe(cta);
+  } else {
+    // Запасной путь для старых браузеров: тот же смысл, но через прокрутку —
+    // порог берём у самой кнопки, а не из головы.
+    window.addEventListener('scroll', function () {
+      var edge = cta ? cta.getBoundingClientRect().bottom + window.scrollY : 420;
+      bar.classList.toggle('show', window.scrollY > edge);
+    }, { passive: true });
+  }
+
+  if (!hasObserver) {
     // Старый браузер: показываем всё сразу — содержимое важнее появления.
     var all = document.querySelectorAll('.rise');
     for (var k = 0; k < all.length; k++) { all[k].classList.add('in'); }
@@ -802,28 +999,6 @@ footer a:hover { text-decoration:underline; }
     });
   }, { rootMargin: '0px 0px -12% 0px' });
   document.querySelectorAll('.rise').forEach(function (node) { revealer.observe(node); });
-
-  // --- Счётчики: добегают до значения, когда блок появился на экране.
-  var counter = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      if (!entry.isIntersecting) { return; }
-      counter.unobserve(entry.target);
-      var node = entry.target;
-      var target = parseInt(node.dataset.count, 10) || 0;
-      if (reduced || target === 0) { node.textContent = String(target); return; }
-      var started = null;
-      var duration = 900;
-      requestAnimationFrame(function step(now) {
-        if (started === null) { started = now; }
-        var progress = Math.min(1, (now - started) / duration);
-        // Замедление к концу: равномерный счёт выглядит машинным.
-        var eased = 1 - Math.pow(1 - progress, 3);
-        node.textContent = String(Math.round(target * eased));
-        if (progress < 1) { requestAnimationFrame(step); }
-      });
-    });
-  }, { threshold: 0.6 });
-  document.querySelectorAll('[data-count]').forEach(function (node) { counter.observe(node); });
 })();
 </script>
 </body>

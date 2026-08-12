@@ -100,6 +100,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             let routeActive = env.route.isActive
             let muted = isMuted   // читает оба тумблера — оба и отслеживаем
             let sketchShown = model.showsSketch
+            _ = model.isFollowing   // значок «к себе» зависит от слежения
 
             mapTemplate.leadingNavigationBarButtons = [tripButton(active: tripActive),
                                                        viewButton(sketchShown: sketchShown)]
@@ -182,17 +183,27 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     /// Отметить засаду прямо на ходу — иконкой, чтобы бар не распухал.
+    ///
+    /// Речевой пузырь, а не треугольник. Треугольник в приложении уже занят и
+    /// занят прочно: `exclamationmark.triangle.fill` — это тип камеры «ДТП», он
+    /// стоит на маркерах карты и в ленте. Один глиф на две разные вещи в
+    /// пределах одного экрана — это не стиль, это ошибка чтения. Пузырь же
+    /// говорит ровно то, что делает кнопка: рассказать другим.
     private var reportButton: CPBarButton {
-        CPBarButton(image: Self.buttonImage("exclamationmark.triangle.fill") ?? UIImage()) { [weak self] _ in
+        CPBarButton(image: Self.buttonImage("exclamationmark.bubble.fill") ?? UIImage()) { [weak self] _ in
             self?.presentReport()
         }
     }
 
     // MARK: - Кнопки карты
 
+    /// «К себе». Значок показывает СОСТОЯНИЕ, а не только действие: залитый —
+    /// карта едет за машиной, контурный — водитель отпанорамировал в сторону и
+    /// карта стоит. Раньше значок был один на оба случая, и единственный способ
+    /// понять, следит ли карта, был подождать и посмотреть, уехала ли метка.
     private var recenterButton: CPMapButton {
         let button = CPMapButton { [model] _ in model.recenterRequests += 1 }
-        button.image = Self.buttonImage("location.fill")
+        button.image = Self.buttonImage(model.isFollowing ? "location.fill" : "location")
         return button
     }
 
@@ -272,9 +283,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
     }
 
+    /// Значок кнопки машины. 24 пункта, а не 20: систему кнопок рисует
+    /// CarPlay, и круг под значком крупный — двадцатка сидела в нём мелкой
+    /// точкой. Плитки сетки рядом идут на 36, так что 24 — это середина шкалы,
+    /// а не выдуманное число.
     private static func buttonImage(_ symbol: String) -> UIImage? {
         UIImage(systemName: symbol,
-                withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold))
+                withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold))
     }
 
     /// Иконка плитки сетки: шаблонное изображение — CarPlay сам красит его под

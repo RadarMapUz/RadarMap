@@ -113,9 +113,14 @@ final class AlertPlayer: NSObject {
 
     func speak(_ text: String) {
         activate()
-        let spoken = Self.speaksUzbek ? UzbekSpeech.spoken(text) : text
+        // Настоящий узбекский голос — если он в системе есть — читает узбекский
+        // текст КАК ЕСТЬ. Переписывать орфографию под турецкую фонетику в этом
+        // случае нельзя: она чинит чужой голос и ломает свой.
+        let useNative = Self.speaksUzbek && UzbekSpeech.nativeVoice != nil
+        let spoken = (Self.speaksUzbek && !useNative) ? UzbekSpeech.spoken(text) : text
         let utterance = AVSpeechUtterance(string: spoken)
-        utterance.voice = AVSpeechSynthesisVoice(language: Self.voiceLanguage)
+        utterance.voice = useNative ? UzbekSpeech.nativeVoice
+                                    : AVSpeechSynthesisVoice(language: Self.voiceLanguage)
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         utterance.volume = Float(settings.alertVolume)
         utterance.postUtteranceDelay = 0.1

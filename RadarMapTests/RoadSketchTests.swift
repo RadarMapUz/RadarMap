@@ -98,6 +98,51 @@ final class RoadSketchTests: XCTestCase {
         XCTAssertEqual(RoadSketch.span(forDistance: nil), RoadSketch.minSpanMeters)
     }
 
+    // MARK: - Охват смотрит вперёд по времени, а не по метрам
+
+    func testStandstillKeepsTheCloseView() {
+        // Стоим — смотреть дальше своей улицы незачем, да и нечего.
+        XCTAssertEqual(RoadSketch.span(forDistance: nil, speedKmh: 0),
+                       RoadSketch.minSpanMeters)
+    }
+
+    func testFasterMeansFurtherAhead() {
+        // На 60 км/ч сто сорок метров — это восемь секунд дороги: схема
+        // упиралась носом в асфальт и не показывала даже перекрёсток, к
+        // которому подъезжаешь.
+        let city = RoadSketch.span(forDistance: nil, speedKmh: 60)
+        let highway = RoadSketch.span(forDistance: nil, speedKmh: 100)
+        XCTAssertGreaterThan(city, RoadSketch.minSpanMeters)
+        XCTAssertGreaterThan(highway, city)
+        // Ровно двадцать секунд пути, пока не упёрлись в потолок.
+        XCTAssertEqual(city, 60 / 3.6 * RoadSketch.lookAheadSeconds, accuracy: 1)
+    }
+
+    func testSpanNeverExceedsTheCeiling() {
+        // За потолком дорогу камеры пришлось бы дотягивать продлением на
+        // километры, то есть выдумывать геометрию.
+        XCTAssertEqual(RoadSketch.span(forDistance: nil, speedKmh: 300),
+                       RoadSketch.maxSpanMeters)
+    }
+
+    func testCameraStillWinsWhenItIsFurtherThanTheSpeedFloor() {
+        // Камера обязана попасть в кадр: скорость задаёт только нижнюю границу.
+        // 450 м — внутри потолка охвата; всё, что дальше него, схема не рисует
+        // вовсе и никогда не рисовала (см. maxSpanMeters), это не про скорость.
+        let span = RoadSketch.span(forDistance: 450, speedKmh: 20)
+        XCTAssertGreaterThan(span, RoadSketch.span(forDistance: nil, speedKmh: 20))
+        XCTAssertTrue(RoadSketch.isInRange(distance: 450, span: span))
+    }
+
+    func testSpeedFloorDoesNotShrinkTheCameraView() {
+        // Обратное тоже верно: медленная езда рядом с дальней камерой не
+        // должна приближать вид так, что камера вылетит из кадра.
+        let slow = RoadSketch.span(forDistance: 500, speedKmh: 5)
+        let fast = RoadSketch.span(forDistance: 500, speedKmh: 90)
+        XCTAssertTrue(RoadSketch.isInRange(distance: 500, span: slow))
+        XCTAssertTrue(RoadSketch.isInRange(distance: 500, span: fast))
+    }
+
     func testDistantCameraIsNotDrawnAtAll() {
         // Четыре километра: схема отвечает на вопрос «где камера относительно
         // меня и моей дороги», а он осмыслен только вблизи. Показать камеру у

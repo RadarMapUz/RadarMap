@@ -73,7 +73,11 @@ final class SketchState {
 
         let alert = env.location.nearestCamera
         let distance = env.location.distanceToNearest
-        let span = RoadSketch.span(forDistance: alert != nil ? distance : nil)
+        // Скорость задаёт нижнюю границу охвата: вид отъезжает ровно настолько,
+        // чтобы в кадре оставался тот же отрезок ВРЕМЕНИ. Ступени масштаба
+        // (bucket) гасят дрожание от каждого километра в час.
+        let span = RoadSketch.span(forDistance: alert != nil ? distance : nil,
+                                   speedKmh: env.location.speedKmh)
         let inRange: Bool = if let distance, alert != nil {
             RoadSketch.isInRange(distance: distance, span: span)
         } else {

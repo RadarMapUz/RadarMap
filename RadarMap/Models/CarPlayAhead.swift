@@ -77,32 +77,53 @@ nonisolated enum CarPlayAhead {
                       isRelevant: (Camera) -> Bool) -> [Item] {
         guard course >= 0, range > 0 else { return [] }
 
-        var found: [Item] = []
-        found.reserveCapacity(limit)
-
+        // Сначала дешёвое: направление и дальность — чистая арифметика.
+        // Гейт спрашивается ПОТОМ и только про то, что уцелело, — он считает
+        // геометрию дороги камеры, и в плотном центре разница между «спросить
+        // про всех впереди» и «спросить про ближайших» — это 77 вызовов на тик
+        // против пяти. Лента пересчитывается каждую секунду, так что порядок
+        // здесь не стилистика (бюджет закреплён PerformanceBudgetTests).
+        var candidates: [(camera: Camera, along: Double, distance: Double)] = []
+        candidates.reserveCapacity(16)
         for camera in cameras {
             let fix = RoadCorridor.fix(from: coordinate, course: course,
                                        to: camera.coordinate)
             // Строго впереди: камера, которую мы уже проехали, на ленте
             // «что впереди» — ложь, даже если она в метре позади.
             guard fix.along > 0, fix.along <= range else { continue }
-            // Гейт оповещений, а не свой: см. преамбулу.
-            guard isRelevant(camera) else { continue }
-            found.append(Item(id: camera.id, kind: camera.kind,
-                              distance: hypot(fix.along, fix.across),
-                              fraction: min(1, fix.along / range),
-                              isTarget: camera.id == targetID))
+            candidates.append((camera, fix.along, hypot(fix.along, fix.across)))
+        }
+        candidates.sort { $0.distance < $1.distance }
+
+        func item(_ candidate: (camera: Camera, along: Double, distance: Double)) -> Item {
+            Item(id: candidate.camera.id, kind: candidate.camera.kind,
+                 distance: candidate.distance,
+                 fraction: min(1, candidate.along / range),
+                 isTarget: candidate.camera.id == targetID)
         }
 
-        found.sort { $0.distance < $1.distance }
+        // От ближней к дальней, пока не набрали строку. Дальше не спрашиваем
+        // вовсе: то, что не поместится, гейту неинтересно.
+        var found: [Item] = []
+        found.reserveCapacity(limit)
+        var targetSeen = false
+        for candidate in candidates where found.count < limit {
+            // Тревожную камеру гейт уже пропустил — её выбрал сам конвейер
+            // оповещений. Спрашивать про неё второй раз незачем.
+            let isTarget = candidate.camera.id == targetID
+            guard isTarget || isRelevant(candidate.camera) else { continue }
+            if isTarget { targetSeen = true }
+            found.append(item(candidate))
+        }
+
         // Тревожная камера обязана быть на ленте, даже если по расстоянию она
         // не попала в первые строки: лента, где её нет, спорит с голосом.
-        if let targetID, found.count > limit,
-           let index = found.firstIndex(where: { $0.id == targetID }), index >= limit {
-            let target = found.remove(at: index)
-            found.insert(target, at: limit - 1)
+        if let targetID, !targetSeen,
+           let target = candidates.first(where: { $0.camera.id == targetID }) {
+            if found.count >= limit { found.removeLast() }
+            found.append(item(target))
         }
-        return Array(found.prefix(limit))
+        return found
     }
 
     /// Развести метки, которые встали друг на друга.

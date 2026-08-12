@@ -217,6 +217,15 @@ struct CarPlayMapView: UIViewRepresentable {
 
         var preferredTracking: MKUserTrackingMode { tripActiveSeen ? .followWithHeading : .follow }
 
+        /// Система снимает слежение сама, как только водитель тронул карту —
+        /// пальцем или крутилкой. Отражаем это в модели, чтобы значок кнопки
+        /// «к себе» показывал состояние, а не просто действие.
+        func mapView(_ mapView: MKMapView, didChange mode: MKUserTrackingMode,
+                     animated: Bool) {
+            let following = mode != .none
+            if model.isFollowing != following { model.isFollowing = following }
+        }
+
         func zoom(_ map: MKMapView, factor: Double) {
             var region = map.region
             region.span.latitudeDelta = min(max(region.span.latitudeDelta * factor, 0.002), 4)

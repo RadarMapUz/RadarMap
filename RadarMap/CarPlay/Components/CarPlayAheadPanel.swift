@@ -96,15 +96,42 @@ struct CarPlayAheadPanel: View {
     /// минимальный зазор между метками.
     private static let rowHeight: CGFloat = 44
 
-    /// Ось с делениями. Деления подписаны в километрах, потому что подписывать
-    /// каждые 500 метров четырьмя цифрами за рулём бессмысленно.
+    /// Ось с делениями.
+    ///
+    /// Деления обязательны, и это не украшение. Шкала здесь ПОСТОЯННАЯ — два
+    /// километра всегда, — и это сделано намеренно: положение точки означает
+    /// одно и то же в любой момент, а не растягивается под текущий набор камер.
+    /// Плата за честность в том, что при дальних камерах низ ленты пуст, и без
+    /// делений эта пустота читается как несработавшая вёрстка. С делениями она
+    /// читается как сообщение: до первого штриха чисто.
     private func scale(height: CGFloat) -> some View {
-        ZStack(alignment: .bottomLeading) {
+        let travel = max(1, height - Self.rowHeight)
+        return ZStack(alignment: .bottomLeading) {
             Capsule()
                 .fill(Theme.stroke)
                 .frame(width: 3)
                 .frame(maxHeight: .infinity)
                 .padding(.leading, 12)
+
+            // Штрихи без чисел. Подписанные деления встали ровно под подписи
+            // камер — в колонке шириной с ладонь оказалось восемь чисел разом,
+            // и читать стало нечего. Масштаб называется один раз, у вершины
+            // оси; штрихи дальше работают ритмом, а не цифрами.
+            ForEach(Self.ticks, id: \.self) { metres in
+                Rectangle()
+                    .fill(Theme.stroke)
+                    .frame(width: 11, height: 1.5)
+                    .padding(.leading, 8)
+                    .offset(y: -travel * (metres / CarPlayAhead.rangeMeters)
+                            - Self.rowHeight / 2)
+            }
+
+            Text(Formatting.distance(CarPlayAhead.rangeMeters))
+                .font(.rounded(10, .medium))
+                .foregroundStyle(Theme.textTertiary.opacity(0.7))
+                .padding(.leading, 6)
+                .offset(y: -travel - Self.rowHeight / 2 - 13)
+
             // «Я» — основание шкалы.
             Circle()
                 .fill(Theme.accent)
@@ -113,6 +140,11 @@ struct CarPlayAheadPanel: View {
                 .shadow(color: Theme.accent.opacity(0.7), radius: 6)
         }
     }
+
+    /// Штрихи шкалы. Через полкилометра: чаще — рябь, реже — не за что
+    /// зацепиться глазом. Двух километров в списке нет: там стоит подпись
+    /// масштаба, и штрих под ней был бы вторым обозначением одного и того же.
+    private static let ticks: [CLLocationDistance] = [500, 1000, 1500]
 
     private func marker(_ item: CarPlayAhead.Item) -> some View {
         HStack(spacing: 10) {

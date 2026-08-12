@@ -215,11 +215,26 @@ nonisolated enum RoadSketch {
 
     // MARK: - Точка зрения (каждый тик, чистая арифметика)
 
+    /// Сколько секунд дороги схема показывает впереди, когда тревожной камеры
+    /// нет. Не метры, а секунды — по тому же принципу, что и «умный радиус»
+    /// оповещений: на 60 км/ч сто сорок метров это восемь секунд, и схема
+    /// упирается носом в асфальт вместо того, чтобы показать перекрёсток,
+    /// к которому подъезжаешь. Двадцать секунд — это тот отрезок, на котором
+    /// водитель ещё принимает решения.
+    static let lookAheadSeconds: Double = 20
+
     /// Охват по дистанции до тревожной камеры: она должна попасть в верхнюю
     /// часть вида с запасом, а не упираться в край.
-    static func span(forDistance distance: Double?) -> Double {
-        guard let distance else { return minSpanMeters }
-        return min(maxSpanMeters, max(minSpanMeters, distance / (meY - 0.12)))
+    ///
+    /// Нижняя граница зависит от скорости: стоим — ближний план (там и смотреть
+    /// нечего, кроме своей улицы), едем — вид отъезжает ровно настолько, чтобы
+    /// в кадре был тот же отрезок времени. Иначе на трассе схема показывала
+    /// пять секунд дороги, и по ней нельзя было понять даже, куда она ведёт.
+    static func span(forDistance distance: Double?, speedKmh: Double = 0) -> Double {
+        let floorSpan = min(maxSpanMeters,
+                            max(minSpanMeters, speedKmh / 3.6 * lookAheadSeconds))
+        guard let distance else { return floorSpan }
+        return min(maxSpanMeters, max(floorSpan, distance / (meY - 0.12)))
     }
 
     /// Камера в охвате вида. За охватом она не рисуется вовсе: показать её у

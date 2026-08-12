@@ -1,0 +1,92 @@
+
+===== БЛОК 1 =====
+1. Statsionar kamera oldinda
+2. Statsionar kamera oldinda o‘ngda
+3. Statsionar kamera oldinda chapda
+4. Statsionar radar oldinda
+5. Statsionar radar oldinda o‘ngda
+6. Statsionar radar oldinda chapda
+7. Intellektual kamera va radar oldinda
+8. Intellektual kamera va radar oldinda o‘ngda
+9. Intellektual kamera va radar oldinda chapda
+10. Ko'chma radar oldinda
+11. Ko'chma radar oldinda o‘ngda
+12. Ko'chma radar oldinda chapda
+13. Uch oyoq kamera oldinda
+14. Uch oyoq kamera oldinda o‘ngda
+15. Uch oyoq kamera oldinda chapda
+16. YPX posti oldinda
+17. YPX posti oldinda o‘ngda
+18. YPX posti oldinda chapda
+19. YTH oldinda
+20. YTH oldinda o‘ngda
+21. YTH oldinda chapda
+22. Kamera oldinda
+23. Kamera oldinda o‘ngda
+24. Kamera oldinda chapda
+25. Radar oldinda
+
+===== БЛОК 2 =====
+26. Radar oldinda o‘ngda
+27. Radar oldinda chapda
+28. Kamera
+29. Radar
+30. ellik metr
+31. yuz metr
+32. yuz ellik metr
+33. ikki yuz metr
+34. ikki yuz ellik metr
+35. uch yuz metr
+36. uch yuz ellik metr
+37. to‘rt yuz metr
+38. besh yuz metr
+39. olti yuz metr
+40. yetti yuz metr
+41. sakkiz yuz metr
+42. to‘qqiz yuz metr
+43. ming metr
+44. yigirma
+45. yigirma besh
+46. o‘ttiz
+47. o‘ttiz besh
+48. qirq
+49. qirq besh
+50. ellik
+
+===== БЛОК 3 =====
+51. ellik besh
+52. oltmish
+53. oltmish besh
+54. yetmish
+55. yetmish besh
+56. sakson
+57. sakson besh
+58. to‘qson
+59. to‘qson besh
+60. yuz
+61. yuz besh
+62. yuz o‘n
+63. yuz o‘n besh
+64. yuz yigirma
+65. yuz yigirma besh
+66. yuz o‘ttiz
+67. yuz o‘ttiz besh
+68. yuz qirq
+69. yuz qirq besh
+70. yuz ellik
+71. yuz ellik besh
+72. yuz oltmish
+73. yuz oltmish besh
+74. yuz yetmish
+75. yuz yetmish besh
+
+===== БЛОК 4 =====
+76. yuz sakson
+77. Haydovchilar belgisi
+78. Oldinda kameralar
+79. Marshrut qayta qurildi
+80. Siz yetib keldingiz
+81. Tezlik oshirildi
+82. Rahmat!
+83. Belgi olib tashlandi
+84. Yuborilmadi, aloqa yo'q

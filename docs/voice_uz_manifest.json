@@ -1,0 +1,338 @@
+[
+  {
+    "file": "kind_statsionar_kamera_oldinda",
+    "text": "Statsionar kamera oldinda"
+  },
+  {
+    "file": "kind_statsionar_kamera_oldinda_ongda",
+    "text": "Statsionar kamera oldinda o‘ngda"
+  },
+  {
+    "file": "kind_statsionar_kamera_oldinda_chapda",
+    "text": "Statsionar kamera oldinda chapda"
+  },
+  {
+    "file": "kind_statsionar_radar_oldinda",
+    "text": "Statsionar radar oldinda"
+  },
+  {
+    "file": "kind_statsionar_radar_oldinda_ongda",
+    "text": "Statsionar radar oldinda o‘ngda"
+  },
+  {
+    "file": "kind_statsionar_radar_oldinda_chapda",
+    "text": "Statsionar radar oldinda chapda"
+  },
+  {
+    "file": "kind_intellektual_kamera__radar_oldinda",
+    "text": "Intellektual kamera va radar oldinda"
+  },
+  {
+    "file": "kind_intellektual_kamera__radar_oldinda_ongda",
+    "text": "Intellektual kamera va radar oldinda o‘ngda"
+  },
+  {
+    "file": "kind_intellektual_kamera__radar_oldinda_chapda",
+    "text": "Intellektual kamera va radar oldinda chapda"
+  },
+  {
+    "file": "kind_kochma_radar_oldinda",
+    "text": "Ko'chma radar oldinda"
+  },
+  {
+    "file": "kind_kochma_radar_oldinda_ongda",
+    "text": "Ko'chma radar oldinda o‘ngda"
+  },
+  {
+    "file": "kind_kochma_radar_oldinda_chapda",
+    "text": "Ko'chma radar oldinda chapda"
+  },
+  {
+    "file": "kind_uch_oyoq_kamera_oldinda",
+    "text": "Uch oyoq kamera oldinda"
+  },
+  {
+    "file": "kind_uch_oyoq_kamera_oldinda_ongda",
+    "text": "Uch oyoq kamera oldinda o‘ngda"
+  },
+  {
+    "file": "kind_uch_oyoq_kamera_oldinda_chapda",
+    "text": "Uch oyoq kamera oldinda chapda"
+  },
+  {
+    "file": "kind_ypx_posti_oldinda",
+    "text": "YPX posti oldinda"
+  },
+  {
+    "file": "kind_ypx_posti_oldinda_ongda",
+    "text": "YPX posti oldinda o‘ngda"
+  },
+  {
+    "file": "kind_ypx_posti_oldinda_chapda",
+    "text": "YPX posti oldinda chapda"
+  },
+  {
+    "file": "kind_yth_oldinda",
+    "text": "YTH oldinda"
+  },
+  {
+    "file": "kind_yth_oldinda_ongda",
+    "text": "YTH oldinda o‘ngda"
+  },
+  {
+    "file": "kind_yth_oldinda_chapda",
+    "text": "YTH oldinda chapda"
+  },
+  {
+    "file": "kind_kamera_oldinda",
+    "text": "Kamera oldinda"
+  },
+  {
+    "file": "kind_kamera_oldinda_ongda",
+    "text": "Kamera oldinda o‘ngda"
+  },
+  {
+    "file": "kind_kamera_oldinda_chapda",
+    "text": "Kamera oldinda chapda"
+  },
+  {
+    "file": "kind_radar_oldinda",
+    "text": "Radar oldinda"
+  },
+  {
+    "file": "kind_radar_oldinda_ongda",
+    "text": "Radar oldinda o‘ngda"
+  },
+  {
+    "file": "kind_radar_oldinda_chapda",
+    "text": "Radar oldinda chapda"
+  },
+  {
+    "file": "kind_kamera",
+    "text": "Kamera"
+  },
+  {
+    "file": "kind_radar",
+    "text": "Radar"
+  },
+  {
+    "file": "dist_50",
+    "text": "ellik metr"
+  },
+  {
+    "file": "dist_100",
+    "text": "yuz metr"
+  },
+  {
+    "file": "dist_150",
+    "text": "yuz ellik metr"
+  },
+  {
+    "file": "dist_200",
+    "text": "ikki yuz metr"
+  },
+  {
+    "file": "dist_250",
+    "text": "ikki yuz ellik metr"
+  },
+  {
+    "file": "dist_300",
+    "text": "uch yuz metr"
+  },
+  {
+    "file": "dist_350",
+    "text": "uch yuz ellik metr"
+  },
+  {
+    "file": "dist_400",
+    "text": "to‘rt yuz metr"
+  },
+  {
+    "file": "dist_500",
+    "text": "besh yuz metr"
+  },
+  {
+    "file": "dist_600",
+    "text": "olti yuz metr"
+  },
+  {
+    "file": "dist_700",
+    "text": "yetti yuz metr"
+  },
+  {
+    "file": "dist_800",
+    "text": "sakkiz yuz metr"
+  },
+  {
+    "file": "dist_900",
+    "text": "to‘qqiz yuz metr"
+  },
+  {
+    "file": "dist_1000",
+    "text": "ming metr"
+  },
+  {
+    "file": "speed_20",
+    "text": "yigirma"
+  },
+  {
+    "file": "speed_25",
+    "text": "yigirma besh"
+  },
+  {
+    "file": "speed_30",
+    "text": "o‘ttiz"
+  },
+  {
+    "file": "speed_35",
+    "text": "o‘ttiz besh"
+  },
+  {
+    "file": "speed_40",
+    "text": "qirq"
+  },
+  {
+    "file": "speed_45",
+    "text": "qirq besh"
+  },
+  {
+    "file": "speed_50",
+    "text": "ellik"
+  },
+  {
+    "file": "speed_55",
+    "text": "ellik besh"
+  },
+  {
+    "file": "speed_60",
+    "text": "oltmish"
+  },
+  {
+    "file": "speed_65",
+    "text": "oltmish besh"
+  },
+  {
+    "file": "speed_70",
+    "text": "yetmish"
+  },
+  {
+    "file": "speed_75",
+    "text": "yetmish besh"
+  },
+  {
+    "file": "speed_80",
+    "text": "sakson"
+  },
+  {
+    "file": "speed_85",
+    "text": "sakson besh"
+  },
+  {
+    "file": "speed_90",
+    "text": "to‘qson"
+  },
+  {
+    "file": "speed_95",
+    "text": "to‘qson besh"
+  },
+  {
+    "file": "speed_100",
+    "text": "yuz"
+  },
+  {
+    "file": "speed_105",
+    "text": "yuz besh"
+  },
+  {
+    "file": "speed_110",
+    "text": "yuz o‘n"
+  },
+  {
+    "file": "speed_115",
+    "text": "yuz o‘n besh"
+  },
+  {
+    "file": "speed_120",
+    "text": "yuz yigirma"
+  },
+  {
+    "file": "speed_125",
+    "text": "yuz yigirma besh"
+  },
+  {
+    "file": "speed_130",
+    "text": "yuz o‘ttiz"
+  },
+  {
+    "file": "speed_135",
+    "text": "yuz o‘ttiz besh"
+  },
+  {
+    "file": "speed_140",
+    "text": "yuz qirq"
+  },
+  {
+    "file": "speed_145",
+    "text": "yuz qirq besh"
+  },
+  {
+    "file": "speed_150",
+    "text": "yuz ellik"
+  },
+  {
+    "file": "speed_155",
+    "text": "yuz ellik besh"
+  },
+  {
+    "file": "speed_160",
+    "text": "yuz oltmish"
+  },
+  {
+    "file": "speed_165",
+    "text": "yuz oltmish besh"
+  },
+  {
+    "file": "speed_170",
+    "text": "yuz yetmish"
+  },
+  {
+    "file": "speed_175",
+    "text": "yuz yetmish besh"
+  },
+  {
+    "file": "speed_180",
+    "text": "yuz sakson"
+  },
+  {
+    "file": "prefix_crowd",
+    "text": "Haydovchilar belgisi"
+  },
+  {
+    "file": "group_ahead",
+    "text": "Oldinda kameralar"
+  },
+  {
+    "file": "say_marshrut_qayta_qurildi",
+    "text": "Marshrut qayta qurildi"
+  },
+  {
+    "file": "say_siz_yetib_keldingiz",
+    "text": "Siz yetib keldingiz"
+  },
+  {
+    "file": "say_tezlik_oshirildi",
+    "text": "Tezlik oshirildi"
+  },
+  {
+    "file": "say_rahmat",
+    "text": "Rahmat!"
+  },
+  {
+    "file": "say_belgi_olib_tashlandi",
+    "text": "Belgi olib tashlandi"
+  },
+  {
+    "file": "say_yuborilmadi_aloqa_yoq",
+    "text": "Yuborilmadi, aloqa yo'q"
+  }
+]

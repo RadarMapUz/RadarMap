@@ -113,10 +113,15 @@ struct CarPlayAheadPanel: View {
                 .frame(maxHeight: .infinity)
                 .padding(.leading, 12)
 
-            // Штрихи без чисел. Подписанные деления встали ровно под подписи
-            // камер — в колонке шириной с ладонь оказалось восемь чисел разом,
-            // и читать стало нечего. Масштаб называется один раз, у вершины
-            // оси; штрихи дальше работают ритмом, а не цифрами.
+            // Штрихи без чисел — только ритм.
+            //
+            // Подписанные деления пробовал дважды и оба раза убрал: сперва они
+            // встали ровно под подписи камер (восемь чисел в колонке шириной с
+            // ладонь), потом подпись масштаба у вершины села на верхнюю метку.
+            // Числа здесь и не нужны: у каждой камеры своё написано рядом, а в
+            // шапке — до какой дальше всего. Штрихи же говорят единственное,
+            // ради чего они тут: у ленты есть масштаб, и пустота внизу — это
+            // «до первого штриха чисто», а не несработавшая вёрстка.
             ForEach(Self.ticks, id: \.self) { metres in
                 Rectangle()
                     .fill(Theme.stroke)
@@ -125,12 +130,6 @@ struct CarPlayAheadPanel: View {
                     .offset(y: -travel * (metres / CarPlayAhead.rangeMeters)
                             - Self.rowHeight / 2)
             }
-
-            Text(Formatting.distance(CarPlayAhead.rangeMeters))
-                .font(.rounded(10, .medium))
-                .foregroundStyle(Theme.textTertiary.opacity(0.7))
-                .padding(.leading, 6)
-                .offset(y: -travel - Self.rowHeight / 2 - 13)
 
             // «Я» — основание шкалы.
             Circle()

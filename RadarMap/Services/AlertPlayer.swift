@@ -16,7 +16,6 @@ import os
 final class AlertPlayer: NSObject {
     private var player: AVAudioPlayer?
     private let synthesizer = AVSpeechSynthesizer()
-    private let session = AVAudioSession.sharedInstance()
     private let settings: AppSettings
 
     /// Тактильный движок: «дорогой» отклик (мягкий на дальнем пороге → резкий у камеры).
@@ -107,17 +106,20 @@ final class AlertPlayer: NSObject {
 
     /// `count` коротких сигналов подряд (эскалация: чем ближе, тем больше).
     func beep(count: Int) {
-        guard let player else { return }
-        activate()
-        player.stop()
-        player.volume = Float(settings.alertVolume)
-        player.numberOfLoops = max(1, count) - 1
-        player.currentTime = 0
-        player.play()
+        guard player != nil else { return }
+        let volume = Float(settings.alertVolume)
+        let loops = max(1, count) - 1
+        withActiveSession { [weak self] in
+            guard let player = self?.player else { return }
+            player.stop()
+            player.volume = volume
+            player.numberOfLoops = loops
+            player.currentTime = 0
+            player.play()
+        }
     }
 
     func speak(_ text: String) {
-        activate()
         // Настоящий узбекский голос — если он в системе есть — читает узбекский
         // текст КАК ЕСТЬ. Переписывать орфографию под турецкую фонетику в этом
         // случае нельзя: она чинит чужой голос и ломает свой.
@@ -131,7 +133,9 @@ final class AlertPlayer: NSObject {
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         utterance.volume = Float(settings.alertVolume)
         utterance.postUtteranceDelay = 0.1
-        synthesizer.speak(utterance)
+        withActiveSession { [weak self] in
+            self?.synthesizer.speak(utterance)
+        }
     }
 
     /// Кэш голоса по языку: AVSpeechSynthesisVoice(language:) — тоже поход к
@@ -167,13 +171,35 @@ final class AlertPlayer: NSObject {
 
     // MARK: - Сессия
 
-    private func activate() {
-        do {
-            try session.setCategory(.playback, options: [.duckOthers, .mixWithOthers])
-            try session.setActive(true)
-        } catch {
-            // Сигнал всё равно попробуем сыграть — хуже не станет.
-            Log.alerts.error("аудиосессия не активировалась: \(error.localizedDescription, privacy: .public)")
+    /// Очередь аудиосессии. НЕ главный поток: setActive над маршрутом CarPlay —
+    /// это переговоры с головным устройством, Apple прямо рекомендует фоновую
+    /// очередь, и в машине вызов может висеть секундами. На главном он
+    /// замораживал спидометр и кнопки экрана машины ровно в момент сигнала —
+    /// то есть тогда, когда водителю нужнее всего живой экран.
+    private nonisolated static let audioQueue =
+        DispatchQueue(label: "uz.radarmap.audio-session", qos: .userInitiated)
+
+    /// Активировать сессию в фоне и выполнить `then` на главном акторе.
+    /// Задержка старта звука на хоп очереди — миллисекунды; блокировка main на
+    /// переговоры с магнитолой — секунды. Обмен в пользу живого экрана.
+    private func withActiveSession(_ then: @escaping @MainActor () -> Void) {
+        Self.audioQueue.async {
+            let started = Date()
+            do {
+                let session = AVAudioSession.sharedInstance()
+                try session.setCategory(.playback, options: [.duckOthers, .mixWithOthers])
+                try session.setActive(true)
+            } catch {
+                // Сигнал всё равно попробуем сыграть — хуже не станет.
+                Log.alerts.error("аудиосессия не активировалась: \(error.localizedDescription, privacy: .public)")
+            }
+            // Замер вслух: если в машине активация действительно долгая, это
+            // будет видно в логе поездки цифрой, а не гаданием.
+            let elapsed = Date().timeIntervalSince(started)
+            if elapsed > 0.25 {
+                Log.alerts.notice("активация аудиосессии: \(elapsed, format: .fixed(precision: 2), privacy: .public) с")
+            }
+            Task { @MainActor in then() }
         }
     }
 
@@ -183,8 +209,12 @@ final class AlertPlayer: NSObject {
             guard let self else { return }
             let stillPlaying = (self.player?.isPlaying ?? false) || self.synthesizer.isSpeaking
             if !stillPlaying {
-                // Ошибка деактивации не мешает работе — музыка просто чуть позже вернёт громкость.
-                try? self.session.setActive(false, options: .notifyOthersOnDeactivation)
+                // Ошибка деактивации не мешает работе — музыка просто чуть позже
+                // вернёт громкость. Тоже вне main: деактивация — те же переговоры.
+                Self.audioQueue.async {
+                    try? AVAudioSession.sharedInstance()
+                        .setActive(false, options: .notifyOthersOnDeactivation)
+                }
             }
         }
     }

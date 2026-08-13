@@ -21,6 +21,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     var interfaceController: CPInterfaceController?
     private var mapTemplate: CPMapTemplate?
     private let model = CarPlayMapModel()
+    /// Чей сейчас экран машины. Переподключение (штатное «моргание» провода
+    /// при запуске двигателя) может доставить didDisconnect СТАРОЙ сцены уже
+    /// ПОСЛЕ didConnect новой — и старая, уходя, глобально гасила GPS и опрос
+    /// отметок у живой. Глобальное состояние трогает только владелец.
+    private static weak var activeDelegate: CarPlaySceneDelegate?
     /// Поколение сессии CarPlay: подписки withObservationTracking из прошлых
     /// подключений сверяются с ним и не пересобирают кнопки повторно.
     var session = 0
@@ -69,6 +74,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // в кармане — у CarPlay свой флаг, телефонная сцена его не затирает.
         // Через окружение: телефонный экран по этому же флагу уступает место
         // экрану передачи (MapKit на двух экранах разом — двойной нагрев).
+        Self.activeDelegate = self
         env.setCarPlayConnected(true)
         // CarPlay может быть ПЕРВОЙ сценой процесса: без этого вызова база
         // лимитов, краудсорс и автостарт стартовали только из телефонной сцены,
@@ -88,6 +94,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         session += 1   // гасим подписки syncTemplate этой сессии
         toastTask?.cancel()
         toastTask = nil
+        // Глобальное состояние гасит только владелец экрана: запоздавший
+        // didDisconnect старой сцены, пришедший после didConnect новой,
+        // выключал бы непрерывный GPS и опрос отметок у ЖИВОЙ сессии.
+        guard Self.activeDelegate === self else {
+            Log.carplay.notice("didDisconnect устаревшей сцены — глобальное состояние не трогаем")
+            return
+        }
+        Self.activeDelegate = nil
         // Вышли из машины: телефон мог всё это время быть в фоне, события
         // scenePhase не будет — снимаем «передний план» сами. И флаг схемы
         // тоже: onDisappear у вью внутри сносимого CPWindow не гарантирован,
@@ -155,10 +169,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// он при перекрытии чужим приложением не приходит. Батарея — приоритет
     /// номер один, и считать невидимое ей противоречит.
     func sceneWillResignActive(_ scene: UIScene) {
+        // Только владелец: события устаревшей сцены не должны гасить буст живой.
+        guard Self.activeDelegate === self else { return }
         AppEnvironment.shared.location.setCarPlaySketchVisible(false)
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
+        // Стали видимым экраном машины — значит, мы и владелец.
+        Self.activeDelegate = self
         // Вернулись на экран машины — схема снова имеет смысл, но только если
         // она и выбрана: в режиме карты частые фиксы ей не нужны.
         AppEnvironment.shared.location.setCarPlaySketchVisible(model.showsSketch)

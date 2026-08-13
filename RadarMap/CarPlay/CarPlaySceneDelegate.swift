@@ -15,6 +15,7 @@
 
 import CarPlay
 import SwiftUI
+import os
 
 final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     var interfaceController: CPInterfaceController?
@@ -50,7 +51,19 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // кнопка, которую нужно искать, за рулём бесполезна.
         template.automaticallyHidesNavigationBar = false
         mapTemplate = template
-        interfaceController.setRootTemplate(template, animated: true) { _, _ in }
+        Log.carplay.notice("CarPlay подключён")
+        interfaceController.setRootTemplate(template, animated: true) { [weak self] _, error in
+            if let error {
+                Log.carplay.error("setRootTemplate: \(error.localizedDescription, privacy: .public)")
+            }
+            // Алерт о разрешении — ПОСЛЕ установки корня: presentTemplate
+            // поверх летящей корневой транзакции CarPlay отклоняет, и раньше
+            // объяснение «почему экран молчит» само молча терялось.
+            // Сразу, а не по первому тапу: без разрешения экран машины не
+            // покажет ни скорости, ни камер, и молчание неотличимо от поломки.
+            guard let self, !self.env.location.isAuthorized else { return }
+            self.showNoPermissionAlert()
+        }
 
         // В машине приложение «на переднем плане», даже если телефон заблокирован
         // в кармане — у CarPlay свой флаг, телефонная сцена его не затирает.
@@ -63,15 +76,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         env.startDrivingServices()
         session += 1
         syncTemplate()
-        // Сразу, а не по первому тапу: без разрешения экран машины не покажет
-        // ни скорости, ни камер, и молчание тут неотличимо от поломки.
-        if !env.location.isAuthorized { showNoPermissionAlert() }
         observePendingConfirm()
     }
 
     func templateApplicationScene(_ scene: CPTemplateApplicationScene,
                                   didDisconnect interfaceController: CPInterfaceController,
                                   from window: CPWindow) {
+        Log.carplay.notice("CarPlay отключён")
         self.interfaceController = nil
         mapTemplate = nil
         session += 1   // гасим подписки syncTemplate этой сессии
@@ -93,12 +104,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     // MARK: - Сборка шаблона
 
+    /// Поколение подписки syncTemplate: живой остаётся только ПОСЛЕДНЯЯ.
+    /// Каждый вызов регистрирует новую одноразовую подписку, и без поколения
+    /// каждый тап «Схема/Карта» добавлял по две вечно перевзводящиеся: после
+    /// N тапов любое изменение состояния пересобирало шаблон N раз подряд.
+    private var syncGeneration = 0
+
     /// Единая пересборка кнопок: и бар, и кнопки карты зависят от состояния
     /// (идёт поездка, построен маршрут, включён звук). Читаем состояние внутри
     /// withObservationTracking — при любом изменении собираем заново.
     func syncTemplate() {
         guard let mapTemplate else { return }
         let session = session   // подписка живёт до первого изменения — привязываем к сессии
+        syncGeneration &+= 1
+        let generation = syncGeneration
 
         withObservationTracking {
             let tripActive = env.location.isTripActive
@@ -118,7 +137,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 : [soundButton(muted: muted), zoomInButton, zoomOutButton, recenterButton]
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
-                guard let self, self.session == session else { return }
+                guard let self, self.session == session,
+                      self.syncGeneration == generation else { return }
                 self.syncTemplate()
             }
         }
@@ -156,7 +176,47 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             // не делает: заголовок кнопки остаётся «Поездка», водитель жмёт
             // ещё раз и решает, что приложение сломано. Говорим вслух.
             guard location.isAuthorized else { return self.showNoPermissionAlert() }
-            if location.isTripActive { location.endTrip() } else { location.startTrip() }
+            guard location.isTripActive else { return location.startTrip() }
+            // На ходу — подтверждение: «Завершить» соседствует со «Схема», и
+            // промах слепого тапа молча выключал бы оповещения о камерах.
+            // На стоянке тап осознанный — завершаем сразу, как раньше.
+            if location.speedKmh >= AppConfig.carPlayEndTripConfirmKmh {
+                confirmEndTrip()
+            } else {
+                location.endTrip()
+            }
+        }
+    }
+
+    /// «Завершить поездку?» на ходу. Тот же паттерн, что у Apple Maps: конец
+    /// маршрута не висит одним тапом на баре.
+    private func confirmEndTrip() {
+        let alert = CPAlertTemplate(
+            titleVariants: [String(localized: "Завершить поездку?")],
+            actions: [
+                CPAlertAction(title: String(localized: "Завершить"),
+                              style: .destructive) { [weak self] _ in
+                    self?.env.location.endTrip()
+                    self?.dismissTopTemplate()
+                },
+                CPAlertAction(title: String(localized: "Отмена"),
+                              style: .cancel) { [weak self] _ in
+                    self?.dismissTopTemplate()
+                },
+            ])
+        interfaceController?.presentTemplate(alert, animated: true) { _, error in
+            if let error {
+                Log.carplay.error("presentTemplate(завершение): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Закрыть верхний модальный шаблон, не глотая ошибку.
+    func dismissTopTemplate() {
+        interfaceController?.dismissTemplate(animated: true) { _, error in
+            if let error {
+                Log.carplay.error("dismissTemplate: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
@@ -172,9 +232,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// (телефон перестаёт греться об тайлы), карта — самый подробный. В жару
     /// автоматика предпочитает схему, но нажатая кнопка старше автоматики.
     private func viewButton(sketchShown: Bool) -> CPBarButton {
+        // model — сильным захватом, а не через self: содержимое экрана обязано
+        // переключаться, даже если делегат по какой-то причине умер раньше
+        // шаблона. Ровно эту гарантию давала 1.1.0, и терять её нельзя.
         CPBarButton(title: sketchShown ? String(localized: "Карта")
-                                       : String(localized: "Схема")) { [weak self] _ in
-            self?.model.toggleView()
+                                       : String(localized: "Схема")) { [weak self, model] _ in
+            model.toggleView()
             // Пересобираем шаблон СРАЗУ, не полагаясь на наблюдение.
             //
             // Кнопки живут вне цикла обновления SwiftUI: их держит CPMapTemplate,
@@ -206,8 +269,16 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// стоит на маркерах карты и в ленте. Один глиф на две разные вещи в
     /// пределах одного экрана — это не стиль, это ошибка чтения. Пузырь же
     /// говорит ровно то, что делает кнопка: рассказать другим.
+    ///
+    /// Фолбэк — заголовком, а не пустой картинкой: `?? UIImage()` давал бы
+    /// нажимаемую кнопку-невидимку в баре.
     private var reportButton: CPBarButton {
-        CPBarButton(image: Self.buttonImage("exclamationmark.bubble.fill") ?? UIImage()) { [weak self] _ in
+        guard let image = Self.buttonImage("exclamationmark.bubble.fill") else {
+            return CPBarButton(title: String(localized: "Радар")) { [weak self] _ in
+                self?.presentReport()
+            }
+        }
+        return CPBarButton(image: image) { [weak self] _ in
             self?.presentReport()
         }
     }
@@ -357,8 +428,16 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             })
         }
 
-        let grid = CPGridTemplate(title: String(localized: "Куда"), gridButtons: buttons)
-        interfaceController?.pushTemplate(grid, animated: true) { _, _ in }
+        // Заголовок совпадает с кнопкой, которой сюда пришли: тап «Маршрут»,
+        // открывший экран «Куда», читался как промах.
+        let grid = CPGridTemplate(title: env.route.isActive ? String(localized: "Маршрут")
+                                                            : String(localized: "Куда"),
+                                  gridButtons: buttons)
+        interfaceController?.pushTemplate(grid, animated: true) { _, error in
+            if let error {
+                Log.carplay.error("pushTemplate(куда): \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     /// Плитка Дом/Работа. Место не задано — плитку всё равно показываем: она
@@ -424,7 +503,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             }
         }
         let grid = CPGridTemplate(title: String(localized: "Что впереди?"), gridButtons: buttons)
-        interfaceController?.pushTemplate(grid, animated: true) { _, _ in }
+        interfaceController?.pushTemplate(grid, animated: true) { _, error in
+            if let error {
+                Log.carplay.error("pushTemplate(отметка): \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     /// Отметка засады из машины.

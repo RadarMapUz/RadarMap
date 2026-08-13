@@ -87,6 +87,10 @@ final class CarPlayMapModel {
 struct CarPlayMapScreen: View {
     @Environment(AppEnvironment.self) private var env
     let model: CarPlayMapModel
+    /// День/ночь для подложки карты. @State, а не computed: чтение
+    /// currentCoordinate в body пересобирало бы всё дерево с картой на каждый
+    /// GPS-тик, а ответ солнца меняется дважды в сутки.
+    @State private var isDaylight = false
 
     var body: some View {
         ZStack {
@@ -124,20 +128,40 @@ struct CarPlayMapScreen: View {
         .onChange(of: env.thermal.mode) { _, mode in
             withAnimation(.easeInOut(duration: 0.3)) { model.autoSwitch(for: mode) }
         }
+        // База камер докодировалась/обновилась — пересчитать «что рядом» СРАЗУ.
+        // Раньше эта подписка жила только в телефонном MapScreen: при холодном
+        // запуске из машины (телефон в кармане) первый фикс приходил раньше
+        // базы, машина стояла на месте, нового фикса distanceFilter не давал —
+        // и док показывал «Чисто» до первого движения.
+        .onChange(of: env.cameras.revision) { env.location.refreshMonitoring() }
+        // День/ночь подложки: раз в минуту, вне body. Чтение координаты внутри
+        // .task не отслеживается SwiftUI, а минутный шаг на границе восхода —
+        // незаметная цена против пересборки дерева карты каждым фиксом.
+        // Пока экран машины жив, одна арифметика NOAA в минуту — копейки.
+        .task {
+            while !Task.isCancelled {
+                isDaylight = Self.daylight(appearance: env.settings.mapAppearance,
+                                           coordinate: env.location.currentCoordinate)
+                try? await Task.sleep(for: .seconds(60))
+            }
+        }
+        // Настройку водитель мог сменить на телефоне посреди поездки — минуты
+        // не ждём.
+        .onChange(of: env.settings.mapAppearance) { _, appearance in
+            isDaylight = Self.daylight(appearance: appearance,
+                                       coordinate: env.location.currentCoordinate)
+        }
     }
 
     /// Светлая подложка карты — по той же настройке, что на телефоне, и по
     /// тому же солнцу. Правило «Авто» считает восход и закат в точке водителя,
     /// а не по часам: в декабре в 18:30 уже темно, и белая карта слепит.
-    ///
-    /// Координата берётся живая, а не троттленная как на телефоне: тут она
-    /// читается не в body карты, а один раз при пересборке экрана, и NOAA-счёт
-    /// на этом пути не идёт каждым фиксом.
-    private var isDaylight: Bool {
-        switch env.settings.mapAppearance {
+    private static func daylight(appearance: MapAppearance,
+                                 coordinate: CLLocationCoordinate2D?) -> Bool {
+        switch appearance {
         case .dark:  return false
         case .light: return true
-        case .auto:  return Sun.isDaytime(at: env.location.currentCoordinate, now: Date())
+        case .auto:  return Sun.isDaytime(at: coordinate, now: Date())
         }
     }
 }

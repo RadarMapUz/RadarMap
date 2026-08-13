@@ -15,6 +15,7 @@
 //
 
 import CarPlay
+import os
 
 extension CarPlaySceneDelegate {
 
@@ -34,6 +35,11 @@ extension CarPlaySceneDelegate {
         let session = session
         withObservationTracking {
             _ = env.mobile.pendingConfirm
+            // И тревогу тоже: guard ниже откладывает вопрос, пока на экране
+            // предупреждение, — значит, снятие тревоги обязано перепоказать
+            // вопрос. Без этого чтения он терялся навсегда: комментарий
+            // обещал «вопрос ждёт», а код его выбрасывал.
+            _ = env.location.isApproachingCamera
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, self.session == session else { return }
@@ -48,10 +54,14 @@ extension CarPlaySceneDelegate {
         // Пока на экране предупреждение о камере, вопрос ждёт: перекрывать
         // предупреждение вопросом — ровно то, чего делать нельзя.
         guard !env.location.isApproachingCamera else { return }
+        // Занято другим диалогом (тост, «Нет доступа») — не пытаемся: второй
+        // presentTemplate поверх показанного CarPlay отклоняет. Наблюдение
+        // выше перепокажет вопрос при следующей смене состояния.
+        guard interfaceController?.presentedTemplate == nil else { return }
         func answer(_ value: Bool?) -> (CPAlertAction) -> Void {
             { [weak self] _ in
                 self?.env.mobile.answerConfirm(stillThere: value)
-                self?.interfaceController?.dismissTemplate(animated: true) { _, _ in }
+                self?.dismissTopTemplate()
             }
         }
         let alert = CPAlertTemplate(
@@ -62,13 +72,21 @@ extension CarPlaySceneDelegate {
                 CPAlertAction(title: String(localized: "Нет"), style: .destructive, handler: answer(false)),
                 CPAlertAction(title: String(localized: "Пропустить"), style: .cancel, handler: answer(Bool?.none)),
             ])
-        interfaceController?.presentTemplate(alert, animated: true) { _, _ in }
+        interfaceController?.presentTemplate(alert, animated: true) { _, error in
+            if let error {
+                Log.carplay.error("presentTemplate(подтверждение): \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     // MARK: - Всплывающие сообщения
 
     func popToMap() {
-        interfaceController?.popToRootTemplate(animated: true) { _, _ in }
+        interfaceController?.popToRootTemplate(animated: true) { _, error in
+            if let error {
+                Log.carplay.error("popToRootTemplate: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     /// Диалог с пояснением.
@@ -82,9 +100,13 @@ extension CarPlaySceneDelegate {
         let alert = CPAlertTemplate(titleVariants: [title + ". " + message, title],
                                     actions: [CPAlertAction(title: String(localized: "Понятно"),
                                                             style: .cancel) { [weak self] _ in
-            self?.interfaceController?.dismissTemplate(animated: true) { _, _ in }
+            self?.dismissTopTemplate()
         }])
-        interfaceController?.presentTemplate(alert, animated: true) { _, _ in }
+        interfaceController?.presentTemplate(alert, animated: true) { _, error in
+            if let error {
+                Log.carplay.error("presentTemplate(алерт): \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     /// Короткое подтверждение без единого тапа: само гаснет через пару секунд —
@@ -93,14 +115,22 @@ extension CarPlaySceneDelegate {
         let alert = CPAlertTemplate(titleVariants: [text],
                                     actions: [CPAlertAction(title: String(localized: "ОК"),
                                                             style: .default) { [weak self] _ in
-            self?.interfaceController?.dismissTemplate(animated: true) { _, _ in }
+            self?.dismissTopTemplate()
         }])
-        interfaceController?.presentTemplate(alert, animated: true) { _, _ in }
+        interfaceController?.presentTemplate(alert, animated: true) { _, error in
+            if let error {
+                Log.carplay.error("presentTemplate(тост): \(error.localizedDescription, privacy: .public)")
+            }
+        }
         toastTask?.cancel()
-        toastTask = Task { @MainActor [weak self] in
+        // Гасим только СВОЙ тост: безусловный dismissTemplate по таймеру
+        // закрывал любой диалог, успевший встать следом, — включая вопрос
+        // «ещё на месте?», требующий ответа.
+        toastTask = Task { @MainActor [weak self, weak alert] in
             try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled else { return }
-            self?.interfaceController?.dismissTemplate(animated: true) { _, _ in }
+            guard !Task.isCancelled, let self, let alert,
+                  self.interfaceController?.presentedTemplate === alert else { return }
+            self.dismissTopTemplate()
         }
     }
 }

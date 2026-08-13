@@ -27,4 +27,8 @@ nonisolated enum Log {
     static let alerts = Logger(subsystem: subsystem, category: "alerts")
     /// Общее: настройки, виджеты, прочее.
     static let app = Logger(subsystem: subsystem, category: "app")
+    /// Жизненный цикл сцены CarPlay и операции с шаблонами. До этой категории
+    /// в CarPlay-коде не было НИ ОДНОЙ строки лога — «в машине ничего не
+    /// работает» было недиагностируемо по определению.
+    static let carplay = Logger(subsystem: subsystem, category: "carplay")
 }

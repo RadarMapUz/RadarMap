@@ -45,10 +45,16 @@ nonisolated enum UzbekSpeech {
     ///
     /// Ищем по префиксу, а не по «uz-UZ»: у голоса может быть регион (uz-Latn,
     /// uz-Cyrl-UZ), и точное совпадение его не найдёт.
-    static var nativeVoice: AVSpeechSynthesisVoice? {
-        AVSpeechSynthesisVoice.speechVoices()
-            .first { $0.language.lowercased().hasPrefix("uz") }
-    }
+    ///
+    /// ОДНО перечисление на процесс, а не на фразу. speechVoices() — это XPC к
+    /// речевому демону на сотни миллисекунд (при занятом демоне — секунды), а
+    /// вызывался он с главного актора на КАЖДУЮ фразу, причём дважды: спидометр
+    /// и кнопки CarPlay замирали ровно в момент оповещения — водитель видел
+    /// «ничего не работает». Голос, установленный посреди поездки, подхватится
+    /// после перезапуска приложения — честная цена за живой главный поток.
+    static let nativeVoice: AVSpeechSynthesisVoice? = AVSpeechSynthesisVoice
+        .speechVoices()
+        .first { $0.language.lowercased().hasPrefix("uz") }
 
     /// Подготовить узбекскую фразу к произнесению турецким голосом.
     static func spoken(_ text: String) -> String {

@@ -42,16 +42,25 @@ struct CarPlayStatusChips: View {
         // Без разрешения экран машины мёртв целиком — это важнее всего
         // остального вместе взятого.
         if !env.location.isAuthorized {
+            // Коротко и действием: за рулём читают глиф и два-три слова,
+            // длинная фраза на узком экране обрезалась на самом важном.
             result.append(CarPlayChip(id: "auth", symbol: "location.slash.fill",
                                       tint: Theme.danger,
-                                      text: String(localized: "Нет доступа к геопозиции — разрешите на телефоне")))
+                                      text: String(localized: "Разрешите геопозицию на телефоне")))
+        } else if !env.location.isAlwaysAuthorized {
+            // «При использовании»: наш экран жив, но стоит открыть в машине
+            // другое приложение при заблокированном телефоне — фиксы встанут,
+            // и голос замолчит. Молчать о такой деградации нельзя.
+            result.append(CarPlayChip(id: "whenInUse", symbol: "location.circle",
+                                      tint: Theme.warning,
+                                      text: String(localized: "Дайте доступ «Всегда» на телефоне")))
         }
         // Тайлы карты требуют сети, база камер — нет. Сказать об этом обязаны:
         // серая карта без объяснения читается как сломанное приложение.
         if !env.network.isOnline {
             result.append(CarPlayChip(id: "offline", symbol: "wifi.slash",
                                       tint: Theme.warning,
-                                      text: String(localized: "Нет сети — карта не грузится, о камерах предупреждаю")))
+                                      text: String(localized: "Нет сети — камеры работают")))
         }
         // Жара: бюджеты уже урезаны (маркеры карты, сеть схемы) — но молча.
         if env.thermal.mode != .full {
@@ -84,13 +93,20 @@ struct CarPlayStatusChip: View {
     let chip: CarPlayChip
 
     var body: some View {
-        Label(chip.text, systemImage: chip.symbol)
-            .font(.rounded(12, .medium))
-            .foregroundStyle(chip.tint)
-            .lineLimit(1)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 6)
-            .background(Theme.background.opacity(0.88), in: Capsule())
-            .overlay(Capsule().stroke(chip.tint.opacity(0.35), lineWidth: 1))
+        // Глиф на пункт крупнее и жирнее текста: так он читается пиктограммой,
+        // а не первой буквой фразы.
+        Label {
+            Text(chip.text)
+                .font(.rounded(14, .semibold))
+        } icon: {
+            Image(systemName: chip.symbol)
+                .font(.rounded(15, .bold))
+        }
+        .foregroundStyle(chip.tint)
+        .lineLimit(1)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Theme.background.opacity(0.88), in: Capsule())
+        .overlay(Capsule().stroke(chip.tint.opacity(0.35), lineWidth: 1))
     }
 }

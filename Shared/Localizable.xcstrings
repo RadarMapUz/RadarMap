@@ -2880,6 +2880,16 @@
         }
       }
     },
+    "Дайте доступ «Всегда» на телефоне": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonda «Doim» ruxsatini bering"
+          }
+        }
+      }
+    },
     "Далее": {
       "localizations": {
         "ru": {
@@ -3546,6 +3556,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safarni yakunlash"
+          }
+        }
+      }
+    },
+    "Завершить поездку?": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarni yakunlaysizmi?"
           }
         }
       }
@@ -6076,23 +6096,6 @@
         }
       }
     },
-    "Нет доступа к геопозиции — разрешите на телефоне": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Нет доступа к геопозиции — разрешите на телефоне"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Joylashuvga ruxsat yo‘q — telefonda ruxsat bering"
-          }
-        }
-      }
-    },
     "Нет доступа к данным": {
       "localizations": {
         "ru": {
@@ -6142,19 +6145,12 @@
         }
       }
     },
-    "Нет сети — карта не грузится, о камерах предупреждаю": {
-      "extractionState": "manual",
+    "Нет сети — камеры работают": {
       "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Нет сети — карта не грузится, о камерах предупреждаю"
-          }
-        },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tarmoq yo‘q — xarita yuklanmayapti, kameralar haqida ogohlantiraman"
+            "value": "Tarmoq yo‘q — kameralar ishlaydi"
           }
         }
       }
@@ -9017,6 +9013,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "O'tishlarni ko'rib chiqish"
+          }
+        }
+      }
+    },
+    "Разрешите геопозицию на телефоне": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonda joylashuvga ruxsat bering"
           }
         }
       }

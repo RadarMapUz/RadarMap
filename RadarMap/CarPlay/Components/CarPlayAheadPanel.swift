@@ -49,12 +49,12 @@ struct CarPlayAheadPanel: View {
                 .font(.rounded(13, .bold))
                 .foregroundStyle(Theme.accent)
             Text("Впереди")
-                .font(.rounded(15, .bold))
+                .font(.rounded(16, .bold))
                 .foregroundStyle(Theme.textPrimary)
             Spacer(minLength: 0)
             if let summary = CarPlayAhead.summary(model.items) {
                 Text(summary)
-                    .font(.rounded(12, .medium))
+                    .font(.rounded(13, .medium))
                     .foregroundStyle(Theme.textTertiary)
                     .lineLimit(1)
             }
@@ -68,6 +68,17 @@ struct CarPlayAheadPanel: View {
         if model.items.isEmpty {
             empty
         } else {
+            ribbonBody
+                // Курс потерян (встали на светофоре): рисуем последнее
+                // известное приглушённо — как схема. Раньше лента схлопывалась
+                // в «Ждём движения» на каждой остановке и разворачивалась
+                // обратно — мигание на ровном месте.
+                .opacity(model.isStale ? 0.45 : 1)
+                .animation(.easeOut(duration: 0.4), value: model.isStale)
+        }
+    }
+
+    private var ribbonBody: some View {
             GeometryReader { geometry in
                 let height = geometry.size.height
                 let travel = max(1, height - Self.rowHeight)
@@ -89,7 +100,6 @@ struct CarPlayAheadPanel: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-        }
     }
 
     /// Высота строки ленты: значок 30 плюс воздух. От неё же считается
@@ -145,27 +155,31 @@ struct CarPlayAheadPanel: View {
     /// масштаба, и штрих под ней был бы вторым обозначением одного и того же.
     private static let ticks: [CLLocationDistance] = [500, 1000, 1500]
 
+    /// Иерархия «эта — следующая» держится размером и весом, а не только
+    /// цветом: с торпеды 20 против 16 почти не различалось, 22 против 15 —
+    /// различается мгновенно.
     private func marker(_ item: CarPlayAhead.Item) -> some View {
         HStack(spacing: 10) {
             ZStack {
                 Circle()
                     .fill(item.isTarget ? Theme.danger : item.kind.tint)
-                    .frame(width: item.isTarget ? 30 : 24,
-                           height: item.isTarget ? 30 : 24)
+                    .frame(width: item.isTarget ? 34 : 24,
+                           height: item.isTarget ? 34 : 24)
                 Image(systemName: item.kind.symbolName)
-                    .font(.rounded(item.isTarget ? 13 : 11, .bold))
+                    .font(.rounded(item.isTarget ? 15 : 11, .bold))
                     .foregroundStyle(.white)
             }
             .shadow(color: (item.isTarget ? Theme.danger : .black).opacity(0.55), radius: 6)
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(Formatting.distance(item.distance))
-                    .font(.rounded(item.isTarget ? 20 : 16, .heavy).monospacedDigit())
+                    .font(.rounded(item.isTarget ? 22 : 15, item.isTarget ? .heavy : .bold)
+                        .monospacedDigit())
                     .foregroundStyle(item.isTarget ? Theme.danger : Theme.textPrimary)
                     .contentTransition(.numericText())
                 Text(item.kind.shortName)
-                    .font(.rounded(11, .medium))
-                    .foregroundStyle(Theme.textTertiary)
+                    .font(.rounded(13, .medium))
+                    .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
             }
         }
@@ -204,7 +218,7 @@ struct CarPlayAheadPanel: View {
                     .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.textSecondary)
                 Text("Камер в двух километрах нет")
-                    .font(.rounded(12))
+                    .font(.rounded(13))
                     .foregroundStyle(Theme.textTertiary)
                     .multilineTextAlignment(.center)
             }
@@ -222,6 +236,9 @@ struct CarPlayAheadPanel: View {
 @Observable
 final class AheadModel {
     private(set) var items: [CarPlayAhead.Item] = []
+    /// Курс потерян (стоим): лента держит последнее известное приглушённо,
+    /// вместо того чтобы схлопнуться и мигать на каждом светофоре.
+    private(set) var isStale = false
     /// Кандидаты последнего отбора. Дорогая часть — перебор окрестности и
     /// коридор — идёт по гейту, а дистанции у этой горстки пересчитываются
     /// каждым тиком: иначе лента отстаёт от дока на весь шаг гейта, и на
@@ -234,9 +251,13 @@ final class AheadModel {
     func refresh(_ env: AppEnvironment) {
         guard let coordinate = env.location.currentCoordinate,
               env.location.currentCourse >= 0 else {
-            if !items.isEmpty { items = []; selected = [] }
+            // Не чистим: то, что было впереди секунду назад, впереди и стоит —
+            // машина на светофоре никуда не делась. Честность обеспечивает
+            // приглушение, как у схемы.
+            if !items.isEmpty, !isStale { isStale = true }
             return
         }
+        if isStale { isStale = false }
         let course = env.location.currentCourse
         let revision = env.cameras.revision
 

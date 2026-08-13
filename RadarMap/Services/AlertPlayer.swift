@@ -38,6 +38,11 @@ final class AlertPlayer: NSObject {
             }
         }
         prepareHaptics()
+        // Прогрев кэша голосов ВНЕ главного потока: первое перечисление
+        // speechVoices() стоит сотни миллисекунд XPC, и без прогрева их платил
+        // бы первый алерт — прямо в момент фразы, замораживая спидометр.
+        // static let потокобезопасен (семантика dispatch_once).
+        Task.detached(priority: .utility) { _ = UzbekSpeech.nativeVoice }
     }
 
     // MARK: - Хаптика по уровням приближения
@@ -116,15 +121,27 @@ final class AlertPlayer: NSObject {
         // Настоящий узбекский голос — если он в системе есть — читает узбекский
         // текст КАК ЕСТЬ. Переписывать орфографию под турецкую фонетику в этом
         // случае нельзя: она чинит чужой голос и ломает свой.
+        // Оба голоса — из кэшей: походы к речевому демону на пути фразы стоили
+        // главному потоку сотен миллисекунд на каждое оповещение.
         let useNative = Self.speaksUzbek && UzbekSpeech.nativeVoice != nil
         let spoken = (Self.speaksUzbek && !useNative) ? UzbekSpeech.spoken(text) : text
         let utterance = AVSpeechUtterance(string: spoken)
         utterance.voice = useNative ? UzbekSpeech.nativeVoice
-                                    : AVSpeechSynthesisVoice(language: Self.voiceLanguage)
+                                    : Self.voice(for: Self.voiceLanguage)
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         utterance.volume = Float(settings.alertVolume)
         utterance.postUtteranceDelay = 0.1
         synthesizer.speak(utterance)
+    }
+
+    /// Кэш голоса по языку: AVSpeechSynthesisVoice(language:) — тоже поход к
+    /// речевому демону, а язык меняется только сменой языка приложения.
+    private static var voiceCache: [String: AVSpeechSynthesisVoice] = [:]
+    private static func voice(for language: String) -> AVSpeechSynthesisVoice? {
+        if let cached = voiceCache[language] { return cached }
+        let voice = AVSpeechSynthesisVoice(language: language)
+        if let voice { voiceCache[language] = voice }
+        return voice
     }
 
     /// Интерфейс сейчас на узбекском — значит и фразы приходят узбекские.

@@ -118,22 +118,24 @@ struct RoadSketchView: View {
 
     /// Линейка масштаба: схема без масштаба заставляла бы угадывать, далеко
     /// ли перекрёсток. Ширина следует за охватом и анимируется вместе с ним.
+    /// Кегль и толщина растут с strokeScale: линии схемы на экране машины
+    /// в 1.6 раза толще, а линейка оставалась телефонной — на грани видимости.
     private func scaleBar(height: CGFloat) -> some View {
         let meters = RoadSketch.scaleBarMeters(forSpan: state.spanMeters)
         let width = CGFloat(meters) * height / CGFloat(state.spanMeters)
         return HStack(spacing: 6) {
             Capsule()
                 .fill(.white.opacity(0.35))
-                .frame(width: width, height: 2)
+                .frame(width: width, height: 2 * strokeScale)
             Text(Formatting.distance(meters))
-                .font(.rounded(11, .medium))
+                .font(.rounded(11 * max(1, strokeScale * 0.9), .medium))
                 .monospacedDigit()
                 .foregroundStyle(Theme.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity,
                alignment: .bottomLeading)
         .padding(.leading, 30)
-        .padding(.bottom, 8)
+        .padding(.bottom, 8 * strokeScale)
         .allowsHitTesting(false)
     }
 }

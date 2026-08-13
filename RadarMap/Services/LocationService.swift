@@ -155,6 +155,11 @@ final class LocationService: NSObject {
         authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse
     }
 
+    /// Доступ «Всегда». «При использовании» держит экран машины живым, но
+    /// фоновые оповещения, геозоны и автостарт при нём молча не работают —
+    /// об этой деградации интерфейс обязан говорить, а не догадываться.
+    var isAlwaysAuthorized: Bool { authorizationStatus == .authorizedAlways }
+
     init(repository: CameraRepository, notifier: NotificationService,
          settings: AppSettings, alerts: AlertPlayer, trip: TripStats) {
         self.repository = repository
@@ -481,6 +486,33 @@ final class LocationService: NSObject {
             manager.showsBackgroundLocationIndicator = false
         }
         manager.startUpdatingLocation()
+        armColdStartWatchdog()
+    }
+
+    /// Сторож холодного старта непрерывного GPS.
+    ///
+    /// Обычный сторож (armStaleWatchdog) взводится только из ПРИНЯТОЙ ветки
+    /// фикса и только в движении — то есть с крытого паркинга, где первый фикс
+    /// не приходит или бракуется, «Нет сигнала» не зажигалось никогда: док
+    /// уверенно показывал «Чисто» и 0 км/ч, схема — «появится в движении»,
+    /// и вся эта тишина была неотличима от сломанного приложения. Здесь окно
+    /// щедрое (staleWatchdogMaxSeconds): первому фиксу позволено идти долго,
+    /// но не бесконечно. Принятый фикс гасит флаг обычным путём, а стоянка с
+    /// живым фиксом отменяет этого сторожа через armStaleWatchdog.
+    private func armColdStartWatchdog() {
+        // Позиция свежая — сторожу нечего сторожить, обычный цикл уже идёт.
+        if let accepted = lastAcceptedAt,
+           Date().timeIntervalSince(accepted) < AppConfig.gpsStaleSeconds { return }
+        fixSequence &+= 1
+        staleWatchdogTask?.cancel()
+        let sequence = fixSequence
+        staleWatchdogTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(AppConfig.staleWatchdogMaxSeconds))
+            guard !Task.isCancelled, let self, self.fixSequence == sequence,
+                  self.isTripActive || self.isForeground else { return }
+            self.isSignalStale = true
+            Log.location.notice("непрерывный GPS запущен, но принятых фиксов нет — сигнал потерян")
+        }
     }
 
     /// Тир точности GPS в поездке. Переключаем только на границах (гистерезис по тиру),
@@ -666,7 +698,15 @@ final class LocationService: NSObject {
             // Перелёт (jump) не берём: это заведомо мусорная координата.
             let positionIsOld = currentCoordinate == nil
                 || Date().timeIntervalSince(lastAcceptedAt ?? .distantPast) > AppConfig.gpsStaleSeconds
-            if reason != .jump, fix.horizontalAccuracy > 0, !isTripActive, positionIsOld {
+            // В поездке — тоже. Условие «!isTripActive» здесь выключало
+            // единственный запасной путь обновления позиции ровно тогда, когда
+            // водитель за рулём: телефон глубоко под стеклом или городской
+            // каньон бракует КАЖДЫЙ фикс по точности, и весь экран машины
+            // (док, схема, лента) замирал без единого честного слова. Грубая
+            // точка идёт только в картинку с флагом isPositionCoarse
+            // («Уточняем положение»); алерты, проезды и трек живут строго на
+            // принятых фиксах — seedContext их не трогает.
+            if reason != .jump, fix.horizontalAccuracy > 0, positionIsOld {
                 seedContext(from: CLLocationCoordinate2D(latitude: fix.lat,
                                                          longitude: fix.lon))
             }
@@ -691,6 +731,10 @@ final class LocationService: NSObject {
         isPositionCoarse = true
         retileIfNeeded(around: coordinate)
         recomputeNearest(from: coordinate)
+        // Тик двигаем и здесь: схема и лента CarPlay подписаны на него, а не
+        // на координату — без тика они стояли на прошлой точке, пока док уже
+        // честно показывал «Уточняем положение» по новой.
+        locationTick &+= 1
     }
 
     /// Сторож потери сигнала: перезаряжается на каждом принятом фиксе, поэтому
@@ -1370,13 +1414,16 @@ extension LocationService: CLLocationManagerDelegate {
     }
 
     /// Система всё-таки приостановила обновления (вне поездки это нормально).
-    /// В поездке паузы быть не должно — если случилась, поднимаем GPS сами.
+    /// «За рулём» паузы быть не должно — если случилась, поднимаем GPS сами.
+    /// isForeground, а не только isTripActive: режим «CarPlay подключён без
+    /// поездки» держит непрерывный GPS точно так же, и пауза там навсегда
+    /// замораживала экран машины.
     nonisolated func locationManagerDidPauseLocationUpdates(_ manager: CLLocationManager) {
         Task { @MainActor in
             Log.location.notice("система приостановила обновления геолокации")
-            guard self.isTripActive else { return }
+            guard self.isTripActive || self.isForeground else { return }
             self.manager.startUpdatingLocation()
-            Log.location.error("пауза во время поездки — обновления перезапущены")
+            Log.location.error("пауза при активном экране — обновления перезапущены")
         }
     }
 

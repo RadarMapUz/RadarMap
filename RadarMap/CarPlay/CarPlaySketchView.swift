@@ -90,36 +90,41 @@ struct CarPlaySketchView: View {
         }
     }
 
-    /// Схема ждёт движения. Значок и ритм вместо одинокой строки: состояние
-    /// должно выглядеть состоянием, а не сбоем.
+    /// Схема ждёт движения. Один круг, не два: двойное кольцо было
+    /// декоративным шумом, а состояние должно выглядеть состоянием.
     private var sketchWaiting: some View {
         VStack(spacing: 14) {
             ZStack {
                 Circle()
                     .stroke(Theme.stroke, lineWidth: 1)
                     .frame(width: 84, height: 84)
-                Circle()
-                    .stroke(Theme.accent.opacity(0.25), lineWidth: 1)
-                    .frame(width: 56, height: 56)
                 Image(systemName: "road.lanes")
                     .font(.rounded(26, .medium))
                     .foregroundStyle(Theme.accent.opacity(0.9))
             }
             VStack(spacing: 4) {
                 Text("Схема появится в движении")
-                    .font(.rounded(18, .semibold))
+                    .font(.rounded(19, .semibold))
                     .foregroundStyle(Theme.textSecondary)
                 Text("Пока машина стоит, направление неизвестно")
-                    .font(.rounded(13))
+                    .font(.rounded(15))
                     .foregroundStyle(Theme.textTertiary)
             }
             .multilineTextAlignment(.center)
         }
     }
 
-    /// То же правило близости, что у приборки телефона: схема и док не должны
-    /// расходиться в оценке тревоги.
+    /// Тон тревоги. Первое слово — за уровнем конвейера оповещений: это тот же
+    /// уровень, что красит кромку дока, и расходиться им нельзя (раньше пороги
+    /// были разные, и схема могла гореть янтарным при красном доке). Дистанция
+    /// остаётся фолбэком для «камера уже в охвате, но алерт ещё не начался».
     private var alertColor: Color {
+        switch env.location.alertLevel {
+        case 3...: return Theme.danger
+        case 2:    return Theme.warning
+        case 1:    return Theme.warning
+        default: break
+        }
         guard let distance = env.location.distanceToNearest else { return Theme.accent }
         let radius = AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
                                                  baseRadius: env.settings.alertRadius)

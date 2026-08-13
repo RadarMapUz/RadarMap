@@ -76,18 +76,30 @@ struct CarPlayOverlay: View {
             dockRow(showRoute: false)
         }
         .padding(.horizontal, 18)
-        // Во всю ширину, а не «плашкой в углу»: прижатая влево панель
-        // оставляла справа полэкрана пустоты и читалась как незаконченная
-        // вёрстка — на широком экране машины особенно.
         .frame(maxWidth: .infinity)
         .frame(height: AppConfig.carPlayDockHeight)
+        // Подкраска в тон тревоги ПОД содержимым, но НАД тёмной подложкой:
+        // с 70 см кромку-нитку не видно, а тонированная плашка читается
+        // боковым зрением как «внизу что-то происходит».
+        .background((alertTint ?? .clear).opacity(alertTint == nil ? 0 : 0.07),
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .background(Theme.background.opacity(0.88),
                     in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         // Кромка панели окрашивается по тревоге: боковым зрением видно, что
         // впереди камера, даже если смотришь на дорогу, а не на цифры.
+        // 3.5, а не 2: двухточечная кромка с торпеды — нитка.
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .stroke(dockEdge, lineWidth: alertTint == nil ? 1 : 2))
-        .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
+            .stroke(dockEdge, lineWidth: alertTint == nil ? 1 : 3.5))
+        // Тень в тон тревоги — «нимб», который виден краем глаза даже там,
+        // где сама плашка перекрыта рукой на руле.
+        .shadow(color: (alertTint ?? .black).opacity(alertTint == nil ? 0.45 : 0.6),
+                radius: alertTint == nil ? 14 : 20, y: 6)
+        // Остров, а не лента: на экране в 1900 точек зоны, растянутые по
+        // третям всей ширины, разъезжаются на полэкрана — глазу приходится
+        // пробегать весь дисплей, чтобы собрать «скорость—камера—прибытие».
+        // Капим ширину и центрируем: на обычных экранах ничего не меняется.
+        .frame(maxWidth: AppConfig.carPlayDockMaxWidth)
+        .frame(maxWidth: .infinity)
         .animation(.easeOut(duration: 0.3), value: env.location.alertLevel)
     }
 
@@ -129,27 +141,28 @@ struct CarPlayOverlay: View {
     }
 
     /// Скорость крупно + знак лимита рядом: сравнение «еду / можно» одним взглядом.
+    ///
+    /// Кегль скорости ПОСТОЯННЫЙ. Раньше при камере цифра сжималась 38→30,
+    /// уступая акцент дистанции, — но скорость нужна водителю сильнее всего
+    /// именно у камеры: он сравнивает «еду/можно» в момент решения тормозить.
+    /// Waze и Google размер спидометра не трогают никогда. Акцент камере уже
+    /// дают красная подложка её зоны и выросшая дистанция.
     private var speedCell: some View {
         HStack(spacing: 12) {
             VStack(spacing: -1) {
-                // Пока едем спокойно — крупная цифра на экране одна, и это
-                // скорость. Впереди камера — акцент уходит ей, а скорость
-                // становится меньше: два одинаково крупных числа рядом за
-                // рулём читаются дольше, чем одно.
                 Text("\(Int(env.location.speedKmh.rounded()))")
-                    .font(.rounded(env.location.isApproachingCamera ? 30 : 38, .heavy)
-                        .monospacedDigit())
+                    .font(.rounded(38, .heavy).monospacedDigit())
                     .foregroundStyle(speedColor)
                     .contentTransition(.numericText())
                     .animation(.snappy(duration: 0.25), value: Int(env.location.speedKmh.rounded()))
                 Text("км/ч")
-                    .font(.rounded(10, .semibold))
+                    .font(.rounded(13, .semibold))
                     .foregroundStyle(Theme.textTertiary)
             }
             .frame(minWidth: 58)
 
             if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
-                SpeedLimitSign(limit: limit, diameter: 46,
+                SpeedLimitSign(limit: limit, diameter: 52,
                                isAssumed: env.speedLimits.isCurrentLimitAssumed)
                     .shadow(color: env.speedLimits.isOverspeeding ? Theme.danger.opacity(0.8) : .clear,
                             radius: 9)
@@ -157,7 +170,6 @@ struct CarPlayOverlay: View {
             }
         }
         .animation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
-        .animation(.easeOut(duration: 0.25), value: env.location.isApproachingCamera)
     }
 
     /// Ближайшая камера — честные состояния: нет сигнала, уточняем положение,
@@ -200,12 +212,15 @@ struct CarPlayOverlay: View {
 
                 // Стрелка направления на камеру относительно курса (вверх = прямо
                 // по ходу): понятно, камера впереди или уводит в сторону.
+                // 12 pt и тёмная тень: девятипунктовый треугольник с торпеды
+                // неразличим, а отвечает он на важный вопрос «по ходу или вбок».
                 if let relative = env.location.relativeBearingToNearest {
                     let angle = CameraDirection.arrowAngle(relativeBearing: relative)
                     Image(systemName: "arrowtriangle.up.fill")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 12, weight: .black))
                         .foregroundStyle(camera.kind.tint)
-                        .offset(y: -26)
+                        .shadow(color: .black.opacity(0.8), radius: 2)
+                        .offset(y: -28)
                         .rotationEffect(.degrees(angle))
                         .animation(.easeOut(duration: 0.3), value: Int(angle / 10))
                 }
@@ -223,7 +238,7 @@ struct CarPlayOverlay: View {
                 Text(env.location.isPositionCoarse
                      ? String(localized: "уточняем положение")
                      : camera.kind.genitivePhrase)
-                    .font(.rounded(11, .medium))
+                    .font(.rounded(14, .medium))
                     .foregroundStyle(env.location.isPositionCoarse ? Theme.warning
                                                                    : Theme.textSecondary)
                     .lineLimit(1)
@@ -258,45 +273,51 @@ struct CarPlayOverlay: View {
                 .frame(width: 38, height: 38)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.rounded(17, .bold))
+                    .font(.rounded(18, .bold))
                     .foregroundStyle(Theme.textPrimary)
                 Text(subtitle)
-                    .font(.rounded(11, .medium))
+                    .font(.rounded(14, .medium))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
             }
         }
     }
 
-    /// Прибытие: во сколько будем, сколько осталось и сколько камер впереди
-    /// по маршруту — три числа, которые спрашивают в дороге чаще всего.
+    /// Прибытие. Главное число — СКОЛЬКО ЕХАТЬ: это первый вопрос и водителя,
+    /// и пассажира, и именно его Apple с Google держат героем. Время прибытия —
+    /// рядом, вторым весом; ниже — остаток пути и камеры впереди по маршруту.
     private var etaCell: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 7) {
-                Image(systemName: "flag.checkered")
-                    .font(.rounded(12, .bold))
-                    .foregroundStyle(Theme.success)
-                Text(env.route.arrivalDate.formatted(date: .omitted, time: .shortened))
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(Formatting.duration(env.route.remainingTime))
                     .font(.rounded(22, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
+                HStack(spacing: 4) {
+                    Image(systemName: "flag.checkered")
+                        .font(.rounded(11, .bold))
+                        .foregroundStyle(Theme.success)
+                    Text(env.route.arrivalDate.formatted(date: .omitted, time: .shortened))
+                        .font(.rounded(14, .semibold).monospacedDigit())
+                        .foregroundStyle(Theme.textSecondary)
+                }
             }
             HStack(spacing: 8) {
                 Text(Formatting.distance(env.route.remainingDistance))
-                    .font(.rounded(12, .semibold).monospacedDigit())
+                    .font(.rounded(14, .semibold).monospacedDigit())
                     .foregroundStyle(Theme.textSecondary)
                 if camerasAhead > 0 {
                     HStack(spacing: 3) {
                         Image(systemName: "camera.fill")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.system(size: 10, weight: .bold))
                         Text("\(camerasAhead)")
-                            .font(.rounded(12, .semibold).monospacedDigit())
+                            .font(.rounded(14, .semibold).monospacedDigit())
                     }
                     .foregroundStyle(Theme.Types.camera)
                 }
             }
         }
-        .frame(minWidth: 96, alignment: .leading)
+        .frame(minWidth: 116, alignment: .leading)
     }
 
     /// Сколько камер маршрута ещё впереди (пройденные не считаем).
@@ -309,40 +330,54 @@ struct CarPlayOverlay: View {
 
     // MARK: - Верхние баннеры
 
-    /// Алерт приближения: цвет и размер растут по уровню тревоги (1→3), рядом —
-    /// знак лимита на этой дороге, чтобы решение «тормозить или нет» было сразу.
+    /// Алерт приближения: три СТУПЕНИ, различимые боковым зрением, а не только
+    /// оттенком. Раньше уровни красились alertTint'ом, а role(.attention) и
+    /// есть warning — лестница 1→3 схлопывалась в «янтарь, янтарь, красный».
+    /// Теперь ступени различаются устройством плашки:
+    ///   1 — тёмная плашка с янтарной кромкой («заметь»),
+    ///   2 — янтарная заливка с тёмным текстом («готовься»),
+    ///   3 — красная заливка, белый текст и пульс глифа («действуй»).
     private func approachBanner(camera: Camera, distance: CLLocationDistance) -> some View {
-        let tint = alertTint ?? Theme.warning
+        let level = max(1, env.location.alertLevel)
+        let fill: AnyShapeStyle = switch level {
+        case 1:  AnyShapeStyle(Theme.background.opacity(0.88))
+        case 2:  AnyShapeStyle(Theme.warning.gradient)
+        default: AnyShapeStyle(Theme.danger.gradient)
+        }
+        let foreground: Color = switch level {
+        case 1:  Theme.textPrimary
+        case 2:  Theme.background
+        default: .white
+        }
+        let glow: Color = level >= 3 ? Theme.danger : Theme.warning
         return HStack(spacing: 12) {
             Image(systemName: camera.kind.symbolName)
                 .font(.rounded(20, .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(level == 1 ? Theme.warning : foreground)
                 .frame(width: 42, height: 42)
-                .background(.white.opacity(0.18), in: Circle())
-                .symbolEffect(.pulse, options: .repeating)
+                .background((level == 1 ? Theme.warning : foreground).opacity(0.18),
+                            in: Circle())
+                .symbolEffect(.pulse, options: .repeating, isActive: level >= 3)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(Formatting.distance(distance))
                     .font(.rounded(28, .heavy).monospacedDigit())
-                    .foregroundStyle(.white)
-                    // Не переносить и не сжимать. Когда рядом стоит баннер
-                    // манёвра, места на двоих может не хватить, и без этого
-                    // «378 м» рассыпалось по одной цифре в строку. Уступать
-                    // место обязан манёвр (у него ellipsis), а не цифра, ради
-                    // которой баннер существует.
+                    .foregroundStyle(foreground)
+                    // Не переносить и не сжимать: уступать место обязан манёвр
+                    // (у него ellipsis), а не цифра, ради которой баннер
+                    // существует.
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .contentTransition(.numericText())
                     .animation(.easeOut(duration: 0.3), value: Int(distance))
-                // shortName, а не displayName: последнее для «интеллектуальной
-                // камеры + радара» даёт 31 символ, баннер растягивался под них
-                // до угла экрана и уезжал под кнопки CarPlay. Тип нужен одним
-                // словом — подробности водитель за рулём не читает.
+                // shortName, а не displayName: тип нужен одним словом. Без
+                // fixedSize: длинное слово честно обрезается многоточием внутри
+                // плашки, а не вылезает из неё под системные кнопки.
                 Text(camera.kind.shortName)
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(foreground.opacity(0.92))
                     .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .truncationMode(.tail)
             }
 
             if let limit = env.speedLimits.limit(near: camera.coordinate) {
@@ -351,41 +386,44 @@ struct CarPlayOverlay: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        // Потолок ширины — как у баннера манёвра. Без него баннер рос по
-        // содержимому и упирался в системные кнопки.
-        .fixedSize(horizontal: true, vertical: false)
         .frame(maxWidth: 340, alignment: .trailing)
         .layoutPriority(1)
-        .background(tint.gradient,
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .shadow(color: tint.opacity(0.55), radius: 16, y: 6)
+        .background(fill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .stroke(level == 1 ? Theme.warning : .clear, lineWidth: 2))
+        .shadow(color: glow.opacity(level == 1 ? 0.35 : 0.55), radius: 16, y: 6)
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     /// Манёвр: «через 300 м — направо на Амира Темура».
+    ///
+    /// Сама инструкция — первичный текст, дистанция — вторичный по цвету:
+    /// водитель ищет глазами «куда», а не «сколько». Раньше было наоборот —
+    /// имя улицы стояло самым мелким текстом баннера (12 pt), при том что
+    /// у Google и Apple именно оно доминирует.
     private func maneuverBanner(step: RouteStep, distance: CLLocationDistance) -> some View {
         HStack(spacing: 12) {
             Image(systemName: step.icon)
-                .font(.rounded(22, .bold))
+                .font(.rounded(24, .bold))
                 .foregroundStyle(Theme.background)
-                .frame(width: 44, height: 44)
+                .frame(width: 50, height: 50)
                 .background(Theme.accent.gradient,
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            in: RoundedRectangle(cornerRadius: 13, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
                 Text(Formatting.distance(distance))
-                    .font(.rounded(20, .heavy).monospacedDigit())
+                    .font(.rounded(22, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                     .animation(.easeOut(duration: 0.3), value: Int(distance))
                 Text(step.text)
-                    .font(.rounded(12, .medium))
-                    .foregroundStyle(Theme.textSecondary)
+                    .font(.rounded(16, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .frame(maxWidth: 320, alignment: .leading)
+        .frame(maxWidth: 360, alignment: .leading)
         .layoutPriority(0)
         .background(Theme.background.opacity(0.88),
                     in: RoundedRectangle(cornerRadius: 18, style: .continuous))

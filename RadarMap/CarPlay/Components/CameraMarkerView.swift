@@ -9,6 +9,12 @@
 //  Здесь — только внешний вид точки: картинка по типу камеры, клин
 //  направления там, где оно доказано, подсветка цели и кэш готовых растров.
 //
+//  Размер маркера следует тиру — та же шкала, что на телефоне (CameraTier):
+//  background — точка, near — диск с каймой, target — крупный глиф с пульсом.
+//  Раньше КАЖДАЯ камера рисовалась 44-пунктовым знаком, то есть размером
+//  «выделенной» телефонной, — из машины это выглядело сыпью одинаково громких
+//  иконок, против которой шкала тиров и существует.
+//
 //  Знак ограничения скорости на маркере намеренно НЕ рисуется на CarPlay
 //  (limit приходит nil): лимит текущей дороги показан в доке крупно и рядом
 //  со скоростью, а сорок маленьких знаков по экрану делали карту нечитаемой.
@@ -54,16 +60,9 @@ final class CameraMarkerView: MKAnnotationView {
     override var annotation: (any MKAnnotation)? {
         didSet {
             guard let annotation = annotation as? CameraAnnotation else { return }
-            image = Self.marker(for: annotation.camera.kind, limit: annotation.limit,
-                                direction: annotation.showsDirection
-                                    ? annotation.camera.markerDirection : nil)
             centerOffset = .zero
             collisionMode = .circle
             displayPriority = .defaultHigh
-            // Слипшиеся маркеры собираются в счётчик вместо того, чтобы
-            // прятать друг друга. Камера оповещения из кластеров исключена:
-            // её нужно видеть отдельно и с пульсом.
-            clusteringIdentifier = annotation.tier == .target ? nil : "camera"
             applyTier(annotation.tier)
         }
     }
@@ -75,14 +74,35 @@ final class CameraMarkerView: MKAnnotationView {
     }
 
     /// Важность маркера: дальние гасим, но не убираем — пропавшая камера хуже
-    /// лишней. Плотность, а не удаление.
+    /// лишней. Плотность, а не удаление. Тир меняет и картинку: точка, диск
+    /// или полный знак — прозрачности одной для этого мало.
     func applyTier(_ tier: CameraTier) {
         alpha = tier == .background ? AppConfig.mapBackgroundCameraOpacity : 1
+        guard let annotation = annotation as? CameraAnnotation else { return }
+        image = Self.marker(for: annotation.camera.kind, limit: annotation.limit,
+                            direction: annotation.showsDirection
+                                ? annotation.camera.markerDirection : nil,
+                            tier: tier)
+        // Слипшиеся маркеры собираются в счётчик вместо того, чтобы
+        // прятать друг друга. Камера оповещения из кластеров исключена:
+        // её нужно видеть отдельно и с пульсом.
+        clusteringIdentifier = tier == .target ? nil : "camera"
     }
 
     /// Цель оповещения: крупнее, поверх соседей и с пульсирующим кольцом —
     /// на карте сразу видно, о какой именно точке говорит панель.
     func setTarget(_ isTarget: Bool) {
+        // Картинка следует цели немедленно: applyTarget приходит чаще, чем
+        // пересчёт тиров в reloadCameras, и точка, ставшая целью между
+        // перерисовками, обязана вырасти до полного знака сразу, а не когда
+        // карта соберётся перезагрузить маркеры. Halo ниже меряется по bounds —
+        // картинка ставится до него.
+        if let annotation = annotation as? CameraAnnotation {
+            image = Self.marker(for: annotation.camera.kind, limit: annotation.limit,
+                                direction: annotation.showsDirection
+                                    ? annotation.camera.markerDirection : nil,
+                                tier: isTarget ? .target : annotation.tier)
+        }
         transform = isTarget ? CGAffineTransform(scaleX: 1.3, y: 1.3) : .identity
         displayPriority = isTarget ? .required : .defaultHigh
         zPriority = isTarget ? .max : .defaultUnselected
@@ -123,14 +143,58 @@ final class CameraMarkerView: MKAnnotationView {
 
     /// Направление квантуем шагом 15°: глазом разницы не видно, а кэш вместо
     /// 360 вариантов на каждый тип держит 24.
-    private static func marker(for kind: CameraType, limit: Int?, direction: Int?) -> UIImage {
-        let step = direction.map { (Int((Double($0) / 15).rounded()) * 15) % 360 }
-        let key = "\(kind.sourceString)|\(limit ?? -1)|\(step ?? -1)"
+    ///
+    /// Клин направления — только от near и выше: на двенадцатипунктовой точке
+    /// он не читается, а кэш без него не множится на 24 варианта.
+    private static func marker(for kind: CameraType, limit: Int?, direction: Int?,
+                               tier: CameraTier) -> UIImage {
+        let step = tier == .background ? nil
+            : direction.map { (Int((Double($0) / 15).rounded()) * 15) % 360 }
+        let key = "\(kind.sourceString)|\(limit ?? -1)|\(step ?? -1)|\(tier)"
         if let cached = cache[key] { return cached }
-        let rendered = limit.map { limitMarker(kind: kind, limit: $0, direction: step) }
-            ?? glyphMarker(kind: kind, direction: step)
+        let rendered: UIImage = switch tier {
+        case .background: dotMarker(kind: kind)
+        case .near:       discMarker(kind: kind, direction: step)
+        case .target:     limit.map { limitMarker(kind: kind, limit: $0, direction: step) }
+                              ?? glyphMarker(kind: kind, direction: step)
+        }
         cache[key] = rendered
         return rendered
+    }
+
+    /// Фоновая камера — точка: тот же язык, что телефонная `dot` (заливка
+    /// цветом типа, белая кайма), чуть крупнее — на экран машины смотрят
+    /// с семидесяти сантиметров.
+    private static func dotMarker(kind: CameraType) -> UIImage {
+        let size = CGSize(width: 14, height: 14)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            let rect = CGRect(x: 1.5, y: 1.5, width: 11, height: 11)
+            UIColor(kind.tint).setFill()
+            UIBezierPath(ovalIn: rect).fill()
+            UIColor.white.withAlphaComponent(0.75).setStroke()
+            let ring = UIBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
+            ring.lineWidth = 1
+            ring.stroke()
+        }
+    }
+
+    /// Ближняя камера — диск с каймой, без глифа: тип читается цветом, а
+    /// полный знак остаётся цели. Клин уменьшен вместе с диском.
+    private static func discMarker(kind: CameraType, direction: Int?) -> UIImage {
+        let size = CGSize(width: 30, height: 30)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            let rect = CGRect(x: 5, y: 5, width: 20, height: 20)
+            drawCone(direction: direction, kind: kind,
+                     center: CGPoint(x: rect.midX, y: rect.midY), radius: 14)
+            UIColor.black.withAlphaComponent(0.55).setFill()
+            UIBezierPath(ovalIn: rect).fill()
+            UIColor(kind.tint).setFill()
+            UIBezierPath(ovalIn: rect.insetBy(dx: 1.8, dy: 1.8)).fill()
+            UIColor.white.withAlphaComponent(0.92).setStroke()
+            let ring = UIBezierPath(ovalIn: rect.insetBy(dx: 2.4, dy: 2.4))
+            ring.lineWidth = 1.4
+            ring.stroke()
+        }
     }
 
     /// Клин «камера смотрит туда» — та же деталь, что на телефоне. Рисуется

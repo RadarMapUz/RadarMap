@@ -291,7 +291,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Фолбэк — заголовком, а не пустой картинкой: `?? UIImage()` давал бы
     /// нажимаемую кнопку-невидимку в баре.
     private var reportButton: CPBarButton {
-        guard let image = Self.buttonImage("exclamationmark.bubble.fill") else {
+        guard let image = buttonImage("exclamationmark.bubble.fill") else {
             return CPBarButton(title: String(localized: "Радар")) { [weak self] _ in
                 self?.presentReport()
             }
@@ -309,19 +309,19 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// понять, следит ли карта, был подождать и посмотреть, уехала ли метка.
     private var recenterButton: CPMapButton {
         let button = CPMapButton { [model] _ in model.recenterRequests += 1 }
-        button.image = Self.buttonImage(model.isFollowing ? "location.fill" : "location")
+        button.image = buttonImage(model.isFollowing ? "location.fill" : "location")
         return button
     }
 
     private var zoomInButton: CPMapButton {
         let button = CPMapButton { [model] _ in model.zoomInRequests += 1 }
-        button.image = Self.buttonImage("plus")
+        button.image = buttonImage("plus")
         return button
     }
 
     private var zoomOutButton: CPMapButton {
         let button = CPMapButton { [model] _ in model.zoomOutRequests += 1 }
-        button.image = Self.buttonImage("minus")
+        button.image = buttonImage("minus")
         return button
     }
 
@@ -331,7 +331,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let button = CPMapButton { [weak self] _ in
             self?.toggleMute()   // наблюдение пересоберёт кнопку
         }
-        button.image = Self.buttonImage(muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+        button.image = buttonImage(muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
         return button
     }
 
@@ -393,17 +393,29 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// CarPlay, и круг под значком крупный — двадцатка сидела в нём мелкой
     /// точкой. Плитки сетки рядом идут на 36, так что 24 — это середина шкалы,
     /// а не выдуманное число.
-    private static func buttonImage(_ symbol: String) -> UIImage? {
+    private func buttonImage(_ symbol: String) -> UIImage? {
         UIImage(systemName: symbol,
-                withConfiguration: UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold))
+                withConfiguration: carConfiguration(pointSize: 24, weight: .semibold))
     }
 
     /// Иконка плитки сетки: шаблонное изображение — CarPlay сам красит его под
     /// тему машины (днём тёмным по светлому, ночью наоборот).
-    private static func gridImage(_ symbol: String) -> UIImage {
-        let config = UIImage.SymbolConfiguration(pointSize: 36, weight: .semibold)
-        let image = UIImage(systemName: symbol, withConfiguration: config) ?? UIImage()
+    private func gridImage(_ symbol: String) -> UIImage {
+        let image = UIImage(systemName: symbol,
+                            withConfiguration: carConfiguration(pointSize: 36, weight: .semibold))
+            ?? UIImage()
         return image.withRenderingMode(.alwaysTemplate)
+    }
+
+    /// Конфигурация значка с трейтами ЭКРАНА МАШИНЫ. Без них картинка несёт
+    /// масштаб телефона: на головном устройстве с другим display scale растр
+    /// пережимается уже там и приезжает не того размера и мыльным. Apple для
+    /// изображений CarPlay прямо велит carTraitCollection.
+    private func carConfiguration(pointSize: CGFloat,
+                                  weight: UIImage.SymbolWeight) -> UIImage.SymbolConfiguration {
+        let config = UIImage.SymbolConfiguration(pointSize: pointSize, weight: weight)
+        guard let traits = interfaceController?.carTraitCollection else { return config }
+        return config.applying(UIImage.SymbolConfiguration(traitCollection: traits))
     }
 
     // MARK: - «Куда»: горячие плитки
@@ -477,7 +489,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func gridButton(symbol: String, titles: [String],
                             action: @escaping () -> Void) -> CPGridButton {
-        CPGridButton(titleVariants: titles, image: Self.gridImage(symbol)) { _ in action() }
+        CPGridButton(titleVariants: titles, image: gridImage(symbol)) { _ in action() }
     }
 
     /// Длинный адрес в плитку не влезает — короткий вариант для узких экранов.

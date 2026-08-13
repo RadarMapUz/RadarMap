@@ -56,7 +56,9 @@ final class CameraClusterView: MKAnnotationView {
     /// Размер растёт ступенями, а не плавно: за рулём важно «мало / много»,
     /// а не точная площадь.
     private static func badge(count: Int, tint: UIColor) -> UIImage {
-        let side: CGFloat = count >= 20 ? 44 : (count >= 8 ? 40 : 36)
+        // Шкала уменьшена вместе с одиночными маркерами (тир-рендер в
+        // CameraMarkerView): группа не должна быть громче полного знака цели.
+        let side: CGFloat = count >= 20 ? 38 : (count >= 8 ? 34 : 30)
         let text = count > 99 ? "99+" : "\(count)"
         let key = "\(text)|\(side)|\(tint.hashValue)"
         if let cached = cache[key] { return cached }
@@ -76,7 +78,7 @@ final class CameraClusterView: MKAnnotationView {
             ring.lineWidth = 1.6
             ring.stroke()
 
-            let font = UIFont.systemFont(ofSize: text.count > 2 ? 13 : 16, weight: .heavy)
+            let font = UIFont.systemFont(ofSize: text.count > 2 ? 12 : 14, weight: .heavy)
             let attributes: [NSAttributedString.Key: Any] = [.font: font,
                                                              .foregroundColor: UIColor.white]
             let bounds = text.size(withAttributes: attributes)

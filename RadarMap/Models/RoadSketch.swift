@@ -51,11 +51,13 @@ nonisolated enum RoadSketch {
         /// дефолтом класса. От неё зависит толщина полотна в метрах.
         var lanes = 0
 
-        /// Ширина проезжей части, метры.
-        var widthMeters: Double {
-            let counted = lanes > 0 ? lanes : kind.defaultLanes(isOneWay: isOneWay)
-            return Double(min(counted, kind.maxLanes)) * kind.laneMeters
+        /// Полос, по которым считается ширина и раскладываются разделительные.
+        var laneCount: Int {
+            min(lanes > 0 ? lanes : kind.defaultLanes(isOneWay: isOneWay), kind.maxLanes)
         }
+
+        /// Ширина проезжей части, метры.
+        var widthMeters: Double { Double(laneCount) * kind.laneMeters }
     }
 
     /// Местность в сцене: вода, зелень, рельсы, кварталы — в метрах от опоры.
@@ -276,6 +278,30 @@ nonisolated enum RoadSketch {
     static let markBudget = 48
 
     static let farNetworkSpan: Double = 340
+
+    /// Насколько широкой должна быть полоса НА ЭКРАНЕ, чтобы её разделительная
+    /// что-то значила. Порога по охвату у разделительных нет и не нужно: полоса
+    /// в метрах сама худеет с отдалением и уходит под этот порог там, где
+    /// разметка перестаёт читаться. Шесть пунктов — граница, ниже которой
+    /// пунктир превращается в рябь.
+    static let laneDividerMinLanePoints: CGFloat = 6
+
+    /// Смещения разделительных от оси дороги, от края к центру.
+    ///
+    /// Правило простое и потому проверяемое: границы между полосами стоят
+    /// через ширину полосы, а ось — посередине. У чётного числа полос одна из
+    /// границ приходится ровно на ось; её здесь НЕТ намеренно — ось рисует
+    /// свой проход, и смысл у неё другой (встречные потоки, а не попутные).
+    ///
+    /// Порядок — от края к центру, и это не косметика: рендерер кладёт полосы
+    /// друг на друга, и широкая закрывает всё, что внутри неё.
+    static func laneDividerOffsets(lanes: Int, laneWidth: CGFloat) -> [CGFloat] {
+        guard lanes >= 3, laneWidth > 0 else { return [] }
+        let half = CGFloat(lanes) / 2
+        return stride(from: lanes - 1, through: 1, by: -1)
+            .map { (CGFloat($0) - half) * laneWidth }
+            .filter { $0 > 0 }
+    }
 
     /// Максимальный охват. Схема отвечает на вопрос «где камера ОТНОСИТЕЛЬНО
     /// МЕНЯ И МОЕЙ ДОРОГИ», а он осмыслен только вблизи. На четырёх километрах

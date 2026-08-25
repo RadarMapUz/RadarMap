@@ -60,12 +60,15 @@ nonisolated struct RoadLine: Sendable {
     /// `RoadTiles.decodeTile`.
     var lanes: Int = 0
 
+    /// Полос, по которым и считается ширина: сказанное тайлом, иначе дефолт
+    /// класса, и всё это в пределах потолка класса.
+    var laneCount: Int {
+        min(lanes > 0 ? lanes : kind.defaultLanes(isOneWay: isOneWay), kind.maxLanes)
+    }
+
     /// Ширина проезжей части, метры. Считается здесь, а не возится в тайле:
     /// одно число полос дешевле числа метров и не расходится с классом.
-    var widthMeters: Double {
-        let counted = lanes > 0 ? lanes : kind.defaultLanes(isOneWay: isOneWay)
-        return Double(min(counted, kind.maxLanes)) * kind.laneMeters
-    }
+    var widthMeters: Double { Double(laneCount) * kind.laneMeters }
 }
 
 /// Откуда берётся сеть. `nonisolated` и `Sendable`: запросы идут из отрисовки,

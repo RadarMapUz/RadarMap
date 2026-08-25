@@ -844,6 +844,17 @@ private struct SketchRaster: View, Equatable {
                                                 lineCap: .butt, lineJoin: .round,
                                                 dash: level < 0 ? [10, 8] : []))
                 }
+                // Разделительные между полосами — ДО заглушек узлов, и это не
+                // порядок ради порядка. Заглушка кладёт в узле диск цветом
+                // асфальта, то есть стирает разметку ровно там, где ей и
+                // положено обрываться: перед перекрёстком. Нарисованные после
+                // неё, разделительные шли бы сквозь перекрёсток насквозь.
+                for line in lines where trim && level >= 0 {
+                    var shape = path(line.points)
+                    if line.isRing { shape.closeSubpath() }
+                    laneDividers(context: &context, line: line, shape: shape)
+                }
+
                 // Заглушки узлов.
                 //
                 // Ways режутся на перекрёстках, и каждый кусок кончается своим
@@ -1038,6 +1049,46 @@ private struct SketchRaster: View, Equatable {
     /// как в оповещениях.
     private func width(for line: RoadSketch.Line) -> CGFloat {
         max(metricWidth(for: line), strokeScale * base(for: line) * zoomWidth)
+    }
+
+    /// Разделительные между полосами.
+    ///
+    /// Рисуются БЕЗ смещения геометрии, и это главное в приёме. Полоса
+    /// шириной 2d, положенная цветом разметки на готовое полотно и тут же
+    /// перекрытая асфальтом шириной 2d − t, оставляет ровно две линии на ±d
+    /// от оси — то есть пару разделительных. Тот же трюк, что у каймы, и та
+    /// же цена: два штриха по уже готовому пути, ни одной новой точки. Честное
+    /// смещение ломаной вбок стоило бы (полос − 1) новых ломаных на каждую
+    /// дорогу, и это на слое, который и так самый плотный.
+    ///
+    /// Пунктир задаётся ВНЕШНЕМУ штриху: в его разрывах остаётся асфальт, и
+    /// разделительная выходит прерывистой сама собой.
+    ///
+    /// Порядок ОТ КРАЯ К ЦЕНТРУ обязателен. Широкая полоса закрывает всё, что
+    /// лежит внутри неё, и обратный порядок стирал бы уже нарисованное.
+    private func laneDividers(context: inout GraphicsContext, line: RoadSketch.Line,
+                              shape: Path) {
+        guard line.isDetailed else { return }
+        let lanes = line.laneCount
+        guard lanes >= 3 else { return }
+        let full = metricWidth(for: line)
+        let lane = full / CGFloat(lanes)
+        // Полоса тоньше этого — не разметка, а муар: на схеме останется рябь
+        // вместо линий, и читаться она будет как дефект растра.
+        guard lane >= RoadSketch.laneDividerMinLanePoints * strokeScale else { return }
+
+        let asphalt = fill(for: line)
+        let thickness = 1.1 * strokeScale
+        for d in RoadSketch.laneDividerOffsets(lanes: lanes, laneWidth: lane) {
+            guard 2 * d > thickness else { continue }
+            context.stroke(shape, with: .color(SketchPalette.laneDivider),
+                           style: .init(lineWidth: 2 * d + thickness,
+                                        lineCap: .butt, lineJoin: .round,
+                                        dash: [5 * strokeScale, 7 * strokeScale]))
+            context.stroke(shape, with: .color(asphalt),
+                           style: .init(lineWidth: 2 * d - thickness,
+                                        lineCap: .butt, lineJoin: .round))
+        }
     }
 
     /// Ширина проезжей части В МЕТРАХ, переведённая в точки.

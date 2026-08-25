@@ -78,10 +78,25 @@ osmium export points.osm.pbf -f geojsonseq --geometry-types=point \
     -o points.geojsonl --overwrite
 echo "    точек в экстракте: $(wc -l < points.geojsonl)"
 
+# Правки конструктора. Снимок, а не приращение: сборка накладывает состояние
+# целиком, и «отменить правку» значит собрать тайлы без этой строки.
+#
+# Нет панели — нет правок, и это не ошибка: сборка обязана работать на машине,
+# где панели никогда не было. Пустой файл в этом случае и пишем.
+EDITS="$WORK/edits.json"
+if python3 "$WORK/admin.py" --export-edits > "$EDITS.new" 2>/dev/null; then
+    mv "$EDITS.new" "$EDITS"
+    echo "    правок панели: $(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["items"]))' "$EDITS")"
+else
+    rm -f "$EDITS.new"
+    echo '{"version":1,"items":[]}' > "$EDITS"
+    echo "    панели нет — собираем без правок"
+fi
+
 echo "--- 3/4: сборка кандидата"
 rm -rf "$CANDIDATE" && mkdir -p "$CANDIDATE"
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
-    --points points.geojsonl --tiles "$CANDIDATE"
+    --points points.geojsonl --edits "$EDITS" --tiles "$CANDIDATE"
 
 # Самопроверка детерминизма. Недетерминированная сборка меняет sha256 ВСЕХ
 # тайлов каждую неделю, и каждый телефон перекачивает свои файлы впустую —
@@ -89,7 +104,7 @@ python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
 echo "--- 4/4: детерминизм"
 rm -rf "$CANDIDATE.check" && mkdir -p "$CANDIDATE.check"
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
-    --points points.geojsonl --tiles "$CANDIDATE.check" >/dev/null
+    --points points.geojsonl --edits "$EDITS" --tiles "$CANDIDATE.check" >/dev/null
 if ! diff -rq "$CANDIDATE" "$CANDIDATE.check" >/dev/null; then
     echo "СТОП: две сборки одного экстракта разошлись — сборка недетерминирована"
     exit 1

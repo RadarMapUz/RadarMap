@@ -1052,5 +1052,74 @@ class SidewalkTests(unittest.TestCase):
                                 for entry in tile["roads"]))
 
 
+class EditBakingTests(unittest.TestCase):
+    """Запекание правок панели в тайлы.
+
+    Запекаем, а не возим отдельным файлом: иначе телефону пришлось бы качать
+    его, разбирать и СЛИВАТЬ С ДОРОГАМИ — то есть делать работу, которую с него
+    только что сняли. Запечённая правка не стоит ему ничего.
+
+    Правка ищет свою дорогу по МЕСТУ. По id нельзя: id ведёт в OSM и не
+    переживает воскресной пересборки — у той же улицы назавтра другой way.
+    """
+
+    def road(self, code, flags, coords, name=""):
+        return (code, flags, [(lon, lat) for lat, lon in coords], name)
+
+    def edit(self, lat, lon, lanes, kind="lanes"):
+        return {"kind": kind, "geom": [lon, lat], "props": {"lanes": lanes}}
+
+    def test_edit_overrides_the_class_default(self):
+        street = self.road(4, 0, [(41.300, 69.250), (41.310, 69.250)])
+        patched, applied, missed = build_roads.apply_edits(
+            [street], [self.edit(41.305, 69.2501, 6)])
+        self.assertEqual((applied, missed), (1, 0))
+        self.assertEqual(build_roads.lanes_of(patched[0][1]), 6)
+
+    def test_edit_beats_the_osm_tag(self):
+        # Рука модератора старше автоматики: он смотрел на спутник.
+        street = self.road(4, build_roads.with_lanes(0, 2),
+                           [(41.300, 69.250), (41.310, 69.250)])
+        patched, _, _ = build_roads.apply_edits(
+            [street], [self.edit(41.305, 69.2501, 6)])
+        self.assertEqual(build_roads.lanes_of(patched[0][1]), 6)
+
+    def test_edit_does_not_beat_the_class_ceiling(self):
+        # …но не старше физики: опечатка модератора не должна залить квартал.
+        yard = self.road(7, 0, [(41.300, 69.250), (41.310, 69.250)])
+        patched, _, _ = build_roads.apply_edits(
+            [yard], [self.edit(41.305, 69.2501, 15)])
+        self.assertEqual(build_roads.lanes_of(patched[0][1]),
+                         build_roads.MAX_LANES_BY_CLASS[7])
+
+    def test_edit_that_lost_its_road_is_reported_not_swallowed(self):
+        # Промах — сигнал для очереди изменений, а не мелочь для лога.
+        street = self.road(4, 0, [(41.300, 69.250), (41.310, 69.250)])
+        _, applied, missed = build_roads.apply_edits(
+            [street], [self.edit(41.900, 69.900, 6)])
+        self.assertEqual((applied, missed), (0, 1))
+
+    def test_edit_does_not_disturb_other_roads(self):
+        target = self.road(4, 0, [(41.300, 69.250), (41.310, 69.250)])
+        other = self.road(4, 0, [(41.300, 69.260), (41.310, 69.260)])
+        patched, _, _ = build_roads.apply_edits(
+            [target, other], [self.edit(41.305, 69.2501, 6)])
+        self.assertEqual(build_roads.lanes_of(patched[1][1]), 0)
+
+    def test_other_kinds_are_left_for_their_own_stage(self):
+        # turn_lanes и своя геометрия запекаются иначе; молча применять их как
+        # полосы нельзя.
+        street = self.road(4, 0, [(41.300, 69.250), (41.310, 69.250)])
+        patched, applied, _ = build_roads.apply_edits(
+            [street], [self.edit(41.305, 69.2501, 6, kind="turn_lanes")])
+        self.assertEqual(applied, 0)
+        self.assertEqual(build_roads.lanes_of(patched[0][1]), 0)
+
+    def test_build_works_where_the_panel_never_existed(self):
+        self.assertEqual(build_roads.load_edits(None), [])
+        self.assertEqual(build_roads.load_edits("/нет/такого"), [])
+        self.assertEqual(build_roads.apply_edits([], []), ([], 0, 0))
+
+
 if __name__ == "__main__":
     unittest.main()

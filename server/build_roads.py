@@ -879,6 +879,74 @@ def generalise(roads, tolerance_deg):
             for code, flags, points, name in solid]
 
 
+def apply_edits(roads, edits, meters=25.0):
+    """Наложить правки панели на сеть → (сеть, наложено, промахнулось).
+
+    Запекаем В ТАЙЛЫ, а не возим отдельным файлом. Отдельный edits.json
+    пришлось бы качать, разбирать и СЛИВАТЬ С ДОРОГАМИ НА ТЕЛЕФОНЕ — то есть
+    вернуть туда работу, которую только что убрали. Запечённая правка не стоит
+    телефону ничего: он получает готовый тайл.
+
+    Правка ищет свою дорогу по МЕСТУ, а не по id: id ведёт в OSM и не переживает
+    воскресной пересборки — у той же улицы назавтра другой way.
+
+    Промахи возвращаются, а не глотаются. Правка, не нашедшая дороги, — это
+    сигнал для очереди изменений (§9 плана), а не мелочь для лога.
+    """
+    if not edits:
+        return roads, 0, 0
+    cells = defaultdict(list)
+    for index, road in enumerate(roads):
+        for key in _cells_of(road[2], POINT_GRID_DEGREES):
+            cells[key].append(index)
+
+    lanes_by_index = {}
+    missed = []
+    for edit in edits:
+        if edit.get("kind") != "lanes":
+            continue
+        lanes = (edit.get("props") or {}).get("lanes")
+        geometry = edit.get("geom") or []
+        if not isinstance(lanes, int) or len(geometry) < 2:
+            missed.append(edit)
+            continue
+        origin = (float(geometry[0]), float(geometry[1]))
+        best, best_distance, seen = None, meters, set()
+        for key in _neighbourhood(origin, POINT_GRID_DEGREES):
+            for index in cells.get(key, ()):
+                if index in seen:
+                    continue
+                seen.add(index)
+                candidate = _nearest_on(origin, roads[index][2])
+                distance = meters_between(origin, candidate)
+                if distance < best_distance:
+                    best, best_distance = index, distance
+        if best is None:
+            missed.append(edit)
+            continue
+        # Рука старше автоматики — но не старше физики: потолок класса стоит
+        # и здесь. Опечатка модератора не должна залить квартал асфальтом.
+        lanes_by_index[best] = clamp_lanes(roads[best][0], lanes)
+
+    if not lanes_by_index:
+        return roads, 0, len(missed)
+    patched = list(roads)
+    for index, lanes in lanes_by_index.items():
+        code, flags, points, name = patched[index]
+        patched[index] = (code, with_lanes(flags, lanes), points, name)
+    return patched, len(lanes_by_index), len(missed)
+
+
+def load_edits(path):
+    """Снимок правок панели. Нет файла — нет правок, и это не ошибка: сборка
+    обязана работать на машине, где панели никогда не было."""
+    if not path or not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8") as handle:
+        payload = json.load(handle)
+    return payload.get("items") or []
+
+
 def build_sidewalks(lines, tolerance_deg):
     """Тротуары как открытые ленты местности.
 
@@ -1533,11 +1601,16 @@ def main():
                         help="geojsonl с водой, зеленью и рельсами (необязателен)")
     parser.add_argument("--points", dest="points", default=None,
                         help="geojsonl узлов: светофоры, лежачие (необязателен)")
+    parser.add_argument("--edits", dest="edits", default=None,
+                        help="снимок правок панели (необязателен)")
     args = parser.parse_args()
 
     (raw, classes, flag_counts, read, skipped,
      lanes_tagged, raw_sidewalks) = collect(args.source)
     roads = generalise(raw, args.tolerance / 111_320.0)
+    # Правки накладываются ПОСЛЕ генерализации: они посажены на ту геометрию,
+    # которая поедет на телефон, а не на сырую.
+    roads, edits_applied, edits_missed = apply_edits(roads, load_edits(args.edits))
     # Местность упрощаем грубее дорог: контур пруда не несёт геометрии, по
     # которой принимают решения за рулём.
     areas = collect_areas(args.areas, args.tolerance * 3 / 111_320.0)
@@ -1605,6 +1678,9 @@ def main():
               f"до {lanes_of(widest[1])}, ширина проезжей части "
               f"{widths[0]:.1f}–{widths[-1]:.1f} м "
               f"(медиана {widths[len(widths) // 2]:.1f})")
+    if edits_applied or edits_missed:
+        print(f"правки панели: наложено {edits_applied}, "
+              f"не нашли дороги {edits_missed}")
     share = 100.0 * lanes_tagged / read if read else 0.0
     print(f"полосы: тегом {lanes_tagged} из {read} ({share:.1f} %), "
           f"остальным по классу")

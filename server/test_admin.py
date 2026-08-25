@@ -795,5 +795,80 @@ class AdminTest(unittest.TestCase):
             admin.DB_PATH = old_path
             os.unlink(fresh.name)
 
+
+class EditorApiTests(AdminTest):
+    """Ручки конструктора.
+
+    Три запрета, каждый — про то, что панель не должна уметь. Она не публикует
+    (закон 2: подписывает и выкладывает владелец со своей машины). Она не
+    отдаёт всё разом — в тайле Ташкента 71 595 дорог, и «без рамки» убило бы её
+    на первом открытии. И она не даёт второму окну молча затереть первое.
+    """
+
+    def setUp(self):
+        super().setUp()
+        conn = admin.db()
+        try:
+            conn.execute("DELETE FROM map_edits")
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_editor_needs_a_session(self):
+        self.assertEqual(_get(self.port, "/editor", cookie="")[0], 401)
+        self.assertEqual(_get(self.port, "/api/edits?south=41&west=69&north=42&east=70",
+                              cookie="")[0], 401)
+
+    def test_api_refuses_to_dump_everything(self):
+        self.assertEqual(_get(self.port, "/api/edits")[0], 400)
+        self.assertEqual(_get(self.port, "/api/roads")[0], 400)
+
+    def test_unknown_kind_is_refused(self):
+        code, _ = _post_json(self.port, "/api/edit",
+                             {"kind": "выдумка", "geom": [69.25, 41.3],
+                              "raw": [69.25, 41.3]})
+        self.assertEqual(code, 400)
+
+    def test_panel_cannot_publish(self):
+        # Статус «опубликовано» ставит только запекание с машины владельца.
+        code, _ = _post_json(self.port, "/api/edit",
+                             {"kind": "lanes", "status": 2,
+                              "geom": [69.25, 41.3], "raw": [69.25, 41.3]})
+        self.assertEqual(code, 400)
+
+    def test_save_then_stale_save_is_refused(self):
+        code, body = _post_json(self.port, "/api/edit",
+                                {"kind": "lanes", "geom": [69.25, 41.3],
+                                 "raw": [69.25, 41.3], "props": {"lanes": 4}})
+        self.assertEqual(code, 200, body)
+        created = json.loads(body)
+        code, _ = _post_json(self.port, "/api/edit",
+                             {"id": created["id"], "version": created["version"],
+                              "kind": "lanes", "geom": [69.25, 41.3],
+                              "raw": [69.25, 41.3], "props": {"lanes": 6}})
+        self.assertEqual(code, 200)
+        # Второе окно держит устаревшую версию.
+        code, _ = _post_json(self.port, "/api/edit",
+                             {"id": created["id"], "version": created["version"],
+                              "kind": "lanes", "geom": [69.25, 41.3],
+                              "raw": [69.25, 41.3], "props": {"lanes": 2}})
+        self.assertEqual(code, 409, "устаревшая версия обязана быть отвергнута")
+
+    def test_saved_edit_shows_up_in_its_bbox_only(self):
+        code, body = _post_json(self.port, "/api/edit",
+                                {"kind": "lanes", "geom": [69.30, 41.35],
+                                 "raw": [69.30, 41.35], "props": {"lanes": 4}})
+        self.assertEqual(code, 200, body)
+        near = json.loads(_get(self.port,
+            "/api/edits?south=41.34&west=69.29&north=41.36&east=69.31")[1])
+        self.assertTrue(any(e["geom"] == [69.30, 41.35] for e in near["edits"]))
+        far = json.loads(_get(self.port,
+            "/api/edits?south=40.0&west=68.0&north=40.5&east=68.5")[1])
+        self.assertEqual(far["edits"], [])
+
+    def test_snap_needs_a_point(self):
+        self.assertEqual(_post_json(self.port, "/api/snap", {})[0], 400)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

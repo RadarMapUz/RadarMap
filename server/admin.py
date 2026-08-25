@@ -48,6 +48,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 import admin_auth
+import map_edits
 
 DB_PATH = os.environ.get("RADARMAP_DB", "/opt/radarmap/api/reports.db")
 CAMERAS_PATH = os.environ.get("RADARMAP_CAMERAS", "/opt/radarmap/www/cameras.json")
@@ -99,6 +100,13 @@ def ensure_api_tables():
         print(f"схема api недоступна: {error}", file=sys.stderr)
 
 
+def edits_tiles_dir():
+    """Где лежат ОПУБЛИКОВАННЫЕ тайлы. Магнит липнет к ним, а не к сырому OSM
+    и не к подложке Яндекса: в панели надо видеть ровно ту геометрию, которая
+    поедет на телефон, вместе со всей генерализацией."""
+    return os.environ.get("RADARMAP_TILES", "/opt/radarmap/api/tiles")
+
+
 def init_db():
     """Таблицы, которыми владеет панель. Всё остальное создаёт api.py —
     он же и пишет туда; панель только читает и проставляет статусы."""
@@ -122,6 +130,7 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # колонка уже есть
     conn.execute("CREATE INDEX IF NOT EXISTS idx_overrides_pub ON overrides(published_at)")
+    map_edits.ensure_tables(conn)
     conn.commit()
     conn.close()
 
@@ -275,9 +284,9 @@ a { color:var(--accent); }
 }
 """
 
-TABS = (("/", "Сводка"), ("/map", "Карта"), ("/cameras", "Камеры"),
-        ("/mobile", "Передвижные"), ("/feedback", "Обращения"),
-        ("/usage", "Люди"), ("/health", "Здоровье"))
+TABS = (("/", "Сводка"), ("/map", "Карта"), ("/editor", "Конструктор"),
+        ("/cameras", "Камеры"), ("/mobile", "Передвижные"),
+        ("/feedback", "Обращения"), ("/usage", "Люди"), ("/health", "Здоровье"))
 
 # Префикс, под которым панель видна снаружи: "/radarmap/admin" на общем домене
 # или пусто при доступе через SSH-туннель. Внутрь запросы приходят уже без
@@ -619,6 +628,58 @@ color:#8ea0bb;line-height:1.7}}
 # Очередь камер
 # --------------------------------------------------------------------------
 
+def render_editor(api_key, drafts):
+    """Страница конструктора.
+
+    Тот же стек и та же форма, что у /map: своя полная страница вместо page(),
+    потому что карта обязана занять экран целиком, а не жить внутри <main> с
+    полями. Там уже стоит карта со спутником, ключ, послабленная ровно на одной
+    странице CSP и свой скрипт файлом без сборки. Второй стек ради второй карты
+    означал бы две подложки, два способа авторизации и две вещи, которые
+    ломаются порознь.
+    """
+    logout_url = u("/logout")
+    return f"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Конструктор · RadarMap</title><style>{CSS}
+body{{overflow:hidden}}
+#map{{position:absolute;inset:52px 0 0 0}}
+.tools{{position:absolute;top:64px;left:12px;z-index:4;display:flex;gap:8px;
+flex-direction:column;width:230px}}
+.tool{{padding:10px 12px;border-radius:10px;border:1px solid #2b3038;
+background:#12161df2;color:#8ea0bb;font-size:14px;cursor:pointer;text-align:left}}
+.tool.on{{background:#101f2e;color:#3cdcff;border-color:#17384d}}
+.legend{{background:#12161de6;border:1px solid #232a35;border-radius:10px;
+padding:9px 11px;font-size:12px;color:#8ea0bb;line-height:1.5}}
+.card{{position:absolute;top:64px;right:12px;width:300px;z-index:5;
+background:#12161d;border:1px solid #232a35;border-radius:14px;padding:14px}}
+.card[hidden]{{display:none}}
+.card h3{{margin:0 0 4px;font-size:15px}}
+.card label{{display:block;margin:10px 0 0;font-size:12px;color:#8ea0bb}}
+.card input{{width:100%;margin-top:4px;padding:9px 11px;border-radius:9px;
+border:1px solid #2b3038;background:#0d1116;color:#e7e9ee;font-size:14px}}
+.card button{{margin-top:12px;margin-right:8px}}
+.card button.ghost{{background:#12161d;color:#8ea0bb;border:1px solid #2b3038}}
+.hint{{font-size:12px;color:#8ea0bb;line-height:1.5}}
+</style></head>
+<body><header>{"".join(
+    f'<a href="{esc(u(path))}" class="{"on" if path == "/editor" else ""}">{esc(name)}</a>'
+    for path, name in TABS)}<a href="{logout_url}" class="out">Выход</a></header>
+<div id="map"></div>
+<div class="tools" data-base="{esc(u(''))}" data-drafts="{drafts}">
+  <button data-kind="lanes" class="tool on">1 · Полосы</button>
+  <button data-kind="turn_lanes" class="tool">2 · Направления</button>
+  <button data-kind="u_turn" class="tool">3 · Разворот</button>
+  <div class="legend" id="hint">Черновиков: {drafts}. Клик по дороге ставит
+    объект — магнит посадит его на ось. Панель ничего не публикует.</div>
+</div>
+<aside class="card" id="card" hidden></aside>
+<script src="https://api-maps.yandex.ru/2.1/?apikey={esc(api_key)}&lang=ru_RU"></script>
+<script src="{esc(u('/static/editor.js'))}"></script>
+</body></html>"""
+
+
 def camera_queue(conn):
     """Нерешённые репорты, сгруппированные по камере, с уже посчитанным сигналом."""
     now = time.time()
@@ -756,6 +817,22 @@ def export_overrides(version):
             item["type"] = row["type"]
         items.append(item)
     return {"version": version, "updatedAt": time.strftime("%Y-%m-%d"), "items": items}
+
+
+def export_edits():
+    """Снимок правок конструктора для запекания в тайлы.
+
+    Тот же приём, что у камер: снимок состояния, а не приращение. Сборка
+    накладывает его целиком, и «отменить правку» значит собрать тайлы без этой
+    строки — отдельного механизма отмены не нужно.
+    """
+    conn = db()
+    try:
+        map_edits.ensure_tables(conn)
+        items = map_edits.export_accepted(conn)
+    finally:
+        conn.close()
+    return {"version": 1, "updatedAt": time.strftime("%Y-%m-%d"), "items": items}
 
 
 def mark_published(version):
@@ -910,8 +987,14 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/search":
                 query = parse_qs(urlparse(self.path).query).get("q", [""])[0]
                 return self._json({"found": search_cameras(query)})
-            if path == "/static/moderate.js":
-                return self.static_file("moderate.js",
+            if path == "/editor":
+                return self.editor_page(conn)
+            if path == "/api/edits":
+                return self.edits_json(conn)
+            if path == "/api/roads":
+                return self.roads_json()
+            if path in ("/static/moderate.js", "/static/editor.js"):
+                return self.static_file(path.rsplit("/", 1)[1],
                                         "application/javascript; charset=utf-8")
             # Старые адреса ведут на карту: два способа делать одно и то же —
             # это рассинхронизация, а ссылки из очереди жалоб должны работать.
@@ -963,6 +1046,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.move_json(conn, self._json_body(raw))
             if path == "/api/undo":
                 return self.undo_json(conn, self._json_body(raw))
+            if path == "/api/snap":
+                return self.snap_json(self._json_body(raw))
+            if path == "/api/edit":
+                return self.edit_save_json(conn, self._json_body(raw))
+            if path == "/api/edit/withdraw":
+                return self.edit_withdraw_json(conn, self._json_body(raw))
             if path == "/cameras/act":
                 self.camera_action(conn, field)
                 return self._redirect(u("/cameras"))
@@ -1153,7 +1242,7 @@ class Handler(BaseHTTPRequestHandler):
     def static_file(self, name, content_type):
         """Один каталог, имена из белого списка. Отдавать файлы по имени из URL
         нельзя: так наружу уезжает /etc/passwd."""
-        if name not in ("moderate.js",):
+        if name not in ("moderate.js", "editor.js"):
             return self._send(404, page("/", "Не найдено", ""))
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", name)
         try:
@@ -1188,6 +1277,118 @@ class Handler(BaseHTTPRequestHandler):
             "SELECT COUNT(*) n FROM overrides WHERE published_at IS NULL").fetchone()["n"]
         self._send(200, render_moderation_map(api_key, pending, len(cameras())),
                    csp=self.CSP_MAP)
+
+    # --- Конструктор карты
+
+    def editor_page(self, conn):
+        api_key = admin_auth.read_config().get("yandex_key", "")
+        if not api_key:
+            return self._send(200, page("/editor", "Нет ключа карты",
+                '<div class="empty">В /opt/radarmap/admin.conf нет строки '
+                'yandex_key=… — без неё карта не загрузится</div>'))
+        drafts = conn.execute("SELECT COUNT(*) n FROM map_edits WHERE status = ?",
+                              (map_edits.DRAFT,)).fetchone()["n"]
+        self._send(200, render_editor(api_key, drafts), csp=self.CSP_MAP)
+
+    def _bbox(self):
+        """Рамка карты из запроса. Без неё не отвечаем: в тайле Ташкента
+        71 595 дорог, и «отдай всё» убило бы панель на первом открытии."""
+        query = parse_qs(urlparse(self.path).query)
+        try:
+            return tuple(float(query[key][0])
+                         for key in ("south", "west", "north", "east"))
+        except (KeyError, IndexError, ValueError):
+            return None
+
+    def edits_json(self, conn):
+        box = self._bbox()
+        if box is None:
+            return self._json({"error": "нужна рамка карты"}, 400)
+        self._json({"edits": map_edits.in_bbox(conn, *box)})
+
+    def roads_json(self):
+        """Геометрия для магнита и для предпросмотра — из опубликованных
+        тайлов. В панели видно ровно то, что поедет на телефон."""
+        box = self._bbox()
+        if box is None:
+            return self._json({"error": "нужна рамка карты"}, 400)
+        roads = map_edits.load_roads(edits_tiles_dir(), *box)
+        self._json({"roads": [{"cls": r["cls"], "name": r["name"],
+                               "points": r["points"]} for r in roads[:2000]]})
+
+    def snap_json(self, field):
+        """Магнит. Считает СЕРВЕР, а не браузер, и это не про мощность.
+
+        Пороги посадки — часть контракта с запеканием: тайлы собирает
+        build_roads.py теми же числами. Вторая реализация в JavaScript
+        разошлась бы с первой молча, и разошлась бы именно там, где дорого, —
+        на неоднозначных местах.
+        """
+        try:
+            lon, lat = float(field["lon"]), float(field["lat"])
+        except (KeyError, TypeError, ValueError):
+            return self._json({"error": "нужны lat и lon"}, 400)
+        span = 0.002
+        roads = map_edits.load_roads(edits_tiles_dir(), lat - span, lon - span,
+                                     lat + span, lon + span)
+        result = map_edits.snap((lon, lat), roads,
+                                prefer_node=bool(field.get("preferNode")))
+        self._json({"point": list(result.point) if result.road else None,
+                    "onRoad": result.on_road,
+                    "atNode": result.at_node,
+                    "anchor": result.anchor,
+                    "ambiguous": [{"cls": r["cls"], "name": r["name"],
+                                   "points": r["points"]}
+                                  for r in result.ambiguous],
+                    "fingerprint": map_edits.fingerprint((lon, lat), roads)})
+
+    def edit_save_json(self, conn, field):
+        """Создать или поправить. Статус выше «принято» отсюда не ставится:
+        публикует владелец со своей машины, и панель этого не умеет."""
+        kind = field.get("kind")
+        if kind not in map_edits.KINDS:
+            return self._json({"error": "неизвестный вид правки"}, 400)
+        status = field.get("status", map_edits.DRAFT)
+        if status not in (map_edits.DRAFT, map_edits.ACCEPTED):
+            return self._json({"error": "панель не публикует"}, 400)
+        geom, raw_point = field.get("geom"), field.get("raw")
+        if not (isinstance(geom, list) and isinstance(raw_point, list)):
+            return self._json({"error": "нужна геометрия"}, 400)
+
+        edit_id, version = field.get("id"), field.get("version")
+        if edit_id is None:
+            new_id = map_edits.create(
+                conn, kind, raw=raw_point, snapped=geom,
+                anchor=field.get("anchor"), props=field.get("props") or {},
+                note=str(field.get("note") or ""),
+                author=str(field.get("author") or "panel"),
+                fingerprint_value=field.get("fingerprint"), status=status)
+            log_action(conn, None, "edit-create", f"{kind} #{new_id}")
+            conn.commit()
+            return self._json({"id": new_id, "version": 1})
+        if not isinstance(version, int):
+            return self._json({"error": "нужна версия"}, 409)
+        ok = map_edits.update(conn, int(edit_id), version, status=status,
+                              geom=geom, raw=raw_point,
+                              anchor=field.get("anchor"),
+                              props=field.get("props") or {},
+                              note=str(field.get("note") or ""))
+        if not ok:
+            return self._json({"error": "правку изменили в другом окне"}, 409)
+        log_action(conn, None, "edit-save", f"{kind} #{edit_id}")
+        conn.commit()
+        self._json({"id": int(edit_id), "version": version + 1})
+
+    def edit_withdraw_json(self, conn, field):
+        try:
+            edit_id, version = int(field["id"]), int(field["version"])
+        except (KeyError, TypeError, ValueError):
+            return self._json({"error": "нужны id и версия"}, 400)
+        if not map_edits.withdraw(conn, edit_id, version):
+            return self._json({"error": "правку изменили в другом окне"}, 409)
+        log_action(conn, None, "edit-withdraw", f"#{edit_id}")
+        conn.commit()
+        self._json({"ok": True})
 
     def camera_json(self, conn, path):
         try:
@@ -1556,6 +1757,9 @@ def main():
         index = sys.argv.index("--export")
         version = int(sys.argv[index + 1]) if len(sys.argv) > index + 1 else 1
         print(json.dumps(export_overrides(version), ensure_ascii=False, separators=(",", ":")))
+        return
+    if "--export-edits" in sys.argv:
+        print(json.dumps(export_edits(), ensure_ascii=False, separators=(",", ":")))
         return
     if "--set-password" in sys.argv:
         print(admin_auth.set_password_interactively())

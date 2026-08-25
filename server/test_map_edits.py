@@ -1,0 +1,274 @@
+#!/usr/bin/env python3
+"""Тесты конструктора карты: магнит и хранилище правок.
+
+Здесь сторожатся ЗАПРЕТЫ, потому что цена ошибки в конструкторе выше, чем в
+остальной системе: всё прочее восстанавливается пересборкой из OSM, а ручную
+работу восстановить неоткуда.
+
+Магнит не имеет права выбирать за человека между двумя дорогами, посаженный
+объект не имеет права уезжать от нарисованной линии, а правка не имеет права
+исчезать — ни от удаления, ни от второго сохранения с другого устройства.
+"""
+import json
+import os
+import sqlite3
+import tempfile
+import unittest
+
+import map_edits
+
+
+def line(*coords):
+    """Ломаная из пар (lat, lon) → внутренний порядок (lon, lat)."""
+    return [(lon, lat) for lat, lon in coords]
+
+
+def road(cls, points, name="", flags=0):
+    return {"cls": cls, "flags": flags, "points": points, "name": name}
+
+
+class MagnetTests(unittest.TestCase):
+
+    def setUp(self):
+        # Проспект с севера на юг и дублёр в двадцати метрах от него.
+        self.avenue = road(3, line((41.300, 69.2500), (41.310, 69.2500)), "Навои")
+        # Дублёр в двадцати метрах: 0.00024° долготы на широте Ташкента.
+        self.side = road(6, line((41.300, 69.25024), (41.310, 69.25024)), "Дублёр")
+
+    def test_point_lands_on_the_axis_not_on_a_vertex(self):
+        # Между вершинами упрощённой линии бывает сотня метров: посадка на
+        # вершину увела бы объект туда же.
+        long_road = road(3, line((41.300, 69.250), (41.310, 69.250)))
+        result = map_edits.snap((69.25010, 41.3050), [long_road])
+        self.assertTrue(result.on_road)
+        self.assertAlmostEqual(result.point[1], 41.3050, places=5,
+                               msg="объект уехал к вершине вместо проекции")
+
+    def test_far_point_does_not_stick(self):
+        result = map_edits.snap((69.2600, 41.3050), [self.avenue])
+        self.assertFalse(result.on_road)
+        self.assertIsNone(result.road)
+
+    def test_magnet_refuses_to_choose_between_two_roads(self):
+        # Проспект с дублёром: угадывание здесь даёт разворот не с той
+        # проезжей части.
+        middle = (69.25012, 41.3050)
+        result = map_edits.snap(middle, [self.avenue, self.side])
+        self.assertFalse(result.on_road, "магнит выбрал за человека")
+        self.assertEqual(len(result.ambiguous), 2,
+                         "обе дороги обязаны быть предъявлены на выбор")
+
+    def test_clear_winner_is_chosen(self):
+        result = map_edits.snap((69.25005, 41.3050), [self.avenue, self.side])
+        self.assertTrue(result.on_road)
+        self.assertEqual(result.road["name"], "Навои")
+
+    def test_node_wins_for_objects_that_live_on_junctions(self):
+        # Светофор в полутора метрах от конца линии — это светофор НА
+        # перекрёстке, а не рядом с ним.
+        near_end = (69.25005, 41.30005)
+        loose = map_edits.snap(near_end, [self.avenue])
+        pinned = map_edits.snap(near_end, [self.avenue], prefer_node=True)
+        self.assertFalse(loose.at_node)
+        self.assertTrue(pinned.at_node)
+        self.assertEqual(pinned.point, self.avenue["points"][0])
+
+    def test_node_does_not_win_from_far_away(self):
+        middle = (69.25005, 41.3050)
+        result = map_edits.snap(middle, [self.avenue], prefer_node=True)
+        self.assertFalse(result.at_node, "середина улицы — не перекрёсток")
+
+    def test_anchor_never_carries_an_osm_id(self):
+        # Id ведёт в OSM и не переживёт воскресной пересборки: у той же улицы
+        # назавтра другой way.
+        result = map_edits.snap((69.25005, 41.3050), [self.avenue])
+        anchor = result.anchor
+        self.assertEqual(set(anchor), {"cls", "name", "bearing", "atNode"})
+        self.assertNotIn("id", json.dumps(anchor))
+
+    def test_anchor_keeps_the_direction_of_the_road(self):
+        result = map_edits.snap((69.25005, 41.3050), [self.avenue])
+        self.assertAlmostEqual(result.anchor["bearing"], 0, delta=1)
+
+    def test_fingerprint_ignores_far_away_changes(self):
+        far = road(6, line((41.400, 69.300), (41.410, 69.300)))
+        point = (69.25005, 41.3050)
+        alone = map_edits.fingerprint(point, [self.avenue])
+        with_far = map_edits.fingerprint(point, [self.avenue, far])
+        self.assertEqual(alone, with_far,
+                         "правка держится за место, а не за всю страну")
+
+    def test_fingerprint_notices_the_road_moving(self):
+        point = (69.25005, 41.3050)
+        before = map_edits.fingerprint(point, [self.avenue])
+        moved = road(3, line((41.300, 69.25012), (41.310, 69.25012)), "Навои")
+        self.assertNotEqual(before, map_edits.fingerprint(point, [moved]))
+
+    def test_fingerprint_does_not_depend_on_road_order(self):
+        # Порядок дорог в тайле задан сортировкой, но полагаться на него
+        # нельзя: отпечаток, зависящий от порядка, поднимал бы очередь на
+        # проверку каждую неделю на ровном месте.
+        point = (69.25012, 41.3050)
+        self.assertEqual(map_edits.fingerprint(point, [self.avenue, self.side]),
+                         map_edits.fingerprint(point, [self.side, self.avenue]))
+
+
+class StorageTests(unittest.TestCase):
+
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.row_factory = sqlite3.Row
+        map_edits.ensure_tables(self.conn)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def make(self, kind="lanes", point=(69.25, 41.30), **kwargs):
+        return map_edits.create(self.conn, kind, raw=list(point),
+                                snapped=list(point), **kwargs)
+
+    def test_unknown_kind_is_refused(self):
+        # Список видов закрытый: неизвестный не попадёт ни в таблицу, ни в
+        # запекание, и молча потеряться ему негде.
+        with self.assertRaises(ValueError):
+            self.make(kind="выдумка")
+
+    def test_accept_really_accepts(self):
+        # Дефект, найденный в браузере: карточка говорила «Принято», а create
+        # молча клал черновик, и правка не попадала в экспорт. Модератор
+        # нажимал, видел подтверждение и уходил — а на телефоны ничего не ехало.
+        edit_id = map_edits.create(self.conn, "lanes", raw=[69.25, 41.3],
+                                   snapped=[69.25, 41.3],
+                                   status=map_edits.ACCEPTED)
+        exported = [item["id"] for item in map_edits.export_accepted(self.conn)]
+        self.assertIn(edit_id, exported)
+
+    def test_create_cannot_publish(self):
+        # Публикует владелец со своей машины. Панель этого не умеет — и не
+        # должна уметь молча.
+        with self.assertRaises(ValueError):
+            map_edits.create(self.conn, "lanes", raw=[69.25, 41.3],
+                             snapped=[69.25, 41.3], status=map_edits.PUBLISHED)
+
+    def test_new_edit_is_a_draft(self):
+        edit_id = self.make()
+        row = self.conn.execute("SELECT status FROM map_edits WHERE id = ?",
+                                (edit_id,)).fetchone()
+        self.assertEqual(row["status"], map_edits.DRAFT)
+
+    def test_second_save_of_a_stale_version_is_refused(self):
+        # Модератор открыл панель с телефона и с ноутбука. Без версии второе
+        # сохранение молча затёрло бы первое.
+        edit_id = self.make()
+        self.assertTrue(map_edits.update(self.conn, edit_id, 1, note="первый"))
+        self.assertFalse(map_edits.update(self.conn, edit_id, 1, note="второй"),
+                         "устаревшая версия обязана быть отвергнута")
+        row = self.conn.execute("SELECT note FROM map_edits WHERE id = ?",
+                                (edit_id,)).fetchone()
+        self.assertEqual(row["note"], "первый")
+
+    def test_forbidden_columns_cannot_be_written(self):
+        edit_id = self.make()
+        with self.assertRaises(ValueError):
+            map_edits.update(self.conn, edit_id, 1, author="чужой")
+
+    def test_withdrawn_edit_is_kept_not_deleted(self):
+        # Ручная работа — единственные данные в системе, которые нельзя
+        # восстановить пересборкой.
+        edit_id = self.make()
+        map_edits.withdraw(self.conn, edit_id, 1)
+        row = self.conn.execute("SELECT status FROM map_edits WHERE id = ?",
+                                (edit_id,)).fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row["status"], map_edits.WITHDRAWN)
+
+    def test_withdrawn_edit_leaves_the_map(self):
+        edit_id = self.make()
+        map_edits.withdraw(self.conn, edit_id, 1)
+        self.assertEqual(map_edits.in_bbox(self.conn, 41.2, 69.2, 41.4, 69.3), [])
+
+    def test_bbox_keeps_the_panel_alive(self):
+        self.make(point=(69.25, 41.30))
+        self.make(point=(69.90, 41.90))
+        near = map_edits.in_bbox(self.conn, 41.29, 69.24, 41.31, 69.26)
+        self.assertEqual(len(near), 1)
+
+    def test_export_takes_accepted_and_published_only(self):
+        # Снимок, а не приращение: сборка накладывает состояние целиком.
+        draft = self.make()
+        accepted = self.make()
+        map_edits.update(self.conn, accepted, 1, status=map_edits.ACCEPTED)
+        withdrawn = self.make()
+        map_edits.withdraw(self.conn, withdrawn, 1)
+        exported = [item["id"] for item in map_edits.export_accepted(self.conn)]
+        self.assertEqual(exported, [accepted])
+        self.assertNotIn(draft, exported, "черновик на телефоны не едет")
+
+
+class TileSourceTests(unittest.TestCase):
+    """Магнит липнет к ОПУБЛИКОВАННЫМ тайлам, а не к сырому OSM."""
+
+    def payload(self, roads):
+        return {"version": 2, "roads": roads}
+
+    def test_tile_decodes_the_same_way_the_phone_does(self):
+        # Первая точка абсолютная, дальше дельты в 1e-5°.
+        decoded = map_edits.decode_tile(self.payload(
+            [[3, 0, [4_130_000, 6_925_000, 100, 0], "Навои"]]))
+        self.assertEqual(len(decoded), 1)
+        self.assertEqual(decoded[0]["name"], "Навои")
+        self.assertAlmostEqual(decoded[0]["points"][0][1], 41.30, places=6)
+        self.assertAlmostEqual(decoded[0]["points"][1][1], 41.301, places=6)
+
+    def test_five_element_record_is_skipped_not_fatal(self):
+        # Тот же запрет, что на клиенте: панель не должна падать на записи,
+        # которой не понимает.
+        decoded = map_edits.decode_tile(self.payload([
+            [3, 0, [4_130_000, 6_925_000, 100, 0], "Навои", 6],
+            [3, 0, [4_130_000, 6_926_000, 100, 0]],
+        ]))
+        self.assertEqual(len(decoded), 1)
+
+    def test_backbone_set_is_not_used_for_snapping(self):
+        # В костяке раздельные проезжие сведены в одну ось: объект сел бы
+        # между ними, то есть на разделительную.
+        with tempfile.TemporaryDirectory() as work:
+            for suffix in ("s", "f"):
+                with open(os.path.join(work, f"road2_262_498_{suffix}.json"),
+                          "w", encoding="utf-8") as handle:
+                    json.dump(self.payload(
+                        [[3, 0, [4_130_000, 6_925_000, 100, 0], suffix]]), handle)
+            loaded = map_edits.load_roads(work, 41.29, 69.24, 41.31, 69.26)
+            self.assertEqual([r["name"] for r in loaded], ["s"])
+
+    def test_v1_tiles_are_used_when_v2_is_not_published_yet(self):
+        # Формат v2 собирается параллельно с v1 и уберётся, только когда в
+        # проде не останется старых сборок. На сервере сейчас лежит ровно v1, и
+        # панель, умеющая липнуть только к v2, там просто не магнитила бы.
+        with tempfile.TemporaryDirectory() as work:
+            with open(os.path.join(work, "tile_262_498.json"), "w",
+                      encoding="utf-8") as handle:
+                json.dump({"version": 1, "roads":
+                           [[3, 0, [4_130_000, 6_925_000, 100, 0], "Навои"]]}, handle)
+            loaded = map_edits.load_roads(work, 41.29, 69.24, 41.31, 69.26)
+            self.assertEqual([r["name"] for r in loaded], ["Навои"])
+
+    def test_v1_is_ignored_once_v2_exists(self):
+        # Когда оба формата на месте, v1 — дубль тех же дорог одним файлом.
+        # Читать оба значило бы удвоить каждую дорогу и получить «две дороги
+        # рядом» там, где она одна: магнит перестал бы выбирать вовсе.
+        with tempfile.TemporaryDirectory() as work:
+            for name, label in (("tile_262_498.json", "старая"),
+                                ("road2_262_498_s.json", "новая")):
+                with open(os.path.join(work, name), "w", encoding="utf-8") as handle:
+                    json.dump({"version": 2, "roads":
+                               [[3, 0, [4_130_000, 6_925_000, 100, 0], label]]}, handle)
+            loaded = map_edits.load_roads(work, 41.29, 69.24, 41.31, 69.26)
+            self.assertEqual([r["name"] for r in loaded], ["новая"])
+
+    def test_missing_tiles_directory_is_not_an_error(self):
+        self.assertEqual(map_edits.load_roads("/нет/такого", 0, 0, 1, 1), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

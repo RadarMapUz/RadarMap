@@ -130,6 +130,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// N тапов любое изменение состояния пересобирало шаблон N раз подряд.
     private var syncGeneration = 0
 
+    /// Открыт ли сейчас осмотр схемы. Кнопка обязана знать: при
+    /// `automaticallyHidesNavigationBar = false` CarPlay своей «Готово» не
+    /// рисует, и без обратного вызова осмотр был дверью в одну сторону.
+    private var isPanning = false
+
     /// Единая пересборка кнопок: и бар, и кнопки карты зависят от состояния
     /// (идёт поездка, построен маршрут, включён звук). Читаем состояние внутри
     /// withObservationTracking — при любом изменении собираем заново.
@@ -212,8 +217,21 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         model.sketch.endInspect()
     }
 
+    /// Осмотр открылся — кнопка становится «выйти». Своим вызовом
+    /// `showPanningInterface` мы этот флаг тоже поднимем, но осмотр умеет
+    /// открываться и мимо нас (жест по карте на сенсорном устройстве), и
+    /// состояние кнопки обязано следовать за шаблоном, а не за нашим тапом.
+    func mapTemplateDidShowPanningInterface(_ mapTemplate: CPMapTemplate) {
+        guard !isPanning else { return }
+        isPanning = true
+        syncTemplate()
+    }
+
     func mapTemplateDidDismissPanningInterface(_ mapTemplate: CPMapTemplate) {
         model.sketch.returnToMe()
+        guard isPanning else { return }
+        isPanning = false
+        syncTemplate()
     }
 
     // MARK: - Уход с экрана машины
@@ -371,14 +389,28 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         return button
     }
 
-    /// Вход в осмотр схемы. Дальше панораму ведёт сам CarPlay: он рисует
-    /// стрелки, ловит перетаскивание и показывает «Готово» — своими руками
-    /// повторять это нельзя, шаблон не отдаёт касания приложению.
+    /// Осмотр схемы — ТУМБЛЕР, а не вход.
+    ///
+    /// «Готово» рисует не приложение, а CarPlay, и только когда прячет
+    /// навигационный бар. Бар мы держим на виду намеренно («Поездка» и «Куда»
+    /// за рулём искать нельзя), поэтому кнопки выхода на экране не появлялось
+    /// вовсе: `showPanningInterface` был, `dismissPanningInterface` — нигде.
+    /// Водитель, тронувший осмотр, оставался в нём до конца поездки, а повторный
+    /// тап открывал осмотр заново поверх уже открытого.
+    ///
+    /// Панораму внутри осмотра по-прежнему ведёт сам шаблон: он ловит
+    /// перетаскивание и стрелки, приложение только входит и выходит.
     private var panButton: CPMapButton {
+        let panning = isPanning
         let button = CPMapButton { [weak self] _ in
-            self?.mapTemplate?.showPanningInterface(animated: true)
+            guard let template = self?.mapTemplate else { return }
+            if panning {
+                template.dismissPanningInterface(animated: true)
+            } else {
+                template.showPanningInterface(animated: true)
+            }
         }
-        button.image = buttonImage("hand.draw")
+        button.image = buttonImage(panning ? "checkmark" : "hand.draw")
         return button
     }
 

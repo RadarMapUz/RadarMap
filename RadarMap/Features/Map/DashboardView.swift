@@ -55,7 +55,8 @@ struct DashboardView: View {
                 // Приборка — режим «телефон в держателе», она обязана быть
                 // самым дешёвым экраном приложения, а не самым дорогим.
                 if let scene = sketch.scene, sketch.hasCourse, !scene.isEmpty {
-                    RoadSketchView(scene: scene, state: sketch, tint: alertColor)
+                    RoadSketchView(scene: scene, state: sketch, tint: alertColor,
+                                   trim: env.thermal.mode.sketchTrim)
                         .frame(height: 200)
                         .padding(.horizontal, 28)
                         .padding(.top, 6)

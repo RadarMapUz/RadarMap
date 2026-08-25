@@ -41,6 +41,20 @@ nonisolated enum RoadSketch {
         var level: Int
         var isOneWay: Bool
         var isDetailed: Bool
+        /// Кольцевая развязка: контур замыкается, шевронов нет.
+        var isRing = false
+        /// Схлопнутая раздельная проезжая часть: две односторонние встречных
+        /// направлений, сведённые в одну ось. Рисуется шире обычной — она и
+        /// есть две дороги.
+        var isDual = false
+    }
+
+    /// Местность в сцене: вода, зелень, рельсы, кварталы — в метрах от опоры.
+    /// Рисуется самым нижним слоем, ПОД дорогами: это то, по чему они идут.
+    struct Area: Equatable {
+        var points: [CGPoint]
+        var kind: SketchArea.Kind
+        var isClosed: Bool
     }
 
     /// Камера в сцене: id нужен, чтобы вью подсветила тревожную кольцом.
@@ -53,6 +67,9 @@ nonisolated enum RoadSketch {
     /// курса и никакого экрана: и то и другое — дело точки зрения, которая
     /// меняется каждый тик, тогда как сцена живёт сотни метров.
     struct Scene: Equatable {
+        /// Местность под дорогами. Пусто — слои не приехали, и это нормальное
+        /// состояние: схема рисует то, что знает.
+        var areas: [Area] = []
         /// Окрестная дорожная сеть — перекрёстки, развязки, параллельные улицы.
         var network: [Line] = []
         /// Проезжая часть тревожной камеры, продлённая по её направлению.
@@ -110,6 +127,14 @@ nonisolated enum RoadSketch {
         /// Видны ли мелкие улицы (мы сами на такой): свернули во дворы —
         /// растр пересобрать с ними, выехали на проспект — без них.
         var minorRoads = false
+        /// Поколение местности: приехал слой воды — растр пересобрать.
+        var areasGeneration = 0
+        /// Схема перешла на костяк района. В ключе явно, а не «через
+        /// spanBucket»: порог костяка (340 м) лежит МЕЖДУ ступенями масштаба
+        /// 273 и 342, и в этом окне источник сети менялся, а ключ — нет.
+        /// Растр оставался собранным по прежней сети, то есть на экране была
+        /// картинка не из того источника, из которого её считали.
+        var farNetwork = false
     }
 
     // MARK: - Мелкие улицы
@@ -133,6 +158,48 @@ nonisolated enum RoadSketch {
     static let minorProbeRadiusMeters: Double = 60
     /// Ближе этого до мелкой улицы считаем, что едем по ней.
     static let minorOnRoadMeters: Double = 25
+
+    /// Ближе этого считаем, что едем ИМЕННО по этой улице. Тот же порядок,
+    /// что у гейта мелких улиц: на проспекте с дублёром решает та дорога, что
+    /// ближе.
+    static let streetNameRadiusMeters: Double = 30
+
+    /// Имя улицы под нами. nil — ближайшая дорога безымянна или далеко.
+    ///
+    /// «Безымянна» и «мы не знаем имени» здесь одно и то же, и подписывать
+    /// нечего: пустая подпись под курсором хуже её отсутствия — она выглядит
+    /// сломанной, а не честной.
+    static func currentStreet(network: RoadNetworkSource,
+                              at coordinate: CLLocationCoordinate2D) -> String? {
+        let lines = network.roads(near: coordinate, radius: streetNameRadiusMeters)
+        let metersPerLon = 111_320.0 * cos(coordinate.latitude * .pi / 180)
+        var best: String?
+        var bestDistance = streetNameRadiusMeters
+        for line in lines where !line.name.isEmpty {
+            var previous: CGPoint?
+            for point in line.points {
+                let local = CGPoint(
+                    x: (point.longitude - coordinate.longitude) * metersPerLon,
+                    y: (point.latitude - coordinate.latitude) * 111_320.0)
+                let distance: Double
+                if let a = previous {
+                    let dx = local.x - a.x, dy = local.y - a.y
+                    let length = dx * dx + dy * dy
+                    let t = length > 0
+                        ? max(0, min(1, (-a.x * dx - a.y * dy) / length)) : 0
+                    distance = Double(hypot(a.x + t * dx, a.y + t * dy))
+                } else {
+                    distance = Double(hypot(local.x, local.y))
+                }
+                if distance < bestDistance {
+                    bestDistance = distance
+                    best = line.name
+                }
+                previous = local
+            }
+        }
+        return best
+    }
 
     /// Едем ли мы сейчас по мелкой улице: ближайшая К НАМ дорога — мелкая.
     ///
@@ -177,6 +244,11 @@ nonisolated enum RoadSketch {
     /// Минимальный охват: на близкой дистанции нельзя раздувать масштаб до
     /// сантиметров, иначе схема дёргается от шума GPS.
     static let minSpanMeters: Double = 140
+
+    /// Охват, с которого схема переходит на костяк района: там раздельные
+    /// проезжие уже сведены в одну ось, а мелких улиц нет вовсе. Совпадает с
+    /// той ступенью, на которой из отбора по масштабу уходят жилые улицы.
+    static let farNetworkSpan: Double = 340
 
     /// Максимальный охват. Схема отвечает на вопрос «где камера ОТНОСИТЕЛЬНО
     /// МЕНЯ И МОЕЙ ДОРОГИ», а он осмыслен только вблизи. На четырёх километрах
@@ -283,6 +355,91 @@ nonisolated enum RoadSketch {
         return CGPoint(x: 0.5 + x / (spanMeters * aspect), y: meY - y / spanMeters)
     }
 
+    // MARK: - Куски маршрута (стрелка манёвра и пройденное)
+
+    /// Сколько метров маршрута ДО и ПОСЛЕ точки манёвра занимает стрелка.
+    /// Не «столько-то пикселей»: стрелка обязана лежать на самой дороге, и
+    /// её длина измеряется дорогой, а не экраном.
+    static let maneuverLeadMeters: Double = 45
+    static let maneuverTailMeters: Double = 45
+
+    /// Дальше этого стрелку не рисуем. Манёвр за полкилометра — ещё не
+    /// решение, а стрелка на весь экран впереди отвлекает от того, что рядом.
+    static let maneuverVisibleMeters: Double = 500
+
+    /// Сколько пройденного маршрута показываем позади. Дальше он всё равно за
+    /// краем вида при любом охвате.
+    static let passedVisibleMeters: Double = 800
+
+    /// Окно стрелки манёвра по пути. nil — манёвра нет, он ещё далеко или уже
+    /// пройден.
+    static func maneuverWindow(stepAlong: Double,
+                               progress: Double) -> (from: Double, to: Double)? {
+        let remaining = stepAlong - progress
+        guard remaining <= maneuverVisibleMeters,
+              remaining > -maneuverTailMeters else { return nil }
+        return (max(0, stepAlong - maneuverLeadMeters), stepAlong + maneuverTailMeters)
+    }
+
+    /// Кусок ломаной между двумя отметками пути, в МЕТРАХ относительно опоры
+    /// сцены (восток, север) — в тех же координатах, что и вся сцена.
+    ///
+    /// Концы интерполируются: стрелка манёвра обязана начинаться там, где
+    /// сказано, а не на ближайшей вершине — иначе на длинном прямом перегоне
+    /// она начиналась бы за сотни метров до поворота.
+    ///
+    /// Отрезки до начала куска пропускаются без единого умножения сверх
+    /// длины, а после конца цикл обрывается: метод зовётся на каждые 25 м
+    /// пути, и на маршруте Ташкент—Бухара это разница между «дёшево» и
+    /// «десять тысяч точек в секунду».
+    static func subPath(_ coordinates: [CLLocationCoordinate2D],
+                        from: CLLocationDistance, to: CLLocationDistance,
+                        anchor: CLLocationCoordinate2D) -> [CGPoint] {
+        guard coordinates.count >= 2, to > from else { return [] }
+        let metersPerLon = 111_320.0 * cos(anchor.latitude * .pi / 180)
+        func project(_ point: CLLocationCoordinate2D) -> CGPoint {
+            CGPoint(x: (point.longitude - anchor.longitude) * metersPerLon,
+                    y: (point.latitude - anchor.latitude) * 111_320.0)
+        }
+        func between(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D,
+                     _ t: Double) -> CLLocationCoordinate2D {
+            CLLocationCoordinate2D(latitude: a.latitude + (b.latitude - a.latitude) * t,
+                                   longitude: a.longitude + (b.longitude - a.longitude) * t)
+        }
+
+        var result: [CGPoint] = []
+        var travelled: CLLocationDistance = 0
+        for index in 1..<coordinates.count {
+            let a = coordinates[index - 1], b = coordinates[index]
+            let length = GeoMath.fastDistance(a.latitude, a.longitude,
+                                              b.latitude, b.longitude)
+            let segmentEnd = travelled + length
+            if segmentEnd < from || length <= 0 { travelled = segmentEnd; continue }
+            if travelled > to { break }
+            if result.isEmpty {
+                result.append(project(between(a, b, max(0, min(1, (from - travelled) / length)))))
+            }
+            if segmentEnd <= to {
+                result.append(project(b))
+            } else {
+                result.append(project(between(a, b, max(0, min(1, (to - travelled) / length)))))
+                break
+            }
+            travelled = segmentEnd
+        }
+        return result.count >= 2 ? result : []
+    }
+
+    /// Порядок слоёв местности снизу вверх.
+    static func drawOrder(_ kind: SketchArea.Kind) -> Int {
+        switch kind {
+        case .block: return 0
+        case .green: return 1
+        case .water: return 2
+        case .rail:  return 3
+        }
+    }
+
     /// Пора ли пересобирать растр: сменились данные или уехали от опоры.
     static func needsRebuild(scene: Scene?, key: RebuildKey, previousKey: RebuildKey?,
                              meOffsetMeters: CGPoint) -> Bool {
@@ -325,6 +482,9 @@ nonisolated enum RoadSketch {
                       network: RoadNetworkSource = EmptyRoadNetwork(),
                       networkBudget: Int = .max,
                       showMinorRoads: Bool = true,
+                      precomputed: Bool = false,
+                      areas: [SketchArea] = [],
+                      areaBudget: Int = .max,
                       route: [CLLocationCoordinate2D] = [],
                       track: [CLLocationCoordinate2D] = [],
                       anchor: CLLocationCoordinate2D,
@@ -379,23 +539,37 @@ nonisolated enum RoadSketch {
             }
         }
 
+        // Местность: отбираем по рамке сцены и переводим в метры. Полигонов
+        // здесь сотни против десятков тысяч дорог, поэтому перебор честнее
+        // сеточного индекса — он стоил бы больше, чем экономит.
+        if areaBudget > 0 && !areas.isEmpty {
+            var kept: [Area] = []
+            kept.reserveCapacity(min(areas.count, areaBudget))
+            for area in areas where area.kind.maxSpanMeters >= spanMeters {
+                let points = nearby(area.points)
+                guard points.count >= (area.isClosed ? 3 : 2) else { continue }
+                kept.append(Area(points: points, kind: area.kind,
+                                 isClosed: area.isClosed))
+                if kept.count >= areaBudget { break }
+            }
+            // Вода поверх зелени, кварталы под всем: порядок задаётся здесь,
+            // чтобы рендерер не сортировал на каждой пересборке.
+            scene.areas = kept.sorted { drawOrder($0.kind) < drawOrder($1.kind) }
+        }
+
         if networkBudget > 0 {
             let candidates = network
                 .roads(near: anchor, radius: radius)
-                .compactMap { line -> (line: Line, proximityMeters: Double)? in
+                .compactMap { line -> Line? in
                     guard line.points.count >= 2 else { return nil }
-                    // Мелкие улицы — только когда мы сами на такой (фильтр ДО
-                    // бюджета: бюджет обязан достаться видимым дорогам).
-                    guard showMinorRoads || !isMinorLine(line) else { return nil }
-                    // За один проход: перевод в метры, близость к машине и
-                    // рамка линии.
-                    var proximity = Double.greatestFiniteMagnitude
+                    // За один проход: перевод в метры и рамка линии. Близость
+                    // к машине здесь больше не считаем: она нужна только
+                    // бюджету перегрева, и считать её надо ПОСЛЕ склейки —
+                    // у куска geometry своей близости нет, есть у улицы.
                     var minX = CGFloat.infinity, maxX = -CGFloat.infinity
                     var minY = CGFloat.infinity, maxY = -CGFloat.infinity
                     let points = line.points.map { coordinate -> CGPoint in
                         let point = local(coordinate)
-                        proximity = min(proximity, max(abs(point.x - meOffset.x),
-                                                       abs(point.y - meOffset.y)))
                         minX = min(minX, point.x); maxX = max(maxX, point.x)
                         minY = min(minY, point.y); maxY = max(maxY, point.y)
                         return point
@@ -404,19 +578,54 @@ nonisolated enum RoadSketch {
                     // ни рисовать.
                     guard maxX >= -radius, minX <= radius,
                           maxY >= -radius, minY <= radius else { return nil }
-                    return (Line(points: points, kind: line.kind, level: line.level,
-                                 isOneWay: line.isOneWay, isDetailed: line.isDetailed),
-                            proximity)
+                    return Line(points: points, kind: line.kind, level: line.level,
+                                isOneWay: line.isOneWay, isDetailed: line.isDetailed,
+                                isRing: line.isRing)
                 }
+            // ГЕНЕРАЛИЗАЦИЯ — до бюджета, и порядок здесь важен дважды.
+            //
+            // Во-первых, склейка объединяет ways в непрерывные улицы, и после
+            // неё «линий» становится в разы меньше — бюджет перегрева получает
+            // осмысленные единицы вместо кусков геометрии. Во-вторых, отбор по
+            // масштабу и отсев обрубков обязаны случиться ДО того, как бюджет
+            // начнёт резать по близости: иначе в жару у машины оставались бы
+            // ближние парковочные карманы, а проспект в трёхстах метрах
+            // выпадал бы как дальний.
+            //
+            // Считаем на СОБРАННОМ охвате (spanAtBuild), а не на текущем:
+            // растр живёт сотни метров и обязан быть согласован сам с собой.
+            let generalised = RoadGeneralise.apply(candidates,
+                                                   span: spanMeters,
+                                                   onMinorRoad: showMinorRoads,
+                                                   precomputed: precomputed)
             // Бюджет (даёт PerformanceMode): в перегрев остаются БЛИЖНИЕ линии.
             // Сеть — контекст, а не предупреждение: дорога камеры, маршрут и
             // трек не режутся ни на одной ступени, как и сами оповещения.
-            let kept = candidates.count <= networkBudget
-                ? candidates
-                : Array(candidates.sorted { $0.proximityMeters < $1.proximityMeters }
-                    .prefix(networkBudget))
-            // Сначала земля, потом мосты: рендерер полагается на этот порядок.
-            scene.network = kept.map(\.line).sorted { $0.level < $1.level }
+            let kept: [Line]
+            if generalised.count <= networkBudget {
+                kept = generalised
+            } else {
+                let byProximity = generalised.map { line -> (line: Line, near: Double) in
+                    var near = Double.greatestFiniteMagnitude
+                    for point in line.points {
+                        near = min(near, max(abs(Double(point.x) - Double(meOffset.x)),
+                                             abs(Double(point.y) - Double(meOffset.y))))
+                    }
+                    return (line, near)
+                }
+                kept = byProximity.sorted { $0.near < $1.near }
+                    .prefix(networkBudget).map(\.line)
+            }
+            // Порядок отрисовки. Сначала земля, потом мосты — на это
+            // рендерер полагается давно. Внутри уровня — от мелких к крупным,
+            // и это новое: порядок там был произвольный, поэтому кайма
+            // дворового проезда могла лечь поперёк проспекта и рассечь его
+            // ровно на перекрёстке. Крупная дорога обязана быть сверху.
+            scene.network = kept.sorted { first, second in
+                first.level != second.level
+                    ? first.level < second.level
+                    : RoadGeneralise.rank(first.kind) > RoadGeneralise.rank(second.kind)
+            }
         }
 
         // Дорога тревожной камеры. Пунктиром — если предположена по оси.

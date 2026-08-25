@@ -14,13 +14,6 @@ import MapKit
 import Observation
 import os
 
-/// Манёвр на маршруте («через 300 м — направо»).
-struct RouteStep {
-    let distanceAlong: CLLocationDistance   // где манёвр, метры от старта
-    let text: String                        // «Поверните направо на Амира Темура»
-    let icon: String                        // SFSymbol для баннера
-}
-
 @MainActor
 @Observable
 final class RouteService {
@@ -505,11 +498,22 @@ final class RouteService {
             let distance: Double
             let name: String
             let maneuver: Maneuver
+            /// Полосы приезжают здесь и раньше молча выбрасывались. `var` с
+            /// умолчанием, а не `let`: у структуры синтезируется ещё и
+            /// memberwise-инициализатор, которым пользуются тесты.
+            var intersections: [Intersection]? = nil
         }
         struct Maneuver: Decodable {
             let type: String
             let modifier: String?
             let exit: Int?
+        }
+        struct Intersection: Decodable {
+            let lanes: [Lane]?
+        }
+        struct Lane: Decodable {
+            let valid: Bool?
+            let indications: [String]?
         }
     }
 
@@ -564,7 +568,35 @@ final class RouteService {
         if !step.name.isEmpty, m.type != "arrive" {
             result += String(format: String(localized: " на %@"), step.name)
         }
-        return RouteStep(distanceAlong: along, text: result, icon: icon)
+        // Тип манёвра — отдельно от фразы. Фраза зависит ещё и от типа
+        // развязки («держитесь правее» на развилке против «поверните направо»
+        // на перекрёстке), а геометрия поворота — только от модификатора.
+        let kind: ManeuverKind = m.type == "arrive" ? .arrive
+            : m.type == "roundabout" || m.type == "rotary" ? .roundabout
+            : ManeuverKind.fromOSRM(modifier: m.modifier)
+        return RouteStep(distanceAlong: along, text: result, icon: icon,
+                         kind: kind, lanes: lanes(of: step))
+    }
+
+    /// Полосы на подходе к манёвру.
+    ///
+    /// Берём ПЕРВЫЙ перекрёсток шага: в модели OSRM шаг начинается своим
+    /// манёвром, и `intersections[0]` — это как раз тот перекрёсток, на
+    /// котором манёвр совершается; его `lanes` описывают полосы на подходе.
+    ///
+    /// Полоса без единой понятной стрелки отбрасывается целиком, а не
+    /// подменяется на «прямо»: пустая клетка в ряду читается как поломка
+    /// рендера, а выдуманная стрелка — как указание, которого никто не давал.
+    nonisolated static func lanes(of step: OSRMResponse.Step) -> [LaneHint] {
+        guard let lanes = step.intersections?.first?.lanes, !lanes.isEmpty else { return [] }
+        let hints = lanes.compactMap { lane -> LaneHint? in
+            let arrows = (lane.indications ?? []).compactMap(LaneArrow.fromOSRM)
+            guard !arrows.isEmpty else { return nil }
+            return LaneHint(arrows: arrows, isValid: lane.valid ?? false)
+        }
+        // Ряд, из которого выпала хоть одна полоса, врёт про их количество —
+        // а водитель считает полосы глазами. Либо весь ряд, либо ничего.
+        return hints.count == lanes.count ? hints : []
     }
 
     // MARK: - Применение результата

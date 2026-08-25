@@ -65,6 +65,15 @@ final class PerformanceModeTests: XCTestCase {
         XCTAssertEqual(PerformanceMode.minimal.sketchNetworkBudget, 0)
     }
 
+    func testSketchTrimGoesFirst() {
+        // Отделка (осевая, шевроны, жила ленты) гаснет уже на первой ступени:
+        // это единственные слои схемы, чьё отсутствие не меняет ни одного её
+        // ответа. Дорога остаётся дорогой, маршрут — маршрутом.
+        XCTAssertTrue(PerformanceMode.full.sketchTrim)
+        XCTAssertFalse(PerformanceMode.reduced.sketchTrim)
+        XCTAssertFalse(PerformanceMode.minimal.sketchTrim)
+    }
+
     func testDegradationIsAlwaysExplained() {
         XCTAssertFalse(PerformanceMode.full.explains, "в норме объяснять нечего")
         for mode in [PerformanceMode.reduced, .minimal] {

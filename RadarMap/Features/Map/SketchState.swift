@@ -35,6 +35,51 @@ final class SketchState {
     /// Курс был хоть раз: без него схему не поворачиваем и не показываем.
     private(set) var hasCourse = false
 
+    // MARK: - Мировые слои поверх растра
+    //
+    // Всё, что меняется чаще растра, но живёт в мировых метрах, лежит здесь и
+    // едет под теми же тремя transform'ами, что и растр, — то есть движется
+    // вместе с дорогами само, без единого пересчёта на кадр. Класть это в
+    // растр было бы нельзя: маршрут «пройден до сих пор» меняется непрерывно
+    // и заставил бы пересобирать растр каждые несколько метров.
+
+    /// Стрелка манёвра: кусок маршрута вокруг точки поворота, метры от опоры.
+    /// Пусто — манёвра нет, он далеко или уже пройден.
+    private(set) var maneuverPath: [CGPoint] = []
+    /// Тип ближайшего манёвра — им выбирается голова стрелки и подсветка
+    /// «нашей» полосы. nil — движок типа не сообщил.
+    private(set) var maneuverKind: ManeuverKind?
+    /// Полосы на подходе к манёвру. Пусто — данных нет, и пузыря нет.
+    private(set) var lanes: [LaneHint] = []
+    /// Пройденный кусок маршрута позади, метры от опоры.
+    private(set) var passedPath: [CGPoint] = []
+    /// Имя улицы под нами. nil — безымянна или мы не на ней.
+    private(set) var currentStreet: String?
+
+    /// Прогресс, на котором в последний раз пересчитан пройденный кусок.
+    /// Пересчитывать его на каждом фиксе незачем: на экране это доли пункта.
+    @ObservationIgnored private var passedAt: CLLocationDistance = -1
+    @ObservationIgnored private var maneuverAt: CLLocationDistance = -1
+    /// Опора, в координатах которой посчитаны мировые слои. Переезд опоры
+    /// обязан пересчитать их немедленно: иначе стрелка манёвра осталась бы
+    /// висеть в координатах прошлой сцены, то есть уехала бы в сторону ровно
+    /// на длину переезда.
+    /// Гейт пересчёта имени улицы: раз в полсотни метров пути.
+    @ObservationIgnored private var street = StreetNameGate()
+
+    private struct StreetNameGate {
+        private var at: CLLocationCoordinate2D?
+        func shouldRefresh(at coordinate: CLLocationCoordinate2D) -> Bool {
+            guard let at else { return true }
+            return GeoMath.fastDistance(at.latitude, at.longitude,
+                                        coordinate.latitude, coordinate.longitude) > 50
+        }
+        mutating func mark(_ coordinate: CLLocationCoordinate2D) { at = coordinate }
+    }
+
+    @ObservationIgnored private var layersAnchorLatitude = Double.nan
+    @ObservationIgnored private var layersAnchorLongitude = Double.nan
+
     @ObservationIgnored private var unwoundCourse: Double?
     @ObservationIgnored private var key: RoadSketch.RebuildKey?
     /// Когда пришёл прошлый тик: анимация точки зрения длится ровно до
@@ -67,10 +112,6 @@ final class SketchState {
         guard let course = unwoundCourse else { return }
         hasCourse = true
 
-        // Тайлы окрестности: дёшево, когда всё на месте; скачивает недостающее
-        // только пока приборка на экране.
-        env.roads.ensureCoverage(around: me)
-
         let alert = env.location.nearestCamera
         let distance = env.location.distanceToNearest
         // Скорость задаёт нижнюю границу охвата: вид отъезжает ровно настолько,
@@ -87,7 +128,16 @@ final class SketchState {
         // Мелкие улицы: видны, только когда мы сами на такой. Решение с
         // гистерезисом в два тика — иначе на границе двора с проспектом
         // растр пересобирался бы туда-сюда.
-        let wantsMinors = RoadSketch.prefersMinorRoads(network: network(env), at: me)
+        let source = network(env, span: span)
+        let wantsMinors = RoadSketch.prefersMinorRoads(network: source, at: me)
+        // Имя улицы считается на пересборке растра, а не на тике: улица под
+        // нами меняется на сотнях метров, а тик приходит раз в секунду.
+        // Кэш окрестности внутри источника делает сам запрос почти бесплатным,
+        // но перебор имён по нему — уже нет.
+        if street.shouldRefresh(at: me) {
+            currentStreet = RoadSketch.currentStreet(network: source, at: me)
+            street.mark(me)
+        }
         if wantsMinors != minorsVisible {
             minorFlipTicks += 1
             if minorFlipTicks >= 2 {
@@ -98,6 +148,17 @@ final class SketchState {
             minorFlipTicks = 0
         }
 
+        // Тайлы окрестности: дёшево, когда всё на месте; скачивает недостающее
+        // только пока приборка на экране.
+        //
+        // Наборы заказываем по тому, что схема СЕЙЧАС показывает, — поэтому
+        // после охвата и решения про мелкие улицы, а не до них. Слой,
+        // невидимый на текущем охвате, не качается и не разбирается вовсе:
+        // дворовые проезды это половина всех дорог, и в общем файле они ехали
+        // бы на телефон всю поездку ради случая, который наступает под конец.
+        env.roads.setWantedSets(wantedSets(span: span, minors: minorsVisible))
+        env.roads.ensureCoverage(around: me)
+
         let freshKey = RoadSketch.RebuildKey(
             alertCameraID: inRange ? alert?.id : nil,
             alertInRange: inRange,
@@ -107,7 +168,9 @@ final class SketchState {
             roadsGeneration: env.roads.revision,
             storeRevision: env.cameras.revision,
             budget: env.thermal.mode.sketchNetworkBudget,
-            minorRoads: minorsVisible)
+            minorRoads: minorsVisible,
+            areasGeneration: env.roads.areas.count,
+            farNetwork: usesFarNetwork(env, span: span))
         let offset = offsetMeters(of: me)
 
         // Плавность — это ритм: анимация длится до следующего ОЖИДАЕМОГО
@@ -145,13 +208,100 @@ final class SketchState {
             }
         }
         key = freshKey
+        refreshRouteLayers(env)
+    }
+
+    /// Мировые слои маршрута: стрелка манёвра и пройденный кусок.
+    ///
+    /// Оба считаются ОТ ОПОРЫ ТЕКУЩЕЙ СЦЕНЫ, поэтому пересчитываются и при
+    /// её переезде — иначе после пересборки растра стрелка осталась бы
+    /// висеть в координатах прошлой опоры, то есть уехала бы в сторону.
+    private func refreshRouteLayers(_ env: AppEnvironment) {
+        guard let scene, env.route.isActive else {
+            maneuverPath = []
+            maneuverKind = nil
+            lanes = []
+            passedPath = []
+            passedAt = -1
+            maneuverAt = -1
+            layersAnchorLatitude = .nan
+            layersAnchorLongitude = .nan
+            return
+        }
+        let anchor = scene.anchor
+        let coordinates = env.route.routeCoordinates
+        let progress = env.route.progressAlong
+        let anchorMoved = anchor.latitude != layersAnchorLatitude
+            || anchor.longitude != layersAnchorLongitude
+        layersAnchorLatitude = anchor.latitude
+        layersAnchorLongitude = anchor.longitude
+
+        // Стрелка манёвра — на смене шага, на сдвиге опоры и по мере
+        // приближения (окно едет вместе с нами, пока манёвр не пройден).
+        let step = env.route.nextStep
+        let window = step.flatMap {
+            RoadSketch.maneuverWindow(stepAlong: $0.distanceAlong, progress: progress)
+        }
+        if let step, let window {
+            let moved = abs(progress - maneuverAt) >= AppConfig.carPlayTraveledStepMeters
+            if anchorMoved || moved || maneuverPath.isEmpty || maneuverKind != step.kind {
+                maneuverAt = progress
+                maneuverPath = RoadSketch.subPath(coordinates, from: window.from,
+                                                  to: window.to, anchor: anchor)
+            }
+            maneuverKind = step.kind
+            lanes = step.lanes
+        } else {
+            maneuverPath = []
+            maneuverKind = nil
+            lanes = []
+            maneuverAt = -1
+        }
+
+        // Пройденное — шагом, а не каждым фиксом: снимать и класть слой
+        // ежесекундно значит платить за то, чего на экране не видно.
+        if progress <= 1 {
+            passedPath = []
+            passedAt = -1
+        } else if anchorMoved
+            || abs(progress - passedAt) >= AppConfig.carPlayTraveledStepMeters {
+            passedAt = progress
+            passedPath = RoadSketch.subPath(
+                coordinates,
+                from: max(0, progress - RoadSketch.passedVisibleMeters),
+                to: progress, anchor: anchor)
+        }
+    }
+
+    /// Наборы тайлов, нужные на этом охвате.
+    ///
+    /// Костяк и улицы — всегда: без них схемы нет. Дворы — когда мы сами на
+    /// мелкой улице. Местность — вода, зелень, рельсы — тоже всегда: это
+    /// крупные ориентиры, они дёшевы и читаются на любом охвате. Кварталы —
+    /// только вблизи, где они и различимы.
+    private func wantedSets(span: Double, minors: Bool) -> Set<RoadTiles.Set> {
+        var sets: Set<RoadTiles.Set> = [.far, .streets, .water, .green, .rail]
+        if minors { sets.insert(.yards) }
+        if span < SketchArea.Kind.block.maxSpanMeters { sets.insert(.blocks) }
+        return sets
     }
 
     /// Один источник сети на тик и на сборку: свои тайлы, где есть, иначе
     /// индекс лимитов.
-    private func network(_ env: AppEnvironment) -> FallbackRoadNetwork {
-        FallbackRoadNetwork(primary: env.roads.network,
-                            fallback: env.speedLimits.sketchNetwork)
+    ///
+    /// На дальнем охвате берётся КОСТЯК района — отдельный набор, где
+    /// раздельные проезжие уже сведены в одну ось, а мелочи нет вовсе.
+    /// Подмножеством обычной сети он быть не может: схлопывание даёт другую
+    /// геометрию, а не выборку из той же.
+    private func network(_ env: AppEnvironment, span: Double) -> FallbackRoadNetwork {
+        let far = env.roads.farNetwork
+        return FallbackRoadNetwork(primary: usesFarNetwork(env, span: span)
+                                       ? far : env.roads.network,
+                                   fallback: env.speedLimits.sketchNetwork)
+    }
+
+    private func usesFarNetwork(_ env: AppEnvironment, span: Double) -> Bool {
+        span >= RoadSketch.farNetworkSpan && !(env.roads.farNetwork is EmptyRoadNetwork)
     }
 
     private func offsetMeters(of me: CLLocationCoordinate2D) -> CGPoint {
@@ -176,9 +326,12 @@ final class SketchState {
                                 cameras: dots,
                                 // Свои тайлы (классы, мосты, дворы), где они
                                 // уже есть; иначе — сеть из индекса лимитов.
-                                network: network(env),
+                                network: network(env, span: span),
                                 networkBudget: env.thermal.mode.sketchNetworkBudget,
                                 showMinorRoads: minorsVisible,
+                                precomputed: env.roads.isPrecomputed,
+                                areas: env.roads.areas,
+                                areaBudget: env.thermal.mode.sketchAreaBudget,
                                 route: env.route.routeCoordinates,
                                 track: env.trip.recentTrack(),
                                 anchor: me, spanMeters: span)

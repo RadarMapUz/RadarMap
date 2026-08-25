@@ -495,4 +495,21 @@ final class RoadSketchTests: XCTestCase {
                                                 courseDeltaDegrees: 0,
                                                 spanChanged: true))
     }
+
+    // MARK: - Ключ пересборки и источник сети
+
+    func testFarNetworkSwitchRebuildsTheRaster() {
+        // Порог костяка (340 м) лежит МЕЖДУ ступенями масштаба 273 и 342.
+        // Пока источник сети не входил в ключ, в этом окне схема меняла
+        // источник, а растр оставался прежним — то есть на экране была
+        // картинка не из того набора, из которого её посчитали.
+        var near = RoadSketch.RebuildKey(spanBucket: RoadSketch.bucket(forSpan: 339))
+        var far = near
+        far.farNetwork = true
+        XCTAssertNotEqual(near, far)
+        XCTAssertEqual(RoadSketch.bucket(forSpan: 339), RoadSketch.bucket(forSpan: 341),
+                       "ступень масштаба в этом окне не меняется — ключ обязан меняться сам")
+        near.farNetwork = true
+        XCTAssertEqual(near, far)
+    }
 }

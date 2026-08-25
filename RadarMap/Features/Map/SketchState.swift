@@ -256,7 +256,14 @@ final class SketchState {
         // невидимый на текущем охвате, не качается и не разбирается вовсе:
         // дворовые проезды это половина всех дорог, и в общем файле они ехали
         // бы на телефон всю поездку ради случая, который наступает под конец.
-        env.roads.setWantedSets(wantedSets(span: span, minors: minorsVisible))
+        // Набор точек заказываем по ТОЙ ЖЕ развилке, по которой выбирается
+        // сеть, а не по одному охвату: пока костяк не приехал, схема рисует
+        // детальную сеть, и точки нужны её собственные. Иначе в окне между
+        // «охват вырос» и «костяк загрузился» на детальные улицы лёг бы набор,
+        // посчитанный по другой геометрии.
+        let onFarNetwork = usesFarNetwork(env, span: span)
+        env.roads.setWantedSets(wantedSets(span: span, minors: minorsVisible,
+                                           far: onFarNetwork))
         // Тайлы просим вокруг ЦЕНТРА ВИДА, а не вокруг машины: при осмотре
         // взгляд уходит туда, где тайлов ещё нет, и без этого панорама
         // упиралась бы в чёрное.
@@ -273,7 +280,7 @@ final class SketchState {
             budget: env.thermal.mode.sketchNetworkBudget,
             minorRoads: minorsVisible,
             areasGeneration: env.roads.areas.count,
-            marksGeneration: env.roads.points.count,
+            marksGeneration: env.roads.points.count &+ env.roads.farPoints.count,
             farNetwork: usesFarNetwork(env, span: span))
         let offset = offsetMeters(of: me)
 
@@ -404,15 +411,26 @@ final class SketchState {
     /// мелкой улице. Местность — вода, зелень, рельсы — тоже всегда: это
     /// крупные ориентиры, они дёшевы и читаются на любом охвате. Кварталы —
     /// только вблизи, где они и различимы.
-    private func wantedSets(span: Double, minors: Bool) -> Set<RoadTiles.Set> {
+    private func wantedSets(span: Double, minors: Bool,
+                            far: Bool) -> Set<RoadTiles.Set> {
         var sets: Set<RoadTiles.Set> = [.far, .streets, .water, .green, .rail]
         if minors { sets.insert(.yards) }
         if span < SketchArea.Kind.block.maxSpanMeters { sets.insert(.blocks) }
-        // Ручные объекты — только там, где хоть один вид из них ещё виден.
-        if SketchPoint.Kind.allCases.contains(where: { $0.maxSpanMeters >= span }) {
+        // Точки — из того набора, что посчитан по РИСУЕМОЙ сети. Просить оба
+        // разом значило бы возить вдвое больше ради слоя, из которого виден
+        // ровно один.
+        if far {
+            sets.insert(.pointsFar)
+        } else if SketchPoint.Kind.allCases.contains(where: { $0.maxSpanMeters >= span }) {
             sets.insert(.points)
         }
         return sets
+    }
+
+    /// Точки под текущую сеть. Та же развилка, что у самой сети: рисуем
+    /// костяк — берём точки костяка.
+    private func sketchPoints(_ env: AppEnvironment, span: Double) -> [SketchPoint] {
+        usesFarNetwork(env, span: span) ? env.roads.farPoints : env.roads.points
     }
 
     /// Один источник сети на тик и на сборку: свои тайлы, где есть, иначе
@@ -471,7 +489,7 @@ final class SketchState {
                                 precomputed: env.roads.isPrecomputed,
                                 areas: env.roads.areas,
                                 areaBudget: env.thermal.mode.sketchAreaBudget,
-                                points: env.roads.points,
+                                points: sketchPoints(env, span: span),
                                 route: env.route.routeCoordinates,
                                 track: env.trip.recentTrack(),
                                 anchor: me, spanMeters: span)

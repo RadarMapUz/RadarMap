@@ -29,22 +29,23 @@ nonisolated struct SketchPoint: Sendable {
         case uTurn = 4
 
         /// До какого охвата объект имеет смысл.
+        ///
+        /// Граница НЕ на вкус, а по геометрии: дальше farNetworkSpan схема
+        /// рисует не улицы, а костяк района — раздельные проезжие части там
+        /// сведены в одну ось, то есть линия проходит МЕЖДУ ними. Точка
+        /// посажена сервером на детальную геометрию, и на костяке она уехала
+        /// бы от нарисованной дороги на полширины проспекта.
+        ///
+        /// Плотность на этой границе замерена: в самом плотном кадре центра
+        /// Ташкента 7 пиктограмм на охвате 260 м и 9 на 340 — то есть предел
+        /// ставит геометрия, а не теснота.
+        ///
+        /// Светофор — исключение: для него сервер считает ВТОРОЙ набор, по
+        /// костяку района, поэтому он живёт до самого дальнего охвата. Так и
+        /// надо: на охвате района светофоры — это и есть карта перекрёстков,
+        /// по ней читается, где город, а где проезд насквозь.
         var maxSpanMeters: Double {
-            switch self {
-            // Разворот — решение, а не украшение: его ищут заранее, поэтому
-            // он живёт дальше остальных.
-            case .uTurn: return RoadSketch.farNetworkSpan
-            case .trafficLight, .speedBump, .stopLine: return 260
-            }
-        }
-
-        var symbolName: String {
-            switch self {
-            case .trafficLight: return "trafficlight"
-            case .speedBump:    return "arrow.up.and.down.and.arrow.left.and.right"
-            case .stopLine:     return "minus"
-            case .uTurn:        return "arrow.uturn.left"
-            }
+            self == .trafficLight ? RoadSketch.maxSpanMeters : RoadSketch.farNetworkSpan
         }
     }
 

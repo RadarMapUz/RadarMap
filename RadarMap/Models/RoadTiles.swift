@@ -38,20 +38,24 @@ nonisolated enum RoadTiles {
     enum Set: String, CaseIterable, Sendable {
         case far = "f", streets = "s", yards = "y"
         case water = "w", green = "g", rail = "r", blocks = "b"
-        /// Точечные объекты, нарисованные руками в панели.
+        /// Точечные объекты. Наборов ДВА: ближний посажен на детальную
+        /// геометрию, дальний пересчитан по костяку района — там раздельные
+        /// проезжие сведены в одну ось, и точка с детальной сети уехала бы от
+        /// нарисованной линии на полширины проспекта.
         case points = "p"
+        case pointsFar = "q"
 
         /// Наборы местности разбираются в SketchArea, дорожные — в RoadLine.
         var isArea: Bool {
             switch self {
-            case .far, .streets, .yards, .points: return false
+            case .far, .streets, .yards, .points, .pointsFar: return false
             case .water, .green, .rail, .blocks: return true
             }
         }
 
         /// Набор точечных объектов: у него своя распаковка — одна координата
         /// вместо ломаной.
-        var isPoints: Bool { self == .points }
+        var isPoints: Bool { self == .points || self == .pointsFar }
 
         /// Вид местности набора. nil — набор дорожный.
         var areaKind: SketchArea.Kind? {
@@ -60,7 +64,7 @@ nonisolated enum RoadTiles {
             case .green:  return .green
             case .rail:   return .rail
             case .blocks: return .block
-            case .far, .streets, .yards, .points: return nil
+            case .far, .streets, .yards, .points, .pointsFar: return nil
             }
         }
     }

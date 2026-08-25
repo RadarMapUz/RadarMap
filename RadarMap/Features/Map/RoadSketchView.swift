@@ -155,6 +155,7 @@ struct RoadSketchView: View {
                          strokeScale: strokeScale)
                 .equatable()
                 .frame(width: side, height: side)
+            marks(side: side, k: k)
             if let camera = scene.alertCamera {
                 AlertCameraMarker(tint: tint, scale: strokeScale)
                     .position(x: side / 2 + camera.x * k,
@@ -174,6 +175,29 @@ struct RoadSketchView: View {
         .rotation3DEffect(.degrees(tiltDegrees), axis: (x: 1, y: 0, z: 0),
                           anchor: .center, perspective: 0.62)
         .animation(.easeInOut(duration: 0.55), value: tiltDegrees)
+    }
+
+    /// Светофоры и прочие точечные объекты.
+    ///
+    /// Не в растре, хотя это и дешевле. Растр целиком поворачивается по курсу,
+    /// и запечённая в него пиктограмма поворачивается вместе с ним: на
+    /// повороте светофор ложится набок, а перевёрнутый значок читается как
+    /// поломка рендера. Поэтому объекты едут ОТДЕЛЬНЫМ слоем в тех же
+    /// координатах мира — сдвигаются, масштабируются и наклоняются вместе со
+    /// схемой, — но каждому возвращён курс, и на экране они стоят прямо.
+    ///
+    /// Цена честная: это единственный слой, который перерисовывается на тик.
+    /// Она мала, потому что мала и величина: в самом плотном кадре центра
+    /// Ташкента 7 значков на ближнем плане и 10 на дальнем, а потолок ниже
+    /// того, что вообще способно приехать в тайле.
+    private func marks(side: CGFloat, k: CGFloat) -> some View {
+        ForEach(Array(scene.marks.prefix(RoadSketch.markBudget).enumerated()),
+                id: \.offset) { _, mark in
+            sketchGlyph(for: mark.kind, scale: strokeScale)
+                .rotationEffect(.degrees(state.courseDegrees))
+                .position(x: side / 2 + mark.point.x * k,
+                          y: side / 2 - mark.point.y * k)
+        }
     }
 
     /// Угол наклона.
@@ -950,23 +974,6 @@ private struct SketchRaster: View, Equatable {
                 }
             }
 
-            // Ручные объекты: светофоры, развороты, лежачие. Под камерами,
-            // но над дорогами — они стоят НА дороге, а не рядом.
-            for mark in scene.marks {
-                let centre = at(mark.point)
-                let radius = 7 * strokeScale
-                let plate = CGRect(x: centre.x - radius, y: centre.y - radius,
-                                   width: radius * 2, height: radius * 2)
-                context.fill(Path(ellipseIn: plate),
-                             with: .color(SketchPalette.markPlate))
-                context.stroke(Path(ellipseIn: plate),
-                               with: .color(SketchPalette.mark.opacity(0.55)),
-                               lineWidth: 1.2 * strokeScale)
-                if let symbol = context.resolveSymbol(id: mark.kind) {
-                    context.draw(symbol, at: centre)
-                }
-            }
-
             // ВСЕ камеры охвата — точками на своих местах: на ферганском
             // чорраха их четыре, и одна точка прятала три остальные. Но
             // одинаковыми они быть не должны: десяток равных точек по краям
@@ -974,27 +981,21 @@ private struct SketchRaster: View, Equatable {
             // Тревожная — полная, с кольцом от вью; остальные — мельче и
             // тише: контекст, а не предупреждение.
             for dot in scene.cameras {
-                let point = at(dot.point)
                 let isAlert = dot.id == scene.alertCameraID
-                let r: CGFloat = (isAlert ? 6 : 4.5) * strokeScale
-                let rect = CGRect(x: point.x - r, y: point.y - r,
-                                  width: r * 2, height: r * 2)
-                context.fill(Path(ellipseIn: rect),
-                             with: .color(Theme.danger.opacity(isAlert ? 0.85 : 0.6)))
-                context.stroke(Path(ellipseIn: rect),
-                               with: .color(.black.opacity(0.6)), lineWidth: 1.5)
+                if let symbol = context.resolveSymbol(
+                    id: SketchSymbol.camera(alert: isAlert)) {
+                    context.draw(symbol, at: at(dot.point))
+                }
             }
         }
         symbols: {
             // Пиктограммы объявляются ОДИН раз на весь растр, а не рисуются
             // по одной на каждый объект: Canvas растеризует символ единожды и
             // дальше только ставит его копии.
-            ForEach(SketchPoint.Kind.allCases, id: \.self) { kind in
-                Image(systemName: kind.symbolName)
-                    .font(.rounded(8 * strokeScale, .bold))
-                    .foregroundStyle(SketchPalette.mark)
-                    .tag(kind)
-            }
+            CameraDotGlyph(scale: strokeScale, isAlert: false)
+                .tag(SketchSymbol.camera(alert: false))
+            CameraDotGlyph(scale: strokeScale, isAlert: true)
+                .tag(SketchSymbol.camera(alert: true))
         }
         .drawingGroup()   // одна текстура: transform'ы крутят её без перерисовки
     }

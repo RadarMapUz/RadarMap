@@ -39,6 +39,10 @@ final class RoadNetworkService {
     private(set) var areas: [SketchArea] = []
     /// Точечные объекты, нарисованные руками в панели: светофоры, развороты.
     private(set) var points: [SketchPoint] = []
+    /// Те же объекты, пересчитанные сервером по костяку района: свои
+    /// пересечения, своё сведение, своя посадка на ось. Не выборка из
+    /// points — другая геометрия, как и сама дальняя сеть.
+    private(set) var farPoints: [SketchPoint] = []
 
     /// Какие наборы тайлов сейчас нужны. Ставит схема: она одна знает охват и
     /// то, едем ли мы по двору. Слой, невидимый на текущем охвате, не
@@ -53,6 +57,7 @@ final class RoadNetworkService {
     /// Распакованная местность по ключам наборов.
     @ObservationIgnored private var loadedAreas: [String: [SketchArea]] = [:]
     @ObservationIgnored private var loadedPoints: [String: [SketchPoint]] = [:]
+    @ObservationIgnored private var loadedPointsFar: [String: [SketchPoint]] = [:]
 
     /// Сеть приходит уже генерализованной: склейка, схлопывание раздельных
     /// проезжих, отсев обрубков и упрощение посчитаны на сервере один раз на
@@ -233,7 +238,7 @@ final class RoadNetworkService {
         let wanted = Set(coverageKeys(around: coordinate, index: index))
 
         var missing: [String] = []
-        for key in wanted where loaded[key] == nil && !broken.contains(key)
+        for key in wanted where !isLoaded(key) && !broken.contains(key)
             && !downloading.contains(key) {
             missing.append(key)
         }
@@ -243,7 +248,7 @@ final class RoadNetworkService {
         }
         // Снимок пересобирается, когда состав окрестности изменился и всё,
         // что можно было получить, получено.
-        let ready = wanted.filter { loaded[$0] != nil }
+        let ready = wanted.filter { isLoaded($0) }
         if missing.isEmpty, downloading.isEmpty, ready != snapshotKeys {
             rebuildSnapshot(keys: ready)
         }
@@ -282,6 +287,11 @@ final class RoadNetworkService {
             return Self.decode(data, as: set)
         }.value
         if let fromDisk {
+            // Снять с полёта ДО finish, а не в defer на выходе: finish
+            // собирает снимок только когда полёт пуст, а defer срабатывает
+            // позже него — то есть на последнем тайле пачки снимок не
+            // собирался никогда.
+            downloading.remove(key)
             finish(key: key, decoded: fromDisk)
             return
         }
@@ -309,6 +319,7 @@ final class RoadNetworkService {
             Log.route.error("тайл дорог \(key, privacy: .public) не сошёлся по sha или формату — отброшен")
             return
         }
+        downloading.remove(key)
         finish(key: key, decoded: decoded)
     }
 
@@ -317,6 +328,23 @@ final class RoadNetworkService {
         case roads([RoadLine])
         case areas([SketchArea])
         case points([SketchPoint])
+    }
+
+    /// Тайл уже разобран и лежит в памяти.
+    ///
+    /// Проверять один `loaded` нельзя: туда попадают только ДОРОЖНЫЕ наборы, а
+    /// местность и точки живут в своих словарях. Пока здесь стояло
+    /// `loaded[key] == nil`, любой недорожный тайл считался недостающим ВСЕГДА
+    /// — он скачивался, разбирался, ложился в свой словарь и на следующем
+    /// тике запрашивался снова. А так как список недостающих никогда не
+    /// пустел, снимок окрестности не пересобирался вовсе: схема всю дорогу
+    /// рисовалась запасной сетью из индекса лимитов, и ни вода, ни зелень, ни
+    /// кварталы, ни светофоры на неё не попадали ни разу.
+    private func isLoaded(_ key: String) -> Bool {
+        guard let set = Self.setOf(key) else { return loaded[key] != nil }
+        if set.isPoints { return loadedPoints[key] != nil || loadedPointsFar[key] != nil }
+        if set.isArea { return loadedAreas[key] != nil }
+        return loaded[key] != nil
     }
 
     /// Набор по составному ключу «тайл_набор». nil — старый формат.
@@ -340,7 +368,9 @@ final class RoadNetworkService {
         switch decoded {
         case .roads(let lines): loaded[key] = lines
         case .areas(let shapes): loadedAreas[key] = shapes
-        case .points(let marks): loadedPoints[key] = marks
+        case .points(let marks):
+            if Self.setOf(key) == .pointsFar { loadedPointsFar[key] = marks }
+            else { loadedPoints[key] = marks }
         }
         // Состав окрестности изменился — следующий тик обязан пройти гейт,
         // иначе новый тайл ждал бы километра пути.
@@ -349,7 +379,7 @@ final class RoadNetworkService {
         // ensureCoverage сузит его до окрестности и выселит дальние тайлы.
         guard downloading.isEmpty else { return }
         rebuildSnapshot(keys: Set(loaded.keys).union(loadedAreas.keys)
-            .union(loadedPoints.keys))
+            .union(loadedPoints.keys).union(loadedPointsFar.keys))
     }
 
     private func rebuildSnapshot(keys: Set<String>) {
@@ -362,7 +392,8 @@ final class RoadNetworkService {
         // порог срабатывал бы всегда, и запас, ради которого он и написан,
         // исчез бы: разворот через границу тайла заставлял бы перечитывать
         // файлы с диска заново.
-        if loaded.count + loadedAreas.count + loadedPoints.count > keys.count + 9 {
+        if loaded.count + loadedAreas.count + loadedPoints.count
+            + loadedPointsFar.count > keys.count + 9 {
             for key in loaded.keys where !keys.contains(key) {
                 loaded.removeValue(forKey: key)
             }
@@ -371,6 +402,9 @@ final class RoadNetworkService {
             }
             for key in loadedPoints.keys where !keys.contains(key) {
                 loadedPoints.removeValue(forKey: key)
+            }
+            for key in loadedPointsFar.keys where !keys.contains(key) {
+                loadedPointsFar.removeValue(forKey: key)
             }
         }
         snapshotKeys = keys
@@ -385,6 +419,7 @@ final class RoadNetworkService {
                             : []
         areas = keys.compactMap { loadedAreas[$0] }.flatMap { $0 }
         points = keys.compactMap { loadedPoints[$0] }.flatMap { $0 }
+        farPoints = keys.compactMap { loadedPointsFar[$0] }.flatMap { $0 }
         Task.detached(priority: .utility) { [nearTiles, farTiles] in
             let near = TileRoadNetwork.build(nearTiles)
             let far = farTiles.isEmpty ? nil : TileRoadNetwork.build(farTiles)

@@ -121,6 +121,24 @@ nonisolated enum SketchPalette {
     /// впереди будет читаться как радар.
     static let mark = Color(red: 0.62, green: 0.66, blue: 0.72)
     static let markPlate = Color(red: 0.10, green: 0.11, blue: 0.13)
+    /// Корпус светофора и стойка под ним. Почти чёрный, но не чёрный: на
+    /// асфальте чистый чёрный читается как дыра, а не как предмет.
+    static let markBody = Color(red: 0.11, green: 0.12, blue: 0.145)
+    static let markEdge = Color(red: 0.55, green: 0.59, blue: 0.66)
+
+    /// Линзы светофора. Приглушены намеренно: это пиктограмма, а не работающий
+    /// светофор, и три ярких огня на схеме перетянули бы взгляд с дороги.
+    /// Красная линза при этом ТЕМНЕЕ и холоднее камерного красного — рядом они
+    /// стоят часто, и путать их нельзя.
+    static let signalRed = Color(red: 0.78, green: 0.24, blue: 0.24)
+    static let signalAmber = Color(red: 0.85, green: 0.62, blue: 0.20)
+    static let signalGreen = Color(red: 0.30, green: 0.70, blue: 0.40)
+
+    /// Камера на схеме — кольцо, а не пятно. Заливка тёмная: марка обязана
+    /// читаться поверх любого асфальта, а сплошной красный кружок на тёмной
+    /// схеме выглядит болячкой, а не значком.
+    static let cameraDotFill = Color(red: 0.13, green: 0.09, blue: 0.10)
+    static let cameraDotRing = Theme.danger
 
     // MARK: - «Я»
 

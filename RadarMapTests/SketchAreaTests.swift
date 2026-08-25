@@ -198,30 +198,62 @@ final class SketchAreaTests: XCTestCase {
         XCTAssertFalse(RoadTiles.Set.water.isPoints)
     }
 
-    func testTrafficLightIsNearOnlyWhileUTurnLivesFurther() {
-        // Разворот — решение, а не украшение: его ищут заранее. Светофор на
-        // охвате района — пиксель среди сотни таких же, то есть шум.
-        XCTAssertGreaterThan(SketchPoint.Kind.uTurn.maxSpanMeters,
-                             SketchPoint.Kind.trafficLight.maxSpanMeters)
+    func testOnlyTheTrafficLightSurvivesTheDistrictSpan() {
+        // Светофор живёт до самого дальнего охвата, потому что для костяка
+        // сервер считает ОТДЕЛЬНЫЙ набор: свои пересечения, своё сведение,
+        // своя посадка на сведённую ось. Остальные виды такого набора не
+        // имеют, и на костяке им нечего показывать — они обрываются на
+        // границе детальной сети.
+        XCTAssertEqual(SketchPoint.Kind.trafficLight.maxSpanMeters,
+                       RoadSketch.maxSpanMeters)
+        for kind in SketchPoint.Kind.allCases where kind != .trafficLight {
+            XCTAssertEqual(kind.maxSpanMeters, RoadSketch.farNetworkSpan,
+                           "\(kind) живёт ровно до костяка района")
+        }
     }
 
     func testSceneKeepsOnlyMarksVisibleAtThisSpan() {
         let light = SketchPoint(coordinate: .init(latitude: 41.3005, longitude: 69.25),
                                 kind: .trafficLight)
-        let turn = SketchPoint(coordinate: .init(latitude: 41.3005, longitude: 69.25),
-                               kind: .uTurn)
+        let bump = SketchPoint(coordinate: .init(latitude: 41.3005, longitude: 69.25),
+                               kind: .speedBump)
         let near = RoadSketch.scene(alertCamera: nil, alertInRange: false,
-                                    points: [light, turn],
+                                    points: [light, bump],
                                     anchor: .init(latitude: 41.3, longitude: 69.25),
                                     spanMeters: 200)
-        XCTAssertEqual(Set(near.marks.map(\.kind)), [.trafficLight, .uTurn])
+        XCTAssertEqual(Set(near.marks.map(\.kind)), [.trafficLight, .speedBump])
 
         let far = RoadSketch.scene(alertCamera: nil, alertInRange: false,
-                                   points: [light, turn],
+                                   points: [light, bump],
                                    anchor: .init(latitude: 41.3, longitude: 69.25),
-                                   spanMeters: 300)
-        XCTAssertEqual(Set(far.marks.map(\.kind)), [.uTurn],
-                       "светофор на охвате района не рисуется")
+                                   spanMeters: RoadSketch.farNetworkSpan + 1)
+        XCTAssertEqual(Set(far.marks.map(\.kind)), [.trafficLight],
+                       "на костяке района остаётся только светофор")
+    }
+
+    func testTheFarPointSetIsPointsToo() {
+        // Два набора, одна распаковка: дальний отличается геометрией, а не
+        // форматом. Перепутать их местами нельзя — они разные наборы.
+        XCTAssertTrue(RoadTiles.Set.pointsFar.isPoints)
+        XCTAssertFalse(RoadTiles.Set.pointsFar.isArea)
+        XCTAssertNotEqual(RoadTiles.Set.pointsFar, RoadTiles.Set.points)
+    }
+
+    func testMarkBudgetCapsWhatEverArrivesInATile() {
+        // Тайл приходит извне, а слой марок перерисовывается на тик: потолок
+        // здесь предохранитель, а не оптимизация.
+        let anchor = CLLocationCoordinate2D(latitude: 41.3, longitude: 69.25)
+        let crowd = (0..<(RoadSketch.markBudget * 2)).map { i in
+            SketchPoint(coordinate: .init(latitude: 41.3 + Double(i) * 1e-5,
+                                          longitude: 69.25),
+                        kind: .trafficLight)
+        }
+        let scene = RoadSketch.scene(alertCamera: nil, alertInRange: false,
+                                     points: crowd, anchor: anchor, spanMeters: 200)
+        XCTAssertGreaterThan(scene.marks.count, RoadSketch.markBudget,
+                             "сцена не режет — режет слой отрисовки")
+        XCTAssertEqual(scene.marks.prefix(RoadSketch.markBudget).count,
+                       RoadSketch.markBudget)
     }
 }
 

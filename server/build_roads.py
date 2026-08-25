@@ -758,9 +758,18 @@ SET_FAR, SET_STREETS, SET_YARDS = "f", "s", "y"
 # Слои местности. Живут своими файлами по тому же закону, что дворовые
 # проезды: слой, невидимый на текущем охвате, не качается и не разбирается.
 SET_WATER, SET_GREEN, SET_RAIL, SET_BLOCKS = "w", "g", "r", "b"
-# Точки. Отдельным набором по тому же закону: светофор виден до 260 м, и на
-# охвате района его файл просто не качается.
-SET_POINTS = "p"
+# Точки. Их ДВА набора, и это не дубль.
+#
+# Дальше 340 м схема рисует не улицы, а костяк района: раздельные проезжие
+# сведены в одну ось, мелочи нет вовсе. Точка, посаженная на детальную
+# геометрию, на костяке уехала бы от нарисованной линии на полширины
+# проспекта, а перекрёсток, который на костяке один, там дал бы четыре
+# пиктограммы — по одной на каждый узел исходной сети.
+#
+# Поэтому дальний набор считается ЗАНОВО по костяку: свои узлы, своё сведение,
+# своя посадка. Ровно тем же приёмом, каким дальняя сеть не является выборкой
+# из ближней, а строится отдельно.
+SET_POINTS, SET_POINTS_FAR = "p", "q"
 
 # Коды видов местности — контракт с клиентом (SketchArea.Kind).
 AREA_WATER, AREA_GREEN, AREA_RAIL, AREA_BLOCK = 1, 2, 3, 4
@@ -942,6 +951,16 @@ POINT_JUNCTION_METERS = 50.0
 # После привязки остаётся сблизить сами узлы: раздельная проезжая часть даёт
 # на одном перекрёстке два узла в десятке метров.
 POINT_CLUSTER_METERS = 20.0
+# На костяке района сведение работает ИНАЧЕ, и узлы там ни при чём: замер по
+# центру Ташкента — у костяка 8 узлов степени ≥ 3 на весь район против 2 498 у
+# детальной сети. Костяк не разрезается по перекрёсткам заново, пересечения
+# улиц там просто не являются узлами, и привязываться не к чему.
+#
+# Поэтому дальний набор сводится по расстоянию, и порог — размер настоящего
+# городского перекрёстка: 70 м. Всё, что ближе, — один перекрёсток; квартал в
+# центре 150–400 м, так что соседние в одну кучу не слипнутся. Замер: 318
+# светофоров → 87 значков, в самом плотном кадре на 700 м — 10 штук.
+POINT_FAR_CLUSTER_METERS = 70.0
 # Виды, которые стоят НА перекрёстке. Лежачий полицейский в этот список не
 # входит намеренно: он лежит посреди квартала, и притянуть его к ближайшему
 # перекрёстку значило бы соврать ровно о том, ради чего он нарисован.
@@ -1173,7 +1192,8 @@ def cluster_points(points, meters=POINT_CLUSTER_METERS):
     return kept
 
 
-def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=()):
+def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
+                far_points=(), far=None):
     """Разложить дороги по тайлам и собрать индексы v1 и v2.
 
     Дорога, задевшая несколько тайлов, попадает в каждый целиком: дубль на
@@ -1184,7 +1204,8 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=())
     сборки без дорог совсем. v1 убирается, когда в проде не останется старых.
     """
     os.makedirs(target_dir, exist_ok=True)
-    far = build_far(roads)
+    if far is None:
+        far = build_far(roads)
 
     def encoded(items):
         """Запись тайла: код, биты, дельты — и имя четвёртым, если оно есть.
@@ -1241,6 +1262,8 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=())
     # установленная сборка, не знающая о них, читала бы их как дороги.
     if points:
         sets[SET_POINTS] = list(points)
+    if far_points:
+        sets[SET_POINTS_FAR] = list(far_points)
     tiled = {name: tile(items, degrees) for name, items in sets.items()}
     index_v2 = {}
     for name, by_key in sorted(tiled.items()):
@@ -1290,11 +1313,18 @@ def main():
     areas = collect_areas(args.areas, args.tolerance * 3 / 111_320.0)
     # Точки садим ПОСЛЕ генерализации: сажать надо на ту геометрию, которая
     # поедет на телефон, а не на сырую.
+    far = build_far(roads)
     raw_points = collect_points(args.points)
     at_junctions = attach_to_junctions(raw_points, junction_nodes(roads))
     clustered = cluster_points(at_junctions)
     points, dropped = snap_points(clustered, roads)
-    index, index_v2 = write_tiles(roads, args.tiles_dir, args.grid, areas, points)
+    # Дальний набор: только светофоры. Стоп-знак и лежачий на охвате района —
+    # шум: решение по ним принимают, когда они уже видны глазами.
+    lights = [p for p in raw_points if p[0] == POINT_TRAFFIC_LIGHT]
+    far_points, far_dropped = snap_points(
+        cluster_points(lights, POINT_FAR_CLUSTER_METERS), far)
+    index, index_v2 = write_tiles(roads, args.tiles_dir, args.grid, areas, points,
+                                  far_points, far)
 
     points_total = sum(len(r[2]) for r in roads)
     print(f"склейка и отсев: {len(raw)} → {len(roads)} дорог")
@@ -1318,6 +1348,8 @@ def main():
               f"вне дорог {dropped}, в тайлах {len(points)}")
         print(f"        светофоров {kinds[POINT_TRAFFIC_LIGHT]}, "
               f"лежачих {kinds[POINT_SPEED_BUMP]}, стоп-линий {kinds[POINT_STOP_LINE]}")
+        print(f"        на костяке района: {len(far_points)} светофоров "
+              f"(вне костяка {far_dropped})")
     print("классы:", classes.most_common(10))
     bridges = sum(n for f, n in flag_counts.items() if f & FLAG_BRIDGE)
     tunnels = sum(n for f, n in flag_counts.items() if f & FLAG_TUNNEL)

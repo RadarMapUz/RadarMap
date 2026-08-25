@@ -168,6 +168,61 @@ final class SketchAreaTests: XCTestCase {
                                    longitude: lon)
         }
     }
+
+    // MARK: - Ручные объекты
+
+    func testPointsDecodeFromASingleCoordinate() {
+        // Точка — одна координата, а не вырожденная ломаная: формат записи
+        // тот же, что у дорог, но координат ровно две.
+        let tile = #"{"version":2,"roads":[[1,0,[4130000,6925000]],[4,0,[4130100,6925100]]]}"#
+        let points = RoadTiles.decodePoints(Data(tile.utf8))
+        XCTAssertEqual(points?.count, 2)
+        XCTAssertEqual(points?.first?.kind, .trafficLight)
+        XCTAssertEqual(points?.last?.kind, .uTurn)
+        XCTAssertEqual(points?.first?.coordinate.latitude ?? 0, 41.3, accuracy: 1e-6)
+    }
+
+    func testUnknownPointKindIsSkippedNotFatal() {
+        // Панель вправе завести новый вид раньше, чем выйдет сборка. Светофоры
+        // в том же файле водитель увидеть обязан.
+        let tile = #"{"version":2,"roads":[[99,0,[4130000,6925000]],[1,0,[4130000,6925000]]]}"#
+        let points = RoadTiles.decodePoints(Data(tile.utf8))
+        XCTAssertEqual(points?.count, 1)
+        XCTAssertEqual(points?.first?.kind, .trafficLight)
+    }
+
+    func testPointsSetNeedsItsOwnDecoder() {
+        XCTAssertTrue(RoadTiles.Set.points.isPoints)
+        XCTAssertFalse(RoadTiles.Set.points.isArea)
+        XCTAssertNil(RoadTiles.Set.points.areaKind)
+        XCTAssertFalse(RoadTiles.Set.water.isPoints)
+    }
+
+    func testTrafficLightIsNearOnlyWhileUTurnLivesFurther() {
+        // Разворот — решение, а не украшение: его ищут заранее. Светофор на
+        // охвате района — пиксель среди сотни таких же, то есть шум.
+        XCTAssertGreaterThan(SketchPoint.Kind.uTurn.maxSpanMeters,
+                             SketchPoint.Kind.trafficLight.maxSpanMeters)
+    }
+
+    func testSceneKeepsOnlyMarksVisibleAtThisSpan() {
+        let light = SketchPoint(coordinate: .init(latitude: 41.3005, longitude: 69.25),
+                                kind: .trafficLight)
+        let turn = SketchPoint(coordinate: .init(latitude: 41.3005, longitude: 69.25),
+                               kind: .uTurn)
+        let near = RoadSketch.scene(alertCamera: nil, alertInRange: false,
+                                    points: [light, turn],
+                                    anchor: .init(latitude: 41.3, longitude: 69.25),
+                                    spanMeters: 200)
+        XCTAssertEqual(Set(near.marks.map(\.kind)), [.trafficLight, .uTurn])
+
+        let far = RoadSketch.scene(alertCamera: nil, alertInRange: false,
+                                   points: [light, turn],
+                                   anchor: .init(latitude: 41.3, longitude: 69.25),
+                                   spanMeters: 300)
+        XCTAssertEqual(Set(far.marks.map(\.kind)), [.uTurn],
+                       "светофор на охвате района не рисуется")
+    }
 }
 
 /// Источник, отдающий заранее известные линии: имя улицы — чистая функция, и

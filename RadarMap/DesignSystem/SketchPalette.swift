@@ -113,6 +113,15 @@ nonisolated enum SketchPalette {
     static let maneuverCasing = Color.white.opacity(0.92)
     static let maneuverBody = Theme.accent
 
+    // MARK: - Ручные объекты
+
+    /// Светофор, разворот, лежачий. Тон один на все виды и намеренно
+    /// приглушённый: это ориентиры, а не предупреждения. Красным на схеме
+    /// говорят только камеры, и делить с ними цвет нельзя — иначе светофор
+    /// впереди будет читаться как радар.
+    static let mark = Color(red: 0.62, green: 0.66, blue: 0.72)
+    static let markPlate = Color(red: 0.10, green: 0.11, blue: 0.13)
+
     // MARK: - «Я»
 
     /// Курсор машины: объём даётся тремя тонами одного цвета, а не тенью.

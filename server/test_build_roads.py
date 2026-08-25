@@ -481,5 +481,203 @@ class AreaTests(unittest.TestCase):
         self.assertEqual(build_roads.collect_areas("/нет/такого", 0), [])
 
 
+class PointTests(unittest.TestCase):
+    """Светофоры и лежачие: единственный слой, который садится НА дороги."""
+
+    @staticmethod
+    def street(lon0, lat0, lon1, lat1, code=3):
+        return (code, 0, [(lon0, lat0), (lon1, lat1)], "")
+
+    @staticmethod
+    def point(kind, lon, lat):
+        return (kind, 0, [(lon, lat)])
+
+    def test_tags_map_to_client_codes(self):
+        self.assertEqual(build_roads.point_kind({"highway": "traffic_signals"}),
+                         build_roads.POINT_TRAFFIC_LIGHT)
+        self.assertEqual(build_roads.point_kind({"traffic_calming": "hump"}),
+                         build_roads.POINT_SPEED_BUMP)
+        self.assertEqual(build_roads.point_kind({"highway": "stop"}),
+                         build_roads.POINT_STOP_LINE)
+
+    def test_narrowing_of_a_carriageway_is_not_a_speed_bump(self):
+        # chicane и choker — сужение проезжей части, а не точка, в которой
+        # сбрасывают скорость. Пиктограмма лежачего на них соврала бы.
+        self.assertIsNone(build_roads.point_kind({"traffic_calming": "chicane"}))
+        self.assertIsNone(build_roads.point_kind({"highway": "residential"}))
+
+    def test_point_lands_on_the_axis_not_where_it_stood(self):
+        # Светофор в OSM стоит у края проезжей части. На схеме он обязан быть
+        # на нарисованной линии, иначе висит рядом с дорогой в воздухе.
+        road = self.street(69.20, 41.30, 69.21, 41.30)
+        aside = self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.205, 41.30008)
+        snapped, dropped = build_roads.snap_points([aside], [road])
+
+        self.assertEqual(dropped, 0)
+        self.assertAlmostEqual(snapped[0][2][0][1], 41.30, places=6)
+
+    def test_point_far_from_every_road_is_dropped(self):
+        road = self.street(69.20, 41.30, 69.21, 41.30)
+        far = self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.205, 41.3020)
+        snapped, dropped = build_roads.snap_points([far], [road])
+
+        self.assertEqual(snapped, [])
+        self.assertEqual(dropped, 1)
+
+    def test_a_yard_driveway_does_not_steal_the_light(self):
+        # Класс 7 из кандидатов исключён: иначе светофор перекрёстка садится на
+        # парковочный проезд, оказавшийся на пару метров ближе.
+        avenue = self.street(69.20, 41.30, 69.21, 41.30, code=3)
+        driveway = self.street(69.2050, 41.30005, 69.2052, 41.30005, code=7)
+        light = self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.2051, 41.300055)
+        snapped, _ = build_roads.snap_points([light], [avenue, driveway])
+
+        self.assertAlmostEqual(snapped[0][2][0][1], 41.30, places=6)
+
+    def test_four_lights_of_one_junction_become_one(self):
+        # Так перекрёсток и размечен в OSM — по светофору на подъезд.
+        step = 12.0 / build_roads.LAT_METERS
+        junction = [self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.20 + dx, 41.30 + dy)
+                    for dx, dy in ((step, 0), (-step, 0), (0, step), (0, -step))]
+
+        self.assertEqual(len(build_roads.cluster_points(junction)), 1)
+
+    def test_two_junctions_stay_two(self):
+        apart = 60.0 / build_roads.LAT_METERS
+        pair = [self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.20, 41.30),
+                self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.20, 41.30 + apart)]
+
+        self.assertEqual(len(build_roads.cluster_points(pair)), 2)
+
+    def test_a_bump_next_to_a_light_survives(self):
+        # Сводятся только соседи ОДНОГО вида: лежачий перед светофором — это
+        # два разных факта, и водителю нужны оба.
+        step = 8.0 / build_roads.LAT_METERS
+        mixed = [self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.20, 41.30),
+                 self.point(build_roads.POINT_SPEED_BUMP, 69.20, 41.30 + step)]
+
+        self.assertEqual(len(build_roads.cluster_points(mixed)), 2)
+
+    def test_a_cluster_stands_in_the_middle_of_the_junction(self):
+        # Значок обязан стоять в центре перекрёстка, а не на одном подъезде.
+        step = 12.0 / build_roads.LAT_METERS
+        junction = [self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.20 + dx, 41.30 + dy)
+                    for dx, dy in ((step, 0), (-step, 0), (0, step), (0, -step))]
+        centre = build_roads.cluster_points(junction)[0][2][0]
+
+        self.assertAlmostEqual(centre[0], 69.20, places=7)
+        self.assertAlmostEqual(centre[1], 41.30, places=7)
+
+    def test_junction_node_needs_three_lines(self):
+        # Тупик — не перекрёсток: светофору там не к чему привязываться.
+        cross = [self.street(69.20, 41.30, 69.21, 41.30),
+                 self.street(69.21, 41.30, 69.22, 41.30),
+                 self.street(69.21, 41.30, 69.21, 41.31)]
+        dead_end = [self.street(69.20, 41.30, 69.21, 41.30),
+                    self.street(69.21, 41.30, 69.22, 41.30)]
+
+        self.assertEqual(len(build_roads.junction_nodes(cross)), 1)
+        self.assertEqual(build_roads.junction_nodes(dead_end), [])
+
+    def test_four_approaches_meet_in_the_node_however_far_apart(self):
+        # Так перекрёсток и размечен в OSM — по светофору на подъезд. На
+        # проспекте они разнесены метров на сорок, и радиус между ними их не
+        # соберёт; узел собирает.
+        node = (69.21, 41.30)
+        cross = [self.street(69.20, 41.30, 69.21, 41.30),
+                 self.street(69.21, 41.30, 69.22, 41.30),
+                 self.street(69.21, 41.30, 69.21, 41.31)]
+        step = 22.0 / build_roads.LAT_METERS
+        approaches = [self.point(build_roads.POINT_TRAFFIC_LIGHT,
+                                 node[0] + dx, node[1] + dy)
+                      for dx, dy in ((step, 0), (-step, 0), (0, step), (0, -step))]
+
+        attached = build_roads.attach_to_junctions(approaches,
+                                                   build_roads.junction_nodes(cross))
+        self.assertEqual(len(attached), 1)
+        self.assertAlmostEqual(attached[0][2][0][0], node[0], places=7)
+
+    def test_two_junctions_are_not_merged_however_close(self):
+        # Обратная половина того же правила.
+        cross = [self.street(69.2000, 41.30, 69.2002, 41.30),
+                 self.street(69.2002, 41.30, 69.2004, 41.30),
+                 self.street(69.2002, 41.30, 69.2002, 41.3010),
+                 self.street(69.2004, 41.30, 69.2006, 41.30),
+                 self.street(69.2004, 41.30, 69.2004, 41.3010)]
+        lights = [self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.20021, 41.30),
+                  self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.20039, 41.30)]
+
+        attached = build_roads.attach_to_junctions(lights,
+                                                   build_roads.junction_nodes(cross))
+        self.assertEqual(len(attached), 2)
+
+    def test_a_bump_is_never_pulled_onto_a_crossing(self):
+        # Лежачий лежит посреди квартала. Притянуть его к перекрёстку значило
+        # бы соврать ровно о том, ради чего он нарисован.
+        cross = [self.street(69.20, 41.30, 69.21, 41.30),
+                 self.street(69.21, 41.30, 69.22, 41.30),
+                 self.street(69.21, 41.30, 69.21, 41.31)]
+        aside = 69.21 - 30.0 / build_roads.LAT_METERS
+        bump = self.point(build_roads.POINT_SPEED_BUMP, aside, 41.30)
+
+        attached = build_roads.attach_to_junctions([bump],
+                                                   build_roads.junction_nodes(cross))
+        self.assertAlmostEqual(attached[0][2][0][0], aside, places=7)
+
+    def test_a_crossing_far_from_any_junction_keeps_its_own_icon(self):
+        # Пешеходный переход посреди квартала — отдельный светофор, а не
+        # подъезд к ближайшему перекрёстку.
+        cross = [self.street(69.20, 41.30, 69.21, 41.30),
+                 self.street(69.21, 41.30, 69.22, 41.30),
+                 self.street(69.21, 41.30, 69.21, 41.31)]
+        far = 69.21 - 90.0 / build_roads.LAT_METERS
+        light = self.point(build_roads.POINT_TRAFFIC_LIGHT, far, 41.30)
+
+        attached = build_roads.attach_to_junctions([light],
+                                                   build_roads.junction_nodes(cross))
+        self.assertAlmostEqual(attached[0][2][0][0], far, places=7)
+
+    def test_clustering_does_not_depend_on_reading_order(self):
+        # Иначе sha256 тайла меняется от перестановки строк в экстракте, и
+        # телефоны перекачивают файл, в котором не изменилось ничего.
+        step = 10.0 / build_roads.LAT_METERS
+        crowd = [self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.20, 41.30),
+                 self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.20 + step, 41.30),
+                 self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.20, 41.30 + step)]
+
+        self.assertEqual(build_roads.cluster_points(crowd),
+                         build_roads.cluster_points(list(reversed(crowd))))
+
+    def test_point_rides_its_own_set_and_carries_one_coordinate(self):
+        road = self.street(69.20, 41.30, 69.21, 41.30)
+        light = self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.205, 41.30)
+        with tempfile.TemporaryDirectory() as target:
+            _, index_v2 = build_roads.write_tiles([road], target, points=[light])
+            key = next(k for k in index_v2 if k.endswith("_" + build_roads.SET_POINTS))
+            with open(os.path.join(target, f"road2_{key}.json"), encoding="utf-8") as handle:
+                tile = json.load(handle)
+
+        entry = tile["roads"][0]
+        self.assertEqual(entry[0], build_roads.POINT_TRAFFIC_LIGHT)
+        self.assertEqual(len(entry[2]), 2)
+
+    def test_points_never_reach_the_old_format(self):
+        # v1 — один файл на всё. Установленная сборка, не знающая о точках,
+        # прочитала бы их как дороги с одной вершиной.
+        road = self.street(69.20, 41.30, 69.21, 41.30)
+        light = self.point(build_roads.POINT_TRAFFIC_LIGHT, 69.205, 41.30)
+        with tempfile.TemporaryDirectory() as target:
+            index_v1, _ = build_roads.write_tiles([road], target, points=[light])
+            key = next(iter(index_v1))
+            with open(os.path.join(target, f"tile_{key}.json"), encoding="utf-8") as handle:
+                tile = json.load(handle)
+
+        self.assertTrue(all(len(entry[2]) >= 4 for entry in tile["roads"]))
+
+    def test_missing_points_file_is_not_an_error(self):
+        self.assertEqual(build_roads.collect_points(None), [])
+        self.assertEqual(build_roads.collect_points("/нет/такого"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

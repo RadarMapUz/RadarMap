@@ -950,6 +950,23 @@ private struct SketchRaster: View, Equatable {
                 }
             }
 
+            // Ручные объекты: светофоры, развороты, лежачие. Под камерами,
+            // но над дорогами — они стоят НА дороге, а не рядом.
+            for mark in scene.marks {
+                let centre = at(mark.point)
+                let radius = 7 * strokeScale
+                let plate = CGRect(x: centre.x - radius, y: centre.y - radius,
+                                   width: radius * 2, height: radius * 2)
+                context.fill(Path(ellipseIn: plate),
+                             with: .color(SketchPalette.markPlate))
+                context.stroke(Path(ellipseIn: plate),
+                               with: .color(SketchPalette.mark.opacity(0.55)),
+                               lineWidth: 1.2 * strokeScale)
+                if let symbol = context.resolveSymbol(id: mark.kind) {
+                    context.draw(symbol, at: centre)
+                }
+            }
+
             // ВСЕ камеры охвата — точками на своих местах: на ферганском
             // чорраха их четыре, и одна точка прятала три остальные. Но
             // одинаковыми они быть не должны: десяток равных точек по краям
@@ -966,6 +983,17 @@ private struct SketchRaster: View, Equatable {
                              with: .color(Theme.danger.opacity(isAlert ? 0.85 : 0.6)))
                 context.stroke(Path(ellipseIn: rect),
                                with: .color(.black.opacity(0.6)), lineWidth: 1.5)
+            }
+        }
+        symbols: {
+            // Пиктограммы объявляются ОДИН раз на весь растр, а не рисуются
+            // по одной на каждый объект: Canvas растеризует символ единожды и
+            // дальше только ставит его копии.
+            ForEach(SketchPoint.Kind.allCases, id: \.self) { kind in
+                Image(systemName: kind.symbolName)
+                    .font(.rounded(8 * strokeScale, .bold))
+                    .foregroundStyle(SketchPalette.mark)
+                    .tag(kind)
             }
         }
         .drawingGroup()   // одна текстура: transform'ы крутят её без перерисовки

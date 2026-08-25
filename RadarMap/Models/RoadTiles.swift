@@ -38,14 +38,20 @@ nonisolated enum RoadTiles {
     enum Set: String, CaseIterable, Sendable {
         case far = "f", streets = "s", yards = "y"
         case water = "w", green = "g", rail = "r", blocks = "b"
+        /// Точечные объекты, нарисованные руками в панели.
+        case points = "p"
 
         /// Наборы местности разбираются в SketchArea, дорожные — в RoadLine.
         var isArea: Bool {
             switch self {
-            case .far, .streets, .yards: return false
+            case .far, .streets, .yards, .points: return false
             case .water, .green, .rail, .blocks: return true
             }
         }
+
+        /// Набор точечных объектов: у него своя распаковка — одна координата
+        /// вместо ломаной.
+        var isPoints: Bool { self == .points }
 
         /// Вид местности набора. nil — набор дорожный.
         var areaKind: SketchArea.Kind? {
@@ -54,7 +60,7 @@ nonisolated enum RoadTiles {
             case .green:  return .green
             case .rail:   return .rail
             case .blocks: return .block
-            case .far, .streets, .yards: return nil
+            case .far, .streets, .yards, .points: return nil
             }
         }
     }
@@ -157,7 +163,22 @@ nonisolated enum RoadTiles {
     /// Распаковка, общая для дорог и местности. Держать её в одном месте
     /// важнее краткости: формат дельт — контракт с сервером, и разойтись двум
     /// его читателям нельзя.
-    private static func decodeEntries(_ data: Data) -> [Entry]? {
+    /// Распаковать тайл точечных объектов.
+    ///
+    /// Вид, которого приложение не знает, пропускается, а не валит тайл:
+    /// панель вправе завести новый раньше, чем выйдет сборка, и светофоры в
+    /// том же файле водитель увидеть обязан.
+    static func decodePoints(_ data: Data) -> [SketchPoint]? {
+        guard let raw = decodeEntries(data, minimumCoordinates: 1) else { return nil }
+        return raw.compactMap { entry in
+            guard let kind = SketchPoint.Kind(rawValue: entry.code),
+                  let point = entry.points.first else { return nil }
+            return SketchPoint(coordinate: point, kind: kind)
+        }
+    }
+
+    private static func decodeEntries(_ data: Data,
+                                      minimumCoordinates: Int = 2) -> [Entry]? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let version = root["version"] as? Int,
               version == formatVersion || version == formatVersionV2,
@@ -170,7 +191,8 @@ nonisolated enum RoadTiles {
                   let code = (entry[0] as? NSNumber)?.intValue,
                   let flags = (entry[1] as? NSNumber)?.intValue,
                   let flat = entry[2] as? [NSNumber],
-                  flat.count >= 4, flat.count % 2 == 0 else { return nil }
+                  flat.count >= minimumCoordinates * 2,
+                  flat.count % 2 == 0 else { return nil }
 
             var points: [CLLocationCoordinate2D] = []
             points.reserveCapacity(flat.count / 2)

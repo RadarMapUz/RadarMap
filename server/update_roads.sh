@@ -61,10 +61,20 @@ osmium export areas.osm.pbf -f geojsonseq \
     --geometry-types=linestring,polygon -o areas.geojsonl --overwrite
 echo "    местности в экстракте: $(wc -l < areas.geojsonl)"
 
+# Точечные объекты: светофоры, стоп-знаки, лежачие полицейские. Это УЗЛЫ, а не
+# линии, поэтому фильтр по n/ и экспорт точками — линейный экспорт их просто не
+# видит. В Ташкенте одних светофоров 1 899, и все они уже лежат в этом же .pbf.
+osmium tags-filter uzbekistan.osm.pbf \
+    n/highway=traffic_signals,stop n/traffic_calming \
+    -o points.osm.pbf --overwrite
+osmium export points.osm.pbf -f geojsonseq --geometry-types=point \
+    -o points.geojsonl --overwrite
+echo "    точек в экстракте: $(wc -l < points.geojsonl)"
+
 echo "--- 3/4: сборка кандидата"
 rm -rf "$CANDIDATE" && mkdir -p "$CANDIDATE"
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
-    --tiles "$CANDIDATE"
+    --points points.geojsonl --tiles "$CANDIDATE"
 
 # Самопроверка детерминизма. Недетерминированная сборка меняет sha256 ВСЕХ
 # тайлов каждую неделю, и каждый телефон перекачивает свои файлы впустую —
@@ -72,7 +82,7 @@ python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
 echo "--- 4/4: детерминизм"
 rm -rf "$CANDIDATE.check" && mkdir -p "$CANDIDATE.check"
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
-    --tiles "$CANDIDATE.check" >/dev/null
+    --points points.geojsonl --tiles "$CANDIDATE.check" >/dev/null
 if ! diff -rq "$CANDIDATE" "$CANDIDATE.check" >/dev/null; then
     echo "СТОП: две сборки одного экстракта разошлись — сборка недетерминирована"
     exit 1

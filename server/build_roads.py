@@ -758,6 +758,9 @@ SET_FAR, SET_STREETS, SET_YARDS = "f", "s", "y"
 # Слои местности. Живут своими файлами по тому же закону, что дворовые
 # проезды: слой, невидимый на текущем охвате, не качается и не разбирается.
 SET_WATER, SET_GREEN, SET_RAIL, SET_BLOCKS = "w", "g", "r", "b"
+# Точки. Отдельным набором по тому же закону: светофор виден до 260 м, и на
+# охвате района его файл просто не качается.
+SET_POINTS = "p"
 
 # Коды видов местности — контракт с клиентом (SketchArea.Kind).
 AREA_WATER, AREA_GREEN, AREA_RAIL, AREA_BLOCK = 1, 2, 3, 4
@@ -910,7 +913,267 @@ def build_blocks(roads, min_area=BLOCK_MIN_AREA, max_area=BLOCK_MAX_AREA):
     return blocks
 
 
-def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=()):
+# --- Точки: светофоры, лежачие полицейские, стоп-линии ----------------------
+
+# Коды — контракт с клиентом (SketchPoint.Kind). Значения не переставляются:
+# установленная сборка читает их как есть, а незнакомый код молча пропускает.
+POINT_TRAFFIC_LIGHT, POINT_SPEED_BUMP, POINT_STOP_LINE, POINT_U_TURN = 1, 2, 3, 4
+
+POINT_TAGS = {("highway", "traffic_signals"): POINT_TRAFFIC_LIGHT,
+              ("highway", "stop"): POINT_STOP_LINE}
+# Что считаем лежачим полицейским. Не весь traffic_calming: «chicane» и
+# «choker» это сужение проезжей части, а не то, из-за чего сбрасывают скорость
+# в конкретной точке.
+CALMING_KINDS = {"bump", "hump", "table", "cushion"}
+
+# Дальше этого от оси — объект не на той дороге, которую мы рисуем.
+POINT_SNAP_METERS = 25.0
+# Перекрёсток в OSM размечен ПОДЪЕЗДАМИ: с каждой стороны стоит свой светофор.
+# На схеме это несколько пиктограмм в одном пятне, то есть каша вместо
+# ориентира. Водителю нужен факт «этот перекрёсток со светофором», а не число
+# столбов, — поэтому подъезды сводятся в узел графа, а не друг к другу.
+#
+# Замер по центру Ташкента (4,5 × 5 км, 318 светофоров): расстояние от
+# светофора до ближайшего узла со степенью ≥ 3 — 0–10 м у 39, 10–20 у 69,
+# 20–30 у 86 (пик — обычный вынос стоп-линии), 30–40 у 33, 40–50 у 25, дальше
+# хвост. Излом на пятидесяти: что дальше — это пешеходный переход посреди
+# квартала, и он заслуживает СВОЕЙ пиктограммы, а не переезда на перекрёсток.
+POINT_JUNCTION_METERS = 50.0
+# После привязки остаётся сблизить сами узлы: раздельная проезжая часть даёт
+# на одном перекрёстке два узла в десятке метров.
+POINT_CLUSTER_METERS = 20.0
+# Виды, которые стоят НА перекрёстке. Лежачий полицейский в этот список не
+# входит намеренно: он лежит посреди квартала, и притянуть его к ближайшему
+# перекрёстку значило бы соврать ровно о том, ради чего он нарисован.
+POINT_AT_JUNCTION = {POINT_TRAFFIC_LIGHT, POINT_STOP_LINE}
+# Ячейка поискового индекса, ~1,1 км. Перебор 1 899 точек по 79 000 дорог —
+# 150 миллионов расстояний; по сетке это тысячи.
+POINT_GRID_DEGREES = 0.01
+# Светофор стоит на улице, а не на выезде из двора: класс 7 (service) из
+# кандидатов исключён — иначе точка садится на парковочный проезд в паре
+# метров от настоящего перекрёстка.
+POINT_MAX_CLASS = 6
+
+
+def point_kind(properties):
+    """Вид точечного объекта по тегам. None — не наш слой."""
+    for key, value in properties.items():
+        code = POINT_TAGS.get((key, value))
+        if code is not None:
+            return code
+    if properties.get("traffic_calming") in CALMING_KINDS:
+        return POINT_SPEED_BUMP
+    return None
+
+
+def collect_points(source_path):
+    """Прочитать geojsonl узлов → список (kind, flags, [(lon, lat)]).
+
+    Геометрия списком из одной точки, а не голой парой: дальше она проходит
+    через те же tile_keys_of, encode и sort_key, что и дороги. Отдельная ветка
+    ради одной координаты стоила бы больше, чем лишние скобки.
+    """
+    points = []
+    if not source_path or not os.path.exists(source_path):
+        return points
+    with open(source_path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.lstrip("\x1e").strip()
+            if not line:
+                continue
+            try:
+                feature = json.loads(line)
+            except ValueError:
+                continue
+            kind = point_kind(feature.get("properties") or {})
+            if kind is None:
+                continue
+            geometry = feature.get("geometry") or {}
+            if geometry.get("type") != "Point":
+                continue
+            coordinates = geometry.get("coordinates") or []
+            if len(coordinates) < 2:
+                continue
+            points.append((kind, 0, [(float(coordinates[0]), float(coordinates[1]))]))
+    return points
+
+
+def _cells_of(points, degrees):
+    """Ячейки, которых касается ломаная, — вместе с промежуточными.
+
+    Одних вершин мало: на прямом участке трассы соседние вершины отстоят на
+    километры, и ячейки между ними остались бы пустыми. Точка, попавшая в
+    такую ячейку, не нашла бы дорогу, лежащую прямо под ней.
+    """
+    keys = set()
+    previous = None
+    for lon, lat in points:
+        keys.add(tile_key(lat, lon, degrees))
+        if previous is not None:
+            span = max(abs(lat - previous[1]), abs(lon - previous[0]))
+            steps = int(span / (degrees / 2))
+            for step in range(1, steps + 1):
+                t = step / (steps + 1)
+                keys.add(tile_key(previous[1] + (lat - previous[1]) * t,
+                                  previous[0] + (lon - previous[0]) * t, degrees))
+        previous = (lon, lat)
+    return keys
+
+
+def _neighbourhood(point, degrees):
+    """Девять ячеек вокруг точки. Ключи те же, что у tile_key."""
+    lon, lat = point
+    row = int(math.floor((lat + 90) / degrees))
+    column = int(math.floor((lon + 180) / degrees))
+    return [f"{row + dr}_{column + dc}" for dr in (-1, 0, 1) for dc in (-1, 0, 1)]
+
+
+def junction_nodes(roads):
+    """Узлы графа, где сходятся три линии и больше.
+
+    Считается по КОНЦАМ уже склеенных дорог: после merge_ways проходной узел
+    исчез вместе со швом, а остались ровно перекрёстки и тупики. Тупик (одна
+    линия) перекрёстком не считается.
+    """
+    degree = Counter()
+    for road in roads:
+        degree[_node(road[2][0])] += 1
+        degree[_node(road[2][-1])] += 1
+    return [(node[1] / SCALE, node[0] / SCALE)
+            for node, count in degree.items() if count >= 3]
+
+
+def attach_to_junctions(points, nodes, meters=POINT_JUNCTION_METERS):
+    """Пересадить приперекрёстные точки в узел, к которому они относятся.
+
+    Именно это, а не сведение соседей по радиусу, отвечает на вопрос «сколько
+    светофоров рисовать»: четыре подъезда одного перекрёстка сходятся в один
+    узел независимо от того, на сколько метров они разнесены, а два соседних
+    перекрёстка остаются двумя, как бы близко они ни стояли.
+
+    Побочная выгода: узел лежит РОВНО на пересечении нарисованных линий, то
+    есть пиктограмма садится в перекрёсток без всякого магнита.
+    """
+    cells = defaultdict(list)
+    for node in nodes:
+        cells[tile_key(node[1], node[0], POINT_GRID_DEGREES)].append(node)
+
+    attached, loose = {}, []
+    for kind, flags, geometry in points:
+        origin = geometry[0]
+        if kind not in POINT_AT_JUNCTION:
+            loose.append((kind, flags, geometry))
+            continue
+        best, best_distance = None, meters
+        for key in _neighbourhood(origin, POINT_GRID_DEGREES):
+            for node in cells.get(key, ()):
+                distance = meters_between(origin, node)
+                if distance < best_distance:
+                    best, best_distance = node, distance
+        if best is None:
+            loose.append((kind, flags, geometry))
+            continue
+        attached[(kind, best)] = (kind, flags, [best])
+    return list(attached.values()) + loose
+
+
+def snap_points(points, roads, meters=POINT_SNAP_METERS):
+    """Посадить точки на ось ближайшей улицы → (посаженные, отброшено).
+
+    Садим на ТУ САМУЮ геометрию, которая поедет на телефон, — уже разрезанную,
+    склеенную и упрощённую. Светофор, честно снятый с сырого OSM, на схеме
+    оказался бы в стороне от нарисованной линии ровно настолько, насколько её
+    сдвинуло упрощение, — и висел бы в воздухе рядом с дорогой.
+
+    Не нашедший дороги в радиусе отбрасывается. Это не потеря: такой объект
+    стоит у дороги, которую мы не рисуем (тропа, выезд с завода), и на схеме
+    он был бы точкой в пустоте.
+    """
+    streets = [road for road in roads if road[0] <= POINT_MAX_CLASS]
+    cells = defaultdict(list)
+    for road in streets:
+        for key in _cells_of(road[2], POINT_GRID_DEGREES):
+            cells[key].append(road)
+
+    snapped, dropped = [], 0
+    for kind, flags, geometry in points:
+        origin = geometry[0]
+        best, best_distance, seen = None, meters, set()
+        for key in _neighbourhood(origin, POINT_GRID_DEGREES):
+            for road in cells.get(key, ()):
+                if id(road) in seen:
+                    continue
+                seen.add(id(road))
+                candidate = _nearest_on(origin, road[2])
+                distance = meters_between(origin, candidate)
+                if distance < best_distance:
+                    best, best_distance = candidate, distance
+        if best is None:
+            dropped += 1
+            continue
+        snapped.append((kind, flags, [best]))
+    return snapped, dropped
+
+
+def cluster_points(points, meters=POINT_CLUSTER_METERS):
+    """Свести соседей одного вида в один объект, стоящий в центре скопления.
+
+    Не «первый победил»: на четырёхстороннем перекрёстке противоположные
+    светофоры отстоят метров на двадцать пять и в пару не попадают, зато
+    каждый попадает в пару с боковым. Правильный ответ — связная компонента:
+    всё, что цепляется друг за друга, это один перекрёсток.
+
+    Пиктограмма ставится в ЦЕНТР компоненты, а не на один из подъездов. Центр
+    четырёх светофоров — середина перекрёстка, то есть ровно там, где водитель
+    их и видит; любой отдельный подъезд сместил бы значок к одной стороне.
+
+    Порядок обхода задан сортировкой, а не порядком строк в экстракте: иначе
+    sha256 тайла менялся бы от перестановки строк, и телефоны перекачивали бы
+    файл, в котором не изменилось ничего.
+    """
+    ordered = sorted(points, key=lambda item: (item[0],
+                                               round(item[2][0][1] * SCALE),
+                                               round(item[2][0][0] * SCALE)))
+    cells = defaultdict(list)
+    for index, (kind, _, geometry) in enumerate(ordered):
+        origin = geometry[0]
+        cells[tile_key(origin[1], origin[0], POINT_GRID_DEGREES)].append(index)
+
+    parent = list(range(len(ordered)))
+
+    def root(index):
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    for index, (kind, _, geometry) in enumerate(ordered):
+        origin = geometry[0]
+        for key in _neighbourhood(origin, POINT_GRID_DEGREES):
+            for other in cells.get(key, ()):
+                if other <= index or ordered[other][0] != kind:
+                    continue
+                if meters_between(origin, ordered[other][2][0]) <= meters:
+                    a, b = root(index), root(other)
+                    if a != b:
+                        parent[max(a, b)] = min(a, b)
+
+    groups = defaultdict(list)
+    for index in range(len(ordered)):
+        groups[root(index)].append(index)
+
+    kept = []
+    for head in sorted(groups):
+        members = groups[head]
+        kind, flags = ordered[head][0], ordered[head][1]
+        lons = sorted(ordered[i][2][0][0] for i in members)
+        lats = sorted(ordered[i][2][0][1] for i in members)
+        centre = (sum(lons) / len(lons), sum(lats) / len(lats))
+        kept.append((kind, flags, [centre]))
+    return kept
+
+
+def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=()):
     """Разложить дороги по тайлам и собрать индексы v1 и v2.
 
     Дорога, задевшая несколько тайлов, попадает в каждый целиком: дубль на
@@ -962,8 +1225,8 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=()):
     area_sets = {SET_WATER: [], SET_GREEN: [], SET_RAIL: [], SET_BLOCKS: []}
     by_code = {AREA_WATER: SET_WATER, AREA_GREEN: SET_GREEN,
                AREA_RAIL: SET_RAIL, AREA_BLOCK: SET_BLOCKS}
-    for kind, flags, points in areas:
-        area_sets[by_code[kind]].append((kind, flags, points))
+    for kind, flags, shape in areas:
+        area_sets[by_code[kind]].append((kind, flags, shape))
     # Кварталы считаются из САМОЙ сети, а не приходят из OSM.
     area_sets[SET_BLOCKS].extend(build_blocks(roads))
 
@@ -974,6 +1237,10 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=()):
     # структуры. Телефон просто просит на три ключа больше.
     sets = split_sets(roads, far)
     sets.update(area_sets)
+    # Точки в v1 не попадают намеренно: старый формат один файл на всё, и
+    # установленная сборка, не знающая о них, читала бы их как дороги.
+    if points:
+        sets[SET_POINTS] = list(points)
     tiled = {name: tile(items, degrees) for name, items in sets.items()}
     index_v2 = {}
     for name, by_key in sorted(tiled.items()):
@@ -1012,6 +1279,8 @@ def main():
                         help="шаг сетки тайлов в градусах")
     parser.add_argument("--areas", dest="areas", default=None,
                         help="geojsonl с водой, зеленью и рельсами (необязателен)")
+    parser.add_argument("--points", dest="points", default=None,
+                        help="geojsonl узлов: светофоры, лежачие (необязателен)")
     args = parser.parse_args()
 
     raw, classes, flag_counts, read, skipped = collect(args.source)
@@ -1019,7 +1288,13 @@ def main():
     # Местность упрощаем грубее дорог: контур пруда не несёт геометрии, по
     # которой принимают решения за рулём.
     areas = collect_areas(args.areas, args.tolerance * 3 / 111_320.0)
-    index, index_v2 = write_tiles(roads, args.tiles_dir, args.grid, areas)
+    # Точки садим ПОСЛЕ генерализации: сажать надо на ту геометрию, которая
+    # поедет на телефон, а не на сырую.
+    raw_points = collect_points(args.points)
+    at_junctions = attach_to_junctions(raw_points, junction_nodes(roads))
+    clustered = cluster_points(at_junctions)
+    points, dropped = snap_points(clustered, roads)
+    index, index_v2 = write_tiles(roads, args.tiles_dir, args.grid, areas, points)
 
     points_total = sum(len(r[2]) for r in roads)
     print(f"склейка и отсев: {len(raw)} → {len(roads)} дорог")
@@ -1036,6 +1311,13 @@ def main():
         counts = Counter(kind for kind, _, _ in areas)
         print(f"местность: вода {counts[AREA_WATER]}, зелень {counts[AREA_GREEN]}, "
               f"рельсы {counts[AREA_RAIL]}")
+    if raw_points:
+        kinds = Counter(kind for kind, _, _ in points)
+        print(f"точки: прочитано {len(raw_points)}, на перекрёстках "
+              f"{len(at_junctions)}, после сведения узлов {len(clustered)}, "
+              f"вне дорог {dropped}, в тайлах {len(points)}")
+        print(f"        светофоров {kinds[POINT_TRAFFIC_LIGHT]}, "
+              f"лежачих {kinds[POINT_SPEED_BUMP]}, стоп-линий {kinds[POINT_STOP_LINE]}")
     print("классы:", classes.most_common(10))
     bridges = sum(n for f, n in flag_counts.items() if f & FLAG_BRIDGE)
     tunnels = sum(n for f, n in flag_counts.items() if f & FLAG_TUNNEL)

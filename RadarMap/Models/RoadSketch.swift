@@ -57,6 +57,14 @@ nonisolated enum RoadSketch {
         var isClosed: Bool
     }
 
+    /// Точечный объект в сцене: метры от опоры. Нарисован руками в панели,
+    /// поэтому виден только вблизи — на охвате района это пиксель среди
+    /// сотни таких же.
+    struct Mark: Equatable {
+        var point: CGPoint
+        var kind: SketchPoint.Kind
+    }
+
     /// Камера в сцене: id нужен, чтобы вью подсветила тревожную кольцом.
     struct CameraDot: Equatable {
         var id: Int
@@ -70,6 +78,8 @@ nonisolated enum RoadSketch {
         /// Местность под дорогами. Пусто — слои не приехали, и это нормальное
         /// состояние: схема рисует то, что знает.
         var areas: [Area] = []
+        /// Светофоры, развороты и прочее, нарисованное руками.
+        var marks: [Mark] = []
         /// Окрестная дорожная сеть — перекрёстки, развязки, параллельные улицы.
         var network: [Line] = []
         /// Проезжая часть тревожной камеры, продлённая по её направлению.
@@ -129,6 +139,8 @@ nonisolated enum RoadSketch {
         var minorRoads = false
         /// Поколение местности: приехал слой воды — растр пересобрать.
         var areasGeneration = 0
+        /// Поколение ручных объектов: приехал светофор — растр пересобрать.
+        var marksGeneration = 0
         /// Схема перешла на костяк района. В ключе явно, а не «через
         /// spanBucket»: порог костяка (340 м) лежит МЕЖДУ ступенями масштаба
         /// 273 и 342, и в этом окне источник сети менялся, а ключ — нет.
@@ -529,6 +541,7 @@ nonisolated enum RoadSketch {
                       precomputed: Bool = false,
                       areas: [SketchArea] = [],
                       areaBudget: Int = .max,
+                      points: [SketchPoint] = [],
                       route: [CLLocationCoordinate2D] = [],
                       track: [CLLocationCoordinate2D] = [],
                       anchor: CLLocationCoordinate2D,
@@ -580,6 +593,17 @@ nonisolated enum RoadSketch {
             if !scene.cameras.contains(where: { $0.id == alertCamera.id }) {
                 scene.cameras.append(CameraDot(id: alertCamera.id,
                                                point: local(alertCamera.coordinate)))
+            }
+        }
+
+        // Точечные объекты: только те, что видны на этом охвате, и только в
+        // круге сцены. Их немного по определению — перебор дешевле индекса.
+        if !points.isEmpty {
+            scene.marks = points.compactMap { mark in
+                guard mark.kind.maxSpanMeters >= spanMeters else { return nil }
+                let point = local(mark.coordinate)
+                guard hypot(point.x, point.y) <= radius else { return nil }
+                return Mark(point: point, kind: mark.kind)
             }
         }
 

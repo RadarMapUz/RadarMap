@@ -273,6 +273,7 @@ final class SketchState {
             budget: env.thermal.mode.sketchNetworkBudget,
             minorRoads: minorsVisible,
             areasGeneration: env.roads.areas.count,
+            marksGeneration: env.roads.points.count,
             farNetwork: usesFarNetwork(env, span: span))
         let offset = offsetMeters(of: me)
 
@@ -407,6 +408,10 @@ final class SketchState {
         var sets: Set<RoadTiles.Set> = [.far, .streets, .water, .green, .rail]
         if minors { sets.insert(.yards) }
         if span < SketchArea.Kind.block.maxSpanMeters { sets.insert(.blocks) }
+        // Ручные объекты — только там, где хоть один вид из них ещё виден.
+        if SketchPoint.Kind.allCases.contains(where: { $0.maxSpanMeters >= span }) {
+            sets.insert(.points)
+        }
         return sets
     }
 
@@ -466,6 +471,7 @@ final class SketchState {
                                 precomputed: env.roads.isPrecomputed,
                                 areas: env.roads.areas,
                                 areaBudget: env.thermal.mode.sketchAreaBudget,
+                                points: env.roads.points,
                                 route: env.route.routeCoordinates,
                                 track: env.trip.recentTrack(),
                                 anchor: me, spanMeters: span)

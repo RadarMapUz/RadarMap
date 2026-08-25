@@ -37,6 +37,8 @@ final class RoadNetworkService {
     /// Местность вокруг: вода, зелень, рельсы, кварталы. Пустая, пока слои не
     /// приехали, — рисовать нечего, и это нормальное состояние.
     private(set) var areas: [SketchArea] = []
+    /// Точечные объекты, нарисованные руками в панели: светофоры, развороты.
+    private(set) var points: [SketchPoint] = []
 
     /// Какие наборы тайлов сейчас нужны. Ставит схема: она одна знает охват и
     /// то, едем ли мы по двору. Слой, невидимый на текущем охвате, не
@@ -50,6 +52,7 @@ final class RoadNetworkService {
     @ObservationIgnored private var wantedSets: Swift.Set<RoadTiles.Set> = [.far, .streets]
     /// Распакованная местность по ключам наборов.
     @ObservationIgnored private var loadedAreas: [String: [SketchArea]] = [:]
+    @ObservationIgnored private var loadedPoints: [String: [SketchPoint]] = [:]
 
     /// Сеть приходит уже генерализованной: склейка, схлопывание раздельных
     /// проезжих, отсев обрубков и упрощение посчитаны на сервере один раз на
@@ -272,11 +275,11 @@ final class RoadNetworkService {
         let fileURL = directory.appendingPathComponent(
             RoadTiles.fileName(key: key, version: indexVersion))
 
-        let areaKind = Self.setOf(key)?.isArea == true
+        let set = Self.setOf(key)
         let fromDisk = await Task.detached(priority: .utility) { () -> Decoded? in
             guard let data = try? Data(contentsOf: fileURL),
                   RoadTiles.sha256Hex(of: data) == expected.sha256 else { return nil }
-            return Self.decode(data, asArea: areaKind)
+            return Self.decode(data, as: set)
         }.value
         if let fromDisk {
             finish(key: key, decoded: fromDisk)
@@ -291,7 +294,7 @@ final class RoadNetworkService {
         let directory = self.directory
         let decoded = await Task.detached(priority: .utility) { () -> Decoded? in
             guard RoadTiles.sha256Hex(of: data) == expected.sha256,
-                  let value = Self.decode(data, asArea: areaKind) else { return nil }
+                  let value = Self.decode(data, as: set) else { return nil }
             do {
                 try FileManager.default.createDirectory(at: directory,
                                                         withIntermediateDirectories: true)
@@ -313,6 +316,7 @@ final class RoadNetworkService {
     private nonisolated enum Decoded {
         case roads([RoadLine])
         case areas([SketchArea])
+        case points([SketchPoint])
     }
 
     /// Набор по составному ключу «тайл_набор». nil — старый формат.
@@ -321,15 +325,22 @@ final class RoadNetworkService {
         return RoadTiles.Set(rawValue: String(suffix))
     }
 
-    private nonisolated static func decode(_ data: Data, asArea: Bool) -> Decoded? {
-        asArea ? RoadTiles.decodeAreas(data).map(Decoded.areas)
-               : RoadTiles.decodeTile(data).map(Decoded.roads)
+    private nonisolated static func decode(_ data: Data,
+                                           as set: RoadTiles.Set?) -> Decoded? {
+        if set?.isPoints == true {
+            return RoadTiles.decodePoints(data).map(Decoded.points)
+        }
+        if set?.isArea == true {
+            return RoadTiles.decodeAreas(data).map(Decoded.areas)
+        }
+        return RoadTiles.decodeTile(data).map(Decoded.roads)
     }
 
     private func finish(key: String, decoded: Decoded) {
         switch decoded {
         case .roads(let lines): loaded[key] = lines
         case .areas(let shapes): loadedAreas[key] = shapes
+        case .points(let marks): loadedPoints[key] = marks
         }
         // Состав окрестности изменился — следующий тик обязан пройти гейт,
         // иначе новый тайл ждал бы километра пути.
@@ -337,7 +348,8 @@ final class RoadNetworkService {
         // Снимок собираем один раз, когда долетела вся пачка; следующий
         // ensureCoverage сузит его до окрестности и выселит дальние тайлы.
         guard downloading.isEmpty else { return }
-        rebuildSnapshot(keys: Set(loaded.keys).union(loadedAreas.keys))
+        rebuildSnapshot(keys: Set(loaded.keys).union(loadedAreas.keys)
+            .union(loadedPoints.keys))
     }
 
     private func rebuildSnapshot(keys: Set<String>) {
@@ -350,12 +362,15 @@ final class RoadNetworkService {
         // порог срабатывал бы всегда, и запас, ради которого он и написан,
         // исчез бы: разворот через границу тайла заставлял бы перечитывать
         // файлы с диска заново.
-        if loaded.count + loadedAreas.count > keys.count + 9 {
+        if loaded.count + loadedAreas.count + loadedPoints.count > keys.count + 9 {
             for key in loaded.keys where !keys.contains(key) {
                 loaded.removeValue(forKey: key)
             }
             for key in loadedAreas.keys where !keys.contains(key) {
                 loadedAreas.removeValue(forKey: key)
+            }
+            for key in loadedPoints.keys where !keys.contains(key) {
+                loadedPoints.removeValue(forKey: key)
             }
         }
         snapshotKeys = keys
@@ -369,6 +384,7 @@ final class RoadNetworkService {
         let farTiles = isV2 ? keys.filter { $0.hasSuffix(farSuffix) }.compactMap { loaded[$0] }
                             : []
         areas = keys.compactMap { loadedAreas[$0] }.flatMap { $0 }
+        points = keys.compactMap { loadedPoints[$0] }.flatMap { $0 }
         Task.detached(priority: .utility) { [nearTiles, farTiles] in
             let near = TileRoadNetwork.build(nearTiles)
             let far = farTiles.isEmpty ? nil : TileRoadNetwork.build(farTiles)

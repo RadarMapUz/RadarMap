@@ -65,6 +65,91 @@ FLAG_ONEWAY, FLAG_BRIDGE, FLAG_TUNNEL = 1, 2, 4
 # контур и не рисует на ней шевроны — стрелки по кругу читаются как ошибка.
 FLAG_RING = 8
 
+# --- Полосы: СТАРШИЕ БИТЫ ТОГО ЖЕ ПОЛЯ, а не пятый элемент записи.
+#
+# Пятый элемент выглядит очевидным решением и уронил бы разбор ЦЕЛОГО тайла у
+# каждой установленной сборки: RoadTiles.swift принимает записи длиной 3 или 4
+# и на пятом возвращает nil на весь квадрат — телефон потерял бы не одну
+# дорогу, а весь регион. Старших битов старый клиент не видит вовсе: он читает
+# flags масками (& 1, & 2, & 4, & 8), и лишние единицы для него ничто.
+FLAG_LANES_SHIFT = 4
+FLAG_LANES_MASK = 0b1111 << FLAG_LANES_SHIFT
+MAX_LANES = 15
+# Биты ХАРАКТЕРА линии. Только они участвуют в склейке и сведении проезжих:
+# две половины одной улицы, у которых в OSM разное число полос, — по-прежнему
+# одна улица, и разойтись они не должны из-за поля, которого раньше не было.
+FLAG_TOPO_MASK = FLAG_ONEWAY | FLAG_BRIDGE | FLAG_TUNNEL | FLAG_RING
+
+# Сколько полос считать, когда OSM молчит (а он молчит у 91 % дорог центра
+# Ташкента: 769 тегов lanes на 8 455 дорог). Числа ПОЛНЫЕ, как в самом теге:
+# у двусторонней дороги это сумма обоих направлений.
+DEFAULT_LANES = {1: (3, 6), 2: (3, 6), 3: (3, 6),
+                 4: (2, 4), 5: (2, 4), 6: (1, 2), 7: (1, 1)}
+# Ширина полосы по классу. Проспект шире улицы не только числом полос, но и
+# самой полосой. Дворовый проезд считается одной полосой, но 3.5 м для него
+# мало: разъезд в кармане — это те же 4.5, что и в натуре.
+LANE_METERS = {1: 3.75, 2: 3.75, 3: 3.75, 4: 3.5, 5: 3.5, 6: 3.5, 7: 4.5}
+# Потолок полос по классу. Не косметика: без него дворовый проезд с ошибочным
+# lanes=15 рисовался бы асфальтом в 67 м — шире, чем ворота вообще пускают, —
+# и одна опечатка в OSM залила бы квартал серым. Класс знает свой предел:
+# восьмиполосных дворов не бывает, как не бывает двухполосных магистралей,
+# у которых восемь полос указаны ошибкой.
+MAX_LANES_BY_CLASS = {1: 15, 2: 15, 3: 12, 4: 8, 5: 8, 6: 4, 7: 2}
+# Шире этого проезжей части не бывает: восемь полос по 3.75 — 30 м, запас
+# вдвое. Всё, что толще, — опечатка в теге lanes, и её ловят ворота.
+MAX_WIDTH_METERS = 60.0
+
+
+def clamp_lanes(code, lanes):
+    """Полосы в пределах, отпущенных классу и четырьмя битами."""
+    return max(0, min(int(lanes), MAX_LANES_BY_CLASS.get(code, 8), MAX_LANES))
+
+
+def lanes_of(flags):
+    """Число полос, зашитое в старшие биты. 0 — «OSM молчал»."""
+    return (flags & FLAG_LANES_MASK) >> FLAG_LANES_SHIFT
+
+
+def with_lanes(flags, lanes):
+    """Поставить число полос, не тронув биты характера."""
+    lanes = max(0, min(MAX_LANES, int(lanes)))
+    return (flags & ~FLAG_LANES_MASK) | (lanes << FLAG_LANES_SHIFT)
+
+
+def topo(flags):
+    """Только биты характера: по ним склеивают и сводят."""
+    return flags & FLAG_TOPO_MASK
+
+
+def road_lanes(properties, code, oneway):
+    """Полосы дороги: из тега, если он есть и правдоподобен, иначе по классу.
+
+    Тег бывает списком через точку с запятой («2;3» на участке с карманом) —
+    берём первое число, а не падаем: дорога важнее точности на полполосы.
+    """
+    raw = properties.get("lanes")
+    if raw is not None:
+        try:
+            value = int(float(str(raw).split(";")[0].strip()))
+        except (TypeError, ValueError):
+            value = 0
+        # Тег принимается, только если он вообще правдоподобен. 99 — это не
+        # «очень широкая дорога», это мусор, и подтягивать его к потолку
+        # класса значило бы выдумать данные из опечатки. Мусор — то же, что
+        # молчание: считаем по классу.
+        if 1 <= value <= MAX_LANES:
+            return clamp_lanes(code, value)
+    single, both = DEFAULT_LANES.get(code, (1, 2))
+    return clamp_lanes(code, single if oneway else both)
+
+
+def road_width_meters(code, lanes):
+    """Ширина проезжей части в метрах. Ровно эту формулу считает клиент —
+    сервер не возит ширину, он возит полосы (§5.1 плана конструктора)."""
+    if not lanes:
+        lanes = DEFAULT_LANES.get(code, (1, 2))[1]
+    return lanes * LANE_METERS.get(code, 3.5)
+
 # Острее этого угла склейка не идёт: улица не разворачивается на себя в узле.
 MAX_MERGE_TURN = 150.0
 
@@ -239,6 +324,10 @@ def merge_ways(roads):
             continue
         used[index] = True
         chain = list(points)
+        # Полос у склеенной улицы — максимум по участкам. Не среднее: ширина
+        # рисуется одна на всю линию, и занизить её значит провести асфальт
+        # уже перекрёстка, к которому улица расширялась.
+        chain_lanes = lanes_of(flags)
         one_way = bool(flags & FLAG_ONEWAY)
 
         def step(node, forward):
@@ -247,9 +336,15 @@ def merge_ways(roads):
             # Имя — часть характера линии. Две улицы, сходящиеся в узле
             # степени два, склеивать нельзя: получилась бы «улица», у которой
             # два названия, и подпись под курсором врала бы на половине пути.
+            # Сравниваем ТОЛЬКО биты характера. Полосы в старших битах —
+            # свойство участка, а не линии: улица, у которой перед
+            # перекрёстком добавили карман, не перестаёт быть одной улицей, а
+            # сравнение всего поля разорвало бы её надвое ровно там, где в OSM
+            # проставлен тег lanes.
             def suits(j):
                 return (not used[j] and roads[j][0] == code
-                        and roads[j][1] == flags and roads[j][3] == name)
+                        and topo(roads[j][1]) == topo(flags)
+                        and roads[j][3] == name)
             same = [j for j in (starts if forward else ends)[node] if suits(j)]
             back = [] if one_way else [
                 j for j in (ends if forward else starts)[node] if suits(j)]
@@ -276,6 +371,7 @@ def merge_ways(roads):
                 break
             j, reverse = found
             used[j] = True
+            chain_lanes = max(chain_lanes, lanes_of(roads[j][1]))
             tail = list(reversed(roads[j][2])) if reverse else roads[j][2]
             chain.extend(tail[1:])
         while not one_way:
@@ -284,9 +380,10 @@ def merge_ways(roads):
                 break
             j, reverse = found
             used[j] = True
+            chain_lanes = max(chain_lanes, lanes_of(roads[j][1]))
             head = roads[j][2] if reverse else list(reversed(roads[j][2]))
             chain = head[:-1] + chain
-        out.append((code, flags, chain, name))
+        out.append((code, with_lanes(flags, chain_lanes), chain, name))
     return out
 
 
@@ -387,7 +484,11 @@ def collapse_dual(roads, max_separation):
             if other == index or used[other]:
                 continue
             ocode, oflags, opoints, oname = roads[other]
-            if ocode != code or oflags != flags or meta[other][1] < 22:
+            # Опять только характер: у двух проезжих одного проспекта число
+            # полос часто разное (справа карман под правый поворот), и парой
+            # они от этого быть не перестают.
+            if (ocode != code or topo(oflags) != topo(flags)
+                    or meta[other][1] < 22):
                 continue
             # Имя надёжнее любой геометрии: две проезжие части одного проспекта
             # называются одинаково, а съезд вдоль него — иначе. Когда имена
@@ -409,7 +510,13 @@ def collapse_dual(roads, max_separation):
             continue
 
         axis = collapsed_axis(points, [roads[i][2] for i in partners], max_separation)
-        out.append((code, flags & ~FLAG_ONEWAY, axis, name))
+        # Полос у сведённой оси — СУММА проезжих. Костяк рисуется той же
+        # толщиной в метрах, что и детальная сеть, и взять полосы одной
+        # половины значило бы нарисовать проспект вдвое уже, чем он есть,
+        # ровно на том охвате, где он и должен читаться проспектом.
+        axis_lanes = clamp_lanes(
+            code, lanes_of(flags) + sum(lanes_of(roads[i][1]) for i in partners))
+        out.append((code, with_lanes(flags & ~FLAG_ONEWAY, axis_lanes), axis, name))
     return out
 
 
@@ -563,7 +670,9 @@ def encode(points):
     return out
 
 
-def flags_of(properties, points=None):
+def flags_of(properties, points=None, code=None):
+    """Биты записи. code передаётся, когда класс уже известен: без него полосы
+    считать не из чего, и старшие биты остаются нулём — «не задано»."""
     flags = 0
     # Кольцо распознаём и по тегу, и по геометрии: в OSM встречается и то, и
     # другое, а рисуются они одинаково.
@@ -578,6 +687,9 @@ def flags_of(properties, points=None):
         flags |= FLAG_BRIDGE
     if properties.get("tunnel") not in (None, "no"):
         flags |= FLAG_TUNNEL
+    if code is not None:
+        flags = with_lanes(flags, road_lanes(properties, code,
+                                             bool(flags & FLAG_ONEWAY)))
     return flags
 
 
@@ -664,6 +776,11 @@ def collect(source_path):
     """Прочитать geojsonl → список (code, flags, encoded, tile_keys)."""
     roads = []
     classes, flag_counts = Counter(), Counter()
+    # Сколько дорог принесли полосы тегом, а не получили их по классу. Число
+    # честное и неприятное — в центре Ташкента это 9 %, — и печатать его надо
+    # каждую сборку: как только оно начнёт расти, приближение по классу можно
+    # будет ужимать.
+    lanes_tagged = 0
     read = skipped = 0
 
     with open(source_path, encoding="utf-8") as handle:
@@ -702,11 +819,13 @@ def collect(source_path):
             # либо оно не нужно ни для подписи под курсором, ни для склейки, а
             # весит столько же, сколько у проспекта.
             name = properties.get("name", "") if code <= NAMED_MAX_CLASS else ""
-            roads.append((code, flags_of(properties, points), points, name))
+            if properties.get("lanes") is not None:
+                lanes_tagged += 1
+            roads.append((code, flags_of(properties, points, code), points, name))
             classes[properties["highway"]] += 1
             flag_counts[roads[-1][1]] += 1
 
-    return roads, classes, flag_counts, read, skipped
+    return roads, classes, flag_counts, read, skipped, lanes_tagged
 
 
 def sort_key(road):
@@ -1306,7 +1425,7 @@ def main():
                         help="geojsonl узлов: светофоры, лежачие (необязателен)")
     args = parser.parse_args()
 
-    raw, classes, flag_counts, read, skipped = collect(args.source)
+    raw, classes, flag_counts, read, skipped, lanes_tagged = collect(args.source)
     roads = generalise(raw, args.tolerance / 111_320.0)
     # Местность упрощаем грубее дорог: контур пруда не несёт геометрии, по
     # которой принимают решения за рулём.
@@ -1355,6 +1474,18 @@ def main():
     tunnels = sum(n for f, n in flag_counts.items() if f & FLAG_TUNNEL)
     oneways = sum(n for f, n in flag_counts.items() if f & FLAG_ONEWAY)
     print(f"односторонних: {oneways}, мостов: {bridges}, тоннелей: {tunnels}")
+    for label, group in (("сеть", roads), ("костяк", far)):
+        if not group:
+            continue
+        widths = sorted(road_width_meters(r[0], lanes_of(r[1])) for r in group)
+        widest = max(group, key=lambda r: road_width_meters(r[0], lanes_of(r[1])))
+        print(f"{label}: полос от {lanes_of(min(group, key=lambda r: lanes_of(r[1]))[1])} "
+              f"до {lanes_of(widest[1])}, ширина проезжей части "
+              f"{widths[0]:.1f}–{widths[-1]:.1f} м "
+              f"(медиана {widths[len(widths) // 2]:.1f})")
+    share = 100.0 * lanes_tagged / read if read else 0.0
+    print(f"полосы: тегом {lanes_tagged} из {read} ({share:.1f} %), "
+          f"остальным по классу")
     return 0
 
 

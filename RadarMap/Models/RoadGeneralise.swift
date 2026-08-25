@@ -174,6 +174,7 @@ nonisolated enum RoadGeneralise {
         for (index, line) in lines.enumerated() where !used[index] {
             used[index] = true
             var points = line.points
+            var lanes = line.lanes
             let currentKey = keys[index]
             let allowReversed = !line.isOneWay
 
@@ -186,6 +187,7 @@ nonisolated enum RoadGeneralise {
                                                   ? points[points.count - 2] : nil
                                           }) {
                 used[next.index] = true
+                lanes = max(lanes, lines[next.index].lanes)
                 let tail = next.reversed ? lines[next.index].points.reversed()
                                          : lines[next.index].points
                 points.append(contentsOf: tail.dropFirst())
@@ -200,6 +202,7 @@ nonisolated enum RoadGeneralise {
                                                           ? points[1] : nil
                                                   }) {
                     used[previous.index] = true
+                    lanes = max(lanes, lines[previous.index].lanes)
                     let head = previous.reversed ? lines[previous.index].points
                                                  : lines[previous.index].points.reversed()
                     points.insert(contentsOf: head.dropFirst().reversed(), at: 0)
@@ -208,6 +211,10 @@ nonisolated enum RoadGeneralise {
 
             var merged = line
             merged.points = points
+            // Полос у склеенной улицы — максимум по кускам, как и на сервере:
+            // ширина рисуется одна на всю линию, и занизить её значит провести
+            // асфальт уже перекрёстка, к которому улица расширялась.
+            merged.lanes = lanes
             result.append(merged)
         }
         return result
@@ -515,6 +522,10 @@ extension RoadGeneralise {
             // означали бы, что по ней можно ехать только в одну сторону.
             collapsed.isOneWay = false
             collapsed.isDual = true
+            // Полосы СКЛАДЫВАЮТСЯ: ось — это две проезжие части, и ширина
+            // одной половины нарисовала бы проспект вдвое уже, чем он есть.
+            // Ровно то же делает collapse_dual в server/build_roads.py.
+            collapsed.lanes = min(15, partners.reduce(line.lanes) { $0 + lines[$1].lanes })
             result.append(collapsed)
         }
         return result

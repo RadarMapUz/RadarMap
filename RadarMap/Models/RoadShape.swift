@@ -54,6 +54,57 @@ nonisolated enum RoadClass: Equatable {
         }
     }
 
+    /// Ширина одной полосы, метры.
+    ///
+    /// ВТОРАЯ ПОЛОВИНА КОНТРАКТА С СЕРВЕРОМ. Тайл возит не ширину, а число
+    /// полос (старшие биты flags), и ширину считает клиент — по этой таблице.
+    /// Она обязана совпадать с LANE_METERS в server/build_roads.py: разойдутся
+    /// — и панель конструктора будет рисовать одну дорогу, а телефон другую.
+    ///
+    /// Проспект шире улицы не только числом полос, но и самой полосой. Двор
+    /// считается одной полосой, но 3.5 м для него мало: разъезд в кармане —
+    /// те же 4.5, что и в натуре.
+    var laneMeters: Double {
+        switch self {
+        case .motorway, .trunk, .primary: return 3.75
+        case .secondary, .tertiary, .residential: return 3.5
+        case .service: return 4.5
+        case .pedestrian, .unknown: return 3.5
+        }
+    }
+
+    /// Сколько полос считать, когда тайл молчит (0 в старших битах). В OSM
+    /// тег lanes стоит у 9 % дорог центра Ташкента — это основной путь, а не
+    /// запасной. Числа ПОЛНЫЕ, как в самом теге: у двусторонней дороги это
+    /// сумма обоих направлений. Совпадает с DEFAULT_LANES на сервере.
+    func defaultLanes(isOneWay: Bool) -> Int {
+        switch self {
+        case .motorway, .trunk, .primary: return isOneWay ? 3 : 6
+        case .secondary, .tertiary: return isOneWay ? 2 : 4
+        case .residential: return isOneWay ? 1 : 2
+        case .service: return 1
+        case .pedestrian, .unknown: return isOneWay ? 1 : 2
+        }
+    }
+
+    /// Потолок полос для класса. Совпадает с MAX_LANES_BY_CLASS на сервере.
+    ///
+    /// Сервер и так подрезает полосы перед записью в тайл, и всё же потолок
+    /// стоит здесь тоже. Клиент не имеет права зависеть от чужой дисциплины:
+    /// тайл приходит по сети, живёт в кэше неделями и переживает любую
+    /// пересборку сервера. Без потолка одно поле в четыре бита превращается в
+    /// дворовый проезд шириной 67 м — асфальт во весь квартал.
+    var maxLanes: Int {
+        switch self {
+        case .motorway, .trunk: return 15
+        case .primary: return 12
+        case .secondary, .tertiary: return 8
+        case .residential: return 4
+        case .service: return 2
+        case .pedestrian, .unknown: return 4
+        }
+    }
+
     /// Проезжая часть. Камера стоит над дорогой, а не над тротуаром, поэтому
     /// пешеходный класс — это признак ошибки сопоставления в снапе (в базе v10
     /// таких 39). Профилю такой «дороги» верить нельзя: её направление и

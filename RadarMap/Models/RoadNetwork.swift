@@ -54,6 +54,18 @@ nonisolated struct RoadLine: Sendable {
     /// только там, где оно есть в OSM. Пусто — не «безымянная», а «мы не
     /// знаем», и подписывать нечего.
     var name: String = ""
+    /// Полос на дороге ВСЕГО, как в теге OSM: у двусторонней — сумма обоих
+    /// направлений. 0 — «тайл не сказал», и тогда берётся дефолт класса.
+    /// Едет старшими битами flags, а не отдельным полем записи — см.
+    /// `RoadTiles.decodeTile`.
+    var lanes: Int = 0
+
+    /// Ширина проезжей части, метры. Считается здесь, а не возится в тайле:
+    /// одно число полос дешевле числа метров и не расходится с классом.
+    var widthMeters: Double {
+        let counted = lanes > 0 ? lanes : kind.defaultLanes(isOneWay: isOneWay)
+        return Double(min(counted, kind.maxLanes)) * kind.laneMeters
+    }
 }
 
 /// Откуда берётся сеть. `nonisolated` и `Sendable`: запросы идут из отрисовки,

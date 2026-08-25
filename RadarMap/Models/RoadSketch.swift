@@ -47,6 +47,15 @@ nonisolated enum RoadSketch {
         /// направлений, сведённые в одну ось. Рисуется шире обычной — она и
         /// есть две дороги.
         var isDual = false
+        /// Полос всего, как в теге OSM. 0 — тайл не сказал, ширина берётся
+        /// дефолтом класса. От неё зависит толщина полотна в метрах.
+        var lanes = 0
+
+        /// Ширина проезжей части, метры.
+        var widthMeters: Double {
+            let counted = lanes > 0 ? lanes : kind.defaultLanes(isOneWay: isOneWay)
+            return Double(min(counted, kind.maxLanes)) * kind.laneMeters
+        }
     }
 
     /// Местность в сцене: вода, зелень, рельсы, кварталы — в метрах от опоры.
@@ -654,7 +663,7 @@ nonisolated enum RoadSketch {
                           maxY >= -radius, minY <= radius else { return nil }
                     return Line(points: points, kind: line.kind, level: line.level,
                                 isOneWay: line.isOneWay, isDetailed: line.isDetailed,
-                                isRing: line.isRing)
+                                isRing: line.isRing, lanes: line.lanes)
                 }
             // ГЕНЕРАЛИЗАЦИЯ — до бюджета, и порядок здесь важен дважды.
             //

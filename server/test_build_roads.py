@@ -679,5 +679,190 @@ class PointTests(unittest.TestCase):
         self.assertEqual(build_roads.collect_points("/нет/такого"), [])
 
 
+class LaneTests(unittest.TestCase):
+    """Полосы: старшие биты того же поля flags.
+
+    Здесь сторожатся две разные вещи. Первая — контракт с УЖЕ УСТАНОВЛЕННЫМИ
+    сборками: запись тайла обязана остаться длиной 3 или 4, потому что
+    RoadTiles.swift на пятом элементе возвращает nil на весь квадрат, и
+    телефон теряет не дорогу, а регион. Вторая — что новое поле не разорвало
+    склейку: улица, у которой в OSM на одном участке проставлен lanes, а на
+    соседнем нет, обязана остаться одной улицей.
+    """
+
+    def road(self, code, flags, coords, name=""):
+        return (code, flags, [(lon, lat) for lat, lon in coords], name)
+
+    def line_north(self, code, flags, lon, lat0, lat1, steps=4, name=""):
+        step = (lat1 - lat0) / steps
+        return self.road(code, flags,
+                         [(lat0 + step * i, lon) for i in range(steps + 1)], name)
+
+    # --- Упаковка
+
+    def test_lanes_survive_the_round_trip(self):
+        for lanes in range(build_roads.MAX_LANES + 1):
+            self.assertEqual(build_roads.lanes_of(build_roads.with_lanes(0, lanes)),
+                             lanes)
+
+    def test_lanes_do_not_disturb_the_character_bits(self):
+        flags = (build_roads.FLAG_ONEWAY | build_roads.FLAG_BRIDGE
+                 | build_roads.FLAG_TUNNEL | build_roads.FLAG_RING)
+        packed = build_roads.with_lanes(flags, 6)
+        self.assertEqual(build_roads.topo(packed), flags,
+                         "полосы не имеют права шевелить характер линии")
+        self.assertEqual(build_roads.lanes_of(packed), 6)
+
+    def test_lanes_are_clamped_into_their_four_bits(self):
+        # 16 полос в четыре бита не влезают и молча стали бы нулём, то есть
+        # «не задано», — а ноль рисуется дефолтом класса, и дорога вышла бы уже.
+        self.assertEqual(build_roads.lanes_of(build_roads.with_lanes(0, 99)),
+                         build_roads.MAX_LANES)
+        self.assertEqual(build_roads.lanes_of(build_roads.with_lanes(0, -3)), 0)
+
+    def test_old_client_masks_still_read_the_same_bits(self):
+        # Ровно то, что делает RoadTiles.swift:223. Установленная сборка не
+        # знает о полосах и обязана прочитать характер линии как раньше.
+        flags = build_roads.with_lanes(build_roads.FLAG_ONEWAY, 15)
+        self.assertTrue(flags & 1)
+        self.assertFalse(flags & 2)
+        self.assertFalse(flags & 4)
+        self.assertFalse(flags & 8)
+
+    # --- Откуда берутся полосы
+
+    def test_lanes_come_from_the_tag(self):
+        self.assertEqual(build_roads.road_lanes({"lanes": "4"}, 3, False), 4)
+        self.assertEqual(build_roads.road_lanes({"lanes": 2}, 6, True), 2)
+
+    def test_lanes_fall_back_to_the_class(self):
+        # OSM молчит у 91 % дорог центра — это основной путь, а не запасной.
+        self.assertEqual(build_roads.road_lanes({}, 3, False), 6)
+        self.assertEqual(build_roads.road_lanes({}, 3, True), 3)
+        self.assertEqual(build_roads.road_lanes({}, 6, False), 2)
+        self.assertEqual(build_roads.road_lanes({}, 7, False), 1)
+
+    def test_nonsense_tag_is_ignored_rather_than_fatal(self):
+        for value in ("абра", "", "0", "99", "-2", None):
+            lanes = build_roads.road_lanes({"lanes": value}, 4, False)
+            self.assertEqual(lanes, 4, f"на теге {value!r} ждём дефолт класса")
+
+    def test_list_tag_takes_the_first_number(self):
+        # «2;3» на участке с карманом. Падать из-за этого нельзя: дорога
+        # важнее полполосы.
+        self.assertEqual(build_roads.road_lanes({"lanes": "2;3"}, 4, False), 2)
+
+    def test_flags_carry_lanes_only_when_the_class_is_known(self):
+        props = {"lanes": "4"}
+        self.assertEqual(build_roads.lanes_of(build_roads.flags_of(props)), 0)
+        self.assertEqual(build_roads.lanes_of(build_roads.flags_of(props, None, 3)), 4)
+
+    # --- Ширина
+
+    def test_width_follows_class_and_lanes(self):
+        self.assertAlmostEqual(build_roads.road_width_meters(3, 6), 22.5)
+        self.assertAlmostEqual(build_roads.road_width_meters(6, 2), 7.0)
+        self.assertAlmostEqual(build_roads.road_width_meters(7, 1), 4.5)
+
+    def test_unset_lanes_still_give_a_width(self):
+        # Ноль означает «не задано», а не «дороги нет»: рисовать её всё равно
+        # надо, и ширина берётся дефолтом класса.
+        self.assertAlmostEqual(build_roads.road_width_meters(4, 0),
+                               build_roads.road_width_meters(4, 4))
+
+    def test_width_can_never_reach_the_gate(self):
+        # Ворота стоят на 60 м. Четыре бита физически не дают их достичь —
+        # то есть опечатка в теге не может уехать на телефоны в принципе.
+        widest = max(build_roads.road_width_meters(code, ceiling)
+                     for code, ceiling in build_roads.MAX_LANES_BY_CLASS.items())
+        self.assertLess(widest, build_roads.MAX_WIDTH_METERS)
+
+    def test_class_ceiling_survives_a_typo(self):
+        # lanes=15 у дворового проезда — опечатка, и без потолка она заливала
+        # бы квартал асфальтом в 67 м.
+        self.assertEqual(build_roads.road_lanes({"lanes": "15"}, 7, False), 2)
+        self.assertEqual(build_roads.road_lanes({"lanes": "15"}, 6, False), 4)
+        self.assertEqual(build_roads.road_lanes({"lanes": "15"}, 1, False), 15)
+
+    def test_plausible_tag_above_the_ceiling_is_trimmed_not_dropped(self):
+        # Десять полос у secondary — не мусор, а скорее ошибка класса в OSM.
+        # Подрезаем до потолка класса; это по-прежнему широкая дорога.
+        self.assertEqual(build_roads.road_lanes({"lanes": "10"}, 4, False), 8)
+
+    # --- Склейка и сведение
+
+    def test_street_still_merges_when_only_lanes_differ(self):
+        # Регрессия, ради которой в склейке стоит маска. В OSM тег lanes
+        # проставлен кусками; сравнение всего поля flags разорвало бы улицу
+        # ровно там, где кто-то был аккуратен.
+        a = self.line_north(3, build_roads.with_lanes(0, 4), 69.25, 41.300, 41.301)
+        b = self.line_north(3, build_roads.with_lanes(0, 2), 69.25, 41.301, 41.302)
+        merged = build_roads.merge_ways([a, b])
+        self.assertEqual(len(merged), 1, "разное число полос — всё ещё одна улица")
+
+    def test_merged_street_keeps_the_widest_count(self):
+        # Ширина рисуется одна на всю линию. Занизить её значит провести
+        # асфальт уже перекрёстка, к которому улица расширялась.
+        a = self.line_north(3, build_roads.with_lanes(0, 4), 69.25, 41.300, 41.301)
+        b = self.line_north(3, build_roads.with_lanes(0, 6), 69.25, 41.301, 41.302)
+        merged = build_roads.merge_ways([a, b])
+        self.assertEqual(build_roads.lanes_of(merged[0][1]), 6)
+
+    def test_character_bits_still_keep_streets_apart(self):
+        # Маска не должна стать дырой: мост и земля остаются разными линиями.
+        a = self.line_north(3, build_roads.with_lanes(0, 4), 69.25, 41.300, 41.301)
+        b = self.line_north(3, build_roads.with_lanes(build_roads.FLAG_BRIDGE, 4),
+                            69.25, 41.301, 41.302)
+        self.assertEqual(len(build_roads.merge_ways([a, b])), 2)
+
+    def test_collapsed_axis_sums_the_carriageways(self):
+        # Костяк рисуется той же толщиной в метрах, что и детальная сеть.
+        # Взять полосы одной половины значило бы нарисовать проспект вдвое
+        # уже, чем он есть, — на том самом охвате, где он и читается проспектом.
+        forward = self.line_north(3, build_roads.with_lanes(build_roads.FLAG_ONEWAY, 3),
+                                  69.2500, 41.300, 41.303, steps=6)
+        back = self.road(3, build_roads.with_lanes(build_roads.FLAG_ONEWAY, 3),
+                         [(41.303 - 0.0005 * i, 69.2502) for i in range(7)])
+        collapsed = build_roads.collapse_dual([forward, back], 45)
+        self.assertEqual(len(collapsed), 1)
+        self.assertEqual(build_roads.lanes_of(collapsed[0][1]), 6)
+
+    def test_carriageways_with_different_lanes_still_pair(self):
+        # Справа карман под правый поворот — обычное дело, парой они быть не
+        # перестают.
+        forward = self.line_north(3, build_roads.with_lanes(build_roads.FLAG_ONEWAY, 4),
+                                  69.2500, 41.300, 41.303, steps=6)
+        back = self.road(3, build_roads.with_lanes(build_roads.FLAG_ONEWAY, 3),
+                         [(41.303 - 0.0005 * i, 69.2502) for i in range(7)])
+        self.assertEqual(len(build_roads.collapse_dual([forward, back], 45)), 1)
+
+    # --- Контракт формата
+
+    def test_record_never_grows_a_fifth_element(self):
+        # Тот самый запрет. Пятый элемент не расширяет формат, а роняет разбор
+        # ВСЕГО тайла у установленных сборок (RoadTiles.swift:193).
+        with tempfile.TemporaryDirectory() as work:
+            roads = [self.road(3, build_roads.with_lanes(build_roads.FLAG_ONEWAY, 6),
+                               [(41.300, 69.25), (41.302, 69.25)], "Навои")]
+            build_roads.write_tiles(roads, work, 0.05, [], [], [], roads)
+            for name in os.listdir(work):
+                if not name.startswith(("tile_", "road2_")):
+                    continue
+                with open(os.path.join(work, name), encoding="utf-8") as handle:
+                    payload = json.load(handle)
+                for entry in payload["roads"]:
+                    self.assertIn(len(entry), (3, 4),
+                                  f"{name}: запись длиной {len(entry)} убьёт тайл целиком")
+
+    def test_lanes_reach_the_tile(self):
+        with tempfile.TemporaryDirectory() as work:
+            roads = [self.road(3, build_roads.with_lanes(0, 6),
+                               [(41.300, 69.25), (41.302, 69.25)])]
+            build_roads.write_tiles(roads, work, 0.05, [], [], [], [])
+            with open(os.path.join(work, "tile_262_498.json"), encoding="utf-8") as handle:
+                tile = json.load(handle)
+            self.assertEqual(build_roads.lanes_of(tile["roads"][0][1]), 6)
+
+
 if __name__ == "__main__":
     unittest.main()

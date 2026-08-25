@@ -220,7 +220,14 @@ nonisolated enum RoadTiles {
 
     static func decodeTile(_ data: Data) -> [RoadLine]? {
         guard let entries = decodeEntries(data) else { return nil }
-        // Биты flags: 1 = одностороннее, 2 = мост, 4 = тоннель, 8 = кольцо.
+        // Биты flags: 1 = одностороннее, 2 = мост, 4 = тоннель, 8 = кольцо,
+        // 16–128 — число полос.
+        //
+        // Полосы приехали СТАРШИМИ БИТАМИ, а не пятым элементом записи, и это
+        // не экономия. Разбор выше принимает записи длиной 3 или 4; пятый
+        // элемент вернул бы nil на ВЕСЬ тайл, то есть установленная сборка
+        // потеряла бы не дорогу, а регион. Старшие биты сборка, не знающая о
+        // полосах, просто не видит: она читает флаги масками.
         return entries.map { entry in
             RoadLine(points: entry.points,
                      kind: roadClass(code: entry.code),
@@ -228,7 +235,8 @@ nonisolated enum RoadTiles {
                      isOneWay: entry.flags & 1 != 0 && entry.flags & 8 == 0,
                      isDetailed: true,
                      isRing: entry.flags & 8 != 0,
-                     name: entry.name)
+                     name: entry.name,
+                     lanes: (entry.flags >> 4) & 0b1111)
         }
     }
 }

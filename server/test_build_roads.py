@@ -864,5 +864,124 @@ class LaneTests(unittest.TestCase):
             self.assertEqual(build_roads.lanes_of(tile["roads"][0][1]), 6)
 
 
+class MarkingTests(unittest.TestCase):
+    """Разметка: зебры и стоп-линии.
+
+    Разметка — не значок, а ПОПЕРЕЧНАЯ ЧЕРТА, и держится она на двух числах,
+    которых у точки раньше не было: азимут дороги под ней и ширина проезжей
+    части. Без первого черта ляжет вдоль дороги вместо поперёк, без второго —
+    не дотянется до кромки. Оба числа известны ровно в момент посадки на ось и
+    больше нигде: дальше по конвейеру дороги уже нет.
+
+    Отдельно сторожится то, что переходы НЕ сводятся в один объект. Светофоры
+    перекрёстка сводить надо — их четыре по подъездам, и четыре значка в одном
+    пятне это каша. Переходов тоже четыре, но каждый лежит на своём подъезде и
+    чертится поперёк своей проезжей части; сведи их — вместо четырёх зебр
+    получится одна посреди перекрёстка.
+    """
+
+    def road(self, code, flags, coords, name=""):
+        return (code, flags, [(lon, lat) for lat, lon in coords], name)
+
+    # --- Упаковка
+
+    def test_azimuth_survives_the_round_trip(self):
+        for degrees in range(0, 360, build_roads.PFLAG_AZIMUTH_STEP):
+            flags = build_roads.point_flags(degrees, 0)
+            self.assertEqual(build_roads.point_azimuth(flags), degrees)
+
+    def test_azimuth_is_rounded_to_its_step(self):
+        # Полтора градуса поперечная черта не показывает.
+        self.assertEqual(build_roads.point_azimuth(build_roads.point_flags(91, 0)), 90)
+        self.assertEqual(build_roads.point_azimuth(build_roads.point_flags(359, 0)), 0)
+
+    def test_width_survives_the_round_trip(self):
+        for meters in (0, 7, 22, 45, 63):
+            flags = build_roads.point_flags(0, meters)
+            self.assertEqual(build_roads.point_width(flags), meters)
+
+    def test_azimuth_and_width_do_not_collide(self):
+        flags = build_roads.point_flags(273, 22)
+        self.assertEqual(build_roads.point_azimuth(flags), 273)
+        self.assertEqual(build_roads.point_width(flags), 22)
+
+    def test_absurd_width_is_clamped_not_wrapped(self):
+        # Шесть бит переполняются молча, и ширина 64 стала бы нулём — то есть
+        # черта не нарисовалась бы вовсе там, где дорога шире всего.
+        self.assertEqual(build_roads.point_width(build_roads.point_flags(0, 999)),
+                         build_roads.PFLAG_WIDTH_MASK)
+
+    # --- Азимут берётся у сегмента, а не у линии
+
+    def test_azimuth_comes_from_the_nearest_segment(self):
+        # Улица после склейки бывает длиной в километр с поворотом. Общее
+        # направление её концов к месту, где стоит зебра, отношения не имеет.
+        corner = self.road(3, 0, [(41.300, 69.250), (41.310, 69.250),
+                                  (41.310, 69.270)])
+        # Точка у ВЕРХНЕГО, широтного плеча: там дорога идёт на восток.
+        crossing = (build_roads.POINT_CROSSING, 0, [(69.260, 41.310)])
+        snapped, dropped = build_roads.snap_points([crossing], [corner])
+        self.assertEqual(dropped, 0)
+        azimuth = build_roads.point_azimuth(snapped[0][1])
+        self.assertAlmostEqual(azimuth, 90, delta=build_roads.PFLAG_AZIMUTH_STEP,
+                               msg="азимут взят у линии целиком, а не у сегмента")
+
+    def test_width_comes_from_the_road_underneath(self):
+        avenue = self.road(3, build_roads.with_lanes(0, 6),
+                           [(41.300, 69.250), (41.310, 69.250)])
+        crossing = (build_roads.POINT_CROSSING, 0, [(69.2501, 41.305)])
+        snapped, _ = build_roads.snap_points([crossing], [avenue])
+        self.assertEqual(build_roads.point_width(snapped[0][1]),
+                         round(build_roads.road_width_meters(3, 6)))
+
+    def test_stop_line_gets_the_same_two_numbers(self):
+        # Стоп-линия была точкой без азимута и ширины, то есть нарисовать её
+        # было нечем.
+        street = self.road(4, build_roads.with_lanes(0, 4),
+                           [(41.300, 69.250), (41.310, 69.250)])
+        stop = (build_roads.POINT_STOP_LINE, 0, [(69.2501, 41.305)])
+        snapped, _ = build_roads.snap_points([stop], [street])
+        self.assertGreater(build_roads.point_width(snapped[0][1]), 0)
+        self.assertAlmostEqual(build_roads.point_azimuth(snapped[0][1]), 0,
+                               delta=build_roads.PFLAG_AZIMUTH_STEP)
+
+    # --- Сведение
+
+    def test_crossings_of_one_junction_stay_four(self):
+        # Четыре подъезда перекрёстка — четыре зебры, каждая на своей проезжей.
+        near = [(69.2500, 41.3001), (69.2500, 41.2999),
+                (69.2501, 41.3000), (69.2499, 41.3000)]
+        points = [(build_roads.POINT_CROSSING, 0, [p]) for p in near]
+        self.assertEqual(len(build_roads.cluster_points(points)), 4)
+
+    def test_traffic_lights_of_one_junction_still_become_one(self):
+        # Правило для переходов не должно отменить правило для светофоров.
+        near = [(69.2500, 41.3001), (69.2500, 41.2999),
+                (69.2501, 41.3000), (69.2499, 41.3000)]
+        points = [(build_roads.POINT_TRAFFIC_LIGHT, 0, [p]) for p in near]
+        self.assertEqual(len(build_roads.cluster_points(points)), 1)
+
+    # --- Контракт с клиентом
+
+    def test_crossing_is_read_from_the_tag(self):
+        self.assertEqual(build_roads.point_kind({"highway": "crossing"}),
+                         build_roads.POINT_CROSSING)
+
+    def test_marking_reaches_the_tile_with_its_numbers(self):
+        with tempfile.TemporaryDirectory() as work:
+            roads = [self.road(3, build_roads.with_lanes(0, 6),
+                               [(41.300, 69.25), (41.310, 69.25)])]
+            crossing = (build_roads.POINT_CROSSING,
+                        build_roads.point_flags(0, 22), [(69.25, 41.305)])
+            build_roads.write_tiles(roads, work, 0.05, [], [crossing], [], roads)
+            name = [n for n in os.listdir(work) if n.endswith("_p.json")][0]
+            with open(os.path.join(work, name), encoding="utf-8") as handle:
+                tile = json.load(handle)
+            entry = tile["roads"][0]
+            self.assertEqual(entry[0], build_roads.POINT_CROSSING)
+            self.assertEqual(build_roads.point_azimuth(entry[1]), 0)
+            self.assertEqual(build_roads.point_width(entry[1]), 22)
+
+
 if __name__ == "__main__":
     unittest.main()

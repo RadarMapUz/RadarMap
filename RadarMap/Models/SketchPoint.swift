@@ -27,6 +27,8 @@ nonisolated struct SketchPoint: Sendable {
         case speedBump = 2
         case stopLine = 3
         case uTurn = 4
+        /// Пешеходный переход. Не значок, а КРАСКА — см. `isPaint`.
+        case crossing = 5
 
         /// До какого охвата объект имеет смысл.
         ///
@@ -45,12 +47,44 @@ nonisolated struct SketchPoint: Sendable {
         /// надо: на охвате района светофоры — это и есть карта перекрёстков,
         /// по ней читается, где город, а где проезд насквозь.
         var maxSpanMeters: Double {
-            self == .trafficLight ? RoadSketch.maxSpanMeters : RoadSketch.farNetworkSpan
+            switch self {
+            case .trafficLight: return RoadSketch.maxSpanMeters
+            // Краска мельче значка на порядок: дальше сотни метров зебра —
+            // это пиксель, а стоп-линия и вовсе волос. Решение по ним
+            // принимают на подъезде, и раньше они не нужны.
+            case .crossing: return 120
+            case .stopLine: return 150
+            default: return RoadSketch.farNetworkSpan
+            }
         }
+
+        /// Краска на асфальте, а не значок над ним.
+        ///
+        /// Разница не косметическая, она определяет СЛОЙ. Значок едет отдельным
+        /// слоем, которому возвращён курс, — иначе светофор ложится набок на
+        /// повороте. Краска обязана поворачиваться ВМЕСТЕ с дорогой: зебра,
+        /// которой вернули курс, встала бы поперёк собственного перехода.
+        /// Поэтому краска живёт в растре, рядом с осевой и разделительными.
+        var isPaint: Bool {
+            self == .crossing || self == .stopLine
+        }
+
+        /// Есть ли чем нарисовать вид, если краска не вышла.
+        ///
+        /// Стоп-линия жила пиктограммой до того, как у точки появились азимут
+        /// и ширина, и обязана жить ею дальше там, где сервер дороги под точкой
+        /// не нашёл: иначе объект, который раньше было видно, просто исчезнет.
+        /// У зебры запасного варианта нет — значка для неё не существует.
+        var hasGlyph: Bool { self != .crossing }
     }
 
     var coordinate: CLLocationCoordinate2D
     var kind: Kind
+    /// Азимут дороги под точкой, градусы. Краска чертится ПОПЕРЁК него.
+    var azimuthDegrees: Double = 0
+    /// Ширина проезжей части под точкой, метры. 0 — сервер не измерил, и
+    /// чертить нечем.
+    var widthMeters: Double = 0
 }
 
 extension SketchPoint: Equatable {
@@ -58,5 +92,7 @@ extension SketchPoint: Equatable {
         lhs.kind == rhs.kind
             && lhs.coordinate.latitude == rhs.coordinate.latitude
             && lhs.coordinate.longitude == rhs.coordinate.longitude
+            && lhs.azimuthDegrees == rhs.azimuthDegrees
+            && lhs.widthMeters == rhs.widthMeters
     }
 }

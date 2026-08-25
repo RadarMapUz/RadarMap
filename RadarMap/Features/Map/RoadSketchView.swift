@@ -918,6 +918,14 @@ private struct SketchRaster: View, Equatable {
                 }
             }
 
+            // Краска на асфальте — ПОСЛЕДНИЙ дорожный слой: она лежит поверх
+            // полотна, разделительных и осевой, потому что в жизни лежит
+            // поверх асфальта. Уровня у неё нет: зебра на мосту рисуется вместе
+            // с мостом, а под мостом её и не бывает.
+            for marking in scene.markings {
+                paint(context: &context, marking: marking, at: at)
+            }
+
             // Трек — самый бледный слой: он объясняет, откуда я приехал, и не
             // должен спорить с тем, что впереди.
             if scene.track.count >= 2 {
@@ -1049,6 +1057,45 @@ private struct SketchRaster: View, Equatable {
     /// как в оповещениях.
     private func width(for line: RoadSketch.Line) -> CGFloat {
         max(metricWidth(for: line), strokeScale * base(for: line) * zoomWidth)
+    }
+
+    /// Зебра и стоп-линия.
+    ///
+    /// И то и другое — ОДИН отрезок поперёк проезжей части; разница только в
+    /// том, чем его обвести. Зебра — толстый штрих с пунктиром ПОПЕРЁК себя:
+    /// разрывы пунктира и есть промежутки между полосами зебры, то есть
+    /// рисовать каждую полосу отдельным прямоугольником не нужно. Стоп-линия —
+    /// тонкий сплошной штрих того же отрезка.
+    ///
+    /// Ни зебра, ни стоп-линия не масштабируются в пунктах: у них есть
+    /// настоящие размеры в метрах, и на схеме они обязаны выглядеть теми же
+    /// четырьмя метрами, что и в натуре.
+    private func paint(context: inout GraphicsContext, marking: RoadSketch.Marking,
+                       at transform: (CGPoint) -> CGPoint) {
+        let across = marking.ends
+        let width = CGFloat(marking.widthMeters) * k
+        // Черта в несколько пунктов — не разметка, а сор в растре.
+        guard width >= RoadSketch.markingMinPoints * strokeScale else { return }
+        var line = Path()
+        line.move(to: transform(across.0))
+        line.addLine(to: transform(across.1))
+
+        switch marking.kind {
+        case .crossing:
+            let stripe = max(RoadSketch.zebraStripeMeters * k,
+                             RoadSketch.zebraStripeMinPoints * strokeScale)
+            context.stroke(line, with: .color(SketchPalette.marking),
+                           style: .init(lineWidth: RoadSketch.zebraDepthMeters * k,
+                                        lineCap: .butt,
+                                        dash: [stripe, stripe]))
+        case .stopLine:
+            context.stroke(line, with: .color(SketchPalette.marking),
+                           style: .init(lineWidth: max(1.2 * strokeScale,
+                                                       RoadSketch.stopLineMeters * k),
+                                        lineCap: .butt))
+        default:
+            break
+        }
     }
 
     /// Разделительные между полосами.

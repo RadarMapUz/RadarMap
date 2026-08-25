@@ -76,6 +76,32 @@ nonisolated enum RoadSketch {
         var kind: SketchPoint.Kind
     }
 
+    /// Краска на асфальте: зебра, стоп-линия. Отрезок ПОПЕРЁК проезжей части,
+    /// заданный серединой, направлением дороги и её шириной — в метрах от
+    /// опоры, как и всё остальное в сцене.
+    ///
+    /// Отдельно от Mark, потому что рисуется в другом слое: краска живёт в
+    /// растре и поворачивается вместе с дорогой, значок — в слое, которому
+    /// курс возвращён, чтобы он стоял прямо.
+    struct Marking: Equatable {
+        var point: CGPoint
+        var kind: SketchPoint.Kind
+        /// Направление дороги, градусы (0 — на север). Черта идёт поперёк.
+        var azimuthDegrees: Double
+        var widthMeters: Double
+
+        /// Концы черты в метрах от опоры. Азимут — компасный, поэтому вдоль
+        /// дороги это (sin, cos), а поперёк — (cos, −sin).
+        var ends: (CGPoint, CGPoint) {
+            let radians = azimuthDegrees * .pi / 180
+            let half = CGFloat(widthMeters) / 2
+            let across = CGPoint(x: CoreGraphics.cos(radians) * half,
+                                 y: -CoreGraphics.sin(radians) * half)
+            return (CGPoint(x: point.x - across.x, y: point.y - across.y),
+                    CGPoint(x: point.x + across.x, y: point.y + across.y))
+        }
+    }
+
     /// Камера в сцене: id нужен, чтобы вью подсветила тревожную кольцом.
     struct CameraDot: Equatable {
         var id: Int
@@ -89,6 +115,8 @@ nonisolated enum RoadSketch {
         /// Местность под дорогами. Пусто — слои не приехали, и это нормальное
         /// состояние: схема рисует то, что знает.
         var areas: [Area] = []
+        /// Краска на асфальте: зебры и стоп-линии. Рисуется в растре.
+        var markings: [Marking] = []
         /// Светофоры, развороты и прочее, нарисованное руками.
         var marks: [Mark] = []
         /// Окрестная дорожная сеть — перекрёстки, развязки, параллельные улицы.
@@ -285,6 +313,29 @@ nonisolated enum RoadSketch {
     /// разметка перестаёт читаться. Шесть пунктов — граница, ниже которой
     /// пунктир превращается в рябь.
     static let laneDividerMinLanePoints: CGFloat = 6
+
+    // MARK: - Краска на асфальте
+    //
+    // Размеры настоящие, в метрах: разметка обязана выглядеть тем же, чем она
+    // является. Зебра в Узбекистане — четыре метра глубиной, полосы примерно
+    // по полметра; стоп-линия — сорок сантиметров.
+
+    /// Глубина зебры вдоль дороги, метры.
+    static let zebraDepthMeters: CGFloat = 4
+    /// Ширина одной полосы зебры и промежутка между ними, метры.
+    static let zebraStripeMeters: CGFloat = 0.55
+    /// …но не тоньше этого на экране.
+    ///
+    /// Полметра на охвате схемы — это полтора пункта, и сглаживание сливает
+    /// такие полосы в ровное серое пятно: зебра перестаёт быть зеброй ровно
+    /// там, где она нужна. Схема не фотография; когда честный размер уходит
+    /// под порог различимости, читаемость старше масштаба — тем же правилом
+    /// живёт ширина линий (zoomWidth) и толщина стоп-линии.
+    static let zebraStripeMinPoints: CGFloat = 2.2
+    /// Толщина стоп-линии, метры.
+    static let stopLineMeters: CGFloat = 0.4
+    /// Короче этого на экране разметка — сор в растре, а не черта.
+    static let markingMinPoints: CGFloat = 12
 
     /// Смещения разделительных от оси дороги, от края к центру.
     ///
@@ -640,11 +691,22 @@ nonisolated enum RoadSketch {
         // Точечные объекты: только те, что видны на этом охвате, и только в
         // круге сцены. Их немного по определению — перебор дешевле индекса.
         if !points.isEmpty {
-            scene.marks = points.compactMap { mark in
-                guard mark.kind.maxSpanMeters >= spanMeters else { return nil }
+            for mark in points where mark.kind.maxSpanMeters >= spanMeters {
                 let point = local(mark.coordinate)
-                guard hypot(point.x, point.y) <= radius else { return nil }
-                return Mark(point: point, kind: mark.kind)
+                guard hypot(point.x, point.y) <= radius else { continue }
+                // Развилка по СЛОЮ, а не по виду: краска и значок рисуются
+                // разными проходами и по-разному относятся к курсу.
+                if mark.kind.isPaint, mark.widthMeters > 0 {
+                    scene.markings.append(Marking(point: point, kind: mark.kind,
+                                                  azimuthDegrees: mark.azimuthDegrees,
+                                                  widthMeters: mark.widthMeters))
+                } else if mark.kind.hasGlyph {
+                    // Сюда попадает и краска без ширины: сервер не нашёл дороги
+                    // под точкой, чертить нечем. Стоп-линия при этом остаётся
+                    // видимой значком, как была до появления разметки, — объект,
+                    // который раньше было видно, исчезать не должен.
+                    scene.marks.append(Mark(point: point, kind: mark.kind))
+                }
             }
         }
 

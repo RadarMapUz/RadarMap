@@ -61,11 +61,18 @@ osmium export areas.osm.pbf -f geojsonseq \
     --geometry-types=linestring,polygon -o areas.geojsonl --overwrite
 echo "    местности в экстракте: $(wc -l < areas.geojsonl)"
 
-# Точечные объекты: светофоры, стоп-знаки, лежачие полицейские. Это УЗЛЫ, а не
-# линии, поэтому фильтр по n/ и экспорт точками — линейный экспорт их просто не
-# видит. В Ташкенте одних светофоров 1 899, и все они уже лежат в этом же .pbf.
+# Точечные объекты: светофоры, стоп-знаки, лежачие полицейские, пешеходные
+# переходы. Это УЗЛЫ, а не линии, поэтому фильтр по n/ и экспорт точками —
+# линейный экспорт их просто не видит. В Ташкенте одних светофоров 1 899, и все
+# они уже лежат в этом же .pbf.
+#
+# Переходы берём УЗЛАМИ, а не линиями footway=crossing. Узел лежит ровно на
+# оси проезжей части, то есть там, где чертить; линия перехода пересекает её
+# и даёт две точки на тротуарах, между которыми ещё надо искать середину.
+# Азимут всё равно считается по дороге, а не по линии перехода, — линия не
+# добавляет ничего, кроме работы. В центре Ташкента это 809 узлов.
 osmium tags-filter uzbekistan.osm.pbf \
-    n/highway=traffic_signals,stop n/traffic_calming \
+    n/highway=traffic_signals,stop,crossing n/traffic_calming \
     -o points.osm.pbf --overwrite
 osmium export points.osm.pbf -f geojsonseq --geometry-types=point \
     -o points.geojsonl --overwrite

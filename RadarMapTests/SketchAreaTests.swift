@@ -206,9 +206,22 @@ final class SketchAreaTests: XCTestCase {
         // границе детальной сети.
         XCTAssertEqual(SketchPoint.Kind.trafficLight.maxSpanMeters,
                        RoadSketch.maxSpanMeters)
-        for kind in SketchPoint.Kind.allCases where kind != .trafficLight {
+        for kind in SketchPoint.Kind.allCases
+        where kind != .trafficLight && !kind.isPaint {
             XCTAssertEqual(kind.maxSpanMeters, RoadSketch.farNetworkSpan,
                            "\(kind) живёт ровно до костяка района")
+        }
+    }
+
+    func testPaintDiesOutBeforeTheDetailedNetworkDoes() {
+        // Краска — исключение из правила выше, и в другую сторону. Значок
+        // размером с палец читается до самой границы детальной сети; черта
+        // шириной в сорок сантиметров дальше сотни метров — волос, а зебра —
+        // серое пятно. Решение по ним принимают на подъезде, и держать их
+        // дольше значит платить растром за то, чего не видно.
+        for kind in SketchPoint.Kind.allCases where kind.isPaint {
+            XCTAssertLessThan(kind.maxSpanMeters, RoadSketch.farNetworkSpan,
+                              "\(kind) — краска, она обязана гаснуть раньше сети")
         }
     }
 

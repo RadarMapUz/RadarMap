@@ -177,7 +177,13 @@ nonisolated enum RoadTiles {
         return raw.compactMap { entry in
             guard let kind = SketchPoint.Kind(rawValue: entry.code),
                   let point = entry.points.first else { return nil }
-            return SketchPoint(coordinate: point, kind: kind)
+            // Биты записи точки: 0–6 — азимут дороги шагом 3°, 7–12 — ширина
+            // проезжей части целыми метрами. Контракт с point_flags в
+            // build_roads.py. Оба числа известны серверу в момент посадки
+            // точки на ось и больше нигде: дальше по конвейеру дороги нет.
+            return SketchPoint(coordinate: point, kind: kind,
+                               azimuthDegrees: Double(entry.flags & 0x7F) * 3,
+                               widthMeters: Double((entry.flags >> 7) & 0x3F))
         }
     }
 

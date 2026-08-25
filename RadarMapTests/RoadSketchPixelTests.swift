@@ -183,7 +183,96 @@ final class RoadSketchPixelTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(band.length, 2, "двор пропал с экрана вовсе")
     }
 
-    // MARK: - Разметка
+    // MARK: - Краска на асфальте
+
+    /// Сколько светлых пятен в самой «полосатой» строке картинки.
+    ///
+    /// Строку зебры ищем перебором, а не считаем: сцена проходит через наклон
+    /// и поворот, и вычислять, куда именно легла черта, значило бы повторять
+    /// в тесте всю математику вью. Самая полосатая строка — это и есть зебра.
+    private func stripiestRow(crossingAzimuth azimuth: Double) throws -> Int {
+        var scene = RoadSketch.Scene()
+        scene.spanBucket = RoadSketch.minSpanMeters
+        scene.spanAtBuild = RoadSketch.minSpanMeters
+        scene.network = [
+            RoadSketch.Line(points: [CGPoint(x: 0, y: -200), CGPoint(x: 0, y: 200)],
+                            kind: .primary, level: 0, isOneWay: false,
+                            isDetailed: true, lanes: 6),
+        ]
+        // Переход ВПЕРЕДИ, а не под курсором: на месте «я» его перекрыл бы
+        // сам курсор, и мерили бы мы его, а не зебру.
+        scene.markings = [
+            RoadSketch.Marking(point: CGPoint(x: 0, y: 60), kind: .crossing,
+                               azimuthDegrees: azimuth, widthMeters: 22.5),
+        ]
+
+        let view = RoadSketchView(scene: scene, state: Self.state)
+            .frame(width: side, height: side)
+            .background(SketchPalette.ground)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 1
+        let image = try XCTUnwrap(renderer.uiImage)
+        let cgImage = try XCTUnwrap(image.cgImage)
+
+        let width = cgImage.width, height = cgImage.height
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: width * height * 4)
+        buffer.initialize(repeating: 0, count: width * height * 4)
+        defer { buffer.deallocate() }
+        let context = try XCTUnwrap(CGContext(
+            data: buffer, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        // Ищем только там, где дорога, и только в верхней части кадра.
+        // Иначе в «самую полосатую строку» попадает интерфейс: компас в правом
+        // верхнем углу, линейка с подписью «50 м» в левом нижнем и курсор «я» —
+        // всё это белое, и пятен в их строках больше, чем в любой зебре.
+        var best = 0
+        let from = width / 2 - 60, through = width / 2 + 60
+        for y in 0..<(height * 2 / 5) {
+            let row = (from...through).map { x -> Double in
+                let i = (y * width + x) * 4
+                return (Double(buffer[i]) + Double(buffer[i + 1])
+                        + Double(buffer[i + 2])) / 765.0
+            }
+            // Краска ярче и асфальта, и любой линии вдоль дороги.
+            best = max(best, peaks(row, above: 0.5))
+        }
+        return best
+    }
+
+    func testZebraReachesTheRaster() throws {
+        // Полос зебры поперёк 22.5-метровой проезжей части — около двадцати.
+        // Точное число зависит от сглаживания, поэтому сторожим порядок: ни
+        // осевая, ни разделительные столько пятен в одной строке дать не могут.
+        XCTAssertGreaterThan(try stripiestRow(crossingAzimuth: 0), 8,
+                             "зебра не доехала до растра")
+    }
+
+    func testZebraLiesAcrossTheRoadNotAlongIt() throws {
+        // Тот же переход, повёрнутый на 90°, ложится ВДОЛЬ дороги — и строка
+        // пересекает его один раз, а не двадцать. Ошибка в азимуте не роняет
+        // ничего и видна только так.
+        let across = try stripiestRow(crossingAzimuth: 0)
+        let along = try stripiestRow(crossingAzimuth: 90)
+        XCTAssertGreaterThan(across, along * 3,
+                             "черта легла вдоль дороги вместо поперёк")
+    }
+
+    func testMarkingWithoutWidthIsNotDrawn() throws {
+        // Сервер не нашёл дороги под точкой — чертить нечем. Черта в ноль
+        // метров была бы невидимой строкой в бюджете растра.
+        var scene = RoadSketch.Scene()
+        scene.spanBucket = RoadSketch.minSpanMeters
+        let point = SketchPoint(coordinate: .init(latitude: 41.31, longitude: 69.25),
+                                kind: .crossing, azimuthDegrees: 0, widthMeters: 0)
+        XCTAssertTrue(point.kind.isPaint)
+        XCTAssertFalse(point.kind.hasGlyph)
+        XCTAssertTrue(scene.markings.isEmpty)
+    }
+
+    // MARK: - Разметка вдоль дороги
 
     func testMarkingsCountOneLessThanLanes() throws {
         // Главное утверждение о разметке, и оно же самое простое: шесть полос

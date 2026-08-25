@@ -593,7 +593,18 @@ def collapsed_axis(points, partners, max_separation):
 
 
 def _nearest_on(point, line):
-    best, best_distance = line[0], float("inf")
+    """Ближайшая точка на ломаной. Совместимость: возвращает только точку."""
+    return _nearest_segment_on(point, line)[0]
+
+
+def _nearest_segment_on(point, line):
+    """Ближайшая точка на ломаной И азимут ТОГО САМОГО сегмента.
+
+    Азимут берётся у сегмента, а не у линии целиком (_bearing по концам):
+    улица после склейки бывает длиной в километр с поворотами, и её общее
+    направление к месту, где стоит зебра, отношения не имеет.
+    """
+    best, best_distance, best_bearing = line[0], float("inf"), 0.0
     for i in range(1, len(line)):
         a, b = line[i - 1], line[i]
         lon_scale = math.cos(math.radians(a[1]))
@@ -605,7 +616,8 @@ def _nearest_on(point, line):
         distance = meters_between(point, candidate)
         if distance < best_distance:
             best, best_distance = candidate, distance
-    return best
+            best_bearing = _bearing_from(a, b)
+    return best, best_bearing
 
 
 def tile_key(lat, lon, degrees=TILE_DEGREES):
@@ -1046,9 +1058,55 @@ def build_blocks(roads, min_area=BLOCK_MIN_AREA, max_area=BLOCK_MAX_AREA):
 # Коды — контракт с клиентом (SketchPoint.Kind). Значения не переставляются:
 # установленная сборка читает их как есть, а незнакомый код молча пропускает.
 POINT_TRAFFIC_LIGHT, POINT_SPEED_BUMP, POINT_STOP_LINE, POINT_U_TURN = 1, 2, 3, 4
+# Пешеходный переход. В OSM их 809 узлами только в центре Ташкента — рисовать
+# такое руками было бы повторением ошибки со светофорами (закон 4 плана).
+POINT_CROSSING = 5
 
 POINT_TAGS = {("highway", "traffic_signals"): POINT_TRAFFIC_LIGHT,
-              ("highway", "stop"): POINT_STOP_LINE}
+              ("highway", "stop"): POINT_STOP_LINE,
+              ("highway", "crossing"): POINT_CROSSING}
+
+# --- Азимут и ширина в битах записи точки.
+#
+# Зебра и стоп-линия — это не значок, а ПОПЕРЕЧНАЯ ЧЕРТА. Без азимута она
+# ляжет вдоль дороги вместо поперёк, без ширины — не дотянется до кромки или
+# вылезет на газон. Оба числа известны в момент посадки точки на ось: дорогу
+# мы там и нашли. Возить их отдельными полями записи нельзя по той же причине,
+# по какой не поехали пятым элементом полосы, — формат записи фиксирован.
+#
+# Шаг азимута 3°: поперечная черта ошибки в полтора градуса не показывает, а
+# 120 значений влезают в семь бит. Ширина — целыми метрами: на двадцатиметровом
+# проспекте это полпроцента, и шесть бит покрывают всё, что вообще бывает.
+PFLAG_AZIMUTH_STEP = 3
+PFLAG_AZIMUTH_MASK = 0x7F
+PFLAG_WIDTH_SHIFT = 7
+PFLAG_WIDTH_MASK = 0x3F
+
+
+def point_flags(azimuth_degrees, width_meters):
+    """Упаковать азимут дороги и ширину проезжей части в биты записи точки."""
+    steps = int(round((azimuth_degrees % 360) / PFLAG_AZIMUTH_STEP)) % (360 // PFLAG_AZIMUTH_STEP)
+    width = max(0, min(PFLAG_WIDTH_MASK, int(round(width_meters))))
+    return (steps & PFLAG_AZIMUTH_MASK) | (width << PFLAG_WIDTH_SHIFT)
+
+
+def point_azimuth(flags):
+    """Азимут дороги под точкой, градусы."""
+    return (flags & PFLAG_AZIMUTH_MASK) * PFLAG_AZIMUTH_STEP
+
+
+def point_width(flags):
+    """Ширина проезжей части под точкой, метры. 0 — не измерена."""
+    return (flags >> PFLAG_WIDTH_SHIFT) & PFLAG_WIDTH_MASK
+
+
+# Виды, которые НЕ сводятся в один объект.
+#
+# Светофоры перекрёстка — один объект: их четыре по подъездам, и четыре значка
+# в одном пятне это каша. С переходами наоборот: их тоже четыре, но каждый
+# лежит на своём подъезде и рисуется своей чертой поперёк своей проезжей части.
+# Сведи их — и вместо четырёх зебр получится одна посреди перекрёстка.
+POINT_NO_CLUSTER = {POINT_CROSSING}
 # Что считаем лежачим полицейским. Не весь traffic_calming: «chicane» и
 # «choker» это сужение проезжей части, а не то, из-за чего сбрасывают скорость
 # в конкретной точке.
@@ -1237,19 +1295,25 @@ def snap_points(points, roads, meters=POINT_SNAP_METERS):
     for kind, flags, geometry in points:
         origin = geometry[0]
         best, best_distance, seen = None, meters, set()
+        best_bearing, best_width = 0.0, 0.0
         for key in _neighbourhood(origin, POINT_GRID_DEGREES):
             for road in cells.get(key, ()):
                 if id(road) in seen:
                     continue
                 seen.add(id(road))
-                candidate = _nearest_on(origin, road[2])
+                candidate, bearing = _nearest_segment_on(origin, road[2])
                 distance = meters_between(origin, candidate)
                 if distance < best_distance:
                     best, best_distance = candidate, distance
+                    best_bearing = bearing
+                    best_width = road_width_meters(road[0], lanes_of(road[1]))
         if best is None:
             dropped += 1
             continue
-        snapped.append((kind, flags, [best]))
+        # Азимут и ширину знаем ровно здесь — дорогу мы только что нашли.
+        # Дальше по конвейеру она уже не понадобится, и второй раз её никто
+        # искать не будет.
+        snapped.append((kind, point_flags(best_bearing, best_width), [best]))
     return snapped, dropped
 
 
@@ -1288,6 +1352,8 @@ def cluster_points(points, meters=POINT_CLUSTER_METERS):
     for index, (kind, _, geometry) in enumerate(ordered):
         origin = geometry[0]
         for key in _neighbourhood(origin, POINT_GRID_DEGREES):
+            if kind in POINT_NO_CLUSTER:
+                continue
             for other in cells.get(key, ()):
                 if other <= index or ordered[other][0] != kind:
                     continue
@@ -1466,7 +1532,15 @@ def main():
               f"{len(at_junctions)}, после сведения узлов {len(clustered)}, "
               f"вне дорог {dropped}, в тайлах {len(points)}")
         print(f"        светофоров {kinds[POINT_TRAFFIC_LIGHT]}, "
-              f"лежачих {kinds[POINT_SPEED_BUMP]}, стоп-линий {kinds[POINT_STOP_LINE]}")
+              f"лежачих {kinds[POINT_SPEED_BUMP]}, стоп-линий {kinds[POINT_STOP_LINE]}, "
+              f"переходов {kinds[POINT_CROSSING]}")
+        # Разметка без ширины ляжет чертой в ноль метров, то есть не ляжет
+        # вовсе. Молчать об этом нельзя: на схеме это выглядит как «зебры не
+        # приехали», а причина — в снапе.
+        painted = [p for p in points if p[0] in (POINT_CROSSING, POINT_STOP_LINE)]
+        widthless = sum(1 for p in painted if point_width(p[1]) == 0)
+        if painted:
+            print(f"        разметка: {len(painted)} черт, без ширины {widthless}")
         print(f"        на костяке района: {len(far_points)} светофоров "
               f"(вне костяка {far_dropped})")
     print("классы:", classes.most_common(10))

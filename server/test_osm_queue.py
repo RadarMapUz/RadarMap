@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""Тесты очереди изменений OSM.
+
+Каждый тест здесь — про границу между «чиню сам» и «спрашиваю». Она проведена
+по одному признаку: автоматика вправе ДВИГАТЬ объект, но не вправе решать, что
+он больше не нужен. Сдвинуть на два метра — её работа. Снять с публикации —
+решение человека, и подменять его удобством нельзя: правка, снятая молча, не
+оставит следа, по которому через полгода можно было бы понять, что случилось.
+"""
+import sqlite3
+import unittest
+
+import map_edits
+import osm_queue
+
+
+def line(*coords):
+    return [(lon, lat) for lat, lon in coords]
+
+
+def road(cls, points, name=""):
+    return {"cls": cls, "flags": 0, "points": points, "name": name}
+
+
+class ReconcileTests(unittest.TestCase):
+
+    def setUp(self):
+        self.before = [road(3, line((41.300, 69.2500), (41.310, 69.2500)), "Навои")]
+        self.point = (69.25005, 41.3050)
+        snapped = map_edits.snap(self.point, self.before)
+        self.edit = {
+            "id": 1, "version": 1, "kind": "lanes",
+            "raw": list(self.point), "geom": list(snapped.point),
+            "anchor": snapped.anchor, "props": {"lanes": 4}, "note": "",
+            "fingerprint": map_edits.fingerprint(self.point, self.before),
+        }
+
+    def moved(self, degrees):
+        """Та же улица, сдвинутая на восток."""
+        return [road(3, line((41.300, 69.2500 + degrees),
+                             (41.310, 69.2500 + degrees)), "Навои")]
+
+    def test_unchanged_surroundings_cost_nothing(self):
+        # Самый частый случай, и он не должен стоить ни одной посадки.
+        verdict, point, _ = osm_queue.reconcile(self.edit, self.before)
+        self.assertEqual(verdict, osm_queue.KEEP)
+        self.assertIsNone(point)
+
+    def test_small_shift_is_fixed_silently(self):
+        # Два метра — ширина обочины: ни полоса, ни сторона перекрёстка от
+        # такого сдвига не меняются.
+        verdict, point, shift = osm_queue.reconcile(self.edit, self.moved(0.000024))
+        self.assertEqual(verdict, osm_queue.RESETTLED)
+        self.assertIsNotNone(point)
+        self.assertLessEqual(shift, osm_queue.SILENT_METERS)
+
+    def test_medium_shift_is_fixed_but_flagged(self):
+        # Подвинули, но человек пусть посмотрит: на таком сдвиге объект уже мог
+        # оказаться не на той стороне.
+        verdict, point, shift = osm_queue.reconcile(self.edit, self.moved(0.00008))
+        self.assertEqual(verdict, osm_queue.CHECK)
+        self.assertIsNotNone(point)
+        self.assertGreater(shift, osm_queue.SILENT_METERS)
+
+    def test_big_shift_is_never_fixed_by_the_machine(self):
+        # Полпроспекта. Двигать вслепую нельзя — объект может уехать на
+        # встречную проезжую часть.
+        verdict, point, _ = osm_queue.reconcile(self.edit, self.moved(0.0003))
+        self.assertEqual(verdict, osm_queue.LOST)
+        self.assertIsNone(point, "автоматика не двигает на такой сдвиг")
+
+    def test_road_gone_means_ask(self):
+        verdict, point, _ = osm_queue.reconcile(self.edit, [])
+        self.assertEqual(verdict, osm_queue.LOST)
+        self.assertIsNone(point)
+
+    def test_newly_ambiguous_place_is_not_guessed(self):
+        # Там, где была одна дорога, теперь две в трёх метрах. Это ровно тот
+        # проспект с дублёром, ради которого магнит не гадает.
+        twins = self.moved(0.000024) + self.moved(0.00005)
+        verdict, point, _ = osm_queue.reconcile(self.edit, twins)
+        self.assertEqual(verdict, osm_queue.LOST)
+        self.assertIsNone(point)
+
+    def test_resettling_starts_from_the_human_click(self):
+        # Посадка от посадки накапливает ошибку: объект уползает каждую неделю,
+        # оставаясь каждый раз «в пределах трёх метров». От исходного намерения
+        # он не уползает никогда.
+        #
+        # Различаем так: дорога идёт с юга на север, значит проекция сохраняет
+        # ШИРОТУ той точки, от которой сажали. Прошлая посадка лежит на два
+        # метра южнее клика — и если пересадка пойдёт от неё, широта уедет туда.
+        drifted = dict(self.edit, geom=[69.250024, 41.30498])
+        verdict, point, _ = osm_queue.reconcile(drifted, self.moved(0.000024))
+        self.assertEqual(verdict, osm_queue.RESETTLED)
+        self.assertAlmostEqual(point[1], self.point[1], places=5,
+                               msg="пересадили от прошлой посадки, а не от raw")
+
+    def test_edit_without_raw_is_not_moved_at_random(self):
+        broken = dict(self.edit, raw=[])
+        verdict, point, _ = osm_queue.reconcile(broken, self.before)
+        self.assertEqual(verdict, osm_queue.LOST)
+        self.assertIsNone(point)
+
+
+class CaughtUpTests(unittest.TestCase):
+
+    def test_osm_catching_up_is_noticed(self):
+        # Своя дорога живёт, пока OSM её не догнал, и панель обязана сказать,
+        # когда это случилось.
+        ours = {"kind": "geometry", "geom": [69.2500, 41.3050]}
+        real = [road(6, line((41.300, 69.25005), (41.310, 69.25005)))]
+        self.assertTrue(osm_queue.caught_up(ours, real))
+
+    def test_far_away_road_is_not_catching_up(self):
+        ours = {"kind": "geometry", "geom": [69.2500, 41.3050]}
+        far = [road(6, line((41.300, 69.2600), (41.310, 69.2600)))]
+        self.assertFalse(osm_queue.caught_up(ours, far))
+
+    def test_rule_applies_only_to_our_own_geometry(self):
+        # У правки полос опоры в OSM есть по определению: соседняя дорога рядом
+        # с ней — не новость, а норма.
+        lanes = {"kind": "lanes", "geom": [69.2500, 41.3050]}
+        real = [road(6, line((41.300, 69.25005), (41.310, 69.25005)))]
+        self.assertFalse(osm_queue.caught_up(lanes, real))
+
+
+class SweepTests(unittest.TestCase):
+
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.row_factory = sqlite3.Row
+        map_edits.ensure_tables(self.conn)
+        self.roads = [road(3, line((41.300, 69.2500), (41.310, 69.2500)), "Навои")]
+        point = (69.25005, 41.3050)
+        snapped = map_edits.snap(point, self.roads)
+        self.edit_id = map_edits.create(
+            self.conn, "lanes", raw=list(point), snapped=list(snapped.point),
+            anchor=snapped.anchor, props={"lanes": 4},
+            fingerprint_value=map_edits.fingerprint(point, self.roads),
+            status=map_edits.ACCEPTED)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def moved(self, degrees):
+        return [road(3, line((41.300, 69.2500 + degrees),
+                             (41.310, 69.2500 + degrees)), "Навои")]
+
+    def test_drafts_are_not_swept(self):
+        # Черновик на телефоны не едет, и трогать его пересборка не должна.
+        map_edits.create(self.conn, "lanes", raw=[69.25, 41.3], snapped=[69.25, 41.3])
+        self.assertEqual(len(osm_queue.sweep(self.conn, self.roads)), 1)
+
+    def test_small_shift_is_applied(self):
+        decisions = osm_queue.sweep(self.conn, self.moved(0.000024))
+        moved, queued = osm_queue.apply_sweep(self.conn, decisions)
+        self.assertEqual((moved, queued), (1, 0))
+
+    def test_lost_edit_is_queued_but_stays_published(self):
+        # Снятие с публикации — решение человека. Автоматика лишь показывает.
+        decisions = osm_queue.sweep(self.conn, [])
+        moved, queued = osm_queue.apply_sweep(self.conn, decisions)
+        self.assertEqual((moved, queued), (0, 1))
+        row = self.conn.execute("SELECT status FROM map_edits WHERE id = ?",
+                                (self.edit_id,)).fetchone()
+        self.assertEqual(row["status"], map_edits.ACCEPTED,
+                         "автоматика сняла правку сама — так нельзя")
+
+    def test_flagged_edit_says_why_in_its_note(self):
+        # Через полгода «почему эта правка помечена» вспомнит только заметка.
+        decisions = osm_queue.sweep(self.conn, self.moved(0.00008))
+        osm_queue.apply_sweep(self.conn, decisions)
+        row = self.conn.execute("SELECT note FROM map_edits WHERE id = ?",
+                                (self.edit_id,)).fetchone()
+        self.assertIn("проверить", row["note"])
+
+    def test_note_is_not_stamped_twice(self):
+        for _ in range(3):
+            osm_queue.apply_sweep(self.conn, osm_queue.sweep(self.conn, self.moved(0.00008)))
+        row = self.conn.execute("SELECT note FROM map_edits WHERE id = ?",
+                                (self.edit_id,)).fetchone()
+        self.assertLessEqual(row["note"].count("проверить"), 1,
+                             "заметка распухает с каждой пересборкой")
+
+    def test_summary_counts_by_verdict(self):
+        counts = osm_queue.summary(osm_queue.sweep(self.conn, self.roads))
+        self.assertEqual(counts, {osm_queue.KEEP: 1})
+
+
+if __name__ == "__main__":
+    unittest.main()

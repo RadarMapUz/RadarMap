@@ -869,6 +869,16 @@ class EditorApiTests(AdminTest):
     def test_snap_needs_a_point(self):
         self.assertEqual(_post_json(self.port, "/api/snap", {})[0], 400)
 
+    def test_changes_page_says_when_there_is_nothing_to_compare_with(self):
+        # Тайлов на стенде нет. Пустая страница здесь была бы враньём: она
+        # читалась бы как «всё в порядке», хотя сверять правки просто не с чем.
+        code, body = _get(self.port, "/changes")
+        self.assertEqual(code, 200)
+        self.assertIn("Сверять правки не с чем", body)
+
+    def test_changes_page_needs_a_session(self):
+        self.assertEqual(_get(self.port, "/changes", cookie="")[0], 401)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

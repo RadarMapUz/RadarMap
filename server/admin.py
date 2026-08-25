@@ -49,6 +49,7 @@ from urllib.parse import parse_qs, urlparse
 
 import admin_auth
 import map_edits
+import osm_queue
 
 DB_PATH = os.environ.get("RADARMAP_DB", "/opt/radarmap/api/reports.db")
 CAMERAS_PATH = os.environ.get("RADARMAP_CAMERAS", "/opt/radarmap/www/cameras.json")
@@ -285,8 +286,9 @@ a { color:var(--accent); }
 """
 
 TABS = (("/", "Сводка"), ("/map", "Карта"), ("/editor", "Конструктор"),
-        ("/cameras", "Камеры"), ("/mobile", "Передвижные"),
-        ("/feedback", "Обращения"), ("/usage", "Люди"), ("/health", "Здоровье"))
+        ("/changes", "Что изменилось"), ("/cameras", "Камеры"),
+        ("/mobile", "Передвижные"), ("/feedback", "Обращения"),
+        ("/usage", "Люди"), ("/health", "Здоровье"))
 
 # Префикс, под которым панель видна снаружи: "/radarmap/admin" на общем домене
 # или пусто при доступе через SSH-туннель. Внутрь запросы приходят уже без
@@ -835,6 +837,33 @@ def export_edits():
     return {"version": 1, "updatedAt": time.strftime("%Y-%m-%d"), "items": items}
 
 
+def sweep_edits(tiles_dir):
+    """Прогнать правки по свежесобранной сети → строка отчёта.
+
+    Зовётся сборкой сразу после кандидата и ДО публикации: если правка
+    потеряла опору, узнать об этом надо раньше, чем тайл уедет на телефоны.
+    Двигает только то, на что автоматика имеет право; снятие с публикации
+    остаётся решением человека и ждёт его на странице «Что изменилось».
+    """
+    roads = map_edits.load_roads(tiles_dir, -90, -180, 90, 180)
+    if not roads:
+        return "правки не сверялись: тайлов по указанному пути нет"
+    conn = db()
+    try:
+        map_edits.ensure_tables(conn)
+        decisions = osm_queue.sweep(conn, roads)
+        moved, queued = osm_queue.apply_sweep(conn, decisions)
+        counts = osm_queue.summary(decisions)
+        log_action(conn, None, "osm-sweep",
+                   f"подвинуто {moved}, в очередь {queued}")
+        conn.commit()
+    finally:
+        conn.close()
+    return (f"правок сверено {len(decisions)}: на месте "
+            f"{counts.get(osm_queue.KEEP, 0)}, подвинуто {moved}, "
+            f"в очередь {queued}")
+
+
 def mark_published(version):
     conn = db()
     now = time.time()
@@ -993,6 +1022,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.edits_json(conn)
             if path == "/api/roads":
                 return self.roads_json()
+            if path == "/changes":
+                return self._send(200, self.changes_page(conn))
             if path in ("/static/moderate.js", "/static/editor.js"):
                 return self.static_file(path.rsplit("/", 1)[1],
                                         "application/javascript; charset=utf-8")
@@ -1390,6 +1421,62 @@ class Handler(BaseHTTPRequestHandler):
         conn.commit()
         self._json({"ok": True})
 
+    # --- Что изменилось после пересборки OSM
+
+    def changes_page(self, conn):
+        """Очередь изменений: что автоматика сделала сама и о чём спрашивает.
+
+        Порядок разделов — по важности, а не по времени: сверху то, что требует
+        решения человека, ниже то, что уже сделано и показано просто чтобы
+        видеть. Список, отсортированный по дате, заставлял бы каждый раз искать
+        среди сделанного то, что ждёт.
+        """
+        roads = map_edits.load_roads(edits_tiles_dir(), -90, -180, 90, 180)
+        if not roads:
+            return page("/changes", "Что изменилось",
+                        '<div class="empty">Тайлов не видно: RADARMAP_TILES '
+                        'указывает не туда, или дороги ещё не публиковались. '
+                        'Сверять правки не с чем.</div>')
+        decisions = osm_queue.sweep(conn, roads)
+        counts = osm_queue.summary(decisions)
+
+        def row(decision):
+            edit = decision["edit"]
+            lat, lon = edit["geom"][1], edit["geom"][0]
+            shift = f' · сдвиг {decision["shift"]} м' if decision["shift"] else ""
+            place = esc(u("/editor")) + f"#{lat},{lon},19"
+            note = esc(edit.get("note") or "")
+            return (f'<div class="chg"><b>#{edit["id"]}</b> {esc(edit["kind"])}{shift} '
+                    f'<a href="{place}">на карте</a>'
+                    f'<div class="muted">{note}</div></div>')
+
+        def block(title, verdict, explain):
+            rows = [d for d in decisions if d["verdict"] == verdict]
+            if not rows:
+                return ""
+            return (f'<h3>{esc(title)} · {len(rows)}</h3>'
+                    f'<div class="muted">{esc(explain)}</div>'
+                    + "".join(row(d) for d in rows))
+
+        body = (
+            block("OSM догнал нас", osm_queue.CAUGHT_UP,
+                  "Рядом с нашей нарисованной дорогой появилась настоящая. "
+                  "Дорога, отданная в OSM, поддерживается всем миром, наша — только нами.")
+            + block("Правки, потерявшие опору", osm_queue.LOST,
+                    "Дорога исчезла или уехала далеко. Автоматика вправе двигать "
+                    "объект, но не вправе решать, что он больше не нужен.")
+            + block("Пересажены, стоит посмотреть", osm_queue.CHECK,
+                    "Подвинули сами, но сдвиг такой, что объект мог оказаться "
+                    "не на той стороне.")
+            + block("Пересажены молча", osm_queue.RESETTLED,
+                    "Сдвиг в пределах обочины: ни полоса, ни сторона перекрёстка "
+                    "от такого не меняются.")
+        )
+        if not body:
+            body = (f'<div class="empty">Все {counts.get(osm_queue.KEEP, 0)} правок '
+                    'на месте: вокруг них в OSM ничего не изменилось.</div>')
+        return page("/changes", "Что изменилось", body)
+
     def camera_json(self, conn, path):
         try:
             camera_id = int(path.rsplit("/", 1)[1])
@@ -1757,6 +1844,11 @@ def main():
         index = sys.argv.index("--export")
         version = int(sys.argv[index + 1]) if len(sys.argv) > index + 1 else 1
         print(json.dumps(export_overrides(version), ensure_ascii=False, separators=(",", ":")))
+        return
+    if "--sweep" in sys.argv:
+        index = sys.argv.index("--sweep")
+        tiles = sys.argv[index + 1] if len(sys.argv) > index + 1 else edits_tiles_dir()
+        print(sweep_edits(tiles))
         return
     if "--export-edits" in sys.argv:
         print(json.dumps(export_edits(), ensure_ascii=False, separators=(",", ":")))

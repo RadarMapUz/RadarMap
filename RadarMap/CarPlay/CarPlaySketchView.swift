@@ -79,7 +79,9 @@ struct CarPlaySketchView: View {
     /// повторяла условие дважды.
     @ViewBuilder
     private var canvas: some View {
-        if let scene = sketch.scene, sketch.hasCourse, !scene.isEmpty {
+        // Без курса схема рисуется севером вверху, а не прячется: где мы —
+        // известно точно, и это стоит показать.
+        if let scene = sketch.scene, !scene.isEmpty {
             RoadSketchView(scene: scene, state: sketch, tint: alertColor,
                            strokeScale: AppConfig.carPlaySketchStrokeScale,
                            trim: env.thermal.mode.sketchTrim)

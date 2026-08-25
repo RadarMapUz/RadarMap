@@ -32,7 +32,8 @@ final class SketchState {
     private(set) var courseDegrees = 0.0
     /// Точный охват вида; растр докручивается scaleEffect'ом до него.
     private(set) var spanMeters = RoadSketch.minSpanMeters
-    /// Курс был хоть раз: без него схему не поворачиваем и не показываем.
+    /// Курс был хоть раз. Ложь — схема рисуется СЕВЕРОМ ВВЕРХ и курсор
+    /// показывается точкой, а не стрелкой: где мы — знаем, куда смотрим — нет.
     private(set) var hasCourse = false
 
     // MARK: - Осмотр: панорама и зум
@@ -195,10 +196,13 @@ final class SketchState {
                                            towards: env.location.displayCourse >= 0
                                                ? env.location.displayCourse
                                                : env.location.currentCourse)
-        // Курса не было ни разу (только запустились): повернуть схему наугад
-        // значило бы соврать направлением.
-        guard let course = unwoundCourse else { return }
-        hasCourse = true
+        // Курса не было ни разу — холодный старт на стоянке или светофор до
+        // первого движения. Поворачивать схему наугад по-прежнему нельзя:
+        // это враньё про направление. Но и прятать её незачем — где мы,
+        // известно точно. Показываем СЕВЕРОМ ВВЕРХ, а курсор рисуется точкой:
+        // «вот здесь ты, куда смотришь — не знаю» честнее пустого экрана.
+        let course = unwoundCourse ?? 0
+        hasCourse = unwoundCourse != nil
 
         let alert = env.location.nearestCamera
         let distance = env.location.distanceToNearest

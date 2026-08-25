@@ -118,4 +118,25 @@ final class SketchInspectTests: XCTestCase {
         XCTAssertLessThanOrEqual(RoadSketch.inspectReturnSeconds, 8)
         XCTAssertGreaterThanOrEqual(RoadSketch.inspectReturnSeconds, 3)
     }
+
+    // MARK: - Курс есть не всегда
+
+    @MainActor
+    func testSketchShowsNorthUpBeforeTheFirstCourse() {
+        // Холодный старт на стоянке: где мы — известно точно, куда смотрим —
+        // нет. Поворачивать наугад нельзя, но и прятать схему незачем: пустой
+        // экран говорит «сломалось», а север вверху — «стоим».
+        let state = freshState()
+        XCTAssertFalse(state.hasCourse)
+        XCTAssertEqual(state.courseDegrees, 0,
+                       "без курса схема не повёрнута, а не повёрнута наугад")
+    }
+
+    func testCourseStaysWhenStandingStill() {
+        // Встали на светофоре: сырой курс уходит в −1, но прошлый остаётся
+        // честным описанием того, как машина стоит.
+        XCTAssertEqual(RoadSketch.unwound(137, towards: -1), 137)
+        XCTAssertNil(RoadSketch.unwound(nil, towards: -1),
+                     "а вот выдумывать первый курс нельзя")
+    }
 }

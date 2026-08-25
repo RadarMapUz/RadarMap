@@ -74,7 +74,13 @@ struct RoadSketchView: View {
                 world(side: side, k: k)
                     .position(pivot)
                 vignette
-                if !cursor.isAway {
+                if !state.hasCourse {
+                    // Курса нет: ни стрелки, ни конуса — оба обещали бы
+                    // направление, которого мы не знаем.
+                    MeDot(scale: strokeScale)
+                        .frame(width: 22 * strokeScale, height: 22 * strokeScale)
+                        .position(cursor.point)
+                } else if !cursor.isAway {
                     ViewCone(scale: strokeScale)
                         .frame(width: 92 * strokeScale, height: 170 * strokeScale)
                         .position(x: cursor.point.x,
@@ -500,6 +506,29 @@ private struct AlertCameraMarker: View {
                 pulsing = true
             }
         }
+    }
+}
+
+/// Мы здесь, но куда смотрим — неизвестно.
+///
+/// Точка, а не стрелка, и это единственно честная форма: стрелка обещает
+/// направление, а до первого движения его нет. Кольцо вокруг — та же
+/// «неуверенность», что у синей точки системных карт.
+private struct MeDot: View {
+    var scale: CGFloat = 1
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(SketchPalette.meBody.opacity(0.22))
+                .frame(width: 44 * scale, height: 44 * scale)
+            Circle()
+                .fill(LinearGradient(colors: [SketchPalette.meTop,
+                                              SketchPalette.meBody],
+                                     startPoint: .top, endPoint: .bottom))
+                .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 1.5 * scale))
+        }
+        .shadow(color: .black.opacity(0.55), radius: 3 * scale)
     }
 }
 

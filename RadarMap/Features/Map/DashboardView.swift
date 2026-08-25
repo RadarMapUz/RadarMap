@@ -54,7 +54,7 @@ struct DashboardView: View {
                 // Схема «где камера»: чертим сами, без карты и без сети.
                 // Приборка — режим «телефон в держателе», она обязана быть
                 // самым дешёвым экраном приложения, а не самым дорогим.
-                if let scene = sketch.scene, sketch.hasCourse, !scene.isEmpty {
+                if let scene = sketch.scene, !scene.isEmpty {
                     RoadSketchView(scene: scene, state: sketch, tint: alertColor,
                                    trim: env.thermal.mode.sketchTrim)
                         .frame(height: 200)

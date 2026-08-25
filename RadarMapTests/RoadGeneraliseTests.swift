@@ -101,6 +101,28 @@ final class RoadGeneraliseTests: XCTestCase {
         XCTAssertEqual(RoadGeneralise.merge([a, b]).count, 1)
     }
 
+    func testHairpinIsNotMerged() {
+        // Улица не разворачивается на себя в узле. Склеенная шпилька рисуется
+        // штрихом, идущим туда и обратно, — на экране это шип, торчащий из
+        // дороги. Ровно он и приехал в симулятор, когда сервер начал склеивать
+        // сам.
+        let up = line([(0, 0), (0, 200)], .primary)
+        let down = line([(1, 0), (1, 200)], .primary)   // рядом, в ту же сторону
+        XCTAssertEqual(RoadGeneralise.merge([up, down]).count, 2)
+    }
+
+    func testTurnDegreesMeasuresTheBend() {
+        XCTAssertEqual(RoadGeneralise.turnDegrees(CGPoint(x: 0, y: 0),
+                                                  CGPoint(x: 0, y: 100),
+                                                  CGPoint(x: 0, y: 200)), 0, accuracy: 0.01)
+        XCTAssertEqual(RoadGeneralise.turnDegrees(CGPoint(x: 0, y: 0),
+                                                  CGPoint(x: 0, y: 100),
+                                                  CGPoint(x: 100, y: 100)), 90, accuracy: 0.01)
+        XCTAssertEqual(RoadGeneralise.turnDegrees(CGPoint(x: 0, y: 0),
+                                                  CGPoint(x: 0, y: 100),
+                                                  CGPoint(x: 0, y: 0)), 180, accuracy: 0.01)
+    }
+
     func testForkStopsTheChain() {
         // В узле сходятся три конца: продолжение неоднозначно, и выбирать
         // наугад нельзя — улица честно обрывается на перекрёстке.

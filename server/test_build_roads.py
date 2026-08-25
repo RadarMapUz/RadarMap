@@ -173,6 +173,21 @@ class GeneraliseTests(unittest.TestCase):
         yard = self.line_north(7, 0, 69.25, 41.301, 41.302)
         self.assertEqual(len(build_roads.merge_ways([big, yard])), 2)
 
+    def test_hairpin_is_not_merged(self):
+        # Улица не разворачивается на себя в узле: склеенная шпилька рисуется
+        # штрихом туда и обратно, и на экране это шип, торчащий из дороги.
+        a = self.road(3, 0, [(41.300, 69.2500), (41.302, 69.2500)])
+        b = self.road(3, 0, [(41.300, 69.2501), (41.302, 69.2501)])
+        self.assertEqual(len(build_roads.merge_ways([a, b])), 2)
+
+    def test_turn_degrees_measures_the_bend(self):
+        straight = build_roads._turn_degrees((69.25, 41.30), (69.25, 41.31),
+                                             (69.25, 41.32))
+        self.assertAlmostEqual(straight, 0, places=3)
+        back = build_roads._turn_degrees((69.25, 41.30), (69.25, 41.31),
+                                         (69.25, 41.30))
+        self.assertAlmostEqual(back, 180, places=3)
+
     def test_fork_stops_the_chain(self):
         # В узле три конца: продолжение неоднозначно, и выбирать наугад
         # нельзя — улица честно обрывается на перекрёстке.
@@ -219,6 +234,22 @@ class GeneraliseTests(unittest.TestCase):
         self.assertEqual(len(collapsed), 1)
         self.assertFalse(collapsed[0][1] & build_roads.FLAG_ONEWAY,
                          "схлопнутая дорога двусторонняя: стрелки на ней были бы ложью")
+
+    def test_axis_fades_instead_of_stepping_sideways(self):
+        # Встречная проезжая часть покрывает только верх оси. Без затухания ось
+        # прыгает вбок на половину разноса ровно там, где пара кончилась, — на
+        # экране это излом асфальта, а не конец данных. Ровно этот излом и
+        # приехал в симулятор, когда правило было починено на клиенте и забыто
+        # на сервере.
+        main = [(69.25, 41.300 + 0.00025 * i) for i in range(13)]
+        back = [(69.2502, 41.303), (69.2502, 41.3015)]
+        axis = build_roads.collapsed_axis(main, [back], 40)
+        self.assertEqual(len(axis), len(main))
+        self.assertAlmostEqual(axis[-1][0], 69.2501, places=4)
+        self.assertAlmostEqual(axis[0][0], 69.25, places=5)
+        steps = [abs(axis[i][0] - axis[i - 1][0]) for i in range(1, len(axis))]
+        self.assertLess(max(steps) * build_roads.LAT_METERS, 6,
+                        "ось обязана сходить плавно, а не шагом")
 
     def test_same_direction_roads_are_not_collapsed(self):
         # Дублёр в ту же сторону — вторая дорога, а не вторая проезжая часть.

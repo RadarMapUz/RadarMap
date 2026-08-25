@@ -65,6 +65,24 @@ FLAG_ONEWAY, FLAG_BRIDGE, FLAG_TUNNEL = 1, 2, 4
 # контур и не рисует на ней шевроны — стрелки по кругу читаются как ошибка.
 FLAG_RING = 8
 
+# Острее этого угла склейка не идёт: улица не разворачивается на себя в узле.
+MAX_MERGE_TURN = 150.0
+
+
+def _turn_degrees(before, at, after):
+    """Угол поворота в вершине, градусы. 0 — прямо, 180 — разворот."""
+    lon_scale = math.cos(math.radians(at[1]))
+    ax = (at[0] - before[0]) * lon_scale
+    ay = at[1] - before[1]
+    bx = (after[0] - at[0]) * lon_scale
+    by = after[1] - at[1]
+    na, nb = math.hypot(ax, ay), math.hypot(bx, by)
+    if na == 0 or nb == 0:
+        return 0.0
+    cos = max(-1.0, min(1.0, (ax * bx + ay * by) / (na * nb)))
+    return math.degrees(math.acos(cos))
+
+
 # У кого возим имя. Ниже tertiary имя либо отсутствует, либо не нужно ни для
 # подписи под курсором, ни для схлопывания раздельных проезжих.
 NAMED_MAX_CLASS = 5
@@ -237,7 +255,20 @@ def merge_ways(roads):
                 j for j in (ends if forward else starts)[node] if suits(j)]
             if len(same) + len(back) != 1:
                 return None
-            return (same[0], False) if same else (back[0], True)
+            found = (same[0], False) if same else (back[0], True)
+
+            # Шпильку не сшиваем. Улица не разворачивается на себя в узле: если
+            # продолжение уходит почти туда же, откуда мы пришли, это не одна
+            # улица с поворотом, а две, встретившиеся в тупике. Склеенная
+            # шпилька рисуется штрихом, идущим туда и обратно, — на экране это
+            # шип, торчащий из дороги, и именно он приехал в симулятор.
+            tail = roads[found[0]][2]
+            outgoing = list(reversed(tail)) if found[1] else tail
+            here = chain[-1] if forward else chain[0]
+            incoming = chain[-2] if forward else chain[1]
+            if _turn_degrees(incoming, here, outgoing[1]) > MAX_MERGE_TURN:
+                return None
+            return found
 
         while True:
             found = step(_node(chain[-1]), True)
@@ -377,18 +408,81 @@ def collapse_dual(roads, max_separation):
             out.append(roads[index])
             continue
 
-        axis = []
-        for point in points:
-            best, best_distance = None, max_separation * 1.5
-            for partner in partners:
-                near = _nearest_on(point, roads[partner][2])
-                distance = meters_between(point, near)
-                if distance < best_distance:
-                    best, best_distance = near, distance
-            axis.append(point if best is None
-                        else ((point[0] + best[0]) / 2, (point[1] + best[1]) / 2))
+        axis = collapsed_axis(points, [roads[i][2] for i in partners], max_separation)
         out.append((code, flags & ~FLAG_ONEWAY, axis, name))
     return out
+
+
+# Насколько плавно сдвиг оси сходит на нет там, где встречная проезжая часть
+# кончилась. Ниже двадцати метров переход виден изломом.
+AXIS_TAPER_METERS = 28.0
+
+
+def collapsed_axis(points, partners, max_separation):
+    """Ось между проезжими частями, сходящая на нет за их пределами.
+
+    Прямолинейное «есть пара — середина, нет пары — своё место» даёт на экране
+    ШАГ ВБОК ровно там, где встречная часть кончилась: дорога прыгает на
+    половину разноса и обратно. В жизни так не бывает, и глаз читает это
+    изломом асфальта, а не концом данных.
+
+    Поэтому сдвиг считается отдельно от точек и затухает вдоль дороги: на
+    участке с парой он полный, дальше линейно сходит к нулю за
+    AXIS_TAPER_METERS. Плюс сглаживание по трём соседям — оно снимает дрожь
+    там, где пара то находится, то теряется на соседних вершинах.
+
+    Ровно то же самое делает RoadGeneralise.collapsedAxis на клиенте. Две
+    реализации одного правила — цена переноса генерализации на сервер, и
+    расходиться им нельзя: клиент считает по запасному источнику там, где
+    тайлов нет.
+    """
+    if len(points) < 2 or not partners:
+        return points
+
+    # 1. Сдвиг там, где пара есть.
+    shift = []
+    for point in points:
+        best, best_distance = None, max_separation * 1.5
+        for partner in partners:
+            near = _nearest_on(point, partner)
+            distance = meters_between(point, near)
+            if distance < best_distance:
+                best, best_distance = near, distance
+        shift.append(None if best is None
+                     else ((best[0] - point[0]) / 2, (best[1] - point[1]) / 2))
+
+    # 2. Расстояние вдоль дороги — по нему и затухаем.
+    along = [0.0]
+    for index in range(1, len(points)):
+        along.append(along[-1] + meters_between(points[index - 1], points[index]))
+
+    known = [i for i, value in enumerate(shift) if value is not None]
+    if not known:
+        return points
+
+    # 3. Пропуски: ближайший известный сдвиг, погашенный по расстоянию до него.
+    for index in range(len(shift)):
+        if shift[index] is not None:
+            continue
+        nearest = min(known, key=lambda k: abs(along[k] - along[index]))
+        gap = abs(along[nearest] - along[index])
+        if gap >= AXIS_TAPER_METERS:
+            shift[index] = (0.0, 0.0)
+        else:
+            fade = 1 - gap / AXIS_TAPER_METERS
+            source = shift[nearest]
+            shift[index] = (source[0] * fade, source[1] * fade)
+
+    # 4. Сглаживание по трём соседям.
+    axis = []
+    for index, point in enumerate(points):
+        previous = shift[max(0, index - 1)]
+        current = shift[index]
+        following = shift[min(len(shift) - 1, index + 1)]
+        dx = (previous[0] + current[0] * 2 + following[0]) / 4
+        dy = (previous[1] + current[1] * 2 + following[1]) / 4
+        axis.append((point[0] + dx, point[1] + dy))
+    return axis
 
 
 def _nearest_on(point, line):

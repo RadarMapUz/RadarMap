@@ -38,6 +38,11 @@ struct RoadSketchView: View {
     /// Цвет тревоги — тот же, что у дистанции рядом: схема и цифра не должны
     /// расходиться в оценке близости.
     var tint: Color = Theme.accent
+    /// Накопленный сдвиг пальца: DragGesture отдаёт translation от начала
+    /// жеста, а состоянию нужен шаг.
+    @State private var dragged = CGSize.zero
+    @State private var pinched: CGFloat = 1
+
     /// Во сколько раз толще линии. На телефоне 1: он в 30 см от глаз. Экран
     /// машины дальше вдвое, и те же полторы точки на нём уже не видны — там
     /// приходит AppConfig.carPlaySketchStrokeScale.
@@ -60,6 +65,7 @@ struct RoadSketchView: View {
             let side = 2 * (viewRadius * RoadSketch.bucketRatio
                             + RoadSketch.driftMeters(forSpan: scene.spanAtBuild) * k)
 
+            let cursor = cursorPoint(pivot: pivot, size: size)
             ZStack {
                 // Земля — самым нижним слоем, а не фоном хоста: схема обязана
                 // выглядеть одинаково и в полосе приборки, и во весь экран
@@ -68,13 +74,23 @@ struct RoadSketchView: View {
                 world(side: side, k: k)
                     .position(pivot)
                 vignette
-                ViewCone(scale: strokeScale)
-                    .frame(width: 92 * strokeScale, height: 170 * strokeScale)
-                    .position(x: pivot.x, y: pivot.y - 78 * strokeScale)
-                    .allowsHitTesting(false)
-                MeCursor(scale: strokeScale)
-                    .frame(width: 34 * strokeScale, height: 40 * strokeScale)
-                    .position(pivot)
+                if !cursor.isAway {
+                    ViewCone(scale: strokeScale)
+                        .frame(width: 92 * strokeScale, height: 170 * strokeScale)
+                        .position(x: cursor.point.x,
+                                  y: cursor.point.y - 78 * strokeScale)
+                        .allowsHitTesting(false)
+                    MeCursor(scale: strokeScale)
+                        .frame(width: 34 * strokeScale, height: 40 * strokeScale)
+                        .position(cursor.point)
+                } else {
+                    // Машина ушла за край. Стрелка «я», которой не видно, хуже
+                    // отсутствующей: вместо неё по краю показываем, В КАКУЮ
+                    // СТОРОНУ осталась машина.
+                    MeAway(scale: strokeScale, angle: cursor.angle)
+                        .frame(width: 30 * strokeScale, height: 30 * strokeScale)
+                        .position(cursor.point)
+                }
                 laneBubble
                 streetLabel
                 // Компас — только там, где для него есть место: в полосе
@@ -83,8 +99,39 @@ struct RoadSketchView: View {
                     compass
                 }
                 scaleBar(height: size.height)
+                recenterButton
             }
             .clipped()
+            .contentShape(Rectangle())
+            // Осмотр: тянем вид пальцем, щипком меняем охват. Жест живёт
+            // здесь, а не в хосте: схема одна и та же на приборке и на экране
+            // машины, и правило возврата у неё общее.
+            .gesture(
+                DragGesture(minimumDistance: 6)
+                    .onChanged { value in
+                        state.viewHeight = size.height
+                        state.beginInspect()
+                        state.pan(by: CGSize(width: value.translation.width - dragged.width,
+                                             height: value.translation.height - dragged.height))
+                        dragged = value.translation
+                    }
+                    .onEnded { _ in
+                        dragged = .zero
+                        state.endInspect()
+                    }
+                    .simultaneously(with: MagnifyGesture()
+                        .onChanged { value in
+                            state.viewHeight = size.height
+                            state.beginInspect()
+                            state.zoom(by: value.magnification / pinched)
+                            pinched = value.magnification
+                        }
+                        .onEnded { _ in
+                            pinched = 1
+                            state.endInspect()
+                        })
+            )
+            .onAppear { state.viewHeight = size.height }
         }
         .accessibilityHidden(true)   // цифру и сторону рядом VoiceOver уже читает
     }
@@ -109,7 +156,7 @@ struct RoadSketchView: View {
             }
         }
         .frame(width: side, height: side)
-        .offset(x: -state.meOffset.width * k, y: state.meOffset.height * k)
+        .offset(x: -state.viewOffset.width * k, y: state.viewOffset.height * k)
         .rotationEffect(.degrees(-state.courseDegrees))
         .scaleEffect(scene.spanBucket / state.spanMeters)
         // Наклон — ЧЕТВЁРТЫЙ transform на той же готовой текстуре, и в этом
@@ -136,7 +183,11 @@ struct RoadSketchView: View {
     /// вид становится честной сверху-вниз схемой с линейным масштабом. Переход
     /// анимирован, и водитель читает его как «приготовились».
     private var tiltDegrees: Double {
-        scene.alertCameraID == nil ? AppConfig.sketchTiltDegrees : 0
+        // Осмотр выпрямляет вид по той же причине, что и тревога: карту
+        // осматривают ради расстояний, а в перспективе расстояние по экрану
+        // нелинейно.
+        scene.alertCameraID == nil && !state.isInspecting
+            ? AppConfig.sketchTiltDegrees : 0
     }
 
     /// Виньетка: дороги растворяются у краёв, а не обрываются.
@@ -231,6 +282,48 @@ struct RoadSketchView: View {
                 .allowsHitTesting(false)
                 .transition(.opacity)
                 .animation(.easeInOut(duration: 0.35), value: street)
+        }
+    }
+
+    /// Где на экране машина и видно ли её.
+    ///
+    /// Обычно — в точке «я», прибитой к 78% высоты. При осмотре вид замирает,
+    /// а машина едет дальше, и курсор уезжает от неё ровно на разницу. Уехал
+    /// за край — прижимаем к краю и разворачиваем указателем: «машина там».
+    private func cursorPoint(pivot: CGPoint,
+                             size: CGSize) -> (point: CGPoint, isAway: Bool, angle: Double) {
+        let offset = RoadSketch.screenOffset(fromScene: state.cursorOffset,
+                                             courseDegrees: state.courseDegrees,
+                                             spanMeters: state.spanMeters,
+                                             viewHeight: size.height)
+        let raw = CGPoint(x: pivot.x + offset.width, y: pivot.y + offset.height)
+        let inset = 26 * strokeScale
+        let clamped = CGPoint(x: min(max(raw.x, inset), size.width - inset),
+                              y: min(max(raw.y, inset), size.height - inset))
+        let away = abs(clamped.x - raw.x) > 0.5 || abs(clamped.y - raw.y) > 0.5
+        let angle = atan2(raw.y - clamped.y, raw.x - clamped.x) * 180 / .pi
+        return (clamped, away, angle)
+    }
+
+    /// «К себе». Появляется, только когда вид уведён, и исчезает сам —
+    /// кнопка, которую видно всегда, за рулём становится шумом.
+    @ViewBuilder
+    private var recenterButton: some View {
+        if state.isInspecting {
+            Button { state.returnToMe() } label: {
+                Image(systemName: "location.fill")
+                    .font(.rounded(15 * strokeScale, .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 40 * strokeScale, height: 40 * strokeScale)
+                    .background(Color.black.opacity(0.72), in: Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.14), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            .padding(.trailing, 12 * strokeScale)
+            .padding(.bottom, 12 * strokeScale)
+            .transition(.opacity.combined(with: .scale))
+            .animation(.easeOut(duration: 0.25), value: state.isInspecting)
         }
     }
 
@@ -407,6 +500,29 @@ private struct AlertCameraMarker: View {
                 pulsing = true
             }
         }
+    }
+}
+
+/// Машина ушла за край экрана: указатель на неё.
+///
+/// Не курсор и не стрелка направления движения — именно указатель «машина
+/// там». Спутать их нельзя: курсор всегда смотрит по курсу, а этот — на
+/// машину, и в осмотре это разные стороны.
+private struct MeAway: View {
+    var scale: CGFloat = 1
+    let angle: Double
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.black.opacity(0.72))
+                .overlay(Circle().stroke(SketchPalette.meBody.opacity(0.5), lineWidth: 1))
+            Image(systemName: "location.north.fill")
+                .font(.rounded(13 * scale, .bold))
+                .foregroundStyle(SketchPalette.meTop)
+                .rotationEffect(.degrees(angle + 90))
+        }
+        .shadow(color: SketchPalette.meBody.opacity(0.5), radius: 4 * scale)
     }
 }
 

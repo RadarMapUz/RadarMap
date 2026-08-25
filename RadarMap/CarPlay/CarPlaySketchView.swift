@@ -14,7 +14,9 @@ import SwiftUI
 
 struct CarPlaySketchView: View {
     @Environment(AppEnvironment.self) private var env
-    @State private var sketch = SketchState()
+    /// Приходит от модели экрана: осмотр в машине начинает шаблон CarPlay,
+    /// и состояние обязано быть общим с делегатом сцены.
+    let sketch: SketchState
 
     var body: some View {
         ZStack {

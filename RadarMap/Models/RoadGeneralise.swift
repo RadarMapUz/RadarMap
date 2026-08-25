@@ -137,8 +137,9 @@ nonisolated enum RoadGeneralise {
         /// Узел степени ровно два — это стык двух кусков одной улицы. Всё
         /// остальное перекрёсток, и сшивать через него нельзя: полученная
         /// «улица» шла бы из одной ветки развилки в другую мимо главной.
-        func continuation(at point: CGPoint, key: Key,
-                          allowReversed: Bool) -> (index: Int, reversed: Bool)? {
+        func continuation(at point: CGPoint, key: Key, allowReversed: Bool,
+                          incomingBefore: (CGPoint) -> CGPoint?)
+            -> (index: Int, reversed: Bool)? {
             let key0 = node(point)
             guard degree[key0] == 2 else { return nil }
             var found: (index: Int, reversed: Bool)?
@@ -153,7 +154,21 @@ nonisolated enum RoadGeneralise {
                     found = (index, true)
                 }
             }
-            return count == 1 ? found : nil
+            guard count == 1, let found else { return nil }
+
+            // Шпильку не сшиваем. Улица не разворачивается на себя в узле:
+            // если продолжение уходит почти туда же, откуда мы пришли, это не
+            // одна улица с поворотом, а две, встретившиеся в тупике.
+            // Склеенная шпилька рисуется штрихом, идущим туда и обратно, — на
+            // экране это шип, торчащий из дороги.
+            let tail = found.reversed ? lines[found.index].points.reversed()
+                                      : lines[found.index].points
+            guard tail.count >= 2, let outgoing = tail.dropFirst().first,
+                  let incoming = incomingBefore(point)
+            else { return found }
+            guard turnDegrees(incoming, point, outgoing) <= maxMergeTurn
+            else { return nil }
+            return found
         }
 
         for (index, line) in lines.enumerated() where !used[index] {
@@ -165,7 +180,11 @@ nonisolated enum RoadGeneralise {
             // Вперёд.
             while let last = points.last,
                   let next = continuation(at: last, key: currentKey,
-                                          allowReversed: allowReversed) {
+                                          allowReversed: allowReversed,
+                                          incomingBefore: { _ in
+                                              points.count >= 2
+                                                  ? points[points.count - 2] : nil
+                                          }) {
                 used[next.index] = true
                 let tail = next.reversed ? lines[next.index].points.reversed()
                                          : lines[next.index].points
@@ -175,7 +194,11 @@ nonisolated enum RoadGeneralise {
             if allowReversed {
                 while let first = points.first,
                       let previous = continuation(at: first, key: currentKey,
-                                                  allowReversed: true) {
+                                                  allowReversed: true,
+                                                  incomingBefore: { _ in
+                                                      points.count >= 2
+                                                          ? points[1] : nil
+                                                  }) {
                     used[previous.index] = true
                     let head = previous.reversed ? lines[previous.index].points
                                                  : lines[previous.index].points.reversed()
@@ -348,6 +371,21 @@ extension RoadGeneralise {
     /// сорока метров разнос всё равно уже неразличим, поэтому потолок низкий.
     static func collapseSeparation(forSpan span: Double) -> Double {
         span < 220 ? 0 : min(45, span / 8)
+    }
+
+    /// Острее этого угла склейка не идёт: улица не разворачивается на себя.
+    static let maxMergeTurn: Double = 150
+
+    /// Угол поворота в вершине, градусы. 0 — прямо, 180 — разворот.
+    static func turnDegrees(_ before: CGPoint, _ at: CGPoint,
+                            _ after: CGPoint) -> Double {
+        let ax = Double(at.x - before.x), ay = Double(at.y - before.y)
+        let bx = Double(after.x - at.x), by = Double(after.y - at.y)
+        let na = (ax * ax + ay * ay).squareRoot()
+        let nb = (bx * bx + by * by).squareRoot()
+        guard na > 0, nb > 0 else { return 0 }
+        let cosine = max(-1, min(1, (ax * bx + ay * by) / (na * nb)))
+        return acos(cosine) * 180 / .pi
     }
 
     /// Ведущая ось обязана быть настоящей улицей, а не куском.

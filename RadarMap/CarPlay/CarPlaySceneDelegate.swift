@@ -17,7 +17,8 @@ import CarPlay
 import SwiftUI
 import os
 
-final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
+final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate,
+                                  CPMapTemplateDelegate {
     var interfaceController: CPInterfaceController?
     private var mapTemplate: CPMapTemplate?
     private let model = CarPlayMapModel()
@@ -56,6 +57,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         window.rootViewController = host
 
         let template = CPMapTemplate()
+        template.mapDelegate = self
         // Бар НЕ прячем: «Поездка» и «Куда» должны быть на виду всегда —
         // кнопка, которую нужно искать, за рулём бесполезна.
         template.automaticallyHidesNavigationBar = false
@@ -154,8 +156,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                                                        reportButton]
             // В режиме схемы зум и «к себе» бессмысленны: охват и центр схема
             // выбирает сама по дистанции до камеры. Оставляем только звук.
+            // В режиме схемы зум и «к себе» отдаёт сам шаблон, когда открыт
+            // осмотр; своя кнопка тут нужна одна — вход в него.
             mapTemplate.mapButtons = sketchShown
-                ? [soundButton(muted: muted)]
+                ? [soundButton(muted: muted), panButton]
                 : [soundButton(muted: muted), zoomInButton, zoomOutButton, recenterButton]
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
@@ -164,6 +168,52 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 self.syncTemplate()
             }
         }
+    }
+
+    // MARK: - Осмотр схемы на экране машины
+
+    /// Панорама в машине идёт НЕ через жесты SwiftUI.
+    ///
+    /// Наша вью живёт внутри CPWindow, а касаниями на карте распоряжается
+    /// шаблон: он сам рисует режим осмотра, сам ловит перетаскивание и сам
+    /// показывает «Готово». Жест SwiftUI до схемы там просто не дойдёт —
+    /// поэтому для машины это отдельная ветка, приводящая к тому же состоянию.
+    ///
+    /// Модель осмотра общая с телефоном (SketchState), и это принципиально:
+    /// правило возврата — по бездействию и по тревоге — обязано быть одним.
+    func mapTemplateDidBeginPanGesture(_ mapTemplate: CPMapTemplate) {
+        model.sketch.beginInspect()
+    }
+
+    func mapTemplate(_ mapTemplate: CPMapTemplate,
+                     didUpdatePanGestureWithTranslation translation: CGPoint,
+                     velocity: CGPoint) {
+        model.sketch.pan(by: CGSize(width: translation.x, height: translation.y))
+    }
+
+    func mapTemplateDidEndPanGesture(_ mapTemplate: CPMapTemplate,
+                                     velocity: CGPoint) {
+        model.sketch.endInspect()
+    }
+
+    /// Кнопки-стрелки на головных устройствах без сенсора: там панорамируют
+    /// крутилкой, и шаг обязан быть заметным — иначе до соседнего квартала
+    /// придётся щёлкать полминуты.
+    func mapTemplate(_ mapTemplate: CPMapTemplate,
+                     panWith direction: CPMapTemplate.PanDirection) {
+        let step: CGFloat = 120
+        var translation = CGSize.zero
+        if direction.contains(.left)  { translation.width += step }
+        if direction.contains(.right) { translation.width -= step }
+        if direction.contains(.up)    { translation.height += step }
+        if direction.contains(.down)  { translation.height -= step }
+        model.sketch.beginInspect()
+        model.sketch.pan(by: translation)
+        model.sketch.endInspect()
+    }
+
+    func mapTemplateDidDismissPanningInterface(_ mapTemplate: CPMapTemplate) {
+        model.sketch.returnToMe()
     }
 
     // MARK: - Уход с экрана машины
@@ -318,6 +368,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private var recenterButton: CPMapButton {
         let button = CPMapButton { [model] _ in model.recenterRequests += 1 }
         button.image = buttonImage(model.isFollowing ? "location.fill" : "location")
+        return button
+    }
+
+    /// Вход в осмотр схемы. Дальше панораму ведёт сам CarPlay: он рисует
+    /// стрелки, ловит перетаскивание и показывает «Готово» — своими руками
+    /// повторять это нельзя, шаблон не отдаёт касания приложению.
+    private var panButton: CPMapButton {
+        let button = CPMapButton { [weak self] _ in
+            self?.mapTemplate?.showPanningInterface(animated: true)
+        }
+        button.image = buttonImage("hand.draw")
         return button
     }
 

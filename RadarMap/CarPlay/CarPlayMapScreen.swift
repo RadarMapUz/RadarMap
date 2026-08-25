@@ -19,6 +19,12 @@ import MapKit
 @MainActor
 @Observable
 final class CarPlayMapModel {
+    /// Состояние схемы. Живёт ЗДЕСЬ, а не во вью, потому что осмотр в машине
+    /// приходит от шаблона CarPlay (CPMapTemplateDelegate), а до вью делегату
+    /// не дотянуться. Одна модель на оба входа — иначе правило возврата
+    /// разошлось бы между телефоном и машиной.
+    let sketch = SketchState()
+
     var recenterRequests = 0
     var zoomInRequests = 0
     var zoomOutRequests = 0
@@ -95,7 +101,7 @@ struct CarPlayMapScreen: View {
     var body: some View {
         ZStack {
             if model.showsSketch {
-                CarPlaySketchView()
+                CarPlaySketchView(sketch: model.sketch)
             } else {
                 CarPlayMapView(model: model,
                                repository: env.cameras,

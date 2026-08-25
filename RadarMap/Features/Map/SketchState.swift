@@ -35,6 +35,94 @@ final class SketchState {
     /// Курс был хоть раз: без него схему не поворачиваем и не показываем.
     private(set) var hasCourse = false
 
+    // MARK: - Осмотр: панорама и зум
+    //
+    // Схема — прибор с прибитой точкой зрения, и это правильно за рулём. Но
+    // посмотреть, что там впереди за поворотом, иногда надо, и тогда вид
+    // отвязывается от машины. Отвязка обязана быть ВРЕМЕННОЙ: экран, молча
+    // оставшийся не там, где машина, — самое опасное, что можно сделать.
+    //
+    // Устройство простое: центр вида и машина разведены. Обычно они совпадают,
+    // при осмотре центр замирает, а машина продолжает ехать — и курсор уезжает
+    // от середины экрана ровно на разницу.
+
+    /// Центр вида относительно опоры сцены, метры. Обычно равен meOffset.
+    private(set) var viewOffset = CGSize.zero
+    /// Машина относительно центра вида, метры. Обычно ноль.
+    private(set) var cursorOffset = CGSize.zero
+    /// Вид отвязан от машины.
+    private(set) var isInspecting = false
+
+    /// Высота вью в пунктах: по ней экранный сдвиг переводится в метры.
+    /// Ставит сама вью — состояние про экран ничего не знает.
+    @ObservationIgnored var viewHeight: CGFloat = 0
+    /// Охват на момент начала осмотра: во время него он держится сам, а не
+    /// выбирается по скорости и расстоянию до камеры.
+    @ObservationIgnored private var inspectSpan: Double?
+    @ObservationIgnored private var returnTask: Task<Void, Never>?
+
+    #if DEBUG
+    /// Границы зума проверяются тестом, а поле остаётся приватным: наружу оно
+    /// не нужно никому, кроме проверки.
+    var inspectSpanForTests: Double? { inspectSpan }
+    #endif
+
+    /// Палец лёг на схему: автовозврат откладывается до отпускания.
+    func beginInspect() {
+        returnTask?.cancel()
+        returnTask = nil
+        if !isInspecting {
+            isInspecting = true
+            inspectSpan = spanMeters
+        }
+    }
+
+    /// Тянем вид. Сдвиг приходит экранный, хранится в метрах сцены.
+    func pan(by translation: CGSize) {
+        guard isInspecting else { return }
+        let delta = RoadSketch.sceneOffset(fromScreen: translation,
+                                           courseDegrees: courseDegrees,
+                                           spanMeters: spanMeters,
+                                           viewHeight: viewHeight)
+        viewOffset = CGSize(width: viewOffset.width + delta.width,
+                            height: viewOffset.height + delta.height)
+        cursorOffset = CGSize(width: meOffset.width - viewOffset.width,
+                              height: meOffset.height - viewOffset.height)
+    }
+
+    /// Щипок. Границы те же, что у автоматики: ближе минимума схему трясёт от
+    /// шума GPS, дальше максимума она перестаёт отвечать на свой вопрос.
+    func zoom(by factor: Double) {
+        guard isInspecting, let base = inspectSpan else { return }
+        let wanted = base / max(0.2, factor)
+        inspectSpan = min(RoadSketch.maxSpanMeters,
+                          max(RoadSketch.minSpanMeters, wanted))
+    }
+
+    /// Палец отпущен: заводим автовозврат.
+    func endInspect() {
+        guard isInspecting else { return }
+        returnTask?.cancel()
+        returnTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(RoadSketch.inspectReturnSeconds))
+            guard !Task.isCancelled else { return }
+            self?.returnToMe()
+        }
+    }
+
+    /// Вернуться к машине. Зовётся кнопкой, автовозвратом и тревогой.
+    func returnToMe() {
+        returnTask?.cancel()
+        returnTask = nil
+        guard isInspecting else { return }
+        isInspecting = false
+        inspectSpan = nil
+        withAnimation(.easeOut(duration: 0.45)) {
+            viewOffset = meOffset
+            cursorOffset = .zero
+        }
+    }
+
     // MARK: - Мировые слои поверх растра
     //
     // Всё, что меняется чаще растра, но живёт в мировых метрах, лежит здесь и
@@ -117,13 +205,21 @@ final class SketchState {
         // Скорость задаёт нижнюю границу охвата: вид отъезжает ровно настолько,
         // чтобы в кадре оставался тот же отрезок ВРЕМЕНИ. Ступени масштаба
         // (bucket) гасят дрожание от каждого километра в час.
-        let span = RoadSketch.span(forDistance: alert != nil ? distance : nil,
-                                   speedKmh: env.location.speedKmh)
+        // При осмотре охват держит пользователь: автоматика, продолжая
+        // выбирать масштаб, дралась бы с щипком.
+        let span = inspectSpan
+            ?? RoadSketch.span(forDistance: alert != nil ? distance : nil,
+                               speedKmh: env.location.speedKmh)
         let inRange: Bool = if let distance, alert != nil {
             RoadSketch.isInRange(distance: distance, span: span)
         } else {
             false
         }
+
+        // Тревожная камера отменяет осмотр немедленно: камера впереди — не тот
+        // момент, когда на экране чужой район. Это единственный случай, когда
+        // рука пользователя перебивается.
+        if inRange, isInspecting { returnToMe() }
 
         // Мелкие улицы: видны, только когда мы сами на такой. Решение с
         // гистерезисом в два тика — иначе на границе двора с проспектом
@@ -157,7 +253,10 @@ final class SketchState {
         // дворовые проезды это половина всех дорог, и в общем файле они ехали
         // бы на телефон всю поездку ради случая, который наступает под конец.
         env.roads.setWantedSets(wantedSets(span: span, minors: minorsVisible))
-        env.roads.ensureCoverage(around: me)
+        // Тайлы просим вокруг ЦЕНТРА ВИДА, а не вокруг машины: при осмотре
+        // взгляд уходит туда, где тайлов ещё нет, и без этого панорама
+        // упиралась бы в чёрное.
+        env.roads.ensureCoverage(around: viewCentre(from: me))
 
         let freshKey = RoadSketch.RebuildKey(
             alertCameraID: inRange ? alert?.id : nil,
@@ -181,14 +280,34 @@ final class SketchState {
             sincePreviousTick: lastTickAt.map { now.timeIntervalSince($0) })
         lastTickAt = now
 
+        // Пересобирать растр надо, когда от опоры уехал ЦЕНТР ВИДА, а не
+        // машина: при осмотре они расходятся, и следить надо за тем, что
+        // человек видит.
+        let viewDrift = isInspecting
+            ? CGPoint(x: viewOffset.width, y: viewOffset.height)
+            : offset
         if RoadSketch.needsRebuild(scene: scene, key: freshKey, previousKey: key,
-                                   meOffsetMeters: offset) {
+                                   meOffsetMeters: viewDrift) {
             // Переезд опоры: растр и смещение меняются в одном кадре без
             // анимации и взаимно компенсируются — картинка стоит на месте.
-            scene = build(env: env, me: me, span: span,
+            let centre = viewCentre(from: me)
+            scene = build(env: env, me: centre, span: span,
                           alert: alert, inRange: inRange)
-            meOffset = .zero
+            // Новая опора — центр вида. Машина отсчитывается от него же.
+            meOffset = CGSize(width: offsetMeters(of: me).x,
+                              height: offsetMeters(of: me).y)
+            viewOffset = .zero
+            cursorOffset = isInspecting ? meOffset : .zero
             withAnimation(.linear(duration: duration)) {
+                courseDegrees = course
+                spanMeters = span
+            }
+        } else if isInspecting {
+            // Вид замер, машина едет: двигается только курсор.
+            meOffset = CGSize(width: offset.x, height: offset.y)
+            withAnimation(.linear(duration: duration)) {
+                cursorOffset = CGSize(width: offset.x - viewOffset.width,
+                                      height: offset.y - viewOffset.height)
                 courseDegrees = course
                 spanMeters = span
             }
@@ -202,6 +321,7 @@ final class SketchState {
                                          spanChanged: span != spanMeters) {
                 withAnimation(.linear(duration: duration)) {
                     meOffset = CGSize(width: offset.x, height: offset.y)
+                    viewOffset = CGSize(width: offset.x, height: offset.y)
                     courseDegrees = course
                     spanMeters = span
                 }
@@ -302,6 +422,16 @@ final class SketchState {
 
     private func usesFarNetwork(_ env: AppEnvironment, span: Double) -> Bool {
         span >= RoadSketch.farNetworkSpan && !(env.roads.farNetwork is EmptyRoadNetwork)
+    }
+
+    /// Координата центра вида: опора плюс смещение вида.
+    private func viewCentre(from me: CLLocationCoordinate2D) -> CLLocationCoordinate2D {
+        guard isInspecting, let scene else { return me }
+        let anchor = scene.anchor
+        let metersPerLon = 111_320.0 * cos(anchor.latitude * .pi / 180)
+        return CLLocationCoordinate2D(
+            latitude: anchor.latitude + Double(viewOffset.height) / 111_320.0,
+            longitude: anchor.longitude + Double(viewOffset.width) / metersPerLon)
     }
 
     private func offsetMeters(of me: CLLocationCoordinate2D) -> CGPoint {

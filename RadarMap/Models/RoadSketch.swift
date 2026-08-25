@@ -440,6 +440,50 @@ nonisolated enum RoadSketch {
         }
     }
 
+    // MARK: - Осмотр (панорама и зум)
+
+    /// Сколько секунд бездействия до возврата к машине.
+    ///
+    /// Шесть, а не десять и не «никогда». Дольше — и водитель успевает забыть,
+    /// что смотрит не туда, где едет; экран, молча оставшийся не там, где
+    /// машина, — самое опасное, что можно сделать за рулём.
+    static let inspectReturnSeconds: Double = 6
+
+    /// Экранный сдвиг пальца → метры сцены.
+    ///
+    /// Мир повёрнут по курсу, палец тянет по экрану — значит перевод требует
+    /// обратного поворота. Формула выведена из screenPoint и обязана с ней
+    /// совпадать: там точка сцены превращается в экранную, здесь наоборот.
+    ///
+    /// Знак отрицательный: палец тянет МИР, то есть центр вида уезжает в
+    /// противоположную сторону.
+    static func sceneOffset(fromScreen translation: CGSize,
+                            courseDegrees: Double, spanMeters: Double,
+                            viewHeight: CGFloat) -> CGSize {
+        guard viewHeight > 0 else { return .zero }
+        let metersPerPoint = spanMeters / Double(viewHeight)
+        let u = Double(translation.width) * metersPerPoint
+        let v = -Double(translation.height) * metersPerPoint
+        let angle = courseDegrees * .pi / 180
+        let east = u * cos(angle) + v * sin(angle)
+        let north = -u * sin(angle) + v * cos(angle)
+        return CGSize(width: -east, height: -north)
+    }
+
+    /// Точка сцены → экранная, в пунктах от «я». Обратная к sceneOffset и
+    /// нужна ровно для одного: показать курсор там, где машина, когда вид
+    /// уведён в сторону.
+    static func screenOffset(fromScene offset: CGSize, courseDegrees: Double,
+                             spanMeters: Double, viewHeight: CGFloat) -> CGSize {
+        guard spanMeters > 0 else { return .zero }
+        let pointsPerMeter = Double(viewHeight) / spanMeters
+        let angle = courseDegrees * .pi / 180
+        let east = Double(offset.width), north = Double(offset.height)
+        let x = east * cos(angle) - north * sin(angle)
+        let y = east * sin(angle) + north * cos(angle)
+        return CGSize(width: x * pointsPerMeter, height: -y * pointsPerMeter)
+    }
+
     /// Пора ли пересобирать растр: сменились данные или уехали от опоры.
     static func needsRebuild(scene: Scene?, key: RebuildKey, previousKey: RebuildKey?,
                              meOffsetMeters: CGPoint) -> Bool {

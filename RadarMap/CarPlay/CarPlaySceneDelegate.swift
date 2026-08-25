@@ -40,6 +40,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                                   didConnect interfaceController: CPInterfaceController,
                                   to window: CPWindow) {
         self.interfaceController = interfaceController
+        // Сторож фризов main на время сессии машины. В DEBUG он уже стоит с
+        // запуска; здесь он нужен ИМЕННО в релизе — жалоба «экран машины стоит»
+        // приходит из TestFlight, а прибора под неё до сих пор не существовало.
+        HitchWatch.start()
         // Режим меняет не только кнопка, но и автоматика жары — из вью.
         // Кнопки шаблона обязаны пойти следом в обоих случаях.
         if model.onViewModeChanged == nil {
@@ -129,6 +133,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// withObservationTracking — при любом изменении собираем заново.
     func syncTemplate() {
         guard let mapTemplate else { return }
+        // Кнопки шаблона живут на головном устройстве: каждое присваивание —
+        // сообщение туда, а не запись в память.
+        MainWork.note(MainWork.Name.carButtons)
+        defer { MainWork.note(MainWork.idle) }
         let session = session   // подписка живёт до первого изменения — привязываем к сессии
         syncGeneration &+= 1
         let generation = syncGeneration

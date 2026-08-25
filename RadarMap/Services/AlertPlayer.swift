@@ -67,6 +67,8 @@ final class AlertPlayer: NSObject {
     /// старом железе — откат на системный генератор.
     func haptic(level: Int) {
         guard settings.hapticsEnabled else { return }
+        MainWork.note(MainWork.Name.haptic)
+        defer { MainWork.note(MainWork.idle) }
         guard supportsHaptics, let engine = hapticEngine else {
             hapticFallback(level: level)
             return
@@ -110,16 +112,23 @@ final class AlertPlayer: NSObject {
         let volume = Float(settings.alertVolume)
         let loops = max(1, count) - 1
         withActiveSession { [weak self] in
-            guard let player = self?.player else { return }
-            player.stop()
-            player.volume = volume
-            player.numberOfLoops = loops
-            player.currentTime = 0
-            player.play()
+            MainWork.during(MainWork.Name.beep) {
+                guard let player = self?.player else { return }
+                player.stop()
+                player.volume = volume
+                player.numberOfLoops = loops
+                player.currentTime = 0
+                player.play()
+            }
         }
     }
 
     func speak(_ text: String) {
+        // Метка на весь метод, а не только на сам speak: подбор голоса ниже —
+        // это поход к речевому демону, и первый в процессе стоит сотни
+        // миллисекунд ровно на главном потоке.
+        MainWork.note(MainWork.Name.voice)
+        defer { MainWork.note(MainWork.idle) }
         // Настоящий узбекский голос — если он в системе есть — читает узбекский
         // текст КАК ЕСТЬ. Переписывать орфографию под турецкую фонетику в этом
         // случае нельзя: она чинит чужой голос и ломает свой.
@@ -134,7 +143,7 @@ final class AlertPlayer: NSObject {
         utterance.volume = Float(settings.alertVolume)
         utterance.postUtteranceDelay = 0.1
         withActiveSession { [weak self] in
-            self?.synthesizer.speak(utterance)
+            MainWork.during(MainWork.Name.voice) { self?.synthesizer.speak(utterance) }
         }
     }
 

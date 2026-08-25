@@ -49,12 +49,6 @@ struct CarPlayMapView: UIViewRepresentable {
         map.showsCompass = false
         map.isPitchEnabled = false          // плоская карта читается за рулём быстрее
         map.showsUserLocation = true
-        map.userTrackingMode = .follow
-        // Вернулись из схемы — тот же масштаб, что был. Регион ставим ДО
-        // слежения: иначе следование тут же перезапишет его умолчанием.
-        if let region = model.lastRegion {
-            map.setRegion(region, animated: false)
-        }
         // Логотип и «Правовые документы» живут в левом нижнем углу — ровно там,
         // где приборная панель. Поджимаем поля карты на её высоту, иначе панель
         // накрывает обязательную атрибуцию Apple.
@@ -74,16 +68,30 @@ struct CarPlayMapView: UIViewRepresentable {
         map.register(CarPlayUserMarker.self,
                      forAnnotationViewWithReuseIdentifier: CarPlayUserMarker.reuseID)
 
-        // Старт: вокруг себя, если позиция уже есть; иначе — Ташкент.
+        // Старт: масштаб, с которым ушли в схему; иначе вокруг себя; иначе
+        // Ташкент. Одним вызовом, а не двумя: восстановленный регион стоял
+        // выше и тут же затирался этим умолчанием — «тот же масштаб при
+        // возврате из схемы» не работал ни разу.
         let center = location.currentCoordinate
             ?? CLLocationCoordinate2D(latitude: 41.3111, longitude: 69.2797)
-        map.setRegion(MKCoordinateRegion(center: center,
-                                         latitudinalMeters: 2600, longitudinalMeters: 2600),
+        map.setRegion(model.lastRegion
+                      ?? MKCoordinateRegion(center: center,
+                                            latitudinalMeters: 2600,
+                                            longitudinalMeters: 2600),
                       animated: false)
+        // Слежение — ПОСЛЕ региона, и это не стиль. Любая программная
+        // установка региона сбрасывает userTrackingMode в .none. Стояло
+        // наоборот, и карта машины замирала там, куда её поставил setRegion
+        // (без первого фикса — над Ташкентом) и не ехала за машиной больше
+        // никогда: включить слежение обратно могли только кнопка «к себе» и
+        // переход поездки в активную.
+        map.userTrackingMode = .follow
         return map
     }
 
     func updateUIView(_ map: MKMapView, context: Context) {
+        MainWork.note(MainWork.Name.carMap)
+        defer { MainWork.note(MainWork.idle) }
         let coordinator = context.coordinator
 
         // Кнопки шаблона: «к себе» и зум (счётчики — обрабатываем дельту).
@@ -178,6 +186,8 @@ struct CarPlayMapView: UIViewRepresentable {
         var tripActiveSeen = false
         var thermalModeSeen = PerformanceMode.full
         var trafficSeen: Bool?
+        /// Слежение уже возвращено на первом фиксе (см. didUpdate userLocation).
+        private var centeredOnUser = false
         /// Показанные камеры по id — обновление области не пересоздаёт аннотации.
         private var shown: [Int: CameraAnnotation] = [:]
         /// Камера, к которой приближаемся (подсвеченный маркер).
@@ -230,7 +240,27 @@ struct CarPlayMapView: UIViewRepresentable {
             var region = map.region
             region.span.latitudeDelta = min(max(region.span.latitudeDelta * factor, 0.002), 4)
             region.span.longitudeDelta = min(max(region.span.longitudeDelta * factor, 0.002), 4)
+            // setRegion снимает слежение — на экране это выглядело так: нажал
+            // «+», и карта перестала ехать за машиной. Зум меняет масштаб, а
+            // не решение следовать: если следили — возвращаем.
+            let wasFollowing = map.userTrackingMode != .none
             map.setRegion(region, animated: true)
+            if wasFollowing {
+                map.setUserTrackingMode(preferredTracking, animated: false)
+            }
+        }
+
+        /// Первая настоящая позиция на карте машины.
+        ///
+        /// MKMapView вправе снять слежение на первой раскладке — окно CarPlay
+        /// приходит с нулевым размером и меняет его уже после makeUIView, а
+        /// каждая такая правка региона гасит userTrackingMode. Возвращаем
+        /// слежение ровно один раз, на первом фиксе: дальше молчим, потому что
+        /// панораму водителя перебивать нельзя.
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            guard !centeredOnUser, userLocation.location != nil else { return }
+            centeredOnUser = true
+            mapView.setUserTrackingMode(preferredTracking, animated: false)
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
@@ -313,6 +343,8 @@ struct CarPlayMapView: UIViewRepresentable {
         // MARK: Камеры
 
         func reloadCameras(on map: MKMapView, force: Bool = false) {
+            MainWork.note(MainWork.Name.carMarkers)
+            defer { MainWork.note(MainWork.idle) }
             if force, !shown.isEmpty {
                 map.removeAnnotations(Array(shown.values))
                 shown.removeAll()

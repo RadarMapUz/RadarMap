@@ -46,6 +46,10 @@ nonisolated enum Perf {
         static let handleLocation: StaticString = "handleLocation"
         static let cameraLayer: StaticString = "cameraLayer"
         static let sketchRefresh: StaticString = "sketchRefresh"
+        /// Растеризация схемы. Бюджет-тест сторожит ЧАСТОТУ пересборок, но не
+        /// их цену, а полотно и лента бьют именно по цене — мерить её можно
+        /// только на устройстве, дорожкой приборов.
+        static let sketchRaster: StaticString = "sketchRaster"
         static let ratingScreen: StaticString = "ratingScreen"
         static let mapBody: StaticString = "mapBody"
     }
@@ -120,33 +124,101 @@ nonisolated enum Perf {
     }
 }
 
-#if DEBUG
+/// Что главный поток делал последним.
+///
+/// Сторож ниже умеет сказать «main стоял 3.2 секунды». Этого мало: он называет
+/// болезнь, но не орган, и жалоба «экран машины стоит» уже пережила из-за этого
+/// два билда. Метка превращает замер в «main стоял 3.2 секунды НА ГЕОЗОНАХ».
+///
+/// Цена — два взятия ненагруженного unfair-замка на участок, десятки
+/// наносекунд. Это меньше, чем стоит одно чтение свойства CLLocationManager,
+/// ради которого метка и ставится.
+nonisolated enum MainWork {
+    /// Главный поток не внутри наших горячих участков. Если фриз пойман здесь —
+    /// он не в прикладном коде, а в системе (раскладка, MapKit, IPC шаблонов),
+    /// и это тоже ответ.
+    static let idle: StaticString = "вне горячего пути"
+
+    private static let state = OSAllocatedUnfairLock(initialState: idle)
+
+    @inline(__always)
+    static func note(_ name: StaticString) {
+        state.withLock { $0 = name }
+    }
+
+    /// Пометить участок на время его работы.
+    ///
+    /// `rethrows` и `@inline(__always)` — по той же причине, что у Perf.measure:
+    /// обёртка не имеет права менять ни поведение вызывающего, ни его стек.
+    @inline(__always)
+    static func during<T>(_ name: StaticString, _ body: () throws -> T) rethrows -> T {
+        note(name)
+        defer { note(idle) }
+        return try body()
+    }
+
+    static var last: StaticString { state.withLock { $0 } }
+
+    /// Имена участков — литералами, чтобы опечатка не развела их на два.
+    enum Name {
+        static let gpsTick: StaticString = "GPS-тик"
+        static let geofences: StaticString = "геозоны"
+        static let carButtons: StaticString = "кнопки CarPlay"
+        static let carMap: StaticString = "карта CarPlay"
+        static let carMarkers: StaticString = "маркеры CarPlay"
+        static let voice: StaticString = "голос"
+        static let beep: StaticString = "сигнал"
+        static let haptic: StaticString = "хаптика"
+    }
+}
+
 /// Сторож подвисаний главного потока — ответ прибором на вопрос «не тормозит
 /// ли»: фоновый поток раз в полсекунды просит main откликнуться, и отклик
-/// дольше порога попадает в лог фолтом с длительностью. Кадр — 16 мс, порог
-/// 250 мс — это уже видимый глазу фриз, а не дрожание планировщика.
+/// дольше порога попадает в лог фолтом с длительностью и последней меткой
+/// MainWork. Кадр — 16 мс, порог 250 мс — это уже видимый глазу фриз, а не
+/// дрожание планировщика.
 ///
-/// Только DEBUG: в релизной сборке ни потока, ни пингов не существует.
+/// Раньше сторож существовал только в DEBUG, и это была ошибка: экран машины
+/// видит только TestFlight, то есть релиз, — под единственную жалобу, которую
+/// нельзя воспроизвести за столом, прибора не было вовсе. Теперь в DEBUG он
+/// стоит всегда, а в релизе его поднимает сцена CarPlay на время сессии.
+/// Цена — один dispatch_async в полсекунды, пока водитель в машине.
+///
 /// Смотреть: log show --predicate 'subsystem == "uz.radarmap.ios"' | grep фриз
 nonisolated enum HitchWatch {
     private static let pingEvery: TimeInterval = 0.5
     private static let threshold: TimeInterval = 0.25
+    /// Ждём отклика долго: обрывать ожидание на пяти секундах значило бы
+    /// записывать любой длинный фриз пятисекундным и потерять его настоящий
+    /// размер — а размер здесь и есть главная улика.
+    private static let giveUpAfter: TimeInterval = 30
 
+    private static let running = OSAllocatedUnfairLock(initialState: false)
+
+    /// Идемпотентен: сцена CarPlay может подключиться дважды за процесс
+    /// (штатное «моргание» провода при запуске двигателя), а второй сторож
+    /// удвоил бы пинги и не сказал ничего нового.
     static func start() {
+        let alreadyRunning = running.withLock { started -> Bool in
+            defer { started = true }
+            return started
+        }
+        guard !alreadyRunning else { return }
+
         Thread.detachNewThread {
             Thread.current.name = "HitchWatch"
             while true {
                 let sem = DispatchSemaphore(value: 0)
                 let sentAt = CFAbsoluteTimeGetCurrent()
                 DispatchQueue.main.async { sem.signal() }
-                _ = sem.wait(timeout: .now() + 5)
+                _ = sem.wait(timeout: .now() + giveUpAfter)
                 let lag = CFAbsoluteTimeGetCurrent() - sentAt
                 if lag > threshold {
-                    Log.app.fault("фриз main \(Int(lag * 1000), privacy: .public) мс")
+                    let stage = MainWork.last.description
+                    Log.app.fault("фриз main \(Int(lag * 1000), privacy: .public) мс на «\(stage, privacy: .public)»")
                 }
                 Thread.sleep(forTimeInterval: pingEvery)
             }
         }
     }
 }
-#endif

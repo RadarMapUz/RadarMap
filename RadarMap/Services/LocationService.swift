@@ -455,6 +455,16 @@ final class LocationService: NSObject {
             roadSnapper.reset()
             displayCoordinate = nil
             displayCourse = -1
+            // Вернулись в тихий фон — геозоны снова единственный способ узнать
+            // о камере, и ставить их надо вокруг того места, где мы сейчас.
+            // Пока шёл непрерывный GPS, retile их не трогал (см. там), так что
+            // без этой строки они остались бы вокруг точки, где экран открыли.
+            // Ровно один раз на переход: applyLocationMode зовётся и от смены
+            // энергосбережения, и из настроек, а перевзводить двадцать геозон
+            // на каждый такой вызов — та же трата, от которой мы и уходим.
+            if !geofencesArmed, let coordinate = currentCoordinate {
+                retile(around: coordinate)
+            }
             return
         }
         // Паузу отдавать системе нельзя ни в поездке, ни в машине: iOS ставит
@@ -615,6 +625,10 @@ final class LocationService: NSObject {
         retile(around: coordinate)
     }
 
+    /// Геозоны сейчас стоят вокруг актуальной точки. Ложь означает «их надо
+    /// пересобрать при первом же уходе в тихий фон».
+    @ObservationIgnored private var geofencesArmed = false
+
     private func retile(around coordinate: CLLocationCoordinate2D) {
         // Якорь ставим здесь, а не только в retileIfNeeded: refreshMonitoring
         // зовёт retile напрямую, и без якоря следующий тик перетайлил бы повторно.
@@ -640,22 +654,44 @@ final class LocationService: NSObject {
         // Считаем по всему окну: по двадцатке цифра упиралась в потолок.
         cameraDensity3km = tracked.count { distance(to: $0) <= 3000 }
 
-        // Геозоны — только вне поездки: в поездке handleEnter выходит первой
-        // строкой, то есть они не могут сработать в принципе, а ретайл каждые
-        // 300–1500 м гнал в locationd сотни пар stop/startMonitoring за поездку
-        // ради невозможного события. Окно кандидатов выше живёт как жило;
-        // геозоны пересинхронизирует endTrip.
-        guard !isTripActive else { return }
-        manager.monitoredRegions.forEach { manager.stopMonitoring(for: $0) }
-        for camera in nearest {
-            let region = CLCircularRegion(
-                center: camera.coordinate,
-                radius: settings.alertRadius,
-                identifier: Self.regionID(for: camera.id)
-            )
-            region.notifyOnEntry = true
-            region.notifyOnExit = true
-            manager.startMonitoring(for: region)
+        // Геозоны — только в ТИХОМ ФОНЕ, где они единственный способ узнать о
+        // камере. Пока идёт непрерывный GPS, handleEnter выходит первой
+        // строкой, то есть сработать они не могут в принципе, а ретайл каждые
+        // 300–1500 м гонит в locationd по сорок синхронных пар
+        // stop/startMonitoring — на главном потоке, на ходу.
+        //
+        // Условие было `!isTripActive`, и это оставляло открытым самый частый
+        // сценарий машины: CarPlay подключён, поездку водитель ещё не начал.
+        // Непрерывный GPS там уже идёт (applyLocationMode держит его по
+        // isCarPlayConnected), фиксы приходят раз в секунду на скорости — и
+        // каждые несколько сотен метров главный поток уходил в locationd за
+        // невозможным событием. Экран машины при этом продолжает показывать
+        // последний кадр: он нарисован, но не живой.
+        //
+        // Возвращает геозоны applyLocationMode при уходе в тихий фон.
+        guard !isTripActive, !isForeground else {
+            // Пока идёт непрерывный GPS, геозоны заведомо устаревают: машина
+            // уезжает, а они остаются вокруг точки, где экран открыли. Помним
+            // это, чтобы уход в тихий фон их пересобрал ровно один раз.
+            geofencesArmed = false
+            return
+        }
+        geofencesArmed = true
+        // Сорок синхронных походов в locationd — самый дорогой участок главного
+        // потока во всём приложении. Под меткой: если сторож поймает фриз здесь,
+        // спорить будет не о чем.
+        MainWork.during(MainWork.Name.geofences) {
+            manager.monitoredRegions.forEach { manager.stopMonitoring(for: $0) }
+            for camera in nearest {
+                let region = CLCircularRegion(
+                    center: camera.coordinate,
+                    radius: settings.alertRadius,
+                    identifier: Self.regionID(for: camera.id)
+                )
+                region.notifyOnEntry = true
+                region.notifyOnExit = true
+                manager.startMonitoring(for: region)
+            }
         }
     }
 
@@ -775,7 +811,9 @@ final class LocationService: NSObject {
         // на главном акторе, раз в секунду, всю поездку. В Instruments это один
         // интервал `handleLocation`; если он вырастет, вырастет и нагрев.
         Perf.measure(Perf.Name.handleLocation) {
-            handleLocationBody(coordinate: coordinate, speed: speed, course: course)
+            MainWork.during(MainWork.Name.gpsTick) {
+                handleLocationBody(coordinate: coordinate, speed: speed, course: course)
+            }
         }
     }
 
@@ -1333,8 +1371,10 @@ final class LocationService: NSObject {
     }
 
     private func handleEnter(regionID: String) {
-        // В поездке оповещает движок по точному расстоянию — геозона не нужна (без дублей).
-        guard !isTripActive else { return }
+        // Пока идёт непрерывный GPS — в поездке или при открытом экране, включая
+        // экран машины, — о камере говорит движок по точному расстоянию. Геозона
+        // дала бы вторым, отставшим на сотни метров, пуш о том же самом.
+        guard !isTripActive, !isForeground else { return }
         guard let id = Self.cameraID(from: regionID),
               !alertedCameraIDs.contains(id),
               let camera = repository.cameras.first(where: { $0.id == id }),

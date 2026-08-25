@@ -416,6 +416,11 @@ final class SketchState {
         var sets: Set<RoadTiles.Set> = [.far, .streets, .water, .green, .rail]
         if minors { sets.insert(.yards) }
         if span < SketchArea.Kind.block.maxSpanMeters { sets.insert(.blocks) }
+        // Тротуаров больше, чем всех улиц вместе (3 439 против 8 455 дорог в
+        // одном центре Ташкента), а видны они только вблизи. Слой, невидимый
+        // на текущем охвате, не качается и не разбирается — тот же закон, что
+        // у дворовых проездов и кварталов.
+        if span < SketchArea.Kind.sidewalk.maxSpanMeters { sets.insert(.sidewalks) }
         // Точки — из того набора, что посчитан по РИСУЕМОЙ сети. Просить оба
         // разом значило бы возить вдвое больше ради слоя, из которого виден
         // ровно один.

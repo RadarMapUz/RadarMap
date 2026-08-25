@@ -541,6 +541,10 @@ nonisolated enum RoadSketch {
         case .green: return 1
         case .water: return 2
         case .rail:  return 3
+        // Тротуар — САМЫМ ВЕРХНИМ из местности, но всё ещё под дорогами. Он
+        // идёт вдоль проезжей части вплотную, и уйди он под зелень — пропал бы
+        // ровно там, где нужен: вдоль улицы через парк.
+        case .sidewalk: return 4
         }
     }
 

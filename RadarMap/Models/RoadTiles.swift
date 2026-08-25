@@ -38,6 +38,9 @@ nonisolated enum RoadTiles {
     enum Set: String, CaseIterable, Sendable {
         case far = "f", streets = "s", yards = "y"
         case water = "w", green = "g", rail = "r", blocks = "b"
+        /// Тротуары. Своим набором по тому же закону, что вода и зелень: слой,
+        /// невидимый на текущем охвате, не качается и не разбирается.
+        case sidewalks = "t"
         /// Точечные объекты. Наборов ДВА: ближний посажен на детальную
         /// геометрию, дальний пересчитан по костяку района — там раздельные
         /// проезжие сведены в одну ось, и точка с детальной сети уехала бы от
@@ -49,7 +52,7 @@ nonisolated enum RoadTiles {
         var isArea: Bool {
             switch self {
             case .far, .streets, .yards, .points, .pointsFar: return false
-            case .water, .green, .rail, .blocks: return true
+            case .water, .green, .rail, .blocks, .sidewalks: return true
             }
         }
 
@@ -64,6 +67,7 @@ nonisolated enum RoadTiles {
             case .green:  return .green
             case .rail:   return .rail
             case .blocks: return .block
+            case .sidewalks: return .sidewalk
             case .far, .streets, .yards, .points, .pointsFar: return nil
             }
         }

@@ -983,5 +983,74 @@ class MarkingTests(unittest.TestCase):
             self.assertEqual(build_roads.point_width(entry[1]), 22)
 
 
+class SidewalkTests(unittest.TestCase):
+    """Тротуары: свой набор тайла, своя полоса охвата.
+
+    Их больше, чем всех улиц вместе — 3 439 против 8 455 дорог в одном центре
+    Ташкента. Слой такого размера обязан жить отдельным файлом, иначе он
+    удваивает трафик всю дорогу ради вида, который наступает только вблизи.
+    """
+
+    def line(self, coords):
+        return [(lon, lat) for lat, lon in coords]
+
+    def test_sidewalk_is_read_from_the_same_file_as_roads(self):
+        # Фильтр osmium берёт w/highway целиком, тротуары отсеивает уже
+        # CLASS_CODES. Читать экстракт второй раз ради них незачем.
+        source = ('{"type":"Feature","properties":{"highway":"footway"},'
+                  '"geometry":{"type":"LineString","coordinates":'
+                  '[[69.25,41.30],[69.25,41.302]]}}\n'
+                  '{"type":"Feature","properties":{"highway":"primary"},'
+                  '"geometry":{"type":"LineString","coordinates":'
+                  '[[69.26,41.30],[69.26,41.302]]}}\n')
+        with tempfile.NamedTemporaryFile("w", suffix=".geojsonl",
+                                         delete=False, encoding="utf-8") as handle:
+            handle.write(source)
+            path = handle.name
+        try:
+            roads, _, _, _, _, _, sidewalks = build_roads.collect(path)
+        finally:
+            os.unlink(path)
+        self.assertEqual(len(roads), 1, "тротуар не должен попасть в дороги")
+        self.assertEqual(len(sidewalks), 1, "тротуар обязан приехать отдельно")
+
+    def test_stairs_and_paths_are_not_sidewalks(self):
+        # Лестница — не путь вдоль дороги, на схеме она обрубок; тропа может
+        # уходить куда угодно.
+        self.assertNotIn("steps", build_roads.SIDEWALK_HIGHWAYS)
+        self.assertNotIn("path", build_roads.SIDEWALK_HIGHWAYS)
+        self.assertIn("footway", build_roads.SIDEWALK_HIGHWAYS)
+
+    def test_stubs_are_dropped(self):
+        short = self.line([(41.3000, 69.2500), (41.30005, 69.2500)])
+        long = self.line([(41.3000, 69.2500), (41.3010, 69.2500)])
+        built = build_roads.build_sidewalks([short, long], 0)
+        self.assertEqual(len(built), 1, "обрубок короче порога — шум на схеме")
+
+    def test_sidewalk_is_an_open_ribbon(self):
+        built = build_roads.build_sidewalks(
+            [self.line([(41.300, 69.250), (41.302, 69.250)])], 0)
+        kind, flags, _ = built[0]
+        self.assertEqual(kind, build_roads.AREA_SIDEWALK)
+        self.assertFalse(flags & build_roads.AREA_FLAG_CLOSED,
+                         "тротуар — лента, а не полигон: замкнутый залился бы")
+
+    def test_sidewalks_go_to_their_own_tile_set(self):
+        with tempfile.TemporaryDirectory() as work:
+            road = (3, 0, self.line([(41.300, 69.25), (41.302, 69.25)]), "")
+            walk = build_roads.build_sidewalks(
+                [self.line([(41.300, 69.2502), (41.302, 69.2502)])], 0)
+            build_roads.write_tiles([road], work, 0.05, walk, [], [], [road])
+            names = os.listdir(work)
+            self.assertTrue(any(n.endswith("_t.json") for n in names),
+                            f"набора тротуаров нет среди {sorted(names)}")
+            # И их нет в наборе улиц: иначе слой качался бы всегда.
+            street = [n for n in names if n.endswith("_s.json")][0]
+            with open(os.path.join(work, street), encoding="utf-8") as handle:
+                tile = json.load(handle)
+            self.assertTrue(all(entry[0] != build_roads.AREA_SIDEWALK
+                                for entry in tile["roads"]))
+
+
 if __name__ == "__main__":
     unittest.main()

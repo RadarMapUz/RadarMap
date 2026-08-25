@@ -48,6 +48,12 @@ nonisolated enum SketchPalette {
     static let water = Color(red: 0.09, green: 0.20, blue: 0.36)
     static let waterEdge = Color(red: 0.16, green: 0.32, blue: 0.52)
 
+    /// Тротуар. Холоднее и глуше асфальта, и это работа: тротуар обязан
+    /// читаться как НЕ дорога с первого взгляда — иначе водитель на схеме
+    /// увидит проезд там, где бордюр. Одного тона тут мало, поэтому он ещё и
+    /// тоньше всего остального.
+    static let sidewalk = Color(red: 0.24, green: 0.26, blue: 0.30)
+
     /// Рельсы — штрих-пунктир: узнаваемая пиктограмма, а не просто линия.
     static let rail = Color(red: 0.42, green: 0.40, blue: 0.36)
 

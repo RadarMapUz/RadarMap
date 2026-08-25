@@ -793,6 +793,7 @@ def collect(source_path):
     # каждую сборку: как только оно начнёт расти, приближение по классу можно
     # будет ужимать.
     lanes_tagged = 0
+    sidewalks = []
     read = skipped = 0
 
     with open(source_path, encoding="utf-8") as handle:
@@ -809,13 +810,18 @@ def collect(source_path):
             read += 1
             properties = feature.get("properties") or {}
             code = CLASS_CODES.get(properties.get("highway"))
-            if code is None:
-                continue
             geometry = feature.get("geometry") or {}
             if geometry.get("type") != "LineString":
                 continue
             points = geometry.get("coordinates") or []
             if len(points) < 2:
+                continue
+            # Тротуары лежат в ТОМ ЖЕ файле: фильтр osmium берёт w/highway
+            # целиком, а отсеивает их уже CLASS_CODES. Читать экстракт второй
+            # раз ради них незачем — забираем попутно.
+            if code is None:
+                if properties.get("highway") in SIDEWALK_HIGHWAYS:
+                    sidewalks.append([(float(x), float(y)) for x, y in points])
                 continue
 
             # БЕЗ упрощения. Оно здесь и стояло, и именно оно ломало топологию:
@@ -837,7 +843,7 @@ def collect(source_path):
             classes[properties["highway"]] += 1
             flag_counts[roads[-1][1]] += 1
 
-    return roads, classes, flag_counts, read, skipped, lanes_tagged
+    return roads, classes, flag_counts, read, skipped, lanes_tagged, sidewalks
 
 
 def sort_key(road):
@@ -873,6 +879,24 @@ def generalise(roads, tolerance_deg):
             for code, flags, points, name in solid]
 
 
+def build_sidewalks(lines, tolerance_deg):
+    """Тротуары как открытые ленты местности.
+
+    Упрощаются грубее дорог и отсеиваются по длине: тротуар объясняет, где
+    кончается асфальт, а не где именно повернуть, и лишняя вершина в нём —
+    это байты без ответа на вопрос.
+    """
+    out = []
+    for points in lines:
+        simplified = simplify(points, tolerance_deg)
+        if len(simplified) < 2:
+            continue
+        if polyline_meters(simplified) < MIN_SIDEWALK_METERS:
+            continue
+        out.append((AREA_SIDEWALK, 0, simplified))
+    return out
+
+
 def build_far(roads):
     """Костяк района: только крупные классы, раздельные проезжие сведены в одну
     ось, упрощение грубее. Отдельным набором, а не подмножеством ближнего:
@@ -889,6 +913,11 @@ SET_FAR, SET_STREETS, SET_YARDS = "f", "s", "y"
 # Слои местности. Живут своими файлами по тому же закону, что дворовые
 # проезды: слой, невидимый на текущем охвате, не качается и не разбирается.
 SET_WATER, SET_GREEN, SET_RAIL, SET_BLOCKS = "w", "g", "r", "b"
+# Тротуары. Своим набором по тому же закону, что вода и зелень: слой,
+# невидимый на текущем охвате, не качается и не разбирается. В центре Ташкента
+# их 3 439 — больше, чем всех улиц вместе, и возить их в общем файле значило
+# бы удвоить трафик ради слоя, который виден только вблизи.
+SET_SIDEWALK = "t"
 # Точки. Их ДВА набора, и это не дубль.
 #
 # Дальше 340 м схема рисует не улицы, а костяк района: раздельные проезжие
@@ -904,6 +933,11 @@ SET_POINTS, SET_POINTS_FAR = "p", "q"
 
 # Коды видов местности — контракт с клиентом (SketchArea.Kind).
 AREA_WATER, AREA_GREEN, AREA_RAIL, AREA_BLOCK = 1, 2, 3, 4
+# Тротуар — тоже «местность», и это не натяжка, а экономия. Он открытая лента,
+# как рельсы, и проходит теми же тайлами, той же распаковкой дельт и тем же
+# бюджетом. Отдельный конвейер ради ленты, которая ничем не отличается от уже
+# работающей, стоил бы больше, чем экономит.
+AREA_SIDEWALK = 5
 AREA_FLAG_CLOSED = 1
 
 # Что считаем водой, зеленью и рельсами. Списки нарочно короткие: на приборке
@@ -915,6 +949,14 @@ WATER_TAGS = {("natural", "water"), ("landuse", "reservoir"),
 GREEN_TAGS = {("leisure", "park"), ("landuse", "forest"), ("landuse", "grass"),
               ("landuse", "cemetery"), ("natural", "wood")}
 RAIL_TAGS = {("railway", "rail")}
+
+# Что считаем тротуаром. Не весь пешеходный highway: steps — лестница, а не
+# путь вдоль дороги, и на схеме она была бы обрубком; path — тропа, которая
+# может уходить куда угодно. Нужен ровно тот тротуар, что идёт вдоль проезжей
+# части и объясняет, где кончается асфальт.
+SIDEWALK_HIGHWAYS = {"footway", "pedestrian"}
+# Короче этого тротуар — обрубок между двумя перекрёстками, шум на схеме.
+MIN_SIDEWALK_METERS = 25.0
 
 # Мелочь на охвате схемы неразличима, а весит столько же, сколько крупное.
 MIN_AREA_METERS = 60.0
@@ -1428,9 +1470,11 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
                          "bytes": len(blob)}
 
     # --- Слои местности: вода, зелень, рельсы. Каждый своим файлом.
-    area_sets = {SET_WATER: [], SET_GREEN: [], SET_RAIL: [], SET_BLOCKS: []}
+    area_sets = {SET_WATER: [], SET_GREEN: [], SET_RAIL: [], SET_BLOCKS: [],
+                 SET_SIDEWALK: []}
     by_code = {AREA_WATER: SET_WATER, AREA_GREEN: SET_GREEN,
-               AREA_RAIL: SET_RAIL, AREA_BLOCK: SET_BLOCKS}
+               AREA_RAIL: SET_RAIL, AREA_BLOCK: SET_BLOCKS,
+               AREA_SIDEWALK: SET_SIDEWALK}
     for kind, flags, shape in areas:
         area_sets[by_code[kind]].append((kind, flags, shape))
     # Кварталы считаются из САМОЙ сети, а не приходят из OSM.
@@ -1491,11 +1535,15 @@ def main():
                         help="geojsonl узлов: светофоры, лежачие (необязателен)")
     args = parser.parse_args()
 
-    raw, classes, flag_counts, read, skipped, lanes_tagged = collect(args.source)
+    (raw, classes, flag_counts, read, skipped,
+     lanes_tagged, raw_sidewalks) = collect(args.source)
     roads = generalise(raw, args.tolerance / 111_320.0)
     # Местность упрощаем грубее дорог: контур пруда не несёт геометрии, по
     # которой принимают решения за рулём.
     areas = collect_areas(args.areas, args.tolerance * 3 / 111_320.0)
+    # Тротуары — тоже «местность», и упрощаются так же грубо: их дело —
+    # показать, где кончается асфальт, а не где повернуть.
+    areas = areas + build_sidewalks(raw_sidewalks, args.tolerance * 3 / 111_320.0)
     # Точки садим ПОСЛЕ генерализации: сажать надо на ту геометрию, которая
     # поедет на телефон, а не на сырую.
     far = build_far(roads)
@@ -1525,7 +1573,7 @@ def main():
     if areas:
         counts = Counter(kind for kind, _, _ in areas)
         print(f"местность: вода {counts[AREA_WATER]}, зелень {counts[AREA_GREEN]}, "
-              f"рельсы {counts[AREA_RAIL]}")
+              f"рельсы {counts[AREA_RAIL]}, тротуары {counts[AREA_SIDEWALK]}")
     if raw_points:
         kinds = Counter(kind for kind, _, _ in points)
         print(f"точки: прочитано {len(raw_points)}, на перекрёстках "

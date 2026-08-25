@@ -1025,6 +1025,7 @@ private struct SketchRaster: View, Equatable {
         case .green: return SketchPalette.green
         case .rail:  return SketchPalette.rail
         case .block: return SketchPalette.block
+        case .sidewalk: return SketchPalette.sidewalk
         }
     }
 
@@ -1035,6 +1036,8 @@ private struct SketchRaster: View, Equatable {
         case .water: return 7 * strokeScale * zoomWidth
         case .rail:  return 2.5 * strokeScale
         case .green, .block: return 3 * strokeScale
+        // Тоньше всего на схеме: тротуар — граница асфальта, а не путь.
+        case .sidewalk: return 1.6 * strokeScale
         }
     }
 

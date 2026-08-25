@@ -1096,9 +1096,93 @@ private struct SketchRaster: View, Equatable {
                            style: .init(lineWidth: max(1.2 * strokeScale,
                                                        RoadSketch.stopLineMeters * k),
                                         lineCap: .butt))
+        case .laneArrows:
+            arrows(context: &context, marking: marking, at: transform)
         default:
             break
         }
+    }
+
+    /// Стрелки полос: по одной на полосу, каждая повёрнута по своему
+    /// направлению.
+    ///
+    /// Стрелки живут в МЕТРАХ, как и всё остальное на асфальте, и раскладка у
+    /// них та же, что у разделительных: центр полосы — на полшага внутрь от её
+    /// границы. Считать их по ширине проезжей части нельзя — полос ровно
+    /// столько, сколько направлений приехало, и это число знает только сервер.
+    ///
+    /// «Прямо и налево» рисуется ДВУМЯ стрелками из одной точки, а не одной
+    /// двусмысленной: водитель читает разметку боковым зрением, и одна фигура
+    /// о двух смыслах читается как ошибка.
+    private func arrows(context: inout GraphicsContext, marking: RoadSketch.Marking,
+                        at transform: (CGPoint) -> CGPoint) {
+        let lanes = marking.turns.count
+        guard lanes > 0 else { return }
+        let lane = CGFloat(marking.widthMeters) / CGFloat(lanes)
+        guard lane * k >= RoadSketch.laneDividerMinLanePoints * strokeScale else { return }
+
+        let radians = marking.azimuthDegrees * Double.pi / 180
+        // Поперёк дороги — (cos, −sin); вдоль — (sin, cos).
+        let across = CGPoint(x: CGFloat(Foundation.cos(radians)),
+                             y: CGFloat(-Foundation.sin(radians)))
+        let along = CGPoint(x: CGFloat(Foundation.sin(radians)),
+                            y: CGFloat(Foundation.cos(radians)))
+        let half = CGFloat(marking.widthMeters) / 2
+        let length = RoadSketch.arrowMeters
+
+        for (index, turn) in marking.turns.enumerated() {
+            let offset = (CGFloat(index) + 0.5) * lane - half
+            let base = CGPoint(x: marking.point.x + across.x * offset,
+                               y: marking.point.y + across.y * offset)
+            for angle in turn.angles {
+                context.stroke(arrowPath(from: base, along: along, across: across,
+                                         length: length, turn: angle,
+                                         transform: transform),
+                               with: .color(SketchPalette.marking),
+                               style: .init(lineWidth: 1.6 * strokeScale,
+                                            lineCap: .round, lineJoin: .round))
+            }
+        }
+    }
+
+    /// Одна стрелка: древко по ходу дороги и остриё, повёрнутое на угол.
+    ///
+    /// Всё считается в координатах МИРА, а не экрана: схема поворачивается по
+    /// курсу, и стрелка, собранная в экранных осях, поехала бы вместе с ним
+    /// отдельно от своей полосы.
+    private func arrowPath(from base: CGPoint, along: CGPoint, across: CGPoint,
+                           length: CGFloat, turn: Double,
+                           transform: (CGPoint) -> CGPoint) -> Path {
+        func world(_ forward: CGFloat, _ side: CGFloat) -> CGPoint {
+            CGPoint(x: base.x + along.x * forward + across.x * side,
+                    y: base.y + along.y * forward + across.y * side)
+        }
+        let radians = turn * Double.pi / 180
+        // Направление острия относительно хода дороги.
+        let tipForward = CGFloat(Foundation.cos(radians))
+        let tipSide = CGFloat(Foundation.sin(radians))
+
+        let shaft = length * 0.45
+        let reach = length * 0.55
+        let bend = world(shaft, 0)
+        let head = world(shaft + tipForward * reach, tipSide * reach)
+
+        var path = Path()
+        path.move(to: transform(world(-length * 0.5, 0)))
+        path.addLine(to: transform(bend))
+        path.addLine(to: transform(head))
+
+        // Остриё — две коротких черты назад от конца, под углом к его ходу.
+        let barb = length * 0.3
+        for side in [CGFloat(-1), CGFloat(1)] {
+            let backForward = -tipForward * barb * 0.8 + (-tipSide) * side * barb * 0.5
+            let backSide = -tipSide * barb * 0.8 + tipForward * side * barb * 0.5
+            let wing = CGPoint(x: head.x + along.x * backForward + across.x * backSide,
+                               y: head.y + along.y * backForward + across.y * backSide)
+            path.move(to: transform(head))
+            path.addLine(to: transform(wing))
+        }
+        return path
     }
 
     /// Разделительные между полосами.

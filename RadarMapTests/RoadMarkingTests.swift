@@ -72,10 +72,16 @@ final class RoadMarkingTests: XCTestCase {
         XCTAssertFalse(SketchPoint.Kind.speedBump.isPaint)
     }
 
-    func testOnlyTheZebraHasNoFallbackGlyph() {
+    func testPurePaintHasNoFallbackGlyph() {
+        // Значком краску не заменишь: зебра и стрелки полос — про место на
+        // асфальте, а не про объект рядом с дорогой. Стоп-линия исключение и
+        // остаётся со значком: она жила им до появления разметки, и там, где
+        // сервер не нашёл дороги, обязана жить дальше.
         XCTAssertFalse(SketchPoint.Kind.crossing.hasGlyph)
-        for kind in SketchPoint.Kind.allCases where kind != .crossing {
-            XCTAssertTrue(kind.hasGlyph, "\(kind) остался без запасного значка")
+        XCTAssertFalse(SketchPoint.Kind.laneArrows.hasGlyph)
+        XCTAssertTrue(SketchPoint.Kind.stopLine.hasGlyph)
+        for kind in SketchPoint.Kind.allCases where !kind.isPaint {
+            XCTAssertTrue(kind.hasGlyph, "\(kind) остался без значка")
         }
     }
 
@@ -86,6 +92,60 @@ final class RoadMarkingTests: XCTestCase {
                           SketchPoint.Kind.trafficLight.maxSpanMeters)
         XCTAssertLessThan(SketchPoint.Kind.stopLine.maxSpanMeters,
                           RoadSketch.farNetworkSpan)
+    }
+
+    // MARK: - Стрелки полос
+
+    func testTurnsComeFromTheHighBits() throws {
+        // Направления лежат выше азимута и ширины, по четыре бита на полосу:
+        // налево(2), прямо(1), прямо-направо(8).
+        let turns = (2 << 13) | (1 << 17) | (8 << 21)
+        let data = tileData([[6, flags(azimuth: 0, width: 11) | turns,
+                              [4_131_000, 6_925_000]]])
+        let point = try XCTUnwrap(RoadTiles.decodePoints(data)?.first)
+        XCTAssertEqual(point.kind, .laneArrows)
+        XCTAssertEqual(point.turns, [.left, .through, .throughRight])
+    }
+
+    func testLaneCountComesFromTurnsNotFromWidth() throws {
+        // Ширина знает про метры, а не про разметку: деление её на среднюю
+        // полосу давало бы то восемь стрелок там, где их шесть, то наоборот.
+        let turns = (1 << 13) | (1 << 17)
+        let data = tileData([[6, flags(azimuth: 0, width: 40) | turns,
+                              [4_131_000, 6_925_000]]])
+        let point = try XCTUnwrap(RoadTiles.decodePoints(data)?.first)
+        XCTAssertEqual(point.turns.count, 2, "число полос взято из ширины")
+    }
+
+    func testOnlyArrowsCarryTurns() throws {
+        let data = tileData([[5, flags(azimuth: 0, width: 11) | (2 << 13),
+                              [4_131_000, 6_925_000]]])
+        let point = try XCTUnwrap(RoadTiles.decodePoints(data)?.first)
+        XCTAssertTrue(point.turns.isEmpty, "у зебры направлений быть не может")
+    }
+
+    func testUnknownTurnIsReadAsNothing() throws {
+        // В turn:lanes встречается что угодно, и терять из-за этого дорогу
+        // нельзя.
+        let data = tileData([[6, flags(azimuth: 0, width: 11) | (15 << 13),
+                              [4_131_000, 6_925_000]]])
+        let point = try XCTUnwrap(RoadTiles.decodePoints(data)?.first)
+        XCTAssertTrue(point.turns.isEmpty)
+    }
+
+    func testAmbiguousTurnIsDrawnAsTwoArrows() {
+        // Одна фигура о двух смыслах читается боковым зрением как ошибка.
+        XCTAssertEqual(LaneTurn.throughLeft.angles.count, 2)
+        XCTAssertEqual(LaneTurn.throughRight.angles.count, 2)
+        XCTAssertEqual(LaneTurn.leftRight.angles.count, 2)
+        XCTAssertEqual(LaneTurn.through.angles, [0])
+    }
+
+    func testEveryTurnHasADirectionExceptNone() {
+        for turn in LaneTurn.allCases where turn != .none {
+            XCTAssertFalse(turn.angles.isEmpty, "\(turn) нечем нарисовать")
+        }
+        XCTAssertTrue(LaneTurn.none.angles.isEmpty)
     }
 
     // MARK: - Геометрия черты

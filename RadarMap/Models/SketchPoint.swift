@@ -29,6 +29,9 @@ nonisolated struct SketchPoint: Sendable {
         case uTurn = 4
         /// Пешеходный переход. Не значок, а КРАСКА — см. `isPaint`.
         case crossing = 5
+        /// Стрелки полос перед перекрёстком. Тоже краска: по стрелке на полосу,
+        /// каждая повёрнута по своему направлению.
+        case laneArrows = 6
 
         /// До какого охвата объект имеет смысл.
         ///
@@ -54,6 +57,9 @@ nonisolated struct SketchPoint: Sendable {
             // принимают на подъезде, и раньше они не нужны.
             case .crossing: return 120
             case .stopLine: return 150
+            // Решение о полосе принимают здесь и сейчас: дальше ста метров
+            // стрелка — пиксель, а перестроиться всё равно уже поздно.
+            case .laneArrows: return 120
             default: return RoadSketch.farNetworkSpan
             }
         }
@@ -66,7 +72,7 @@ nonisolated struct SketchPoint: Sendable {
         /// которой вернули курс, встала бы поперёк собственного перехода.
         /// Поэтому краска живёт в растре, рядом с осевой и разделительными.
         var isPaint: Bool {
-            self == .crossing || self == .stopLine
+            self == .crossing || self == .stopLine || self == .laneArrows
         }
 
         /// Есть ли чем нарисовать вид, если краска не вышла.
@@ -75,7 +81,7 @@ nonisolated struct SketchPoint: Sendable {
         /// и ширина, и обязана жить ею дальше там, где сервер дороги под точкой
         /// не нашёл: иначе объект, который раньше было видно, просто исчезнет.
         /// У зебры запасного варианта нет — значка для неё не существует.
-        var hasGlyph: Bool { self != .crossing }
+        var hasGlyph: Bool { self != .crossing && self != .laneArrows }
     }
 
     var coordinate: CLLocationCoordinate2D
@@ -85,6 +91,42 @@ nonisolated struct SketchPoint: Sendable {
     /// Ширина проезжей части под точкой, метры. 0 — сервер не измерил, и
     /// чертить нечем.
     var widthMeters: Double = 0
+    /// Куда можно с каждой полосы, слева направо. Пусто у всего, кроме стрелок.
+    var turns: [LaneTurn] = []
+}
+
+/// Направление полосы. Коды — контракт с build_roads.py (TURN_THROUGH и
+/// соседние). Неизвестный код читается как `.none`, а не роняет запись: в
+/// turn:lanes встречается что угодно, и терять из-за этого дорогу нельзя.
+nonisolated enum LaneTurn: Int, Sendable, CaseIterable {
+    case none = 0
+    case through = 1
+    case left = 2
+    case right = 3
+    case slightLeft = 4
+    case slightRight = 5
+    case uTurn = 6
+    case throughLeft = 7
+    case throughRight = 8
+    case leftRight = 9
+
+    /// Углы стрелок относительно хода дороги, градусы. Их может быть два —
+    /// «прямо и налево» рисуется двумя стрелками из одной точки, а не одной
+    /// двусмысленной.
+    var angles: [Double] {
+        switch self {
+        case .none:         return []
+        case .through:      return [0]
+        case .left:         return [-90]
+        case .right:        return [90]
+        case .slightLeft:   return [-35]
+        case .slightRight:  return [35]
+        case .uTurn:        return [-160]
+        case .throughLeft:  return [0, -90]
+        case .throughRight: return [0, 90]
+        case .leftRight:    return [-90, 90]
+        }
+    }
 }
 
 extension SketchPoint: Equatable {
@@ -94,5 +136,6 @@ extension SketchPoint: Equatable {
             && lhs.coordinate.longitude == rhs.coordinate.longitude
             && lhs.azimuthDegrees == rhs.azimuthDegrees
             && lhs.widthMeters == rhs.widthMeters
+            && lhs.turns == rhs.turns
     }
 }

@@ -160,6 +160,6 @@ nonisolated func sketchGlyph(for kind: SketchPoint.Kind, scale: CGFloat) -> some
     // У зебры пиктограммы нет и быть не может: значком краску не заменишь —
     // она про место на асфальте, а не про объект рядом с дорогой. Сцена
     // такой вид в слой значков и не кладёт (SketchPoint.Kind.hasGlyph).
-    case .crossing:     EmptyView()
+    case .crossing, .laneArrows: EmptyView()
     }
 }

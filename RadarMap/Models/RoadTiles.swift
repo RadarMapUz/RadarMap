@@ -185,9 +185,25 @@ nonisolated enum RoadTiles {
             // проезжей части целыми метрами. Контракт с point_flags в
             // build_roads.py. Оба числа известны серверу в момент посадки
             // точки на ось и больше нигде: дальше по конвейеру дороги нет.
+            // Направления полос лежат ВЫШЕ азимута и ширины, по четыре бита
+            // на полосу, до восьми полос. Девять стрелок в ряд на схеме уже не
+            // читаются, а место в записи не бесплатно.
+            //
+            // Сколько полос — считаем ПО САМИМ направлениям, а не по ширине:
+            // ширина знает про метры, а не про разметку, и деление её на
+            // среднюю полосу давало бы то восемь стрелок там, где их шесть, то
+            // наоборот. Читаем все восемь слотов и отбрасываем пустой хвост.
+            var turns: [LaneTurn] = []
+            if kind == .laneArrows {
+                turns = (0..<8).map {
+                    LaneTurn(rawValue: (entry.flags >> (13 + $0 * 4)) & 0xF) ?? .none
+                }
+                while turns.last == LaneTurn.none { turns.removeLast() }
+            }
             return SketchPoint(coordinate: point, kind: kind,
                                azimuthDegrees: Double(entry.flags & 0x7F) * 3,
-                               widthMeters: Double((entry.flags >> 7) & 0x3F))
+                               widthMeters: Double((entry.flags >> 7) & 0x3F),
+                               turns: turns)
         }
     }
 

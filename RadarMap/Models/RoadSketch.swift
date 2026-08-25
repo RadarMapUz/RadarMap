@@ -89,6 +89,8 @@ nonisolated enum RoadSketch {
         /// Направление дороги, градусы (0 — на север). Черта идёт поперёк.
         var azimuthDegrees: Double
         var widthMeters: Double
+        /// Куда можно с каждой полосы, слева направо. Пусто у зебры и стоп-линии.
+        var turns: [LaneTurn] = []
 
         /// Концы черты в метрах от опоры. Азимут — компасный, поэтому вдоль
         /// дороги это (sin, cos), а поперёк — (cos, −sin).
@@ -336,6 +338,10 @@ nonisolated enum RoadSketch {
     static let stopLineMeters: CGFloat = 0.4
     /// Короче этого на экране разметка — сор в растре, а не черта.
     static let markingMinPoints: CGFloat = 12
+    /// Длина стрелки полосы вдоль дороги, метры. Настоящая разметка длиннее
+    /// (около пяти), но на схеме стрелка соседствует со стоп-линией и зеброй,
+    /// и вытянутая перекрывала бы их.
+    static let arrowMeters: CGFloat = 4.5
 
     /// Смещения разделительных от оси дороги, от края к центру.
     ///
@@ -703,7 +709,8 @@ nonisolated enum RoadSketch {
                 if mark.kind.isPaint, mark.widthMeters > 0 {
                     scene.markings.append(Marking(point: point, kind: mark.kind,
                                                   azimuthDegrees: mark.azimuthDegrees,
-                                                  widthMeters: mark.widthMeters))
+                                                  widthMeters: mark.widthMeters,
+                                                  turns: mark.turns))
                 } else if mark.kind.hasGlyph {
                     // Сюда попадает и краска без ширины: сервер не нашёл дороги
                     // под точкой, чертить нечем. Стоп-линия при этом остаётся

@@ -961,6 +961,52 @@ class MarkingTests(unittest.TestCase):
         points = [(build_roads.POINT_TRAFFIC_LIGHT, 0, [p]) for p in near]
         self.assertEqual(len(build_roads.cluster_points(points)), 1)
 
+    # --- Стрелки полос
+
+    def test_turn_lanes_are_parsed_in_order(self):
+        self.assertEqual(build_roads.parse_turn_lanes("left|through|through;right"),
+                         [build_roads.TURN_LEFT, build_roads.TURN_THROUGH,
+                          build_roads.TURN_THROUGH_RIGHT])
+
+    def test_turn_order_inside_a_lane_does_not_matter(self):
+        self.assertEqual(build_roads.turn_code("left;through"),
+                         build_roads.turn_code("through;left"))
+
+    def test_nonsense_turn_does_not_lose_the_road(self):
+        self.assertEqual(build_roads.parse_turn_lanes("чушь|left"),
+                         [build_roads.TURN_NONE, build_roads.TURN_LEFT])
+
+    def test_turns_do_not_collide_with_azimuth_and_width(self):
+        flags = build_roads.pack_turns(build_roads.point_flags(273, 22),
+                                       [build_roads.TURN_LEFT, build_roads.TURN_THROUGH])
+        self.assertEqual(build_roads.point_azimuth(flags), 273)
+        self.assertEqual(build_roads.point_width(flags), 22)
+        self.assertEqual(build_roads.unpack_turns(flags, 2),
+                         [build_roads.TURN_LEFT, build_roads.TURN_THROUGH])
+
+    def test_snap_keeps_the_turns_it_did_not_compute(self):
+        street = self.road(4, build_roads.with_lanes(0, 4),
+                           [(41.300, 69.250), (41.310, 69.250)])
+        arrows = (build_roads.POINT_LANE_ARROWS,
+                  build_roads.pack_turns(0, [build_roads.TURN_LEFT,
+                                             build_roads.TURN_THROUGH]),
+                  [(69.2501, 41.305)])
+        snapped, _ = build_roads.snap_points([arrows], [street])
+        self.assertEqual(build_roads.unpack_turns(snapped[0][1], 2),
+                         [build_roads.TURN_LEFT, build_roads.TURN_THROUGH])
+        self.assertGreater(build_roads.point_width(snapped[0][1]), 0)
+
+    def test_arrows_stand_before_the_junction(self):
+        way = [(69.250, 41.300), (69.250, 41.310)]
+        spot = build_roads._step_back(way, build_roads.ARROW_SETBACK_METERS)
+        self.assertIsNotNone(spot)
+        back = build_roads.meters_between(spot, way[-1])
+        self.assertAlmostEqual(back, build_roads.ARROW_SETBACK_METERS, delta=0.5)
+
+    def test_short_way_gets_no_arrows(self):
+        self.assertIsNone(build_roads._step_back(
+            [(69.250, 41.3000), (69.250, 41.30005)], 12.0))
+
     # --- Контракт с клиентом
 
     def test_crossing_is_read_from_the_tag(self):
@@ -1008,7 +1054,7 @@ class SidewalkTests(unittest.TestCase):
             handle.write(source)
             path = handle.name
         try:
-            roads, _, _, _, _, _, sidewalks = build_roads.collect(path)
+            roads, _, _, _, _, _, sidewalks, _ = build_roads.collect(path)
         finally:
             os.unlink(path)
         self.assertEqual(len(roads), 1, "тротуар не должен попасть в дороги")

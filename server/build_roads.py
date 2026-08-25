@@ -794,6 +794,7 @@ def collect(source_path):
     # будет ужимать.
     lanes_tagged = 0
     sidewalks = []
+    arrows = []
     read = skipped = 0
 
     with open(source_path, encoding="utf-8") as handle:
@@ -839,11 +840,20 @@ def collect(source_path):
             name = properties.get("name", "") if code <= NAMED_MAX_CLASS else ""
             if properties.get("lanes") is not None:
                 lanes_tagged += 1
+            turns = parse_turn_lanes(properties.get("turn:lanes"))
+            if turns:
+                # Стрелки стоят ПЕРЕД перекрёстком, а не в нём: решение о
+                # полосе принимают на подъезде. Отступаем от конца пути на
+                # длину стоп-линии с запасом.
+                spot = _step_back(points, ARROW_SETBACK_METERS)
+                if spot is not None:
+                    arrows.append((spot, turns))
             roads.append((code, flags_of(properties, points, code), points, name))
             classes[properties["highway"]] += 1
             flag_counts[roads[-1][1]] += 1
 
-    return roads, classes, flag_counts, read, skipped, lanes_tagged, sidewalks
+    return (roads, classes, flag_counts, read, skipped, lanes_tagged,
+            sidewalks, arrows)
 
 
 def sort_key(road):
@@ -1054,6 +1064,27 @@ BLOCK_MIN_AREA = 400.0        # м², примерно один двор
 BLOCK_MAX_AREA = 500_000.0    # м², половина квадратного километра
 
 
+# Насколько стрелки отступают от конца пути. Двенадцать метров — стоп-линия
+# плюс запас: стрелка, нарисованная в самом узле, окажется на перекрёстке, где
+# её уже поздно читать.
+ARROW_SETBACK_METERS = 12.0
+
+
+def _step_back(points, meters):
+    """Точка на ломаной в стольких метрах от её КОНЦА. None — путь короче."""
+    remaining = meters
+    for i in range(len(points) - 1, 0, -1):
+        a, b = points[i - 1], points[i]
+        length = meters_between(a, b)
+        if length <= 0:
+            continue
+        if length >= remaining:
+            t = remaining / length
+            return (b[0] + (a[0] - b[0]) * t, b[1] + (a[1] - b[1]) * t)
+        remaining -= length
+    return None
+
+
 def _bearing_from(node_point, next_point):
     lon_scale = math.cos(math.radians(node_point[1]))
     angle = math.degrees(math.atan2((next_point[0] - node_point[0]) * lon_scale,
@@ -1210,13 +1241,91 @@ def point_width(flags):
     return (flags >> PFLAG_WIDTH_SHIFT) & PFLAG_WIDTH_MASK
 
 
+# --- Стрелки полос.
+#
+# Единственный слой образца, который на 98 % придётся вводить руками: turn:lanes
+# стоит у 163 дорог из 8 455 в центре Ташкента. Поэтому он и последний по
+# очереди, а не первый — сначала берём то, что уже лежит в OSM.
+POINT_LANE_ARROWS = 6
+
+# Куда можно с полосы. Коды — контракт с клиентом (SketchPoint.LaneTurn).
+TURN_NONE, TURN_THROUGH, TURN_LEFT, TURN_RIGHT = 0, 1, 2, 3
+TURN_SLIGHT_LEFT, TURN_SLIGHT_RIGHT, TURN_UTURN = 4, 5, 6
+TURN_THROUGH_LEFT, TURN_THROUGH_RIGHT, TURN_LEFT_RIGHT = 7, 8, 9
+
+# Разбор одной полосы из turn:lanes. Значение бывает составным («through;left»),
+# и порядок в нём не гарантирован — сравниваем множествами.
+TURN_SETS = (
+    (frozenset({"through", "left"}), TURN_THROUGH_LEFT),
+    (frozenset({"through", "right"}), TURN_THROUGH_RIGHT),
+    (frozenset({"left", "right"}), TURN_LEFT_RIGHT),
+    (frozenset({"through"}), TURN_THROUGH),
+    (frozenset({"left"}), TURN_LEFT),
+    (frozenset({"right"}), TURN_RIGHT),
+    (frozenset({"slight_left"}), TURN_SLIGHT_LEFT),
+    (frozenset({"slight_right"}), TURN_SLIGHT_RIGHT),
+    (frozenset({"reverse"}), TURN_UTURN),
+    (frozenset({"merge_to_left"}), TURN_SLIGHT_LEFT),
+    (frozenset({"merge_to_right"}), TURN_SLIGHT_RIGHT),
+)
+
+# Биты направлений идут ВЫШЕ азимута и ширины — по четыре на полосу.
+#
+# Восемь полос, а не пятнадцать: девять стрелок в ряд на экране схемы уже не
+# читаются, а место в записи не бесплатно. Итого 13 + 32 = 45 бит — влезает в
+# число JSON без потери точности (у double их 53).
+PFLAG_TURNS_SHIFT = 13
+TURN_BITS = 4
+MAX_ARROW_LANES = 8
+
+
 # Виды, которые НЕ сводятся в один объект.
 #
 # Светофоры перекрёстка — один объект: их четыре по подъездам, и четыре значка
-# в одном пятне это каша. С переходами наоборот: их тоже четыре, но каждый
-# лежит на своём подъезде и рисуется своей чертой поперёк своей проезжей части.
-# Сведи их — и вместо четырёх зебр получится одна посреди перекрёстка.
-POINT_NO_CLUSTER = {POINT_CROSSING}
+# в одном пятне это каша. С переходами и стрелками наоборот: их тоже по одному
+# на подъезд, но каждый лежит на своей проезжей части и чертится поперёк неё.
+# Сведи их — и вместо четырёх зебр выйдет одна посреди перекрёстка.
+POINT_NO_CLUSTER = {POINT_CROSSING, POINT_LANE_ARROWS}
+
+
+def turn_code(value):
+    """Код направления одной полосы. Неизвестное — TURN_NONE, а не отказ:
+    в turn:lanes встречается что угодно, и терять из-за этого всю дорогу нельзя."""
+    parts = frozenset(p.strip() for p in str(value).split(";") if p.strip())
+    if not parts:
+        return TURN_NONE
+    for wanted, code in TURN_SETS:
+        if parts == wanted:
+            return code
+    # Составное значение, которого нет в списке: берём главное направление.
+    for single, code in (("through", TURN_THROUGH), ("left", TURN_LEFT),
+                         ("right", TURN_RIGHT), ("reverse", TURN_UTURN)):
+        if single in parts:
+            return code
+    return TURN_NONE
+
+
+def parse_turn_lanes(value):
+    """«left|through|through;right» → [2, 1, 8]. Пусто — тега нет или он пуст."""
+    if not value:
+        return []
+    lanes = [turn_code(part) for part in str(value).split("|")]
+    return lanes[:MAX_ARROW_LANES]
+
+
+def pack_turns(flags, lanes):
+    """Уложить направления полос в старшие биты записи точки."""
+    for index, code in enumerate(lanes[:MAX_ARROW_LANES]):
+        flags |= (code & 0xF) << (PFLAG_TURNS_SHIFT + index * TURN_BITS)
+    return flags
+
+
+def unpack_turns(flags, count):
+    """Достать направления обратно. count — сколько полос ожидаем."""
+    out = []
+    for index in range(min(count, MAX_ARROW_LANES)):
+        out.append((flags >> (PFLAG_TURNS_SHIFT + index * TURN_BITS)) & 0xF)
+    return out
 # Что считаем лежачим полицейским. Не весь traffic_calming: «chicane» и
 # «choker» это сужение проезжей части, а не то, из-за чего сбрасывают скорость
 # в конкретной точке.
@@ -1423,7 +1532,11 @@ def snap_points(points, roads, meters=POINT_SNAP_METERS):
         # Азимут и ширину знаем ровно здесь — дорогу мы только что нашли.
         # Дальше по конвейеру она уже не понадобится, и второй раз её никто
         # искать не будет.
-        snapped.append((kind, point_flags(best_bearing, best_width), [best]))
+        # Азимут и ширину ставим здесь, а всё, что лежит ВЫШЕ них, оставляем
+        # как приехало: у стрелок полос там направления, и пересчёт посадки не
+        # имеет права их стереть.
+        above = flags & ~((1 << PFLAG_TURNS_SHIFT) - 1)
+        snapped.append((kind, point_flags(best_bearing, best_width) | above, [best]))
     return snapped, dropped
 
 
@@ -1606,7 +1719,7 @@ def main():
     args = parser.parse_args()
 
     (raw, classes, flag_counts, read, skipped,
-     lanes_tagged, raw_sidewalks) = collect(args.source)
+     lanes_tagged, raw_sidewalks, raw_arrows) = collect(args.source)
     roads = generalise(raw, args.tolerance / 111_320.0)
     # Правки накладываются ПОСЛЕ генерализации: они посажены на ту геометрию,
     # которая поедет на телефон, а не на сырую.
@@ -1621,6 +1734,12 @@ def main():
     # поедет на телефон, а не на сырую.
     far = build_far(roads)
     raw_points = collect_points(args.points)
+    # Стрелки полос — такой же точечный объект, и идут они тем же путём: снап
+    # посадит их на нарисованную ось и посчитает азимут с шириной. Направления
+    # приезжают в старших битах и посадкой не стираются.
+    raw_points = raw_points + [
+        (POINT_LANE_ARROWS, pack_turns(0, turns), [spot])
+        for spot, turns in raw_arrows]
     at_junctions = attach_to_junctions(raw_points, junction_nodes(roads))
     clustered = cluster_points(at_junctions)
     points, dropped = snap_points(clustered, roads)
@@ -1652,6 +1771,7 @@ def main():
         print(f"точки: прочитано {len(raw_points)}, на перекрёстках "
               f"{len(at_junctions)}, после сведения узлов {len(clustered)}, "
               f"вне дорог {dropped}, в тайлах {len(points)}")
+        print(f"        стрелок полос {kinds[POINT_LANE_ARROWS]}")
         print(f"        светофоров {kinds[POINT_TRAFFIC_LIGHT]}, "
               f"лежачих {kinds[POINT_SPEED_BUMP]}, стоп-линий {kinds[POINT_STOP_LINE]}, "
               f"переходов {kinds[POINT_CROSSING]}")

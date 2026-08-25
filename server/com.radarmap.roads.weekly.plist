@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Еженедельная публикация дорог. Ставится на МАШИНУ ВЛАДЕЛЬЦА, а не на
+         VPS, и это вся суть: ключ подписи живёт только здесь. VPS готовит
+         кандидата по крону (update_roads.sh), мак его забирает, проверяет
+         воротами и подписывает.
+
+         Установка:
+           cp server/com.radarmap.roads.weekly.plist ~/Library/LaunchAgents/
+           launchctl load ~/Library/LaunchAgents/com.radarmap.roads.weekly.plist
+
+         Мак спит в воскресенье — launchd выполнит задание при ближайшем
+         пробуждении, кандидат на VPS дождётся. -->
+    <key>Label</key>
+    <string>com.radarmap.roads.weekly</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>REPO/server/publish_roads.sh</string>
+        <string>--auto</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key><integer>0</integer>
+        <key>Hour</key><integer>10</integer>
+        <key>Minute</key><integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/tmp/radarmap-roads.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/radarmap-roads.log</string>
+</dict>
+</plist>

@@ -64,8 +64,10 @@ final class RoadTilesTests: XCTestCase {
         // sha сошёлся, а формат нет — это дрейф формата, и правильный ответ:
         // не рисовать ничего, а не рисовать наполовину разобранное.
         XCTAssertNil(RoadTiles.decodeTile(Data("мусор".utf8)))
+        // Версия из будущего. Двойка была здесь, пока не существовала: теперь
+        // это рабочий формат, и брать её примером «неизвестного» нельзя.
         XCTAssertNil(RoadTiles.decodeTile(
-            try! JSONSerialization.data(withJSONObject: ["version": 2, "roads": []])))
+            try! JSONSerialization.data(withJSONObject: ["version": 9, "roads": []])))
         // Нечётное число координат — битая дорога валит весь тайл.
         XCTAssertNil(RoadTiles.decodeTile(tileData([[3, 0, [4_131_000, 6_925_000, 100]]])))
     }
@@ -198,5 +200,48 @@ final class RoadTilesTests: XCTestCase {
                                         fallback: Fixed(lines: fallback))
         XCTAssertEqual(empty.roads(near: .init(), radius: 100).count, 1,
                        "нет покрытия — честный фолбэк на индекс лимитов, не пустота")
+    }
+
+    // MARK: - Формат v2: генерализация уехала на сервер
+
+    /// Байты взяты из настоящего выхода build_roads.py, а не написаны рукой:
+    /// это контракт с сервером, и проверять его надо тем, что сервер реально
+    /// пишет.
+    private let goldenStreets = """
+    {"version":2,"roads":[[3,0,[4130000,6925000,50,0,50,0,50,0,50,0,50,0,50,0]],    [6,0,[4130150,6925000,0,-50,0,-50,0,-50,0,-50]]]}
+    """
+
+    func testV2TileDecodes() {
+        let lines = RoadTiles.decodeTile(Data(goldenStreets.utf8))
+        XCTAssertEqual(lines?.count, 2)
+        XCTAssertEqual(lines?.first?.kind, .primary)
+        XCTAssertEqual(lines?.first?.points.count, 7)
+        XCTAssertEqual(lines?.first?.points.first?.latitude ?? 0, 41.3, accuracy: 1e-6)
+        XCTAssertEqual(lines?.last?.kind, .residential)
+    }
+
+    func testV1TileStillDecodes() {
+        // Сервер публикует оба формата, пока в проде есть сборки, знающие
+        // только старый. Перестать читать v1 — значит оставить их без дорог.
+        let v1 = #"{"version":1,"roads":[[3,0,[4130000,6925000,50,0]]]}"#
+        XCTAssertEqual(RoadTiles.decodeTile(Data(v1.utf8))?.count, 1)
+    }
+
+    func testUnknownVersionIsRefused() {
+        // Не «нарисуем что разобрали»: дрейф формата — повод не рисовать
+        // ничего, а не рисовать наполовину.
+        let future = #"{"version":9,"roads":[[3,0,[4130000,6925000,50,0]]]}"#
+        XCTAssertNil(RoadTiles.decodeTile(Data(future.utf8)))
+    }
+
+    func testFileNamesMatchWhatServerWrites() {
+        XCTAssertEqual(RoadTiles.fileName(key: "262_498", version: 1), "tile_262_498.json")
+        XCTAssertEqual(RoadTiles.fileName(key: "2626_4985_s", version: 2),
+                       "road2_2626_4985_s.json")
+    }
+
+    func testSetKeyIsComposite() {
+        XCTAssertEqual(RoadTiles.setKey("2626_4985", .yards), "2626_4985_y")
+        XCTAssertEqual(RoadTiles.setKey("2626_4985", .far), "2626_4985_f")
     }
 }

@@ -21,6 +21,9 @@ postgres, minio, prometheus, outline. Всё, что мы делаем, долж
 | Рабочие файлы снапа | `/opt/radarmap/work` — 225 МБ, наружу не отдаются |
 | Бэкапы | `/opt/radarmap/backups`, 7 последних, cron 03:17 |
 | Сторож | `/opt/radarmap/healthcheck.sh`, cron каждые 5 мин |
+| Дороги, кандидат | `/opt/radarmap/update_roads.sh`, cron вс 04:17 — свежий OSM, сборка, отчёт; НЕ публикует |
+| Дороги, публикация | `publish_roads.sh --auto` на маке владельца, launchd вс 10:00 — ворота, подпись, выкладка |
+| Дороги, откат | `bash server/rollback_roads.sh` — вернуть прошлый набор из `roads_prev` |
 | Логи | `/var/log/radarmap-{backup,health}.log`, `journalctl -u radarmap-api` |
 
 ## Панель модератора

@@ -30,6 +30,31 @@ final class RoadNetworkService {
     /// Снимок загруженных тайлов под кэшем окрестности. Пустой, пока тайлы
     /// не приехали, — вызывающий обязан держать фолбэк, а не пустоту.
     private(set) var network: any RoadNetworkSource = EmptyRoadNetwork()
+    /// Костяк района: раздельные проезжие сведены в одну ось, мелочи нет.
+    /// Пустой на старом формате — вызывающий тогда берёт обычную сеть.
+    private(set) var farNetwork: any RoadNetworkSource = EmptyRoadNetwork()
+
+    /// Местность вокруг: вода, зелень, рельсы, кварталы. Пустая, пока слои не
+    /// приехали, — рисовать нечего, и это нормальное состояние.
+    private(set) var areas: [SketchArea] = []
+
+    /// Какие наборы тайлов сейчас нужны. Ставит схема: она одна знает охват и
+    /// то, едем ли мы по двору. Слой, невидимый на текущем охвате, не
+    /// качается и не разбирается вовсе — дворовые проезды это половина всех
+    /// дорог, и в общем файле они ехали бы на телефон всю поездку впустую.
+    func setWantedSets(_ wanted: Swift.Set<RoadTiles.Set>) {
+        guard wanted != wantedSets else { return }
+        wantedSets = wanted
+        lastEnsureAt = nil   // состав окрестности изменился — проверить сразу
+    }
+    @ObservationIgnored private var wantedSets: Swift.Set<RoadTiles.Set> = [.far, .streets]
+    /// Распакованная местность по ключам наборов.
+    @ObservationIgnored private var loadedAreas: [String: [SketchArea]] = [:]
+
+    /// Сеть приходит уже генерализованной: склейка, схлопывание раздельных
+    /// проезжих, отсев обрубков и упрощение посчитаны на сервере один раз на
+    /// всю страну. Схема тогда только фильтрует по классу и сглаживает.
+    var isPrecomputed: Bool { indexVersion >= RoadTiles.formatVersionV2 }
 
     @ObservationIgnored private var index: RoadTiles.Index?
     /// Распакованные тайлы в памяти (только окрестность — см. eviction).
@@ -50,7 +75,13 @@ final class RoadNetworkService {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("roads", isDirectory: true)
     }
-    private var indexURL: URL { directory.appendingPathComponent("roads_index.json") }
+    private var indexURL: URL {
+        directory.appendingPathComponent(indexVersion >= RoadTiles.formatVersionV2
+                                         ? "roads_index_v2.json" : "roads_index.json")
+    }
+    /// Версия действующего индекса. Старый формат остаётся рабочим: сервер
+    /// публикует оба, пока в проде есть сборки, знающие только его.
+    @ObservationIgnored private var indexVersion = RoadTiles.formatVersionV2
 
     // MARK: - Старт и индекс
 
@@ -66,35 +97,58 @@ final class RoadNetworkService {
     }
 
     private func loadLocalIndex() async {
-        let url = indexURL
-        let loaded = await Task.detached(priority: .utility) { () -> RoadTiles.Index? in
-            guard let data = try? Data(contentsOf: url),
-                  let envelope = try? JSONDecoder().decode(
-                      SignedPayload<RoadTiles.Index>.self, from: data)
-            else { return nil }
-            return envelope.verified()
-        }.value
-        if let loaded, loaded.version == RoadTiles.formatVersion {
-            index = loaded
+        // Сперва новый формат, потом старый: если на диске лежат оба, работать
+        // надо по новому.
+        for version in [RoadTiles.formatVersionV2, RoadTiles.formatVersion] {
+            indexVersion = version
+            let url = indexURL
+            let loaded = await Task.detached(priority: .utility) { () -> RoadTiles.Index? in
+                guard let data = try? Data(contentsOf: url),
+                      let envelope = try? JSONDecoder().decode(
+                          SignedPayload<RoadTiles.Index>.self, from: data)
+                else { return nil }
+                return envelope.verified()
+            }.value
+            if let loaded, loaded.version == version {
+                index = loaded
+                return
+            }
         }
+        indexVersion = RoadTiles.formatVersionV2
     }
 
     private func refreshIndexIfNeeded() async {
+        // Трое суток, а не семь. Публикация недельная, и при недельной же
+        // проверке телефон в худшем случае ждал свежие дороги почти две
+        // недели: разминулись на день — жди следующий круг. Трое суток режут
+        // ожидание вдвое, а стоят одного маленького подписанного JSON.
         let lastCheck = Storage.double(.roadsIndexLastCheck)
-        let weekAgo = Date().timeIntervalSince1970 - 7 * 24 * 3600
-        guard index == nil || lastCheck < weekAgo else { return }
+        let deadline = Date().timeIntervalSince1970 - 3 * 24 * 3600
+        guard index == nil || lastCheck < deadline else { return }
 
         // Недельная фоновая проверка: сбой сети не критичен, попробуем позже.
-        guard let data = try? await api.getData("roads_index.json",
-                                                cachePolicy: .reloadIgnoringLocalCacheData)
-        else { return }
+        // Новый формат спрашиваем первым; сервер отдаёт оба, пока в проде есть
+        // сборки, знающие только старый.
+        var payload: Data?
+        for version in [RoadTiles.formatVersionV2, RoadTiles.formatVersion] {
+            indexVersion = version
+            let name = version >= RoadTiles.formatVersionV2
+                ? "roads_index_v2.json" : "roads_index.json"
+            if let data = try? await api.getData(name,
+                                                 cachePolicy: .reloadIgnoringLocalCacheData) {
+                payload = data
+                break
+            }
+        }
+        guard let data = payload else { return }
+        let expectedVersion = indexVersion
 
         let url = indexURL, directory = self.directory
         let fresh = await Task.detached(priority: .utility) { () -> RoadTiles.Index? in
             guard let envelope = try? JSONDecoder().decode(
                       SignedPayload<RoadTiles.Index>.self, from: data),
                   let value = envelope.verified(),
-                  value.version == RoadTiles.formatVersion else { return nil }
+                  value.version == expectedVersion else { return nil }
             do {
                 try FileManager.default.createDirectory(at: directory,
                                                         withIntermediateDirectories: true)
@@ -117,6 +171,35 @@ final class RoadNetworkService {
             loaded.removeAll()
             broken.removeAll()
             snapshotKeys.removeAll()
+        }
+        collectGarbage(keeping: fresh)
+    }
+
+    /// Убрать с диска файлы, которых больше нет в индексе.
+    ///
+    /// Раньше это была гигиена, теперь необходимость: смена сетки с 0.5° на
+    /// 0.05° делает мусором ВСЕ старые тайлы разом — до двадцати четырёх
+    /// мегабайт, которые никто никогда больше не прочитает и которые не
+    /// исчезнут сами. Индекс подписан и знает полный состав набора, так что
+    /// «нет в индексе» — это надёжный признак, а не догадка.
+    private func collectGarbage(keeping index: RoadTiles.Index) {
+        let directory = self.directory
+        let live = Set(index.tiles.keys.map {
+            RoadTiles.fileName(key: $0, version: index.version)
+        })
+        Task.detached(priority: .background) {
+            let manager = FileManager.default
+            guard let names = try? manager.contentsOfDirectory(atPath: directory.path)
+            else { return }
+            var removed = 0
+            for name in names where name.hasPrefix("tile_") || name.hasPrefix("road2_") {
+                guard !live.contains(name) else { continue }
+                try? manager.removeItem(at: directory.appendingPathComponent(name))
+                removed += 1
+            }
+            if removed > 0 {
+                Log.route.notice("тайлы дорог вне индекса удалены: \(removed, privacy: .public)")
+            }
         }
     }
 
@@ -144,9 +227,7 @@ final class RoadNetworkService {
         lastEnsureAt = coordinate
         // Тайлы, которых нет в подписанном индексе, не существуют и не
         // запрашиваются: индекс — единственный источник правды о наборе.
-        let wanted = Set(RoadTiles.neighborhood(of: coordinate,
-                                                tileDegrees: index.tileDegrees))
-            .filter { index.tiles[$0] != nil }
+        let wanted = Set(coverageKeys(around: coordinate, index: index))
 
         var missing: [String] = []
         for key in wanted where loaded[key] == nil && !broken.contains(key)
@@ -165,30 +246,52 @@ final class RoadNetworkService {
         }
     }
 
+    /// Какие файлы нужны вокруг точки.
+    ///
+    /// В старом формате это девять тайлов окрестности. В новом у каждого тайла
+    /// три набора, и берём мы не все: костяк и улицы нужны всегда, дворовые
+    /// проезды — только когда схема их показывает. Половина всех дорог
+    /// перестаёт ехать на телефон ради случая, который наступает под конец
+    /// поездки.
+    private func coverageKeys(around coordinate: CLLocationCoordinate2D,
+                              index: RoadTiles.Index) -> [String] {
+        let tiles = RoadTiles.neighborhood(of: coordinate,
+                                           tileDegrees: index.tileDegrees)
+        guard index.version >= RoadTiles.formatVersionV2 else {
+            return tiles.filter { index.tiles[$0] != nil }
+        }
+        return tiles.flatMap { tile in
+            wantedSets.map { RoadTiles.setKey(tile, $0) }
+        }.filter { index.tiles[$0] != nil }
+    }
+
     /// Тайл: сперва диск, затем сеть; в обоих случаях sha256 сверяется с
     /// подписанным индексом, несходство — «тайла нет», не «сойдёт и так».
     private func load(key: String, expected: RoadTiles.Index.TileMeta) async {
         defer { downloading.remove(key) }
-        let fileURL = directory.appendingPathComponent("tile_\(key).json")
+        let fileURL = directory.appendingPathComponent(
+            RoadTiles.fileName(key: key, version: indexVersion))
 
-        let fromDisk = await Task.detached(priority: .utility) { () -> [RoadLine]? in
+        let areaKind = Self.setOf(key)?.isArea == true
+        let fromDisk = await Task.detached(priority: .utility) { () -> Decoded? in
             guard let data = try? Data(contentsOf: fileURL),
                   RoadTiles.sha256Hex(of: data) == expected.sha256 else { return nil }
-            return RoadTiles.decodeTile(data)
+            return Self.decode(data, asArea: areaKind)
         }.value
         if let fromDisk {
-            finish(key: key, lines: fromDisk)
+            finish(key: key, decoded: fromDisk)
             return
         }
 
-        guard let data = try? await api.getData("roads/tile_\(key).json") else {
+        guard let data = try? await api.getData(
+            "roads/" + RoadTiles.fileName(key: key, version: indexVersion)) else {
             // Сеть — не приговор: попробуем при следующем ensureCoverage.
             return
         }
         let directory = self.directory
-        let decoded = await Task.detached(priority: .utility) { () -> [RoadLine]? in
+        let decoded = await Task.detached(priority: .utility) { () -> Decoded? in
             guard RoadTiles.sha256Hex(of: data) == expected.sha256,
-                  let lines = RoadTiles.decodeTile(data) else { return nil }
+                  let value = Self.decode(data, asArea: areaKind) else { return nil }
             do {
                 try FileManager.default.createDirectory(at: directory,
                                                         withIntermediateDirectories: true)
@@ -196,42 +299,88 @@ final class RoadNetworkService {
             } catch {
                 Log.route.error("тайл дорог не записался: \(error.localizedDescription, privacy: .public)")
             }
-            return lines
+            return value
         }.value
         guard let decoded else {
             broken.insert(key)
             Log.route.error("тайл дорог \(key, privacy: .public) не сошёлся по sha или формату — отброшен")
             return
         }
-        finish(key: key, lines: decoded)
+        finish(key: key, decoded: decoded)
     }
 
-    private func finish(key: String, lines: [RoadLine]) {
-        loaded[key] = lines
+    /// Что лежит в наборе: дороги или местность.
+    private nonisolated enum Decoded {
+        case roads([RoadLine])
+        case areas([SketchArea])
+    }
+
+    /// Набор по составному ключу «тайл_набор». nil — старый формат.
+    private nonisolated static func setOf(_ key: String) -> RoadTiles.Set? {
+        guard let suffix = key.split(separator: "_").last else { return nil }
+        return RoadTiles.Set(rawValue: String(suffix))
+    }
+
+    private nonisolated static func decode(_ data: Data, asArea: Bool) -> Decoded? {
+        asArea ? RoadTiles.decodeAreas(data).map(Decoded.areas)
+               : RoadTiles.decodeTile(data).map(Decoded.roads)
+    }
+
+    private func finish(key: String, decoded: Decoded) {
+        switch decoded {
+        case .roads(let lines): loaded[key] = lines
+        case .areas(let shapes): loadedAreas[key] = shapes
+        }
         // Состав окрестности изменился — следующий тик обязан пройти гейт,
         // иначе новый тайл ждал бы километра пути.
         lastEnsureAt = nil
         // Снимок собираем один раз, когда долетела вся пачка; следующий
         // ensureCoverage сузит его до окрестности и выселит дальние тайлы.
         guard downloading.isEmpty else { return }
-        rebuildSnapshot(keys: Set(loaded.keys))
+        rebuildSnapshot(keys: Set(loaded.keys).union(loadedAreas.keys))
     }
 
     private func rebuildSnapshot(keys: Set<String>) {
         // Дальние тайлы — вон из памяти (файлы остаются на диске).
-        if loaded.count > 12 {
+        //
+        // Порог считается ОТ РАЗМЕРА ОКРЕСТНОСТИ, а не константой в двенадцать.
+        // Константа была верна, пока на тайл приходился один файл: девять
+        // тайлов покрытия плюс запас. В новом формате файлов три на тайл, то
+        // есть окрестность сама по себе от восемнадцати до двадцати семи, —
+        // порог срабатывал бы всегда, и запас, ради которого он и написан,
+        // исчез бы: разворот через границу тайла заставлял бы перечитывать
+        // файлы с диска заново.
+        if loaded.count + loadedAreas.count > keys.count + 9 {
             for key in loaded.keys where !keys.contains(key) {
                 loaded.removeValue(forKey: key)
             }
+            for key in loadedAreas.keys where !keys.contains(key) {
+                loadedAreas.removeValue(forKey: key)
+            }
         }
         snapshotKeys = keys
-        let tiles = keys.compactMap { loaded[$0] }
-        Task.detached(priority: .utility) { [tiles] in
-            let built = TileRoadNetwork.build(tiles)
+        // Костяк района собирается отдельным снимком: на дальнем охвате схема
+        // берёт его вместо обычной сети — там раздельные проезжие уже сведены
+        // в одну ось, и мелочи нет вовсе.
+        let isV2 = indexVersion >= RoadTiles.formatVersionV2
+        let farSuffix = "_" + RoadTiles.Set.far.rawValue
+        let nearTiles = keys.filter { !isV2 || !$0.hasSuffix(farSuffix) }
+            .compactMap { loaded[$0] }
+        let farTiles = isV2 ? keys.filter { $0.hasSuffix(farSuffix) }.compactMap { loaded[$0] }
+                            : []
+        areas = keys.compactMap { loadedAreas[$0] }.flatMap { $0 }
+        Task.detached(priority: .utility) { [nearTiles, farTiles] in
+            let near = TileRoadNetwork.build(nearTiles)
+            let far = farTiles.isEmpty ? nil : TileRoadNetwork.build(farTiles)
             await MainActor.run {
-                self.network = CachedRoadNetwork(built)
+                self.network = CachedRoadNetwork(near)
+                if let far {
+                    self.farNetwork = CachedRoadNetwork(far)
+                } else {
+                    self.farNetwork = EmptyRoadNetwork()
+                }
                 self.revision += 1
-                Log.route.info("сеть дорог: \(built.lines.count) линий из \(tiles.count) тайлов")
+                Log.route.info("сеть дорог: \(near.lines.count) линий, костяк \(far?.lines.count ?? 0)")
             }
         }
     }

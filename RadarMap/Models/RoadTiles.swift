@@ -27,6 +27,44 @@ import Foundation
 nonisolated enum RoadTiles {
 
     static let formatVersion = 1
+    /// Новый формат: мелкая сетка и три набора на тайл — костяк района,
+    /// улицы, дворовые проезды. Разложен так не для красоты: дворы это
+    /// половина всех дорог, а видны они только когда мы сами во дворе, и в
+    /// отдельном файле телефон просто не качает их всю остальную дорогу.
+    static let formatVersionV2 = 2
+
+    /// Наборы нового формата. Ключ индекса составной: «тайл_набор» — так он
+    /// ложится в тот же плоский словарь, что и раньше.
+    enum Set: String, CaseIterable, Sendable {
+        case far = "f", streets = "s", yards = "y"
+        case water = "w", green = "g", rail = "r", blocks = "b"
+
+        /// Наборы местности разбираются в SketchArea, дорожные — в RoadLine.
+        var isArea: Bool {
+            switch self {
+            case .far, .streets, .yards: return false
+            case .water, .green, .rail, .blocks: return true
+            }
+        }
+
+        /// Вид местности набора. nil — набор дорожный.
+        var areaKind: SketchArea.Kind? {
+            switch self {
+            case .water:  return .water
+            case .green:  return .green
+            case .rail:   return .rail
+            case .blocks: return .block
+            case .far, .streets, .yards: return nil
+            }
+        }
+    }
+
+    static func setKey(_ tile: String, _ set: Set) -> String { "\(tile)_\(set.rawValue)" }
+
+    /// Имя файла тайла на сервере и на диске.
+    static func fileName(key: String, version: Int) -> String {
+        version >= formatVersionV2 ? "road2_\(key).json" : "tile_\(key).json"
+    }
     /// Масштаб координат в тайле: 1e-5° ≈ 1,1 м.
     static let scale = 1e5
 
@@ -85,18 +123,50 @@ nonisolated enum RoadTiles {
         }
     }
 
+    /// Распаковать тайл местности.
+    ///
+    /// Формат тот же, что у дорог, и это не совпадение, а решение: одна
+    /// распаковка дельт на оба слоя. Первое число — вид, второе — биты, из
+    /// которых нам нужен один: замкнут контур или нет.
+    static func decodeAreas(_ data: Data) -> [SketchArea]? {
+        guard let raw = decodeEntries(data) else { return nil }
+        var areas: [SketchArea] = []
+        areas.reserveCapacity(raw.count)
+        for entry in raw {
+            guard let kind = SketchArea.Kind(rawValue: entry.code) else { continue }
+            areas.append(SketchArea(points: entry.points, kind: kind,
+                                    isClosed: entry.flags & 1 != 0))
+        }
+        return areas
+    }
+
     /// Распаковать тайл. `nil` — формат не тот: sha уже сошёлся, значит это
     /// не порча по дороге, а дрейф формата, и правильный ответ — не рисовать
     /// ничего, а не рисовать наполовину разобранное.
-    static func decodeTile(_ data: Data) -> [RoadLine]? {
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              root["version"] as? Int == formatVersion,
-              let rawRoads = root["roads"] as? [[Any]] else { return nil }
+    /// Одна запись тайла: код, биты и распакованные дельты.
+    private struct Entry {
+        let code: Int
+        let flags: Int
+        let points: [CLLocationCoordinate2D]
+        /// Имя четвёртым элементом и только там, где оно есть: у одной дороги
+        /// из семи. Писать пустую строку остальным значило бы платить за неё
+        /// местом у всех.
+        let name: String
+    }
 
-        var lines: [RoadLine] = []
-        lines.reserveCapacity(rawRoads.count)
-        for entry in rawRoads {
-            guard entry.count == 3,
+    /// Распаковка, общая для дорог и местности. Держать её в одном месте
+    /// важнее краткости: формат дельт — контракт с сервером, и разойтись двум
+    /// его читателям нельзя.
+    private static func decodeEntries(_ data: Data) -> [Entry]? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let version = root["version"] as? Int,
+              version == formatVersion || version == formatVersionV2,
+              let rawEntries = root["roads"] as? [[Any]] else { return nil }
+
+        var entries: [Entry] = []
+        entries.reserveCapacity(rawEntries.count)
+        for entry in rawEntries {
+            guard entry.count == 3 || entry.count == 4,
                   let code = (entry[0] as? NSNumber)?.intValue,
                   let flags = (entry[1] as? NSNumber)?.intValue,
                   let flat = entry[2] as? [NSNumber],
@@ -116,14 +186,24 @@ nonisolated enum RoadTiles {
                 points.append(CLLocationCoordinate2D(latitude: Double(lat) / scale,
                                                      longitude: Double(lon) / scale))
             }
-            // Биты flags: 1 = одностороннее, 2 = мост, 4 = тоннель.
-            lines.append(RoadLine(points: points,
-                                  kind: roadClass(code: code),
-                                  level: flags & 2 != 0 ? 1 : (flags & 4 != 0 ? -1 : 0),
-                                  isOneWay: flags & 1 != 0,
-                                  isDetailed: true))
+            let name = entry.count > 3 ? (entry[3] as? String ?? "") : ""
+            entries.append(Entry(code: code, flags: flags, points: points, name: name))
         }
-        return lines
+        return entries
+    }
+
+    static func decodeTile(_ data: Data) -> [RoadLine]? {
+        guard let entries = decodeEntries(data) else { return nil }
+        // Биты flags: 1 = одностороннее, 2 = мост, 4 = тоннель, 8 = кольцо.
+        return entries.map { entry in
+            RoadLine(points: entry.points,
+                     kind: roadClass(code: entry.code),
+                     level: entry.flags & 2 != 0 ? 1 : (entry.flags & 4 != 0 ? -1 : 0),
+                     isOneWay: entry.flags & 1 != 0 && entry.flags & 8 == 0,
+                     isDetailed: true,
+                     isRing: entry.flags & 8 != 0,
+                     name: entry.name)
+        }
     }
 }
 

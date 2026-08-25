@@ -45,6 +45,14 @@ if [ -n "${free_mb:-}" ] && [ "$free_mb" -lt "$DISK_MIN_MB" ]; then
 fi
 
 # 5. Свежесть бэкапа: backup_db.sh мог тихо перестать работать месяц назад.
+# Дороги обновляются раз в неделю. Три недели без свежего индекса означают,
+# что цикл встал — крон не отработал или ворота публикации не пускают. Молча
+# устаревающая карта хуже отсутствующей: по ней ездят, считая её свежей.
+stale_roads=$(find /opt/radarmap/www -maxdepth 1 -name 'roads_index*.json' -mtime -21 2>/dev/null | head -1)
+if [ -z "$stale_roads" ]; then
+    problems+=("дорожный индекс не обновлялся больше трёх недель")
+fi
+
 newest_backup=$(find /opt/radarmap/backups -name 'reports*.db*' -mtime -2 2>/dev/null | head -1)
 if [ -d /opt/radarmap/backups ] && [ -z "$newest_backup" ]; then
     problems+=("бэкапа reports.db нет за последние двое суток")

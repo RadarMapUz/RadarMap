@@ -951,13 +951,15 @@ def sweep_edits(tiles_dir):
     Двигает только то, на что автоматика имеет право; снятие с публикации
     остаётся решением человека и ждёт его на странице «Что изменилось».
     """
-    roads = map_edits.load_roads(tiles_dir, -90, -180, 90, 180)
-    if not roads:
+    if not os.path.isdir(tiles_dir or ""):
         return "правки не сверялись: тайлов по указанному пути нет"
     conn = db()
     try:
         map_edits.ensure_tables(conn)
-        decisions = osm_queue.sweep(conn, roads)
+        # Вокруг каждой правки, а не по всей земле: сборка запускается на той
+        # же машине, где живёт панель, и «дай все дороги» съедало бы её память
+        # ровно тогда, когда она нужна сборке.
+        decisions = osm_queue.sweep(conn, tiles_dir=tiles_dir)
         moved, queued = osm_queue.apply_sweep(conn, decisions)
         counts = osm_queue.summary(decisions)
         log_action(conn, None, "osm-sweep",
@@ -1681,13 +1683,16 @@ class Handler(BaseHTTPRequestHandler):
         # возврат раньше него — действие теряло бы и подтверждение, и отмену, а
         # модератор видел бы «сверять не с чем» и решал, что ничего не вышло.
         done = self.changes_banner()
-        roads = map_edits.load_roads(edits_tiles_dir(), -90, -180, 90, 180)
-        if not roads:
+        tiles = edits_tiles_dir()
+        if not os.path.isdir(tiles):
             return page("/changes", "Что изменилось", done +
                         '<div class="empty">Тайлов не видно: RADARMAP_TILES '
                         'указывает не туда, или дороги ещё не публиковались. '
                         'Сверять правки не с чем.</div>')
-        decisions = osm_queue.sweep(conn, roads)
+        # Сверяем ВОКРУГ КАЖДОЙ правки, а не по всей земле. «Дай все дороги»
+        # открывало на боевом 210 файлов и упирало панель в MemoryMax — после
+        # чего она переставала отвечать вовсе.
+        decisions = osm_queue.sweep(conn, tiles_dir=tiles)
         counts = osm_queue.summary(decisions)
 
         act = esc(u("/changes/act"))

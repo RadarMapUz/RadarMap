@@ -548,13 +548,57 @@ def decode_tile(payload):
     return roads
 
 
+# Шаг сетки тайлов. Формат v1 — один файл на 0.5°, v2 — мелкая сетка по
+# наборам. Нужен здесь ровно затем, чтобы по ИМЕНИ файла понять, какой кусок
+# земли в нём лежит, и не открывать его, если он не в рамке.
+TILE_DEGREES_V1 = 0.5
+TILE_DEGREES_V2 = 0.05
+
 # Разобранные тайлы: путь → (mtime, дороги).
 #
-# Тайл Ташкента — 2.7 МБ и 71 595 дорог, и перечитывать его на каждое движение
-# карты значит платить четверть секунды за каждый кадр панели. Ключ — время
-# правки файла, поэтому свежая публикация подхватывается сама, без перезапуска
-# панели: модератор не должен помнить, что после выкладки надо что-то дёрнуть.
+# Тайл Ташкента — 2.7 МБ и 71 595 дорог; разобранный он занимает десятки
+# мегабайт. Кэш ОБЯЗАН быть ограничен: панель живёт под MemoryMax=256M, и
+# бесконечный кэш выбирал его за десяток движений карты — сервис упирался в
+# потолок и переставал отвечать вовсе. Так и случилось на боевом.
+#
+# Двух хватает: модератор работает в одном месте, а два — это его тайл и
+# соседний, когда он стоит на границе.
 _TILE_CACHE = {}
+_TILE_ORDER = []
+TILE_CACHE_SIZE = 2
+
+# Сколько тайлов вообще можно прочитать за один запрос.
+#
+# Не «сколько влезет», а именно потолок: запрос с рамкой во всю страну
+# («сверь все правки») читал бы все 210 файлов и убивал панель. Рамка шире
+# этого — ошибка вызова, а не повод грузить землю целиком.
+MAX_TILES_PER_CALL = 6
+
+
+def _tile_box(name):
+    """Кусок земли, лежащий в файле, по его ИМЕНИ → (юг, запад, север, восток).
+
+    None — имя не наше. Читать файл, чтобы узнать, нужен ли он, значит читать
+    все файлы: ровно эта ошибка и положила панель.
+    """
+    if name.endswith(".json") and name.startswith("tile_"):
+        parts, step = name[len("tile_"):-len(".json")].split("_"), TILE_DEGREES_V1
+    elif name.endswith(".json") and name.startswith("road2_"):
+        body = name[len("road2_"):-len(".json")].rsplit("_", 1)
+        if len(body) != 2:
+            return None
+        parts, step = body[0].split("_"), TILE_DEGREES_V2
+    else:
+        return None
+    if len(parts) != 2:
+        return None
+    try:
+        row, column = int(parts[0]), int(parts[1])
+    except ValueError:
+        return None
+    south = row * step - 90
+    west = column * step - 180
+    return (south, west, south + step, west + step)
 
 
 def _tile_roads(path):
@@ -572,6 +616,11 @@ def _tile_roads(path):
         return []
     roads = decode_tile(payload)
     _TILE_CACHE[path] = (mtime, roads)
+    if path in _TILE_ORDER:
+        _TILE_ORDER.remove(path)
+    _TILE_ORDER.append(path)
+    while len(_TILE_ORDER) > TILE_CACHE_SIZE:
+        _TILE_CACHE.pop(_TILE_ORDER.pop(0), None)
     return roads
 
 
@@ -580,35 +629,61 @@ def load_roads(tiles_dir, south, west, north, east, sets=("s", "y")):
 
     Читаем ТО ЖЕ, что уедет на телефон: магнит обязан липнуть к нарисованной
     геометрии, а не к сырому OSM. Наборы по умолчанию — улицы и дворы: костяк
-    (`f`) для посадки не годится, там раздельные проезжие сведены в одну ось,
-    и объект сел бы между ними.
+    (`f`) для посадки не годится, там раздельные проезжие сведены в одну ось, и
+    объект сел бы между ними.
+
+    Открываем только те файлы, чей кусок земли ПЕРЕСЕКАЕТ рамку, и не больше
+    MAX_TILES_PER_CALL. Прежняя версия читала весь каталог и разбирала каждый
+    файл, чтобы понять, нужен ли он: на боевом это 210 файлов и десятки
+    миллионов объектов — панель упиралась в MemoryMax и переставала отвечать.
     """
     if not tiles_dir or not os.path.isdir(tiles_dir):
         return []
     names = sorted(os.listdir(tiles_dir))
-
-    def wanted(name):
-        if not name.endswith(".json"):
-            return False
-        if name.startswith("road2_"):
-            suffix = name[len("road2_"):-len(".json")].rsplit("_", 1)
-            return len(suffix) == 2 and suffix[1] in sets
-        # Запасной путь: СТАРЫЙ формат, один файл на всё.
-        #
-        # Он не наследие ради наследия. Формат v2 собирается параллельно с v1 и
-        # уберётся, только когда в проде не останется старых сборок, — а до тех
-        # пор на сервере может лежать один v1, и именно так там сейчас и есть.
-        # Панель, умеющая липнуть только к v2, на таком сервере просто не
-        # магнитила бы, и понять почему было бы неоткуда: дороги в тайлах есть.
-        return name.startswith("tile_") if not has_v2 else False
-
     has_v2 = any(name.startswith("road2_") for name in names)
-    roads = []
+
+    wanted = []
     for name in names:
-        if not wanted(name):
+        if name.startswith("road2_"):
+            body = name[len("road2_"):-len(".json")].rsplit("_", 1)
+            if len(body) != 2 or body[1] not in sets:
+                continue
+        elif name.startswith("tile_"):
+            # Запасной путь: СТАРЫЙ формат, один файл на всё.
+            #
+            # Он не наследие ради наследия. Формат v2 собирается параллельно с
+            # v1 и уберётся, только когда в проде не останется старых сборок, —
+            # а до тех пор на сервере может лежать один v1, и именно так там
+            # сейчас и есть. Панель, умеющая липнуть только к v2, на таком
+            # сервере просто не магнитила бы, и понять почему было бы неоткуда.
+            if has_v2:
+                continue
+        else:
             continue
+        box = _tile_box(name)
+        if box is None:
+            continue
+        if box[0] > north or box[2] < south or box[1] > east or box[3] < west:
+            continue
+        wanted.append(name)
+
+    roads = []
+    for name in wanted[:MAX_TILES_PER_CALL]:
         for road in _tile_roads(os.path.join(tiles_dir, name)):
             if any(south <= lat <= north and west <= lon <= east
                    for lon, lat in road["points"]):
                 roads.append(road)
     return roads
+
+
+def roads_near(tiles_dir, point, meters=200.0):
+    """Дороги вокруг точки. Рамка считается от радиуса, а не берётся от мира.
+
+    Нужна там, где раньше просили «все дороги»: сверка правок, отпечаток
+    окрестности. Правка держится за МЕСТО, и всё, что дальше двухсот метров,
+    к ней отношения не имеет — а стоит его чтение всей памяти панели.
+    """
+    lon, lat = float(point[0]), float(point[1])
+    d_lat = meters / LAT_METERS
+    d_lon = d_lat / max(0.2, math.cos(math.radians(lat)))
+    return load_roads(tiles_dir, lat - d_lat, lon - d_lon, lat + d_lat, lon + d_lon)

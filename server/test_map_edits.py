@@ -268,6 +268,14 @@ class TileSourceTests(unittest.TestCase):
     def payload(self, roads):
         return {"version": 2, "roads": roads}
 
+    def v2_key(self, lat, lon):
+        """Имя тайла v2 по координате. Сетка мелкая (0.05°), и синтетические
+        имена вроде road2_262_498 указывают на другой конец земли — тайл просто
+        не попадает в рамку, и тест «ничего не нашлось» проходит по неверной
+        причине."""
+        step = map_edits.TILE_DEGREES_V2
+        return int((lat + 90) / step), int((lon + 180) / step)
+
     def test_tile_decodes_the_same_way_the_phone_does(self):
         # Первая точка абсолютная, дальше дельты в 1e-5°.
         decoded = map_edits.decode_tile(self.payload(
@@ -290,8 +298,9 @@ class TileSourceTests(unittest.TestCase):
         # В костяке раздельные проезжие сведены в одну ось: объект сел бы
         # между ними, то есть на разделительную.
         with tempfile.TemporaryDirectory() as work:
+            row, column = self.v2_key(41.30, 69.25)
             for suffix in ("s", "f"):
-                with open(os.path.join(work, f"road2_262_498_{suffix}.json"),
+                with open(os.path.join(work, f"road2_{row}_{column}_{suffix}.json"),
                           "w", encoding="utf-8") as handle:
                     json.dump(self.payload(
                         [[3, 0, [4_130_000, 6_925_000, 100, 0], suffix]]), handle)
@@ -315,13 +324,62 @@ class TileSourceTests(unittest.TestCase):
         # Читать оба значило бы удвоить каждую дорогу и получить «две дороги
         # рядом» там, где она одна: магнит перестал бы выбирать вовсе.
         with tempfile.TemporaryDirectory() as work:
+            row, column = self.v2_key(41.30, 69.25)
             for name, label in (("tile_262_498.json", "старая"),
-                                ("road2_262_498_s.json", "новая")):
+                                (f"road2_{row}_{column}_s.json", "новая")):
                 with open(os.path.join(work, name), "w", encoding="utf-8") as handle:
                     json.dump({"version": 2, "roads":
                                [[3, 0, [4_130_000, 6_925_000, 100, 0], label]]}, handle)
             loaded = map_edits.load_roads(work, 41.29, 69.24, 41.31, 69.26)
             self.assertEqual([r["name"] for r in loaded], ["новая"])
+
+    def test_only_tiles_touching_the_frame_are_opened(self):
+        # Прежняя версия читала весь каталог и разбирала каждый файл, чтобы
+        # понять, нужен ли он. На боевом это 210 файлов и десятки миллионов
+        # объектов: панель упиралась в MemoryMax и переставала отвечать.
+        with tempfile.TemporaryDirectory() as work:
+            for name, label in (("tile_262_498.json", "Ташкент"),
+                                ("tile_100_100.json", "другой конец земли")):
+                with open(os.path.join(work, name), "w", encoding="utf-8") as handle:
+                    json.dump({"version": 1, "roads":
+                               [[3, 0, [4_130_000, 6_925_000, 100, 0], label]]}, handle)
+            loaded = map_edits.load_roads(work, 41.29, 69.24, 41.31, 69.26)
+            self.assertEqual([r["name"] for r in loaded], ["Ташкент"])
+
+    def test_cache_does_not_grow_without_bound(self):
+        # Ради этого потолка всё и затевалось: разобранный тайл Ташкента —
+        # десятки мегабайт, а панель живёт под MemoryMax=256M.
+        with tempfile.TemporaryDirectory() as work:
+            for row in range(260, 268):
+                with open(os.path.join(work, f"tile_{row}_498.json"),
+                          "w", encoding="utf-8") as handle:
+                    json.dump({"version": 1, "roads":
+                               [[3, 0, [4_130_000, 6_925_000, 100, 0]]]}, handle)
+                lat = row * 0.5 - 90
+                map_edits.load_roads(work, lat, 69.0, lat + 0.4, 69.4)
+            self.assertLessEqual(len(map_edits._TILE_CACHE),
+                                 map_edits.TILE_CACHE_SIZE)
+
+    def test_world_frame_cannot_read_the_whole_country(self):
+        # Рамка во всю землю — ошибка вызова, а не повод грузить всё.
+        with tempfile.TemporaryDirectory() as work:
+            for row in range(250, 275):
+                with open(os.path.join(work, f"tile_{row}_498.json"),
+                          "w", encoding="utf-8") as handle:
+                    json.dump({"version": 1, "roads":
+                               [[3, 0, [4_130_000, 6_925_000, 100, 0]]]}, handle)
+            loaded = map_edits.load_roads(work, -90, -180, 90, 180)
+            self.assertLessEqual(len(loaded), map_edits.MAX_TILES_PER_CALL)
+
+    def test_roads_near_asks_for_a_frame_not_for_the_world(self):
+        with tempfile.TemporaryDirectory() as work:
+            for name, label in (("tile_262_498.json", "рядом"),
+                                ("tile_100_100.json", "далеко")):
+                with open(os.path.join(work, name), "w", encoding="utf-8") as handle:
+                    json.dump({"version": 1, "roads":
+                               [[3, 0, [4_130_000, 6_925_000, 100, 0], label]]}, handle)
+            near = map_edits.roads_near(work, (69.25, 41.30))
+            self.assertEqual([r["name"] for r in near], ["рядом"])
 
     def test_missing_tiles_directory_is_not_an_error(self):
         self.assertEqual(map_edits.load_roads("/нет/такого", 0, 0, 1, 1), [])

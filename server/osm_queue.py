@@ -91,19 +91,36 @@ def caught_up(edit, roads, meters=CAUGHT_UP_METERS):
     return False
 
 
-def sweep(conn, roads):
+def sweep(conn, roads=None, tiles_dir=None):
     """Прогнать ВСЕ действующие правки по новой сети → список решений.
 
     Ничего не применяет сам: возвращает, что нашёл. Применение — отдельным
     шагом, потому что снятие с публикации это решение, а не следствие.
+
+    Дороги берутся ВОКРУГ КАЖДОЙ ПРАВКИ, а не разом по всей земле. Правка
+    держится за место, и всё, что дальше двухсот метров, к ней отношения не
+    имеет — а стоит его чтение всей памяти панели: на боевом «сверь все
+    правки» открывало 210 файлов и упирало сервис в MemoryMax, после чего он
+    переставал отвечать вовсе.
+
+    Готовый список дорог (roads) остаётся ради тестов и ради вызова, у которого
+    сеть уже в руках, — например из сборки тайлов.
     """
     out = []
     for edit in map_edits.export_accepted(conn):
-        if caught_up(edit, roads):
+        near = roads
+        if near is None:
+            raw = edit.get("raw") or edit.get("geom") or []
+            if len(raw) < 2:
+                out.append({"edit": edit, "verdict": LOST, "point": None,
+                            "shift": 0.0})
+                continue
+            near = map_edits.roads_near(tiles_dir, (raw[0], raw[1]))
+        if caught_up(edit, near):
             out.append({"edit": edit, "verdict": CAUGHT_UP, "point": None,
                         "shift": 0.0})
             continue
-        verdict, point, shift = reconcile(edit, roads)
+        verdict, point, shift = reconcile(edit, near)
         out.append({"edit": edit, "verdict": verdict, "point": point,
                     "shift": round(shift, 1)})
     return out

@@ -165,6 +165,29 @@ class Snap:
                 "atNode": self.at_node}
 
 
+def candidates(point, roads, meters=SNAP_METERS):
+    """Все дороги в радиусе захвата, ближняя первой.
+
+    Отдельно от snap() и намеренно: магнит не выбирает за человека, но человеку
+    надо чем-то ответить. «Приблизьте карту» ответом не является — приближение
+    не разводит две проезжие части, они физически в двадцати метрах друг от
+    друга. Список кандидатов, у каждого из которых УЖЕ посчитана своя посадка,
+    позволяет выбрать без второго запроса на сервер.
+    """
+    out = []
+    for road in roads:
+        line = road.get("points") or []
+        if len(line) < 2:
+            continue
+        candidate, azimuth, distance = nearest_on(point, line)
+        if distance > meters:
+            continue
+        out.append({"road": road, "point": candidate,
+                    "bearing": azimuth, "distance": distance})
+    out.sort(key=lambda item: item["distance"])
+    return out
+
+
 def snap(point, roads, meters=SNAP_METERS, node_meters=NODE_METERS,
          prefer_node=False):
     """Посадить точку на ось ближайшей дороги.
@@ -174,26 +197,17 @@ def snap(point, roads, meters=SNAP_METERS, node_meters=NODE_METERS,
     в полутора метрах от узла светофор на схеме висит рядом с перекрёстком,
     а не на нём.
     """
-    best = Snap(point)
-    contenders = []
-    for road in roads:
-        line = road.get("points") or []
-        if len(line) < 2:
-            continue
-        candidate, azimuth, distance = nearest_on(point, line)
-        if distance > meters:
-            continue
-        contenders.append((distance, road, candidate, azimuth))
-
-    if not contenders:
-        return best
-    contenders.sort(key=lambda item: item[0])
-    distance, road, candidate, azimuth = contenders[0]
+    found = candidates(point, roads, meters)
+    if not found:
+        return Snap(point)
+    first = found[0]
+    road, candidate = first["road"], first["point"]
+    distance, azimuth = first["distance"], first["bearing"]
 
     # Неоднозначность: вторая дорога почти на том же расстоянии. Не выбираем
     # за человека — проспект с дублёром выглядит именно так.
-    close = [item[1] for item in contenders[1:]
-             if item[0] - distance <= AMBIGUOUS_METERS]
+    close = [item["road"] for item in found[1:]
+             if item["distance"] - distance <= AMBIGUOUS_METERS]
     if close:
         return Snap(candidate, road, distance, azimuth, False, [road] + close)
 

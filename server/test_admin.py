@@ -869,6 +869,43 @@ class EditorApiTests(AdminTest):
     def test_snap_needs_a_point(self):
         self.assertEqual(_post_json(self.port, "/api/snap", {})[0], 400)
 
+    def test_snap_offers_choices_rather_than_a_refusal(self):
+        # «Приблизьте карту» ответом не является: приближение не разводит две
+        # проезжие части, они физически в двадцати метрах друг от друга. Ручка
+        # обязана отдавать список, у каждого элемента которого уже посчитана
+        # своя посадка, — иначе выбор стоил бы второго запроса.
+        code, body = _post_json(self.port, "/api/snap",
+                                {"lat": 41.31, "lon": 69.25})
+        self.assertEqual(code, 200)
+        payload = json.loads(body)
+        self.assertIn("candidates", payload)
+        self.assertIsInstance(payload["candidates"], list)
+
+    def test_withdrawn_edit_can_be_brought_back(self):
+        # Отмена — это возврат предыдущей версии, а не отдельный механизм.
+        code, body = _post_json(self.port, "/api/edit",
+                                {"kind": "lanes", "geom": [69.25, 41.3],
+                                 "raw": [69.25, 41.3], "props": {"lanes": 4},
+                                 "status": 1})
+        self.assertEqual(code, 200, body)
+        made = json.loads(body)
+        code, _ = _post_json(self.port, "/api/edit/withdraw",
+                             {"id": made["id"], "version": made["version"]})
+        self.assertEqual(code, 200)
+        gone = json.loads(_get(self.port,
+            "/api/edits?south=41.29&west=69.24&north=41.31&east=69.26")[1])
+        self.assertEqual(gone["edits"], [], "снятая правка осталась на карте")
+
+        code, _ = _post_json(self.port, "/api/edit",
+                             {"id": made["id"], "version": made["version"] + 1,
+                              "kind": "lanes", "geom": [69.25, 41.3],
+                              "raw": [69.25, 41.3], "props": {"lanes": 4},
+                              "status": 1})
+        self.assertEqual(code, 200)
+        back = json.loads(_get(self.port,
+            "/api/edits?south=41.29&west=69.24&north=41.31&east=69.26")[1])
+        self.assertEqual(len(back["edits"]), 1, "отмена не вернула правку")
+
     def test_changes_page_says_when_there_is_nothing_to_compare_with(self):
         # Тайлов на стенде нет. Пустая страница здесь была бы враньём: она
         # читалась бы как «всё в порядке», хотя сверять правки просто не с чем.

@@ -663,7 +663,19 @@ background:#12161d;border:1px solid #232a35;border-radius:14px;padding:14px}}
 border:1px solid #2b3038;background:#0d1116;color:#e7e9ee;font-size:14px}}
 .card button{{margin-top:12px;margin-right:8px}}
 .card button.ghost{{background:#12161d;color:#8ea0bb;border:1px solid #2b3038}}
+.card button.pick{{display:block;width:100%;margin-top:8px;text-align:left;
+background:#0d1116;color:#e7e9ee;border:1px solid #2b3038;border-left-width:4px}}
+.card .keys{{margin-top:12px;padding-top:10px;border-top:1px solid #1b2231;
+font-size:11px}}
 .hint{{font-size:12px;color:#8ea0bb;line-height:1.5}}
+/* Полоска отмены. Не диалог подтверждения: тот тормозит на каждом объекте и
+   всё равно проматывается не глядя, а отмена после факта стоит ноль, пока не
+   нужна. Ровно так же сделано на карте камер. */
+.toast{{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);z-index:6;
+background:#12161df2;border:1px solid #2b3038;border-radius:12px;padding:10px 14px;
+font-size:13px;display:none;gap:12px;align-items:center}}
+.toast.on{{display:flex}}
+.toast button{{padding:6px 12px;font-size:13px}}
 </style></head>
 <body><header>{"".join(
     f'<a href="{esc(u(path))}" class="{"on" if path == "/editor" else ""}">{esc(name)}</a>'
@@ -674,9 +686,12 @@ border:1px solid #2b3038;background:#0d1116;color:#e7e9ee;font-size:14px}}
   <button data-kind="turn_lanes" class="tool">2 · Направления</button>
   <button data-kind="u_turn" class="tool">3 · Разворот</button>
   <div class="legend" id="hint">Черновиков: {drafts}. Клик по дороге ставит
-    объект — магнит посадит его на ось. Панель ничего не публикует.</div>
+    объект, клик по объекту — правит. Панель ничего не публикует.</div>
+  <div class="legend">1–9 вид · Enter принять · Delete снять · Esc закрыть ·
+    Ctrl+Z отменить</div>
 </div>
 <aside class="card" id="card" hidden></aside>
+<div class="toast" id="toast"></div>
 <script src="https://api-maps.yandex.ru/2.1/?apikey={esc(api_key)}&lang=ru_RU"></script>
 <script src="{esc(u('/static/editor.js'))}"></script>
 </body></html>"""
@@ -1354,6 +1369,12 @@ class Handler(BaseHTTPRequestHandler):
         build_roads.py теми же числами. Вторая реализация в JavaScript
         разошлась бы с первой молча, и разошлась бы именно там, где дорого, —
         на неоднозначных местах.
+
+        Отдаём СПИСОК кандидатов, а не один ответ. Магнит по-прежнему не
+        выбирает за человека, но «приблизьте карту» ответом не является:
+        приближение не разводит две проезжие части, они физически в двадцати
+        метрах. У каждого кандидата уже посчитана своя посадка — выбор не стоит
+        второго запроса.
         """
         try:
             lon, lat = float(field["lon"]), float(field["lat"])
@@ -1362,16 +1383,30 @@ class Handler(BaseHTTPRequestHandler):
         span = 0.002
         roads = map_edits.load_roads(edits_tiles_dir(), lat - span, lon - span,
                                      lat + span, lon + span)
+        found = map_edits.candidates((lon, lat), roads)
         result = map_edits.snap((lon, lat), roads,
                                 prefer_node=bool(field.get("preferNode")))
-        self._json({"point": list(result.point) if result.road else None,
-                    "onRoad": result.on_road,
-                    "atNode": result.at_node,
-                    "anchor": result.anchor,
-                    "ambiguous": [{"cls": r["cls"], "name": r["name"],
-                                   "points": r["points"]}
-                                  for r in result.ambiguous],
-                    "fingerprint": map_edits.fingerprint((lon, lat), roads)})
+
+        def described(item):
+            road = item["road"]
+            return {"cls": road["cls"], "name": road.get("name", ""),
+                    "points": road["points"], "point": list(item["point"]),
+                    "meters": round(item["distance"], 1),
+                    "anchor": {"cls": road["cls"], "name": road.get("name", ""),
+                               "bearing": round(item["bearing"], 1),
+                               "atNode": False}}
+
+        return self._json({
+            "point": list(result.point) if result.road else None,
+            "onRoad": result.on_road,
+            "atNode": result.at_node,
+            "anchor": result.anchor,
+            # Три — потолок не от лени: четыре строки выбора за рулём панели
+            # уже не читаются, а четвёртая дорога в радиусе захвата означает,
+            # что человек ткнул не туда.
+            "candidates": [described(item) for item in found[:3]],
+            "ambiguous": len(result.ambiguous) > 0,
+            "fingerprint": map_edits.fingerprint((lon, lat), roads)})
 
     def edit_save_json(self, conn, field):
         """Создать или поправить. Статус выше «принято» отсюда не ставится:

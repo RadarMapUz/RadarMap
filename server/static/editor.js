@@ -52,7 +52,14 @@
     hint: document.getElementById('hint'),
     toast: document.getElementById('toast'),
     todo: document.getElementById('todo'),
+    work: document.getElementById('work'),
+    worksum: document.getElementById('worksum'),
   };
+
+  // Палец против курсора. Спрашиваем УКАЗАТЕЛЬ, а не ширину экрана: планшет с
+  // пером бывает шире телефона, а мышь на маленьком окне остаётся мышью.
+  const coarse = window.matchMedia
+    && window.matchMedia('(pointer: coarse)').matches;
 
   // Очередь работы в видимой рамке и место в ней.
   let queue = [];
@@ -250,7 +257,8 @@
   }
 
   function place(coords, existing) {
-    post('/api/snap', { lat: coords[0], lon: coords[1] }).then(function (snap) {
+    post('/api/snap', { lat: coords[0], lon: coords[1], touch: coarse })
+      .then(function (snap) {
       const list = snap.candidates || [];
       if (!list.length) {
         hint('Вне дороги. Ворота публикации об этом спросят.');
@@ -511,13 +519,14 @@
 
   function renderTodo() {
     els.todo.innerHTML = '';
+    els.worksum.textContent = queue.length
+      ? 'Здесь работать · ' + queue.length + (coarse ? '' : '   ( ] дальше, [ назад )')
+      : 'В этой рамке размечено всё';
     if (!queue.length) {
       els.todo.appendChild(node('div',
-        'В этой рамке размечено всё. Отодвиньте карту.', 'muted'));
+        'Отодвиньте карту — работа найдётся рядом.', 'muted'));
       return;
     }
-    els.todo.appendChild(node('div',
-      'Здесь работать · ' + queue.length + '  ( ] дальше, [ назад )', 'muted'));
     queue.slice(0, 12).forEach(function (item, index) {
       const row = node('button', item.title, 'todo-row' + (item.draft ? ' draft' : ''));
       // Подсветку ставит САМА перерисовка, а не переход.
@@ -542,6 +551,7 @@
     map.setCenter([item.point[1], item.point[0]], Math.max(map.getZoom(), 18));
     hint(item.title);
     renderTodo();
+    if (coarse) { els.work.open = false; }
     if (item.draft) { setTimeout(function () { select(item.id); }, 400); }
   }
 
@@ -557,6 +567,9 @@
   }
 
   ymaps.ready(function () {
+    // Список открыт на столе и свёрнут на телефоне: там его открывают, когда
+    // ИЩУТ работу, а не когда её делают, и развёрнутым он закрывает карту.
+    els.work.open = !coarse;
     const start = placeFromHash() || { center: [41.311, 69.280], zoom: 17 };
     map = new ymaps.Map('map', {
       center: start.center, zoom: start.zoom,

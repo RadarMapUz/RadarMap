@@ -708,27 +708,64 @@ font-size:13px;display:none;gap:12px;align-items:center}}
 /* Очередь работы. Панель обязана говорить, что делать дальше: пустой экран
    карты — это вопрос «а где работать?», на который модератор отвечает своей
    памятью, а она кончается на третьем сеансе. */
-.todo{{max-height:46vh;overflow:auto;padding:8px}}
+.toolrow{{display:flex;gap:8px;flex-direction:column}}
+.work{{background:#12161de6;border:1px solid #232a35;border-radius:10px}}
+.work summary{{padding:9px 11px;font-size:12px;color:#8ea0bb;cursor:pointer;
+list-style:none}}
+.work summary::-webkit-details-marker{{display:none}}
+.work[open] summary{{border-bottom:1px solid #1b2231}}
+.todo{{max-height:42vh;overflow:auto;padding:8px}}
 .todo-row{{display:block;width:100%;text-align:left;margin-top:4px;padding:6px 8px;
 border:1px solid #232a35;border-radius:8px;background:#0d1116;color:#8ea0bb;
 font-size:12px;cursor:pointer;line-height:1.35}}
 .todo-row:hover{{background:#182029;color:#e7e9ee}}
 .todo-row.on{{border-color:#17384d;color:#3cdcff}}
 .todo-row.draft{{border-left:3px solid #ffb020}}
+
+/* Телефон. Это ОСНОВНОЙ сценарий, а не запасной: очередь разбирают в дороге и
+   в перерыве. На столе панель инструментов слева стоит на месте, а на экране
+   в четыреста точек она съедает половину карты — и работать становится не
+   с чем.
+
+   Поэтому инструменты уезжают вниз одной строкой (большой палец достаёт до
+   низа, а не до верха), карточка становится листом снизу вверх, а очередь
+   складывается — её открывают, когда ищут работу, а не когда её делают. */
+@media (max-width:700px) {{
+  .tools{{position:absolute;top:auto;left:8px;right:8px;bottom:8px;width:auto;
+          max-height:none;overflow:visible;gap:6px}}
+  .toolrow{{flex-direction:row;overflow-x:auto;scrollbar-width:none}}
+  .toolrow::-webkit-scrollbar{{display:none}}
+  .tool{{flex:0 0 auto;font-size:15px;padding:12px 14px}}
+  .keyhelp{{display:none}}
+  .todo{{max-height:34vh}}
+  #map{{inset:52px 0 0 0}}
+  .card{{top:auto;left:0;right:0;bottom:0;width:auto;border-radius:16px 16px 0 0;
+         max-height:72vh;overflow:auto;padding:16px}}
+  .card input{{padding:12px;font-size:16px}}
+  .card button{{width:100%;margin:10px 0 0;padding:13px;font-size:16px}}
+  .card button.pick{{padding:14px;font-size:15px}}
+  .toast{{left:8px;right:8px;bottom:auto;top:60px;transform:none;
+          justify-content:space-between}}
+}}
 </style></head>
 <body><header>{"".join(
     f'<a href="{esc(u(path))}" class="{"on" if path == "/editor" else ""}">{esc(name)}</a>'
     for path, name in TABS)}<a href="{logout_url}" class="out">Выход</a></header>
 <div id="map"></div>
 <div class="tools" data-base="{esc(u(''))}" data-drafts="{drafts}">
-  <button data-kind="lanes" class="tool on">1 · Полосы</button>
-  <button data-kind="turn_lanes" class="tool">2 · Направления</button>
-  <button data-kind="u_turn" class="tool">3 · Разворот</button>
+  <div class="toolrow">
+    <button data-kind="lanes" class="tool on">1 · Полосы</button>
+    <button data-kind="turn_lanes" class="tool">2 · Направления</button>
+    <button data-kind="u_turn" class="tool">3 · Разворот</button>
+  </div>
   <div class="legend" id="hint">Черновиков: {drafts}. Клик по дороге ставит
     объект, клик по объекту — правит. Панель ничего не публикует.</div>
-  <div class="legend">1–9 вид · Enter принять · Delete снять · Esc закрыть ·
-    Ctrl+Z отменить · \\ схема ⇄ спутник · ] [ по очереди</div>
-  <div class="legend todo" id="todo"></div>
+  <div class="legend keyhelp">1–9 вид · Enter принять · Delete снять ·
+    Esc закрыть · Ctrl+Z отменить · \\ схема ⇄ спутник · ] [ по очереди</div>
+  <details class="work" id="work">
+    <summary id="worksum">Здесь работать</summary>
+    <div class="todo" id="todo"></div>
+  </details>
 </div>
 <aside class="card" id="card" hidden></aside>
 <div class="toast" id="toast"></div>
@@ -1441,10 +1478,14 @@ class Handler(BaseHTTPRequestHandler):
         except (KeyError, TypeError, ValueError):
             return self._json({"error": "нужны lat и lon"}, 400)
         span = 0.002
+        # Палец накрывает на экране телефона метров сорок городской улицы.
+        # Требовать от него точности курсора — значит требовать невозможного.
+        reach = (map_edits.TOUCH_SNAP_METERS if field.get("touch")
+                 else map_edits.SNAP_METERS)
         roads = map_edits.load_roads(edits_tiles_dir(), lat - span, lon - span,
                                      lat + span, lon + span)
-        found = map_edits.candidates((lon, lat), roads)
-        result = map_edits.snap((lon, lat), roads,
+        found = map_edits.candidates((lon, lat), roads, reach)
+        result = map_edits.snap((lon, lat), roads, meters=reach,
                                 prefer_node=bool(field.get("preferNode")))
 
         def described(item):

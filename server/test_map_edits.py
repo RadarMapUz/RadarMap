@@ -44,6 +44,24 @@ class MagnetTests(unittest.TestCase):
         self.assertAlmostEqual(result.point[1], 41.3050, places=5,
                                msg="объект уехал к вершине вместо проекции")
 
+    def test_finger_reaches_further_than_the_cursor(self):
+        # Палец накрывает на экране телефона метров сорок городской улицы.
+        # Требовать от него точности курсора — значит требовать невозможного:
+        # промах будет не ошибкой модератора, а свойством руки.
+        far = (69.25035, 41.3050)   # ~29 м от оси
+        self.assertFalse(map_edits.snap(far, [self.avenue]).on_road)
+        self.assertTrue(map_edits.snap(far, [self.avenue],
+                                       meters=map_edits.TOUCH_SNAP_METERS).on_road)
+
+    def test_bigger_reach_still_does_not_guess(self):
+        # Больший радиус даёт больше КАНДИДАТОВ, а не больше догадок: правило
+        # «на неоднозначном месте не выбираем за человека» от него не слабеет.
+        middle = (69.25012, 41.3050)
+        result = map_edits.snap(middle, [self.avenue, self.side],
+                                meters=map_edits.TOUCH_SNAP_METERS)
+        self.assertFalse(result.on_road)
+        self.assertGreaterEqual(len(result.ambiguous), 2)
+
     def test_far_point_does_not_stick(self):
         result = map_edits.snap((69.2600, 41.3050), [self.avenue])
         self.assertFalse(result.on_road)

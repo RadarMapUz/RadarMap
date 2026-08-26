@@ -8,6 +8,7 @@
 """
 import json
 import os
+import shutil
 import sqlite3
 import tempfile
 import threading
@@ -795,6 +796,82 @@ class AdminTest(unittest.TestCase):
         finally:
             admin.DB_PATH = old_path
             os.unlink(fresh.name)
+
+
+class ChangesHistoryTests(AdminTest):
+    """История в очереди изменений.
+
+    Endpoint, которого не видно на экране, — это не история, а строчка в
+    журнале запросов. Модератор, увидевший «сдвиг 12 м», первым делом
+    спрашивает, куда объект стоял до него, и спросить он должен здесь же.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.work = tempfile.mkdtemp()
+        self.old_tiles = os.environ.get("RADARMAP_TILES")
+        os.environ["RADARMAP_TILES"] = self.work
+        step = map_edits.TILE_DEGREES_V2
+        row = int((41.30 + 90) / step)
+        column = int((69.25 + 180) / step)
+        with open(os.path.join(self.work, f"road2_{row}_{column}_s.json"),
+                  "w", encoding="utf-8") as handle:
+            json.dump({"version": 2, "roads":
+                       [[3, 0, [4_130_000, 6_925_000, 200, 0], "Навои"]]},
+                      handle, ensure_ascii=False)
+        conn = admin.db()
+        try:
+            conn.execute("DELETE FROM map_edits")
+            conn.execute("DELETE FROM map_edit_history")
+            conn.commit()
+        finally:
+            conn.close()
+
+    def tearDown(self):
+        if self.old_tiles is None:
+            os.environ.pop("RADARMAP_TILES", None)
+        else:
+            os.environ["RADARMAP_TILES"] = self.old_tiles
+        shutil.rmtree(self.work, ignore_errors=True)
+
+    def moved_edit(self):
+        conn = admin.db()
+        try:
+            edit_id = map_edits.create(conn, "lanes", raw=[69.2500, 41.3000],
+                                       snapped=[69.2500, 41.3000],
+                                       props={"lanes": 4},
+                                       status=map_edits.ACCEPTED)
+            map_edits.update(conn, edit_id, 1, geom=[69.2502, 41.3001])
+            conn.commit()
+        finally:
+            conn.close()
+        return edit_id
+
+    def test_history_is_offered_in_the_queue(self):
+        self.moved_edit()
+        code, body = _get(self.port, "/changes")
+        self.assertEqual(code, 200)
+        self.assertIn("Было раньше", body)
+        self.assertIn("41.30000", body, "прежней точки не видно")
+
+    def test_edit_without_history_shows_no_empty_block(self):
+        conn = admin.db()
+        try:
+            map_edits.create(conn, "lanes", raw=[69.25, 41.30],
+                             snapped=[69.25, 41.30], props={"lanes": 4},
+                             status=map_edits.ACCEPTED)
+            conn.commit()
+        finally:
+            conn.close()
+        self.assertNotIn("Было раньше", _get(self.port, "/changes")[1])
+
+    def test_history_endpoint_and_page_agree(self):
+        edit_id = self.moved_edit()
+        code, body = _get(self.port, f"/api/edit/{edit_id}/history")
+        self.assertEqual(code, 200)
+        rows = json.loads(body)["history"]
+        self.assertEqual(len(rows), 1)
+        self.assertIn(f"в{rows[0]['version']} ", _get(self.port, "/changes")[1])
 
 
 class EditorApiTests(AdminTest):

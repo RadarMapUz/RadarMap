@@ -37,6 +37,8 @@
   ];
   const WHYS = ['нет в OSM', 'OSM неверен', 'временная схема'];
   const REMOVE_WHYS = ['нет в жизни', 'перекрыта', 'ошибка OSM'];
+  // Виды местности — те же коды, что у слоёв из OSM.
+  const AREAS = { 2: 'Зелень', 1: 'Вода', 4: 'Квартал' };
   // Обстановка. Коды те же, что у точек из OSM: панель заводит объект ТОГО ЖЕ
   // вида, а не параллельный, поэтому на телефоне он рисуется тем же кодом и
   // добавлять там нечего.
@@ -77,7 +79,10 @@
     worksum: document.getElementById('worksum'),
     find: document.getElementById('find'),
     found: document.getElementById('found'),
+    cover: document.getElementById('cover'),
   };
+
+  let onlyMine = false;   // показывать только нарисованное руками
 
   // Палец против курсора. Спрашиваем УКАЗАТЕЛЬ, а не ширину экрана: планшет с
   // пером бывает шире телефона, а мышь на маленьком окне остаётся мышью.
@@ -421,12 +426,14 @@
     get('/api/roads' + bbox()).then(function (data) {
       roadsInFrame = data.roads || [];
       renderRoads();
+      renderCoverage();
     });
     // Обстановка — вторая половина картинки. Без неё схема врёт: дорога есть,
     // а перекрёсток на ней ничем не отличается от прямого участка.
     get('/api/points' + bbox()).then(function (data) {
       pointsInFrame = data.points || [];
       renderMarks();
+      renderCoverage();
     });
   }
 
@@ -441,6 +448,43 @@
     5: { color: '#ffffff', size: 8, name: 'Переход' },
     6: { color: '#7bd3ff', size: 7, name: 'Стрелки полос' },
   };
+
+  // Сколько в кадре нашего.
+  //
+  // Вести свою карту вслепую нельзя: на третьем сеансе никто не помнит, какие
+  // перекрёстки уже размечены, и работа начинает ходить по кругу. Считаем по
+  // тому, что и так загружено, — отдельной ручки для этого не нужно.
+  function renderCoverage() {
+    const total = roadsInFrame.length;
+    const drawn = roadsInFrame.filter(function (r) { return r.drawn; }).length;
+    const measured = roadsInFrame.filter(function (r) { return r.measured; }).length;
+    const mine = pointsInFrame.filter(function (p) { return p.mine; }).length;
+    if (!total) { els.cover.textContent = 'В этой рамке дорог нет.'; return; }
+    const share = Math.round(measured / total * 100);
+    els.cover.innerHTML = '';
+    els.cover.appendChild(node('div',
+      'Размечено ' + share + '% · дорог ' + total +
+      ' · нарисовано нами ' + drawn +
+      ' · обстановки нашей ' + mine +
+      ' · размеченных областей ' + areasInFrame.length, 'muted'));
+    const only = node('button', onlyMine ? 'Показать всё' : 'Только наше', 'ghost');
+    only.style.width = '100%';
+    only.addEventListener('click', function () {
+      onlyMine = !onlyMine;
+      renderRoads();
+      renderCoverage();
+    });
+    els.cover.appendChild(only);
+    // Главный переключатель взгляда — кнопкой, а не только клавишей. Спутник и
+    // своя схема отвечают на разные вопросы («где объект стоит на самом деле»
+    // против «что увидит водитель»), и переключаться между ними приходится
+    // ежеминутно; клавиша \\ остаётся, но искать её на ощупь никто не обязан.
+    const view = node('button', schema ? '\\ · На спутник' : '\\ · На свою схему',
+                      'ghost');
+    view.style.width = '100%';
+    view.addEventListener('click', toggleSchema);
+    els.cover.appendChild(view);
+  }
 
   function renderMarks() {
     markLayer.forEach(function (item) { map.geoObjects.remove(item); });
@@ -459,6 +503,10 @@
           strokeColor: mark.mine ? '#ffb020' : look.color,
           strokeWidth: mark.mine ? 3 : 0,
           fillOpacity: 0.9, zIndex: 260,
+          // Тоже сквозная: обстановка со схемы — картинка, а не кнопка. Свои
+          // объекты правятся через метки правок, а опубликованный светофор
+          // молча съедал бы щелчок по перекрёстку, где их и ставят.
+          interactivityModel: 'default#transparent',
         });
       map.geoObjects.add(circle);
       markLayer.push(circle);
@@ -497,10 +545,14 @@
 
     if (!schema) {
       // Поверх спутника — только тонкие оси: подложка и так занята снимком,
-      // а показать надо, к чему прилипнет магнит.
+      // а показать надо, к чему прилипнет магнит. Своё выделено цветом: на
+      // снимке его иначе не отличить от чужого.
       roadsInFrame.forEach(function (road) {
-        line(road.points, { strokeColor: '#38bdf8', strokeWidth: 2,
-                            strokeOpacity: 0.45, zIndex: 200 });
+        if (onlyMine && !road.drawn) { return; }
+        line(road.points, {
+          strokeColor: road.drawn ? '#ffb020' : '#38bdf8',
+          strokeWidth: road.drawn ? 4 : 2,
+          strokeOpacity: road.drawn ? 0.9 : 0.45, zIndex: 200 });
       });
       return;
     }
@@ -522,7 +574,13 @@
     const perPixel = metersPerPixel();
     // Чем ближе к экрану дороги, тем позже они рисуются: мост обязан лечь
     // ПОВЕРХ того, что под ним, иначе развязка читается перекрёстком.
-    const ordered = roadsInFrame.slice().sort(function (a, c) {
+    // «Только наше» — отдельный взгляд на карту: видно, что сделано руками,
+    // без чужого под ним. Без него своя работа тонет в восьмидесяти тысячах
+    // чужих линий и кажется меньше, чем она есть.
+    const shown = onlyMine
+      ? roadsInFrame.filter(function (r) { return r.drawn; })
+      : roadsInFrame;
+    const ordered = shown.slice().sort(function (a, c) {
       return a.level - c.level;
     });
     ordered.forEach(function (road) {
@@ -539,6 +597,11 @@
       // линию рядом с первой, а не исправленную первую.
       polotno.events.add('click', function (e) {
         e.stopPropagation();
+        // Во время рисования полотно — это фон, а не объект. Обводя парк или
+        // дотягивая дорогу до перекрёстка, вершину ставят прямо поверх
+        // асфальта, и карточка «перерисовать эту улицу» посреди обводки
+        // отменяла бы работу вопросом, которого никто не задавал.
+        if (drawing) { addVertex(e.get('coords')); return; }
         askReshape(road);
       });
     });
@@ -581,6 +644,30 @@
     const whyLabel = node('label', 'Если убрать — почему');
     whyLabel.appendChild(why);
     els.card.appendChild(whyLabel);
+
+    // Название. Единственное, что человек знает лучше OSM всегда: он там был.
+    const title = field('Название (пусто — не менять)', 'text', road.name || '');
+    els.card.appendChild(title.label);
+    const rename = node('button', 'Назвать');
+    rename.addEventListener('click', function () {
+      const text = title.input.value.trim();
+      if (!text) { hint('Введите название.'); return; }
+      post('/api/edit', {
+        kind: 'name', geom: road.points[Math.floor(road.points.length / 2)],
+        raw: road.points[0], props: { name: text }, status: ACCEPTED,
+      }).then(function (result) {
+        if (result.error) { hint(result.error); return; }
+        closeCard();
+        hint('Название сохранено: ' + text);
+        offerUndo('Название · ' + text, function () {
+          return post('/api/edit/withdraw',
+                      { id: result.id, version: result.version });
+        });
+        walking = false;
+        reloadEdits();
+      });
+    });
+    els.card.appendChild(rename);
 
     const drop = node('button', 'Убрать дорогу', 'ghost');
     drop.addEventListener('click', function () {
@@ -648,7 +735,12 @@
         [[area.point[1], area.point[0]], area.radius],
         { hintContent: 'Размечено руками · автоматика здесь не двигает' },
         { fillColor: '#ffb02022', strokeColor: '#ffb020', strokeWidth: 2,
-          strokeStyle: 'shortdash', zIndex: 150 });
+          strokeStyle: 'shortdash', zIndex: 150,
+          // Область СКВОЗНАЯ для щелчка. Она бывает в сотни метров шириной и
+          // накрывает как раз то место, где идёт ручная работа; ловя щелчки на
+          // себя, она не давала ни поставить вершину, ни выбрать дорогу —
+          // ровно там, где это нужнее всего.
+          interactivityModel: 'default#transparent' });
       map.geoObjects.add(circle);
       areaLayer.push(circle);
     });
@@ -659,6 +751,7 @@
     map.setType(schema ? 'yandex#map' : 'yandex#hybrid');
     renderRoads();
     renderMarks();
+    renderCoverage();
     hint(schema
       ? 'Своя схема: видно то, что увидит водитель. \\ — обратно на спутник.'
       : 'Спутник: видно, где объект стоит на самом деле. \\ — на схему.');
@@ -806,11 +899,13 @@
     return Math.round(total);
   }
 
-  function startDrawing(cls) {
+  function startDrawing(cls, areaCode) {
     closeCard();
-    drawing = { points: [], cls: cls };
-    hint('Щелчок — вершина, Enter — закончить, Backspace — снять последнюю, '
-         + 'Esc — отменить.');
+    drawing = { points: [], cls: cls, area: areaCode || 0 };
+    hint(areaCode
+      ? 'Обведите контур: щелчок — вершина, Enter — замкнуть, Esc — отменить.'
+      : 'Щелчок — вершина, Enter — закончить, Backspace — снять последнюю, '
+        + 'Esc — отменить.');
     renderDrawing();
   }
 
@@ -821,9 +916,13 @@
     if (!drawing || !drawing.points.length) { return; }
 
     if (drawing.points.length >= 2) {
-      drawLine = new ymaps.Polyline(
-        drawing.points.map(function (p) { return [p[1], p[0]]; }), {},
-        { strokeColor: '#ffb020', strokeWidth: 5, strokeOpacity: 0.9, zIndex: 300 });
+      const path = drawing.points.map(function (p) { return [p[1], p[0]]; });
+      // Контур показываем ЗАМКНУТЫМ уже во время рисования: иначе до самого
+      // конца непонятно, что получится, и площадь приходится воображать.
+      if (drawing.area) { path.push(path[0]); }
+      drawLine = new ymaps.Polyline(path, {},
+        { strokeColor: drawing.area ? '#38e58c' : '#ffb020',
+          strokeWidth: 5, strokeOpacity: 0.9, zIndex: 300 });
       map.geoObjects.add(drawLine);
     }
     // Вершины ТЯНУТСЯ. Это и есть правка ломаной: диалог «изменить точку №3»
@@ -933,6 +1032,29 @@
   }
 
   function finishDrawing() {
+    if (drawing && drawing.area) {
+      if (drawing.points.length < 3) {
+        hint('Для контура нужно хотя бы три вершины.');
+        return;
+      }
+      const ring = drawing.points.slice();
+      const code = drawing.area;
+      cancelDrawing(true);
+      post('/api/edit', {
+        kind: 'area', geom: ring, raw: ring[0],
+        props: { area: code }, status: ACCEPTED,
+      }).then(function (result) {
+        if (result.error) { hint(result.error); return; }
+        hint(AREAS[code] + ' обведена. Публикует владелец со своей машины.');
+        offerUndo(AREAS[code], function () {
+          return post('/api/edit/withdraw',
+                      { id: result.id, version: result.version });
+        });
+        walking = false;
+        reloadEdits();
+      });
+      return;
+    }
     if (!drawing || drawing.points.length < 2) {
       hint('Нужно хотя бы две вершины.');
       return;
@@ -1143,7 +1265,7 @@
     // На телефоне свёрнуто ВСЁ, кроме текущего инструмента: развёрнутые
     // списки занимают экран целиком и закрывают карту — то есть ровно то,
     // ради чего панель открыли. На столе места хватает, и прятать нечего.
-    ['work', 'drawbox', 'pointbox', 'areabox'].forEach(function (id) {
+    ['work', 'drawbox', 'pointbox', 'areabox', 'landbox'].forEach(function (id) {
       const box = document.getElementById(id);
       if (box) { box.open = !coarse; }
     });
@@ -1153,6 +1275,10 @@
       controls: ['zoomControl', 'typeSelector'],
     }, { suppressMapOpenBlock: true });
     map.setType('yandex#hybrid');
+    // Двойной щелчок НЕ приближает. Контур обводят быстрыми щелчками подряд, и
+    // поведение по умолчанию съедало каждую вторую вершину, попутно меняя
+    // масштаб: человек ставил четыре угла, а получал два и другой зум.
+    map.behaviors.disable('dblClickZoom');
     objects = new ymaps.ObjectManager({ clusterize: false });
     map.geoObjects.add(objects);
 
@@ -1191,6 +1317,7 @@
         button.classList.add('on');
         kind = button.getAttribute('data-kind');
         const cls = button.getAttribute('data-cls');
+        const area = button.getAttribute('data-area');
         const code = button.getAttribute('data-point');
         pointCode = code ? parseInt(code, 10) : 0;
         markingArea = button.getAttribute('data-kind') === 'lock';
@@ -1198,7 +1325,9 @@
           cancelDrawing(true);
           hint('Щелчок — разметить область: автоматика здесь перестанет двигать.');
         }
-        if (cls) {
+        if (area) {
+          startDrawing(6, parseInt(area, 10));
+        } else if (cls) {
           startDrawing(parseInt(cls, 10));
         } else {
           cancelDrawing(true);

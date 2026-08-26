@@ -957,13 +957,23 @@ def apply_edits(roads, edits, meters=25.0):
             cells[key].append(index)
 
     lanes_by_index = {}
+    names_by_index = {}
     missed = []
     for edit in edits:
-        if edit.get("kind") != "lanes":
+        kind = edit.get("kind")
+        if kind not in ("lanes", "name"):
             continue
-        lanes = (edit.get("props") or {}).get("lanes")
+        props = edit.get("props") or {}
+        lanes = props.get("lanes")
+        title = props.get("name")
         geometry = edit.get("geom") or []
-        if not isinstance(lanes, int) or len(geometry) < 2:
+        if len(geometry) < 2 or isinstance(geometry[0], (list, tuple)):
+            missed.append(edit)
+            continue
+        if kind == "lanes" and not isinstance(lanes, int):
+            missed.append(edit)
+            continue
+        if kind == "name" and not (isinstance(title, str) and title.strip()):
             missed.append(edit)
             continue
         origin = (float(geometry[0]), float(geometry[1]))
@@ -980,11 +990,18 @@ def apply_edits(roads, edits, meters=25.0):
         if best is None:
             missed.append(edit)
             continue
-        # Рука старше автоматики — но не старше физики: потолок класса стоит
-        # и здесь. Опечатка модератора не должна залить квартал асфальтом.
-        lanes_by_index[best] = clamp_lanes(roads[best][0], lanes)
+        if kind == "name":
+            # Название — единственное, что человек знает лучше OSM всегда: он
+            # там был. Поэтому оно перекрывает пришедшее из экстракта, а не
+            # дополняет его.
+            names_by_index[best] = title.strip()
+        else:
+            # Рука старше автоматики — но не старше физики: потолок класса
+            # стоит и здесь. Опечатка модератора не должна залить квартал
+            # асфальтом.
+            lanes_by_index[best] = clamp_lanes(roads[best][0], lanes)
 
-    if not lanes_by_index:
+    if not lanes_by_index and not names_by_index:
         return roads, 0, len(missed)
     patched = list(roads)
     for index, lanes in lanes_by_index.items():
@@ -993,7 +1010,10 @@ def apply_edits(roads, edits, meters=25.0):
         # очереди конструктора ей больше делать нечего.
         patched[index] = (code, with_lanes(flags, lanes) | FLAG_LANES_TAGGED,
                           points, name)
-    return patched, len(lanes_by_index), len(missed)
+    for index, title in names_by_index.items():
+        code, flags, points, _ = patched[index]
+        patched[index] = (code, flags, points, title)
+    return (patched, len(lanes_by_index) + len(names_by_index), len(missed))
 
 
 def drawn(edits):
@@ -1249,6 +1269,44 @@ MIN_SIDEWALK_METERS = 25.0
 
 # Мелочь на охвате схемы неразличима, а весит столько же, сколько крупное.
 MIN_AREA_METERS = 60.0
+
+
+# Виды местности, которые можно обвести руками. Те же коды, что у слоёв из
+# OSM: панель заводит объект ТОГО ЖЕ вида, а не параллельный, поэтому телефон
+# рисует его тем же кодом и добавлять там нечего.
+DRAWN_AREA_KINDS = {AREA_WATER, AREA_GREEN, AREA_RAIL, AREA_BLOCK}
+# Меньше этого контур на охвате схемы неразличим, а весит столько же.
+MIN_DRAWN_AREA_METERS = 30.0
+
+
+def drawn_areas(edits):
+    """Обведённая руками местность → записи слоя, как из OSM."""
+    out = []
+    for edit in edits:
+        if edit.get("kind") != "area":
+            continue
+        props = edit.get("props") or {}
+        kind = props.get("area")
+        if kind not in DRAWN_AREA_KINDS:
+            continue
+        ring = edit.get("geom") or []
+        if len(ring) < 3 or not isinstance(ring[0], (list, tuple)):
+            continue
+        points = []
+        for pair in ring:
+            try:
+                points.append((float(pair[0]), float(pair[1])))
+            except (TypeError, ValueError, IndexError):
+                points = []
+                break
+        if len(points) < 3:
+            continue
+        if polyline_meters(points) < MIN_DRAWN_AREA_METERS:
+            continue
+        # Замкнутый контур заливается, разомкнутый — лента. Обведённое руками
+        # всегда полигон: ленты (рельсы вдоль насыпи) в панели не рисуют.
+        out.append((kind, AREA_FLAG_CLOSED, points))
+    return out
 
 
 def split_sets(roads, far):
@@ -1984,6 +2042,9 @@ def main():
     # Тротуары — тоже «местность», и упрощаются так же грубо: их дело —
     # показать, где кончается асфальт, а не где повернуть.
     areas = areas + build_sidewalks(raw_sidewalks, args.tolerance * 3 / 111_320.0)
+    # Обведённое руками — тем же слоем, что и пришедшее из OSM: телефон не
+    # знает и не должен знать, откуда взялся газон.
+    areas = areas + drawn_areas(edits)
     # Точки садим ПОСЛЕ генерализации: сажать надо на ту геометрию, которая
     # поедет на телефон, а не на сырую.
     far = build_far(roads)

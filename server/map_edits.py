@@ -71,19 +71,42 @@ CREATE TABLE IF NOT EXISTS map_edits(
     version      INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_edits_kind ON map_edits(kind, status);
+
+-- История геометрии. Отдельной таблицей, а не колонкой: у одной правки версий
+-- много, и «кто и когда сдвинул эту улицу» через полгода спросят обязательно.
+-- Восстановить это неоткуда — ручная работа единственная в системе, которую
+-- нельзя пересобрать из OSM.
+CREATE TABLE IF NOT EXISTS map_edit_history(
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    edit_id  INTEGER NOT NULL,
+    version  INTEGER NOT NULL,
+    geom     TEXT NOT NULL,
+    props    TEXT,
+    note     TEXT DEFAULT '',
+    author   TEXT DEFAULT '',
+    at       REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_history_edit ON map_edit_history(edit_id, version);
 """
 
 # Виды правок. Список закрытый: неизвестный вид не попадает ни в таблицу, ни в
 # запекание, и «панель завела новый вид раньше сборки» здесь невозможно —
 # в отличие от точек, где такое допускается намеренно.
-KINDS = {"lanes", "turn_lanes", "u_turn", "geometry", "point", "remove", "lock"}
+KINDS = {"lanes", "turn_lanes", "u_turn", "geometry", "point", "remove",
+         "lock", "name", "area"}
 
 # Названия видов для человека. Код — контракт с сервером и с запеканием, а на
 # экране нужно слово: «lanes» в строке очереди читается как недоделка.
 KIND_NAMES = {"lanes": "Полосы", "turn_lanes": "Направления полос",
               "u_turn": "Разворот", "geometry": "Своя геометрия",
               "point": "Обстановка", "remove": "Убрана дорога",
-              "lock": "Размеченная область"}
+              "lock": "Размеченная область", "name": "Название",
+              "area": "Местность"}
+
+# Виды местности — те же коды, что у слоёв из OSM: вода, зелень, рельсы,
+# квартал. Панель заводит объект ТОГО ЖЕ вида, а не параллельный, поэтому он
+# рисуется на телефоне тем же кодом и добавлять там нечего.
+AREA_NAMES = {1: "Вода", 2: "Зелень", 3: "Рельсы", 4: "Квартал"}
 
 # Почему дорогу убрали. Закрытым списком по той же причине, что и у своей
 # геометрии: свободный текст через полгода превращается в «тест» и «см. выше».
@@ -305,6 +328,40 @@ def create(conn, kind, raw, snapped, anchor=None, props=None, note="",
     return cursor.lastrowid
 
 
+def remember(conn, edit_id):
+    """Отложить нынешнюю версию правки в историю.
+
+    Зовётся ПЕРЕД изменением: сохраняем то, что было, а не то, что стало.
+    Иначе история — это копия текущего состояния, то есть ничего.
+    """
+    row = conn.execute("SELECT * FROM map_edits WHERE id = ?",
+                       (edit_id,)).fetchone()
+    if row is None:
+        return False
+    conn.execute(
+        """INSERT INTO map_edit_history(edit_id, version, geom, props, note,
+                                        author, at)
+           VALUES(?,?,?,?,?,?,?)""",
+        (edit_id, row["version"], row["geom"], row["props"], row["note"],
+         row["author"], time.time()))
+    return True
+
+
+def history(conn, edit_id):
+    """Как правка выглядела раньше, свежее первым."""
+    rows = conn.execute(
+        "SELECT version, geom, props, note, author, at FROM map_edit_history "
+        "WHERE edit_id = ? ORDER BY version DESC", (edit_id,)).fetchall()
+    out = []
+    for row in rows:
+        out.append({"version": row["version"],
+                    "geom": json.loads(row["geom"]),
+                    "props": json.loads(row["props"]) if row["props"] else {},
+                    "note": row["note"], "author": row["author"],
+                    "at": row["at"]})
+    return out
+
+
 def update(conn, edit_id, version, **fields):
     """Правка по оптимистической блокировке.
 
@@ -323,6 +380,11 @@ def update(conn, edit_id, version, **fields):
         sets.append(f"{key} = ?")
         values.append(value if isinstance(value, str) or value is None
                       else json.dumps(value, separators=(",", ":")))
+    # Историю пишем ДО изменения и только когда меняется геометрия или
+    # свойства: заметка и статус меняются часто, и версия «поменяли статус»
+    # засоряла бы историю тем, о чём никто не спросит.
+    if "geom" in fields or "props" in fields:
+        remember(conn, edit_id)
     sets.append("updated = ?")
     values.append(time.time())
     sets.append("version = version + 1")
@@ -524,6 +586,9 @@ TODO_MAX_CLASS = 4
 # build_roads живёт на машине владельца и на VPS его может не быть вовсе, а
 # панель обязана работать и там.
 FLAG_LANES_TAGGED = 1 << 8
+# Нарисовано руками. Тот же бит, что ставит сборка: телефон его не читает, а
+# панели он нужен, чтобы отличать своё от чужого.
+FLAG_HAND_DRAWN = 1 << 9
 # Биты характера линии — те же, что читает телефон.
 FLAG_ONEWAY, FLAG_BRIDGE, FLAG_TUNNEL, FLAG_RING = 1, 2, 4, 8
 FLAG_LANES_SHIFT = 4

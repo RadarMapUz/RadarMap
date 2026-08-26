@@ -286,6 +286,9 @@ a { color:var(--accent); }
 .chg b { font-size:14px; }
 .chg .muted { flex-basis:100%; font-size:12px; }
 .chg a { margin-left:auto; }
+.past { flex-basis:100%; }
+.past summary { cursor:pointer; font-size:12px; color:var(--muted); }
+.past .muted { font-size:12px; padding-left:14px; }
 form.inline { display:inline; }
 form.inline button { margin:0; padding:6px 12px; font-size:13px; }
 button.ghost { background:transparent; color:var(--text-2);
@@ -799,6 +802,15 @@ font-size:12px;cursor:pointer;line-height:1.35}}
       <button data-kind="point" data-point="2" class="tool">G · Лежачий</button>
     </div>
   </details>
+  <div class="legend cover" id="cover"></div>
+  <details class="work" id="landbox">
+    <summary>Обвести местность</summary>
+    <div class="toolrow draw">
+      <button data-kind="area" data-area="2" class="tool">Зелень</button>
+      <button data-kind="area" data-area="1" class="tool">Вода</button>
+      <button data-kind="area" data-area="4" class="tool">Квартал</button>
+    </div>
+  </details>
   <details class="work" id="areabox">
     <summary>Отметить своё</summary>
     <div class="toolrow draw">
@@ -1178,6 +1190,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.geocode_json()
             if path.startswith("/api/edit/") and path.endswith("/osm"):
                 return self.edit_osm(conn, path)
+            if path.startswith("/api/edit/") and path.endswith("/history"):
+                return self.edit_history(conn, path)
             if path in ("/static/moderate.js", "/static/editor.js"):
                 return self.static_file(path.rsplit("/", 1)[1],
                                         "application/javascript; charset=utf-8")
@@ -1525,7 +1539,11 @@ class Handler(BaseHTTPRequestHandler):
                     "oneWay": bool(flags & map_edits.FLAG_ONEWAY),
                     "level": 1 if flags & map_edits.FLAG_BRIDGE
                              else (-1 if flags & map_edits.FLAG_TUNNEL else 0),
-                    "measured": bool(flags & map_edits.FLAG_LANES_TAGGED)}
+                    "measured": bool(flags & map_edits.FLAG_LANES_TAGGED),
+                    # Своё против чужого. Вести свою карту вслепую нельзя: на
+                    # третьем сеансе никто не помнит, какие перекрёстки уже
+                    # размечены, и работа начинает ходить по кругу.
+                    "drawn": bool(flags & map_edits.FLAG_HAND_DRAWN)}
 
         self._json({"roads": [described(r) for r in roads[:2000]]})
 
@@ -1606,6 +1624,19 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Security-Policy", self.CSP_STRICT)
         self.end_headers()
         self.wfile.write(payload)
+
+    def edit_history(self, conn, path):
+        """Как правка выглядела раньше.
+
+        «Кто и когда сдвинул эту улицу» через полгода спросят обязательно, а
+        восстановить это неоткуда: ручная работа — единственное в системе, что
+        нельзя пересобрать из OSM.
+        """
+        try:
+            edit_id = int(path.split("/")[3])
+        except (IndexError, ValueError):
+            return self._json({"error": "номер не число"}, 400)
+        self._json({"history": map_edits.history(conn, edit_id)})
 
     def geocode_json(self):
         """Поиск адреса — ЧЕРЕЗ СВОЙ сервер, а не из браузера.
@@ -1806,6 +1837,36 @@ class Handler(BaseHTTPRequestHandler):
                     f'<input type="hidden" name="op" value="{op}">'
                     f'<button class="{cls}">{esc(caption)}</button></form>')
 
+        def past(edit):
+            """Как эта правка выглядела раньше.
+
+            Свёрнуто, а не списком под каждой строкой: очередь читают ради
+            решения «принять или снять», и десять прошлых версий над этим
+            решением — шум. Но открыть их надо здесь же: модератор, увидевший
+            сдвиг, первым делом спрашивает, куда объект стоял до него, а
+            восстановить это больше неоткуда — ручную работу не пересобрать
+            из OSM.
+            """
+            rows = map_edits.history(conn, edit["id"])
+            if not rows:
+                return ""
+            lines = []
+            for old_row in rows:
+                when = time.strftime("%d.%m.%Y %H:%M",
+                                     time.localtime(old_row["at"]))
+                where = old_row["geom"]
+                if where and isinstance(where[0], list):
+                    where = where[0]
+                try:
+                    spot = f"{float(where[1]):.5f}, {float(where[0]):.5f}"
+                except (TypeError, ValueError, IndexError):
+                    spot = "координат нет"
+                who = esc(old_row["author"] or "панель")
+                lines.append(f'<div class="muted">в{old_row["version"]} · '
+                             f'{esc(when)} · {esc(spot)} · {who}</div>')
+            return (f'<details class="past"><summary>Было раньше · '
+                    f'{len(rows)}</summary>{"".join(lines)}</details>')
+
         def row(decision):
             edit = decision["edit"]
             lat, lon = edit["geom"][1], edit["geom"][0]
@@ -1823,7 +1884,7 @@ class Handler(BaseHTTPRequestHandler):
             return (f'<div class="chg"><b>#{edit["id"]}</b> '
                     f'{esc(map_edits.kind_name(edit["kind"]))}{shift} '
                     f'<a href="{place}">на карте</a>{actions}'
-                    f'<div class="muted">{note}</div></div>')
+                    f'<div class="muted">{note}</div>{past(edit)}</div>')
 
         def block(title, verdict, explain):
             rows = [d for d in decisions if d["verdict"] == verdict]

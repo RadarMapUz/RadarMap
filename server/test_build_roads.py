@@ -1163,6 +1163,80 @@ class DrawnRoadTests(unittest.TestCase):
         self.assertIs(build_roads.graft([far], [mine])[0], far)
 
 
+class NameAndLandTests(unittest.TestCase):
+    """Название дороги и обведённая руками местность.
+
+    Оба — про то же правило, что и всё остальное в конструкторе: панель заводит
+    объект ТОГО ЖЕ вида, что приезжает из OSM, а не параллельный. Поэтому
+    телефон рисует их тем же кодом, и добавлять там нечего.
+    """
+
+    def road(self, code, coords, name=""):
+        return (code, 0, [(lon, lat) for lat, lon in coords], name)
+
+    def naming(self, lat, lon, text):
+        return {"kind": "name", "geom": [lon, lat], "props": {"name": text}}
+
+    def ring(self, code, *coords):
+        return {"kind": "area", "geom": [[lon, lat] for lat, lon in coords],
+                "props": {"area": code}}
+
+    # --- Название
+
+    def test_hand_name_overrides_osm(self):
+        # Название — единственное, что человек знает лучше OSM всегда: он там
+        # был.
+        street = self.road(4, [(41.300, 69.250), (41.310, 69.250)], "Старое")
+        patched, applied, _ = build_roads.apply_edits(
+            [street], [self.naming(41.305, 69.2501, "Новое")])
+        self.assertEqual(applied, 1)
+        self.assertEqual(patched[0][3], "Новое")
+
+    def test_empty_name_is_refused(self):
+        street = self.road(4, [(41.300, 69.250), (41.310, 69.250)], "Старое")
+        patched, applied, missed = build_roads.apply_edits(
+            [street], [self.naming(41.305, 69.2501, "   ")])
+        self.assertEqual((applied, missed), (0, 1))
+        self.assertEqual(patched[0][3], "Старое")
+
+    def test_name_does_not_touch_lanes(self):
+        street = self.road(4, [(41.300, 69.250), (41.310, 69.250)])
+        before = street[1]
+        patched, _, _ = build_roads.apply_edits(
+            [street], [self.naming(41.305, 69.2501, "Новое")])
+        self.assertEqual(patched[0][1], before)
+
+    # --- Местность
+
+    def test_drawn_area_becomes_a_layer_object(self):
+        built = build_roads.drawn_areas([self.ring(
+            build_roads.AREA_GREEN, (41.300, 69.250), (41.301, 69.250),
+            (41.301, 69.251))])
+        self.assertEqual(len(built), 1)
+        kind, flags, points = built[0]
+        self.assertEqual(kind, build_roads.AREA_GREEN)
+        self.assertTrue(flags & build_roads.AREA_FLAG_CLOSED,
+                        "обведённое руками — полигон, а не лента")
+
+    def test_unknown_area_kind_is_refused(self):
+        self.assertEqual(build_roads.drawn_areas([self.ring(
+            99, (41.300, 69.250), (41.301, 69.250), (41.301, 69.251))]), [])
+
+    def test_two_points_are_not_a_contour(self):
+        self.assertEqual(build_roads.drawn_areas([self.ring(
+            build_roads.AREA_GREEN, (41.300, 69.250), (41.301, 69.250))]), [])
+
+    def test_tiny_contour_is_noise(self):
+        self.assertEqual(build_roads.drawn_areas([self.ring(
+            build_roads.AREA_GREEN, (41.30000, 69.25000), (41.30001, 69.25000),
+            (41.30001, 69.25001))]), [])
+
+    def test_broken_contour_is_skipped_not_fatal(self):
+        self.assertEqual(build_roads.drawn_areas(
+            [{"kind": "area", "geom": [["чушь", 1], [2, 3], [4, 5]],
+              "props": {"area": 2}}]), [])
+
+
 class ReplaceRoadTests(unittest.TestCase):
     """Перерисованная дорога заменяет старую, а не ложится рядом.
 

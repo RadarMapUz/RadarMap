@@ -435,6 +435,57 @@ class WidthContractTests(unittest.TestCase):
         self.assertAlmostEqual(two_way, one_way * 2)
 
 
+class HistoryTests(unittest.TestCase):
+    """История геометрии.
+
+    «Кто и когда сдвинул эту улицу» через полгода спросят обязательно, а
+    восстановить это неоткуда: ручная работа — единственное в системе, что
+    нельзя пересобрать из OSM.
+    """
+
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.row_factory = sqlite3.Row
+        map_edits.ensure_tables(self.conn)
+        self.id = map_edits.create(self.conn, "geometry",
+                                   raw=[69.25, 41.30],
+                                   snapped=[[69.25, 41.30], [69.26, 41.31]],
+                                   props={"cls": 4})
+
+    def tearDown(self):
+        self.conn.close()
+
+    def test_previous_geometry_is_kept(self):
+        map_edits.update(self.conn, self.id, 1,
+                         geom=[[69.25, 41.30], [69.27, 41.32]])
+        past = map_edits.history(self.conn, self.id)
+        self.assertEqual(len(past), 1)
+        self.assertEqual(past[0]["geom"], [[69.25, 41.30], [69.26, 41.31]],
+                         "в историю попало новое, а не прежнее")
+
+    def test_history_grows_with_each_change(self):
+        for i in range(3):
+            map_edits.update(self.conn, self.id, i + 1,
+                             geom=[[69.25, 41.30], [69.26 + i / 100, 41.31]])
+        self.assertEqual(len(map_edits.history(self.conn, self.id)), 3)
+
+    def test_newest_first(self):
+        map_edits.update(self.conn, self.id, 1, props={"cls": 3})
+        map_edits.update(self.conn, self.id, 2, props={"cls": 6})
+        past = map_edits.history(self.conn, self.id)
+        self.assertGreater(past[0]["version"], past[1]["version"])
+
+    def test_note_alone_does_not_pollute_history(self):
+        # Заметка и статус меняются часто, и версия «поменяли статус» засоряла
+        # бы историю тем, о чём никто не спросит.
+        map_edits.update(self.conn, self.id, 1, note="посмотрел")
+        map_edits.update(self.conn, self.id, 2, status=map_edits.ACCEPTED)
+        self.assertEqual(map_edits.history(self.conn, self.id), [])
+
+    def test_history_of_a_missing_edit_is_empty(self):
+        self.assertEqual(map_edits.history(self.conn, 999), [])
+
+
 class GiveToOsmTests(unittest.TestCase):
     """Выгрузка нарисованной дороги в OSM.
 

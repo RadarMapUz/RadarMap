@@ -1049,6 +1049,15 @@ def drawn(edits):
 # расхождение может дать только округление координат в тайле (1e-5° ≈ 1.1 м).
 GRAFT_METERS = 1.5
 
+# Насколько близко чужая дорога должна лежать к нарисованной, чтобы считаться
+# заменённой ею. Восемь метров — половина обычной улицы: ближе этого две линии
+# на схеме сливаются в одну толстую, и держать обе бессмысленно.
+REPLACE_METERS = 8.0
+# И какая её доля должна попасть в эту полосу. Половина, а не вся: у чужой
+# дороги может быть хвост за пределами перерисованного куска, и требовать
+# совпадения целиком значило бы не заменить почти ничего.
+REPLACE_SHARE = 0.5
+
 
 def graft(roads, hand):
     """Врезать концы нарисованных дорог в чужие линии → новая сеть.
@@ -1089,6 +1098,56 @@ def graft(roads, hand):
                 patched.insert(best_index, end)
         out.append((code, flags, patched, name) if len(patched) != len(points) else road)
     return out
+
+
+def suppress(roads, hand_edits):
+    """Убрать чужие дороги, которые перерисовали руками → (сеть, сколько убрано).
+
+    Модератор, поправивший геометрию существующей улицы, ждёт, что на схеме
+    останется ОДНА дорога — его. Без этого их будет две: старая из OSM и новая
+    поверх неё, в нескольких метрах друг от друга, и водитель увидит на месте
+    улицы двойную линию.
+
+    Ищем по МЕСТУ, а не по id: id ведёт в OSM и не переживает воскресной
+    пересборки. Заменённой считается дорога, которая больше чем наполовину
+    лежит в полосе вокруг нарисованной.
+    """
+    lines = [e for e in hand_edits
+             if e.get("kind") == "geometry" and (e.get("props") or {}).get("replace")]
+    if not lines:
+        return roads, 0
+    shapes = []
+    for edit in lines:
+        points = []
+        for pair in edit.get("geom") or []:
+            try:
+                points.append((float(pair[0]), float(pair[1])))
+            except (TypeError, ValueError, IndexError):
+                points = []
+                break
+        if len(points) >= 2:
+            shapes.append(points)
+    if not shapes:
+        return roads, 0
+
+    kept, dropped = [], 0
+    for road in roads:
+        points = road[2]
+        if not points:
+            kept.append(road)
+            continue
+        replaced = False
+        for shape in shapes:
+            near = sum(1 for point in points
+                       if _point_to_polyline(point, shape) <= REPLACE_METERS)
+            if near >= max(2, len(points) * REPLACE_SHARE):
+                replaced = True
+                break
+        if replaced:
+            dropped += 1
+        else:
+            kept.append(road)
+    return kept, dropped
 
 
 def load_edits(path):
@@ -1902,6 +1961,9 @@ def main():
     # пройти ту же разрезку на узлах и склейку, что и всё остальное, иначе она
     # ляжет поверх сети, а не внутрь неё, и узлов на стыках не появится.
     hand = drawn(edits)
+    # Сначала убираем то, что перерисовали руками: иначе на схеме останутся две
+    # дороги — старая из OSM и новая поверх неё в нескольких метрах.
+    raw, replaced = suppress(raw, edits)
     # Врезаем концы своих дорог в чужие линии ДО генерализации: разрезка на
     # перекрёстках работает по общим вершинам, а без врезки её там нет.
     roads = generalise(graft(raw, hand) + hand, args.tolerance / 111_320.0)
@@ -1984,7 +2046,8 @@ def main():
               f"(медиана {widths[len(widths) // 2]:.1f})")
     if edits_applied or edits_missed or hand:
         print(f"правки панели: наложено {edits_applied}, "
-              f"не нашли дороги {edits_missed}, нарисовано руками {len(hand)}")
+              f"не нашли дороги {edits_missed}, нарисовано руками {len(hand)}, "
+              f"заменено чужих {replaced}")
     share = 100.0 * lanes_tagged / read if read else 0.0
     print(f"полосы: тегом {lanes_tagged} из {read} ({share:.1f} %), "
           f"остальным по классу")

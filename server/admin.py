@@ -1158,6 +1158,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, self.changes_page(conn))
             if path == "/api/todo":
                 return self.todo_json(conn)
+            if path == "/api/points":
+                return self.points_json(conn)
             if path == "/api/geocode":
                 return self.geocode_json()
             if path.startswith("/api/edit/") and path.endswith("/osm"):
@@ -1652,6 +1654,32 @@ class Handler(BaseHTTPRequestHandler):
             places.append({"title": meta.get("text") or obj.get("name") or text,
                            "lat": float(parts[1]), "lon": float(parts[0])})
         self._json({"places": places})
+
+    def points_json(self, conn):
+        """Обстановка для подложки схемы: из тайлов и своя из правок.
+
+        Панель обязана показывать ТО ЖЕ, что увидит водитель, а без обстановки
+        схема — половина картинки: дорога есть, а перекрёсток на ней ничем не
+        отличается от прямого участка.
+
+        Своя обстановка идёт РЯДОМ с тайловой и помечена отдельно: модератор
+        должен видеть, что из этого уже уехало на телефоны, а что ещё лежит в
+        панели и ждёт публикации.
+        """
+        box = self._bbox()
+        if box is None:
+            return self._json({"error": "нужна рамка карты"}, 400)
+        south, west, north, east = box
+        from_tiles = map_edits.load_points(edits_tiles_dir(), *box)
+        mine = []
+        for edit in map_edits.in_bbox(conn, *box):
+            if edit["kind"] != "point":
+                continue
+            code = (edit["props"] or {}).get("point")
+            if code:
+                mine.append({"kind": code, "point": edit["geom"],
+                             "id": edit["id"], "mine": True})
+        self._json({"points": from_tiles[:1500] + mine})
 
     def todo_json(self, conn):
         """Что делать дальше в видимой рамке.

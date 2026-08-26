@@ -51,6 +51,8 @@
   let schema = false;      // наша подложка вместо спутника
   let ground = null;       // тёмная земля под схемой
   let roadsInFrame = [];   // последний ответ /api/roads
+  let pointsInFrame = [];  // обстановка: из тайлов и своя
+  let markLayer = [];      // её отрисовка на подложке
   let pickLines = [];      // подсветка кандидатов при неоднозначности
   let dragger = null;      // перетаскиваемая метка выбранной правки
   let current = null;      // что сейчас в карточке
@@ -416,6 +418,47 @@
       roadsInFrame = data.roads || [];
       renderRoads();
     });
+    // Обстановка — вторая половина картинки. Без неё схема врёт: дорога есть,
+    // а перекрёсток на ней ничем не отличается от прямого участка.
+    get('/api/points' + bbox()).then(function (data) {
+      pointsInFrame = data.points || [];
+      renderMarks();
+    });
+  }
+
+  // Как обстановка выглядит на подложке. Не пиктограммы приложения — их здесь
+  // и не нужно: на карте важно ГДЕ объект и какого он вида, а не как он
+  // нарисован на приборке.
+  const MARK_LOOK = {
+    1: { color: '#ff4d4d', size: 9, name: 'Светофор' },
+    2: { color: '#ffb020', size: 7, name: 'Лежачий' },
+    3: { color: '#e8e8e8', size: 7, name: 'Стоп-линия' },
+    4: { color: '#9b7bff', size: 7, name: 'Разворот' },
+    5: { color: '#ffffff', size: 8, name: 'Переход' },
+    6: { color: '#7bd3ff', size: 7, name: 'Стрелки полос' },
+  };
+
+  function renderMarks() {
+    markLayer.forEach(function (item) { map.geoObjects.remove(item); });
+    markLayer = [];
+    if (!schema) { return; }
+    pointsInFrame.forEach(function (mark) {
+      const look = MARK_LOOK[mark.kind];
+      if (!look) { return; }
+      const circle = new ymaps.Circle(
+        [[mark.point[1], mark.point[0]], look.size], {
+          hintContent: look.name + (mark.mine ? ' · своя, ещё не опубликована' : ''),
+        }, {
+          fillColor: look.color,
+          // Своя обстановка обведена: модератор должен видеть, что уже уехало
+          // на телефоны, а что ещё лежит в панели и ждёт публикации.
+          strokeColor: mark.mine ? '#ffb020' : look.color,
+          strokeWidth: mark.mine ? 3 : 0,
+          fillOpacity: 0.9, zIndex: 260,
+        });
+      map.geoObjects.add(circle);
+      markLayer.push(circle);
+    });
   }
 
   // Метров в пикселе на текущем зуме. Ширина проезжей части приходит с сервера
@@ -484,8 +527,16 @@
       // пятнадцати метрах не сливаются в одну широкую.
       line(road.points, { strokeColor: '#04060a', strokeWidth: width + 3,
                           strokeOpacity: 1, zIndex: 200 + road.level * 10 });
-      line(road.points, { strokeColor: asphalt(road.cls), strokeWidth: width,
-                          strokeOpacity: 1, zIndex: 201 + road.level * 10 });
+      const polotno = line(road.points,
+        { strokeColor: asphalt(road.cls), strokeWidth: width,
+          strokeOpacity: 1, zIndex: 201 + road.level * 10 });
+      // Щелчок по полотну — взять эту дорогу в правку. Перерисовать
+      // существующую улицу иначе нельзя: рисование с нуля дало бы вторую
+      // линию рядом с первой, а не исправленную первую.
+      polotno.events.add('click', function (e) {
+        e.stopPropagation();
+        askReshape(road);
+      });
     });
     ordered.forEach(function (road) {
       // Осевая — только там, где она есть в жизни: на дворовом проезде её нет,
@@ -498,10 +549,42 @@
     });
   }
 
+  // Взять существующую дорогу в правку.
+  //
+  // Её геометрия копируется в рисовалку как есть — тяни вершины, добавляй
+  // новые. При сохранении старая уходит: модератор, поправивший улицу, ждёт,
+  // что на схеме останется ОДНА дорога, а не две в нескольких метрах.
+  function askReshape(road) {
+    els.card.hidden = false;
+    els.card.innerHTML = '';
+    els.card.appendChild(node('h3', 'Дорога класса ' + road.cls));
+    els.card.appendChild(node('div',
+      (road.name || 'без имени') + ' · ' + road.lanes + ' полос · ' +
+      road.width + ' м', 'muted'));
+    els.card.appendChild(node('div',
+      'Можно перерисовать: геометрия скопируется, старая линия при сохранении '
+      + 'уйдёт.', 'muted'));
+    const take = node('button', 'Перерисовать');
+    take.addEventListener('click', function () {
+      closeCard();
+      drawing = { points: road.points.map(function (p) { return [p[0], p[1]]; }),
+                  cls: road.cls, replace: true, lanes: road.lanes,
+                  oneWay: road.oneWay };
+      chosenVertex = -1;
+      renderDrawing();
+      hint('Тяни вершины · середину отрезка — добавить · Enter — сохранить');
+    });
+    els.card.appendChild(take);
+    const cancel = node('button', 'Отмена', 'ghost');
+    cancel.addEventListener('click', closeCard);
+    els.card.appendChild(cancel);
+  }
+
   function toggleSchema() {
     schema = !schema;
     map.setType(schema ? 'yandex#map' : 'yandex#hybrid');
     renderRoads();
+    renderMarks();
     hint(schema
       ? 'Своя схема: видно то, что увидит водитель. \\ — обратно на спутник.'
       : 'Спутник: видно, где объект стоит на самом деле. \\ — на схему.');
@@ -778,10 +861,11 @@
     // из них последняя.
     attachEnd([last[1], last[0]]).then(function (point) {
       const points = drawing.points.slice(0, -1).concat([point]);
+      const was = drawing;
       cancelDrawing(true);
       current = { kind: 'geometry', geom: points, raw: points[0],
                   props: { cls: cls }, note: '' };
-      showRoadCard(points, cls);
+      showRoadCard(points, cls, was);
     });
   }
 
@@ -792,10 +876,16 @@
     if (!quiet) { hint('Рисование отменено.'); }
   }
 
-  function showRoadCard(points, cls) {
+  function showRoadCard(points, cls, was) {
+    const reshaping = !!(was && was.replace);
     els.card.hidden = false;
     els.card.innerHTML = '';
-    els.card.appendChild(node('h3', 'Своя дорога'));
+    els.card.appendChild(node('h3', reshaping ? 'Перерисованная дорога'
+                                              : 'Своя дорога'));
+    if (reshaping) {
+      els.card.appendChild(node('div',
+        'Старая линия уйдёт со схемы при публикации.', 'muted'));
+    }
     els.card.appendChild(node('div',
       'Вершин ' + points.length + ' · ' + drawnMeters(points) + ' м', 'muted'));
 
@@ -841,6 +931,7 @@
         bridge: bridge.input.checked,
         why: why.value,
       };
+      if (reshaping) { current.props.replace = true; }
       if (count >= 1 && count <= 15) { current.props.lanes = count; }
       current.status = ACCEPTED;
       post('/api/edit', current).then(function (result) {

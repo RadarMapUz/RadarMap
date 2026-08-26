@@ -1163,6 +1163,58 @@ class DrawnRoadTests(unittest.TestCase):
         self.assertIs(build_roads.graft([far], [mine])[0], far)
 
 
+class ReplaceRoadTests(unittest.TestCase):
+    """Перерисованная дорога заменяет старую, а не ложится рядом.
+
+    Модератор, поправивший геометрию улицы, ждёт, что на схеме останется ОДНА
+    дорога — его. Без замены их будет две: старая из OSM и новая поверх неё в
+    нескольких метрах, и водитель увидит на месте улицы двойную линию.
+    """
+
+    def road(self, coords):
+        return (4, 0, [(lon, lat) for lat, lon in coords], "")
+
+    def redraw(self, coords, replace=True):
+        return {"kind": "geometry",
+                "geom": [[lon, lat] for lat, lon in coords],
+                "props": {"cls": 4, "replace": replace}}
+
+    def test_redrawn_road_removes_the_old_one(self):
+        old = self.road([(41.300, 69.250), (41.302, 69.250)])
+        mine = self.redraw([(41.300, 69.25002), (41.302, 69.25002)])
+        kept, dropped = build_roads.suppress([old], [mine])
+        self.assertEqual((len(kept), dropped), (0, 1))
+
+    def test_road_further_than_the_band_survives(self):
+        far = self.road([(41.300, 69.2510), (41.302, 69.2510)])
+        mine = self.redraw([(41.300, 69.250), (41.302, 69.250)])
+        kept, dropped = build_roads.suppress([far], [mine])
+        self.assertEqual((len(kept), dropped), (1, 0))
+
+    def test_drawing_without_replace_removes_nothing(self):
+        # Новая дорога рядом с существующей — законный случай: дублёр, съезд.
+        old = self.road([(41.300, 69.250), (41.302, 69.250)])
+        mine = self.redraw([(41.300, 69.25002), (41.302, 69.25002)], replace=False)
+        kept, dropped = build_roads.suppress([old], [mine])
+        self.assertEqual((len(kept), dropped), (1, 0))
+
+    def test_road_only_partly_covered_survives(self):
+        # У чужой дороги может быть длинный хвост за перерисованным куском —
+        # выбрасывать её целиком нельзя.
+        long_road = self.road([(41.300, 69.250), (41.302, 69.250),
+                               (41.310, 69.250), (41.320, 69.250),
+                               (41.330, 69.250)])
+        mine = self.redraw([(41.300, 69.25002), (41.302, 69.25002)])
+        kept, dropped = build_roads.suppress([long_road], [mine])
+        self.assertEqual((len(kept), dropped), (1, 0))
+
+    def test_broken_geometry_suppresses_nothing(self):
+        old = self.road([(41.300, 69.250), (41.302, 69.250)])
+        broken = {"kind": "geometry", "geom": [["чушь", 1]], "props": {"replace": True}}
+        kept, dropped = build_roads.suppress([old], [broken])
+        self.assertEqual((len(kept), dropped), (1, 0))
+
+
 class DrawnPointTests(unittest.TestCase):
     """Обстановка, поставленная руками.
 

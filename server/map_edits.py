@@ -735,6 +735,45 @@ def load_roads(tiles_dir, south, west, north, east, sets=("s", "y")):
     return roads
 
 
+def load_points(tiles_dir, south, west, north, east):
+    """Точечные объекты из тайлов: светофоры, переходы, стоп-линии, стрелки.
+
+    Панель обязана показывать ТО ЖЕ, что увидит водитель, а без обстановки
+    схема — половина картинки: дорога есть, а перекрёсток на ней ничем не
+    отличается от прямого участка.
+
+    Читаем набор `p` — ближний, посаженный на детальную геометрию. Дальний
+    (`q`) пересчитан по костяку района и в панели, где всегда крупный масштаб,
+    смысла не имеет.
+
+    В опубликованном сейчас формате v1 точек нет вовсе: набор появился только в
+    v2. Пусто — не ошибка, а «сервер ещё не публиковал точки»; своя обстановка
+    из правок панели показывается независимо от этого.
+    """
+    if not tiles_dir or not os.path.isdir(tiles_dir):
+        return []
+    out = []
+    for name in sorted(os.listdir(tiles_dir)):
+        if not name.startswith("road2_") or not name.endswith(".json"):
+            continue
+        body = name[len("road2_"):-len(".json")].rsplit("_", 1)
+        if len(body) != 2 or body[1] != "p":
+            continue
+        box = _tile_box(name)
+        if box is None or box[0] > north or box[2] < south \
+                or box[1] > east or box[3] < west:
+            continue
+        for road in _tile_roads(os.path.join(tiles_dir, name)):
+            spot = (road.get("points") or [None])[0]
+            if spot is None:
+                continue
+            lon, lat = spot
+            if south <= lat <= north and west <= lon <= east:
+                out.append({"kind": road["cls"], "flags": road["flags"],
+                            "point": [lon, lat]})
+    return out
+
+
 def roads_near(tiles_dir, point, meters=200.0):
     """Дороги вокруг точки. Рамка считается от радиуса, а не берётся от мира.
 

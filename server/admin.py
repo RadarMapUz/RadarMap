@@ -275,6 +275,22 @@ a.map { color:var(--accent); font-size:13px; }
 a { color:var(--accent); }
 .empty { color:var(--text-3); padding:26px 0; text-align:center; }
 
+/* Очередь изменений OSM. Строка — это решение, которое надо принять, поэтому
+   действия стоят В НЕЙ, а не за переходом на отдельную страницу: очередь
+   разбирают подряд, и каждый переход стоил бы возврата и потери места. */
+.chg { border:1px solid var(--stroke); border-radius:12px; padding:10px 12px;
+       margin:8px 0; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.chg b { font-size:14px; }
+.chg .muted { flex-basis:100%; font-size:12px; }
+.chg a { margin-left:auto; }
+form.inline { display:inline; }
+form.inline button { margin:0; padding:6px 12px; font-size:13px; }
+button.ghost { background:transparent; color:var(--text-2);
+               border:1px solid var(--stroke); }
+.warn { background:#2a2013; border:1px solid #6b5320; border-radius:10px;
+        padding:9px 12px; margin:10px 0; font-size:13px; color:#e3c07b;
+        display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+
 @media (max-width:520px) {
   main { padding:10px; }
   .card { padding:11px 12px; border-radius:12px; }
@@ -1124,6 +1140,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.edit_save_json(conn, self._json_body(raw))
             if path == "/api/edit/withdraw":
                 return self.edit_withdraw_json(conn, self._json_body(raw))
+            if path == "/changes/act":
+                return self.changes_action(conn, field)
             if path == "/cameras/act":
                 self.camera_action(conn, field)
                 return self._redirect(u("/cameras"))
@@ -1529,14 +1547,34 @@ class Handler(BaseHTTPRequestHandler):
         видеть. Список, отсортированный по дате, заставлял бы каждый раз искать
         среди сделанного то, что ждёт.
         """
+        # Баннер СНАЧАЛА, и это не порядок ради порядка. Он рассказывает, что
+        # только что сделано, и держит ссылку «вернуть»; уйди страница в ранний
+        # возврат раньше него — действие теряло бы и подтверждение, и отмену, а
+        # модератор видел бы «сверять не с чем» и решал, что ничего не вышло.
+        done = self.changes_banner()
         roads = map_edits.load_roads(edits_tiles_dir(), -90, -180, 90, 180)
         if not roads:
-            return page("/changes", "Что изменилось",
+            return page("/changes", "Что изменилось", done +
                         '<div class="empty">Тайлов не видно: RADARMAP_TILES '
                         'указывает не туда, или дороги ещё не публиковались. '
                         'Сверять правки не с чем.</div>')
         decisions = osm_queue.sweep(conn, roads)
         counts = osm_queue.summary(decisions)
+
+        act = esc(u("/changes/act"))
+
+        def button(edit, op, caption, cls=""):
+            """Действие одной кнопкой, без диалога подтверждения.
+
+            Подтверждение тормозит на каждой строке и всё равно проматывается
+            не глядя. Всё, что здесь делается, обратимо: снятие возвращается,
+            метка ставится заново следующей же пересборкой.
+            """
+            return (f'<form method="post" action="{act}" class="inline">'
+                    f'<input type="hidden" name="id" value="{edit["id"]}">'
+                    f'<input type="hidden" name="version" value="{edit["version"]}">'
+                    f'<input type="hidden" name="op" value="{op}">'
+                    f'<button class="{cls}">{esc(caption)}</button></form>')
 
         def row(decision):
             edit = decision["edit"]
@@ -1544,8 +1582,17 @@ class Handler(BaseHTTPRequestHandler):
             shift = f' · сдвиг {decision["shift"]} м' if decision["shift"] else ""
             place = esc(u("/editor")) + f"#{lat},{lon},19"
             note = esc(edit.get("note") or "")
-            return (f'<div class="chg"><b>#{edit["id"]}</b> {esc(edit["kind"])}{shift} '
-                    f'<a href="{place}">на карте</a>'
+            actions = button(edit, "withdraw", "Снять", "ghost")
+            # «Всё верно» — по МЕТКЕ, а не по вердикту этой сверки. Метку
+            # ставит пересадка, и живёт она в заметке: следующая неделя может
+            # не найти сдвига вовсе, а метка останется — и снять её будет
+            # нечем, то есть счётчик на вкладке не обнулится никогда.
+            if (osm_queue.CHECK == decision["verdict"]
+                    or map_edits.CHECK_MARK in (edit.get("note") or "")):
+                actions = button(edit, "confirm", "Всё верно") + actions
+            return (f'<div class="chg"><b>#{edit["id"]}</b> '
+                    f'{esc(map_edits.kind_name(edit["kind"]))}{shift} '
+                    f'<a href="{place}">на карте</a>{actions}'
                     f'<div class="muted">{note}</div></div>')
 
         def block(title, verdict, explain):
@@ -1573,7 +1620,62 @@ class Handler(BaseHTTPRequestHandler):
         if not body:
             body = (f'<div class="empty">Все {counts.get(osm_queue.KEEP, 0)} правок '
                     'на месте: вокруг них в OSM ничего не изменилось.</div>')
-        return page("/changes", "Что изменилось", body)
+        return page("/changes", "Что изменилось", done + body)
+
+    def changes_banner(self):
+        """Что только что сделали и как это отменить.
+
+        Полоски с отменой, как на карте, здесь нет и не нужно: страница
+        серверная, без JavaScript, и заводить его ради одной кнопки значило бы
+        завести вторую страницу с другими правилами. Ссылка «вернуть» делает то
+        же самое и переживает перезагрузку.
+        """
+        query = parse_qs(urlparse(self.path).query)
+        op = (query.get("done") or [""])[0]
+        try:
+            edit_id = int((query.get("id") or ["0"])[0])
+            version = int((query.get("version") or ["0"])[0])
+        except ValueError:
+            return ""
+        if op == "withdraw" and edit_id:
+            act = esc(u("/changes/act"))
+            return (f'<div class="warn">Снята правка #{edit_id}. '
+                    f'<form method="post" action="{act}" class="inline">'
+                    f'<input type="hidden" name="id" value="{edit_id}">'
+                    f'<input type="hidden" name="version" value="{version}">'
+                    f'<input type="hidden" name="op" value="restore">'
+                    f'<button>Вернуть</button></form></div>')
+        if op == "confirm" and edit_id:
+            return f'<div class="warn">Правка #{edit_id} подтверждена.</div>'
+        if op == "restore" and edit_id:
+            return f'<div class="warn">Правка #{edit_id} возвращена.</div>'
+        if op == "stale":
+            return ('<div class="warn">Правку изменили в другом окне — '
+                    'страница перечитана.</div>')
+        return ""
+
+    def changes_action(self, conn, field):
+        """Снять, подтвердить или вернуть — одна строка очереди."""
+        try:
+            edit_id, version = int(field("id")), int(field("version"))
+        except ValueError:
+            return self._redirect(u("/changes"))
+        op = field("op")
+        handlers = {"withdraw": map_edits.withdraw,
+                    "confirm": map_edits.confirm,
+                    "restore": map_edits.restore}
+        handler = handlers.get(op)
+        if handler is None:
+            return self._redirect(u("/changes"))
+        if not handler(conn, edit_id, version):
+            # Версия устарела: правку изменили в другом окне. Молча
+            # перезаписать нельзя — модератор открывает панель и с телефона,
+            # и с ноутбука, и второе сохранение затёрло бы первое.
+            return self._redirect(u("/changes") + "?done=stale")
+        log_action(conn, None, f"changes-{op}", f"#{edit_id}")
+        conn.commit()
+        self._redirect(u("/changes") +
+                       f"?done={op}&id={edit_id}&version={version + 1}")
 
     def camera_json(self, conn, path):
         try:

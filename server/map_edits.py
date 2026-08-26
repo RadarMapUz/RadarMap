@@ -69,6 +69,15 @@ CREATE INDEX IF NOT EXISTS idx_edits_kind ON map_edits(kind, status);
 # в отличие от точек, где такое допускается намеренно.
 KINDS = {"lanes", "turn_lanes", "u_turn", "geometry"}
 
+# Названия видов для человека. Код — контракт с сервером и с запеканием, а на
+# экране нужно слово: «lanes» в строке очереди читается как недоделка.
+KIND_NAMES = {"lanes": "Полосы", "turn_lanes": "Направления полос",
+              "u_turn": "Разворот", "geometry": "Своя геометрия"}
+
+
+def kind_name(kind):
+    return KIND_NAMES.get(kind, kind)
+
 
 def ensure_tables(conn):
     conn.executescript(SCHEMA)
@@ -296,6 +305,34 @@ def update(conn, edit_id, version, **fields):
         values).rowcount
     conn.commit()
     return changed == 1
+
+
+# Метка автоматики «сдвинулось, посмотри». Живёт в заметке, а не отдельной
+# колонкой: через полгода «почему эта правка помечена» вспомнит только текст,
+# и держать причину рядом с меткой дешевле, чем сводить их запросом.
+CHECK_MARK = "проверить"
+
+
+def confirm(conn, edit_id, version):
+    """«Посмотрел, всё верно» — снять метку автоматики.
+
+    Не трогает ни геометрию, ни статус: правка и так опубликована. Убирается
+    ровно то, что мешает ей уйти из очереди, — иначе очередь не пустеет
+    никогда и её перестают открывать.
+    """
+    row = conn.execute("SELECT note FROM map_edits WHERE id = ?",
+                       (edit_id,)).fetchone()
+    if row is None:
+        return False
+    cleaned = " · ".join(part for part in (row["note"] or "").split(" · ")
+                         if CHECK_MARK not in part)
+    return update(conn, edit_id, version, note=cleaned)
+
+
+def restore(conn, edit_id, version):
+    """Вернуть снятую правку. Отмена — это возврат предыдущей версии, а не
+    отдельный механизм: у нас есть версия, и её достаточно."""
+    return update(conn, edit_id, version, status=ACCEPTED)
 
 
 def withdraw(conn, edit_id, version):

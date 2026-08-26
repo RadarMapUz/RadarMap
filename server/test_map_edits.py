@@ -124,6 +124,7 @@ class StorageTests(unittest.TestCase):
         self.conn.close()
 
     def make(self, kind="lanes", point=(69.25, 41.30), **kwargs):
+        # note передаётся дальше в create — так тестам не нужен второй шаг.
         return map_edits.create(self.conn, kind, raw=list(point),
                                 snapped=list(point), **kwargs)
 
@@ -171,6 +172,44 @@ class StorageTests(unittest.TestCase):
         edit_id = self.make()
         with self.assertRaises(ValueError):
             map_edits.update(self.conn, edit_id, 1, author="чужой")
+
+    def test_confirm_clears_only_the_machine_mark(self):
+        # «Посмотрел, всё верно» убирает ровно то, что мешает правке уйти из
+        # очереди, — и не трогает ни геометрию, ни статус, ни то, что написал
+        # человек.
+        edit_id = self.make(note="почему: съезд не размечен")
+        map_edits.update(self.conn, edit_id, 1,
+                         note="почему: съезд не размечен · проверить: сдвиг 8.0 м",
+                         status=map_edits.ACCEPTED)
+        self.assertTrue(map_edits.confirm(self.conn, edit_id, 2))
+        row = self.conn.execute("SELECT note, status FROM map_edits WHERE id = ?",
+                                (edit_id,)).fetchone()
+        self.assertNotIn("проверить", row["note"])
+        self.assertIn("съезд не размечен", row["note"], "стёрто написанное человеком")
+        self.assertEqual(row["status"], map_edits.ACCEPTED)
+
+    def test_confirm_is_idempotent(self):
+        edit_id = self.make(note="проверить: сдвиг 8.0 м")
+        map_edits.confirm(self.conn, edit_id, 1)
+        self.assertTrue(map_edits.confirm(self.conn, edit_id, 2))
+
+    def test_confirm_of_a_missing_edit_is_not_an_error(self):
+        self.assertFalse(map_edits.confirm(self.conn, 999, 1))
+
+    def test_restore_brings_a_withdrawn_edit_back(self):
+        edit_id = self.make()
+        map_edits.update(self.conn, edit_id, 1, status=map_edits.ACCEPTED)
+        map_edits.withdraw(self.conn, edit_id, 2)
+        self.assertEqual(map_edits.in_bbox(self.conn, 41.2, 69.2, 41.4, 69.3), [])
+        self.assertTrue(map_edits.restore(self.conn, edit_id, 3))
+        self.assertEqual(len(map_edits.in_bbox(self.conn, 41.2, 69.2, 41.4, 69.3)), 1)
+
+    def test_stale_version_cannot_confirm_or_restore(self):
+        # Модератор открывает панель и с телефона, и с ноутбука.
+        edit_id = self.make()
+        map_edits.update(self.conn, edit_id, 1, note="первый")
+        self.assertFalse(map_edits.confirm(self.conn, edit_id, 1))
+        self.assertFalse(map_edits.restore(self.conn, edit_id, 1))
 
     def test_withdrawn_edit_is_kept_not_deleted(self):
         # Ручная работа — единственные данные в системе, которые нельзя

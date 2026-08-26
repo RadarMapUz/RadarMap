@@ -19,6 +19,7 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 
 import admin
+import map_edits
 import admin_auth
 import api
 
@@ -915,6 +916,93 @@ class EditorApiTests(AdminTest):
 
     def test_changes_page_needs_a_session(self):
         self.assertEqual(_get(self.port, "/changes", cookie="")[0], 401)
+
+    def test_changes_action_needs_a_session(self):
+        self.assertEqual(_post(self.port, "/changes/act",
+                               {"id": 1, "version": 1, "op": "withdraw"},
+                               cookie=""), 401)
+
+    def test_changes_action_withdraws_and_offers_the_way_back(self):
+        # Очередь разбирают подряд, и действие обязано быть в строке, а не за
+        # переходом: каждый переход стоил бы возврата и потери места.
+        code, body = _post_json(self.port, "/api/edit",
+                                {"kind": "lanes", "geom": [69.25, 41.3],
+                                 "raw": [69.25, 41.3], "props": {"lanes": 4},
+                                 "status": 1})
+        self.assertEqual(code, 200, body)
+        made = json.loads(body)
+        self.assertEqual(_post(self.port, "/changes/act",
+                               {"id": made["id"], "version": made["version"],
+                                "op": "withdraw"}), 303)
+        gone = json.loads(_get(self.port,
+            "/api/edits?south=41.29&west=69.24&north=41.31&east=69.26")[1])
+        self.assertEqual(gone["edits"], [])
+
+        # Страница после действия предлагает вернуть — это и есть отмена,
+        # переживающая перезагрузку.
+        page = _get(self.port, "/changes?done=withdraw&id=%d&version=%d"
+                    % (made["id"], made["version"] + 1))[1]
+        self.assertIn("Вернуть", page)
+
+        self.assertEqual(_post(self.port, "/changes/act",
+                               {"id": made["id"], "version": made["version"] + 1,
+                                "op": "restore"}), 303)
+        back = json.loads(_get(self.port,
+            "/api/edits?south=41.29&west=69.24&north=41.31&east=69.26")[1])
+        self.assertEqual(len(back["edits"]), 1)
+
+    def test_stale_version_does_not_overwrite_silently(self):
+        code, body = _post_json(self.port, "/api/edit",
+                                {"kind": "lanes", "geom": [69.25, 41.3],
+                                 "raw": [69.25, 41.3], "props": {"lanes": 4},
+                                 "status": 1})
+        made = json.loads(body)
+        self.assertEqual(_post(self.port, "/changes/act",
+                               {"id": made["id"], "version": 99,
+                                "op": "withdraw"}), 303)
+        still = json.loads(_get(self.port,
+            "/api/edits?south=41.29&west=69.24&north=41.31&east=69.26")[1])
+        self.assertEqual(len(still["edits"]), 1, "устаревшая версия сняла правку")
+        self.assertIn("в другом окне", _get(self.port, "/changes?done=stale")[1])
+
+    def test_confirm_appears_by_the_mark_not_by_this_weeks_verdict(self):
+        # Метку ставит пересадка, и живёт она в заметке. Следующая неделя может
+        # не найти сдвига вовсе — а метка останется, и снять её будет нечем,
+        # то есть счётчик на вкладке не обнулится никогда.
+        code, body = _post_json(self.port, "/api/edit",
+                                {"kind": "lanes", "geom": [69.25, 41.3],
+                                 "raw": [69.25, 41.3], "props": {"lanes": 4},
+                                 "status": 1, "note": "проверить: сдвиг 8.0 м"})
+        self.assertEqual(code, 200, body)
+        made = json.loads(body)
+        self.assertEqual(_post(self.port, "/changes/act",
+                               {"id": made["id"], "version": made["version"],
+                                "op": "confirm"}), 303)
+        conn = admin.db()
+        try:
+            note = conn.execute("SELECT note FROM map_edits WHERE id = ?",
+                                (made["id"],)).fetchone()["note"]
+        finally:
+            conn.close()
+        self.assertNotIn("проверить", note)
+
+    def test_queue_row_says_the_name_not_the_code(self):
+        # «lanes» в строке очереди читается как недоделка.
+        self.assertEqual(map_edits.kind_name("lanes"), "Полосы")
+        self.assertEqual(map_edits.kind_name("выдумка"), "выдумка")
+
+    def test_unknown_operation_changes_nothing(self):
+        code, body = _post_json(self.port, "/api/edit",
+                                {"kind": "lanes", "geom": [69.25, 41.3],
+                                 "raw": [69.25, 41.3], "props": {"lanes": 4},
+                                 "status": 1})
+        made = json.loads(body)
+        self.assertEqual(_post(self.port, "/changes/act",
+                               {"id": made["id"], "version": made["version"],
+                                "op": "выдумка"}), 303)
+        still = json.loads(_get(self.port,
+            "/api/edits?south=41.29&west=69.24&north=41.31&east=69.26")[1])
+        self.assertEqual(len(still["edits"]), 1)
 
 
 if __name__ == "__main__":

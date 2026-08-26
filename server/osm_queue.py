@@ -122,7 +122,7 @@ def apply_sweep(conn, decisions):
         if decision["verdict"] in (RESETTLED, CHECK) and decision["point"]:
             note = edit.get("note") or ""
             if decision["verdict"] == CHECK:
-                mark = f"проверить: сдвиг {decision['shift']} м"
+                mark = f"{map_edits.CHECK_MARK}: сдвиг {decision['shift']} м"
                 note = f"{note} · {mark}".strip(" ·") if mark not in note else note
             if map_edits.update(conn, edit["id"], edit["version"],
                                 geom=decision["point"], note=note):
@@ -130,6 +130,16 @@ def apply_sweep(conn, decisions):
         elif decision["verdict"] in (LOST, CAUGHT_UP):
             queued += 1
     return moved, queued
+
+
+def marked(edits):
+    """Правки, помеченные автоматикой и ждущие человека.
+
+    Считается по ЗАМЕТКЕ, а не по вердикту свежей сверки: метку поставила
+    пересадка, а следующая неделя может не найти сдвига вовсе — и правка
+    молча исчезла бы из очереди, так и оставшись непроверенной.
+    """
+    return [e for e in edits if map_edits.CHECK_MARK in (e.get("note") or "")]
 
 
 def summary(decisions):

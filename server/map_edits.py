@@ -76,13 +76,24 @@ CREATE INDEX IF NOT EXISTS idx_edits_kind ON map_edits(kind, status);
 # Виды правок. Список закрытый: неизвестный вид не попадает ни в таблицу, ни в
 # запекание, и «панель завела новый вид раньше сборки» здесь невозможно —
 # в отличие от точек, где такое допускается намеренно.
-KINDS = {"lanes", "turn_lanes", "u_turn", "geometry", "point"}
+KINDS = {"lanes", "turn_lanes", "u_turn", "geometry", "point", "remove", "lock"}
 
 # Названия видов для человека. Код — контракт с сервером и с запеканием, а на
 # экране нужно слово: «lanes» в строке очереди читается как недоделка.
 KIND_NAMES = {"lanes": "Полосы", "turn_lanes": "Направления полос",
               "u_turn": "Разворот", "geometry": "Своя геометрия",
-              "point": "Обстановка"}
+              "point": "Обстановка", "remove": "Убрана дорога",
+              "lock": "Размеченная область"}
+
+# Почему дорогу убрали. Закрытым списком по той же причине, что и у своей
+# геометрии: свободный текст через полгода превращается в «тест» и «см. выше».
+REMOVE_REASONS = {"нет в жизни", "перекрыта", "ошибка OSM"}
+
+# Радиус размеченной области по умолчанию, метры. Перекрёсток с подъездами —
+# это примерно столько; меньше не накрывает подходы, больше захватывает соседние
+# улицы, за которые никто не отвечал.
+LOCK_METERS = 120.0
+MAX_LOCK_METERS = 600.0
 
 # Обстановка, которую ставят руками. Коды — те же, что у точек из OSM: панель
 # заводит объект того же вида, а не параллельный, поэтому на телефоне он
@@ -377,6 +388,44 @@ def in_bbox(conn, south, west, north, east, limit=2000):
         if len(out) >= limit:
             break
     return out
+
+
+def locks(conn):
+    """Размеченные области → [(точка, радиус в метрах)].
+
+    Область — это заявление «здесь разбирались руками». Внутри неё автоматика
+    смотрит и докладывает, но НИЧЕГО НЕ ДВИГАЕТ: перекрёсток, размеченный
+    человеком по спутнику, не должен уезжать за тем, как его в очередной раз
+    перерисовал случайный картограф.
+
+    Без этого правила своя карта невозможна: каждая воскресная пересборка
+    отчасти обесценивает предыдущую неделю работы, причём молча.
+    """
+    out = []
+    for row in conn.execute("SELECT geom, props FROM map_edits "
+                            "WHERE kind = 'lock' AND status IN (?, ?)",
+                            (ACCEPTED, PUBLISHED)).fetchall():
+        try:
+            point = json.loads(row["geom"])
+            props = json.loads(row["props"]) if row["props"] else {}
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(point, list) or len(point) < 2:
+            continue
+        radius = props.get("radius")
+        if not isinstance(radius, (int, float)) or radius <= 0:
+            radius = LOCK_METERS
+        out.append(((float(point[0]), float(point[1])),
+                    min(float(radius), MAX_LOCK_METERS)))
+    return out
+
+
+def inside_lock(point, areas):
+    """Лежит ли точка в размеченной области."""
+    for centre, radius in areas:
+        if meters_between(point, centre) <= radius:
+            return True
+    return False
 
 
 def by_id(conn, edit_id):

@@ -745,13 +745,18 @@ font-size:12px;cursor:pointer;line-height:1.35}}
    низа, а не до верха), карточка становится листом снизу вверх, а очередь
    складывается — её открывают, когда ищут работу, а не когда её делают. */
 @media (max-width:700px) {{
+  /* Потолок высоты обязателен. Без него панель инструментов со всеми
+     раскрытыми списками занимает экран целиком и закрывает карту — то есть
+     ровно то, ради чего её открыли. */
   .tools{{position:absolute;top:auto;left:8px;right:8px;bottom:8px;width:auto;
-          max-height:none;overflow:visible;gap:6px}}
+          max-height:52vh;overflow:auto;gap:6px}}
   .toolrow{{flex-direction:row;overflow-x:auto;scrollbar-width:none}}
   .toolrow::-webkit-scrollbar{{display:none}}
   .tool{{flex:0 0 auto;font-size:15px;padding:12px 14px}}
   .keyhelp{{display:none}}
-  .todo{{max-height:34vh}}
+  .todo{{max-height:30vh}}
+  /* Свёрнутые списки на телефоне — одна строка вместо шести кнопок. */
+  .work summary{{padding:11px}}
   #map{{inset:52px 0 0 0}}
   .card{{top:auto;left:0;right:0;bottom:0;width:auto;border-radius:16px 16px 0 0;
          max-height:72vh;overflow:auto;padding:16px}}
@@ -794,10 +799,19 @@ font-size:12px;cursor:pointer;line-height:1.35}}
       <button data-kind="point" data-point="2" class="tool">G · Лежачий</button>
     </div>
   </details>
+  <details class="work" id="areabox">
+    <summary>Отметить своё</summary>
+    <div class="toolrow draw">
+      <button data-kind="lock" class="tool">Z · Размечено руками</button>
+    </div>
+    <div class="legend">Внутри размеченной области воскресная пересборка
+      смотрит и докладывает, но ничего не двигает сама.</div>
+  </details>
   <div class="legend" id="hint">Черновиков: {drafts}. Клик по дороге ставит
     объект, клик по объекту — правит. Панель ничего не публикует.</div>
   <div class="legend keyhelp">1–3 свойства · Q W E R дорога ·
-    A S D F G обстановка · Enter закончить · Backspace снять вершину ·
+    A S D F G обстановка · Z разметить область ·
+    Enter закончить · Backspace снять вершину ·
     Delete убрать вершину · Esc отменить · Ctrl+Z вернуть ·
     \\ схема ⇄ спутник · ] [ по очереди</div>
   <details class="work" id="work">
@@ -1820,9 +1834,14 @@ class Handler(BaseHTTPRequestHandler):
                     + "".join(row(d) for d in rows))
 
         body = (
-            block("OSM догнал нас", osm_queue.CAUGHT_UP,
-                  "Рядом с нашей нарисованной дорогой появилась настоящая. "
-                  "Дорога, отданная в OSM, поддерживается всем миром, наша — только нами.")
+            block("Размечено руками — решайте сами", osm_queue.LOCKED,
+                  "Внутри размеченной области OSM сдвинулся, но автоматика её "
+                  "не трогала: здесь разбирались руками, и переставлять эту "
+                  "работу она не вправе.")
+            + block("OSM догнал нас", osm_queue.CAUGHT_UP,
+                    "Рядом с нашей нарисованной дорогой появилась настоящая. "
+                    "Дорога, отданная в OSM, поддерживается всем миром, наша — "
+                    "только нами.")
             + block("Правки, потерявшие опору", osm_queue.LOST,
                     "Дорога исчезла или уехала далеко. Автоматика вправе двигать "
                     "объект, но не вправе решать, что он больше не нужен.")

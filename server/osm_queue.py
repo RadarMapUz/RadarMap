@@ -23,6 +23,7 @@ RESETTLED = "resettled"    # подвинули сами, молча
 CHECK = "check"            # подвинули, но пусть человек посмотрит
 LOST = "lost"              # опоры не стало — в очередь, с публикации снять
 CAUGHT_UP = "caught_up"    # OSM догнал нашу нарисованную дорогу
+LOCKED = "locked"          # внутри размеченной области: смотрим, но не двигаем
 
 # Пороги. Числа из §9.2 плана.
 #
@@ -37,10 +38,15 @@ CHECK_METERS = 15.0
 CAUGHT_UP_METERS = 20.0
 
 
-def reconcile(edit, roads):
+def reconcile(edit, roads, areas=()):
     """Что делать с одной правкой после пересборки → (решение, точка, сдвиг).
 
     Точка — куда пересадить; None означает «не двигаем».
+
+    areas — размеченные области. Внутри них автоматика не двигает НИЧЕГО, даже
+    когда уверена: там разбирались руками, и её уверенность стоит меньше. Она
+    по-прежнему считает сдвиг и по-прежнему докладывает — решение принимает
+    человек, а до его решения на телефоны едет то, что он нарисовал.
     """
     raw = edit.get("raw") or []
     if len(raw) < 2:
@@ -61,7 +67,14 @@ def reconcile(edit, roads):
         return LOST, None, 0.0
 
     old = edit.get("geom") or raw
+    if isinstance(old[0], (list, tuple)):
+        old = old[0]
     shift = map_edits.meters_between((float(old[0]), float(old[1])), result.point)
+    # Внутри размеченной области — только доклад. Сдвиг посчитан и показан, но
+    # правка остаётся на месте: человек разбирался здесь руками, и переставлять
+    # его работу автоматика не вправе.
+    if areas and map_edits.inside_lock(origin, areas):
+        return (LOCKED, None, shift) if shift > SILENT_METERS else (KEEP, None, 0.0)
     if shift <= SILENT_METERS:
         return RESETTLED, list(result.point), shift
     if shift <= CHECK_METERS:
@@ -106,8 +119,12 @@ def sweep(conn, roads=None, tiles_dir=None):
     Готовый список дорог (roads) остаётся ради тестов и ради вызова, у которого
     сеть уже в руках, — например из сборки тайлов.
     """
+    areas = map_edits.locks(conn)
     out = []
     for edit in map_edits.export_accepted(conn):
+        # Сама область — не правка геометрии, сверять её не с чем.
+        if edit.get("kind") == "lock":
+            continue
         near = roads
         if near is None:
             raw = edit.get("raw") or edit.get("geom") or []
@@ -120,7 +137,7 @@ def sweep(conn, roads=None, tiles_dir=None):
             out.append({"edit": edit, "verdict": CAUGHT_UP, "point": None,
                         "shift": 0.0})
             continue
-        verdict, point, shift = reconcile(edit, near)
+        verdict, point, shift = reconcile(edit, near, areas)
         out.append({"edit": edit, "verdict": verdict, "point": point,
                     "shift": round(shift, 1)})
     return out
@@ -144,7 +161,7 @@ def apply_sweep(conn, decisions):
             if map_edits.update(conn, edit["id"], edit["version"],
                                 geom=decision["point"], note=note):
                 moved += 1
-        elif decision["verdict"] in (LOST, CAUGHT_UP):
+        elif decision["verdict"] in (LOST, CAUGHT_UP, LOCKED):
             queued += 1
     return moved, queued
 

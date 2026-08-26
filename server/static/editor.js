@@ -36,6 +36,7 @@
     { code: 7, name: 'Проезд, двор' },
   ];
   const WHYS = ['нет в OSM', 'OSM неверен', 'временная схема'];
+  const REMOVE_WHYS = ['нет в жизни', 'перекрыта', 'ошибка OSM'];
   // Обстановка. Коды те же, что у точек из OSM: панель заводит объект ТОГО ЖЕ
   // вида, а не параллельный, поэтому на телефоне он рисуется тем же кодом и
   // добавлять там нечего.
@@ -45,6 +46,7 @@
 
   let kind = 'lanes';
   let pointCode = 0;      // какой объект обстановки ставим (0 — никакой)
+  let markingArea = false; // следующий щелчок размечает область
   let map = null;
   let objects = null;      // все правки в рамке
   let netLines = [];       // наши оси из тайлов
@@ -53,6 +55,8 @@
   let roadsInFrame = [];   // последний ответ /api/roads
   let pointsInFrame = [];  // обстановка: из тайлов и своя
   let markLayer = [];      // её отрисовка на подложке
+  let areasInFrame = [];   // размеченные области
+  let areaLayer = [];
   let pickLines = [];      // подсветка кандидатов при неоднозначности
   let dragger = null;      // перетаскиваемая метка выбранной правки
   let current = null;      // что сейчас в карточке
@@ -564,6 +568,38 @@
     els.card.appendChild(node('div',
       'Можно перерисовать: геометрия скопируется, старая линия при сохранении '
       + 'уйдёт.', 'muted'));
+    // «Убрать» — второй способ распрощаться с чужой линией. Улицу бывает нужно
+    // просто убрать: перекрыли, снесли, застроили, — и рисовать ради этого
+    // фиктивную дорогу нелепо.
+    const why = document.createElement('select');
+    REMOVE_WHYS.forEach(function (text) {
+      const option = document.createElement('option');
+      option.value = text;
+      option.textContent = text;
+      why.appendChild(option);
+    });
+    const whyLabel = node('label', 'Если убрать — почему');
+    whyLabel.appendChild(why);
+    els.card.appendChild(whyLabel);
+
+    const drop = node('button', 'Убрать дорогу', 'ghost');
+    drop.addEventListener('click', function () {
+      post('/api/edit', {
+        kind: 'remove', geom: road.points, raw: road.points[0],
+        props: { why: why.value, cls: road.cls }, status: ACCEPTED,
+      }).then(function (result) {
+        if (result.error) { hint(result.error); return; }
+        closeCard();
+        hint('Дорога убрана. На схеме её не будет после публикации.');
+        offerUndo('Убрана дорога класса ' + road.cls, function () {
+          return post('/api/edit/withdraw',
+                      { id: result.id, version: result.version });
+        });
+        walking = false;
+        reloadEdits();
+      });
+    });
+
     const take = node('button', 'Перерисовать');
     take.addEventListener('click', function () {
       closeCard();
@@ -575,9 +611,47 @@
       hint('Тяни вершины · середину отрезка — добавить · Enter — сохранить');
     });
     els.card.appendChild(take);
+    els.card.appendChild(drop);
     const cancel = node('button', 'Отмена', 'ghost');
     cancel.addEventListener('click', closeCard);
     els.card.appendChild(cancel);
+  }
+
+  // --- Размеченная область -------------------------------------------------
+  //
+  // Заявление «здесь разбирались руками». Внутри неё воскресная пересборка
+  // смотрит и докладывает, но НИЧЕГО НЕ ДВИГАЕТ. Без этого правила своя карта
+  // невозможна: каждая пересборка отчасти обесценивает предыдущую неделю
+  // работы, причём молча.
+
+  function markArea(coords) {
+    post('/api/edit', {
+      kind: 'lock', geom: [coords[1], coords[0]], raw: [coords[1], coords[0]],
+      props: { radius: 120 }, status: ACCEPTED,
+    }).then(function (result) {
+      if (result.error) { hint(result.error); return; }
+      hint('Область размечена: автоматика здесь больше ничего не двигает.');
+      offerUndo('Размеченная область', function () {
+        return post('/api/edit/withdraw',
+                    { id: result.id, version: result.version });
+      });
+      walking = false;
+      reloadEdits();
+    });
+  }
+
+  function renderAreas() {
+    areaLayer.forEach(function (item) { map.geoObjects.remove(item); });
+    areaLayer = [];
+    areasInFrame.forEach(function (area) {
+      const circle = new ymaps.Circle(
+        [[area.point[1], area.point[0]], area.radius],
+        { hintContent: 'Размечено руками · автоматика здесь не двигает' },
+        { fillColor: '#ffb02022', strokeColor: '#ffb020', strokeWidth: 2,
+          strokeStyle: 'shortdash', zIndex: 150 });
+      map.geoObjects.add(circle);
+      areaLayer.push(circle);
+    });
   }
 
   function toggleSchema() {
@@ -593,10 +667,18 @@
   function reloadEdits() {
     get('/api/edits' + bbox()).then(function (data) {
       known = {};
+      areasInFrame = (data.edits || [])
+        .filter(function (e) { return e.kind === 'lock'; })
+        .map(function (e) {
+          return { point: e.geom, radius: (e.props || {}).radius || 120 };
+        });
+      renderAreas();
       objects.removeAll();
       objects.add({
         type: 'FeatureCollection',
-        features: (data.edits || []).map(function (edit) {
+        features: (data.edits || []).filter(function (edit) {
+          return edit.kind !== 'lock';
+        }).map(function (edit) {
           known[edit.id] = edit;
           const lanes = edit.props && edit.props.lanes;
           return {
@@ -1058,9 +1140,13 @@
   }
 
   ymaps.ready(function () {
-    // Список открыт на столе и свёрнут на телефоне: там его открывают, когда
-    // ИЩУТ работу, а не когда её делают, и развёрнутым он закрывает карту.
-    els.work.open = !coarse;
+    // На телефоне свёрнуто ВСЁ, кроме текущего инструмента: развёрнутые
+    // списки занимают экран целиком и закрывают карту — то есть ровно то,
+    // ради чего панель открыли. На столе места хватает, и прятать нечего.
+    ['work', 'drawbox', 'pointbox', 'areabox'].forEach(function (id) {
+      const box = document.getElementById(id);
+      if (box) { box.open = !coarse; }
+    });
     const start = placeFromHash() || { center: [41.311, 69.280], zoom: 17 };
     map = new ymaps.Map('map', {
       center: start.center, zoom: start.zoom,
@@ -1075,6 +1161,7 @@
     });
     map.events.add('click', function (e) {
       if (drawing) { addVertex(e.get('coords')); return; }
+      if (markingArea) { markArea(e.get('coords')); markingArea = false; return; }
       if (pointCode) { placePoint(e.get('coords'), pointCode); return; }
       if (current && current.id) { closeCard(); return; }
       place(e.get('coords'), null);
@@ -1106,6 +1193,11 @@
         const cls = button.getAttribute('data-cls');
         const code = button.getAttribute('data-point');
         pointCode = code ? parseInt(code, 10) : 0;
+        markingArea = button.getAttribute('data-kind') === 'lock';
+        if (markingArea) {
+          cancelDrawing(true);
+          hint('Щелчок — разметить область: автоматика здесь перестанет двигать.');
+        }
         if (cls) {
           startDrawing(parseInt(cls, 10));
         } else {
@@ -1178,6 +1270,11 @@
       }
       // Обстановка — на соседнем ряду букв: рука не путает ряды так, как
       // путает соседние клавиши в одном.
+      if (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'я') {
+        const button = document.querySelector('[data-kind="lock"]');
+        if (button) { button.click(); }
+        return;
+      }
       const marks = { a: 1, ф: 1, s: 5, ы: 5, d: 3, в: 3, f: 4, а: 4, g: 2, п: 2 };
       const code = marks[e.key.toLowerCase()];
       if (code) {

@@ -103,6 +103,106 @@ class ReconcileTests(unittest.TestCase):
         self.assertIsNone(point)
 
 
+class LockedAreaTests(unittest.TestCase):
+    """Размеченная область: смотрим, но не двигаем.
+
+    Ради этого правила и затевалась своя карта. Перекрёсток, который человек
+    разметил по спутнику, не должен уезжать за тем, как его в очередной раз
+    перерисовал случайный картограф: без области каждая воскресная пересборка
+    отчасти обесценивает предыдущую неделю работы, причём молча.
+
+    Автоматика при этом не слепнет — она считает сдвиг и докладывает. Меняется
+    одно: решение принимает человек.
+    """
+
+    def setUp(self):
+        self.roads = [road(3, line((41.300, 69.2500), (41.310, 69.2500)), "Навои")]
+        self.point = (69.25005, 41.3050)
+        snapped = map_edits.snap(self.point, self.roads)
+        self.edit = {"id": 1, "version": 1, "kind": "lanes",
+                     "raw": list(self.point), "geom": list(snapped.point),
+                     "props": {"lanes": 4}, "note": "",
+                     "fingerprint": map_edits.fingerprint(self.point, self.roads)}
+        self.moved = [road(3, line((41.300, 69.25008), (41.310, 69.25008)), "Навои")]
+
+    def test_without_an_area_the_machine_moves_it(self):
+        verdict, point, _ = osm_queue.reconcile(self.edit, self.moved)
+        self.assertIn(verdict, (osm_queue.RESETTLED, osm_queue.CHECK))
+        self.assertIsNotNone(point)
+
+    def test_inside_an_area_nothing_is_moved(self):
+        areas = [(self.point, 120.0)]
+        verdict, point, shift = osm_queue.reconcile(self.edit, self.moved, areas)
+        self.assertEqual(verdict, osm_queue.LOCKED)
+        self.assertIsNone(point, "автоматика подвинула размеченное")
+        self.assertGreater(shift, 0, "но сдвиг обязана показать")
+
+    def test_area_does_not_reach_the_next_district(self):
+        far = [((69.40, 41.40), 120.0)]
+        verdict, point, _ = osm_queue.reconcile(self.edit, self.moved, far)
+        self.assertNotEqual(verdict, osm_queue.LOCKED)
+        self.assertIsNotNone(point)
+
+    def test_unchanged_place_inside_an_area_is_still_quiet(self):
+        # Область не должна поднимать шум там, где ничего не менялось: иначе
+        # очередь наполнится сама собой и её перестанут открывать.
+        areas = [(self.point, 120.0)]
+        verdict, _, _ = osm_queue.reconcile(self.edit, self.roads, areas)
+        self.assertEqual(verdict, osm_queue.KEEP)
+
+    def test_area_itself_is_not_swept(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        map_edits.ensure_tables(conn)
+        map_edits.create(conn, "lock", raw=[69.25, 41.30], snapped=[69.25, 41.30],
+                         props={"radius": 150}, status=map_edits.ACCEPTED)
+        try:
+            self.assertEqual(osm_queue.sweep(conn, self.roads), [],
+                             "область — не правка геометрии, сверять её не с чем")
+        finally:
+            conn.close()
+
+    def test_area_is_read_from_the_table(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        map_edits.ensure_tables(conn)
+        map_edits.create(conn, "lock", raw=list(self.point),
+                         snapped=list(self.point), props={"radius": 150},
+                         status=map_edits.ACCEPTED)
+        try:
+            areas = map_edits.locks(conn)
+            self.assertEqual(len(areas), 1)
+            self.assertTrue(map_edits.inside_lock(self.point, areas))
+            self.assertFalse(map_edits.inside_lock((69.40, 41.40), areas))
+        finally:
+            conn.close()
+
+    def test_draft_area_does_not_protect_anything(self):
+        # Черновик не едет на телефоны и не должен менять поведение сборки.
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        map_edits.ensure_tables(conn)
+        map_edits.create(conn, "lock", raw=list(self.point),
+                         snapped=list(self.point), props={"radius": 150})
+        try:
+            self.assertEqual(map_edits.locks(conn), [])
+        finally:
+            conn.close()
+
+    def test_absurd_radius_is_trimmed(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        map_edits.ensure_tables(conn)
+        map_edits.create(conn, "lock", raw=list(self.point),
+                         snapped=list(self.point), props={"radius": 999999},
+                         status=map_edits.ACCEPTED)
+        try:
+            self.assertLessEqual(map_edits.locks(conn)[0][1],
+                                 map_edits.MAX_LOCK_METERS)
+        finally:
+            conn.close()
+
+
 class CaughtUpTests(unittest.TestCase):
 
     def test_osm_catching_up_is_noticed(self):

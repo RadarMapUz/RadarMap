@@ -47,6 +47,7 @@ MAX_DRAWN_AT_ONCE = 50
 # Причина обязательна и закрытым списком: свободный текст через полгода
 # превращается в «тест», «пока так» и «см. выше».
 DRAWN_REASONS = {"нет в OSM", "OSM неверен", "временная схема"}
+REMOVE_REASONS = {"нет в жизни", "перекрыта", "ошибка OSM"}
 
 LAT_METERS = 111_320.0
 
@@ -66,9 +67,17 @@ def check_drawn(edits):
     раз подряд.
     """
     lines = [e for e in edits if e.get("kind") == "geometry"]
-    if not lines:
-        return True, []
     reasons = []
+
+    # Убранные дороги проверяются отдельно и мягче: геометрию у них не рисовал
+    # человек, это копия чужой линии. Спрашиваем только одно — почему.
+    for edit in [e for e in edits if e.get("kind") == "remove"]:
+        why = (edit.get("props") or {}).get("why")
+        if why not in REMOVE_REASONS:
+            reasons.append(f"правка #{edit.get('id', '?')}: не сказано, почему "
+                           f"дорога убрана")
+    if not lines:
+        return not reasons, reasons
     if len(lines) > MAX_DRAWN_AT_ONCE:
         reasons.append(f"нарисовано за раз {len(lines)} — больше "
                        f"{MAX_DRAWN_AT_ONCE}, это похоже на ошибку")

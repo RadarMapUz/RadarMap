@@ -54,6 +54,8 @@
     todo: document.getElementById('todo'),
     work: document.getElementById('work'),
     worksum: document.getElementById('worksum'),
+    find: document.getElementById('find'),
+    found: document.getElementById('found'),
   };
 
   // Палец против курсора. Спрашиваем УКАЗАТЕЛЬ, а не ширину экрана: планшет с
@@ -555,6 +557,90 @@
     if (item.draft) { setTimeout(function () { select(item.id); }, 400); }
   }
 
+  // --- Поиск места --------------------------------------------------------
+  //
+  // Три разных вопроса под одной строкой, и порядок разбора — от точного к
+  // приблизительному.
+  //
+  // «#12» — номер правки. О ней уже говорили (в очереди изменений, в переписке),
+  // и искать её глазами по карте не поиск. Ищется мимо рамки и находит даже
+  // снятую: она есть, просто не едет на телефоны.
+  //
+  // «41.31, 69.28» — координаты. Приходят из жалобы водителя, из чужой карты,
+  // из сообщения. Разбирать их отдельно надо потому, что геокодер на паре чисел
+  // отвечает чем угодно, кроме нужного места.
+  //
+  // Всё остальное — адрес, и его знает Яндекс. Своих имён улиц у нас нет: в
+  // опубликованных тайлах поле имени пустое у всех записей.
+
+  const COORDS = /^\s*(-?\d{1,3}[.,]\d+)\s*[, ]\s*(-?\d{1,3}[.,]\d+)\s*$/;
+
+  function showFound(items) {
+    els.found.innerHTML = '';
+    els.found.hidden = !items.length;
+    items.slice(0, 6).forEach(function (item) {
+      const row = node('button', item.title);
+      row.addEventListener('click', function () {
+        els.found.hidden = true;
+        els.find.value = '';
+        walking = false;
+        map.setCenter(item.center, item.zoom || 18);
+        if (item.select) { setTimeout(function () { select(item.select); }, 500); }
+      });
+      els.found.appendChild(row);
+    });
+  }
+
+  function search(text) {
+    const query = (text || '').trim();
+    els.found.hidden = true;
+    if (!query) { return; }
+
+    const byId = query.match(/^#?(\d{1,9})$/);
+    if (byId) {
+      get('/api/edits?id=' + byId[1]).then(function (data) {
+        const edit = (data.edits || [])[0];
+        if (!edit) { hint('Правки #' + byId[1] + ' нет.'); return; }
+        known[edit.id] = edit;
+        showFound([{ title: 'Правка #' + edit.id + ' · ' +
+                            (NAMES[edit.kind] || edit.kind),
+                     center: [edit.geom[1], edit.geom[0]], zoom: 19,
+                     select: edit.id }]);
+      });
+      return;
+    }
+
+    const point = query.match(COORDS);
+    if (point) {
+      const lat = parseFloat(point[1].replace(',', '.'));
+      const lon = parseFloat(point[2].replace(',', '.'));
+      if (Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+        showFound([{ title: lat.toFixed(5) + ', ' + lon.toFixed(5),
+                     center: [lat, lon], zoom: 19 }]);
+        return;
+      }
+    }
+
+    // Адрес — через СВОЙ сервер, а не через ymaps.geocode.
+    //
+    // Геокодер в JS-API работает через JSONP: он подгружает с чужого хоста
+    // СКРИПТ, а не данные, и ответ исполняется как код. Разрешить это в CSP
+    // панели значило бы открыть выполнение чужого кода на странице, где лежит
+    // сессия модератора, — ради строки поиска.
+    //
+    // Рамка карты идёт с запросом: «Навои» есть не в одном городе, а модератор
+    // ищет ту улицу, над которой сейчас сидит.
+    get('/api/geocode?q=' + encodeURIComponent(query) + '&' + bbox().slice(1))
+      .then(function (data) {
+        if (data.error) { hint(data.error); return; }
+        const items = (data.places || []).map(function (place) {
+          return { title: place.title, center: [place.lat, place.lon], zoom: 18 };
+        });
+        if (!items.length) { hint('Ничего не нашлось.'); return; }
+        showFound(items);
+      }, function () { hint('Поиск недоступен.'); });
+  }
+
   // --- Место в адресе -----------------------------------------------------
 
   function placeFromHash() {
@@ -607,6 +693,14 @@
         button.classList.add('on');
         kind = button.getAttribute('data-kind');
       });
+    });
+
+    els.find.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); search(els.find.value); }
+      if (e.key === 'Escape') { els.find.value = ''; els.found.hidden = true;
+                                els.find.blur(); }
+      // Клавиши инструментов не должны срабатывать, пока набирают адрес.
+      e.stopPropagation();
     });
 
     document.addEventListener('keydown', function (e) {

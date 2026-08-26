@@ -45,6 +45,9 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import urllib.error
+import urllib.parse
+import urllib.request
 from urllib.parse import parse_qs, urlparse
 
 import admin_auth
@@ -708,6 +711,14 @@ font-size:13px;display:none;gap:12px;align-items:center}}
 /* Очередь работы. Панель обязана говорить, что делать дальше: пустой экран
    карты — это вопрос «а где работать?», на который модератор отвечает своей
    памятью, а она кончается на третьем сеансе. */
+.find{{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2b3038;
+background:#12161df2;color:#e7e9ee;font-size:14px}}
+.found{{background:#12161df2;border:1px solid #232a35;border-radius:10px;
+overflow:hidden}}
+.found button{{display:block;width:100%;margin:0;text-align:left;padding:9px 11px;
+font-size:12px;background:transparent;border:0;border-bottom:1px solid #1b2231;
+color:#8ea0bb;border-radius:0}}
+.found button:hover{{background:#182029;color:#e7e9ee}}
 .toolrow{{display:flex;gap:8px;flex-direction:column}}
 .work{{background:#12161de6;border:1px solid #232a35;border-radius:10px}}
 .work summary{{padding:9px 11px;font-size:12px;color:#8ea0bb;cursor:pointer;
@@ -753,6 +764,9 @@ font-size:12px;cursor:pointer;line-height:1.35}}
     for path, name in TABS)}<a href="{logout_url}" class="out">Выход</a></header>
 <div id="map"></div>
 <div class="tools" data-base="{esc(u(''))}" data-drafts="{drafts}">
+  <input id="find" class="find" placeholder="Место, «41.31, 69.28» или «#12»"
+         autocomplete="off" enterkeyhint="search">
+  <div class="found" id="found" hidden></div>
   <div class="toolrow">
     <button data-kind="lanes" class="tool on">1 · Полосы</button>
     <button data-kind="turn_lanes" class="tool">2 · Направления</button>
@@ -1118,6 +1132,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, self.changes_page(conn))
             if path == "/api/todo":
                 return self.todo_json(conn)
+            if path == "/api/geocode":
+                return self.geocode_json()
             if path in ("/static/moderate.js", "/static/editor.js"):
                 return self.static_file(path.rsplit("/", 1)[1],
                                         "application/javascript; charset=utf-8")
@@ -1428,6 +1444,16 @@ class Handler(BaseHTTPRequestHandler):
             return None
 
     def edits_json(self, conn):
+        # Поиск по номеру идёт мимо рамки: номер называют, когда о правке уже
+        # говорили, и искать её глазами по карте — не поиск.
+        query = parse_qs(urlparse(self.path).query)
+        if query.get("id"):
+            try:
+                edit_id = int(query["id"][0])
+            except ValueError:
+                return self._json({"error": "номер не число"}, 400)
+            found = map_edits.by_id(conn, edit_id)
+            return self._json({"edits": [found] if found else []})
         box = self._bbox()
         if box is None:
             return self._json({"error": "нужна рамка карты"}, 400)
@@ -1508,6 +1534,68 @@ class Handler(BaseHTTPRequestHandler):
             "candidates": [described(item) for item in found[:3]],
             "ambiguous": len(result.ambiguous) > 0,
             "fingerprint": map_edits.fingerprint((lon, lat), roads)})
+
+    def geocode_json(self):
+        """Поиск адреса — ЧЕРЕЗ СВОЙ сервер, а не из браузера.
+
+        Геокодер Яндекса в JS-API работает через JSONP: он подгружает с чужого
+        хоста СКРИПТ, а не данные, и ответ исполняется как код. Разрешить это в
+        CSP панели значило бы открыть выполнение чужого кода на странице, где
+        лежит сессия модератора, — ради строки поиска. Здесь запрос уходит с
+        сервера, обратно приходит JSON, и ключ карты остаётся на сервере.
+        """
+        query = parse_qs(urlparse(self.path).query)
+        text = (query.get("q") or [""])[0].strip()
+        if not text:
+            return self._json({"places": []})
+        # Ключ ОТДЕЛЬНЫЙ. Геокодер у Яндекса — своя услуга со своим ключом:
+        # тот, что рисует карту, на неё не годится и отвечает 403. Падаем на
+        # ключ карты только затем, чтобы владельцу, у которого оба ключа один,
+        # ничего не пришлось менять.
+        config = admin_auth.read_config()
+        key = config.get("yandex_geocoder_key") or config.get("yandex_key", "")
+        if not key:
+            return self._json({"error": "в admin.conf нет ключа карты"}, 503)
+        url = ("https://geocode-maps.yandex.ru/1.x/?format=json&results=6"
+               f"&apikey={urllib.parse.quote(key)}"
+               f"&geocode={urllib.parse.quote(text)}")
+        # Рамка карты сужает поиск: «Навои» есть не в одном городе, а модератор
+        # ищет ту улицу, над которой сейчас сидит.
+        box = self._bbox()
+        if box:
+            south, west, north, east = box
+            url += (f"&bbox={west},{south}~{east},{north}&rspn=1")
+        try:
+            with urllib.request.urlopen(url, timeout=6) as answer:
+                payload = json.loads(answer.read().decode())
+        except urllib.error.HTTPError as error:
+            print(f"геокодер: {error}", file=sys.stderr)
+            if error.code in (401, 403):
+                # Самая частая причина, и «поиск недоступен» её прячет.
+                # Владелец должен узнать, ЧТО именно чинить, из панели, а не
+                # из логов, в которые он не смотрит.
+                return self._json({"error": "Геокодеру нужен свой ключ: заведите "
+                                            "его в кабинете Яндекса и положите "
+                                            "в admin.conf строкой "
+                                            "yandex_geocoder_key=…"}, 502)
+            return self._json({"error": "поиск недоступен"}, 502)
+        except Exception as error:  # сеть, формат — наружу одинаково
+            print(f"геокодер: {error}", file=sys.stderr)
+            return self._json({"error": "поиск недоступен"}, 502)
+
+        members = (payload.get("response", {})
+                   .get("GeoObjectCollection", {}).get("featureMember", []))
+        places = []
+        for member in members:
+            obj = member.get("GeoObject") or {}
+            point = (obj.get("Point") or {}).get("pos", "")
+            parts = point.split()
+            if len(parts) != 2:
+                continue
+            meta = (obj.get("metaDataProperty") or {}).get("GeocoderMetaData") or {}
+            places.append({"title": meta.get("text") or obj.get("name") or text,
+                           "lat": float(parts[1]), "lon": float(parts[0])})
+        self._json({"places": places})
 
     def todo_json(self, conn):
         """Что делать дальше в видимой рамке.

@@ -986,6 +986,41 @@ class EditorApiTests(AdminTest):
             conn.close()
         self.assertNotIn("проверить", note)
 
+    def test_edit_is_found_by_its_number_outside_the_frame(self):
+        # Номер называют, когда о правке уже говорили. Искать её глазами по
+        # карте — не поиск, поэтому запрос по номеру идёт мимо рамки.
+        code, body = _post_json(self.port, "/api/edit",
+                                {"kind": "lanes", "geom": [69.90, 41.90],
+                                 "raw": [69.90, 41.90], "props": {"lanes": 4},
+                                 "status": 1})
+        made = json.loads(body)
+        found = json.loads(_get(self.port, "/api/edits?id=%d" % made["id"])[1])
+        self.assertEqual(len(found["edits"]), 1)
+        self.assertEqual(found["edits"][0]["id"], made["id"])
+
+    def test_withdrawn_edit_is_still_found_by_number(self):
+        # «Нет такой» на снятую правку было бы враньём: она есть, просто не
+        # едет на телефоны.
+        code, body = _post_json(self.port, "/api/edit",
+                                {"kind": "lanes", "geom": [69.25, 41.3],
+                                 "raw": [69.25, 41.3], "props": {"lanes": 4},
+                                 "status": 1})
+        made = json.loads(body)
+        _post_json(self.port, "/api/edit/withdraw",
+                   {"id": made["id"], "version": made["version"]})
+        found = json.loads(_get(self.port, "/api/edits?id=%d" % made["id"])[1])
+        self.assertEqual(len(found["edits"]), 1)
+        self.assertEqual(found["edits"][0]["status"], 3)
+
+    def test_missing_number_is_not_an_error(self):
+        found = json.loads(_get(self.port, "/api/edits?id=99999")[1])
+        self.assertEqual(found["edits"], [])
+
+    def test_nonsense_number_is_refused(self):
+        # Латиницей, а не кириллицей: urllib кладёт в строку запроса только
+        # ascii, и кириллица здесь роняла бы сам тест, а не проверяла ручку.
+        self.assertEqual(_get(self.port, "/api/edits?id=abc")[0], 400)
+
     def test_queue_row_says_the_name_not_the_code(self):
         # «lanes» в строке очереди читается как недоделка.
         self.assertEqual(map_edits.kind_name("lanes"), "Полосы")

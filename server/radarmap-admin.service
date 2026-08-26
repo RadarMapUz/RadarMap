@@ -13,6 +13,14 @@ After=network.target
 Type=simple
 ExecStart=/usr/bin/python3 /opt/radarmap/api/admin.py
 WorkingDirectory=/opt/radarmap/api
+# Где лежат ОПУБЛИКОВАННЫЕ тайлы. Без этой строки конструктор открывается, но
+# магнит не находит ни одной дороги: путь по умолчанию указывает в каталог,
+# которого на сервере нет, — и понять причину неоткуда, потому что дороги в
+# тайлах есть, просто панель смотрит не туда.
+Environment=RADARMAP_TILES=/opt/radarmap/www/roads
+# Панель видна снаружи под этим префиксом (nginx снимает его на входе, а
+# ссылки панель подставляет сама).
+Environment=RADARMAP_ADMIN_BASE=/radarmap/admin
 Restart=always
 RestartSec=3
 

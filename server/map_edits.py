@@ -372,6 +372,17 @@ def in_bbox(conn, south, west, north, east, limit=2000):
     return out
 
 
+def by_id(conn, edit_id):
+    """Одна правка по номеру — для поиска «#12».
+
+    Снятые тоже находятся: номер называют, когда о правке уже говорили, и
+    ответ «нет такой» на снятую правку был бы враньём — она есть, просто не
+    едет на телефоны.
+    """
+    row = conn.execute("SELECT * FROM map_edits WHERE id = ?", (edit_id,)).fetchone()
+    return row_to_dict(row) if row else None
+
+
 def row_to_dict(row):
     return {"id": row["id"], "kind": row["kind"], "status": row["status"],
             "geom": json.loads(row["geom"]), "raw": json.loads(row["raw"]),

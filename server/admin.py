@@ -868,6 +868,7 @@ font-size:12px;cursor:pointer;line-height:1.35}}
 .todo-row:hover{{background:#182029;color:#e7e9ee}}
 .todo-row.on{{border-color:#17384d;color:#3cdcff}}
 .todo-row.draft{{border-left:3px solid #ffb020}}
+.todo-row.done{{border-left:3px solid #2f6b3c;color:#6f8299}}
 
 /* Телефон. Это ОСНОВНОЙ сценарий, а не запасной: очередь разбирают в дороге и
    в перерыве. На столе панель инструментов слева стоит на месте, а на экране
@@ -967,6 +968,7 @@ font-size:12px;cursor:pointer;line-height:1.35}}
   <div class="legend" id="hint">Черновиков: {drafts}. Клик по дороге ставит
     объект, клик по объекту — правит. Панель ничего не публикует.</div>
   <div class="legend keyhelp">V выбрать · 1–3 свойства · Q W E R дорога ·
+    Ctrl+D не примыкать ·
     A S D F G обстановка · Z разметить область ·
     Enter закончить · Backspace снять вершину ·
     Delete убрать вершину · Esc отменить · Ctrl+Z вернуть ·

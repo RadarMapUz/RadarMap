@@ -502,12 +502,63 @@ def by_id(conn, edit_id):
 
 
 def row_to_dict(row):
-    return {"id": row["id"], "kind": row["kind"], "status": row["status"],
+    edit = {"id": row["id"], "kind": row["kind"], "status": row["status"],
             "geom": json.loads(row["geom"]), "raw": json.loads(row["raw"]),
             "anchor": json.loads(row["anchor"]) if row["anchor"] else None,
             "props": json.loads(row["props"]) if row["props"] else {},
             "fingerprint": row["fingerprint"], "note": row["note"],
             "author": row["author"], "version": row["version"]}
+    edit["draw"] = draw_of(edit)
+    return edit
+
+
+# Какие правки — линии, а какие точки.
+#
+# Разница не косметическая. Нарисованная дорога — ЛИНИЯ, и показывать её точкой
+# значит не показывать сделанную работу вовсе; а взять у линии `geom[1]` как
+# широту — это вторая ВЕРШИНА вместо координаты, то есть метка уезжает в
+# случайное место. Ровно так и было, и выглядело как «панель ставит что-то
+# сама».
+LINE_KINDS = {"geometry", "remove"}
+RING_KINDS = {"area"}
+
+
+def draw_of(edit):
+    """Чем правка рисуется на карте: точкой, линией или замкнутым контуром.
+
+    Считает СЕРВЕР, и по той же причине, что ширину дороги: панель обязана
+    рисовать то же, что увидит водитель, а вторая реализация в JavaScript
+    разошлась бы с первой молча.
+    """
+    kind = edit.get("kind")
+    geom = edit.get("geom") or []
+    shape = "line" if kind in LINE_KINDS else (
+        "ring" if kind in RING_KINDS else "point")
+    if shape == "point":
+        point = list(geom) if len(geom) == 2 and not isinstance(
+            geom[0], (list, tuple)) else None
+    else:
+        point = list(geom[0]) if geom and isinstance(
+            geom[0], (list, tuple)) else None
+    out = {"shape": shape, "point": point}
+    if kind != "geometry":
+        return out
+    # Ширина нарисованной дороги — та же формула, что у пришедшей из OSM:
+    # полосы на метры полосы по классу. Иначе своя дорога на схеме была бы
+    # шире или уже соседней при одинаковом классе.
+    props = edit.get("props") or {}
+    try:
+        cls = int(props.get("cls") or 6)
+    except (TypeError, ValueError):
+        cls = 6
+    flags = FLAG_ONEWAY if props.get("oneway") else 0
+    lanes = props.get("lanes")
+    if isinstance(lanes, int) and 1 <= lanes <= 15:
+        flags |= min(lanes, MAX_LANES_BY_CLASS.get(cls, 8)) << FLAG_LANES_SHIFT
+    out["cls"] = cls
+    out["lanes"] = road_lanes_of(flags, cls)
+    out["width"] = round(road_width_meters(flags, cls), 1)
+    return out
 
 
 # Что писать в тегах, отдавая дорогу в OSM. Класс → highway.
@@ -658,8 +709,15 @@ def todo(roads, edits, limit=40):
     Считаем по видимой рамке, а не по городу: очередь в семьдесят тысяч строк
     не помогает, она подавляет. Сколько влезло — столько и работы на сейчас.
     """
-    done = [(float(e["geom"][0]), float(e["geom"][1]))
-            for e in edits if e.get("geom") and len(e["geom"]) >= 2]
+    # Через draw_of, а не по geom напрямую. У линии geom — СПИСОК ВЕРШИН, и
+    # float(geom[0]) на ней падал: очередь работы отдавала 500, конструктор
+    # молча оставался без списка «здесь работать», а в консоли висело
+    # «Failed to fetch», по которому причину не найти.
+    done = []
+    for edit in edits:
+        point = (edit.get("draw") or draw_of(edit)).get("point")
+        if point:
+            done.append((float(point[0]), float(point[1])))
     out = []
     for road in roads:
         if road.get("cls", 99) > TODO_MAX_CLASS:

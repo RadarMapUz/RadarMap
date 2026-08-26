@@ -25,8 +25,14 @@
 
   // Названия видов. Код — контракт с сервером, а на карточке нужно слово:
   // «lanes» в заголовке читается как недоделка.
+  // Виды правок словами. Список ПОЛНЫЙ и совпадает с KIND_NAMES в
+  // map_edits.py: неназванный вид показывался кодом — «point», «area», —
+  // а код на экране читается как недоделка.
   const NAMES = { lanes: 'Полосы', turn_lanes: 'Направления полос',
-                  u_turn: 'Разворот', geometry: 'Своя геометрия' };
+                  u_turn: 'Разворот', geometry: 'Своя геометрия',
+                  point: 'Обстановка', remove: 'Убрана дорога',
+                  lock: 'Размеченная область', name: 'Название',
+                  area: 'Местность' };
   // Классы дорог — те же, что у OSM: от них зависит и ширина полотна, и то,
   // как дорогу нарисует телефон.
   const CLASSES = [
@@ -35,10 +41,28 @@
     { code: 5, name: 'Второстепенная' }, { code: 6, name: 'Жилая' },
     { code: 7, name: 'Проезд, двор' },
   ];
+  function className(cls) {
+    const found = CLASSES.filter(function (item) { return item.code === cls; })[0];
+    return found ? found.name : 'дорога';
+  }
+
+  // Ширина рисуемой дороги в метрах — та же формула, что у сервера и у
+  // телефона. Держать её здесь пришлось: пока линию ведут, правки ещё нет, и
+  // спросить у сервера не у чего. Значения совпадают с LANE_METERS и
+  // DEFAULT_LANES в map_edits.py — расхождение поймает тест раскладки.
+  const LANE_METERS = { 1: 3.75, 2: 3.75, 3: 3.75, 4: 3.5, 5: 3.5, 6: 3.5, 7: 4.5 };
+  const DEFAULT_LANES = { 1: 6, 2: 6, 3: 6, 4: 4, 5: 4, 6: 2, 7: 1 };
+
+  function classWidth(cls) {
+    return (DEFAULT_LANES[cls] || 2) * (LANE_METERS[cls] || 3.5);
+  }
+
   const WHYS = ['нет в OSM', 'OSM неверен', 'временная схема'];
   const REMOVE_WHYS = ['нет в жизни', 'перекрыта', 'ошибка OSM'];
   // Виды местности — те же коды, что у слоёв из OSM.
   const AREAS = { 2: 'Зелень', 1: 'Вода', 4: 'Квартал' };
+  // Заливка обведённого — тех же тонов, что слои местности на схеме телефона.
+  const AREA_FILL = { 2: '#1d3a2455', 1: '#16324a55', 4: '#1a1d2255' };
   // Обстановка. Коды те же, что у точек из OSM: панель заводит объект ТОГО ЖЕ
   // вида, а не параллельный, поэтому на телефоне он рисуется тем же кодом и
   // добавлять там нечего.
@@ -61,6 +85,8 @@
   // клавишей.
   let schema = true;
   let roadsInFrame = [];   // последний ответ /api/roads
+  let mineShapes = [];     // своя работа на карте: линии и контуры правок
+  let editsInFrame = [];   // последний ответ /api/edits
   let pointsInFrame = [];  // обстановка: из тайлов и своя
   let markLayer = [];      // её отрисовка на подложке
   let areasInFrame = [];   // размеченные области
@@ -146,6 +172,30 @@
     els.toast.classList.add('on');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(hideToast, 10000);
+  }
+
+  // Полоска с двумя выходами: уточнить и отменить.
+  //
+  // Живёт ДО СЛЕДУЮЩЕГО ДЕЙСТВИЯ, а не десять секунд. Десяти секунд хватает,
+  // чтобы отменить промах, но не хватает, чтобы решить «а полос-то там
+  // четыре»: пока вспомнишь, полоска уже ушла, и уточнять станет нечего.
+  function offerRefine(text, refine, undo) {
+    undoStack = undo;
+    els.toast.innerHTML = '';
+    const label = document.createElement('span');
+    label.textContent = text;
+    els.toast.appendChild(label);
+    const more = document.createElement('button');
+    more.textContent = 'Уточнить';
+    more.addEventListener('click', function () { hideToast(); refine(); });
+    els.toast.appendChild(more);
+    const back = document.createElement('button');
+    back.textContent = 'Отменить';
+    back.className = 'ghost';
+    back.addEventListener('click', undo);
+    els.toast.appendChild(back);
+    els.toast.classList.add('on');
+    clearTimeout(toastTimer);
   }
 
   function hideToast() {
@@ -780,27 +830,91 @@
       : 'Спутник: видно, где объект стоит на самом деле. \\ — на схему.');
   }
 
+  // Своя работа на карте.
+  //
+  // Нарисованная дорога показывается ДОРОГОЙ — тем же полотном своей ширины,
+  // что и пришедшая из OSM, только поверх и с пунктиром «наше». Иначе между
+  // «нарисовал» и «увидел» лежит неделя: схема берётся из тайлов, а тайлы
+  // пересобираются в воскресенье. Работать в таком инструменте нельзя.
+  function renderMine() {
+    mineShapes.forEach(function (shape) { map.geoObjects.remove(shape); });
+    mineShapes = [];
+    const perPixel = metersPerPixel();
+    const edits = editsInFrame;
+
+    function add(shape) { map.geoObjects.add(shape); mineShapes.push(shape); }
+    function path(points) {
+      return points.map(function (p) { return [p[1], p[0]]; });
+    }
+
+    edits.forEach(function (edit) {
+      const drawn = edit.draw || {};
+      if (drawn.shape === 'line' && edit.kind === 'geometry') {
+        const width = Math.max(2, (drawn.width || 6) / perPixel);
+        add(new ymaps.Polyline(path(edit.geom), {}, {
+          strokeColor: '#04060a', strokeWidth: width + 3, zIndex: 320,
+          interactivityModel: 'default#transparent' }));
+        add(new ymaps.Polyline(path(edit.geom), {
+          hintContent: 'Своя дорога · класс ' + (drawn.cls || '?') + ' · ' +
+                       (drawn.lanes || '?') + ' полос · ещё не опубликована',
+        }, { strokeColor: asphalt(drawn.cls || 6), strokeWidth: width,
+             zIndex: 321, interactivityModel: 'default#transparent' }));
+        // Пунктир поверх полотна — единственное, чем своё отличается от
+        // чужого. Через месяц работы отличить их иначе будет нельзя.
+        add(new ymaps.Polyline(path(edit.geom), {}, {
+          strokeColor: '#ffb020', strokeWidth: 2, strokeStyle: 'shortdash',
+          strokeOpacity: 0.9, zIndex: 322,
+          interactivityModel: 'default#transparent' }));
+        return;
+      }
+      if (drawn.shape === 'line') {
+        // Убранная дорога. Показываем ту самую линию, которую убрали: решение
+        // проверяют по тому, ТА ли это дорога, а по точке этого не видно.
+        add(new ymaps.Polyline(path(edit.geom), {
+          hintContent: 'Убрана · ' + ((edit.props || {}).why || ''),
+        }, { strokeColor: '#ff4d4f', strokeWidth: 4, strokeStyle: 'shortdash',
+             strokeOpacity: 0.85, zIndex: 320,
+             interactivityModel: 'default#transparent' }));
+        return;
+      }
+      if (drawn.shape === 'ring') {
+        const code = (edit.props || {}).area;
+        add(new ymaps.Polygon([path(edit.geom)], {
+          hintContent: (AREAS[code] || 'Местность') + ' · ещё не опубликована',
+        }, { fillColor: AREA_FILL[code] || '#38e58c33',
+             strokeColor: '#ffb020', strokeWidth: 2, strokeStyle: 'shortdash',
+             zIndex: 180, interactivityModel: 'default#transparent' }));
+      }
+    });
+  }
+
   function reloadEdits() {
     get('/api/edits' + bbox()).then(function (data) {
       known = {};
-      areasInFrame = (data.edits || [])
+      const edits = data.edits || [];
+      areasInFrame = edits
         .filter(function (e) { return e.kind === 'lock'; })
         .map(function (e) {
           return { point: e.geom, radius: (e.props || {}).radius || 120 };
         });
       renderAreas();
+      editsInFrame = edits.filter(function (e) { return e.kind !== 'lock'; });
+      renderMine();
       objects.removeAll();
       objects.add({
         type: 'FeatureCollection',
-        features: (data.edits || []).filter(function (edit) {
-          return edit.kind !== 'lock';
+        features: edits.filter(function (edit) {
+          // У линии и контура своя отрисовка; метка на них — только ручка,
+          // за которую правку берут, и она стоит на первой вершине.
+          return edit.kind !== 'lock' && edit.draw && edit.draw.point;
         }).map(function (edit) {
           known[edit.id] = edit;
           const lanes = edit.props && edit.props.lanes;
+          const at = edit.draw.point;
           return {
             type: 'Feature',
             id: edit.id,
-            geometry: { type: 'Point', coordinates: [edit.geom[1], edit.geom[0]] },
+            geometry: { type: 'Point', coordinates: [at[1], at[0]] },
             properties: {
               hintContent: (NAMES[edit.kind] || edit.kind) +
                 (lanes ? ' · ' + lanes : ''),
@@ -858,6 +972,32 @@
     });
   }
 
+  // Что уже сделано в этой рамке.
+  //
+  // «А что я успел» — вопрос, который задают на третьем сеансе, и отвечать на
+  // него памятью нельзя. Показываем своё же, но отдельно от работы: сделанное
+  // не должно притворяться недоделанным.
+  function renderDone() {
+    const mine = editsInFrame.filter(function (edit) {
+      return edit.draw && edit.draw.point;
+    });
+    if (!mine.length) { return; }
+    els.todo.appendChild(node('div', 'Сделано здесь · ' + mine.length, 'muted'));
+    mine.slice(-8).reverse().forEach(function (edit) {
+      const drawn = edit.draw;
+      const what = edit.kind === 'geometry'
+        ? className(drawn.cls) + ' · ' + drawn.lanes + ' полос'
+        : (NAMES[edit.kind] || edit.kind);
+      const row = node('button', '#' + edit.id + ' · ' + what, 'todo-row done');
+      row.addEventListener('click', function () {
+        map.setCenter([drawn.point[1], drawn.point[0]],
+                      Math.max(map.getZoom(), 18));
+        select(edit.id);
+      });
+      els.todo.appendChild(row);
+    });
+  }
+
   function renderTodo() {
     els.todo.innerHTML = '';
     els.worksum.textContent = queue.length
@@ -866,6 +1006,7 @@
     if (!queue.length) {
       els.todo.appendChild(node('div',
         'Отодвиньте карту — работа найдётся рядом.', 'muted'));
+      renderDone();
       return;
     }
     queue.slice(0, 12).forEach(function (item, index) {
@@ -880,6 +1021,7 @@
       row.addEventListener('click', function () { goTo(index); });
       els.todo.appendChild(row);
     });
+    renderDone();
   }
 
   function goTo(index) {
@@ -905,6 +1047,9 @@
 
   // Ближе этого конец линии считается примкнувшим к чужой дороге.
   const ATTACH_METERS = 12;
+
+  // Что примкнуло последним: куда ставил человек и куда посадил магнит.
+  let lastAttach = null;
 
   // Ближе этого две вершины считаются ОДНИМ узлом.
   //
@@ -1011,10 +1156,32 @@
       // Контур показываем ЗАМКНУТЫМ уже во время рисования: иначе до самого
       // конца непонятно, что получится, и площадь приходится воображать.
       if (drawing.area) { path.push(path[0]); }
-      drawLine = new ymaps.Polyline(path, {},
-        { strokeColor: drawing.area ? '#38e58c' : '#ffb020',
-          strokeWidth: 5, strokeOpacity: 0.9, zIndex: 300 });
-      map.geoObjects.add(drawLine);
+      if (drawing.area) {
+        drawLine = new ymaps.Polyline(path, {},
+          { strokeColor: '#38e58c', strokeWidth: 5, strokeOpacity: 0.9,
+            zIndex: 300 });
+        map.geoObjects.add(drawLine);
+      } else {
+        // Дорога ведётся ПОЛОТНОМ своего класса, а не одинаковой ниткой.
+        // Проезд и магистраль на экране должны отличаться с первой вершины:
+        // иначе «какую дорогу я делал» — вопрос без ответа до самой карточки.
+        const lanes = drawing.lanes;
+        const meters = lanes ? lanes * (LANE_METERS[drawing.cls] || 3.5)
+                             : classWidth(drawing.cls);
+        const width = Math.max(3, meters / metersPerPixel());
+        [[width + 3, '#04060a', 298], [width, asphalt(drawing.cls), 299]]
+          .forEach(function (layer) {
+            const band = new ymaps.Polyline(path, {},
+              { strokeColor: layer[1], strokeWidth: layer[0],
+                strokeOpacity: 0.95, zIndex: layer[2] });
+            map.geoObjects.add(band);
+            drawDots.push(band);
+          });
+        drawLine = new ymaps.Polyline(path, {},
+          { strokeColor: '#ffb020', strokeWidth: 2, strokeStyle: 'shortdash',
+            strokeOpacity: 0.9, zIndex: 300 });
+        map.geoObjects.add(drawLine);
+      }
     }
     // Вершины ТЯНУТСЯ. Это и есть правка ломаной: диалог «изменить точку №3»
     // объяснять пришлось бы, а перетаскивание — нет.
@@ -1099,8 +1266,9 @@
       map.geoObjects.add(handle);
       drawDots.push(handle);
     }
-    hint('Вершин ' + drawing.points.length + ' · ' +
-         drawnMeters(drawing.points) + ' м · Enter — закончить');
+    hint((drawing.area ? AREAS[drawing.area] : className(drawing.cls)) +
+         ' · вершин ' + drawing.points.length + ' · ' +
+         drawnMeters(drawing.points) + ' м · Enter — готово');
   }
 
   // Прилипают только КОНЦЫ линии, а не каждая вершина.
@@ -1110,14 +1278,45 @@
   // тупиком. Но притягивать середину нельзя: линию стянуло бы на соседние
   // улицы, и нарисовать съезд стало бы невозможно.
   function attachEnd(coords) {
+    const asIs = [coords[1], coords[0]];
     return post('/api/snap', { lat: coords[0], lon: coords[1], touch: coarse })
       .then(function (snap) {
         const near = (snap.candidates || [])[0];
         if (near && !snap.ambiguous && near.meters <= ATTACH_METERS) {
+          // Прилипание НАЗЫВАЕТСЯ вслух. Оно правильное — дорога, нарисованная
+          // рядом с существующей, а не в неё, не дорога, — но невидимое
+          // читается как «панель поставила точку сама, а я исправляй».
+          lastAttach = { at: asIs, to: near.point };
+          hint('Конец примкнул к «' + (near.name || 'дороге класса ' + near.cls)
+               + '», ' + near.meters + ' м · Ctrl+D — не примыкать');
           return near.point;
         }
-        return [coords[1], coords[0]];
-      }, function () { return [coords[1], coords[0]]; });
+        lastAttach = null;
+        return asIs;
+      }, function () { lastAttach = null; return asIs; });
+  }
+
+  // Отменить ТОЛЬКО прилипание, не трогая линию.
+  //
+  // Раньше отмена была одна и убирала всю работу: чтобы не примкнуть, надо
+  // было стереть нарисованное и начать заново.
+  function detachEnd() {
+    if (!lastAttach || !drawing || !drawing.points.length) {
+      hint('Нечего откреплять: последний конец никуда не примыкал.');
+      return;
+    }
+    const stuck = lastAttach;
+    for (let i = drawing.points.length - 1; i >= 0; i--) {
+      const p = drawing.points[i];
+      if (p[0] === stuck.to[0] && p[1] === stuck.to[1]) {
+        drawing.points[i] = [stuck.at[0], stuck.at[1]];
+        lastAttach = null;
+        renderDrawing();
+        hint('Конец откреплён и стоит там, где вы его поставили.');
+        return;
+      }
+    }
+    hint('Этот конец уже подвинули — откреплять нечего.');
   }
 
   function addVertex(coords) {
@@ -1170,7 +1369,15 @@
       cancelDrawing(true);
       current = { kind: 'geometry', geom: points, raw: points[0],
                   props: { cls: cls }, note: '' };
-      showRoadCard(points, cls, was);
+      // Сохраняем СРАЗУ. Класс выбран в палитре, причина следует из ситуации,
+      // полосы считаются по классу, мост и односторонняя выключены — четыре
+      // вопроса из пяти уже имеют ответ, и спрашивать их на каждой дороге
+      // значит брать плату за то, что и так известно. Уточнение — после, и
+      // только когда оно нужно.
+      saveRoad(points, cls, was, {
+        cls: cls, oneway: false, bridge: false,
+        why: was && was.replace ? 'OSM неверен' : 'нет в OSM',
+      });
     });
   }
 
@@ -1181,24 +1388,77 @@
     if (!quiet) { hint('Рисование отменено.'); }
   }
 
-  function showRoadCard(points, cls, was) {
+  // Сохранить дорогу и предложить уточнить.
+  //
+  // Одна дорога — одно движение: нарисовал, Enter, готово. Полоска внизу
+  // держит два выхода — «Уточнить» для десятого случая из десяти и «Отменить»
+  // для промаха, — и живёт до следующего действия, а не десять секунд:
+  // «уточнить» через десять секунд после сохранения уже невозможно.
+  function saveRoad(points, cls, was, props) {
+    const held = Object.keys((was && was.joined) || {});
+    if (was && was.replace) { props.replace = true; }
+    current.props = props;
+    current.status = ACCEPTED;
+    post('/api/edit', current).then(function (result) {
+      if (result.error) { hint(result.error); return; }
+      const also = held.map(function (key) {
+        const road = was.joined[key];
+        return post('/api/edit', {
+          kind: 'geometry', geom: road.points, raw: road.points[0],
+          props: { cls: road.cls, oneway: !!road.oneWay, bridge: false,
+                   why: 'OSM неверен', replace: true },
+          status: ACCEPTED,
+        });
+      });
+      Promise.all(also).then(function (results) {
+        const made = [result].concat(results.filter(function (r) {
+          return r && !r.error;
+        }));
+        const lost = results.filter(function (r) { return !r || r.error; });
+        closeCard();
+        hint(lost.length
+          ? className(cls) + ' сохранён, но ' + lost.length + ' соседних по '
+            + 'узлу не сохранились. Проверьте перекрёсток.'
+          : className(cls) + ' · ' + drawnMeters(points) + ' м · сохранено'
+            + (made.length > 1 ? ', с узлами: ' + made.length : '')
+            + '. Публикует владелец со своей машины.');
+        offerRefine(className(cls) + ' · ' + drawnMeters(points) + ' м',
+          function () { refineRoad(result, points, cls, props); },
+          function () {
+            return Promise.all(made.map(function (item) {
+              return post('/api/edit/withdraw',
+                          { id: item.id, version: item.version });
+            }));
+          });
+        walking = false;
+        reloadEdits();
+      });
+    });
+  }
+
+  // Уточнение уже сохранённой дороги: та самая карточка с пятью полями, но
+  // после факта и по желанию.
+  function refineRoad(result, points, cls, props) {
+    current = { id: result.id, version: result.version, kind: 'geometry',
+                geom: points, raw: points[0], props: props, note: '' };
+    showRoadCard(points, cls, props.replace ? { replace: true } : null, props);
+  }
+
+  function showRoadCard(points, cls, was, filled) {
     const reshaping = !!(was && was.replace);
+    const known = filled || {};
     els.card.hidden = false;
     els.card.innerHTML = '';
-    els.card.appendChild(node('h3', reshaping ? 'Перерисованная дорога'
-                                              : 'Своя дорога'));
+    els.card.appendChild(node('h3', className(cls) + ' · уточнить'));
+    els.card.appendChild(node('div',
+      'Дорога уже сохранена. Здесь — то, что нужно редко: полосы, '
+      + 'односторонняя, мост.', 'muted'));
     if (reshaping) {
       els.card.appendChild(node('div',
         'Старая линия уйдёт со схемы при публикации.', 'muted'));
     }
     els.card.appendChild(node('div',
       'Вершин ' + points.length + ' · ' + drawnMeters(points) + ' м', 'muted'));
-    const held = Object.keys((was && was.joined) || {});
-    if (held.length) {
-      els.card.appendChild(node('div',
-        'Вместе с узлами поедут ещё ' + held.length +
-        ' — каждая отдельной правкой.', 'muted'));
-    }
 
     const kind = document.createElement('select');
     CLASSES.forEach(function (item) {
@@ -1212,11 +1472,14 @@
     kindLabel.appendChild(kind);
     els.card.appendChild(kindLabel);
 
-    const lanes = field('Полос всего (пусто — по классу)', 'number', '');
+    const lanes = field('Полос всего (пусто — по классу)', 'number',
+                        known.lanes || '');
     els.card.appendChild(lanes.label);
 
     const oneway = check('Односторонняя');
     const bridge = check('Мост');
+    oneway.input.checked = !!known.oneway;
+    bridge.input.checked = !!known.bridge;
     els.card.appendChild(oneway.label);
     els.card.appendChild(bridge.label);
 
@@ -1230,14 +1493,16 @@
       // Перерисованная улица В OSM ЕСТЬ — её только что оттуда и взяли.
       // Причина по умолчанию «нет в OSM» была бы неправдой в каждой такой
       // правке, а ворота публикации спрашивают именно её.
-      if (reshaping && text === 'OSM неверен') { option.selected = true; }
+      if (text === (known.why || (reshaping ? 'OSM неверен' : 'нет в OSM'))) {
+        option.selected = true;
+      }
       why.appendChild(option);
     });
     const whyLabel = node('label', 'Почему дорога своя');
     whyLabel.appendChild(why);
     els.card.appendChild(whyLabel);
 
-    const save = node('button', 'Принять');
+    const save = node('button', 'Сохранить уточнение');
     save.addEventListener('click', function () {
       const count = parseInt(lanes.input.value, 10);
       current.props = {
@@ -1249,45 +1514,18 @@
       if (reshaping) { current.props.replace = true; }
       if (count >= 1 && count <= 15) { current.props.lanes = count; }
       current.status = ACCEPTED;
+      // Класс запоминаем ДО отправки: closeCard обнуляет current, и чтение
+      // current.props после него роняло обработчик молча — внутри промиса
+      // такое исключение не видно нигде.
+      const saved = className(current.props.cls);
+      // Правка УЖЕ существует: current несёт её номер и версию, и тот же
+      // адрес обновляет её, а не заводит вторую рядом.
       post('/api/edit', current).then(function (result) {
         if (result.error) { hint(result.error); return; }
-        // Соседи по узлу — каждый СВОЕЙ правкой того же вида. Общей правки на
-        // перекрёсток быть не может: запекание применяет геометрию к одной
-        // дороге, и «правка на четыре улицы» означала бы второй формат
-        // хранения ради одного случая.
-        const also = held.map(function (key) {
-          const road = was.joined[key];
-          return post('/api/edit', {
-            kind: 'geometry', geom: road.points, raw: road.points[0],
-            props: { cls: road.cls, oneway: !!road.oneWay, bridge: false,
-                     why: 'OSM неверен', replace: true },
-            status: ACCEPTED,
-          });
-        });
-        Promise.all(also).then(function (results) {
-          const made = [result].concat(results.filter(function (r) {
-            return r && !r.error;
-          }));
-          const lost = results.filter(function (r) { return !r || r.error; });
-          closeCard();
-          hint(lost.length
-            ? 'Дорога принята, но ' + lost.length + ' соседних по узлу не '
-              + 'сохранились. Проверьте перекрёсток.'
-            : 'Принято правок: ' + made.length
-              + '. Публикует владелец со своей машины.');
-          // Отмена снимает ВСЁ, что поехало: половина перекрёстка, оставшаяся
-          // сдвинутой, хуже, чем не тронутый вовсе.
-          offerUndo('Дорога · ' + drawnMeters(points) + ' м'
-                    + (made.length > 1 ? ' и узлы' : ''), function () {
-            return Promise.all(made.map(function (item) {
-              return post('/api/edit/withdraw',
-                          { id: item.id, version: item.version });
-            }));
-          });
-          walking = false;
-          reloadEdits();
-          drawRoads();
-        });
+        closeCard();
+        hint(saved + ' уточнён.');
+        walking = false;
+        reloadEdits();
       });
     });
     els.card.appendChild(save);
@@ -1452,7 +1690,13 @@
     map.events.add('boundschange', function () { drawRoads(); reloadEdits(); });
     // Зум меняет метры на пиксель, то есть ВСЮ ширину полотна. Без пересчёта
     // схема на другом масштабе врала бы о том, что увидит водитель.
-    map.events.add('actionend', function () { if (schema) { renderRoads(); } });
+    map.events.add('actionend', function () {
+      // Зум меняет метры на пиксель, то есть ширину полотна — и у чужих дорог,
+      // и у своих. Своя дорога, нарисованная в прежнем масштабе, иначе
+      // осталась бы шире или уже соседней того же класса.
+      renderMine();
+      if (schema) { renderRoads(); }
+    });
     drawRoads();
     reloadEdits();
 
@@ -1504,6 +1748,7 @@
     document.addEventListener('keydown', function (e) {
       if (e.metaKey || e.ctrlKey) {
         if (e.key === 'z' || e.key === 'я') { e.preventDefault(); undo(); }
+        if (e.key === 'd' || e.key === 'в') { e.preventDefault(); detachEnd(); }
         return;
       }
       const inField = e.target && e.target.tagName === 'INPUT';

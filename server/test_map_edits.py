@@ -10,6 +10,7 @@
 исчезать — ни от удаления, ни от второго сохранения с другого устройства.
 """
 import json
+import re
 import os
 import sqlite3
 import tempfile
@@ -433,6 +434,184 @@ class WidthContractTests(unittest.TestCase):
         two_way = map_edits.road_width_meters(0, 3)
         one_way = map_edits.road_width_meters(map_edits.FLAG_ONEWAY, 3)
         self.assertAlmostEqual(two_way, one_way * 2)
+
+
+class DrawOfTests(unittest.TestCase):
+    """Чем правка рисуется на карте.
+
+    Было так: правка любого вида ложилась точкой по `geom[1]` как широте. Для
+    линии `geom[1]` — это ВТОРАЯ ВЕРШИНА, и метка уезжала в случайное место, а
+    нарисованная дорога не показывалась дорогой вовсе. Со стороны это выглядело
+    как «панель ставит что-то сама, а моей работы не видно».
+    """
+
+    def test_line_edit_is_a_line(self):
+        drawn = map_edits.draw_of({
+            "kind": "geometry", "geom": [[69.25, 41.30], [69.26, 41.31]],
+            "props": {"cls": 3}})
+        self.assertEqual(drawn["shape"], "line")
+        self.assertEqual(drawn["point"], [69.25, 41.30],
+                         "точка линии — её первая вершина, а не вторая")
+
+    def test_removed_road_is_a_line_too(self):
+        # Убранную дорогу надо видеть целиком: решение «убрать» проверяют по
+        # тому, ту ли линию убрали.
+        self.assertEqual(map_edits.draw_of({
+            "kind": "remove", "geom": [[69.25, 41.30], [69.26, 41.31]],
+            "props": {}})["shape"], "line")
+
+    def test_area_is_a_ring(self):
+        self.assertEqual(map_edits.draw_of({
+            "kind": "area", "geom": [[69.25, 41.30], [69.26, 41.31],
+                                     [69.26, 41.30]],
+            "props": {"area": 2}})["shape"], "ring")
+
+    def test_point_edit_keeps_its_coordinate(self):
+        drawn = map_edits.draw_of({"kind": "point", "geom": [69.25, 41.30],
+                                   "props": {"point": 1}})
+        self.assertEqual((drawn["shape"], drawn["point"]),
+                         ("point", [69.25, 41.30]))
+
+    def test_drawn_road_carries_the_width_the_phone_will_draw(self):
+        # Своя дорога обязана лечь той же шириной, что соседняя из OSM того же
+        # класса: иначе на схеме видно не дорогу, а то, что её рисовали не там.
+        drawn = map_edits.draw_of({
+            "kind": "geometry", "geom": [[69.25, 41.30], [69.26, 41.31]],
+            "props": {"cls": 3, "lanes": 4}})
+        self.assertEqual(drawn["lanes"], 4)
+        self.assertAlmostEqual(drawn["width"], 4 * map_edits.LANE_METERS[3], 1)
+
+    def test_lanes_are_capped_by_class(self):
+        drawn = map_edits.draw_of({
+            "kind": "geometry", "geom": [[69.25, 41.30], [69.26, 41.31]],
+            "props": {"cls": 7, "lanes": 15}})
+        self.assertEqual(drawn["lanes"], map_edits.MAX_LANES_BY_CLASS[7])
+
+    def test_default_lanes_when_none_given(self):
+        drawn = map_edits.draw_of({
+            "kind": "geometry", "geom": [[69.25, 41.30], [69.26, 41.31]],
+            "props": {"cls": 3}})
+        self.assertEqual(drawn["lanes"], map_edits.DEFAULT_LANES[3][1])
+
+    def test_oneway_halves_the_default(self):
+        drawn = map_edits.draw_of({
+            "kind": "geometry", "geom": [[69.25, 41.30], [69.26, 41.31]],
+            "props": {"cls": 3, "oneway": True}})
+        self.assertEqual(drawn["lanes"], map_edits.DEFAULT_LANES[3][0])
+
+    def test_nonsense_class_does_not_crash(self):
+        drawn = map_edits.draw_of({
+            "kind": "geometry", "geom": [[69.25, 41.30], [69.26, 41.31]],
+            "props": {"cls": "проспект"}})
+        self.assertEqual(drawn["cls"], 6)
+
+    def test_empty_geometry_gives_no_point(self):
+        self.assertIsNone(map_edits.draw_of({"kind": "point", "geom": [],
+                                             "props": {}})["point"])
+
+    def test_every_kind_gets_a_shape(self):
+        # Новый вид правки не должен молча стать точкой в неизвестном месте.
+        for kind in sorted(map_edits.KINDS):
+            geom = ([[69.25, 41.30], [69.26, 41.31], [69.26, 41.30]]
+                    if kind in map_edits.LINE_KINDS | map_edits.RING_KINDS
+                    else [69.25, 41.30])
+            drawn = map_edits.draw_of({"kind": kind, "geom": geom, "props": {}})
+            self.assertIn(drawn["shape"], ("point", "line", "ring"), kind)
+            self.assertIsNotNone(drawn["point"], kind)
+
+
+class ClientTablesTests(unittest.TestCase):
+    """Таблицы ширины в панели и на сервере — одни и те же числа.
+
+    Пока линию ведут, правки ещё нет, и спросить ширину у сервера не у чего:
+    рисовать полотно приходится на клиенте. Значит, таблица продублирована — а
+    дублирование, за которым никто не следит, расходится молча и ровно там, где
+    это дороже всего: на глазах у человека, который по картинке принимает
+    решение. Тот же приём уже стоит между build_roads.py и RoadShape.swift.
+    """
+
+    def table(self, name):
+        source = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "static", "editor.js")
+        with open(source, encoding="utf-8") as handle:
+            text = handle.read()
+        match = re.search(r"const " + name + r" = \{([^}]*)\}", text)
+        self.assertIsNotNone(match, f"в editor.js нет таблицы {name}")
+        out = {}
+        for pair in match.group(1).split(","):
+            if ":" not in pair:
+                continue
+            key, value = pair.split(":")
+            out[int(key.strip())] = float(value.strip())
+        return out
+
+    def test_lane_meters_match(self):
+        self.assertEqual(self.table("LANE_METERS"),
+                         {k: float(v) for k, v in map_edits.LANE_METERS.items()})
+
+    def test_default_lanes_match_the_two_way_case(self):
+        # На клиенте одно число на класс — для двусторонней дороги: рисуют её
+        # чаще, а односторонняя приходит с явным числом полос.
+        server = {cls: float(both)
+                  for cls, (single, both) in map_edits.DEFAULT_LANES.items()}
+        self.assertEqual(self.table("DEFAULT_LANES"), server)
+
+    def test_every_kind_has_a_word_in_the_panel(self):
+        # Неназванный вид показывался кодом — «point», «area», — а код на
+        # экране читается как недоделка, а не как объект.
+        source = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "static", "editor.js")
+        with open(source, encoding="utf-8") as handle:
+            text = handle.read()
+        match = re.search(r"const NAMES = \{(.*?)\};", text, re.S)
+        self.assertIsNotNone(match)
+        named = set(re.findall(r"(\w+):", match.group(1)))
+        self.assertEqual(named, set(map_edits.KIND_NAMES),
+                         "виды правок в панели и на сервере разошлись")
+
+    def test_every_class_is_covered(self):
+        for cls in map_edits.OSM_HIGHWAY:
+            self.assertIn(cls, self.table("LANE_METERS"))
+            self.assertIn(cls, self.table("DEFAULT_LANES"))
+
+
+class TodoWithLinesTests(unittest.TestCase):
+    """Очередь работы не должна падать от правки-линии.
+
+    `todo` считала каждую правку точкой и брала `geom[0]` как долготу. У
+    нарисованной дороги `geom[0]` — вершина, то есть список, и весь запрос
+    отдавал 500. Со стороны это выглядело как пустой конструктор без списка
+    «здесь работать»: браузер показывал «Failed to fetch», по которому причину
+    не найти.
+    """
+
+    def road(self, lat, lon):
+        return {"cls": 3, "flags": 0, "name": "",
+                "points": [(lon, lat), (lon + 0.002, lat + 0.002)]}
+
+    def test_line_edit_does_not_break_the_queue(self):
+        work = map_edits.todo([self.road(41.30, 69.25)], [
+            {"kind": "geometry", "geom": [[69.30, 41.35], [69.31, 41.36]],
+             "props": {}}])
+        self.assertEqual(len(work), 1, "дорога без полос пропала из очереди")
+
+    def test_line_edit_still_marks_its_place_as_done(self):
+        # Правка считается сделанной работой там, где стоит её ПЕРВАЯ вершина.
+        road = self.road(41.30, 69.25)
+        spot = road["points"][len(road["points"]) // 2]
+        work = map_edits.todo([road], [
+            {"kind": "geometry", "geom": [[spot[0], spot[1]],
+                                          [spot[0] + 0.001, spot[1]]],
+             "props": {}}])
+        self.assertEqual(work, [], "работа рядом с правкой осталась в очереди")
+
+    def test_area_and_point_edits_mix_without_error(self):
+        work = map_edits.todo([self.road(41.30, 69.25)], [
+            {"kind": "area", "geom": [[69.40, 41.40], [69.41, 41.41],
+                                      [69.41, 41.40]], "props": {}},
+            {"kind": "point", "geom": [69.40, 41.40], "props": {}},
+            {"kind": "lock", "geom": [69.40, 41.40], "props": {}}])
+        self.assertEqual(len(work), 1)
 
 
 class HistoryTests(unittest.TestCase):

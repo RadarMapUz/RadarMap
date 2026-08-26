@@ -46,7 +46,10 @@
                    4: 'Разворот', 5: 'Пешеходный переход' };
   const DRAFT = 0, ACCEPTED = 1, WITHDRAWN = 3;
 
-  let kind = 'lanes';
+  // Инструмент по умолчанию — СТРЕЛКА, как в любом редакторе. Пока выбран
+  // какой-нибудь «Полосы», щелчок по улице обязан делать полосы; взять улицу
+  // и потянуть можно только тогда, когда ничего другого не выбрано.
+  let kind = 'select';
   let pointCode = 0;      // какой объект обстановки ставим (0 — никакой)
   let markingArea = false; // следующий щелчок размечает область
   let map = null;
@@ -348,6 +351,14 @@
         hint('Вне дороги. Ворота публикации об этом спросят.');
         return;
       }
+      // Стрелка берёт дорогу целиком, а не сажает на неё объект. Работает и
+      // на спутнике, где полотна для щелчка нет вовсе, — иначе взять улицу в
+      // правку можно было бы только на своей схеме.
+      if (kind === 'select' && !existing) {
+        if (snap.ambiguous) { offerChoice(coords, list, snap, existing, signature(list)); return; }
+        askReshape(list[0]);
+        return;
+      }
       if (!snap.ambiguous) { adopt(coords, list[0], snap, existing, null); return; }
 
       const key = signature(list);
@@ -402,6 +413,8 @@
 
   function adopt(coords, candidate, snap, existing, source) {
     clearPicks();
+    // Выбор из двух улиц стрелкой заканчивается тем же: улицу берут в правку.
+    if (kind === 'select' && !existing) { askReshape(candidate); return; }
     // Подсказка обязана говорить о ТЕКУЩЕМ состоянии. Оставленное «выберите
     // дорогу» после того, как выбор уже сделан, — мелкая неправда, из которых
     // и складывается недоверие к инструменту.
@@ -595,6 +608,10 @@
         // асфальта, и карточка «перерисовать эту улицу» посреди обводки
         // отменяла бы работу вопросом, которого никто не задавал.
         if (drawing) { addVertex(e.get('coords')); return; }
+        // Инструмент главнее полотна. Выбран светофор — щелчок по улице
+        // ставит светофор, а не открывает её геометрию: иначе палитра
+        // обещала бы одно, а карта делала другое.
+        if (kind !== 'select') { place(e.get('coords'), null); return; }
         askReshape(road);
       });
     });
@@ -611,19 +628,28 @@
 
   // Взять существующую дорогу в правку.
   //
-  // Её геометрия копируется в рисовалку как есть — тяни вершины, добавляй
-  // новые. При сохранении старая уходит: модератор, поправивший улицу, ждёт,
-  // что на схеме останется ОДНА дорога, а не две в нескольких метрах.
+  // Вершины становятся тянущимися СРАЗУ, по одному щелчку. Это и есть работа
+  // конструктора: улицу поправляют, взявшись за неё, а не выбрав пункт в
+  // карточке, — а карточка остаётся рядом для того, что мышью не делается:
+  // назвать и убрать.
+  //
+  // Геометрия копируется в рисовалку как есть. При сохранении старая уходит:
+  // модератор, поправивший улицу, ждёт, что на схеме останется ОДНА дорога, а
+  // не две в нескольких метрах.
   function askReshape(road) {
+    drawing = { points: road.points.map(function (p) { return [p[0], p[1]]; }),
+                cls: road.cls, replace: true, lanes: road.lanes,
+                oneWay: road.oneWay };
+    chosenVertex = -1;
+    renderDrawing();
+    hint('Тяни вершины · середину отрезка — добавить · Enter — сохранить · '
+         + 'Esc — отменить');
     els.card.hidden = false;
     els.card.innerHTML = '';
     els.card.appendChild(node('h3', 'Дорога класса ' + road.cls));
     els.card.appendChild(node('div',
       (road.name || 'без имени') + ' · ' + road.lanes + ' полос · ' +
       road.width + ' м', 'muted'));
-    els.card.appendChild(node('div',
-      'Можно перерисовать: геометрия скопируется, старая линия при сохранении '
-      + 'уйдёт.', 'muted'));
     // «Убрать» — второй способ распрощаться с чужой линией. Улицу бывает нужно
     // просто убрать: перекрыли, снесли, застроили, — и рисовать ради этого
     // фиктивную дорогу нелепо.
@@ -650,6 +676,9 @@
         raw: road.points[0], props: { name: text }, status: ACCEPTED,
       }).then(function (result) {
         if (result.error) { hint(result.error); return; }
+        // Дорога была взята в правку одним щелчком; назвали — значит с
+        // геометрией ничего не делали, и висящие вершины сбивали бы с толку.
+        cancelDrawing(true);
         closeCard();
         hint('Название сохранено: ' + text);
         offerUndo('Название · ' + text, function () {
@@ -669,6 +698,7 @@
         props: { why: why.value, cls: road.cls }, status: ACCEPTED,
       }).then(function (result) {
         if (result.error) { hint(result.error); return; }
+        cancelDrawing(true);
         closeCard();
         hint('Дорога убрана. На схеме её не будет после публикации.');
         offerUndo('Убрана дорога класса ' + road.cls, function () {
@@ -680,20 +710,15 @@
       });
     });
 
-    const take = node('button', 'Перерисовать');
-    take.addEventListener('click', function () {
-      closeCard();
-      drawing = { points: road.points.map(function (p) { return [p[0], p[1]]; }),
-                  cls: road.cls, replace: true, lanes: road.lanes,
-                  oneWay: road.oneWay };
-      chosenVertex = -1;
-      renderDrawing();
-      hint('Тяни вершины · середину отрезка — добавить · Enter — сохранить');
-    });
-    els.card.appendChild(take);
+    const save = node('button', 'Сохранить геометрию');
+    save.addEventListener('click', finishDrawing);
+    els.card.appendChild(save);
     els.card.appendChild(drop);
     const cancel = node('button', 'Отмена', 'ghost');
-    cancel.addEventListener('click', closeCard);
+    cancel.addEventListener('click', function () {
+      cancelDrawing(true);
+      closeCard();
+    });
     els.card.appendChild(cancel);
   }
 
@@ -1124,6 +1149,10 @@
       const option = document.createElement('option');
       option.value = text;
       option.textContent = text;
+      // Перерисованная улица В OSM ЕСТЬ — её только что оттуда и взяли.
+      // Причина по умолчанию «нет в OSM» была бы неправдой в каждой такой
+      // правке, а ворота публикации спрашивают именно её.
+      if (reshaping && text === 'OSM неверен') { option.selected = true; }
       why.appendChild(option);
     });
     const whyLabel = node('label', 'Почему дорога своя');
@@ -1432,8 +1461,16 @@
         if (button) { button.click(); }
         return;
       }
-      const index = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].indexOf(e.key);
-      if (index >= 0 && buttons[index]) { buttons[index].click(); }
+      // Клавиша привязана к ВИДУ инструмента, а не к его месту в списке.
+      // По порядку это ломалось от каждой новой плитки: на плитке написано
+      // «1», а нажатие выбирало соседнюю.
+      const kinds = { '1': 'lanes', '2': 'turn_lanes', '3': 'u_turn',
+                      v: 'select', м: 'select' };
+      const wanted = kinds[e.key] || kinds[e.key.toLowerCase()];
+      if (wanted) {
+        const button = document.querySelector('[data-kind="' + wanted + '"]');
+        if (button) { button.click(); }
+      }
     });
   });
 })();

@@ -566,8 +566,25 @@ def search_cameras(query, limit=20):
     return found
 
 
+def static_url(name):
+    """Адрес скрипта со СЛЕПКОМ его содержимого.
+
+    Без метки версии браузер модератора продолжает выполнять вчерашний файл:
+    адрес не изменился, значит можно взять из кэша. Выкатили исправление —
+    а панель у человека ведёт себя по-старому, и понять это со стороны нельзя
+    вовсе. Метка от времени правки файла: меняется ровно тогда, когда меняется
+    сам файл.
+    """
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", name)
+    try:
+        stamp = int(os.path.getmtime(path))
+    except OSError:
+        stamp = 0
+    return u(f"/static/{name}") + f"?v={stamp}"
+
+
 def render_moderation_map(api_key, pending, camera_count):
-    logout_url, moderate_js = u("/logout"), u("/static/moderate.js")
+    logout_url, moderate_js = u("/logout"), static_url("moderate.js")
     """Главный экран модерации: одна карта на все камеры.
 
     Прежний путь «список → страница камеры → перетащить → назад» стоил семи
@@ -736,6 +753,11 @@ fill="#ffb02022" stroke="#ffb020" stroke-width="2"
 stroke-dasharray="4 3"/></svg>"""
 
 
+SELECT_ICON = """<svg viewBox="0 0 48 28"><path d="M20 5l11 16h-6l-2 5z"
+fill="#cfd6e3" stroke="#0b0e13" stroke-width="1.2"
+stroke-linejoin="round"/></svg>"""
+
+
 def tool_button(icon, name, key, attrs, extra=""):
     """Плитка палитры: рисунок, имя, клавиша.
 
@@ -883,7 +905,8 @@ font-size:12px;cursor:pointer;line-height:1.35}}
     <button id="viewsat" class="view">Спутник</button>
   </div>
   <div class="toolrow">
-    {tool_button(PROP_ICONS["lanes"], "Полосы", "1", 'data-kind="lanes"', " on")}
+    {tool_button(SELECT_ICON, "Выбрать", "V", 'data-kind="select"', " on")}
+    {tool_button(PROP_ICONS["lanes"], "Полосы", "1", 'data-kind="lanes"')}
     {tool_button(PROP_ICONS["turn_lanes"], "Направления", "2",
                  'data-kind="turn_lanes"')}
     {tool_button(PROP_ICONS["u_turn"], "Разворот", "3", 'data-kind="u_turn"')}
@@ -935,7 +958,7 @@ font-size:12px;cursor:pointer;line-height:1.35}}
   </details>
   <div class="legend" id="hint">Черновиков: {drafts}. Клик по дороге ставит
     объект, клик по объекту — правит. Панель ничего не публикует.</div>
-  <div class="legend keyhelp">1–3 свойства · Q W E R дорога ·
+  <div class="legend keyhelp">V выбрать · 1–3 свойства · Q W E R дорога ·
     A S D F G обстановка · Z разметить область ·
     Enter закончить · Backspace снять вершину ·
     Delete убрать вершину · Esc отменить · Ctrl+Z вернуть ·
@@ -948,7 +971,7 @@ font-size:12px;cursor:pointer;line-height:1.35}}
 <aside class="card" id="card" hidden></aside>
 <div class="toast" id="toast"></div>
 <script src="https://api-maps.yandex.ru/2.1/?apikey={esc(api_key)}&lang=ru_RU"></script>
-<script src="{esc(u('/static/editor.js'))}"></script>
+<script src="{esc(static_url('editor.js'))}"></script>
 </body></html>"""
 
 
@@ -1180,11 +1203,14 @@ class Handler(BaseHTTPRequestHandler):
                "https://*.maps.yandex.net https://*.yandex.ru https://yastatic.net; "
                "font-src data:; worker-src blob:; child-src blob:")
 
-    def _send(self, code, body, content_type="text/html; charset=utf-8", csp=None):
+    def _send(self, code, body, content_type="text/html; charset=utf-8", csp=None,
+              extra=None):
         payload = body.encode()
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(payload)))
+        for header, value in (extra or {}).items():
+            self.send_header(header, value)
         # same-origin, а НЕ no-referrer: при no-referrer браузер шлёт
         # `Origin: null` даже на свою же форму, и проверка источника ниже
         # отвергала собственный вход с 403. Наружу заголовок всё равно не
@@ -1566,7 +1592,10 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             return self._send(404, page("/", "Не найдено",
                                         '<div class="empty">Файл карты не найден</div>'))
-        self._send(200, body, content_type)
+        # Кэшируется НАДОЛГО и намеренно: адрес несёт метку версии, поэтому
+        # новый файл приезжает новым адресом, а старый можно не перепроверять.
+        self._send(200, body, content_type,
+                   extra={"Cache-Control": "public, max-age=31536000, immutable"})
 
     def _json(self, payload, code=200):
         self._send(code, json.dumps(payload, ensure_ascii=False),
@@ -1692,9 +1721,19 @@ class Handler(BaseHTTPRequestHandler):
 
         def described(item):
             road = item["road"]
-            return {"cls": road["cls"], "name": road.get("name", ""),
+            flags = road.get("flags", 0)
+            cls = road["cls"]
+            # Кандидат несёт ВСЁ о дороге, а не только имя и класс. Стрелкой
+            # берут улицу прямо из результата магнита — и карточка обязана
+            # сразу сказать, сколько там полос и какой ширины полотно, не
+            # ходя за этим вторым запросом.
+            return {"cls": cls, "name": road.get("name", ""),
                     "points": road["points"], "point": list(item["point"]),
                     "meters": round(item["distance"], 1),
+                    "lanes": map_edits.road_lanes_of(flags, cls),
+                    "width": round(map_edits.road_width_meters(flags, cls), 1),
+                    "oneWay": bool(flags & map_edits.FLAG_ONEWAY),
+                    "drawn": bool(flags & map_edits.FLAG_HAND_DRAWN),
                     "anchor": {"cls": road["cls"], "name": road.get("name", ""),
                                "bearing": round(item["bearing"], 1),
                                "atNode": False}}

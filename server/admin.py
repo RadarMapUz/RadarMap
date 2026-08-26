@@ -711,7 +711,7 @@ font-size:12px;cursor:pointer;line-height:1.35}}
   <div class="legend" id="hint">Черновиков: {drafts}. Клик по дороге ставит
     объект, клик по объекту — правит. Панель ничего не публикует.</div>
   <div class="legend">1–9 вид · Enter принять · Delete снять · Esc закрыть ·
-    Ctrl+Z отменить</div>
+    Ctrl+Z отменить · \\ схема ⇄ спутник · ] [ по очереди</div>
   <div class="legend todo" id="todo"></div>
 </div>
 <aside class="card" id="card" hidden></aside>
@@ -1385,8 +1385,24 @@ class Handler(BaseHTTPRequestHandler):
         if box is None:
             return self._json({"error": "нужна рамка карты"}, 400)
         roads = map_edits.load_roads(edits_tiles_dir(), *box)
-        self._json({"roads": [{"cls": r["cls"], "name": r["name"],
-                               "points": r["points"]} for r in roads[:2000]]})
+
+        def described(road):
+            flags, cls = road.get("flags", 0), road["cls"]
+            return {"cls": cls, "name": road.get("name", ""),
+                    "points": road["points"],
+                    # Ширину считает СЕРВЕР. Панель обязана рисовать то же, что
+                    # увидит водитель, а вторая реализация той же формулы в
+                    # JavaScript разошлась бы с первой молча — и разошлась бы
+                    # именно там, где это стоит дороже всего: на глазах у
+                    # человека, который по этой картинке принимает решение.
+                    "lanes": map_edits.road_lanes_of(flags, cls),
+                    "width": round(map_edits.road_width_meters(flags, cls), 1),
+                    "oneWay": bool(flags & map_edits.FLAG_ONEWAY),
+                    "level": 1 if flags & map_edits.FLAG_BRIDGE
+                             else (-1 if flags & map_edits.FLAG_TUNNEL else 0),
+                    "measured": bool(flags & map_edits.FLAG_LANES_TAGGED)}
+
+        self._json({"roads": [described(r) for r in roads[:2000]]})
 
     def snap_json(self, field):
         """Магнит. Считает СЕРВЕР, а не браузер, и это не про мощность.

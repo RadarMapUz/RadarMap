@@ -270,6 +270,56 @@ class TileSourceTests(unittest.TestCase):
         self.assertEqual(map_edits.load_roads("/нет/такого", 0, 0, 1, 1), [])
 
 
+class WidthContractTests(unittest.TestCase):
+    """Панель обязана рисовать ТО ЖЕ, что увидит водитель.
+
+    Таблица ширин существует в трёх местах: build_roads.py (сборка тайлов),
+    RoadShape.swift (телефон) и map_edits.py (панель). Первые две порознь
+    потому, что сервер и клиент — разные программы; третья потому, что панель
+    не может импортировать build_roads: тот живёт на машине владельца, и на VPS
+    его может не быть вовсе.
+
+    Разойтись им нельзя. Здесь сверяются две из трёх — те, что на одном языке;
+    третью сторожит RoadLaneTests на клиенте.
+    """
+
+    def setUp(self):
+        try:
+            import build_roads
+        except ImportError:  # pragma: no cover — на VPS сборки нет
+            self.skipTest("build_roads недоступен: панель работает и без него")
+        self.build = build_roads
+
+    def test_lane_width_tables_match(self):
+        self.assertEqual(map_edits.LANE_METERS, self.build.LANE_METERS)
+
+    def test_default_lane_tables_match(self):
+        self.assertEqual(map_edits.DEFAULT_LANES, self.build.DEFAULT_LANES)
+
+    def test_class_ceilings_match(self):
+        self.assertEqual(map_edits.MAX_LANES_BY_CLASS, self.build.MAX_LANES_BY_CLASS)
+
+    def test_measured_bit_is_the_same_bit(self):
+        self.assertEqual(map_edits.FLAG_LANES_TAGGED, self.build.FLAG_LANES_TAGGED)
+
+    def test_width_comes_out_the_same_for_every_class(self):
+        for cls in sorted(self.build.LANE_METERS):
+            for lanes in (0, 1, 4, 15):
+                flags = self.build.with_lanes(0, lanes)
+                panel = map_edits.road_width_meters(flags, cls)
+                built = self.build.road_width_meters(
+                    cls, min(self.build.lanes_of(flags),
+                             self.build.MAX_LANES_BY_CLASS.get(cls, 8))
+                    if lanes else 0)
+                self.assertAlmostEqual(panel, built, places=6,
+                                       msg=f"класс {cls}, полос {lanes}")
+
+    def test_oneway_halves_the_default_in_both(self):
+        two_way = map_edits.road_width_meters(0, 3)
+        one_way = map_edits.road_width_meters(map_edits.FLAG_ONEWAY, 3)
+        self.assertAlmostEqual(two_way, one_way * 2)
+
+
 class TodoTests(unittest.TestCase):
     """Очередь работы: что панель предлагает делать дальше.
 

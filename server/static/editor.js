@@ -33,6 +33,9 @@
   let map = null;
   let objects = null;      // все правки в рамке
   let netLines = [];       // наши оси из тайлов
+  let schema = false;      // наша подложка вместо спутника
+  let ground = null;       // тёмная земля под схемой
+  let roadsInFrame = [];   // последний ответ /api/roads
   let pickLines = [];      // подсветка кандидатов при неоднозначности
   let dragger = null;      // перетаскиваемая метка выбранной правки
   let current = null;      // что сейчас в карточке
@@ -342,15 +345,98 @@
 
   function drawRoads() {
     get('/api/roads' + bbox()).then(function (data) {
-      netLines.forEach(function (line) { map.geoObjects.remove(line); });
-      netLines = (data.roads || []).map(function (road) {
-        const line = new ymaps.Polyline(
-          road.points.map(function (p) { return [p[1], p[0]]; }), {},
-          { strokeColor: '#38bdf8', strokeWidth: 2, strokeOpacity: 0.45 });
-        map.geoObjects.add(line);
-        return line;
-      });
+      roadsInFrame = data.roads || [];
+      renderRoads();
     });
+  }
+
+  // Метров в пикселе на текущем зуме. Ширина проезжей части приходит с сервера
+  // В МЕТРАХ — иначе панель рисовала бы одно, а телефон другое, — и перевести
+  // её в пиксели можно только здесь.
+  function metersPerPixel() {
+    const lat = map.getCenter()[0] * Math.PI / 180;
+    return 156543.03392 * Math.cos(lat) / Math.pow(2, map.getZoom());
+  }
+
+  // Цвет асфальта по классу — те же тона, что на схеме телефона.
+  function asphalt(cls) {
+    if (cls <= 2) { return '#6b6a63'; }
+    if (cls === 3) { return '#5e5d58'; }
+    if (cls === 4) { return '#525252'; }
+    if (cls <= 6) { return '#464646'; }
+    return '#3c3c3c';
+  }
+
+  function line(points, options) {
+    const shape = new ymaps.Polyline(
+      points.map(function (p) { return [p[1], p[0]]; }), {}, options);
+    map.geoObjects.add(shape);
+    netLines.push(shape);
+    return shape;
+  }
+
+  function renderRoads() {
+    netLines.forEach(function (shape) { map.geoObjects.remove(shape); });
+    netLines = [];
+    if (ground) { map.geoObjects.remove(ground); ground = null; }
+
+    if (!schema) {
+      // Поверх спутника — только тонкие оси: подложка и так занята снимком,
+      // а показать надо, к чему прилипнет магнит.
+      roadsInFrame.forEach(function (road) {
+        line(road.points, { strokeColor: '#38bdf8', strokeWidth: 2,
+                            strokeOpacity: 0.45, zIndex: 200 });
+      });
+      return;
+    }
+
+    // Своя подложка. Требование §7.2 плана конструктора, и оно не про красоту:
+    // объект, идеально поставленный по спутнику, на схеме может оказаться под
+    // кромкой или за краем охвата. Здесь видно ровно то, что увидит водитель.
+    const b = map.getBounds();
+    // zIndex задаём ЯВНО. У полигона и ломаной он по умолчанию одинаковый, и
+    // порядок добавления его не решает: земля ложилась поверх дорог, и схема
+    // выглядела пустым чёрным полем — при полностью нарисованных линиях.
+    ground = new ymaps.Polygon([[
+      [b[0][0], b[0][1]], [b[0][0], b[1][1]],
+      [b[1][0], b[1][1]], [b[1][0], b[0][1]], [b[0][0], b[0][1]],
+    ]], {}, { fillColor: '#0e1013', strokeWidth: 0, zIndex: 100,
+              interactivityModel: 'default#transparent' });
+    map.geoObjects.add(ground);
+
+    const perPixel = metersPerPixel();
+    // Чем ближе к экрану дороги, тем позже они рисуются: мост обязан лечь
+    // ПОВЕРХ того, что под ним, иначе развязка читается перекрёстком.
+    const ordered = roadsInFrame.slice().sort(function (a, c) {
+      return a.level - c.level;
+    });
+    ordered.forEach(function (road) {
+      const width = Math.max(1.5, road.width / perPixel);
+      // Кайма ТЕМНЕЕ земли: полотно читается лежащим на ней, а две улицы в
+      // пятнадцати метрах не сливаются в одну широкую.
+      line(road.points, { strokeColor: '#04060a', strokeWidth: width + 3,
+                          strokeOpacity: 1, zIndex: 200 + road.level * 10 });
+      line(road.points, { strokeColor: asphalt(road.cls), strokeWidth: width,
+                          strokeOpacity: 1, zIndex: 201 + road.level * 10 });
+    });
+    ordered.forEach(function (road) {
+      // Осевая — только там, где она есть в жизни: на дворовом проезде её нет,
+      // а нарисованная была бы выдуманной деталью.
+      if (road.oneWay || road.cls > 4) { return; }
+      if (road.width / perPixel < 8) { return; }
+      line(road.points, { strokeColor: '#e0d9b8', strokeWidth: 1.2,
+                          strokeOpacity: 0.30, strokeStyle: 'shortdash',
+                          zIndex: 240 });
+    });
+  }
+
+  function toggleSchema() {
+    schema = !schema;
+    map.setType(schema ? 'yandex#map' : 'yandex#hybrid');
+    renderRoads();
+    hint(schema
+      ? 'Своя схема: видно то, что увидит водитель. \\ — обратно на спутник.'
+      : 'Спутник: видно, где объект стоит на самом деле. \\ — на схему.');
   }
 
   function reloadEdits() {
@@ -490,6 +576,9 @@
     // reloadEdits сам обновляет очередь: поставленная правка снимает работу
     // из списка, и звать обе вручную значило бы качать очередь дважды.
     map.events.add('boundschange', function () { drawRoads(); reloadEdits(); });
+    // Зум меняет метры на пиксель, то есть ВСЮ ширину полотна. Без пересчёта
+    // схема на другом масштабе врала бы о том, что увидит водитель.
+    map.events.add('actionend', function () { if (schema) { renderRoads(); } });
     drawRoads();
     reloadEdits();
 
@@ -525,6 +614,7 @@
         return;
       }
       if (inField) { return; }
+      if (e.key === '\\' || e.key === 'ё') { toggleSchema(); return; }
       if (e.key === ']' || e.key === 'ъ') { goTo(queueAt + 1); return; }
       if (e.key === '[' || e.key === 'х') { goTo(queueAt - 1); return; }
       const index = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].indexOf(e.key);

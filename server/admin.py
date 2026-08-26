@@ -787,6 +787,14 @@ def render_editor(api_key, drafts):
 <title>Конструктор · RadarMap</title><style>{CSS}
 body{{overflow:hidden}}
 #map{{position:absolute;inset:52px 0 0 0;background:#0e1013}}
+/* Земля своей карты.
+   Красить контейнер бесполезно: ymaps кладёт поверх свою панель со СВОЕЙ
+   светлой картинкой-фоном (тот самый «в клеточку»), и наша ночная схема
+   выходила чёрным по белому. Гасим картинку и задаём цвет там, где он
+   действительно виден. Селектор по куску класса, а не по версии: версия
+   библиотеки в имени класса и меняется вместе с ней. */
+#map ymaps[class*="i-ua_js"], #map ymaps[class$="ground-pane"]
+{{background-image:none;background-color:#0e1013}}
 .tools{{position:absolute;top:64px;left:12px;z-index:4;display:flex;gap:8px;
 flex-direction:column;width:260px;max-height:calc(100vh - 88px);overflow:auto}}
 .tool{{display:flex;align-items:center;gap:10px;padding:7px 10px;

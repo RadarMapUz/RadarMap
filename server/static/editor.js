@@ -59,14 +59,6 @@
   // дорабатывает нашу схему: открывать его на чужом снимке значит показывать
   // не тот предмет, с которым работают, и прятать всю уже построенную сеть за
   // клавишей.
-  // Тайл своей карты: один пиксель цвета земли, растянутый на всю плитку.
-  // Прозрачный не годится — под прозрачным ymaps красит свой белый фон, и
-  // схема выходила чёрным по белому вместо того, что видит водитель ночью.
-  // Data-URI, а не файл: иначе на каждую плитку шёл бы запрос за одним и тем
-  // же пикселем.
-  const GROUND_TILE = 'data:image/gif;base64,'
-    + 'R0lGODlhAQABAIAAAA4QEwAAACwAAAAAAQABAAACAkQBADs=';
-
   let schema = true;
   let roadsInFrame = [];   // последний ответ /api/roads
   let pointsInFrame = [];  // обстановка: из тайлов и своя
@@ -637,13 +629,15 @@
   // модератор, поправивший улицу, ждёт, что на схеме останется ОДНА дорога, а
   // не две в нескольких метрах.
   function askReshape(road) {
-    drawing = { points: road.points.map(function (p) { return [p[0], p[1]]; }),
-                cls: road.cls, replace: true, lanes: road.lanes,
-                oneWay: road.oneWay };
+    const points = road.points.map(function (p) { return [p[0], p[1]]; });
+    drawing = { points: points, cls: road.cls, replace: true,
+                lanes: road.lanes, oneWay: road.oneWay, joined: {},
+                joins: points.map(function (p) { return heldAt(p, road.points); }) };
     chosenVertex = -1;
     renderDrawing();
-    hint('Тяни вершины · середину отрезка — добавить · Enter — сохранить · '
-         + 'Esc — отменить');
+    const nodes = drawing.joins.filter(function (j) { return j.length; }).length;
+    hint('Тяни вершины · середину отрезка — добавить · Enter — сохранить'
+         + (nodes ? ' · узлов ' + nodes + ': соседние улицы поедут вместе' : ''));
     els.card.hidden = false;
     els.card.innerHTML = '';
     els.card.appendChild(node('h3', 'Дорога класса ' + road.cls));
@@ -912,6 +906,60 @@
   // Ближе этого конец линии считается примкнувшим к чужой дороге.
   const ATTACH_METERS = 12;
 
+  // Ближе этого две вершины считаются ОДНИМ узлом.
+  //
+  // Порог не выдуман: координаты в тайле лежат с шагом 1e-5°, это чуть больше
+  // метра, и после генерализации сошедшиеся концы отличаются в последнем
+  // знаке. Два метра ловят именно их и не хватают соседнюю улицу — ближайшая
+  // проезжая часть на перекрёстке начинается метрах в десяти.
+  const JOIN_METERS = 2;
+
+  function metersApart(a, b) {
+    const lat = (a[1] + b[1]) / 2 * Math.PI / 180;
+    return Math.hypot((b[1] - a[1]) * 111320,
+                      (b[0] - a[0]) * 111320 * Math.cos(lat));
+  }
+
+  // Кто ещё держится за эту точку.
+  //
+  // В нашей схеме перекрёсток — это не объект, а общий конец нескольких
+  // отрезков: сборка режет дороги по общим вершинам. Поэтому сдвинуть один
+  // отрезок и не тронуть остальные — значит разорвать перекрёсток молча:
+  // на схеме останется щель, а маршрут через неё не пройдёт.
+  function heldAt(point, own) {
+    const out = [];
+    roadsInFrame.forEach(function (road) {
+      if (road.points === own) { return; }
+      road.points.forEach(function (p, at) {
+        if (metersApart(p, point) <= JOIN_METERS) { out.push({ road: road, at: at }); }
+      });
+    });
+    return out;
+  }
+
+  // Соседи, которых тянут вместе с узлом. Копия, а не сама дорога: отказ от
+  // правки не должен оставить схему сдвинутой.
+  function heldCopy(road) {
+    const key = road.points.map(function (p) { return p[0] + ',' + p[1]; }).join(';');
+    if (!drawing.joined[key]) {
+      drawing.joined[key] = {
+        cls: road.cls, oneWay: road.oneWay, name: road.name,
+        points: road.points.map(function (p) { return [p[0], p[1]]; }),
+      };
+    }
+    return drawing.joined[key];
+  }
+
+  // Подвинуть узел: вершина едет, и с ней ВСЕ, кто за неё держится.
+  function weld(index, to) {
+    const was = drawing.points[index];
+    (drawing.joins[index] || []).forEach(function (hold) {
+      heldCopy(hold.road).points[hold.at] = [to[0], to[1]];
+    });
+    drawing.points[index] = [to[0], to[1]];
+    return was;
+  }
+
   let drawing = null;     // { points: [[lon,lat]], cls }
   let chosenVertex = -1;  // выбранная вершина: её убирает Delete
   let drawLine = null;    // нарисованная часть
@@ -930,7 +978,8 @@
 
   function startDrawing(cls, areaCode) {
     closeCard();
-    drawing = { points: [], cls: cls, area: areaCode || 0 };
+    drawing = { points: [], cls: cls, area: areaCode || 0, joined: {},
+                joins: [] };
     hint(areaCode
       ? 'Обведите контур: щелчок — вершина, Enter — замкнуть, Esc — отменить.'
       : 'Щелчок — вершина, Enter — закончить, Backspace — снять последнюю, '
@@ -943,6 +992,19 @@
     drawDots.forEach(function (dot) { map.geoObjects.remove(dot); });
     drawDots = [];
     if (!drawing || !drawing.points.length) { return; }
+
+    // Соседи по узлу — на экране. Иначе «поехали вместе» остаётся обещанием
+    // в подсказке: человек видит сдвинутой одну улицу и не знает, тронулись
+    // ли остальные, пока не опубликует.
+    Object.keys(drawing.joined || {}).forEach(function (key) {
+      const held = drawing.joined[key];
+      const shape = new ymaps.Polyline(
+        held.points.map(function (p) { return [p[1], p[0]]; }), {},
+        { strokeColor: '#ffb020', strokeWidth: 3, strokeOpacity: 0.65,
+          strokeStyle: 'shortdash', zIndex: 295 });
+      map.geoObjects.add(shape);
+      drawDots.push(shape);
+    });
 
     if (drawing.points.length >= 2) {
       const path = drawing.points.map(function (p) { return [p[1], p[0]]; });
@@ -957,12 +1019,17 @@
     // Вершины ТЯНУТСЯ. Это и есть правка ломаной: диалог «изменить точку №3»
     // объяснять пришлось бы, а перетаскивание — нет.
     drawing.points.forEach(function (point, index) {
+      const held = (drawing.joins[index] || []).length;
       const dot = new ymaps.Placemark([point[1], point[0]],
-        { hintContent: 'Вершина ' + (index + 1) + ' · Delete — убрать' },
-        { preset: 'islands#orangeCircleDotIcon', draggable: true, zIndex: 310 });
+        { hintContent: held
+            ? 'Узел · за него держатся ещё ' + held + ' · поедут вместе'
+            : 'Вершина ' + (index + 1) + ' · Delete — убрать' },
+        { preset: held ? 'islands#violetCircleDotIcon'
+                       : 'islands#orangeCircleDotIcon',
+          draggable: true, zIndex: 310 });
       dot.events.add('dragend', function () {
         const at = dot.geometry.getCoordinates();
-        drawing.points[index] = [at[1], at[0]];
+        weld(index, [at[1], at[0]]);
         renderDrawing();
       });
       // Щелчок по вершине выбирает её; Delete убирает выбранную. Убирать по
@@ -993,6 +1060,9 @@
         return function () {
           const to = ghost.geometry.getCoordinates();
           drawing.points.splice(at, 0, [to[1], to[0]]);
+          // Новая вершина ничей не узел: список держащихся обязан ехать
+          // вместе с точками, иначе он начнёт указывать не на те.
+          drawing.joins.splice(at, 0, []);
           renderDrawing();
         };
       })(i));
@@ -1019,8 +1089,10 @@
       handle.events.add('dragend', function () {
         const to = handle.geometry.getCoordinates();
         const dLat = to[0] - from[0], dLon = to[1] - from[1];
-        drawing.points = drawing.points.map(function (p) {
-          return [p[0] + dLon, p[1] + dLat];
+        // Через weld, а не напрямую: перенос улицы целиком тоже обязан
+        // тащить за собой перекрёстки, за которые она держится.
+        drawing.points.forEach(function (p, index) {
+          weld(index, [p[0] + dLon, p[1] + dLat]);
         });
         renderDrawing();
       });
@@ -1121,6 +1193,12 @@
     }
     els.card.appendChild(node('div',
       'Вершин ' + points.length + ' · ' + drawnMeters(points) + ' м', 'muted'));
+    const held = Object.keys((was && was.joined) || {});
+    if (held.length) {
+      els.card.appendChild(node('div',
+        'Вместе с узлами поедут ещё ' + held.length +
+        ' — каждая отдельной правкой.', 'muted'));
+    }
 
     const kind = document.createElement('select');
     CLASSES.forEach(function (item) {
@@ -1173,14 +1251,43 @@
       current.status = ACCEPTED;
       post('/api/edit', current).then(function (result) {
         if (result.error) { hint(result.error); return; }
-        closeCard();
-        hint('Дорога принята. Публикует владелец со своей машины.');
-        offerUndo('Своя дорога · ' + drawnMeters(points) + ' м', function () {
-          return post('/api/edit/withdraw',
-                      { id: result.id, version: result.version });
+        // Соседи по узлу — каждый СВОЕЙ правкой того же вида. Общей правки на
+        // перекрёсток быть не может: запекание применяет геометрию к одной
+        // дороге, и «правка на четыре улицы» означала бы второй формат
+        // хранения ради одного случая.
+        const also = held.map(function (key) {
+          const road = was.joined[key];
+          return post('/api/edit', {
+            kind: 'geometry', geom: road.points, raw: road.points[0],
+            props: { cls: road.cls, oneway: !!road.oneWay, bridge: false,
+                     why: 'OSM неверен', replace: true },
+            status: ACCEPTED,
+          });
         });
-        walking = false;
-        reloadEdits();
+        Promise.all(also).then(function (results) {
+          const made = [result].concat(results.filter(function (r) {
+            return r && !r.error;
+          }));
+          const lost = results.filter(function (r) { return !r || r.error; });
+          closeCard();
+          hint(lost.length
+            ? 'Дорога принята, но ' + lost.length + ' соседних по узлу не '
+              + 'сохранились. Проверьте перекрёсток.'
+            : 'Принято правок: ' + made.length
+              + '. Публикует владелец со своей машины.');
+          // Отмена снимает ВСЁ, что поехало: половина перекрёстка, оставшаяся
+          // сдвинутой, хуже, чем не тронутый вовсе.
+          offerUndo('Дорога · ' + drawnMeters(points) + ' м'
+                    + (made.length > 1 ? ' и узлы' : ''), function () {
+            return Promise.all(made.map(function (item) {
+              return post('/api/edit/withdraw',
+                          { id: item.id, version: item.version });
+            }));
+          });
+          walking = false;
+          reloadEdits();
+          drawRoads();
+        });
       });
     });
     els.card.appendChild(save);
@@ -1307,11 +1414,11 @@
     // поверх. Прозрачный тайл вместо подложки: под нашей сетью не должно
     // просвечивать ничего чужого, ни цветом, ни подписью, ни улицей, которой у
     // нас нет. Заодно чужие тайлы перестают качаться там, где их не видно.
-    ymaps.layer.storage.add('rm#blank', function () {
-      return new ymaps.Layer(GROUND_TILE, { tileTransparent: false });
-    });
-    ymaps.mapType.storage.add('rm#own',
-      new ymaps.MapType('Своя карта', ['rm#blank']));
+    // Тип карты БЕЗ СЛОЁВ вовсе. Не «слой с пустым тайлом»: слой, у которого
+    // плитки нет, рисует вместо неё свою светлую заглушку, и на девятнадцатом
+    // масштабе ночная схема выходила чёрным по белому. Земля здесь — фон
+    // подложечной панели, он задан в CSS страницы.
+    ymaps.mapType.storage.add('rm#own', new ymaps.MapType('Своя карта', []));
     map = new ymaps.Map('map', {
       center: start.center, zoom: start.zoom,
       // Выбор подложки — наш собственный, наверху панели. Родной «Слои» знает
@@ -1414,6 +1521,7 @@
       if (drawing && e.key === 'Backspace') {
         e.preventDefault();
         drawing.points.pop();
+        drawing.joins.pop();
         chosenVertex = -1;
         renderDrawing();
         return;
@@ -1425,7 +1533,16 @@
           hint('В линии останется меньше двух вершин — рисовать будет нечего.');
           return;
         }
+        // Узел не удаляется вместе с вершиной. За него держатся другие улицы,
+        // и убрать его здесь значило бы оставить их концы висеть в воздухе —
+        // причём молча, потому что чужие правки отсюда не видны.
+        if ((drawing.joins[chosenVertex] || []).length) {
+          hint('Это узел: за него держатся другие улицы. Сдвинуть можно, '
+               + 'убрать — нет.');
+          return;
+        }
         drawing.points.splice(chosenVertex, 1);
+        drawing.joins.splice(chosenVertex, 1);
         chosenVertex = -1;
         renderDrawing();
         return;

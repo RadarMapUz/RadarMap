@@ -52,8 +52,19 @@
   let map = null;
   let objects = null;      // все правки в рамке
   let netLines = [];       // наши оси из тайлов
-  let schema = false;      // наша подложка вместо спутника
-  let ground = null;       // тёмная земля под схемой
+  // Своя карта — ХОЛСТ ПО УМОЛЧАНИЮ, а не второй взгляд. Конструктор
+  // дорабатывает нашу схему: открывать его на чужом снимке значит показывать
+  // не тот предмет, с которым работают, и прятать всю уже построенную сеть за
+  // клавишей.
+  // Тайл своей карты: один пиксель цвета земли, растянутый на всю плитку.
+  // Прозрачный не годится — под прозрачным ymaps красит свой белый фон, и
+  // схема выходила чёрным по белому вместо того, что видит водитель ночью.
+  // Data-URI, а не файл: иначе на каждую плитку шёл бы запрос за одним и тем
+  // же пикселем.
+  const GROUND_TILE = 'data:image/gif;base64,'
+    + 'R0lGODlhAQABAIAAAA4QEwAAACwAAAAAAQABAAACAkQBADs=';
+
+  let schema = true;
   let roadsInFrame = [];   // последний ответ /api/roads
   let pointsInFrame = [];  // обстановка: из тайлов и своя
   let markLayer = [];      // её отрисовка на подложке
@@ -80,6 +91,8 @@
     find: document.getElementById('find'),
     found: document.getElementById('found'),
     cover: document.getElementById('cover'),
+    viewSchema: document.getElementById('viewschema'),
+    viewSat: document.getElementById('viewsat'),
   };
 
   let onlyMine = false;   // показывать только нарисованное руками
@@ -475,15 +488,6 @@
       renderCoverage();
     });
     els.cover.appendChild(only);
-    // Главный переключатель взгляда — кнопкой, а не только клавишей. Спутник и
-    // своя схема отвечают на разные вопросы («где объект стоит на самом деле»
-    // против «что увидит водитель»), и переключаться между ними приходится
-    // ежеминутно; клавиша \\ остаётся, но искать её на ощупь никто не обязан.
-    const view = node('button', schema ? '\\ · На спутник' : '\\ · На свою схему',
-                      'ghost');
-    view.style.width = '100%';
-    view.addEventListener('click', toggleSchema);
-    els.cover.appendChild(view);
   }
 
   function renderMarks() {
@@ -541,7 +545,6 @@
   function renderRoads() {
     netLines.forEach(function (shape) { map.geoObjects.remove(shape); });
     netLines = [];
-    if (ground) { map.geoObjects.remove(ground); ground = null; }
 
     if (!schema) {
       // Поверх спутника — только тонкие оси: подложка и так занята снимком,
@@ -557,19 +560,9 @@
       return;
     }
 
-    // Своя подложка. Требование §7.2 плана конструктора, и оно не про красоту:
-    // объект, идеально поставленный по спутнику, на схеме может оказаться под
-    // кромкой или за краем охвата. Здесь видно ровно то, что увидит водитель.
-    const b = map.getBounds();
-    // zIndex задаём ЯВНО. У полигона и ломаной он по умолчанию одинаковый, и
-    // порядок добавления его не решает: земля ложилась поверх дорог, и схема
-    // выглядела пустым чёрным полем — при полностью нарисованных линиях.
-    ground = new ymaps.Polygon([[
-      [b[0][0], b[0][1]], [b[0][0], b[1][1]],
-      [b[1][0], b[1][1]], [b[1][0], b[0][1]], [b[0][0], b[0][1]],
-    ]], {}, { fillColor: '#0e1013', strokeWidth: 0, zIndex: 100,
-              interactivityModel: 'default#transparent' });
-    map.geoObjects.add(ground);
+    // Земля — фон холста, а не полигон по рамке. Полигон приходилось
+    // перерисовывать на каждое движение карты, и он всегда отставал: по краю
+    // экрана оставалась светлая полоса чужой подложки.
 
     const perPixel = metersPerPixel();
     // Чем ближе к экрану дороги, тем позже они рисуются: мост обязан лечь
@@ -746,9 +739,20 @@
     });
   }
 
+  function showView(wanted) {
+    if (schema !== wanted) { toggleSchema(); }
+  }
+
+  function markView() {
+    if (!els.viewSchema) { return; }
+    els.viewSchema.classList.toggle('on', schema);
+    els.viewSat.classList.toggle('on', !schema);
+  }
+
   function toggleSchema() {
     schema = !schema;
-    map.setType(schema ? 'yandex#map' : 'yandex#hybrid');
+    markView();
+    map.setType(schema ? 'rm#own' : 'yandex#hybrid');
     renderRoads();
     renderMarks();
     renderCoverage();
@@ -1270,11 +1274,22 @@
       if (box) { box.open = !coarse; }
     });
     const start = placeFromHash() || { center: [41.311, 69.280], zoom: 17 };
+    // Своя карта — это ПУСТОЙ холст, а не чужая схема с нашими линиями
+    // поверх. Прозрачный тайл вместо подложки: под нашей сетью не должно
+    // просвечивать ничего чужого, ни цветом, ни подписью, ни улицей, которой у
+    // нас нет. Заодно чужие тайлы перестают качаться там, где их не видно.
+    ymaps.layer.storage.add('rm#blank', function () {
+      return new ymaps.Layer(GROUND_TILE, { tileTransparent: false });
+    });
+    ymaps.mapType.storage.add('rm#own',
+      new ymaps.MapType('Своя карта', ['rm#blank']));
     map = new ymaps.Map('map', {
       center: start.center, zoom: start.zoom,
-      controls: ['zoomControl', 'typeSelector'],
+      // Выбор подложки — наш собственный, наверху панели. Родной «Слои» знает
+      // только про чужие типы и про нашу карту сказать ничего не может.
+      controls: ['zoomControl'],
     }, { suppressMapOpenBlock: true });
-    map.setType('yandex#hybrid');
+    map.setType(schema ? 'rm#own' : 'yandex#hybrid');
     // Двойной щелчок НЕ приближает. Контур обводят быстрыми щелчками подряд, и
     // поведение по умолчанию съедало каждую вторую вершину, попутно меняя
     // масштаб: человек ставил четыре угла, а получал два и другой зум.
@@ -1309,6 +1324,12 @@
       const target = placeFromHash();
       if (target) { map.setCenter(target.center, target.zoom); }
     });
+
+    if (els.viewSchema) {
+      els.viewSchema.addEventListener('click', function () { showView(true); });
+      els.viewSat.addEventListener('click', function () { showView(false); });
+      markView();
+    }
 
     const buttons = Array.prototype.slice.call(document.querySelectorAll('.tool'));
     buttons.forEach(function (button) {

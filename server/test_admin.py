@@ -798,6 +798,66 @@ class AdminTest(unittest.TestCase):
             os.unlink(fresh.name)
 
 
+class PaletteTests(AdminTest):
+    """Палитра конструктора.
+
+    Список слов требует помнить, чем проспект отличается от проезда, — а
+    отличаются они шириной и разметкой, то есть тем, что видно с одного
+    взгляда. И открываться конструктор обязан на СВОЕЙ карте: он дорабатывает
+    нашу схему, а не чужой снимок.
+    """
+
+    def page(self):
+        # Ключ ставим на время одного запроса и убираем сразу: без ключа
+        # страница честно говорит, что карта не загрузится, и палитры на ней
+        # нет вовсе, а оставленный ключ ломал бы соседний тест про это.
+        conf = admin_auth.read_config(self.conf.name)
+        conf["yandex_key"] = "test-key"
+        with open(self.conf.name, "w", encoding="utf-8") as handle:
+            handle.writelines(f"{k}={v}\n" for k, v in conf.items())
+        try:
+            code, body = _get(self.port, "/editor")
+        finally:
+            conf.pop("yandex_key", None)
+            with open(self.conf.name, "w", encoding="utf-8") as handle:
+                handle.writelines(f"{k}={v}\n" for k, v in conf.items())
+        self.assertEqual(code, 200)
+        return body
+
+    def test_every_tool_is_drawn(self):
+        body = self.page()
+        self.assertEqual(body.count("<svg"), body.count('class="ico"'),
+                         "какой-то инструмент остался без рисунка")
+        self.assertGreaterEqual(body.count("<svg"), 15)
+
+    def test_road_classes_differ_by_width(self):
+        # Ширина на значке — не украшение: это единственное, чем классы
+        # отличаются на дороге, и выбирают их именно по ней.
+        body = self.page()
+        for height in ('height="20"', 'height="14"', 'height="10"',
+                       'height="6"'):
+            self.assertIn(height, body)
+
+    def test_keys_are_shown_next_to_the_tool(self):
+        # Конструктором работают двумя руками; подсмотреть букву надо там же,
+        # где выбирают инструмент, а не в справке внизу.
+        body = self.page()
+        for key in ("Q", "W", "E", "R", "A", "S", "D", "F", "G", "Z"):
+            self.assertIn(f'<span class="key">{key}</span>', body)
+
+    def test_opens_on_our_own_map(self):
+        body = self.page()
+        self.assertIn('id="viewschema" class="view on"', body)
+        self.assertIn('id="viewsat" class="view"', body)
+
+    def test_palette_has_no_leftover_word_lists(self):
+        # Старые подписи вида «Q · Проспект» означали бы, что где-то осталась
+        # кнопка мимо палитры.
+        body = self.page()
+        for stale in ("Q · Проспект", "A · Светофор", "1 · Полосы"):
+            self.assertNotIn(stale, body)
+
+
 class ChangesHistoryTests(AdminTest):
     """История в очереди изменений.
 

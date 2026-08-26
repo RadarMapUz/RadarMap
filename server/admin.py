@@ -665,6 +665,89 @@ color:#8ea0bb;line-height:1.7}}
 # Очередь камер
 # --------------------------------------------------------------------------
 
+# Палитра конструктора рисуется, а не подписывается.
+#
+# Список слов «Проспект / Улица / Жилая / Проезд» требует помнить, чем они
+# отличаются, — а отличаются они ШИРИНОЙ И РАЗМЕТКОЙ, то есть ровно тем, что
+# видно с одного взгляда. Тона здесь те же, что у полотна на схеме и на
+# телефоне: выбранное в палитре и легшее на карту должны совпадать, иначе
+# палитра обещает не то, что делает.
+ROAD_ICONS = {
+    3: """<svg viewBox="0 0 48 28"><rect x="0" y="4" width="48" height="20"
+rx="2" fill="#5e5d58"/><path d="M0 11h48M0 17h48" stroke="#7d7c74"
+stroke-width="1"/><path d="M0 14h48" stroke="#e0d9b8" stroke-width="1.6"
+stroke-dasharray="6 5"/></svg>""",
+    4: """<svg viewBox="0 0 48 28"><rect x="0" y="7" width="48" height="14"
+rx="2" fill="#525252"/><path d="M0 14h48" stroke="#e0d9b8" stroke-width="1.4"
+stroke-dasharray="5 5"/></svg>""",
+    6: """<svg viewBox="0 0 48 28"><rect x="0" y="9" width="48" height="10"
+rx="2" fill="#464646"/></svg>""",
+    7: """<svg viewBox="0 0 48 28"><rect x="0" y="11" width="48" height="6"
+rx="2" fill="#3c3c3c"/></svg>""",
+}
+
+PROP_ICONS = {
+    # Полосы: их считают, поэтому на значке они разделены.
+    "lanes": """<svg viewBox="0 0 48 28"><rect x="0" y="5" width="48"
+height="18" rx="2" fill="#525252"/><path d="M0 11h48M0 17h48" stroke="#cfcabb"
+stroke-width="1" stroke-dasharray="4 4"/></svg>""",
+    # Направления: стрелки полос — то самое, что рисуется на асфальте.
+    "turn_lanes": """<svg viewBox="0 0 48 28"><rect x="0" y="5" width="48"
+height="18" rx="2" fill="#525252"/><g stroke="#e8e8e8" stroke-width="1.5"
+fill="none" stroke-linecap="round"><path d="M10 21v-7l-3 3M10 14l3 3"/>
+<path d="M24 21v-9"/><path d="M38 21v-6l3 3M38 15l-3 3"/></g></svg>""",
+    "u_turn": """<svg viewBox="0 0 48 28"><rect x="0" y="5" width="48"
+height="18" rx="2" fill="#525252"/><path d="M18 21v-6a6 6 0 0 1 12 0v6"
+stroke="#e8e8e8" stroke-width="1.8" fill="none"/><path d="M27 18l3 4 3-4"
+fill="#e8e8e8"/></svg>""",
+}
+
+POINT_ICONS = {
+    1: """<svg viewBox="0 0 48 28"><rect x="18" y="2" width="12" height="24"
+rx="3" fill="#1b1f26" stroke="#3a4250"/><circle cx="24" cy="8" r="3"
+fill="#ff4d4f"/><circle cx="24" cy="14" r="3" fill="#ffb020"/>
+<circle cx="24" cy="20" r="3" fill="#38e58c"/></svg>""",
+    5: """<svg viewBox="0 0 48 28"><rect x="0" y="5" width="48" height="18"
+rx="2" fill="#4a4a4a"/><g fill="#f2f2f2"><rect x="6" y="7" width="5"
+height="14"/><rect x="16" y="7" width="5" height="14"/><rect x="26" y="7"
+width="5" height="14"/><rect x="36" y="7" width="5" height="14"/></g></svg>""",
+    3: """<svg viewBox="0 0 48 28"><rect x="0" y="5" width="48" height="18"
+rx="2" fill="#4a4a4a"/><rect x="20" y="5" width="6" height="18"
+fill="#f2f2f2"/></svg>""",
+    4: """<svg viewBox="0 0 48 28"><rect x="0" y="5" width="48" height="18"
+rx="2" fill="#4a4a4a"/><path d="M16 22V14a8 8 0 0 1 16 0v8" stroke="#ffb020"
+stroke-width="2" fill="none"/><path d="M28 19l4 5 4-5" fill="#ffb020"/></svg>""",
+    2: """<svg viewBox="0 0 48 28"><rect x="0" y="5" width="48" height="18"
+rx="2" fill="#4a4a4a"/><path d="M12 19a12 8 0 0 1 24 0z" fill="#ffb020"/>
+<path d="M12 19h24" stroke="#0d1116" stroke-width="1.5"/></svg>""",
+}
+
+AREA_ICONS = {
+    2: """<svg viewBox="0 0 48 28"><rect x="2" y="3" width="44" height="22"
+rx="5" fill="#1d3a24" stroke="#2f6b3c"/></svg>""",
+    1: """<svg viewBox="0 0 48 28"><rect x="2" y="3" width="44" height="22"
+rx="5" fill="#16324a" stroke="#2b6285"/></svg>""",
+    4: """<svg viewBox="0 0 48 28"><rect x="2" y="3" width="44" height="22"
+rx="5" fill="#1a1d22" stroke="#343a44"/></svg>""",
+}
+
+LOCK_ICON = """<svg viewBox="0 0 48 28"><circle cx="24" cy="14" r="11"
+fill="#ffb02022" stroke="#ffb020" stroke-width="2"
+stroke-dasharray="4 3"/></svg>"""
+
+
+def tool_button(icon, name, key, attrs, extra=""):
+    """Плитка палитры: рисунок, имя, клавиша.
+
+    Клавиша ПОКАЗАНА, а не спрятана в справке снизу. Конструктором работают
+    двумя руками — левая на клавиатуре, правая на мыши, — и подсмотреть букву
+    надо там же, где выбирают инструмент.
+    """
+    chip = f'<span class="key">{esc(key)}</span>' if key else ""
+    return (f'<button class="tool{extra}" {attrs}><span class="ico">{icon}</span>'
+            f'<span class="lbl">{esc(name)}</span>{chip}</button>')
+
+
 def render_editor(api_key, drafts):
     """Страница конструктора.
 
@@ -681,12 +764,29 @@ def render_editor(api_key, drafts):
 <meta name="robots" content="noindex, nofollow">
 <title>Конструктор · RadarMap</title><style>{CSS}
 body{{overflow:hidden}}
-#map{{position:absolute;inset:52px 0 0 0}}
+#map{{position:absolute;inset:52px 0 0 0;background:#0e1013}}
 .tools{{position:absolute;top:64px;left:12px;z-index:4;display:flex;gap:8px;
 flex-direction:column;width:260px;max-height:calc(100vh - 88px);overflow:auto}}
-.tool{{padding:10px 12px;border-radius:10px;border:1px solid #2b3038;
-background:#12161df2;color:#8ea0bb;font-size:14px;cursor:pointer;text-align:left}}
+.tool{{display:flex;align-items:center;gap:10px;padding:7px 10px;
+border-radius:10px;border:1px solid #2b3038;background:#12161df2;color:#8ea0bb;
+font-size:13px;cursor:pointer;text-align:left}}
 .tool.on{{background:#101f2e;color:#3cdcff;border-color:#17384d}}
+.tool:hover{{border-color:#3a4453}}
+.ico{{flex:0 0 auto;width:48px;height:28px;border-radius:6px;overflow:hidden;
+background:#0b0e13;display:block}}
+.ico svg{{display:block;width:48px;height:28px}}
+.lbl{{flex:1 1 auto}}
+.key{{flex:0 0 auto;font-size:11px;color:#5d6b80;border:1px solid #2b3038;
+border-radius:5px;padding:1px 6px}}
+.tool.on .key{{color:#3cdcff;border-color:#17384d}}
+/* Холст выбирается наверху и одним движением. Своя карта отвечает на вопрос
+   «что увидит водитель», спутник — «где объект стоит на самом деле»;
+   переключаться приходится ежеминутно, и прятать это в клавишу нельзя. */
+.views{{display:flex;gap:6px;background:#12161df2;border:1px solid #232a35;
+border-radius:10px;padding:4px}}
+.view{{flex:1;padding:8px 10px;border-radius:8px;border:0;background:transparent;
+color:#8ea0bb;font-size:13px;cursor:pointer}}
+.view.on{{background:#101f2e;color:#3cdcff}}
 .legend{{background:#12161de6;border:1px solid #232a35;border-radius:10px;
 padding:9px 11px;font-size:12px;color:#8ea0bb;line-height:1.5}}
 .card{{position:absolute;top:64px;right:12px;width:300px;z-index:5;
@@ -778,43 +878,57 @@ font-size:12px;cursor:pointer;line-height:1.35}}
   <input id="find" class="find" placeholder="Место, «41.31, 69.28» или «#12»"
          autocomplete="off" enterkeyhint="search">
   <div class="found" id="found" hidden></div>
+  <div class="views">
+    <button id="viewschema" class="view on">Своя карта</button>
+    <button id="viewsat" class="view">Спутник</button>
+  </div>
   <div class="toolrow">
-    <button data-kind="lanes" class="tool on">1 · Полосы</button>
-    <button data-kind="turn_lanes" class="tool">2 · Направления</button>
-    <button data-kind="u_turn" class="tool">3 · Разворот</button>
+    {tool_button(PROP_ICONS["lanes"], "Полосы", "1", 'data-kind="lanes"', " on")}
+    {tool_button(PROP_ICONS["turn_lanes"], "Направления", "2",
+                 'data-kind="turn_lanes"')}
+    {tool_button(PROP_ICONS["u_turn"], "Разворот", "3", 'data-kind="u_turn"')}
   </div>
   <details class="work" id="drawbox" open>
     <summary>Нарисовать дорогу</summary>
     <div class="toolrow draw">
-      <button data-kind="geometry" data-cls="3" class="tool">Q · Проспект</button>
-      <button data-kind="geometry" data-cls="4" class="tool">W · Улица</button>
-      <button data-kind="geometry" data-cls="6" class="tool">E · Жилая</button>
-      <button data-kind="geometry" data-cls="7" class="tool">R · Проезд</button>
+      {tool_button(ROAD_ICONS[3], "Проспект", "Q",
+                   'data-kind="geometry" data-cls="3"')}
+      {tool_button(ROAD_ICONS[4], "Улица", "W",
+                   'data-kind="geometry" data-cls="4"')}
+      {tool_button(ROAD_ICONS[6], "Жилая", "E",
+                   'data-kind="geometry" data-cls="6"')}
+      {tool_button(ROAD_ICONS[7], "Проезд", "R",
+                   'data-kind="geometry" data-cls="7"')}
     </div>
   </details>
-  <details class="work" id="pointbox">
+  <details class="work" id="pointbox" open>
     <summary>Поставить обстановку</summary>
     <div class="toolrow draw">
-      <button data-kind="point" data-point="1" class="tool">A · Светофор</button>
-      <button data-kind="point" data-point="5" class="tool">S · Переход</button>
-      <button data-kind="point" data-point="3" class="tool">D · Стоп-линия</button>
-      <button data-kind="point" data-point="4" class="tool">F · Разворот</button>
-      <button data-kind="point" data-point="2" class="tool">G · Лежачий</button>
+      {tool_button(POINT_ICONS[1], "Светофор", "A",
+                   'data-kind="point" data-point="1"')}
+      {tool_button(POINT_ICONS[5], "Переход", "S",
+                   'data-kind="point" data-point="5"')}
+      {tool_button(POINT_ICONS[3], "Стоп-линия", "D",
+                   'data-kind="point" data-point="3"')}
+      {tool_button(POINT_ICONS[4], "Разворот", "F",
+                   'data-kind="point" data-point="4"')}
+      {tool_button(POINT_ICONS[2], "Лежачий", "G",
+                   'data-kind="point" data-point="2"')}
     </div>
   </details>
   <div class="legend cover" id="cover"></div>
   <details class="work" id="landbox">
     <summary>Обвести местность</summary>
     <div class="toolrow draw">
-      <button data-kind="area" data-area="2" class="tool">Зелень</button>
-      <button data-kind="area" data-area="1" class="tool">Вода</button>
-      <button data-kind="area" data-area="4" class="tool">Квартал</button>
+      {tool_button(AREA_ICONS[2], "Зелень", "", 'data-kind="area" data-area="2"')}
+      {tool_button(AREA_ICONS[1], "Вода", "", 'data-kind="area" data-area="1"')}
+      {tool_button(AREA_ICONS[4], "Квартал", "", 'data-kind="area" data-area="4"')}
     </div>
   </details>
   <details class="work" id="areabox">
     <summary>Отметить своё</summary>
     <div class="toolrow draw">
-      <button data-kind="lock" class="tool">Z · Размечено руками</button>
+      {tool_button(LOCK_ICON, "Размечено руками", "Z", 'data-kind="lock"')}
     </div>
     <div class="legend">Внутри размеченной области воскресная пересборка
       смотрит и докладывает, но ничего не двигает сама.</div>

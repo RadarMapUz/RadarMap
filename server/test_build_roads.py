@@ -1163,6 +1163,53 @@ class DrawnRoadTests(unittest.TestCase):
         self.assertIs(build_roads.graft([far], [mine])[0], far)
 
 
+class DrawnPointTests(unittest.TestCase):
+    """Обстановка, поставленная руками.
+
+    Виды те же, что приезжают из OSM, и это решение, а не совпадение: панель
+    заводит объект ТОГО ЖЕ вида, а не параллельный. Поэтому он идёт общим
+    конвейером — привязка к узлу, сведение, посадка на ось с расчётом азимута и
+    ширины, — и на телефоне не меняется ничего.
+    """
+
+    def mark(self, code, lat=41.305, lon=69.2501, **props):
+        props["point"] = code
+        return {"kind": "point", "geom": [lon, lat], "props": props}
+
+    def test_hand_placed_light_becomes_a_point(self):
+        pts = build_roads.drawn_points([self.mark(build_roads.POINT_TRAFFIC_LIGHT)])
+        self.assertEqual(len(pts), 1)
+        self.assertEqual(pts[0][0], build_roads.POINT_TRAFFIC_LIGHT)
+
+    def test_unknown_kind_is_refused(self):
+        self.assertEqual(build_roads.drawn_points([self.mark(99)]), [])
+
+    def test_a_road_is_not_a_point(self):
+        self.assertEqual(build_roads.drawn_points(
+            [{"kind": "geometry", "geom": [[69.25, 41.3], [69.26, 41.3]]}]), [])
+
+    def test_broken_geometry_is_skipped(self):
+        for geom in ([], [69.25], [[69.25, 41.3]], ["чушь", 1]):
+            self.assertEqual(build_roads.drawn_points(
+                [{"kind": "point", "geom": geom, "props": {"point": 1}}]), [])
+
+    def test_hand_placed_mark_gets_azimuth_and_width_from_the_road(self):
+        # Азимут и ширину считает не человек: он их не знает и знать не должен.
+        street = (4, build_roads.with_lanes(0, 4),
+                  [(69.250, 41.300), (69.250, 41.310)], "")
+        pts = build_roads.drawn_points([self.mark(build_roads.POINT_CROSSING)])
+        snapped, dropped = build_roads.snap_points(pts, [street])
+        self.assertEqual(dropped, 0)
+        self.assertGreater(build_roads.point_width(snapped[0][1]), 0)
+
+    def test_hand_placed_arrows_keep_their_turns(self):
+        pts = build_roads.drawn_points([self.mark(
+            build_roads.POINT_LANE_ARROWS,
+            turns=[build_roads.TURN_LEFT, build_roads.TURN_THROUGH])])
+        self.assertEqual(build_roads.unpack_turns(pts[0][1], 2),
+                         [build_roads.TURN_LEFT, build_roads.TURN_THROUGH])
+
+
 class SidewalkTests(unittest.TestCase):
     """Тротуары: свой набор тайла, своя полоса охвата.
 

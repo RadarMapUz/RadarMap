@@ -784,11 +784,22 @@ font-size:12px;cursor:pointer;line-height:1.35}}
       <button data-kind="geometry" data-cls="7" class="tool">R · Проезд</button>
     </div>
   </details>
+  <details class="work" id="pointbox">
+    <summary>Поставить обстановку</summary>
+    <div class="toolrow draw">
+      <button data-kind="point" data-point="1" class="tool">A · Светофор</button>
+      <button data-kind="point" data-point="5" class="tool">S · Переход</button>
+      <button data-kind="point" data-point="3" class="tool">D · Стоп-линия</button>
+      <button data-kind="point" data-point="4" class="tool">F · Разворот</button>
+      <button data-kind="point" data-point="2" class="tool">G · Лежачий</button>
+    </div>
+  </details>
   <div class="legend" id="hint">Черновиков: {drafts}. Клик по дороге ставит
     объект, клик по объекту — правит. Панель ничего не публикует.</div>
-  <div class="legend keyhelp">1–3 объект · Q W E R рисовать дорогу ·
-    Enter закончить · Backspace снять вершину · Esc отменить ·
-    Delete снять · Ctrl+Z вернуть · \\ схема ⇄ спутник · ] [ по очереди</div>
+  <div class="legend keyhelp">1–3 свойства · Q W E R дорога ·
+    A S D F G обстановка · Enter закончить · Backspace снять вершину ·
+    Delete убрать вершину · Esc отменить · Ctrl+Z вернуть ·
+    \\ схема ⇄ спутник · ] [ по очереди</div>
   <details class="work" id="work">
     <summary id="worksum">Здесь работать</summary>
     <div class="todo" id="todo"></div>
@@ -1149,6 +1160,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.todo_json(conn)
             if path == "/api/geocode":
                 return self.geocode_json()
+            if path.startswith("/api/edit/") and path.endswith("/osm"):
+                return self.edit_osm(conn, path)
             if path in ("/static/moderate.js", "/static/editor.js"):
                 return self.static_file(path.rsplit("/", 1)[1],
                                         "application/javascript; charset=utf-8")
@@ -1549,6 +1562,34 @@ class Handler(BaseHTTPRequestHandler):
             "candidates": [described(item) for item in found[:3]],
             "ambiguous": len(result.ambiguous) > 0,
             "fingerprint": map_edits.fingerprint((lon, lat), roads)})
+
+    def edit_osm(self, conn, path):
+        """Нарисованная дорога файлом для редактора OSM.
+
+        Дорога, отданная в OSM, поддерживается всем миром; наша — только нами.
+        Кнопка не украшение, а способ перестать платить за поддержку в одиночку:
+        отданная дорога вернётся к нам сама обычной воскресной пересборкой, и
+        своя копия снимется по правилу «OSM догнал».
+        """
+        try:
+            edit_id = int(path.split("/")[3])
+        except (IndexError, ValueError):
+            return self._json({"error": "номер не число"}, 400)
+        edit = map_edits.by_id(conn, edit_id)
+        if edit is None or edit["kind"] != "geometry":
+            return self._json({"error": "это не нарисованная дорога"}, 404)
+        body = map_edits.as_osm(edit)
+        if not body:
+            return self._json({"error": "у правки нет геометрии"}, 400)
+        payload = body.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/xml; charset=utf-8")
+        self.send_header("Content-Disposition",
+                         f'attachment; filename="radarmap-{edit_id}.osm"')
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Content-Security-Policy", self.CSP_STRICT)
+        self.end_headers()
+        self.wfile.write(payload)
 
     def geocode_json(self):
         """Поиск адреса — ЧЕРЕЗ СВОЙ сервер, а не из браузера.

@@ -36,9 +36,15 @@
     { code: 7, name: 'Проезд, двор' },
   ];
   const WHYS = ['нет в OSM', 'OSM неверен', 'временная схема'];
+  // Обстановка. Коды те же, что у точек из OSM: панель заводит объект ТОГО ЖЕ
+  // вида, а не параллельный, поэтому на телефоне он рисуется тем же кодом и
+  // добавлять там нечего.
+  const POINTS = { 1: 'Светофор', 2: 'Лежачий полицейский', 3: 'Стоп-линия',
+                   4: 'Разворот', 5: 'Пешеходный переход' };
   const DRAFT = 0, ACCEPTED = 1, WITHDRAWN = 3;
 
   let kind = 'lanes';
+  let pointCode = 0;      // какой объект обстановки ставим (0 — никакой)
   let map = null;
   let objects = null;      // все правки в рамке
   let netLines = [];       // наши оси из тайлов
@@ -155,6 +161,22 @@
     els.card.appendChild(node('h3', NAMES[current.kind] || current.kind));
     els.card.appendChild(node('div', where, 'muted'));
 
+    // «Отправить в OSM» — только у своей геометрии и только у сохранённой.
+    //
+    // Дорога, отданная в OSM, поддерживается всем миром; наша — только нами.
+    // Кнопка не украшение, а способ перестать платить за поддержку в одиночку:
+    // отданная дорога вернётся обычной воскресной пересборкой, и своя копия
+    // снимется по правилу «OSM догнал».
+    if (current.id && current.kind === 'geometry') {
+      const give = document.createElement('a');
+      give.href = base + '/api/edit/' + current.id + '/osm';
+      give.textContent = 'Отправить в OSM (файл для JOSM)';
+      give.className = 'muted';
+      give.style.display = 'block';
+      give.style.marginTop = '8px';
+      els.card.appendChild(give);
+    }
+
     const lanesInput = field('Полос всего', 'number', lanes);
     els.card.appendChild(lanesInput.label);
     const noteInput = field('Почему', 'text', current.note || '');
@@ -265,6 +287,33 @@
   function clearPicks() {
     pickLines.forEach(function (line) { map.geoObjects.remove(line); });
     pickLines = [];
+  }
+
+  // Обстановка ставится тем же магнитом, что и всё прочее: азимут и ширину
+  // считает не человек, а сервер — он берёт их у дороги под точкой.
+  function placePoint(coords, code) {
+    post('/api/snap', { lat: coords[0], lon: coords[1], touch: coarse,
+                        preferNode: code === 1 || code === 3 })
+      .then(function (snap) {
+        if (!snap.onRoad) {
+          hint('Вне дороги. Обстановка ставится на проезжей части.');
+          return;
+        }
+        post('/api/edit', {
+          kind: 'point', geom: snap.point, raw: [coords[1], coords[0]],
+          anchor: snap.anchor, fingerprint: snap.fingerprint,
+          props: { point: code }, status: ACCEPTED,
+        }).then(function (result) {
+          if (result.error) { hint(result.error); return; }
+          hint(POINTS[code] + ' поставлен. Публикует владелец со своей машины.');
+          offerUndo(POINTS[code], function () {
+            return post('/api/edit/withdraw',
+                        { id: result.id, version: result.version });
+          });
+          walking = false;
+          reloadEdits();
+        });
+      });
   }
 
   function place(coords, existing) {
@@ -577,6 +626,7 @@
   const ATTACH_METERS = 12;
 
   let drawing = null;     // { points: [[lon,lat]], cls }
+  let chosenVertex = -1;  // выбранная вершина: её убирает Delete
   let drawLine = null;    // нарисованная часть
   let drawDots = [];      // вершины, каждую можно тянуть
 
@@ -615,16 +665,75 @@
     // объяснять пришлось бы, а перетаскивание — нет.
     drawing.points.forEach(function (point, index) {
       const dot = new ymaps.Placemark([point[1], point[0]],
-        { hintContent: 'Вершина ' + (index + 1) },
+        { hintContent: 'Вершина ' + (index + 1) + ' · Delete — убрать' },
         { preset: 'islands#orangeCircleDotIcon', draggable: true, zIndex: 310 });
       dot.events.add('dragend', function () {
         const at = dot.geometry.getCoordinates();
         drawing.points[index] = [at[1], at[0]];
         renderDrawing();
       });
+      // Щелчок по вершине выбирает её; Delete убирает выбранную. Убирать по
+      // щелчку нельзя: попасть в вершину при правке приходится часто, и
+      // каждый промах стирал бы работу.
+      dot.events.add('click', function (e) {
+        e.stopPropagation();
+        chosenVertex = index;
+        hint('Вершина ' + (index + 1) + ' выбрана · Delete — убрать');
+      });
       map.geoObjects.add(dot);
       drawDots.push(dot);
     });
+
+    // Середины отрезков. Потянул — там появилась вершина.
+    //
+    // Это единственный способ добавить точку в готовую линию, который не
+    // требует объяснений: в любом редакторе карт он такой же, и рука его уже
+    // знает.
+    for (let i = 1; i < drawing.points.length; i++) {
+      const a = drawing.points[i - 1], b = drawing.points[i];
+      const middle = [(a[1] + b[1]) / 2, (a[0] + b[0]) / 2];
+      const ghost = new ymaps.Placemark(middle,
+        { hintContent: 'Потянуть — добавить вершину' },
+        { preset: 'islands#grayCircleDotIcon', draggable: true,
+          iconOpacity: 0.55, zIndex: 305 });
+      ghost.events.add('dragend', (function (at) {
+        return function () {
+          const to = ghost.geometry.getCoordinates();
+          drawing.points.splice(at, 0, [to[1], to[0]]);
+          renderDrawing();
+        };
+      })(i));
+      map.geoObjects.add(ghost);
+      drawDots.push(ghost);
+    }
+
+    // Ручка переноса всей линии.
+    //
+    // Отдельной ручкой, а не перетаскиванием самой линии: линия лежит поверх
+    // карты, и таскать её пальцем значило бы отобрать у карты панораму — самое
+    // частое движение в работе.
+    if (drawing.points.length >= 2) {
+      const first = drawing.points[0];
+      const last = drawing.points[drawing.points.length - 1];
+      const handle = new ymaps.Placemark(
+        [(first[1] + last[1]) / 2, (first[0] + last[0]) / 2],
+        { hintContent: 'Потянуть — перенести всю дорогу' },
+        { preset: 'islands#blueCircleDotIcon', draggable: true, zIndex: 315 });
+      let from = null;
+      handle.events.add('dragstart', function () {
+        from = handle.geometry.getCoordinates();
+      });
+      handle.events.add('dragend', function () {
+        const to = handle.geometry.getCoordinates();
+        const dLat = to[0] - from[0], dLon = to[1] - from[1];
+        drawing.points = drawing.points.map(function (p) {
+          return [p[0] + dLon, p[1] + dLat];
+        });
+        renderDrawing();
+      });
+      map.geoObjects.add(handle);
+      drawDots.push(handle);
+    }
     hint('Вершин ' + drawing.points.length + ' · ' +
          drawnMeters(drawing.points) + ' м · Enter — закончить');
   }
@@ -678,6 +787,7 @@
 
   function cancelDrawing(quiet) {
     drawing = null;
+    chosenVertex = -1;
     renderDrawing();
     if (!quiet) { hint('Рисование отменено.'); }
   }
@@ -874,6 +984,7 @@
     });
     map.events.add('click', function (e) {
       if (drawing) { addVertex(e.get('coords')); return; }
+      if (pointCode) { placePoint(e.get('coords'), pointCode); return; }
       if (current && current.id) { closeCard(); return; }
       place(e.get('coords'), null);
     });
@@ -902,7 +1013,14 @@
         button.classList.add('on');
         kind = button.getAttribute('data-kind');
         const cls = button.getAttribute('data-cls');
-        if (cls) { startDrawing(parseInt(cls, 10)); } else { cancelDrawing(true); }
+        const code = button.getAttribute('data-point');
+        pointCode = code ? parseInt(code, 10) : 0;
+        if (cls) {
+          startDrawing(parseInt(cls, 10));
+        } else {
+          cancelDrawing(true);
+          if (pointCode) { hint('Щелчок по дороге — ' + POINTS[pointCode] + '.'); }
+        }
       });
     });
 
@@ -934,6 +1052,19 @@
       if (drawing && e.key === 'Backspace') {
         e.preventDefault();
         drawing.points.pop();
+        chosenVertex = -1;
+        renderDrawing();
+        return;
+      }
+      if (drawing && e.key === 'Delete') {
+        e.preventDefault();
+        if (chosenVertex < 0) { hint('Сначала щёлкните по вершине.'); return; }
+        if (drawing.points.length <= 2) {
+          hint('В линии останется меньше двух вершин — рисовать будет нечего.');
+          return;
+        }
+        drawing.points.splice(chosenVertex, 1);
+        chosenVertex = -1;
         renderDrawing();
         return;
       }
@@ -951,6 +1082,15 @@
       const cls = letters[e.key.toLowerCase()];
       if (cls) {
         const button = document.querySelector('.draw [data-cls="' + cls + '"]');
+        if (button) { button.click(); }
+        return;
+      }
+      // Обстановка — на соседнем ряду букв: рука не путает ряды так, как
+      // путает соседние клавиши в одном.
+      const marks = { a: 1, ф: 1, s: 5, ы: 5, d: 3, в: 3, f: 4, а: 4, g: 2, п: 2 };
+      const code = marks[e.key.toLowerCase()];
+      if (code) {
+        const button = document.querySelector('[data-point="' + code + '"]');
         if (button) { button.click(); }
         return;
       }

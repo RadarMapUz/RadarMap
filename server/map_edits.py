@@ -76,12 +76,19 @@ CREATE INDEX IF NOT EXISTS idx_edits_kind ON map_edits(kind, status);
 # Виды правок. Список закрытый: неизвестный вид не попадает ни в таблицу, ни в
 # запекание, и «панель завела новый вид раньше сборки» здесь невозможно —
 # в отличие от точек, где такое допускается намеренно.
-KINDS = {"lanes", "turn_lanes", "u_turn", "geometry"}
+KINDS = {"lanes", "turn_lanes", "u_turn", "geometry", "point"}
 
 # Названия видов для человека. Код — контракт с сервером и с запеканием, а на
 # экране нужно слово: «lanes» в строке очереди читается как недоделка.
 KIND_NAMES = {"lanes": "Полосы", "turn_lanes": "Направления полос",
-              "u_turn": "Разворот", "geometry": "Своя геометрия"}
+              "u_turn": "Разворот", "geometry": "Своя геометрия",
+              "point": "Обстановка"}
+
+# Обстановка, которую ставят руками. Коды — те же, что у точек из OSM: панель
+# заводит объект того же вида, а не параллельный, поэтому на телефоне он
+# рисуется тем же кодом и ничего добавлять не надо.
+POINT_NAMES = {1: "Светофор", 2: "Лежачий полицейский", 3: "Стоп-линия",
+               4: "Разворот", 5: "Пешеходный переход", 6: "Стрелки полос"}
 
 
 def kind_name(kind):
@@ -390,6 +397,58 @@ def row_to_dict(row):
             "props": json.loads(row["props"]) if row["props"] else {},
             "fingerprint": row["fingerprint"], "note": row["note"],
             "author": row["author"], "version": row["version"]}
+
+
+# Что писать в тегах, отдавая дорогу в OSM. Класс → highway.
+OSM_HIGHWAY = {1: "motorway", 2: "trunk", 3: "primary", 4: "secondary",
+               5: "tertiary", 6: "residential", 7: "service"}
+
+
+def as_osm(edit):
+    """Нарисованная дорога в формате OSM XML — чтобы отдать её всем.
+
+    Дорога, отданная в OSM, поддерживается всем миром; наша — только нами.
+    Поэтому «отправить в OSM» не украшение, а способ перестать платить за
+    поддержку в одиночку: отданная дорога вернётся к нам сама обычной
+    воскресной пересборкой, и своя копия снимется по правилу «OSM догнал».
+
+    XML, а не GeoJSON: JOSM открывает .osm файлом, и вставлять руками ничего
+    не надо. Отрицательные id — соглашение OSM для того, чего ещё нет на
+    сервере.
+    """
+    points = edit.get("geom") or []
+    if not points or not isinstance(points[0], (list, tuple)):
+        return ""
+    props = edit.get("props") or {}
+    tags = {"highway": OSM_HIGHWAY.get(props.get("cls"), "residential")}
+    if props.get("oneway"):
+        tags["oneway"] = "yes"
+    if props.get("bridge"):
+        tags["bridge"] = "yes"
+    if props.get("tunnel"):
+        tags["tunnel"] = "yes"
+    if isinstance(props.get("lanes"), int):
+        tags["lanes"] = str(props["lanes"])
+    if props.get("name"):
+        tags["name"] = str(props["name"])
+
+    def escaped(value):
+        return (str(value).replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;").replace('"', "&quot;"))
+
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<osm version="0.6" generator="RadarMap">']
+    for index, pair in enumerate(points, start=1):
+        lines.append('  <node id="-%d" lat="%.7f" lon="%.7f" />'
+                     % (index, float(pair[1]), float(pair[0])))
+    lines.append('  <way id="-1000">')
+    for index in range(1, len(points) + 1):
+        lines.append('    <nd ref="-%d" />' % index)
+    for key, value in sorted(tags.items()):
+        lines.append('    <tag k="%s" v="%s" />' % (key, escaped(value)))
+    lines.append("  </way>")
+    lines.append("</osm>")
+    return "\n".join(lines) + "\n"
 
 
 def export_accepted(conn):

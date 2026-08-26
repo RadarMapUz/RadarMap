@@ -435,6 +435,59 @@ class WidthContractTests(unittest.TestCase):
         self.assertAlmostEqual(two_way, one_way * 2)
 
 
+class GiveToOsmTests(unittest.TestCase):
+    """Выгрузка нарисованной дороги в OSM.
+
+    Дорога, отданная в OSM, поддерживается всем миром; наша — только нами.
+    Это не украшение, а способ перестать платить за поддержку в одиночку:
+    отданная дорога вернётся к нам сама обычной воскресной пересборкой, и своя
+    копия снимется по правилу «OSM догнал».
+    """
+
+    def road(self, **props):
+        return {"kind": "geometry",
+                "geom": [[69.250, 41.300], [69.251, 41.301]], "props": props}
+
+    def test_xml_is_what_josm_opens(self):
+        xml = map_edits.as_osm(self.road(cls=4))
+        self.assertIn('<osm version="0.6"', xml)
+        self.assertIn('<way id="-1000">', xml)
+        self.assertEqual(xml.count("<node "), 2)
+        self.assertEqual(xml.count("<nd "), 2)
+
+    def test_negative_ids_mark_what_osm_does_not_know_yet(self):
+        # Соглашение OSM: отрицательные id — это ещё не созданные объекты.
+        xml = map_edits.as_osm(self.road(cls=4))
+        self.assertIn('id="-1"', xml)
+        self.assertIn('id="-2"', xml)
+
+    def test_class_becomes_a_highway_tag(self):
+        self.assertIn('k="highway" v="secondary"',
+                      map_edits.as_osm(self.road(cls=4)))
+        self.assertIn('k="highway" v="primary"',
+                      map_edits.as_osm(self.road(cls=3)))
+
+    def test_unknown_class_does_not_lose_the_road(self):
+        self.assertIn('k="highway" v="residential"',
+                      map_edits.as_osm(self.road(cls=99)))
+
+    def test_flags_travel_with_the_road(self):
+        xml = map_edits.as_osm(self.road(cls=4, oneway=True, bridge=True, lanes=2))
+        self.assertIn('k="oneway" v="yes"', xml)
+        self.assertIn('k="bridge" v="yes"', xml)
+        self.assertIn('k="lanes" v="2"', xml)
+
+    def test_name_is_escaped(self):
+        # Имя приходит от человека, и кавычка в нём не должна ломать XML.
+        xml = map_edits.as_osm(self.road(cls=4, name='улица "Мира" & Ко'))
+        self.assertIn("&quot;", xml)
+        self.assertIn("&amp;", xml)
+        self.assertNotIn('v="улица "', xml)
+
+    def test_a_point_is_not_a_road(self):
+        self.assertEqual(map_edits.as_osm({"kind": "point", "geom": [69.25, 41.3]}), "")
+
+
 class TodoTests(unittest.TestCase):
     """Очередь работы: что панель предлагает делать дальше.
 

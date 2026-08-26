@@ -1525,6 +1525,39 @@ def point_kind(properties):
     return None
 
 
+# Обстановка, которую ставят руками. Виды те же, что приезжают из OSM: панель
+# заводит объект ТОГО ЖЕ вида, а не параллельный, поэтому дальше он идёт общим
+# конвейером — привязка к узлу, сведение, посадка на ось с расчётом азимута и
+# ширины. На телефоне не меняется ничего.
+DRAWN_POINT_KINDS = {POINT_TRAFFIC_LIGHT, POINT_SPEED_BUMP, POINT_STOP_LINE,
+                     POINT_U_TURN, POINT_CROSSING, POINT_LANE_ARROWS}
+
+
+def drawn_points(edits):
+    """Обстановка из правок панели → точки, как из OSM."""
+    out = []
+    for edit in edits:
+        if edit.get("kind") != "point":
+            continue
+        props = edit.get("props") or {}
+        kind = props.get("point")
+        if kind not in DRAWN_POINT_KINDS:
+            continue
+        geom = edit.get("geom") or []
+        if len(geom) < 2 or isinstance(geom[0], (list, tuple)):
+            continue
+        try:
+            spot = (float(geom[0]), float(geom[1]))
+        except (TypeError, ValueError):
+            continue
+        flags = 0
+        turns = props.get("turns")
+        if kind == POINT_LANE_ARROWS and isinstance(turns, list):
+            flags = pack_turns(0, [t for t in turns if isinstance(t, int)])
+        out.append((kind, flags, [spot]))
+    return out
+
+
 def collect_points(source_path):
     """Прочитать geojsonl узлов → список (kind, flags, [(lon, lat)]).
 
@@ -1890,7 +1923,7 @@ def main():
     # приезжают в старших битах и посадкой не стираются.
     raw_points = raw_points + [
         (POINT_LANE_ARROWS, pack_turns(0, turns), [spot])
-        for spot, turns in raw_arrows]
+        for spot, turns in raw_arrows] + drawn_points(edits)
     at_junctions = attach_to_junctions(raw_points, junction_nodes(roads))
     clustered = cluster_points(at_junctions)
     points, dropped = snap_points(clustered, roads)

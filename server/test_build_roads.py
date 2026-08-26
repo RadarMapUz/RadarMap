@@ -1063,6 +1063,106 @@ class MarkingTests(unittest.TestCase):
             self.assertEqual(build_roads.point_width(entry[1]), 22)
 
 
+class DrawnRoadTests(unittest.TestCase):
+    """Дороги, нарисованные руками в конструкторе.
+
+    Главное здесь — они добавляются в сеть ДО генерализации. Своя дорога
+    обязана пройти ту же разрезку на узлах и склейку, что и всё остальное:
+    иначе она ляжет ПОВЕРХ сети, а не внутрь неё, узлов на стыках не появится,
+    маршрут по ней не пройдёт, а на схеме она будет тупиком рядом с настоящей
+    улицей.
+    """
+
+    def edit(self, points, **props):
+        return {"kind": "geometry",
+                "geom": [[lon, lat] for lat, lon in points],
+                "props": props}
+
+    def test_drawn_road_becomes_a_road(self):
+        built = build_roads.drawn([self.edit([(41.300, 69.250), (41.302, 69.250)],
+                                             cls=3)])
+        self.assertEqual(len(built), 1)
+        code, flags, points, _ = built[0]
+        self.assertEqual(code, 3)
+        self.assertEqual(len(points), 2)
+        self.assertTrue(flags & build_roads.FLAG_HAND_DRAWN)
+
+    def test_hand_drawn_bit_is_invisible_to_the_phone(self):
+        # Телефон читает характер линии масками; старший бит он не видит и
+        # видеть не должен — ему всё равно, откуда взялась дорога.
+        built = build_roads.drawn([self.edit([(41.300, 69.250), (41.302, 69.250)],
+                                             cls=3, oneway=True)])
+        flags = built[0][1]
+        self.assertTrue(flags & build_roads.FLAG_ONEWAY)
+        self.assertEqual(build_roads.topo(flags), build_roads.FLAG_ONEWAY)
+
+    def test_unknown_class_falls_back_to_a_living_street(self):
+        built = build_roads.drawn([self.edit([(41.300, 69.250), (41.302, 69.250)],
+                                             cls=99)])
+        self.assertEqual(built[0][0], 6)
+
+    def test_lanes_by_hand_mark_the_road_as_measured(self):
+        built = build_roads.drawn([self.edit([(41.300, 69.250), (41.302, 69.250)],
+                                             cls=3, lanes=4)])
+        flags = built[0][1]
+        self.assertEqual(build_roads.lanes_of(flags), 4)
+        self.assertTrue(flags & build_roads.FLAG_LANES_TAGGED,
+                        "нарисовал и указал полосы — это измерено, а не догадка")
+
+    def test_lanes_without_a_hand_come_from_the_class(self):
+        built = build_roads.drawn([self.edit([(41.300, 69.250), (41.302, 69.250)],
+                                             cls=3)])
+        flags = built[0][1]
+        self.assertEqual(build_roads.lanes_of(flags), 6)
+        self.assertFalse(flags & build_roads.FLAG_LANES_TAGGED)
+
+    def test_other_kinds_are_not_roads(self):
+        self.assertEqual(build_roads.drawn([{"kind": "lanes", "geom": [69.25, 41.3]}]), [])
+
+    def test_broken_geometry_is_skipped_not_fatal(self):
+        for geom in ([], [[69.25, 41.3]], [["чушь", 1], [2, 3]], [69.25, 41.30]):
+            self.assertEqual(
+                build_roads.drawn([{"kind": "geometry", "geom": geom, "props": {}}]), [])
+
+    def test_drawn_road_joins_the_network_at_its_node(self):
+        # Ради этого нарисованное и добавляется ДО генерализации: конец своей
+        # дороги, упёршийся в проспект, обязан разрезать его на узле.
+        #
+        # Само по себе это не работает: разрезка идёт по общим ВЕРШИНАМ, а
+        # конец приходит в середину отрезка, где вершины нет. Врезает её graft.
+        avenue = (3, 0, [(69.250, 41.300), (69.250, 41.302)], "")
+        mine = build_roads.drawn(
+            [self.edit([(41.301, 69.250), (41.301, 69.252)], cls=6)])[0]
+        grafted = build_roads.graft([avenue], [mine])
+        self.assertEqual(len(grafted[0][2]), 3, "вершина в чужую линию не врезана")
+        split = build_roads.split_at_junctions(grafted + [mine])
+        self.assertEqual(len(split), 3, "проспект обязан разрезаться на узле")
+
+    def test_graft_does_not_move_the_road_it_touches(self):
+        # Врезка меняет топологию, а не геометрию: точка и так лежит на отрезке.
+        avenue = (3, 0, [(69.250, 41.300), (69.250, 41.302)], "")
+        mine = build_roads.drawn(
+            [self.edit([(41.301, 69.250), (41.301, 69.252)], cls=6)])[0]
+        grafted = build_roads.graft([avenue], [mine])[0]
+        self.assertEqual(grafted[2][0], avenue[2][0])
+        self.assertEqual(grafted[2][-1], avenue[2][-1])
+        self.assertAlmostEqual(grafted[2][1][0], 69.250, places=6)
+
+    def test_graft_does_not_double_an_existing_vertex(self):
+        # Конец пришёл ровно в вершину — врезать нечего.
+        avenue = (3, 0, [(69.250, 41.300), (69.250, 41.301), (69.250, 41.302)], "")
+        mine = build_roads.drawn(
+            [self.edit([(41.301, 69.250), (41.301, 69.252)], cls=6)])[0]
+        grafted = build_roads.graft([avenue], [mine])[0]
+        self.assertEqual(len(grafted[2]), 3)
+
+    def test_graft_leaves_far_away_roads_alone(self):
+        far = (3, 0, [(69.300, 41.300), (69.300, 41.302)], "")
+        mine = build_roads.drawn(
+            [self.edit([(41.301, 69.250), (41.301, 69.252)], cls=6)])[0]
+        self.assertIs(build_roads.graft([far], [mine])[0], far)
+
+
 class SidewalkTests(unittest.TestCase):
     """Тротуары: свой набор тайла, своя полоса охвата.
 

@@ -720,6 +720,9 @@ font-size:12px;background:transparent;border:0;border-bottom:1px solid #1b2231;
 color:#8ea0bb;border-radius:0}}
 .found button:hover{{background:#182029;color:#e7e9ee}}
 .toolrow{{display:flex;gap:8px;flex-direction:column}}
+.toolrow.draw{{padding:8px}}
+.card select{{width:100%;margin-top:4px;padding:9px 11px;border-radius:9px;
+border:1px solid #2b3038;background:#0d1116;color:#e7e9ee;font-size:14px}}
 .work{{background:#12161de6;border:1px solid #232a35;border-radius:10px}}
 .work summary{{padding:9px 11px;font-size:12px;color:#8ea0bb;cursor:pointer;
 list-style:none}}
@@ -772,10 +775,20 @@ font-size:12px;cursor:pointer;line-height:1.35}}
     <button data-kind="turn_lanes" class="tool">2 · Направления</button>
     <button data-kind="u_turn" class="tool">3 · Разворот</button>
   </div>
+  <details class="work" id="drawbox" open>
+    <summary>Нарисовать дорогу</summary>
+    <div class="toolrow draw">
+      <button data-kind="geometry" data-cls="3" class="tool">Q · Проспект</button>
+      <button data-kind="geometry" data-cls="4" class="tool">W · Улица</button>
+      <button data-kind="geometry" data-cls="6" class="tool">E · Жилая</button>
+      <button data-kind="geometry" data-cls="7" class="tool">R · Проезд</button>
+    </div>
+  </details>
   <div class="legend" id="hint">Черновиков: {drafts}. Клик по дороге ставит
     объект, клик по объекту — правит. Панель ничего не публикует.</div>
-  <div class="legend keyhelp">1–9 вид · Enter принять · Delete снять ·
-    Esc закрыть · Ctrl+Z отменить · \\ схема ⇄ спутник · ] [ по очереди</div>
+  <div class="legend keyhelp">1–3 объект · Q W E R рисовать дорогу ·
+    Enter закончить · Backspace снять вершину · Esc отменить ·
+    Delete снять · Ctrl+Z вернуть · \\ схема ⇄ спутник · ] [ по очереди</div>
   <details class="work" id="work">
     <summary id="worksum">Здесь работать</summary>
     <div class="todo" id="todo"></div>

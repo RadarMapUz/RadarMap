@@ -102,5 +102,76 @@ class GateTests(unittest.TestCase):
         self.assertIn("изменилось 1", text)
 
 
+class DrawnGateTests(unittest.TestCase):
+    """Ворота для нарисованного руками.
+
+    Своя геометрия — единственные данные в системе, которые нельзя
+    восстановить пересборкой, и единственные, которые не с чем сверить, кроме
+    рук, их нарисовавших. Проверять её надо строже всего остального, но
+    проверять СМЫСЛ, а не аккуратность.
+    """
+
+    def line(self, *coords, **props):
+        props.setdefault("why", "нет в OSM")
+        return {"id": 1, "kind": "geometry",
+                "geom": [[lon, lat] for lat, lon in coords], "props": props}
+
+    def straight(self, meters, **props):
+        # 0.00001° широты ≈ 1.11 м.
+        return self.line((41.300, 69.250),
+                         (41.300 + meters / 111_320.0, 69.250), **props)
+
+    def test_good_road_passes(self):
+        ok, reasons = roads_gate.check_drawn([self.straight(200)])
+        self.assertTrue(ok, reasons)
+
+    def test_stub_is_refused(self):
+        ok, reasons = roads_gate.check_drawn([self.straight(5)])
+        self.assertFalse(ok)
+        self.assertIn("короче", " ".join(reasons))
+
+    def test_reason_is_mandatory(self):
+        edit = self.straight(200)
+        edit["props"].pop("why")
+        ok, reasons = roads_gate.check_drawn([edit])
+        self.assertFalse(ok)
+        self.assertIn("почему", " ".join(reasons))
+
+    def test_free_text_reason_is_not_accepted(self):
+        # Свободный текст через полгода превращается в «тест» и «пока так».
+        ok, _ = roads_gate.check_drawn([self.straight(200, why="пока так")])
+        self.assertFalse(ok)
+
+    def test_jump_across_the_city_is_refused(self):
+        ok, reasons = roads_gate.check_drawn([self.straight(9000)])
+        self.assertFalse(ok)
+        self.assertIn("полгорода", " ".join(reasons))
+
+    def test_mouse_tremor_is_refused(self):
+        many = [(41.300 + i * 0.00002, 69.250) for i in range(300)]
+        ok, reasons = roads_gate.check_drawn([self.line(*many)])
+        self.assertFalse(ok)
+        self.assertIn("дрожь", " ".join(reasons))
+
+    def test_all_complaints_come_at_once(self):
+        # Модератор, нарисовавший десять дорог, должен увидеть все замечания
+        # разом, а не открывать ворота десять раз подряд.
+        bad = self.straight(5)
+        bad["props"].pop("why")
+        ok, reasons = roads_gate.check_drawn([bad])
+        self.assertFalse(ok)
+        self.assertGreaterEqual(len(reasons), 2)
+
+    def test_too_many_at_once_is_a_question(self):
+        ok, reasons = roads_gate.check_drawn(
+            [self.straight(200) for _ in range(60)])
+        self.assertFalse(ok)
+        self.assertIn("за раз", " ".join(reasons))
+
+    def test_other_kinds_are_not_checked_here(self):
+        ok, _ = roads_gate.check_drawn([{"kind": "lanes", "geom": [69.25, 41.3]}])
+        self.assertTrue(ok)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -34,6 +34,69 @@ def _totals(index):
     return len(tiles), sum(meta.get("bytes", 0) for meta in tiles.values())
 
 
+# --- Ворота для нарисованного руками.
+#
+# Числа ловят опечатку, а не мешают работе. Своя геометрия — единственные
+# данные в системе, которые нельзя восстановить пересборкой, и единственные,
+# которые не с чем сверить, кроме рук, их нарисовавших: проверять их надо
+# строже, чем всё остальное, но проверять СМЫСЛ, а не аккуратность.
+MIN_DRAWN_METERS = 20.0
+MAX_DRAWN_VERTICES = 200
+MAX_DRAWN_SEGMENT_METERS = 2000.0
+MAX_DRAWN_AT_ONCE = 50
+# Причина обязательна и закрытым списком: свободный текст через полгода
+# превращается в «тест», «пока так» и «см. выше».
+DRAWN_REASONS = {"нет в OSM", "OSM неверен", "временная схема"}
+
+LAT_METERS = 111_320.0
+
+
+def _meters(a, b):
+    import math
+    lon_scale = math.cos(math.radians((a[1] + b[1]) / 2))
+    return math.hypot((b[1] - a[1]) * LAT_METERS,
+                      (b[0] - a[0]) * LAT_METERS * lon_scale)
+
+
+def check_drawn(edits):
+    """Пускать ли нарисованное в публикацию → (можно, [причины]).
+
+    Причины возвращаются ВСЕ, а не первая: модератор, нарисовавший десять
+    дорог, должен увидеть все замечания разом, а не открывать ворота десять
+    раз подряд.
+    """
+    lines = [e for e in edits if e.get("kind") == "geometry"]
+    if not lines:
+        return True, []
+    reasons = []
+    if len(lines) > MAX_DRAWN_AT_ONCE:
+        reasons.append(f"нарисовано за раз {len(lines)} — больше "
+                       f"{MAX_DRAWN_AT_ONCE}, это похоже на ошибку")
+
+    for edit in lines:
+        who = f"правка #{edit.get('id', '?')}"
+        points = edit.get("geom") or []
+        if len(points) < 2:
+            reasons.append(f"{who}: меньше двух точек — рисовать нечего")
+            continue
+        if len(points) > MAX_DRAWN_VERTICES:
+            reasons.append(f"{who}: вершин {len(points)} — похоже на дрожь мыши")
+        total, longest = 0.0, 0.0
+        for i in range(1, len(points)):
+            step = _meters(points[i - 1], points[i])
+            total += step
+            longest = max(longest, step)
+        if total < MIN_DRAWN_METERS:
+            reasons.append(f"{who}: длина {total:.0f} м — короче {MIN_DRAWN_METERS:.0f}")
+        if longest > MAX_DRAWN_SEGMENT_METERS:
+            reasons.append(f"{who}: отрезок {longest:.0f} м — похоже на промах "
+                           f"через полгорода")
+        why = (edit.get("props") or {}).get("why")
+        if why not in DRAWN_REASONS:
+            reasons.append(f"{who}: не сказано, почему дорога своя")
+    return not reasons, reasons
+
+
 def decide(previous, candidate, allow_grid_change=False):
     """Пускать ли кандидата в публикацию. Возвращает (можно, [причины])."""
     reasons = []

@@ -27,6 +27,15 @@
   // «lanes» в заголовке читается как недоделка.
   const NAMES = { lanes: 'Полосы', turn_lanes: 'Направления полос',
                   u_turn: 'Разворот', geometry: 'Своя геометрия' };
+  // Классы дорог — те же, что у OSM: от них зависит и ширина полотна, и то,
+  // как дорогу нарисует телефон.
+  const CLASSES = [
+    { code: 1, name: 'Магистраль' }, { code: 2, name: 'Скоростная' },
+    { code: 3, name: 'Проспект' },   { code: 4, name: 'Улица' },
+    { code: 5, name: 'Второстепенная' }, { code: 6, name: 'Жилая' },
+    { code: 7, name: 'Проезд, двор' },
+  ];
+  const WHYS = ['нет в OSM', 'OSM неверен', 'временная схема'];
   const DRAFT = 0, ACCEPTED = 1, WITHDRAWN = 3;
 
   let kind = 'lanes';
@@ -557,6 +566,201 @@
     if (item.draft) { setTimeout(function () { select(item.id); }, 400); }
   }
 
+  // --- Рисование дороги ---------------------------------------------------
+  //
+  // Три действия и ни одного лишнего: щелчок ставит вершину, Enter заканчивает,
+  // Esc отменяет всю линию, Backspace снимает последнюю вершину. Пока ведёшь —
+  // рядом видно длину в метрах: без неё «двадцать метров» и «двести» на экране
+  // выглядят одинаково, а ворота публикации считают именно метры.
+
+  // Ближе этого конец линии считается примкнувшим к чужой дороге.
+  const ATTACH_METERS = 12;
+
+  let drawing = null;     // { points: [[lon,lat]], cls }
+  let drawLine = null;    // нарисованная часть
+  let drawDots = [];      // вершины, каждую можно тянуть
+
+  function drawnMeters(points) {
+    let total = 0;
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1], b = points[i];
+      const lat = (a[1] + b[1]) / 2 * Math.PI / 180;
+      total += Math.hypot((b[1] - a[1]) * 111320,
+                          (b[0] - a[0]) * 111320 * Math.cos(lat));
+    }
+    return Math.round(total);
+  }
+
+  function startDrawing(cls) {
+    closeCard();
+    drawing = { points: [], cls: cls };
+    hint('Щелчок — вершина, Enter — закончить, Backspace — снять последнюю, '
+         + 'Esc — отменить.');
+    renderDrawing();
+  }
+
+  function renderDrawing() {
+    if (drawLine) { map.geoObjects.remove(drawLine); drawLine = null; }
+    drawDots.forEach(function (dot) { map.geoObjects.remove(dot); });
+    drawDots = [];
+    if (!drawing || !drawing.points.length) { return; }
+
+    if (drawing.points.length >= 2) {
+      drawLine = new ymaps.Polyline(
+        drawing.points.map(function (p) { return [p[1], p[0]]; }), {},
+        { strokeColor: '#ffb020', strokeWidth: 5, strokeOpacity: 0.9, zIndex: 300 });
+      map.geoObjects.add(drawLine);
+    }
+    // Вершины ТЯНУТСЯ. Это и есть правка ломаной: диалог «изменить точку №3»
+    // объяснять пришлось бы, а перетаскивание — нет.
+    drawing.points.forEach(function (point, index) {
+      const dot = new ymaps.Placemark([point[1], point[0]],
+        { hintContent: 'Вершина ' + (index + 1) },
+        { preset: 'islands#orangeCircleDotIcon', draggable: true, zIndex: 310 });
+      dot.events.add('dragend', function () {
+        const at = dot.geometry.getCoordinates();
+        drawing.points[index] = [at[1], at[0]];
+        renderDrawing();
+      });
+      map.geoObjects.add(dot);
+      drawDots.push(dot);
+    });
+    hint('Вершин ' + drawing.points.length + ' · ' +
+         drawnMeters(drawing.points) + ' м · Enter — закончить');
+  }
+
+  // Прилипают только КОНЦЫ линии, а не каждая вершина.
+  //
+  // Дорога, нарисованная РЯДОМ с существующей, а не В неё, — не дорога, а
+  // параллельная линия: маршрут по ней не пройдёт, а на схеме она останется
+  // тупиком. Но притягивать середину нельзя: линию стянуло бы на соседние
+  // улицы, и нарисовать съезд стало бы невозможно.
+  function attachEnd(coords) {
+    return post('/api/snap', { lat: coords[0], lon: coords[1], touch: coarse })
+      .then(function (snap) {
+        const near = (snap.candidates || [])[0];
+        if (near && !snap.ambiguous && near.meters <= ATTACH_METERS) {
+          return near.point;
+        }
+        return [coords[1], coords[0]];
+      }, function () { return [coords[1], coords[0]]; });
+  }
+
+  function addVertex(coords) {
+    if (drawing.points.length === 0) {
+      attachEnd(coords).then(function (point) {
+        drawing.points.push(point);
+        renderDrawing();
+      });
+      return;
+    }
+    drawing.points.push([coords[1], coords[0]]);
+    renderDrawing();
+  }
+
+  function finishDrawing() {
+    if (!drawing || drawing.points.length < 2) {
+      hint('Нужно хотя бы две вершины.');
+      return;
+    }
+    const cls = drawing.cls;
+    const last = drawing.points[drawing.points.length - 1];
+    // Последнюю вершину притягиваем на выходе: пока рисуешь, неизвестно, какая
+    // из них последняя.
+    attachEnd([last[1], last[0]]).then(function (point) {
+      const points = drawing.points.slice(0, -1).concat([point]);
+      cancelDrawing(true);
+      current = { kind: 'geometry', geom: points, raw: points[0],
+                  props: { cls: cls }, note: '' };
+      showRoadCard(points, cls);
+    });
+  }
+
+  function cancelDrawing(quiet) {
+    drawing = null;
+    renderDrawing();
+    if (!quiet) { hint('Рисование отменено.'); }
+  }
+
+  function showRoadCard(points, cls) {
+    els.card.hidden = false;
+    els.card.innerHTML = '';
+    els.card.appendChild(node('h3', 'Своя дорога'));
+    els.card.appendChild(node('div',
+      'Вершин ' + points.length + ' · ' + drawnMeters(points) + ' м', 'muted'));
+
+    const kind = document.createElement('select');
+    CLASSES.forEach(function (item) {
+      const option = document.createElement('option');
+      option.value = item.code;
+      option.textContent = item.code + ' · ' + item.name;
+      if (item.code === cls) { option.selected = true; }
+      kind.appendChild(option);
+    });
+    const kindLabel = node('label', 'Класс дороги');
+    kindLabel.appendChild(kind);
+    els.card.appendChild(kindLabel);
+
+    const lanes = field('Полос всего (пусто — по классу)', 'number', '');
+    els.card.appendChild(lanes.label);
+
+    const oneway = check('Односторонняя');
+    const bridge = check('Мост');
+    els.card.appendChild(oneway.label);
+    els.card.appendChild(bridge.label);
+
+    // Причина обязательна и закрытым списком: свободный текст через полгода
+    // превращается в «тест», «пока так» и «см. выше».
+    const why = document.createElement('select');
+    WHYS.forEach(function (text) {
+      const option = document.createElement('option');
+      option.value = text;
+      option.textContent = text;
+      why.appendChild(option);
+    });
+    const whyLabel = node('label', 'Почему дорога своя');
+    whyLabel.appendChild(why);
+    els.card.appendChild(whyLabel);
+
+    const save = node('button', 'Принять');
+    save.addEventListener('click', function () {
+      const count = parseInt(lanes.input.value, 10);
+      current.props = {
+        cls: parseInt(kind.value, 10),
+        oneway: oneway.input.checked,
+        bridge: bridge.input.checked,
+        why: why.value,
+      };
+      if (count >= 1 && count <= 15) { current.props.lanes = count; }
+      current.status = ACCEPTED;
+      post('/api/edit', current).then(function (result) {
+        if (result.error) { hint(result.error); return; }
+        closeCard();
+        hint('Дорога принята. Публикует владелец со своей машины.');
+        offerUndo('Своя дорога · ' + drawnMeters(points) + ' м', function () {
+          return post('/api/edit/withdraw',
+                      { id: result.id, version: result.version });
+        });
+        walking = false;
+        reloadEdits();
+      });
+    });
+    els.card.appendChild(save);
+    const cancel = node('button', 'Отмена', 'ghost');
+    cancel.addEventListener('click', closeCard);
+    els.card.appendChild(cancel);
+  }
+
+  function check(caption) {
+    const label = node('label', caption);
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.style.width = 'auto';
+    input.style.marginRight = '8px';
+    label.insertBefore(input, label.firstChild);
+    return { label: label, input: input };
+  }
+
   // --- Поиск места --------------------------------------------------------
   //
   // Три разных вопроса под одной строкой, и порядок разбора — от точного к
@@ -669,8 +873,13 @@
       select(e.get('objectId'));
     });
     map.events.add('click', function (e) {
+      if (drawing) { addVertex(e.get('coords')); return; }
       if (current && current.id) { closeCard(); return; }
       place(e.get('coords'), null);
+    });
+    // Двойной щелчок заканчивает линию — привычка из любого редактора карт.
+    map.events.add('dblclick', function (e) {
+      if (drawing) { e.preventDefault(); finishDrawing(); }
     });
     // reloadEdits сам обновляет очередь: поставленная правка снимает работу
     // из списка, и звать обе вручную значило бы качать очередь дважды.
@@ -692,6 +901,8 @@
         buttons.forEach(function (b) { b.classList.remove('on'); });
         button.classList.add('on');
         kind = button.getAttribute('data-kind');
+        const cls = button.getAttribute('data-cls');
+        if (cls) { startDrawing(parseInt(cls, 10)); } else { cancelDrawing(true); }
       });
     });
 
@@ -715,7 +926,17 @@
         if (picks[Number(e.key) - 1]) { picks[Number(e.key) - 1].click(); }
         return;
       }
-      if (e.key === 'Escape') { closeCard(); return; }
+      if (e.key === 'Escape') {
+        if (drawing) { cancelDrawing(); } else { closeCard(); }
+        return;
+      }
+      if (drawing && e.key === 'Enter') { e.preventDefault(); finishDrawing(); return; }
+      if (drawing && e.key === 'Backspace') {
+        e.preventDefault();
+        drawing.points.pop();
+        renderDrawing();
+        return;
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (!inField && current && current.id) { e.preventDefault(); withdrawCurrent(); }
         return;
@@ -724,6 +945,15 @@
       if (e.key === '\\' || e.key === 'ё') { toggleSchema(); return; }
       if (e.key === ']' || e.key === 'ъ') { goTo(queueAt + 1); return; }
       if (e.key === '[' || e.key === 'х') { goTo(queueAt - 1); return; }
+      // Классы дорог — на буквах, а не на цифрах: цифры уже заняты видами
+      // объектов, и одна клавиша на две вещи — это не экономия, а ошибка.
+      const letters = { q: 3, й: 3, w: 4, ц: 4, e: 6, у: 6, r: 7, к: 7 };
+      const cls = letters[e.key.toLowerCase()];
+      if (cls) {
+        const button = document.querySelector('.draw [data-cls="' + cls + '"]');
+        if (button) { button.click(); }
+        return;
+      }
       const index = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].indexOf(e.key);
       if (index >= 0 && buttons[index]) { buttons[index].click(); }
     });

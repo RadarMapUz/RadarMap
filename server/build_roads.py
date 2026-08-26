@@ -86,6 +86,22 @@ MAX_LANES = 15
 # ширина, — он рисует то, что приехало. Ровно поэтому бит и можно завести, не
 # трогая формат: старшие биты установленная сборка не видит.
 FLAG_LANES_TAGGED = 1 << 8
+# Нарисовано руками, а не приехало из OSM.
+#
+# Телефону этот бит не нужен и он его не читает: ему всё равно, откуда взялась
+# дорога, он рисует то, что приехало. Нужен он панели — отличать своё от чужого
+# в очереди изменений: только у своей геометрии есть срок пересмотра и только
+# её надо снимать, когда OSM догонит.
+FLAG_HAND_DRAWN = 1 << 9
+
+# Своя дорога короче этого — не дорога, а дрожь мыши.
+MIN_DRAWN_METERS = 20.0
+# Вершин больше этого в одной линии не бывает: столько щелчков подряд человек
+# не делает, а вот зажатая кнопка делает.
+MAX_DRAWN_VERTICES = 200
+# Отрезок длиннее этого — почти наверняка промах через полгорода: щёлкнули,
+# отвлеклись, щёлкнули снова.
+MAX_DRAWN_SEGMENT_METERS = 2000.0
 # Биты ХАРАКТЕРА линии. Только они участвуют в склейке и сведении проезжих:
 # две половины одной улицы, у которых в OSM разное число полос, — по-прежнему
 # одна улица, и разойтись они не должны из-за поля, которого раньше не было.
@@ -980,6 +996,101 @@ def apply_edits(roads, edits, meters=25.0):
     return patched, len(lanes_by_index), len(missed)
 
 
+def drawn(edits):
+    """Нарисованные руками дороги → записи сети, как из OSM.
+
+    ДОБАВЛЯЮТСЯ в сеть, а не накладываются на неё, и делается это ДО
+    генерализации: своя дорога должна пройти ту же разрезку на узлах, склейку и
+    упрощение, что и всё остальное. Иначе она ляжет поверх сети, а не внутрь
+    неё, и узлов на стыках не появится — маршрут по такой дороге не пройдёт, а
+    на схеме она будет тупиком рядом с настоящей улицей.
+
+    Отбрасываем молча только то, что нарисовать нельзя вовсе (нет двух точек).
+    Всё остальное — дело ворот: они умеют объяснить, а здесь объяснять некому.
+    """
+    out = []
+    for edit in edits:
+        if edit.get("kind") != "geometry":
+            continue
+        line = edit.get("geom") or []
+        if len(line) < 2 or not isinstance(line[0], (list, tuple)):
+            continue
+        points = []
+        for pair in line:
+            try:
+                points.append((float(pair[0]), float(pair[1])))
+            except (TypeError, ValueError, IndexError):
+                points = []
+                break
+        if len(points) < 2:
+            continue
+        props = edit.get("props") or {}
+        code = props.get("cls")
+        if code not in CLASS_CODES.values():
+            code = 6
+        flags = FLAG_HAND_DRAWN
+        if props.get("oneway"):
+            flags |= FLAG_ONEWAY
+        if props.get("bridge"):
+            flags |= FLAG_BRIDGE
+        if props.get("tunnel"):
+            flags |= FLAG_TUNNEL
+        lanes = props.get("lanes")
+        if isinstance(lanes, int) and lanes >= 1:
+            flags = with_lanes(flags, clamp_lanes(code, lanes)) | FLAG_LANES_TAGGED
+        else:
+            flags = with_lanes(flags, road_lanes({}, code, bool(flags & FLAG_ONEWAY)))
+        out.append((code, flags, points, str(props.get("name") or "")))
+    return out
+
+
+# Насколько близко конец нарисованной дороги должен подойти к чужой оси, чтобы
+# считаться примкнувшим. Полтора метра: магнит панели сажает конец НА ось, и
+# расхождение может дать только округление координат в тайле (1e-5° ≈ 1.1 м).
+GRAFT_METERS = 1.5
+
+
+def graft(roads, hand):
+    """Врезать концы нарисованных дорог в чужие линии → новая сеть.
+
+    Без этого нарисованное — декорация. Разрезка на перекрёстках работает по
+    общим ВЕРШИНАМ, а конец своей дороги упирается в чужую линию посреди
+    отрезка, где вершины нет: узел не образуется, маршрут по такой дороге не
+    пройдёт, и на схеме она останется тупиком в полуметре от настоящей улицы.
+
+    Поэтому в чужую линию вставляется вершина ровно там, куда пришёл конец.
+    Геометрия от этого не меняется — точка и так лежит на отрезке, — меняется
+    только топология, ради которой всё и делается.
+    """
+    if not hand:
+        return roads
+    ends = []
+    for _, _, points, _ in hand:
+        ends.append(points[0])
+        ends.append(points[-1])
+
+    out = []
+    for road in roads:
+        code, flags, points, name = road
+        patched = list(points)
+        for end in ends:
+            best_index, best_distance = None, GRAFT_METERS
+            for i in range(1, len(patched)):
+                a, b = patched[i - 1], patched[i]
+                if meters_between(end, a) <= GRAFT_METERS or \
+                        meters_between(end, b) <= GRAFT_METERS:
+                    best_index = None
+                    break  # вершина уже есть — врезать нечего
+                candidate = _nearest_on(end, [a, b])
+                distance = meters_between(end, candidate)
+                if distance < best_distance:
+                    best_index, best_distance = i, distance
+            if best_index is not None:
+                patched.insert(best_index, end)
+        out.append((code, flags, patched, name) if len(patched) != len(points) else road)
+    return out
+
+
 def load_edits(path):
     """Снимок правок панели. Нет файла — нет правок, и это не ошибка: сборка
     обязана работать на машине, где панели никогда не было."""
@@ -1753,10 +1864,17 @@ def main():
 
     (raw, classes, flag_counts, read, skipped,
      lanes_tagged, raw_sidewalks, raw_arrows) = collect(args.source)
-    roads = generalise(raw, args.tolerance / 111_320.0)
-    # Правки накладываются ПОСЛЕ генерализации: они посажены на ту геометрию,
+    edits = load_edits(args.edits)
+    # Нарисованное руками добавляется ДО генерализации: своя дорога обязана
+    # пройти ту же разрезку на узлах и склейку, что и всё остальное, иначе она
+    # ляжет поверх сети, а не внутрь неё, и узлов на стыках не появится.
+    hand = drawn(edits)
+    # Врезаем концы своих дорог в чужие линии ДО генерализации: разрезка на
+    # перекрёстках работает по общим вершинам, а без врезки её там нет.
+    roads = generalise(graft(raw, hand) + hand, args.tolerance / 111_320.0)
+    # А правки СВОЙСТВ накладываются ПОСЛЕ: они посажены на ту геометрию,
     # которая поедет на телефон, а не на сырую.
-    roads, edits_applied, edits_missed = apply_edits(roads, load_edits(args.edits))
+    roads, edits_applied, edits_missed = apply_edits(roads, edits)
     # Местность упрощаем грубее дорог: контур пруда не несёт геометрии, по
     # которой принимают решения за рулём.
     areas = collect_areas(args.areas, args.tolerance * 3 / 111_320.0)
@@ -1831,9 +1949,9 @@ def main():
               f"до {lanes_of(widest[1])}, ширина проезжей части "
               f"{widths[0]:.1f}–{widths[-1]:.1f} м "
               f"(медиана {widths[len(widths) // 2]:.1f})")
-    if edits_applied or edits_missed:
+    if edits_applied or edits_missed or hand:
         print(f"правки панели: наложено {edits_applied}, "
-              f"не нашли дороги {edits_missed}")
+              f"не нашли дороги {edits_missed}, нарисовано руками {len(hand)}")
     share = 100.0 * lanes_tagged / read if read else 0.0
     print(f"полосы: тегом {lanes_tagged} из {read} ({share:.1f} %), "
           f"остальным по классу")

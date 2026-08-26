@@ -48,7 +48,20 @@
     card: document.getElementById('card'),
     hint: document.getElementById('hint'),
     toast: document.getElementById('toast'),
+    todo: document.getElementById('todo'),
   };
+
+  // Очередь работы в видимой рамке и место в ней.
+  let queue = [];
+  let queueAt = -1;
+  // Идём ПО очереди, а не двигаем карту руками.
+  //
+  // Различать обязательно: перелёт к следующему объекту сам двигает карту, а
+  // движение карты пересобирает очередь — и место в ней теряется. Без этого
+  // флага «дальше» всегда прыгало бы на первую строку новой рамки, то есть
+  // ходило бы по кругу между двумя местами вместо того, чтобы идти вперёд.
+  let walking = false;
+  let walkTimer = null;
 
   function post(url, body) {
     return fetch(base + url, {
@@ -185,6 +198,10 @@
       if (result.error) { hint(result.error); return; }
       closeCard();
       hint('Принято. Публикует владелец со своей машины.');
+      // Работа сделана — очередь обязана пересобраться, даже если мы идём по
+      // ней: размеченной дороге в списке больше не место.
+      walking = false;
+      clearTimeout(walkTimer);
       if (before) {
         offerUndo('Правка #' + result.id, function () {
           return post('/api/edit', Object.assign({}, before, {
@@ -360,10 +377,7 @@
           };
         }),
       });
-      const drafts = (data.edits || []).filter(function (e) {
-        return e.status === DRAFT;
-      }).length;
-      tools.setAttribute('data-drafts', drafts);
+      reloadTodo();
     });
   }
 
@@ -379,6 +393,70 @@
     showCard(edit.anchor);
     attachDragger();
     hint('Правка #' + id + '. Delete — снять, Esc — закрыть.');
+  }
+
+  // --- Очередь работы -----------------------------------------------------
+
+  // Панель обязана говорить, что делать дальше. Пустой экран карты — это
+  // вопрос «а где работать?», на который модератор отвечает своей памятью, а
+  // она кончается на третьем сеансе.
+  function reloadTodo() {
+    if (walking) { renderTodo(); return; }
+    get('/api/todo' + bbox()).then(function (data) {
+      const drafts = (data.drafts || []).map(function (item) {
+        return { title: 'Черновик #' + item.id + ' · ' + (NAMES[item.kind] || item.kind),
+                 point: item.point, draft: true, id: item.id };
+      });
+      const lanes = (data.lanes || []).map(function (item) {
+        // Имя, если оно есть; иначе направление. Опубликованные сейчас тайлы
+        // имён не содержат вовсе, и «без имени · класс 3» не говорит ничего о
+        // том, что перед тобой, — а «с юга на север» говорит.
+        return { title: (item.name || item.heading) + ' · класс ' + item.cls +
+                        ' · ' + item.meters + ' м',
+                 point: item.point };
+      });
+      // Черновики первыми: начатая и не законченная работа не едет никуда, и
+      // забыть её проще всего.
+      queue = drafts.concat(lanes);
+      queueAt = -1;
+      renderTodo();
+    });
+  }
+
+  function renderTodo() {
+    els.todo.innerHTML = '';
+    if (!queue.length) {
+      els.todo.appendChild(node('div',
+        'В этой рамке размечено всё. Отодвиньте карту.', 'muted'));
+      return;
+    }
+    els.todo.appendChild(node('div',
+      'Здесь работать · ' + queue.length + '  ( ] дальше, [ назад )', 'muted'));
+    queue.slice(0, 12).forEach(function (item, index) {
+      const row = node('button', item.title, 'todo-row' + (item.draft ? ' draft' : ''));
+      // Подсветку ставит САМА перерисовка, а не переход.
+      //
+      // Переход двигает карту, движение карты перерисовывает список, и
+      // подсветка, поставленная переходом, стиралась бы этой перерисовкой —
+      // причём асинхронно, то есть иногда бы срабатывала, а иногда нет. Хуже
+      // отсутствующей подсветки только мерцающая.
+      if (index === queueAt) { row.classList.add('on'); }
+      row.addEventListener('click', function () { goTo(index); });
+      els.todo.appendChild(row);
+    });
+  }
+
+  function goTo(index) {
+    if (!queue.length) { return; }
+    queueAt = (index + queue.length) % queue.length;
+    const item = queue[queueAt];
+    walking = true;
+    clearTimeout(walkTimer);
+    walkTimer = setTimeout(function () { walking = false; }, 1200);
+    map.setCenter([item.point[1], item.point[0]], Math.max(map.getZoom(), 18));
+    hint(item.title);
+    renderTodo();
+    if (item.draft) { setTimeout(function () { select(item.id); }, 400); }
   }
 
   // --- Место в адресе -----------------------------------------------------
@@ -409,6 +487,8 @@
       if (current && current.id) { closeCard(); return; }
       place(e.get('coords'), null);
     });
+    // reloadEdits сам обновляет очередь: поставленная правка снимает работу
+    // из списка, и звать обе вручную значило бы качать очередь дважды.
     map.events.add('boundschange', function () { drawRoads(); reloadEdits(); });
     drawRoads();
     reloadEdits();
@@ -445,6 +525,8 @@
         return;
       }
       if (inField) { return; }
+      if (e.key === ']' || e.key === 'ъ') { goTo(queueAt + 1); return; }
+      if (e.key === '[' || e.key === 'х') { goTo(queueAt - 1); return; }
       const index = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].indexOf(e.key);
       if (index >= 0 && buttons[index]) { buttons[index].click(); }
     });

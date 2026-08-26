@@ -270,5 +270,65 @@ class TileSourceTests(unittest.TestCase):
         self.assertEqual(map_edits.load_roads("/нет/такого", 0, 0, 1, 1), [])
 
 
+class TodoTests(unittest.TestCase):
+    """Очередь работы: что панель предлагает делать дальше.
+
+    Она обязана быть КОРОТКОЙ и по делу. Очередь в семьдесят тысяч строк не
+    помогает — она подавляет, и её перестают открывать. Поэтому: только по
+    видимой рамке, только классы, которые вообще стоит размечать руками, и
+    только то, о чём никто ещё ничего не сказал.
+    """
+
+    def road(self, cls, points, flags=0, name=""):
+        return {"cls": cls, "flags": flags, "points": points, "name": name}
+
+    def straight(self, lon, length=0.01):
+        return [(lon, 41.300), (lon, 41.300 + length)]
+
+    def test_measured_road_is_not_offered(self):
+        # Дорога с тегом lanes уже размечена — предлагать её значит тратить
+        # время модератора на сделанное.
+        roads = [self.road(3, self.straight(69.25)),
+                 self.road(3, self.straight(69.26),
+                           flags=map_edits.FLAG_LANES_TAGGED)]
+        self.assertEqual(len(map_edits.todo(roads, [])), 1)
+
+    def test_yards_are_not_offered(self):
+        # Дворовых проездов половина всей сети, и они и так нарисованы верно.
+        # Попади они в очередь — она стала бы бесконечной, то есть бесполезной.
+        roads = [self.road(7, self.straight(69.25)),
+                 self.road(6, self.straight(69.26))]
+        self.assertEqual(map_edits.todo(roads, []), [])
+
+    def test_road_with_an_edit_nearby_is_done(self):
+        roads = [self.road(3, self.straight(69.25))]
+        middle = map_edits.todo(roads, [])[0]["point"]
+        edits = [{"geom": middle}]
+        self.assertEqual(map_edits.todo(roads, edits), [],
+                         "правка стоит — работа сделана")
+
+    def test_longest_roads_come_first(self):
+        # Улица в километр важнее проулка в тридцать метров: разметив её,
+        # закрываешь больше карты за то же время.
+        roads = [self.road(3, self.straight(69.25, 0.001)),
+                 self.road(3, self.straight(69.26, 0.01))]
+        first = map_edits.todo(roads, [])[0]
+        self.assertGreater(first["meters"], 500)
+
+    def test_queue_has_a_ceiling(self):
+        roads = [self.road(3, self.straight(69.25 + i * 0.001)) for i in range(80)]
+        self.assertLessEqual(len(map_edits.todo(roads, [])), 40)
+
+    def test_row_says_where_the_road_goes(self):
+        # Опубликованные сейчас тайлы имён улиц не содержат вовсе — все записи
+        # в них длиной три. «Без имени · класс 3» не говорит ничего о том, что
+        # перед тобой; направление говорит.
+        north = map_edits.todo([self.road(3, self.straight(69.25))], [])[0]
+        self.assertEqual(north["heading"], "с юга на север")
+        east = map_edits.todo(
+            [self.road(3, [(69.25, 41.30), (69.26, 41.30)])], [])[0]
+        self.assertEqual(east["heading"], "с запада на восток")
+
+
 if __name__ == "__main__":
     unittest.main()

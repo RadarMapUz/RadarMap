@@ -75,6 +75,17 @@ FLAG_RING = 8
 FLAG_LANES_SHIFT = 4
 FLAG_LANES_MASK = 0b1111 << FLAG_LANES_SHIFT
 MAX_LANES = 15
+# Полосы ЗНАЕМ, а не предположили по классу.
+#
+# Без этого бита по тайлу нельзя отличить измеренное от подставленного: у
+# дороги без тега lanes стоит дефолт класса, и выглядит он ровно так же, как
+# настоящее число. Панели это нужно, чтобы показать, ГДЕ работать: очередь
+# конструктора — это как раз дороги, о полосах которых OSM молчит.
+#
+# Телефон бит не читает и читать не должен: ему всё равно, откуда взялась
+# ширина, — он рисует то, что приехало. Ровно поэтому бит и можно завести, не
+# трогая формат: старшие биты установленная сборка не видит.
+FLAG_LANES_TAGGED = 1 << 8
 # Биты ХАРАКТЕРА линии. Только они участвуют в склейке и сведении проезжих:
 # две половины одной улицы, у которых в OSM разное число полос, — по-прежнему
 # одна улица, и разойтись они не должны из-за поля, которого раньше не было.
@@ -119,6 +130,23 @@ def with_lanes(flags, lanes):
 def topo(flags):
     """Только биты характера: по ним склеивают и сводят."""
     return flags & FLAG_TOPO_MASK
+
+
+def tagged_lanes(properties):
+    """Сказал ли OSM про полосы что-то правдоподобное.
+
+    Мусор в теге — то же, что молчание, и здесь тоже: «99» не делает дорогу
+    измеренной, он делает её ошибочно размеченной. Панель обязана предложить
+    такую дорогу к правке наравне с молчащей.
+    """
+    raw = properties.get("lanes")
+    if raw is None:
+        return False
+    try:
+        value = int(float(str(raw).split(";")[0].strip()))
+    except (TypeError, ValueError):
+        return False
+    return 1 <= value <= MAX_LANES
 
 
 def road_lanes(properties, code, oneway):
@@ -702,6 +730,8 @@ def flags_of(properties, points=None, code=None):
     if code is not None:
         flags = with_lanes(flags, road_lanes(properties, code,
                                              bool(flags & FLAG_ONEWAY)))
+        if tagged_lanes(properties):
+            flags |= FLAG_LANES_TAGGED
     return flags
 
 
@@ -943,7 +973,10 @@ def apply_edits(roads, edits, meters=25.0):
     patched = list(roads)
     for index, lanes in lanes_by_index.items():
         code, flags, points, name = patched[index]
-        patched[index] = (code, with_lanes(flags, lanes), points, name)
+        # Правка делает дорогу ИЗМЕРЕННОЙ: модератор смотрел на спутник, и в
+        # очереди конструктора ей больше делать нечего.
+        patched[index] = (code, with_lanes(flags, lanes) | FLAG_LANES_TAGGED,
+                          points, name)
     return patched, len(lanes_by_index), len(missed)
 
 

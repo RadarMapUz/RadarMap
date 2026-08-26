@@ -759,6 +759,40 @@ class LaneTests(unittest.TestCase):
 
     # --- Ширина
 
+    # --- «Полосы знаем» против «предположили по классу»
+
+    def test_tag_marks_the_road_as_measured(self):
+        # Без этого бита по тайлу нельзя отличить измеренное от подставленного:
+        # дефолт класса выглядит ровно так же, как настоящее число.
+        tagged = build_roads.flags_of({"lanes": "4"}, None, 3)
+        guessed = build_roads.flags_of({}, None, 3)
+        self.assertTrue(tagged & build_roads.FLAG_LANES_TAGGED)
+        self.assertFalse(guessed & build_roads.FLAG_LANES_TAGGED)
+        self.assertEqual(build_roads.lanes_of(guessed), 6, "полосы всё равно есть")
+
+    def test_nonsense_tag_does_not_count_as_measured(self):
+        # «99» не делает дорогу измеренной, он делает её ошибочно размеченной.
+        # Панель обязана предложить такую наравне с молчащей.
+        self.assertFalse(build_roads.flags_of({"lanes": "99"}, None, 3)
+                         & build_roads.FLAG_LANES_TAGGED)
+        self.assertFalse(build_roads.flags_of({"lanes": "чушь"}, None, 3)
+                         & build_roads.FLAG_LANES_TAGGED)
+
+    def test_measured_bit_does_not_disturb_anything_else(self):
+        flags = build_roads.flags_of({"lanes": "4", "oneway": "yes",
+                                      "bridge": "yes"}, None, 3)
+        self.assertTrue(flags & build_roads.FLAG_ONEWAY)
+        self.assertTrue(flags & build_roads.FLAG_BRIDGE)
+        self.assertEqual(build_roads.lanes_of(flags), 4)
+
+    def test_merge_ignores_the_measured_bit(self):
+        # Улица, у которой тег проставлен кусками, — по-прежнему одна улица.
+        a = self.road(3, build_roads.flags_of({"lanes": "4"}, None, 3),
+                      [(41.300, 69.25), (41.301, 69.25)])
+        b = self.road(3, build_roads.flags_of({}, None, 3),
+                      [(41.301, 69.25), (41.302, 69.25)])
+        self.assertEqual(len(build_roads.merge_ways([a, b])), 1)
+
     def test_width_follows_class_and_lanes(self):
         self.assertAlmostEqual(build_roads.road_width_meters(3, 6), 22.5)
         self.assertAlmostEqual(build_roads.road_width_meters(6, 2), 7.0)
@@ -1144,6 +1178,14 @@ class EditBakingTests(unittest.TestCase):
         _, applied, missed = build_roads.apply_edits(
             [street], [self.edit(41.900, 69.900, 6)])
         self.assertEqual((applied, missed), (0, 1))
+
+    def test_edit_takes_the_road_off_the_queue(self):
+        # Модератор смотрел на спутник — дороге в очереди конструктора больше
+        # делать нечего.
+        street = self.road(4, 0, [(41.300, 69.250), (41.310, 69.250)])
+        patched, _, _ = build_roads.apply_edits(
+            [street], [self.edit(41.305, 69.2501, 6)])
+        self.assertTrue(patched[0][1] & build_roads.FLAG_LANES_TAGGED)
 
     def test_edit_does_not_disturb_other_roads(self):
         target = self.road(4, 0, [(41.300, 69.250), (41.310, 69.250)])

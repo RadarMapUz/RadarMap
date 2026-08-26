@@ -324,6 +324,19 @@ def pending_counts(conn):
             "/mobile": conn.execute(
                 "SELECT COUNT(*) FROM reports WHERE active = 1 AND expires > ?",
                 (now,)).fetchone()[0],
+            # Черновик — это начатая и не законченная работа: он не едет
+            # никуда и через неделю о нём никто не вспомнит. Счётчик на
+            # вкладке — единственный способ о нём узнать, не заходя внутрь.
+            "/editor": conn.execute(
+                "SELECT COUNT(*) FROM map_edits WHERE status = ?",
+                (map_edits.DRAFT,)).fetchone()[0],
+            # Помеченные автоматикой «проверить» ждут человека на странице
+            # «Что изменилось». Считаем их дешёвым запросом, а не пересборкой
+            # очереди: счётчик рисуется на КАЖДОЙ странице панели.
+            "/changes": conn.execute(
+                "SELECT COUNT(*) FROM map_edits "
+                "WHERE status = ? AND note LIKE '%проверить%'",
+                (map_edits.ACCEPTED,)).fetchone()[0],
         }
     except sqlite3.Error:
         return {}
@@ -648,7 +661,7 @@ def render_editor(api_key, drafts):
 body{{overflow:hidden}}
 #map{{position:absolute;inset:52px 0 0 0}}
 .tools{{position:absolute;top:64px;left:12px;z-index:4;display:flex;gap:8px;
-flex-direction:column;width:230px}}
+flex-direction:column;width:260px;max-height:calc(100vh - 88px);overflow:auto}}
 .tool{{padding:10px 12px;border-radius:10px;border:1px solid #2b3038;
 background:#12161df2;color:#8ea0bb;font-size:14px;cursor:pointer;text-align:left}}
 .tool.on{{background:#101f2e;color:#3cdcff;border-color:#17384d}}
@@ -676,6 +689,16 @@ background:#12161df2;border:1px solid #2b3038;border-radius:12px;padding:10px 14
 font-size:13px;display:none;gap:12px;align-items:center}}
 .toast.on{{display:flex}}
 .toast button{{padding:6px 12px;font-size:13px}}
+/* Очередь работы. Панель обязана говорить, что делать дальше: пустой экран
+   карты — это вопрос «а где работать?», на который модератор отвечает своей
+   памятью, а она кончается на третьем сеансе. */
+.todo{{max-height:46vh;overflow:auto;padding:8px}}
+.todo-row{{display:block;width:100%;text-align:left;margin-top:4px;padding:6px 8px;
+border:1px solid #232a35;border-radius:8px;background:#0d1116;color:#8ea0bb;
+font-size:12px;cursor:pointer;line-height:1.35}}
+.todo-row:hover{{background:#182029;color:#e7e9ee}}
+.todo-row.on{{border-color:#17384d;color:#3cdcff}}
+.todo-row.draft{{border-left:3px solid #ffb020}}
 </style></head>
 <body><header>{"".join(
     f'<a href="{esc(u(path))}" class="{"on" if path == "/editor" else ""}">{esc(name)}</a>'
@@ -689,6 +712,7 @@ font-size:13px;display:none;gap:12px;align-items:center}}
     объект, клик по объекту — правит. Панель ничего не публикует.</div>
   <div class="legend">1–9 вид · Enter принять · Delete снять · Esc закрыть ·
     Ctrl+Z отменить</div>
+  <div class="legend todo" id="todo"></div>
 </div>
 <aside class="card" id="card" hidden></aside>
 <div class="toast" id="toast"></div>
@@ -1039,6 +1063,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.roads_json()
             if path == "/changes":
                 return self._send(200, self.changes_page(conn))
+            if path == "/api/todo":
+                return self.todo_json(conn)
             if path in ("/static/moderate.js", "/static/editor.js"):
                 return self.static_file(path.rsplit("/", 1)[1],
                                         "application/javascript; charset=utf-8")
@@ -1407,6 +1433,27 @@ class Handler(BaseHTTPRequestHandler):
             "candidates": [described(item) for item in found[:3]],
             "ambiguous": len(result.ambiguous) > 0,
             "fingerprint": map_edits.fingerprint((lon, lat), roads)})
+
+    def todo_json(self, conn):
+        """Что делать дальше в видимой рамке.
+
+        Панель обязана отвечать на этот вопрос сама. Пустой экран карты — это
+        вопрос «а где работать?», на который модератор отвечает своей памятью,
+        а она кончается на третьем сеансе.
+        """
+        box = self._bbox()
+        if box is None:
+            return self._json({"error": "нужна рамка карты"}, 400)
+        roads = map_edits.load_roads(edits_tiles_dir(), *box)
+        edits = map_edits.in_bbox(conn, *box)
+        drafts = [e for e in edits if e["status"] == map_edits.DRAFT]
+        self._json({
+            "lanes": map_edits.todo(roads, edits),
+            # Черновики — тоже работа: начал и не закончил. Их в очереди
+            # ставим первыми, потому что забытый черновик не едет никуда.
+            "drafts": [{"id": e["id"], "kind": e["kind"], "point": e["geom"]}
+                       for e in drafts],
+        })
 
     def edit_save_json(self, conn, field):
         """Создать или поправить. Статус выше «принято» отсюда не ставится:

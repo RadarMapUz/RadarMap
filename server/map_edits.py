@@ -1201,6 +1201,66 @@ PFLAG_AZIMUTH_MASK = 0x7F
 PFLAG_WIDTH_SHIFT = 7
 PFLAG_WIDTH_MASK = 0x3F
 
+# Населённые пункты: город, посёлок, кишлак, район города. Ранг — в коде
+# записи, как класс у дороги; по нему решается, с какого масштаба подписывать.
+PLACE_SET = "n"
+PLACE_NAMES = {1: "город", 2: "посёлок", 3: "кишлак", 4: "хутор",
+               5: "район", 6: "квартал"}
+# С какого масштаба виден какой ранг. Замер простой: подпись должна отвечать
+# на вопрос «где я», когда дорог уже не разобрать. Показать все ранги сразу
+# значит закрыть карту словами.
+PLACE_SCALE = ((80.0, 1), (30.0, 2), (12.0, 3), (6.0, 4), (3.0, 6))
+
+
+def place_rank(mpp=None):
+    """Какие ранги мест имеет смысл показывать на этом масштабе."""
+    if mpp is None or mpp <= 0:
+        return 6
+    for edge, rank in PLACE_SCALE:
+        if mpp >= edge:
+            return rank
+    return 6
+
+
+def load_places(tiles_dir, south, west, north, east, mpp=None, limit=400):
+    """Места из тайлов набора «n» → [{ранг, имя, точка}].
+
+    Отдельным набором и отдельным чтением: мест мало (по стране это тысячи), а
+    нужны они ровно там, где всё остальное уже не читается.
+    """
+    if not tiles_dir or not os.path.isdir(tiles_dir):
+        return []
+    worst = place_rank(mpp)
+    out = []
+    for name in _tile_names(tiles_dir):
+        if not name.startswith("road2_") or not name.endswith(".json"):
+            continue
+        body = name[len("road2_"):-len(".json")].rsplit("_", 1)
+        if len(body) != 2 or body[1] != PLACE_SET:
+            continue
+        box = _tile_box(name)
+        if box is None:
+            continue
+        if box[0] > north or box[2] < south or box[1] > east or box[3] < west:
+            continue
+        for place in _tile_roads(os.path.join(tiles_dir, name)):
+            points = place["points"]
+            if not points:
+                continue
+            lon, lat = points[0]
+            if not (south <= lat <= north and west <= lon <= east):
+                continue
+            rank = place.get("cls", 6)
+            if rank > worst:
+                continue
+            out.append({"rank": rank, "name": place.get("name", ""),
+                        "point": [lon, lat],
+                        "kind": PLACE_NAMES.get(rank, "место")})
+    # Крупные вперёд: если упрёмся в потолок, потеряем кварталы, а не города.
+    out.sort(key=lambda place: place["rank"])
+    return out[:limit]
+
+
 AREA_SETS = ("w", "g", "r", "b", "t", "h", "d")
 AREA_KINDS = {"w": 1, "g": 2, "r": 3, "b": 4, "t": 5, "h": 6}
 AREA_CLOSED = 1

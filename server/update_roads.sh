@@ -162,6 +162,19 @@ osmium export addresses.osm.pbf -f geojsonseq \
     --geometry-types=point,linestring,polygon -o addresses.geojsonl --overwrite
 echo "    адресов в экстракте: $(wc -l < addresses.geojsonl)"
 
+# Населённые пункты. Ровно те виды, которые подписывают на карте: город,
+# посёлок, кишлак, хутор и район города. Всё остальное из `place` — это
+# страны, области и континенты, и на схеме за рулём им делать нечего.
+#
+# Берём и узлы, и границы: город в OSM бывает и тем, и другим.
+osmium tags-filter uzbekistan.osm.pbf \
+    n/place=city,town,village,hamlet,suburb,neighbourhood \
+    a/place=city,town,village,hamlet,suburb,neighbourhood \
+    -o places.osm.pbf --overwrite
+osmium export places.osm.pbf -f geojsonseq \
+    --geometry-types=point,polygon -o places.geojsonl --overwrite
+echo "    мест в экстракте: $(wc -l < places.geojsonl)"
+
 # Правки конструктора. Снимок, а не приращение: сборка накладывает состояние
 # целиком, и «отменить правку» значит собрать тайлы без этой строки.
 #
@@ -201,6 +214,7 @@ fi
 
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
     --points points.geojsonl --houses houses.geojsonl \
+    --places places.geojsonl \
     --addresses addresses.geojsonl --edits "$EDITS" $SURFACE --mvt \
     --tiles "$CANDIDATE"
 
@@ -226,6 +240,7 @@ rm -rf "$CANDIDATE.check" && mkdir -p "$CANDIDATE.check"
 # сборкой и не написанное другой, остановило бы конвейер на ровном месте.
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
     --points points.geojsonl --houses houses.geojsonl \
+    --places places.geojsonl \
     --addresses addresses.geojsonl --edits "$EDITS" $SURFACE --mvt \
     --tiles "$CANDIDATE.check" >/dev/null
 if ! diff -rq "$CANDIDATE" "$CANDIDATE.check" >/dev/null; then

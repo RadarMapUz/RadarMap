@@ -1660,3 +1660,62 @@ class PassRunnerTests(unittest.TestCase):
         self.assertIsNotNone(runner)
         self.assertNotIn("requestAnimationFrame", runner.group(1),
                          "в бегуне слоёв снова остался голый кадр")
+
+
+class PlaceReadTests(unittest.TestCase):
+    """Названия населённых пунктов: читаются своим набором и по масштабу.
+
+    До этого набора дальний план оставался картой без адресов: сеть дорог
+    есть, а где Чирчик, а где Ангрен — неизвестно. Показать все ранги сразу
+    значит закрыть карту словами, поэтому ранг решает, с какого масштаба
+    подписывать.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        map_edits._NAMES_CACHE.clear()
+
+    def tile(self, key, rows):
+        with open(os.path.join(self.dir, f"road2_{key}_n.json"), "w",
+                  encoding="utf-8") as handle:
+            json.dump({"version": 2, "roads": rows}, handle, ensure_ascii=False)
+
+    def place(self, rank, lat, lon, name):
+        return [rank, 0, [round(lat * 100000), round(lon * 100000)], name]
+
+    def test_a_city_is_read_with_its_name(self):
+        self.tile("2626_4985", [self.place(1, 41.31, 69.28, "Toshkent")])
+        got = map_edits.load_places(self.dir, 41.0, 69.0, 41.6, 69.6, mpp=100)
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0]["name"], "Toshkent")
+        self.assertEqual(got[0]["rank"], 1)
+        self.assertEqual(got[0]["kind"], "город")
+
+    def test_small_places_wait_for_a_closer_scale(self):
+        self.tile("2626_4985", [self.place(1, 41.31, 69.28, "Toshkent"),
+                                self.place(6, 41.312, 69.282, "Чиланзар")])
+        far = map_edits.load_places(self.dir, 41.0, 69.0, 41.6, 69.6, mpp=100)
+        self.assertEqual([p["name"] for p in far], ["Toshkent"])
+        near = map_edits.load_places(self.dir, 41.0, 69.0, 41.6, 69.6, mpp=2)
+        self.assertEqual(len(near), 2, "вблизи скрыли квартал")
+
+    def test_the_frame_is_respected(self):
+        self.tile("2626_4985", [self.place(1, 41.31, 69.28, "Toshkent")])
+        self.assertEqual(
+            map_edits.load_places(self.dir, 40.0, 68.0, 40.5, 68.5, mpp=100), [])
+
+    def test_the_biggest_survive_the_ceiling(self):
+        rows = [self.place(6, 41.30 + i / 1000, 69.28, f"квартал {i}")
+                for i in range(20)]
+        rows.append(self.place(1, 41.31, 69.29, "Toshkent"))
+        self.tile("2626_4985", rows)
+        got = map_edits.load_places(self.dir, 41.0, 69.0, 41.6, 69.6,
+                                    mpp=2, limit=3)
+        self.assertEqual(got[0]["name"], "Toshkent",
+                         "потолок съел город, а не квартал")
+
+    def test_scale_table_never_inverts(self):
+        # Чем дальше отъехали, тем крупнее должны быть оставшиеся места.
+        ranks = [map_edits.place_rank(m) for m in (200, 80, 30, 12, 6, 2)]
+        self.assertEqual(ranks, sorted(ranks), "порядок рангов перевернулся")

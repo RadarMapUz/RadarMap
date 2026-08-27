@@ -117,6 +117,7 @@
   // в одну ось, и куски склеены через перекрёстки. Смотреть на него можно,
   // править по нему — нет: правка села бы между проезжими частями.
   let skeletonFrame = false;
+  let placesInFrame = [];  // города и посёлки последнего кадра
   let pointsInFrame = [];  // обстановка: из тайлов и своя
   let markLayer = [];      // её отрисовка на подложке
   let areasInFrame = [];   // размеченные области
@@ -859,6 +860,14 @@
       renderRoads();
       renderCoverage();
     });
+    // Названия населённых пунктов. Нужны ровно там, где улиц уже не
+    // подписывают: на охвате района и области. Своей ручкой, потому что мест
+    // мало, а ответ на «где я» они дают быстрее любой геометрии.
+    get('/api/places' + box, signal).then(function (data) {
+      if (!fresh(data)) { return; }
+      placesInFrame = data.places || [];
+      repaintSoon();
+    });
     // Обстановка — вторая половина картинки. Без неё схема врёт: дорога есть,
     // а перекрёсток на ней ничем не отличается от прямого участка.
     get('/api/areas' + box, signal).then(function (data) {
@@ -1505,7 +1514,60 @@
   const NAME_MIN_METERS = 60;      // короче — подпись длиннее самой улицы
   const NAME_FAR_MPP = 8;          // дальше улицы уже не подписывают
 
+  // Города подписываются РАНЬШЕ улиц и переживают их: на дальнем плане имя
+  // улицы не нужно и не помещается, а «Чирчик» отвечает на вопрос «где я»
+  // одним словом.
+  const PLACE_LOOK = {
+    1: { size: 17, weight: 700, up: 12 },
+    2: { size: 15, weight: 600, up: 10 },
+    3: { size: 13, weight: 600, up: 9 },
+    4: { size: 12, weight: 500, up: 8 },
+    5: { size: 12, weight: 500, up: 8 },
+    6: { size: 11, weight: 500, up: 7 },
+  };
+
+  function paintPlaces() {
+    if (!placesInFrame.length) { return; }
+    brush.save();
+    brush.textAlign = 'center';
+    brush.textBaseline = 'middle';
+    brush.lineJoin = 'round';
+    const taken = [];
+    placesInFrame.forEach(function (place) {
+      const look = PLACE_LOOK[place.rank] || PLACE_LOOK[6];
+      const at = atPixel(place.point[0], place.point[1]);
+      if (at[0] < 0 || at[1] < 0 || at[0] > painted.width || at[1] > painted.height) {
+        return;
+      }
+      brush.font = look.weight + ' ' + look.size + 'px system-ui, sans-serif';
+      const width = brush.measureText(place.name).width;
+      const box = { x: at[0] - width / 2, y: at[1] - look.up - look.size / 2,
+                    w: width, h: look.size };
+      for (let i = 0; i < taken.length; i++) {
+        const other = taken[i];
+        if (box.x < other.x + other.w && box.x + box.w > other.x
+            && box.y < other.y + other.h && box.y + box.h > other.y) {
+          return;
+        }
+      }
+      taken.push(box);
+      // Точка под именем: без неё подпись висит над пустотой и непонятно, к
+      // чему она относится.
+      brush.beginPath();
+      brush.arc(at[0], at[1], place.rank <= 2 ? 3.5 : 2.5, 0, Math.PI * 2);
+      brush.fillStyle = skin.label;
+      brush.fill();
+      brush.strokeStyle = skin.labelHalo;
+      brush.lineWidth = 3.5;
+      brush.strokeText(place.name, at[0], at[1] - look.up);
+      brush.fillStyle = skin.label;
+      brush.fillText(place.name, at[0], at[1] - look.up);
+    });
+    brush.restore();
+  }
+
   function paintNames() {
+    paintPlaces();
     const perPixel = metersPerPixel();
     const named = streetsInFrame.filter(function (street) {
       return street.name && street.points.length >= 2;

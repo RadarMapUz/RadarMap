@@ -1828,6 +1828,19 @@ SET_SURFACE = "d"
 # из ближней, а строится отдельно.
 SET_POINTS, SET_POINTS_FAR = "p", "q"
 
+# Населённые пункты: город, посёлок, кишлак, район города.
+#
+# Своим набором, а не вместе с обстановкой: обстановка живёт на ближнем плане
+# и посажена на дорогу, а название города нужно ровно там, где дорог уже не
+# видно. Один файл на тайл, запись — точка с именем.
+#
+# Ранг в коде записи, как класс у дороги: по нему клиент решает, с какого
+# охвата подписывать. Город виден с охвата области, кишлак — с районного;
+# показать всё сразу значит закрыть карту словами.
+SET_PLACES = "n"
+PLACE_RANKS = {"city": 1, "town": 2, "village": 3, "hamlet": 4,
+               "suburb": 5, "neighbourhood": 6}
+
 # Коды видов местности — контракт с клиентом (SketchArea.Kind).
 AREA_WATER, AREA_GREEN, AREA_RAIL, AREA_BLOCK = 1, 2, 3, 4
 # Тротуар — тоже «местность», и это не натяжка, а экономия. Он открытая лента,
@@ -2408,6 +2421,63 @@ def drawn_points(edits):
             flags = pack_turns(0, [t for t in turns if isinstance(t, int)])
         out.append((kind, flags, [spot]))
     return out
+
+
+def collect_places(source_path):
+    """Прочитать geojsonl мест → [(ранг, биты, [(lon, lat)], имя)].
+
+    Берём и точки, и площади: город в OSM бывает и узлом, и границей. У
+    площади — середина рамки: центр города нам неизвестен, а середина —
+    честный ответ на «где примерно».
+
+    Без имени место бесполезно: подписывать нечем, а рисовать точку без
+    подписи незачем — на схеме и так есть дороги.
+    """
+    out = []
+    if not source_path or not os.path.exists(source_path):
+        return out
+    with open(source_path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.lstrip("\x1e").strip()
+            if not line:
+                continue
+            try:
+                feature = json.loads(line)
+            except ValueError:
+                continue
+            properties = feature.get("properties") or {}
+            rank = PLACE_RANKS.get((properties.get("place") or "").strip())
+            name = (properties.get("name") or "").strip()
+            if rank is None or not name:
+                continue
+            spot = _middle_of(feature.get("geometry") or {})
+            if spot is None:
+                continue
+            out.append((rank, 0, [spot], name))
+    return out
+
+
+def _middle_of(geometry):
+    """Середина рамки любой геометрии → (lon, lat). None — не разобрали."""
+    shape = geometry.get("type")
+    coords = geometry.get("coordinates")
+    if shape == "Point" and coords and len(coords) >= 2:
+        return (round(coords[0], 5), round(coords[1], 5))
+    points = []
+    def walk(node):
+        if isinstance(node, (list, tuple)):
+            if node and isinstance(node[0], (int, float)) and len(node) >= 2:
+                points.append(node)
+            else:
+                for item in node:
+                    walk(item)
+    walk(coords)
+    if not points:
+        return None
+    lons = [p[0] for p in points]
+    lats = [p[1] for p in points]
+    return (round((min(lons) + max(lons)) / 2, 5),
+            round((min(lats) + max(lats)) / 2, 5))
 
 
 def collect_points(source_path):
@@ -3224,7 +3294,7 @@ def build_road_surface(roads):
 
 def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
                 far_points=(), far=None, addresses=None, houses=None,
-                surface=True):
+                surface=True, places=()):
     """Разложить дороги по тайлам и собрать индексы v1 и v2.
 
     Дорога, задевшая несколько тайлов, попадает в каждый целиком: дубль на
@@ -3301,6 +3371,8 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
         sets[SET_POINTS] = list(points)
     if far_points:
         sets[SET_POINTS_FAR] = list(far_points)
+    if places:
+        sets[SET_PLACES] = list(places)
     tiled = {name: tile(items, degrees) for name, items in sets.items()}
     index_v2 = {}
     # Дома и поверхность СВОИ ФАЙЛЫ УЖЕ НАПИСАЛИ и отдают только записи
@@ -3370,6 +3442,8 @@ def main():
                         help="geojsonl зданий (необязателен)")
     parser.add_argument("--addresses", dest="addresses", default=None,
                         help="geojsonl объектов с addr:street (необязателен)")
+    parser.add_argument("--places", dest="places", default=None,
+                        help="geojsonl населённых пунктов (необязателен)")
     # Поверхность считается по ВСЕЙ переданной сети, и на боевом с гигабайтом
     # памяти это не то, что включают молча. Ключом — как дома и адреса.
     parser.add_argument("--no-surface", dest="surface", action="store_false",
@@ -3474,9 +3548,18 @@ def main():
     else:
         identity_count = identity_cells = 0
     del identities
+    places = collect_places(args.places)
     index, index_v2 = write_tiles(roads, args.tiles_dir, args.grid, areas, points,
                                   far_points, far, addresses, houses,
-                                  args.surface)
+                                  args.surface, places)
+
+    if places:
+        ranks = Counter(place[0] for place in places)
+        named = ", ".join(f"{name} {ranks[rank]}" for name, rank in
+                          (("городов", 1), ("посёлков", 2), ("кишлаков", 3),
+                           ("хуторов", 4), ("районов", 5), ("кварталов", 6))
+                          if ranks.get(rank))
+        print(f"места: {len(places)} — {named}")
 
     if houses:
         weight = sum(meta["bytes"] for meta in houses.values())

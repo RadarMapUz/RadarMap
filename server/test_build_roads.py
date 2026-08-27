@@ -2778,3 +2778,83 @@ class OsmiumGeometryTests(unittest.TestCase):
             {"type": "MultiPolygon", "coordinates": [[outer, inner]]})])
         areas = build_roads.collect_areas(path, 0)
         self.assertEqual(len(areas), 1, "дырка приехала отдельной площадью")
+
+
+class PlaceSetTests(unittest.TestCase):
+    """Названия населённых пунктов — свой набор, а не обстановка.
+
+    Обстановка живёт на ближнем плане и посажена на дорогу; название города
+    нужно ровно там, где дорог уже не видно. До этого набора дальний план
+    оставался картой без адресов: сеть есть, а где Чирчик и где Ангрен —
+    неизвестно.
+    """
+
+    def feature(self, props, geometry):
+        return json.dumps({"type": "Feature", "properties": props,
+                           "geometry": geometry})
+
+    def write(self, lines):
+        handle = tempfile.NamedTemporaryFile("w", suffix=".geojsonl",
+                                             delete=False, encoding="utf-8")
+        handle.write("\n".join(lines))
+        handle.close()
+        self.addCleanup(os.unlink, handle.name)
+        return handle.name
+
+    def test_a_city_node_becomes_a_record_with_a_name(self):
+        path = self.write([self.feature(
+            {"place": "city", "name": "Toshkent"},
+            {"type": "Point", "coordinates": [69.24, 41.31]})])
+        places = build_roads.collect_places(path)
+        self.assertEqual(len(places), 1)
+        rank, flags, points, name = places[0]
+        self.assertEqual(rank, 1)
+        self.assertEqual(name, "Toshkent")
+        self.assertEqual(points, [(69.24, 41.31)])
+
+    def test_a_place_drawn_as_a_boundary_gets_its_middle(self):
+        # Город в OSM бывает и узлом, и границей. Центр нам неизвестен,
+        # середина рамки — честный ответ на «где примерно».
+        ring = [[69.2, 41.3], [69.4, 41.3], [69.4, 41.4], [69.2, 41.4], [69.2, 41.3]]
+        path = self.write([self.feature(
+            {"place": "town", "name": "Chirchiq"},
+            {"type": "MultiPolygon", "coordinates": [[ring]]})])
+        places = build_roads.collect_places(path)
+        self.assertEqual(len(places), 1)
+        self.assertEqual(places[0][2], [(69.3, 41.35)])
+
+    def test_a_place_without_a_name_is_not_a_place(self):
+        # Подписывать нечем, а точка без подписи на схеме не нужна: там и так
+        # есть дороги.
+        path = self.write([self.feature(
+            {"place": "village"},
+            {"type": "Point", "coordinates": [69.24, 41.31]})])
+        self.assertEqual(build_roads.collect_places(path), [])
+
+    def test_unknown_kinds_are_skipped(self):
+        path = self.write([self.feature(
+            {"place": "ocean", "name": "Аральское"},
+            {"type": "Point", "coordinates": [59.0, 45.0]})])
+        self.assertEqual(build_roads.collect_places(path), [])
+
+    def test_places_travel_in_their_own_set(self):
+        road = (3, 0, [(69.25, 41.300), (69.25, 41.302)], "")
+        places = [(1, 0, [(69.251, 41.301)], "Toshkent")]
+        with tempfile.TemporaryDirectory() as work:
+            build_roads.write_tiles([road], work, places=places)
+            names = os.listdir(work)
+            own = [n for n in names if n.endswith("_n.json")]
+            self.assertTrue(own, "набор мест не написан")
+            with open(os.path.join(work, own[0]), encoding="utf-8") as handle:
+                rows = json.load(handle)["roads"]
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0][0], 1, "ранг не доехал")
+            self.assertEqual(rows[0][3], "Toshkent", "имя не доехало")
+            self.assertLessEqual(len(rows[0]), 4,
+                                 "пятый элемент убивает тайл у старых сборок")
+
+    def test_no_places_no_file(self):
+        road = (3, 0, [(69.25, 41.300), (69.25, 41.302)], "")
+        with tempfile.TemporaryDirectory() as work:
+            build_roads.write_tiles([road], work)
+            self.assertFalse([n for n in os.listdir(work) if n.endswith("_n.json")])

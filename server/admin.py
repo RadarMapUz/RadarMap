@@ -1527,6 +1527,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.edits_json(conn)
             if path == "/api/areas":
                 return self.areas_json()
+            if path == "/api/places":
+                return self.places_json()
             if path == "/api/candidates":
                 return self.candidates_json()
             if path == "/api/roads":
@@ -2073,6 +2075,24 @@ class Handler(BaseHTTPRequestHandler):
             edits_tiles_dir(), *box, sets=map_edits.area_sets(mpp),
             budget=limits["bytes"], objects=map_edits.area_objects(mpp),
             keep=(mpp or 0))})
+
+    def places_json(self):
+        """Названия населённых пунктов: город, посёлок, кишлак, район.
+
+        Отдельной ручкой, а не вместе с местностью: мест мало, а нужны они
+        ровно там, где всё остальное уже не читается — на охвате района и
+        области. Ранг решает, с какого масштаба подписывать.
+        """
+        box = self._bbox()
+        if box is None:
+            return self._json({"error": "нужна рамка карты"}, 400)
+        query = parse_qs(urlparse(self.path).query)
+        try:
+            mpp = float(query["mpp"][0])
+        except (KeyError, IndexError, ValueError):
+            mpp = None
+        self._json({"places": map_edits.load_places(edits_tiles_dir(), *box,
+                                                    mpp=mpp)})
 
     def candidates_json(self):
         """Кандидаты от нейросети: обводки зданий, которых в OSM ещё нет.

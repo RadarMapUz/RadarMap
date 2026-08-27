@@ -3035,3 +3035,66 @@ class KerbRoundingTests(unittest.TestCase):
                 worst = max(worst, abs(gap - radius))
         self.assertLess(worst, 4.0,
                         f"парабола отошла от дуги на {worst:.2f} м")
+
+
+class HouseGeometryTests(unittest.TestCase):
+    """Дома тоже приезжают MultiPolygon — и тоже терялись целиком.
+
+    Проверка `type != "Polygon"` стояла в двух местах: в collect_areas и в
+    stream_houses. Первую починили, вторая осталась, и на боевом экстракте
+    100 % домов — MultiPolygon: все 1 653 195 домов страны выбрасывались
+    молча. В отчёте сборки строки «дома:» просто не было.
+    """
+
+    def house(self, lat, lon, size=0.0003, shape="MultiPolygon", levels=None):
+        ring = [[lon, lat], [lon + size, lat], [lon + size, lat + size],
+                [lon, lat + size], [lon, lat]]
+        body = [[ring]] if shape == "MultiPolygon" else [ring]
+        props = {"building": "yes"}
+        if levels is not None:
+            props["building:levels"] = str(levels)
+        return json.dumps({"type": "Feature", "properties": props,
+                           "geometry": {"type": shape, "coordinates": body}})
+
+    def write(self, lines):
+        handle = tempfile.NamedTemporaryFile("w", suffix=".geojsonl",
+                                             delete=False, encoding="utf-8")
+        handle.write("\n".join(lines))
+        handle.close()
+        self.addCleanup(os.unlink, handle.name)
+        return handle.name
+
+    def test_a_multipolygon_house_reaches_the_tile(self):
+        path = self.write([self.house(41.31, 69.28)])
+        with tempfile.TemporaryDirectory() as work:
+            index = build_roads.stream_houses(path, work, 0.05)
+            self.assertTrue(index, "дом потерялся при разборе")
+            names = [n for n in os.listdir(work) if n.endswith("_h.json")]
+            self.assertTrue(names, "файла набора домов нет")
+
+    def test_a_plain_polygon_still_works(self):
+        # Старый вид геометрии никуда не делся: экспорт могут поменять.
+        path = self.write([self.house(41.31, 69.28, shape="Polygon")])
+        with tempfile.TemporaryDirectory() as work:
+            self.assertTrue(build_roads.stream_houses(path, work, 0.05))
+
+    def test_levels_survive_the_new_path(self):
+        path = self.write([self.house(41.31, 69.28, levels=9)])
+        with tempfile.TemporaryDirectory() as work:
+            build_roads.stream_houses(path, work, 0.05)
+            name = [n for n in os.listdir(work) if n.endswith("_h.json")][0]
+            with open(os.path.join(work, name), encoding="utf-8") as handle:
+                rows = json.load(handle)["roads"]
+            flags = rows[0][1]
+            levels = (flags >> build_roads.HOUSE_LEVELS_SHIFT)
+            self.assertEqual(levels, 9, "этажность потерялась")
+
+    def test_a_line_is_not_a_house(self):
+        # Забор и второе тело того же контура — не дом.
+        line = json.dumps({"type": "Feature", "properties": {"building": "yes"},
+                           "geometry": {"type": "LineString",
+                                        "coordinates": [[69.28, 41.31],
+                                                        [69.281, 41.311]]}})
+        path = self.write([line])
+        with tempfile.TemporaryDirectory() as work:
+            self.assertEqual(build_roads.stream_houses(path, work, 0.05), {})

@@ -1232,22 +1232,27 @@ def stream_houses(source_path, target_dir, degrees, tolerance_deg=None,
                     feature = json.loads(line)
                 except ValueError:
                     continue
+                # Osmium НЕ пишет «Polygon». Здесь стояла ровно та же
+                # проверка, что и в collect_areas, и с тем же исходом:
+                # на боевом экстракте 100 % домов — MultiPolygon, то есть
+                # ВСЕ 1 653 195 домов страны выбрасывались молча. В отчёте
+                # сборки строки «дома:» просто не было, и понять, что слой
+                # потерян, можно было только по её отсутствию.
                 geometry = feature.get("geometry") or {}
-                if geometry.get("type") != "Polygon":
-                    continue
-                rings = geometry.get("coordinates") or []
-                points = rings[0] if rings else []
-                if len(points) < 4:
-                    continue
-                points = simplify(points, tolerance_deg)
-                if len(points) < 4 or extent_meters(points) < floor:
-                    continue
                 levels = house_levels(feature.get("properties") or {})
                 flags = AREA_FLAG_CLOSED | (levels << HOUSE_LEVELS_SHIFT)
-                record = [AREA_HOUSE, flags, encode(points)]
-                row = json.dumps(record, separators=(",", ":"))
-                for key in tile_keys_of(points, degrees):
-                    sink(key).write(row + "\n")
+                for closed, points in _shapes_of(geometry):
+                    # Дом — площадь. Незамкнутая линия здесь — это забор или
+                    # второе тело того же контура; ни то, ни другое не дом.
+                    if not closed or len(points) < 4:
+                        continue
+                    points = simplify(points, tolerance_deg)
+                    if len(points) < 4 or extent_meters(points) < floor:
+                        continue
+                    record = [AREA_HOUSE, flags, encode(points)]
+                    row = json.dumps(record, separators=(",", ":"))
+                    for key in tile_keys_of(points, degrees):
+                        sink(key).write(row + "\n")
     finally:
         for handle in open_files.values():
             handle.close()

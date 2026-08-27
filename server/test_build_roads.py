@@ -2943,3 +2943,95 @@ class ClipToTileTests(unittest.TestCase):
                 points = sum(len(row[2]) // 2 for row in rows)
                 self.assertLess(points, whole // 3,
                                 f"{name} везёт почти всё озеро целиком")
+
+
+class KerbRoundingTests(unittest.TestCase):
+    """Въезд в перекрёсток скруглён бордюром, а не срезан углом.
+
+    Оболочка кромок даёт правильную площадь, но с острыми углами. В жизни угол
+    между двумя улицами скруглён, и именно это отличает нарисованный
+    перекрёсток от настоящего сильнее всего остального.
+
+    Радиус не выдуман: половина ширины самой узкой ноги узла, в пределах от
+    двух до десяти метров. Больше — скругление съело бы проезжую часть.
+    """
+
+    def square(self, half=0.0002, lat=41.31, lon=69.28):
+        return [(lon - half, lat - half), (lon + half, lat - half),
+                (lon + half, lat + half), (lon - half, lat + half),
+                (lon - half, lat - half)]
+
+    def scale(self):
+        return math.cos(math.radians(41.31))
+
+    def test_corners_lose_their_points(self):
+        sharp = self.square()
+        soft = build_roads.round_corners(sharp, 6.0, self.scale())
+        self.assertGreater(len(soft), len(sharp), "вершин не прибавилось")
+        for corner in sharp[:-1]:
+            self.assertNotIn(corner, soft, "угол остался острым")
+
+    def test_the_shape_stays_inside_the_hull(self):
+        sharp = self.square()
+        soft = build_roads.round_corners(sharp, 6.0, self.scale())
+        lons = [p[0] for p in sharp]
+        lats = [p[1] for p in sharp]
+        for lon, lat in soft:
+            self.assertGreaterEqual(lon, min(lons) - 1e-9)
+            self.assertLessEqual(lon, max(lons) + 1e-9)
+            self.assertGreaterEqual(lat, min(lats) - 1e-9)
+            self.assertLessEqual(lat, max(lats) + 1e-9)
+
+    def test_the_middle_is_still_covered(self):
+        # Перекрёсток обязан остаться перекрёстком: скругление режет углы, а не
+        # площадь под узлом.
+        soft = build_roads.round_corners(self.square(), 6.0, self.scale())
+        area = abs(build_roads.signed_area_meters(soft))
+        whole = abs(build_roads.signed_area_meters(self.square()))
+        self.assertGreater(area, whole * 0.7, "скругление съело перекрёсток")
+
+    def test_a_straight_corner_is_left_alone(self):
+        # Почти прямая линия углом не является — скруглять там нечего.
+        line = [(69.28, 41.31), (69.281, 41.3100005), (69.282, 41.31),
+                (69.281, 41.315), (69.28, 41.31)]
+        soft = build_roads.round_corners(line, 6.0, self.scale())
+        self.assertIn((69.281, 41.3100005), soft,
+                      "прямой участок разрезали на дугу")
+
+    def test_the_ring_stays_closed(self):
+        soft = build_roads.round_corners(self.square(), 6.0, self.scale())
+        self.assertEqual(soft[0], soft[-1])
+
+    def test_the_radius_never_eats_the_carriageway(self):
+        # Половина ширины самой узкой ноги, в пределах.
+        node = (69.28, 41.31)
+        legs_wide = [(node, (69.29, 41.31), 20.0), (node, (69.27, 41.31), 20.0)]
+        legs_yard = [(node, (69.29, 41.31), 20.0), (node, (69.28, 41.32), 4.0)]
+        self.assertEqual(build_roads.kerb_radius(legs_wide),
+                         build_roads.KERB_RADIUS_MAX)
+        self.assertEqual(build_roads.kerb_radius(legs_yard), 2.0)
+
+    def test_the_curve_is_close_enough_to_a_real_arc(self):
+        # Дуга приближается параболой. Проверяем ЧИСЛОМ, что отклонение
+        # меньше допуска упрощения (4 м), а не «на глаз».
+        radius = build_roads.KERB_RADIUS_MAX
+        corner = (69.28, 41.31)
+        scale = self.scale()
+        step = 0.0004
+        ring = [corner,
+                (corner[0] + step / scale, corner[1]),
+                (corner[0] + step / scale, corner[1] + step),
+                (corner[0], corner[1] + step),
+                corner]
+        soft = build_roads.round_corners(ring, radius, scale)
+        # Прямой угол: центр дуги смещён от угла на R*(√2−1)+R по биссектрисе.
+        centre = (corner[0] + radius / 111_320.0 / scale,
+                  corner[1] + radius / 111_320.0)
+        worst = 0.0
+        for lon, lat in soft:
+            gap = math.hypot((lon - centre[0]) * scale * 111_320.0,
+                             (lat - centre[1]) * 111_320.0)
+            if gap < radius * 2:
+                worst = max(worst, abs(gap - radius))
+        self.assertLess(worst, 4.0,
+                        f"парабола отошла от дуги на {worst:.2f} м")

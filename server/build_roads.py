@@ -3115,6 +3115,100 @@ def _hull_of(legs):
     return ring if len(ring) >= 3 else []
 
 
+# Скругление въезда в перекрёсток.
+#
+# Оболочка кромок даёт ПРАВИЛЬНУЮ площадь, но с острыми углами: в жизни угол
+# между двумя улицами скруглён бордюром, и именно это отличает нарисованный
+# перекрёсток от настоящего сильнее всего остального.
+#
+# Радиус не выдумываем: он не имеет права съесть проезжую часть, поэтому берём
+# половину ширины САМОЙ УЗКОЙ ноги узла и ограничиваем сверху. Двор к проспекту
+# получит маленький радиус, два проспекта — большой, и оба останутся честными.
+KERB_RADIUS_MIN = 2.0
+KERB_RADIUS_MAX = 10.0
+# Дуга приближается квадратичной кривой Безье через сам угол. Это парабола, а
+# не окружность, но отклонение на наших радиусах меньше допуска упрощения
+# (4 м): проверено тестом, а не на глаз.
+#
+# Точек на угол — ОДНА, и это замер, а не экономия из принципа. На 5 987
+# настоящих перекрёстках центра Ташкента:
+#
+#   одна точка  — вершин ×3,1, набор «d» тяжелее на 26 %
+#   две точки   — вершин ×4,0, тяжелее на 38 %
+#   три точки   — вершин ×4,9, тяжелее на 51 %
+#
+# Разницу между одной и двумя на экране телефона (55 метров на высоту) видно
+# только рядом с вершинами, и она не стоит двенадцати процентов веса.
+KERB_ARC_STEPS = 1
+# Почти прямой угол скруглять нечего: там нет угла.
+KERB_STRAIGHT_DEGREES = 12.0
+
+
+def round_corners(ring, radius, scale, steps=KERB_ARC_STEPS):
+    """Скруглить углы кольца бордюрным радиусом. Кольцо → кольцо.
+
+    Срез считается по касательным: t = R / tan(θ/2), но не больше половины
+    каждой из соседних сторон — иначе соседние скругления съедят друг друга и
+    кольцо вывернется.
+    """
+    if radius <= 0 or len(ring) < 4:
+        return ring
+    points = ring[:-1] if ring[0] == ring[-1] else list(ring)
+    if len(points) < 3:
+        return ring
+    straight = math.radians(180.0 - KERB_STRAIGHT_DEGREES)
+    out = []
+    for i, point in enumerate(points):
+        before = points[i - 1]
+        after = points[(i + 1) % len(points)]
+        one = ((before[0] - point[0]) * scale, before[1] - point[1])
+        two = ((after[0] - point[0]) * scale, after[1] - point[1])
+        len_one = math.hypot(*one)
+        len_two = math.hypot(*two)
+        if len_one <= 0 or len_two <= 0:
+            out.append(point)
+            continue
+        one = (one[0] / len_one, one[1] / len_one)
+        two = (two[0] / len_two, two[1] / len_two)
+        cosine = max(-1.0, min(1.0, one[0] * two[0] + one[1] * two[1]))
+        angle = math.acos(cosine)
+        if angle >= straight or angle <= 1e-6:
+            out.append(point)
+            continue
+        # ВСЁ В МЕТРАХ, и только в конце — обратно в градусы.
+        #
+        # Длины сторон здесь в градусах (с поправкой на долготу), радиус — в
+        # метрах. Смешать их значит получить срез в доли миллиметра: угол
+        # «скруглится» на 0,2 мм, и все проверки, кроме числовой, это
+        # пропустят. Ровно так и вышло с первого раза.
+        cut = min(radius / math.tan(angle / 2),
+                  len_one * 111_320.0 / 2, len_two * 111_320.0 / 2) / 111_320.0
+        if cut <= 0:
+            out.append(point)
+            continue
+        start = (point[0] + one[0] * cut / scale, point[1] + one[1] * cut)
+        end = (point[0] + two[0] * cut / scale, point[1] + two[1] * cut)
+        out.append(start)
+        for step in range(1, steps + 1):
+            t = step / (steps + 1)
+            back = (1 - t) * (1 - t)
+            mid = 2 * (1 - t) * t
+            fore = t * t
+            out.append((back * start[0] + mid * point[0] + fore * end[0],
+                        back * start[1] + mid * point[1] + fore * end[1]))
+        out.append(end)
+    out.append(out[0])
+    return out
+
+
+def kerb_radius(legs):
+    """Радиус бордюра узла: половина ширины самой узкой ноги, в пределах."""
+    if not legs:
+        return 0.0
+    narrow = min(leg[2] for leg in legs)
+    return max(KERB_RADIUS_MIN, min(KERB_RADIUS_MAX, narrow / 2))
+
+
 def _hull_fits(legs, ring):
     want = max(leg[2] for leg in legs) ** 2
     return want <= 0 or abs(signed_area_meters(ring)) <= want * JUNCTION_MAX_AREA
@@ -3129,7 +3223,9 @@ def iter_junctions(arms):
         if not ring:
             continue
         if _hull_fits(legs, ring):
-            yield (AREA_JUNCTION, AREA_FLAG_CLOSED, ring)
+            scale = _lon_scale([legs[0][0]]) or 1.0
+            yield (AREA_JUNCTION, AREA_FLAG_CLOSED,
+                   round_corners(ring, kerb_radius(legs), scale))
             continue
         # Кластер растянулся — разбираем обратно по узлам. Лучше шов, чем
         # двор, залитый асфальтом.

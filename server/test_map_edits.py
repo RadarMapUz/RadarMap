@@ -1520,3 +1520,104 @@ class PanelPaletteTests(unittest.TestCase):
                 continue
             self.assertGreater(self.lum(far), self.lum(near),
                                f"вид {kind}: дальняя ступень темнее ближней")
+
+
+class StreetNameTests(unittest.TestCase):
+    """Подписи улиц: правила, а не шрифт.
+
+    До этого в панели не было НИ ОДНОГО вызова fillText — карта была
+    безымянной, и улица называлась только после щелчка. Раскладку в canvas
+    приходится писать руками: ни коллизий, ни автоматики там нет, поэтому
+    сторожим ровно те правила, из-за нарушения которых подписи превращаются
+    в мусор.
+
+    Замерено на живом кадре центра, 3008 пикселей, 1,8 м/пиксель: улиц с
+    именем 361, подписей нарисовано 40 (упёрлись в бюджет), коротких 31,
+    не поместились 32, наложились 3, за кадром 32.
+    """
+
+    def source(self):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "static", "editor.js")
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_the_pass_is_wired_in(self):
+        text = self.source()
+        self.assertIn("paintNames", text)
+        order = re.search(r"\[paintLand, paintNet, paintMarks, (\w+), ", text)
+        self.assertIsNotNone(order, "проход подписей не в списке слоёв")
+        self.assertEqual(order.group(1), "paintNames",
+                         "подписи рисуются не после сети и обстановки")
+
+    def test_a_label_is_never_upside_down(self):
+        # Разворачиваем УЧАСТОК, а не текст: перевёрнутое название читается
+        # как сбой отрисовки, а не как подпись.
+        self.assertIn("if (to[0] < from[0]) { const swap = from; from = to; to = swap; }",
+                      self.source())
+
+    def test_labels_do_not_overlap(self):
+        self.assertIn("taken.push(box)", self.source(),
+                      "занятые места не запоминаются — подписи налезут")
+
+    def test_a_label_that_does_not_fit_is_not_drawn(self):
+        # Обрезок названия хуже его отсутствия.
+        self.assertIn("if (width + 12 > run.length) { return false; }",
+                      self.source())
+
+    def test_one_name_is_not_repeated_side_by_side(self):
+        # Улица приезжает несколькими лентами: у проспекта с дублёром разные
+        # классы, а склейка идёт по классу. «Mustaqillik shoh ko'chasi» так
+        # подписывалась пять раз, и две подписи стояли впритык одна над другой.
+        text = self.source()
+        found = re.search(r"const NAME_REPEAT = (\d+);", text)
+        self.assertIsNotNone(found, "повторы имён ничем не разведены")
+        self.assertGreaterEqual(int(found.group(1)), 300,
+                                "полэкрана — это меньше трёхсот пикселей?")
+        self.assertIn("already[text] = centre", text)
+
+    def test_the_budget_is_real_and_sane(self):
+        found = re.search(r"const NAME_BUDGET = (\d+);", self.source())
+        self.assertIsNotNone(found, "бюджета подписей нет")
+        self.assertLessEqual(int(found.group(1)), 60,
+                             "столько подписей в кадре — это уже не карта")
+
+    def test_far_views_are_left_alone(self):
+        # На охвате района имя улицы не нужно и не помещается; там нужны
+        # названия населённых пунктов, а их в данных пока нет.
+        found = re.search(r"const NAME_FAR_MPP = (\d+);", self.source())
+        self.assertIsNotNone(found)
+        self.assertLessEqual(int(found.group(1)), 12)
+
+
+class PassRunnerTests(unittest.TestCase):
+    """Слой обязан дорисоваться даже без кадра.
+
+    Голого requestAnimationFrame мало: у окна, закрытого другим окном, кадры
+    не приходят ВООБЩЕ. Поймано следом в консоли — кадр заказан (id 2, 3, 4),
+    таймер на 300 мс сработал трижды, кадр не пришёл ни разу. Холст оставался
+    залитым землёй с одной местностью: ни сети, ни обстановки, ни подписей.
+    """
+
+    def source(self):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "static", "editor.js")
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_the_next_layer_has_a_second_way_to_arrive(self):
+        text = self.source()
+        self.assertIn("function soon(work)", text, "гонки кадра и таймера нет")
+        self.assertIn("soon(step)", text, "слои по-прежнему ждут только кадра")
+
+    def test_the_race_cancels_the_loser(self):
+        text = self.source()
+        self.assertIn("window.clearTimeout(timer)", text)
+        self.assertIn("window.cancelAnimationFrame(frame)", text)
+
+    def test_no_bare_frame_request_is_left_in_the_runner(self):
+        text = self.source()
+        runner = re.search(r"function runPasses\(passes\) \{(.*?)\n  \}", text, re.S)
+        self.assertIsNotNone(runner)
+        self.assertNotIn("requestAnimationFrame", runner.group(1),
+                         "в бегуне слоёв снова остался голый кадр")

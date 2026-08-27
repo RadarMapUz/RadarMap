@@ -1267,12 +1267,38 @@
       brush.clearRect(0, 0, width, height);
     }
     const passes = schema
-      ? [paintLand, paintNet, paintMarks, paintCandidates]
+      ? [paintLand, paintNet, paintMarks, paintNames, paintCandidates]
       : [paintThinNet, paintCandidates];
     runPasses(passes);
   }
 
   let painting = 0;
+
+  /// Следующий слой — по кадру ИЛИ по таймеру, что придёт раньше.
+  ///
+  /// Голого requestAnimationFrame мало: у окна, закрытого другим окном, кадры
+  /// не приходят ВООБЩЕ. Поймано на себе — и не догадкой, а следом в консоли:
+  /// кадр заказан (id 2, 3, 4), таймер на 300 мс сработал трижды, а сам кадр
+  /// не пришёл ни разу. Холст оставался залитым землёй с одной местностью:
+  /// ни сети, ни обстановки, ни подписей. Открытая в соседнем окне панель
+  /// показывала пустую карту и молчала о причине.
+  ///
+  /// Гонка честная: кто пришёл первым, тот и отменяет второго.
+  function soon(work) {
+    let done = false;
+    const frame = window.requestAnimationFrame(function () {
+      if (done) { return; }
+      done = true;
+      window.clearTimeout(timer);
+      work();
+    });
+    const timer = window.setTimeout(function () {
+      if (done) { return; }
+      done = true;
+      window.cancelAnimationFrame(frame);
+      work();
+    }, 40);
+  }
 
   /// Слои по одному за кадр. Новая пересборка отменяет незаконченную: рисовать
   /// вчерашнюю рамку поверх сегодняшней незачем.
@@ -1282,7 +1308,7 @@
     function step() {
       if (mine !== painting || at >= passes.length) { return; }
       passes[at++]();
-      window.requestAnimationFrame(step);
+      soon(step);
     }
     // Первый слой — сразу, без ожидания кадра: иначе при быстром движении
     // холст остаётся пустым на один кадр дольше нужного.
@@ -1385,6 +1411,153 @@
         }
       });
     });
+  }
+
+
+  // --- Подписи улиц ---------------------------------------------------------
+  //
+  // До этого в файле не было НИ ОДНОГО вызова fillText: карта была безымянной,
+  // и улица называлась только после щелчка, в карточке правки. Модератор водил
+  // глазами по сетке и опознавал место по форме перекрёстка.
+  //
+  // Правила те же, что на телефоне и в панели MapLibre, и они не про красоту:
+  //
+  //   * подпись идёт ВДОЛЬ улицы и никогда вверх ногами;
+  //   * одна подпись на склеенную улицу, а не на кусок: кусков у одной улицы в
+  //     кадре бывает пятнадцать, и пятнадцать подписей подряд — это шум;
+  //   * подпись не рисуется, если не помещается в видимую часть улицы: обрезок
+  //     названия хуже его отсутствия;
+  //   * подписи не налезают друг на друга — держим занятые прямоугольники;
+  //   * бюджет на кадр, ближние к середине первыми.
+  //
+  // Раскладку в canvas приходится писать руками: ни коллизий, ни автоматики
+  // там нет. Поэтому бюджет и порядок важнее шрифта.
+  const NAME_BUDGET = 40;
+  const NAME_MIN_METERS = 60;      // короче — подпись длиннее самой улицы
+  const NAME_FAR_MPP = 8;          // дальше улицы уже не подписывают
+
+  function paintNames() {
+    const perPixel = metersPerPixel();
+    const named = streetsInFrame.filter(function (street) {
+      return street.name && street.points.length >= 2;
+    });
+    if (perPixel > NAME_FAR_MPP) { return; }
+    if (!named.length) { return; }
+
+    const middle = [painted.width / 2, painted.height / 2];
+    const ranked = named.map(function (street) {
+      const at = atPixel(street.points[0][0], street.points[0][1]);
+      return { street: street,
+               gap: Math.hypot(at[0] - middle[0], at[1] - middle[1]) };
+    }).sort(function (a, b) { return a.gap - b.gap; });
+
+    brush.save();
+    brush.textAlign = 'center';
+    brush.textBaseline = 'middle';
+    brush.lineJoin = 'round';
+    const taken = [];
+    const already = {};
+    let drawn = 0;
+    for (let i = 0; i < ranked.length && drawn < NAME_BUDGET; i++) {
+      if (placeName(ranked[i].street, perPixel, taken, already)) { drawn++; }
+    }
+    brush.restore();
+  }
+
+  /// Самый длинный ПОЧТИ ПРЯМОЙ ход улицы в пикселях: на нём подпись не гнётся.
+  ///
+  /// Считать по одному отрезку было мало: на семнадцатом зуме у улицы
+  /// пятнадцать вершин, самый длинный отрезок между ними — тридцать пикселей,
+  /// а название занимает сто двадцать. Подписей не появлялось вовсе именно на
+  /// том масштабе, где по улицам и работают.
+  ///
+  /// Поэтому копим ПОДРЯД идущие отрезки, пока улица не свернула больше чем на
+  /// STRAIGHT_TURN: у прямой улицы, разбитой вершинами, ход собирается целиком.
+  const STRAIGHT_TURN = 20 * Math.PI / 180;
+
+  function straightRun(points) {
+    let best = null, bestLength = 0;
+    let start = atPixel(points[0][0], points[0][1]);
+    let last = start, runLength = 0, runAngle = null;
+    for (let i = 1; i < points.length; i++) {
+      const next = atPixel(points[i][0], points[i][1]);
+      const step = Math.hypot(next[0] - last[0], next[1] - last[1]);
+      if (step < 0.5) { continue; }
+      const angle = Math.atan2(next[1] - last[1], next[0] - last[0]);
+      let turn = runAngle === null ? 0 : Math.abs(angle - runAngle);
+      if (turn > Math.PI) { turn = 2 * Math.PI - turn; }
+      if (runAngle !== null && turn > STRAIGHT_TURN) {
+        start = last;
+        runLength = 0;
+      }
+      runAngle = angle;
+      runLength += step;
+      last = next;
+      if (runLength > bestLength) {
+        bestLength = runLength;
+        best = [start, next];
+      }
+    }
+    return best ? { from: best[0], to: best[1], length: bestLength } : null;
+  }
+
+  // Одно имя на кадр — если только оно не далеко.
+  //
+  // Улица приезжает несколькими склеенными лентами: у проспекта с дублёром
+  // разные классы, а склейка идёт по классу. На кадре центра «Mustaqillik
+  // shoh ko'chasi» так подписывалась пять раз подряд, и две подписи стояли
+  // впритык одна над другой. Длинная улица имеет право на повтор — но не
+  // ближе, чем через полэкрана.
+  const NAME_REPEAT = 600;
+
+  function placeName(street, perPixel, taken, already) {
+    const run = straightRun(street.points);
+    if (!run || run.length < NAME_MIN_METERS / perPixel) { return false; }
+
+    const size = street.cls <= 3 ? 13 : 11;
+    brush.font = '600 ' + size + 'px system-ui, -apple-system, sans-serif';
+    const text = street.name;
+    const width = brush.measureText(text).width;
+    // Не помещается — молчим. Обрезанное название читается как сбой.
+    if (width + 12 > run.length) { return false; }
+
+    let from = run.from, to = run.to;
+    // Никогда вверх ногами: если участок идёт справа налево, разворачиваем его,
+    // а не текст.
+    if (to[0] < from[0]) { const swap = from; from = to; to = swap; }
+    const angle = Math.atan2(to[1] - from[1], to[0] - from[0]);
+    const centre = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
+
+    const box = { x: centre[0] - width / 2, y: centre[1] - size / 2,
+                  w: width, h: size };
+    const twin = already[text];
+    if (twin && Math.hypot(centre[0] - twin[0], centre[1] - twin[1]) < NAME_REPEAT) {
+      return false;
+    }
+    if (box.x < 0 || box.y < 0
+        || box.x + box.w > painted.width || box.y + box.h > painted.height) {
+      return false;
+    }
+    for (let i = 0; i < taken.length; i++) {
+      const other = taken[i];
+      if (box.x < other.x + other.w && box.x + box.w > other.x
+          && box.y < other.y + other.h && box.y + box.h > other.y) {
+        return false;
+      }
+    }
+    taken.push(box);
+    already[text] = centre;
+
+    brush.translate(centre[0], centre[1]);
+    brush.rotate(angle);
+    // Обводка тёмным: подпись лежит на асфальте, а он светлее фона.
+    brush.strokeStyle = 'rgba(6, 8, 12, 0.85)';
+    brush.lineWidth = 3;
+    brush.strokeText(text, 0, 0);
+    brush.fillStyle = '#d7dae0';
+    brush.fillText(text, 0, 0);
+    brush.setTransform(painted.ratio, 0, 0, painted.ratio, 0, 0);
+    return true;
   }
 
   // Трапеция подхода: от обычной ширины в восьми метрах от узла к расширенной

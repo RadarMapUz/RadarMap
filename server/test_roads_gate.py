@@ -175,3 +175,46 @@ class DrawnGateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeliberateWaiverTests(unittest.TestCase):
+    """Осознанный пропуск объёмных ворот — с причиной и не для всего.
+
+    День, ради которого он заведён: набор домов уехал впервые (+78 МБ), а
+    крупная местность перестала возиться в каждый тайл целиком — 2 925 тайлов
+    похудели. На проверенном образце это 1 421 вершина против 13 при той же
+    покрытой земле, то есть ворота видели правду и правильно останавливали
+    автоматику.
+    """
+
+    def index(self, tiles):
+        return {"tileDegrees": 0.05,
+                "tiles": {k: {"sha256": k, "bytes": v} for k, v in tiles.items()}}
+
+    def test_volume_passes_only_when_asked(self):
+        was = self.index({"a_w": 1000, "b_w": 1000})
+        now = self.index({"a_w": 3000, "b_w": 3000})
+        ok, reasons = roads_gate.decide(was, now)
+        self.assertFalse(ok, "трёхкратный рост прошёл молча")
+        ok, reasons = roads_gate.decide(was, now, allow_big_change=True)
+        self.assertTrue(ok)
+        self.assertTrue(any("пропущено осознанно" in r for r in reasons),
+                        "пропуск не назван вслух")
+
+    def test_an_empty_candidate_is_never_waived(self):
+        # Пустой кандидат — это отсутствие данных, а не «сильное изменение».
+        ok, reasons = roads_gate.decide(self.index({"a_w": 1000}), {"tiles": {}},
+                                        allow_big_change=True)
+        self.assertFalse(ok)
+
+    def test_a_grid_change_is_never_waived(self):
+        was = self.index({"a_w": 1000})
+        now = {"tileDegrees": 0.02, "tiles": {"x_w": {"sha256": "x", "bytes": 1000}}}
+        ok, _ = roads_gate.decide(was, now, allow_big_change=True)
+        self.assertFalse(ok, "смена сетки прошла по пропуску объёма")
+
+    def test_nothing_is_waived_when_nothing_is_wrong(self):
+        same = self.index({"a_w": 1000})
+        ok, reasons = roads_gate.decide(same, same, allow_big_change=True)
+        self.assertTrue(ok)
+        self.assertEqual(reasons, [], "тихая публикация обросла словами")

@@ -136,10 +136,22 @@ except Exception:
 with open(sys.argv[2], "w", encoding="utf-8") as handle:
     json.dump(payload, handle)
 PYGATE
-GATE_ARGS=""
-[ "$ALLOW_GRID" = "1" ] && GATE_ARGS="--allow-grid-change"
+# Массивом, а не строкой: причина пропуска — это фраза с пробелами, и в
+# строке она разваливалась на слова. В журнале осталось «пропуск: дома» вместо
+# всей причины — то есть ровно то, ради чего причину и требуют.
+GATE_ARGS=()
+[ "$ALLOW_GRID" = "1" ] && GATE_ARGS+=("--allow-grid-change")
+# Осознанный пропуск объёмных ворот. Только с причиной и только руками:
+#
+#   RADARMAP_ALLOW_BIG="дома поехали впервые" bash server/publish_roads.sh --auto
+#
+# Ворота не мешают — они спрашивают. Пропускать их «чтобы прошло» нельзя: они
+# ловили настоящую потерю не раз, последний — пропавший пруд в тайле
+# 2615_4994, у которого в OSM только линейный вид.
+[ -n "${RADARMAP_ALLOW_BIG:-}" ] && GATE_ARGS+=("--allow-big-change=$RADARMAP_ALLOW_BIG")
 if ! GATE_OUT=$(python3 "$(dirname "$0")/roads_gate.py" \
-        "$WORK/live_payload.json" "$WORK/index_payload_v2.json" $GATE_ARGS); then
+        "$WORK/live_payload.json" "$WORK/index_payload_v2.json" \
+        ${GATE_ARGS[@]+"${GATE_ARGS[@]}"}); then
     echo "$GATE_OUT"
     notify "НЕ опубликовано. $(printf '%s' "$GATE_OUT" | tr '\n' ' ')"
     exit 1

@@ -940,6 +940,8 @@ def collect_areas(source_path, tolerance_deg):
     принимают решения за рулём, — он несёт факт «здесь вода».
     """
     areas = []
+    rings = set()        # подписи колец из многоугольников
+    orphans = []         # замкнутые линии: решим в конце, есть ли у них двойник
     if not source_path or not os.path.exists(source_path):
         return areas
     with open(source_path, encoding="utf-8") as handle:
@@ -956,16 +958,59 @@ def collect_areas(source_path, tolerance_deg):
             if kind is None:
                 continue
             geometry = feature.get("geometry") or {}
+            # Замкнутая линия — обычно второе тело площади, и её мы отбрасываем
+            # (иначе площадь легла бы в тайл дважды). Но «обычно» это не
+            # «всегда»: у одной-двух записей из тридцати восьми тысяч
+            # многоугольника-двойника нет вовсе, и такая линия — единственное
+            # тело объекта. Ворота публикации поймали ровно этот случай: из
+            # тайла 2615_4994 пропал пруд, у которого был только линейный вид.
+            #
+            # Поэтому замкнутые линии откладываем и в конце добавляем те, чьей
+            # подписи нет среди колец.
             for closed, points in _shapes_of(geometry):
-                if len(points) < (3 if closed else 2):
-                    continue
-                points = simplify(points, tolerance_deg)
-                if len(points) < (3 if closed else 2):
-                    continue
-                if extent_meters(points) < MIN_AREA_METERS:
-                    continue
-                areas.append((kind, AREA_FLAG_CLOSED if closed else 0, points))
+                if closed:
+                    rings.add(_ring_signature(points))
+                out = _kept_area(kind, closed, points, tolerance_deg)
+                if out is not None:
+                    areas.append(out)
+            if geometry.get("type") == "LineString":
+                coordinates = geometry.get("coordinates") or []
+                if len(coordinates) > 2 and coordinates[0] == coordinates[-1]:
+                    orphans.append((kind, [tuple(p[:2]) for p in coordinates]))
+
+    for kind, points in orphans:
+        if _ring_signature(points) in rings:
+            continue
+        out = _kept_area(kind, True, points, tolerance_deg)
+        if out is not None:
+            areas.append(out)
     return areas
+
+
+def _kept_area(kind, closed, points, tolerance_deg):
+    """Упростить и отсеять мелочь. None — объект не доехал."""
+    if len(points) < (3 if closed else 2):
+        return None
+    points = simplify(points, tolerance_deg)
+    if len(points) < (3 if closed else 2):
+        return None
+    if extent_meters(points) < MIN_AREA_METERS:
+        return None
+    return (kind, AREA_FLAG_CLOSED if closed else 0, points)
+
+
+def _ring_signature(points):
+    """Подпись кольца: рамка и число вершин.
+
+    Замерено на боевом экстракте: 38 703 различных кольца и 37 759 замкнутых
+    линий, и по этой подписи они сходятся все, кроме двух. Считается по СЫРЫМ
+    координатам — упрощение у двойников одно и то же, но сравнивать надёжнее
+    до него.
+    """
+    lons = [point[0] for point in points]
+    lats = [point[1] for point in points]
+    return (round(min(lons), 6), round(min(lats), 6),
+            round(max(lons), 6), round(max(lats), 6), len(points))
 
 
 def _shapes_of(geometry):

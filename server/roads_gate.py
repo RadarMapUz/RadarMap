@@ -106,9 +106,25 @@ def check_drawn(edits):
     return not reasons, reasons
 
 
-def decide(previous, candidate, allow_grid_change=False):
-    """Пускать ли кандидата в публикацию. Возвращает (можно, [причины])."""
+def decide(previous, candidate, allow_grid_change=False, allow_big_change=False):
+    """Пускать ли кандидата в публикацию. Возвращает (можно, [причины]).
+
+    `allow_big_change` — осознанный пропуск ОБЪЁМНЫХ ворот: объём, исчезнувшие
+    и похудевшие тайлы. Он нужен ровно для одного случая: слой поехал впервые
+    или сборка стала честнее, и потайловые числа обязаны измениться сильно.
+    Мы в такой день были: набор домов уехал первый раз (+78 МБ), а крупная
+    местность перестала возиться в каждый тайл целиком — 2 925 тайлов
+    похудели, и на проверенном образце это 1 421 вершина против 13 при той же
+    покрытой земле.
+
+    Что он НЕ пропускает и не будет: пустого кандидата и смену сетки. Первое —
+    это отсутствие данных, второе — потеря смысла у потайлового сравнения.
+
+    Пропущенные причины не исчезают: они возвращаются отдельным списком, и
+    тот, кто нажал, обязан назвать, почему.
+    """
     reasons = []
+    waived = []
     if not (candidate.get("tiles") or {}):
         return False, ["кандидат пуст: ни одного тайла"]
 
@@ -157,7 +173,9 @@ def decide(previous, candidate, allow_grid_change=False):
         reasons.append(f"тайлов похудело больше чем на "
                        f"{MAX_TILE_LOSS * 100:.0f}%: {len(shrunk)} ({worst})")
 
-    return not reasons, reasons
+    if allow_big_change and reasons:
+        waived, reasons = reasons, []
+    return not reasons, reasons + [f"пропущено осознанно: {why}" for why in waived]
 
 
 def summary(previous, candidate):
@@ -178,14 +196,27 @@ def main():
         print("нужно: roads_gate.py прошлый.json кандидат.json [--allow-grid-change]")
         return 2
     allow = "--allow-grid-change" in sys.argv
+    # Причина обязательна: ворота пропускают не «потому что мешают», а потому
+    # что человек посмотрел на числа и назвал, что именно изменилось.
+    big = ""
+    for arg in sys.argv:
+        if arg.startswith("--allow-big-change="):
+            big = arg.split("=", 1)[1].strip()
+    if "--allow-big-change" in sys.argv and not big:
+        print("нужна причина: --allow-big-change=«что изменилось и почему это ожидаемо»")
+        return 2
     with open(sys.argv[1], encoding="utf-8") as handle:
         previous = json.load(handle)
     with open(sys.argv[2], encoding="utf-8") as handle:
         candidate = json.load(handle)
-    ok, reasons = decide(previous, candidate, allow_grid_change=allow)
+    ok, reasons = decide(previous, candidate, allow_grid_change=allow,
+                         allow_big_change=bool(big))
     print(summary(previous, candidate))
+    if big:
+        print("пропуск объёмных ворот:", big)
     for reason in reasons:
-        print("СТОП:", reason)
+        print(("ПРОПУЩЕНО: " if reason.startswith("пропущено осознанно")
+               else "СТОП: ") + reason)
     return 0 if ok else 1
 
 

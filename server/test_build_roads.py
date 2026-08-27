@@ -3158,3 +3158,65 @@ class JunctionIndexTests(unittest.TestCase):
         slow = (time.time() - start) * 10
         self.assertLess(fast * 5, slow,
                         f"клетки не дали выигрыша: {fast:.3f} против {slow:.3f}")
+
+
+class OrphanRingTests(unittest.TestCase):
+    """Замкнутая линия без многоугольника-двойника — единственное тело объекта.
+
+    Осторожность «замкнутая линия это второе тело площади» верна для 37 757
+    записей из 37 759 — и неверна для двух. Ворота публикации поймали ровно
+    этот случай: из тайла 2615_4994 пропал пруд, у которого был только
+    линейный вид. Гейт сработал как задумано, а правило пришлось уточнить.
+    """
+
+    def feature(self, props, geometry):
+        return json.dumps({"type": "Feature", "properties": props,
+                           "geometry": geometry})
+
+    def write(self, lines):
+        handle = tempfile.NamedTemporaryFile("w", suffix=".geojsonl",
+                                             delete=False, encoding="utf-8")
+        handle.write("\n".join(lines))
+        handle.close()
+        self.addCleanup(os.unlink, handle.name)
+        return handle.name
+
+    def ring(self, lat=41.31, lon=69.28, size=0.003):
+        return [[lon, lat], [lon + size, lat], [lon + size, lat + size],
+                [lon, lat + size], [lon, lat]]
+
+    def test_a_closed_line_without_a_twin_survives(self):
+        path = self.write([self.feature(
+            {"natural": "water"},
+            {"type": "LineString", "coordinates": self.ring()})])
+        areas = build_roads.collect_areas(path, 0)
+        self.assertEqual(len(areas), 1, "объект без двойника потерялся")
+        self.assertEqual(areas[0][1], build_roads.AREA_FLAG_CLOSED,
+                         "одинокая замкнутая линия приехала незамкнутой")
+
+    def test_a_twin_is_still_dropped(self):
+        ring = self.ring()
+        path = self.write([
+            self.feature({"natural": "water"},
+                         {"type": "MultiPolygon", "coordinates": [[ring]]}),
+            self.feature({"natural": "water"},
+                         {"type": "LineString", "coordinates": ring}),
+        ])
+        self.assertEqual(len(build_roads.collect_areas(path, 0)), 1,
+                         "площадь легла в тайл дважды")
+
+    def test_the_signature_tells_twins_from_strangers(self):
+        one = self.ring()
+        other = self.ring(lat=41.40)
+        self.assertEqual(build_roads._ring_signature(one),
+                         build_roads._ring_signature(list(one)))
+        self.assertNotEqual(build_roads._ring_signature(one),
+                            build_roads._ring_signature(other))
+
+    def test_an_open_line_is_untouched(self):
+        path = self.write([self.feature(
+            {"waterway": "canal"},
+            {"type": "LineString", "coordinates": [[69.25, 41.30], [69.26, 41.31]]})])
+        areas = build_roads.collect_areas(path, 0)
+        self.assertEqual(len(areas), 1)
+        self.assertEqual(areas[0][1], 0, "арык приехал замкнутым")

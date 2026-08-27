@@ -42,6 +42,19 @@ def _get(port, path, cookie=None):
         return e.code, e.read().decode()
 
 
+def _get_full(port, path, cookie=None):
+    """Как _get, но с заголовками: политику и тип содержимого проверяют по ним."""
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}")
+    token = COOKIE["value"] if cookie is None else cookie
+    if token:
+        req.add_header("Cookie", token)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status, resp.read(), dict(resp.headers)
+    except urllib.error.HTTPError as e:
+        return e.code, e.read(), dict(e.headers)
+
+
 def _post(port, path, fields, origin=None, cookie=None):
     data = urllib.parse.urlencode(fields).encode()
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -798,6 +811,147 @@ class AdminTest(unittest.TestCase):
             os.unlink(fresh.name)
 
 
+    # --- Панель на MapLibre: рядом с рабочей, за адресом -------------------
+    #
+    # Переход идёт параллельно, а не заменой: конструктор — единственный
+    # инструмент разметки, и если он неделю ведёт себя странно, встаёт вся
+    # работа по картам. Откат здесь — это адрес, а не выкат.
+
+    def test_gl_page_carries_the_strict_policy(self):
+        code, body, headers = _get_full(self.port, "/editor-gl")
+        self.assertEqual(code, 200)
+        csp = headers.get("Content-Security-Policy", "")
+        # Чужих источников на странице нет вовсе: библиотека лежит своим
+        # файлом, тайлы свои. Поэтому политика строже рабочей, а не мягче.
+        self.assertIn("script-src 'self'", csp)
+        self.assertNotIn("yandex", csp)
+        # blob: обязателен: MapLibre поднимает воркеры из blob-URL, и без
+        # этого карта молча не рисует ничего.
+        self.assertIn("worker-src blob:", csp)
+        text = body.decode()
+        self.assertIn("maplibre-gl.js", text)
+        self.assertIn("editor_gl.js", text)
+
+    def test_gl_page_needs_a_session(self):
+        code, _body, _headers = _get_full(self.port, "/editor-gl", cookie="")
+        self.assertNotEqual(code, 200)
+
+    def test_library_comes_from_our_own_host(self):
+        code, body, headers = _get_full(self.port, "/static/vendor/maplibre-gl.js")
+        self.assertEqual(code, 200)
+        self.assertIn(b"MapLibre GL JS", body[:400])
+        self.assertIn("javascript", headers.get("Content-Type", ""))
+
+    def test_static_takes_names_from_the_list_only(self):
+        # Отдавать файлы по имени из URL нельзя: так наружу уезжает /etc/passwd.
+        for name in ("../admin.py", "vendor/../../admin.py", "secrets.env"):
+            code, _body, _headers = _get_full(self.port, "/static/" + name)
+            self.assertNotEqual(code, 200, name)
+
+    def test_missing_tile_is_no_data_not_an_error(self):
+        # «Нет данных здесь» и «адрес неверный» ведут к разному поведению
+        # клиента: путать их значит получать красные строки в консоли на
+        # каждом пустом квадрате.
+        code, _body, _headers = _get_full(self.port, "/mvt/15/22690/12247.mvt")
+        self.assertEqual(code, 204)
+
+    def test_tile_path_takes_numbers_only(self):
+        for path in ("/mvt/15/../../admin.py.mvt", "/mvt/a/b/c.mvt",
+                     "/mvt/15/1.mvt"):
+            code, _body, _headers = _get_full(self.port, path)
+            self.assertEqual(code, 404, path)
+
+
+class AccountTests(unittest.TestCase):
+    """Учётные записи.
+
+    Пароль был один, и журнал писал «edit-withdraw #5» — на вопрос «кто снял»
+    ответить было нечем. Пока модератор один, это терпимо; на втором человеке
+    становится дырой: снятую чужую правку не отличить от своей.
+
+    Без HTTP-сервера и НЕ наследуясь от AdminTest: конфигурация здесь
+    переписывается, а у общего стенда в ней лежит секрет подписи сессий —
+    чужие тесты после такого получали бы 401 на ровном месте.
+    """
+
+    def setUp(self):
+        handle = tempfile.NamedTemporaryFile(suffix=".conf", delete=False)
+        handle.close()
+        self.conf = handle.name
+        self.addCleanup(os.unlink, self.conf)
+        self.saved_path = admin_auth.CONFIG_PATH
+        admin_auth.CONFIG_PATH = self.conf
+        self.addCleanup(setattr, admin_auth, "CONFIG_PATH", self.saved_path)
+        admin_auth.write_password("пароль-владельца-1234", self.conf)
+
+    def test_owner_signs_in_without_a_name(self):
+        # Так входили до появления имён, и ломать это ради формы нельзя:
+        # обновление панели выкинуло бы из неё единственного человека.
+        self.assertEqual(
+            admin_auth.who_signs_in("", "пароль-владельца-1234"),
+            admin_auth.OWNER)
+
+    def test_named_person_signs_in(self):
+        admin_auth.write_account("иван", "пароль-ивана-1234", self.conf)
+        self.assertEqual(
+            admin_auth.who_signs_in("иван", "пароль-ивана-1234"), "иван")
+
+    def test_right_password_wrong_name_is_refused(self):
+        # Иначе пароль владельца пускал бы под любым именем, и журнал врал бы
+        # именно там, где на него полагаются.
+        admin_auth.write_account("иван", "пароль-ивана-1234", self.conf)
+        self.assertIsNone(
+            admin_auth.who_signs_in("иван", "пароль-владельца-1234"))
+
+    def test_unknown_name_is_refused(self):
+        self.assertIsNone(
+            admin_auth.who_signs_in("пётр", "пароль-владельца-1234"))
+
+    def test_account_can_be_dropped(self):
+        admin_auth.write_account("иван", "пароль-ивана-1234", self.conf)
+        self.assertTrue(admin_auth.drop_account("иван", self.conf))
+        self.assertIsNone(admin_auth.who_signs_in("иван", "пароль-ивана-1234"))
+        self.assertFalse(admin_auth.drop_account("иван", self.conf))
+
+    def test_owner_name_is_not_free_to_take(self):
+        with self.assertRaises(ValueError):
+            admin_auth.write_account(admin_auth.OWNER, "любой", self.conf)
+
+    def test_password_change_still_kills_sessions(self):
+        # Смена пароля обязана перевыпускать секрет подписи: иначе украденная
+        # кука переживает единственное действие, которым её можно отозвать.
+        before = admin_auth.read_config(self.conf)["session_secret"]
+        admin_auth.write_password("другой-пароль-1234", self.conf)
+        self.assertNotEqual(
+            before, admin_auth.read_config(self.conf)["session_secret"])
+
+    def test_adding_a_person_does_not_kick_everyone_out(self):
+        # А вот заведение человека — не должно: иначе каждый новый модератор
+        # выкидывает из панели всех остальных.
+        before = admin_auth.read_config(self.conf)["session_secret"]
+        admin_auth.write_account("иван", "пароль-ивана-1234", self.conf)
+        self.assertEqual(
+            before, admin_auth.read_config(self.conf)["session_secret"])
+
+    def test_cookie_carries_the_name_and_stays_ascii(self):
+        # Заголовки HTTP — latin-1: кириллическое имя в куке роняло весь ответ
+        # на входе, человек вводил верный пароль и получал обрыв соединения.
+        sessions = admin_auth.Sessions(secret="тест")
+        token = sessions.issue(name="владелец")
+        self.assertTrue(token.isascii(), token)
+        self.assertEqual(sessions.name_of(token), "владелец")
+
+    def test_name_in_the_cookie_cannot_be_swapped(self):
+        sessions = admin_auth.Sessions(secret="тест")
+        token = sessions.issue(name="иван")
+        self.assertFalse(sessions.valid(token.replace("%D0%B8", "%D0%BF")))
+
+    def test_old_cookie_without_a_name_still_works(self):
+        # Куку выдали до появления имён — это владелец, а не «выйти всем».
+        sessions = admin_auth.Sessions(secret="тест")
+        self.assertEqual(sessions.name_of(sessions.issue()), "")
+
+
 class PaletteTests(AdminTest):
     """Палитра конструктора.
 
@@ -1051,6 +1205,79 @@ class EditorApiTests(AdminTest):
         self.assertEqual(code, 200)
         self.assertIn("Сверять правки не с чем", body)
 
+    def test_author_of_an_edit_is_the_person_not_the_browser(self):
+        # Автор из тела запроса позволял подписать правку любым именем — и
+        # журнал врал бы именно там, где на него полагаются.
+        code, body = _post_json(self.port, "/api/edit",
+                                {"kind": "lanes", "geom": [69.25, 41.3],
+                                 "raw": [69.25, 41.3], "props": {"lanes": 4},
+                                 "author": "не-я", "status": 1})
+        self.assertEqual(code, 200, body)
+        made = json.loads(body)
+        conn = admin.db()
+        try:
+            edit = map_edits.by_id(conn, made["id"])
+        finally:
+            conn.close()
+        self.assertNotEqual(edit["author"], "не-я")
+        self.assertEqual(edit["author"], admin_auth.OWNER)
+
+    def test_journal_shows_who_did_it(self):
+        # Журнал писал «edit-withdraw #5» и молчал о том, кто это сделал.
+        conn = admin.db()
+        try:
+            admin.log_action(conn, None, "edit-withdraw", "#5", who="иван")
+            conn.commit()
+        finally:
+            conn.close()
+        body = _get(self.port, "/journal")[1]
+        self.assertIn("иван", body)
+        self.assertIn("edit-withdraw", body)
+
+    def test_journal_search_narrows_to_the_person(self):
+        conn = admin.db()
+        try:
+            admin.log_action(conn, None, "edit-save", "правка #77", who="иван")
+            admin.log_action(conn, None, "edit-save", "правка #88", who="пётр")
+            conn.commit()
+        finally:
+            conn.close()
+        body = _get(self.port, "/journal?q=" + urllib.parse.quote("иван"))[1]
+        rows = body.split("<main>")[1]
+        self.assertIn("правка #77", rows)
+        self.assertNotIn("правка #88", rows)
+
+    def test_journal_links_to_the_edit(self):
+        # Запись журнала без ссылки на объект — это строка, после которой надо
+        # идти искать руками.
+        conn = admin.db()
+        try:
+            admin.log_action(conn, None, "edit-save", "#42", who="иван")
+            conn.commit()
+        finally:
+            conn.close()
+        self.assertIn("?edit=42", _get(self.port, "/journal")[1])
+
+    def test_journal_needs_a_session(self):
+        self.assertEqual(_get(self.port, "/journal", cookie="")[0], 401)
+
+    def test_summary_counts_the_constructor(self):
+        # Конструктор — половина панели, а сводка о нём не знала вовсе.
+        conn = admin.db()
+        try:
+            conn.execute("DELETE FROM map_edits")
+            map_edits.create(conn, "lanes", raw=[69.25, 41.30],
+                             snapped=[69.25, 41.30], props={"lanes": 4})
+            map_edits.create(conn, "lock", raw=[69.25, 41.30],
+                             snapped=[69.25, 41.30], props={"radius": 120},
+                             status=map_edits.ACCEPTED)
+            conn.commit()
+        finally:
+            conn.close()
+        body = _get(self.port, "/")[1]
+        self.assertIn("черновиков в конструкторе", body)
+        self.assertIn("размеченных областей", body)
+
     def test_changes_page_needs_a_session(self):
         self.assertEqual(_get(self.port, "/changes", cookie="")[0], 401)
 
@@ -1179,3 +1406,4 @@ class EditorApiTests(AdminTest):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

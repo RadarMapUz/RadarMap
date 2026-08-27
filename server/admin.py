@@ -36,6 +36,9 @@ Stdlib-only (sqlite3 + http.server), слушает 127.0.0.1:8093. Вход п�
     python3 admin.py --export             # JSON действующих правок (для публикации)
     python3 admin.py --mark-published 12  # пометить правки опубликованными в версии 12
     python3 admin.py --set-password       # задать пароль входа (спросит дважды)
+    python3 admin.py --add-person <имя>   # завести человека (пароль спросит)
+    python3 admin.py --drop-person <имя>  # убрать человека
+    python3 admin.py --people             # кто может войти
 """
 import html
 import json
@@ -139,7 +142,17 @@ def init_db():
     conn.close()
 
 
-def log_action(conn, camera_id, action, detail=""):
+def log_action(conn, camera_id, action, detail="", who=""):
+    """Запись в журнал решений.
+
+    `who` — кто это сделал. Раньше журнал писал «edit-withdraw #5», и на
+    вопрос «кто снял» ответить было нечем: пароль один, значит все действия
+    одинаковы и безымянны. Имя дописывается к подробностям, а не отдельной
+    колонкой: у таблицы есть читатели постарше этого изменения, и менять её
+    форму ради одного поля дороже, чем оно стоит.
+    """
+    if who:
+        detail = f"{detail} · {who}".strip(" ·")
     conn.execute("INSERT INTO moderation_log(at, camera_id, action, detail) VALUES(?,?,?,?)",
                  (time.time(), camera_id, action, detail))
 
@@ -289,6 +302,12 @@ a { color:var(--accent); }
 .past { flex-basis:100%; }
 .past summary { cursor:pointer; font-size:12px; color:var(--muted); }
 .past .muted { font-size:12px; padding-left:14px; }
+.chg .pick { width:16px; height:16px; margin:0 6px 0 0; accent-color:#3cdcff; }
+/* Поиск и пачка. Очередь читают, ища конкретное, а не подряд: без поиска
+   двадцатая строка находится только глазами. */
+.bulk { display:flex; gap:8px; align-items:center; margin:0 0 12px; flex-wrap:wrap; }
+.bulk .find { flex:1 1 220px; padding:9px 11px; border-radius:10px;
+  border:1px solid #2b3038; background:#12161d; color:#e7e9ee; font-size:14px; }
 form.inline { display:inline; }
 form.inline button { margin:0; padding:6px 12px; font-size:13px; }
 button.ghost { background:transparent; color:var(--text-2);
@@ -310,7 +329,7 @@ button.ghost { background:transparent; color:var(--text-2);
 TABS = (("/", "Сводка"), ("/map", "Карта"), ("/editor", "Конструктор"),
         ("/changes", "Что изменилось"), ("/cameras", "Камеры"),
         ("/mobile", "Передвижные"), ("/feedback", "Обращения"),
-        ("/usage", "Люди"), ("/health", "Здоровье"))
+        ("/usage", "Люди"), ("/journal", "Журнал"), ("/health", "Здоровье"))
 
 # Префикс, под которым панель видна снаружи: "/radarmap/admin" на общем домене
 # или пусто при доступе через SSH-туннель. Внутрь запросы приходят уже без
@@ -406,7 +425,12 @@ def login_page(message="", secure=True, configured=True):
         note = ("Пароль ещё не задан. На сервере: python3 admin.py --set-password")
         form = f'<div class="empty">{esc(note)}</div>'
     else:
+        # Имя необязательно: так входили до появления учётных записей, и
+        # пустое поле по-прежнему означает владельца. Требовать его сразу
+        # значило бы выкинуть из панели единственного человека при обновлении.
         form = (f'<form method="post" action="{u("/login")}">'
+                '<input type="text" name="name" placeholder="Имя (пусто — владелец)" '
+                'autocomplete="username">'
                 '<input type="password" name="password" placeholder="Пароль" '
                 'autofocus autocomplete="current-password" required>'
                 '<button type="submit">Войти</button></form>')
@@ -740,6 +764,11 @@ rx="2" fill="#4a4a4a"/><path d="M12 19a12 8 0 0 1 24 0z" fill="#ffb020"/>
 }
 
 AREA_ICONS = {
+    # Дом — не заливка, а контур с крышей: он обводится по одному, а не
+    # массивом, и на плитке должен читаться как «здание», а не как «зона».
+    6: """<svg viewBox="0 0 48 28"><path d="M14 24V12l10-6 10 6v12z"
+fill="#212430" stroke="#3a4250" stroke-width="1.5"
+stroke-linejoin="round"/></svg>""",
     2: """<svg viewBox="0 0 48 28"><rect x="2" y="3" width="44" height="22"
 rx="5" fill="#1d3a24" stroke="#2f6b3c"/></svg>""",
     1: """<svg viewBox="0 0 48 28"><rect x="2" y="3" width="44" height="22"
@@ -768,6 +797,135 @@ def tool_button(icon, name, key, attrs, extra=""):
     chip = f'<span class="key">{esc(key)}</span>' if key else ""
     return (f'<button class="tool{extra}" {attrs}><span class="ico">{icon}</span>'
             f'<span class="lbl">{esc(name)}</span>{chip}</button>')
+
+
+# Поиск и выбор в очереди. Скрипт страницей, а не файлом: он в двадцать строк
+# и живёт ровно на одной странице; отдельный файл здесь стоил бы запроса и
+# ещё одного места, где можно забыть обновить версию.
+CHANGES_JS = """<script>
+(function () {
+  const rows = Array.prototype.slice.call(document.querySelectorAll('.chg'));
+  const find = document.getElementById('qfind');
+  const picked = document.getElementById('picked');
+  const all = document.getElementById('pickall');
+  function count() {
+    const n = rows.filter(function (row) {
+      const box = row.querySelector('.pick');
+      return box && box.checked && row.style.display !== 'none';
+    }).length;
+    picked.textContent = n ? 'выбрано ' + n : '';
+  }
+  if (find) {
+    find.addEventListener('input', function () {
+      const want = find.value.trim().toLowerCase();
+      rows.forEach(function (row) {
+        row.style.display = !want || row.textContent.toLowerCase().indexOf(want) >= 0
+          ? '' : 'none';
+      });
+      count();
+    });
+  }
+  if (all) {
+    all.addEventListener('click', function () {
+      const visible = rows.filter(function (row) { return row.style.display !== 'none'; });
+      const turnOn = visible.some(function (row) {
+        const box = row.querySelector('.pick');
+        return box && !box.checked;
+      });
+      visible.forEach(function (row) {
+        const box = row.querySelector('.pick');
+        if (box) { box.checked = turnOn; }
+      });
+      count();
+    });
+  }
+  rows.forEach(function (row) {
+    const box = row.querySelector('.pick');
+    if (box) { box.addEventListener('change', count); }
+  });
+})();
+</script>"""
+
+
+def mvt_stamp():
+    """Когда в последний раз менялось дерево MVT. 0 — его ещё нет."""
+    root = os.path.join(edits_tiles_dir() or "", "mvt")
+    newest = 0
+    for folder, _dirs, files in os.walk(root):
+        for name in files:
+            try:
+                newest = max(newest, int(os.path.getmtime(
+                    os.path.join(folder, name))))
+            except OSError:
+                continue
+        # Дерево тайлов — тысячи файлов; на метку хватает первой сотни, а
+        # обход целиком стоил бы полсекунды на каждое открытие страницы.
+        if newest:
+            break
+    return newest
+
+
+def render_editor_gl():
+    """Панель на MapLibre — рядом с рабочей, за флагом.
+
+    Переход на векторный стек делается ПАРАЛЛЕЛЬНО, а не заменой: конструктор
+    — единственный инструмент разметки, и если он неделю ведёт себя странно,
+    встаёт вся работа по картам. Обе панели работают одновременно, картинки
+    сравниваются на одних и тех же местах, откат — это адрес.
+
+    Чужих источников на странице нет вовсе: библиотека лежит своим файлом,
+    тайлы свои, спутника пока нет. Ровно поэтому CSP здесь строже, чем у
+    рабочей панели, а не мягче.
+    """
+    logout_url = u("/logout")
+    # Метка сборки в адресе тайла. Без неё браузер модератора показывает
+    # вчерашнюю карту после публикации и не спрашивает сервер: адрес тот же,
+    # значит можно взять из кэша. Понять это со стороны нельзя вовсе.
+    stamp = mvt_stamp()
+    return f"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Конструктор на MapLibre</title>
+<link rel="stylesheet" href="{static_url("vendor/maplibre-gl.css")}">
+<style>
+ html,body{{margin:0;height:100%;background:#0e1013;color:#e8e8e8;
+   font:14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif}}
+ #map{{position:absolute;inset:0}}
+ .bar{{position:absolute;left:12px;top:12px;z-index:5;display:flex;gap:8px;
+   align-items:center;background:#161a20cc;border:1px solid #2a2f38;
+   border-radius:10px;padding:8px 12px;backdrop-filter:blur(6px)}}
+ .bar a{{color:#8ab4f8;text-decoration:none}}
+ .bar b{{font-weight:600}}
+ .note{{position:absolute;right:12px;bottom:12px;z-index:5;max-width:360px;
+   background:#161a20cc;border:1px solid #2a2f38;border-radius:10px;
+   padding:10px 12px;color:#9aa3af}}
+ #count{{color:#9aa3af}}
+ #find{{background:#0e1013;border:1px solid #2a2f38;border-radius:8px;
+   color:#e8e8e8;padding:6px 10px;width:190px;font:inherit}}
+ .found{{position:absolute;left:12px;top:56px;z-index:6;min-width:260px;
+   background:#161a20f2;border:1px solid #2a2f38;border-radius:10px;
+   overflow:hidden}}
+ .found button{{display:block;width:100%;text-align:left;background:none;
+   border:0;color:#e8e8e8;padding:8px 12px;font:inherit;cursor:pointer}}
+ .found button:hover{{background:#1f2530}}
+</style></head><body>
+<div id="map" data-stamp="{stamp}"></div>
+<div class="bar">
+  <b>MapLibre</b>
+  <input id="find" type="search" placeholder="улица и дом" autocomplete="off">
+  <span id="count">каркас</span>
+  <a id="same" href="{u("/editor")}">та же точка в рабочей</a>
+  <a href="{logout_url}">выйти</a>
+</div>
+<div id="found" class="found" hidden></div>
+<div class="note">
+<b>Q W E R</b> — рисовать дорогу · <b>H</b> — обвести дом ·
+<b>1</b> — полосы · <b>A</b> светофор, <b>S</b> переход, <b>D</b> стоп-линия,
+<b>F</b> разворот, <b>G</b> лежачий.<br>
+<b>Enter</b> закончить · <b>Esc</b> отменить · <b>Backspace</b> убрать вершину.
+Вершину можно тянуть — узел поедет со всеми улицами.</div>
+<script src="{static_url("vendor/maplibre-gl.js")}"></script>
+<script src="{static_url("editor_gl.js")}"></script>
+</body></html>"""
 
 
 def render_editor(api_key, drafts):
@@ -949,9 +1107,10 @@ font-size:12px;cursor:pointer;line-height:1.35}}
     </div>
   </details>
   <div class="legend cover" id="cover"></div>
-  <details class="work" id="landbox">
-    <summary>Обвести местность</summary>
+  <details class="work" id="landbox" open>
+    <summary>Обвести дом и местность</summary>
     <div class="toolrow draw">
+      {tool_button(AREA_ICONS[6], "Дом", "H", 'data-kind="area" data-area="6"')}
       {tool_button(AREA_ICONS[2], "Зелень", "", 'data-kind="area" data-area="2"')}
       {tool_button(AREA_ICONS[1], "Вода", "", 'data-kind="area" data-area="1"')}
       {tool_button(AREA_ICONS[4], "Квартал", "", 'data-kind="area" data-area="4"')}
@@ -968,7 +1127,7 @@ font-size:12px;cursor:pointer;line-height:1.35}}
   <div class="legend" id="hint">Черновиков: {drafts}. Клик по дороге ставит
     объект, клик по объекту — правит. Панель ничего не публикует.</div>
   <div class="legend keyhelp">V выбрать · 1–3 свойства · Q W E R дорога ·
-    Ctrl+D не примыкать ·
+    Ctrl+D не примыкать · H дом ·
     A S D F G обстановка · Z разметить область ·
     Enter закончить · Backspace снять вершину ·
     Delete убрать вершину · Esc отменить · Ctrl+Z вернуть ·
@@ -1174,7 +1333,10 @@ def mark_published(version):
     now = time.time()
     count = conn.execute("UPDATE overrides SET published_at = ? WHERE published_at IS NULL",
                          (now,)).rowcount
-    log_action(conn, None, "publish", f"версия {version}, новых правок {count}")
+    # Отметку о публикации ставит НЕ человек в панели, а команда владельца
+    # с его машины. Имени вошедшего здесь нет и быть не может.
+    log_action(conn, None, "publish", f"версия {version}, новых правок {count}",
+               who="публикация")
     conn.commit()
     conn.close()
     return count
@@ -1196,6 +1358,29 @@ class Handler(BaseHTTPRequestHandler):
     # Послабление РОВНО для страницы переноса и ровно до доменов Яндекса.
     # Свой скрипт лежит файлом ('self'), поэтому 'unsafe-inline' для скриптов
     # не нужен — внедрить код через данные камеры нельзя.
+    # Страница на MapLibre. Чужих источников тут нет вовсе: библиотека лежит
+    # своим файлом, тайлы — свои, шрифтов и спутника пока нет.
+    #
+    # blob: обязателен и не является послаблением «на всякий случай»: MapLibre
+    # поднимает свои воркеры из blob-URL, и без worker-src карта не рисует
+    # ничего, молча. img-src blob: — по той же причине, там живут текстуры.
+    # Спутник — ЕДИНСТВЕННЫЙ чужой источник на странице, и это неизбежно:
+    # своих снимков у нас нет и не будет, съёмка города — отдельный бизнес.
+    #
+    # Спутник Яндекса под MapLibre брать НЕЛЬЗЯ — это их условия, а не наша
+    # осторожность. Esri World Imagery правообладатель разрешил использовать
+    # для обводки в OSM явно; именно её показывают iD и JOSM. Окончательное
+    # решение по лицензии — за владельцем, здесь только техническая часть.
+    #
+    # Открыт ровно один хост и ровно для картинок: скрипты по-прежнему только
+    # свои, потому что на этой странице лежит сессия модератора.
+    SATELLITE = "https://server.arcgisonline.com"
+    CSP_GL = ("default-src 'none'; form-action 'self'; "
+              "script-src 'self'; worker-src blob:; child-src blob:; "
+              "style-src 'self' 'unsafe-inline'; "
+              f"img-src 'self' data: blob: {SATELLITE}; "
+              f"connect-src 'self' {SATELLITE}; "
+              "font-src 'self'")
     CSP_MAP = ("default-src 'none'; form-action 'self'; "
                # yastatic.net обязателен: api-maps.yandex.ru — только загрузчик,
                # сам код карты лежит там. Без него страница открывается, а карта
@@ -1260,10 +1445,10 @@ class Handler(BaseHTTPRequestHandler):
         # на каждую попытку и панель ложится сама от собственной защиты.
         if SESSIONS.blocked(address):
             return self._send_login("Слишком много попыток. Подождите 15 минут.", code=429)
-        stored = admin_auth.read_config().get("password_hash")
-        if admin_auth.check_password(field("password"), stored):
+        who = admin_auth.who_signs_in(field("name"), field("password"))
+        if who:
             SESSIONS.note_success(address)
-            token = SESSIONS.issue()
+            token = SESSIONS.issue(name=who)
             self.send_response(303)
             self.send_header("Location", "/")
             # SameSite=Lax, а не Strict: со Strict часть браузеров не
@@ -1278,7 +1463,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             return self.end_headers()
         SESSIONS.note_failure(address)
-        self._send_login("Неверный пароль", code=401)
+        # «Имя или пароль», а не «неверный пароль»: иначе форма отвечает,
+        # существует ли такое имя, — и список людей вычитывается перебором.
+        self._send_login("Неверное имя или пароль", code=401)
+
+    def who(self):
+        """Кто сейчас работает. Пусто не бывает: кука без имени выдана до
+        появления учётных записей, и это владелец."""
+        token = admin_auth.cookie_token(self.headers.get("Cookie"))
+        return SESSIONS.name_of(token) or admin_auth.OWNER
 
     def _do_logout(self):
         SESSIONS.drop(admin_auth.cookie_token(self.headers.get("Cookie")))
@@ -1328,8 +1521,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self.editor_page(conn)
             if path == "/api/edits":
                 return self.edits_json(conn)
+            if path == "/api/areas":
+                return self.areas_json()
+            if path == "/api/candidates":
+                return self.candidates_json()
             if path == "/api/roads":
                 return self.roads_json()
+            if path == "/journal":
+                return self._send(200, self.journal_page(conn))
             if path == "/changes":
                 return self._send(200, self.changes_page(conn))
             if path == "/api/todo":
@@ -1338,13 +1537,28 @@ class Handler(BaseHTTPRequestHandler):
                 return self.points_json(conn)
             if path == "/api/geocode":
                 return self.geocode_json()
+            if path == "/api/address":
+                return self.search_json()
             if path.startswith("/api/edit/") and path.endswith("/osm"):
                 return self.edit_osm(conn, path)
             if path.startswith("/api/edit/") and path.endswith("/history"):
                 return self.edit_history(conn, path)
-            if path in ("/static/moderate.js", "/static/editor.js"):
+            if path in ("/static/moderate.js", "/static/editor.js",
+                        "/static/editor_gl.js"):
                 return self.static_file(path.rsplit("/", 1)[1],
                                         "application/javascript; charset=utf-8")
+            if path == "/static/vendor/maplibre-gl.js":
+                return self.static_file("vendor/maplibre-gl.js",
+                                        "application/javascript; charset=utf-8")
+            if path == "/static/vendor/maplibre-gl.css":
+                return self.static_file("vendor/maplibre-gl.css",
+                                        "text/css; charset=utf-8")
+            if path.startswith("/mvt/"):
+                return self.mvt_tile(path)
+            if path.startswith("/glyphs/"):
+                return self.glyph_range(path)
+            if path == "/editor-gl":
+                return self._send(200, render_editor_gl(), csp=self.CSP_GL)
             # Старые адреса ведут на карту: два способа делать одно и то же —
             # это рассинхронизация, а ссылки из очереди жалоб должны работать.
             if path == "/positions":
@@ -1399,10 +1613,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.snap_json(self._json_body(raw))
             if path == "/api/edit":
                 return self.edit_save_json(conn, self._json_body(raw))
+            if path == "/api/edit/street":
+                return self.street_lanes_json(conn, self._json_body(raw))
             if path == "/api/edit/withdraw":
                 return self.edit_withdraw_json(conn, self._json_body(raw))
             if path == "/changes/act":
-                return self.changes_action(conn, field)
+                return self.changes_action(conn, field, form)
             if path == "/cameras/act":
                 self.camera_action(conn, field)
                 return self._redirect(u("/cameras"))
@@ -1430,7 +1646,7 @@ class Handler(BaseHTTPRequestHandler):
             conn.execute("INSERT OR REPLACE INTO overrides"
                          "(camera_id, op, lat, lon, type, note, decided_at, published_at) "
                          "VALUES(?,'hide',NULL,NULL,NULL,'',?,NULL)", (camera_id, now))
-            log_action(conn, camera_id, "hide")
+            log_action(conn, camera_id, "hide", who=self.who())
             self.resolve_reports(conn, camera_id, RESOLVED_DONE)
 
         elif action == "move":
@@ -1445,22 +1661,22 @@ class Handler(BaseHTTPRequestHandler):
             conn.execute("INSERT OR REPLACE INTO overrides"
                          "(camera_id, op, lat, lon, type, note, decided_at, published_at) "
                          "VALUES(?,'move',?,?,NULL,'',?,NULL)", (camera_id, lat, lon, now))
-            log_action(conn, camera_id, "move", f"{lat:.6f}, {lon:.6f}")
+            log_action(conn, camera_id, "move", f"{lat:.6f}, {lon:.6f}", who=self.who())
             self.resolve_reports(conn, camera_id, RESOLVED_DONE)
 
         elif action == "restore":
             # Откат: правка исчезает из снимка, и после публикации камера
             # возвращается всем. Это и есть страховка от ошибки модератора.
             conn.execute("DELETE FROM overrides WHERE camera_id = ?", (camera_id,))
-            log_action(conn, camera_id, "restore")
+            log_action(conn, camera_id, "restore", who=self.who())
 
         elif action == "reject":
             self.resolve_reports(conn, camera_id, RESOLVED_REJECTED)
-            log_action(conn, camera_id, "reject")
+            log_action(conn, camera_id, "reject", who=self.who())
 
         elif action == "resolve":
             self.resolve_reports(conn, camera_id, RESOLVED_DONE)
-            log_action(conn, camera_id, "resolve")
+            log_action(conn, camera_id, "resolve", who=self.who())
 
         elif action == "snooze":
             try:
@@ -1468,7 +1684,7 @@ class Handler(BaseHTTPRequestHandler):
                              (now + SNOOZE_DAYS * DAY, camera_id))
             except sqlite3.OperationalError:
                 pass   # см. resolve_reports: таблицы может ещё не быть
-            log_action(conn, camera_id, "snooze")
+            log_action(conn, camera_id, "snooze", who=self.who())
         conn.commit()
 
     def resolve_reports(self, conn, camera_id, status):
@@ -1496,11 +1712,11 @@ class Handler(BaseHTTPRequestHandler):
         if action == "kill":
             conn.execute("UPDATE reports SET active = 0, closed = 'moderator' WHERE id = ?",
                          (report_id,))
-            log_action(conn, None, "mobile_kill", f"отметка {report_id}")
+            log_action(conn, None, "mobile_kill", f"отметка {report_id}", who=self.who())
         elif action == "extend":
             conn.execute("UPDATE reports SET expires = ? WHERE id = ?",
                          (time.time() + 3 * 3600, report_id))
-            log_action(conn, None, "mobile_extend", f"отметка {report_id}")
+            log_action(conn, None, "mobile_extend", f"отметка {report_id}", who=self.who())
         elif action == "block":
             # Блокируем оба ключа сразу: адрес переживает ротацию UUID,
             # устройство — смену сети. Сутки, а не навсегда: за адресом в
@@ -1524,13 +1740,13 @@ class Handler(BaseHTTPRequestHandler):
                     "UPDATE reports SET active = 0, closed = 'blocked' "
                     "WHERE active = 1 AND (device = ? OR (ip != '' AND ip = ?))",
                     (row["device"], row["ip"]))
-                log_action(conn, None, "mobile_block", f"источник отметки {report_id}")
+                log_action(conn, None, "mobile_block", f"источник отметки {report_id}", who=self.who())
         elif action == "unblock":
             kind, value = field("block_kind"), field("block_value")
             if kind in ("ip", "device") and value:
                 conn.execute("DELETE FROM blocked WHERE kind = ? AND value = ?",
                              (kind, value))
-                log_action(conn, None, "mobile_unblock", f"{kind} {value}")
+                log_action(conn, None, "mobile_unblock", f"{kind} {value}", who=self.who())
         conn.commit()
 
     def feedback_action(self, conn, field):
@@ -1561,6 +1777,30 @@ class Handler(BaseHTTPRequestHandler):
         oldest = conn.execute(
             "SELECT MIN(received) FROM camera_reports WHERE resolved = ?",
             (RESOLVED_NEW,)).fetchone()[0]
+        # Своя карта на сводке. Конструктор — половина панели, а сводка о нём
+        # не знала вовсе: человек открывал главную, видел ноль камер и уходил,
+        # не узнав ни про висящие черновики, ни про правки, которые ждут
+        # решения после воскресной сверки.
+        #
+        # Считаем дешёвыми запросами, а не пересборкой очереди: сводка
+        # открывается первой и обязана открываться мгновенно.
+        map_work = {"drafts": 0, "check": 0, "accepted": 0, "locks": 0}
+        try:
+            map_work["drafts"] = conn.execute(
+                "SELECT COUNT(*) FROM map_edits WHERE status = ?",
+                (map_edits.DRAFT,)).fetchone()[0]
+            map_work["check"] = conn.execute(
+                "SELECT COUNT(*) FROM map_edits WHERE status != ? AND note LIKE ?",
+                (map_edits.WITHDRAWN, f"%{map_edits.CHECK_MARK}%")).fetchone()[0]
+            map_work["accepted"] = conn.execute(
+                "SELECT COUNT(*) FROM map_edits WHERE status = ?",
+                (map_edits.ACCEPTED,)).fetchone()[0]
+            map_work["locks"] = conn.execute(
+                "SELECT COUNT(*) FROM map_edits "
+                "WHERE kind = 'lock' AND status != ?",
+                (map_edits.WITHDRAWN,)).fetchone()[0]
+        except sqlite3.Error:
+            pass
 
         def tile(value, label, tone=""):
             return (f'<div class="card" style="flex:1 1 130px">'
@@ -1581,21 +1821,101 @@ class Handler(BaseHTTPRequestHandler):
   {tile(new_feedback, "новых обращений")}
   {tile(live, "живых отметок на карте")}
 </div>
+<h1>Своя карта</h1>
+<div class="row">
+  {tile(map_work["drafts"], "черновиков в конструкторе",
+        "t-warn" if map_work["drafts"] else "")}
+  {tile(map_work["check"], "правок ждут решения",
+        "t-warn" if map_work["check"] else "")}
+  {tile(map_work["accepted"], "принято и ждёт публикации")}
+  {tile(map_work["locks"], "размеченных областей")}
+</div>
 {publish_hint}
 <div class="card"><div class="muted">Всего в очереди: {len(queue)} камер ·
 самый старый неразобранный репорт: {esc(ago(oldest))}</div></div>
 {'<div class="empty">Пусто — можно закрыть вкладку</div>'
- if not (ready or disputed or new_feedback or unpublished) else ''}""")
+ if not (ready or disputed or new_feedback or unpublished
+         or map_work["drafts"] or map_work["check"]) else ''}""")
 
 
     # --- Положение камеры ---
 
+    def glyph_range(self, path):
+        """Кусок шрифта для подписей. Три файла, имена — числами.
+
+        Готовый сервис глифов существует, и подключить его — одна строка. Но
+        тогда карта модератора перестаёт работать, когда лежит чужой сервис, а
+        CSP приходится открывать на ещё один источник — на странице, где лежит
+        его сессия. Триста килобайт своих файлов дешевле обоих последствий.
+        """
+        name = path.rsplit("/", 1)[1]
+        if name not in ("0-255.pbf", "256-511.pbf", "1024-1279.pbf"):
+            # Пустой диапазон — это 204, а не 404: у шрифта их 256, и
+            # красная строка в консоли на каждый несуществующий кусок
+            # означала бы двести пятьдесят строк на одну карту.
+            self.send_response(204)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        full = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "static", "vendor", "glyphs", name)
+        try:
+            with open(full, "rb") as handle:
+                blob = handle.read()
+        except OSError:
+            return self._send(404, page("/", "Не найдено", ""))
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-protobuf")
+        self.send_header("Content-Length", str(len(blob)))
+        self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        self.send_header("Content-Security-Policy", self.CSP_STRICT)
+        self.end_headers()
+        self.wfile.write(blob)
+
+    def mvt_tile(self, path):
+        """Тайл MVT. Отдаёт ПАНЕЛЬ, а не вебрут, и это про CSP.
+
+        Тайлы лежат в вебруте и раздаются оттуда боевому клиенту. Панели
+        ходить туда значило бы открыть connect-src на другой источник — на той
+        самой странице, где лежит сессия модератора. Свой адрес того же
+        источника обходится без послабления.
+        """
+        parts = path[len("/mvt/"):].split("/")
+        if len(parts) != 3 or not parts[2].endswith(".mvt"):
+            return self._send(404, page("/", "Не найдено", ""))
+        zoom, column, row = parts[0], parts[1], parts[2][:-len(".mvt")]
+        # Числа, и только числа: имя из URL идёт в путь файла.
+        if not all(piece.isdigit() for piece in (zoom, column, row)):
+            return self._send(404, page("/", "Не найдено", ""))
+        full = os.path.join(edits_tiles_dir() or "", "mvt", zoom, column,
+                            f"{row}.mvt")
+        try:
+            with open(full, "rb") as handle:
+                blob = handle.read()
+        except OSError:
+            # Пустой тайл — это 204, а не 404: у клиента «нет данных здесь» и
+            # «адрес неверный» ведут к разному поведению, и путать их значит
+            # получать в консоли красные строки на каждом пустом квадрате.
+            self.send_response(204)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/vnd.mapbox-vector-tile")
+        self.send_header("Content-Length", str(len(blob)))
+        self.send_header("Cache-Control", "public, max-age=600")
+        self.send_header("Content-Security-Policy", self.CSP_STRICT)
+        self.end_headers()
+        self.wfile.write(blob)
+
     def static_file(self, name, content_type):
         """Один каталог, имена из белого списка. Отдавать файлы по имени из URL
         нельзя: так наружу уезжает /etc/passwd."""
-        if name not in ("moderate.js", "editor.js"):
+        if name not in ("moderate.js", "editor.js", "editor_gl.js",
+                        "vendor/maplibre-gl.js", "vendor/maplibre-gl.css"):
             return self._send(404, page("/", "Не найдено", ""))
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", name)
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "static", *name.split("/"))
         try:
             with open(path, encoding="utf-8") as handle:
                 body = handle.read()
@@ -1676,7 +1996,21 @@ class Handler(BaseHTTPRequestHandler):
         box = self._bbox()
         if box is None:
             return self._json({"error": "нужна рамка карты"}, 400)
-        roads = map_edits.load_roads(edits_tiles_dir(), *box)
+        # Потолок ПО ОХВАТУ: на квартале читаем всё, на городе — костяк.
+        # Один потолок на все случаи означал «покажи шестую часть города и
+        # молчи», и молчал он именно там, где пустой экран неотличим от
+        # отсутствия данных.
+        # Охват ЭКРАНА приходит отдельно: рамка запроса шире него на запас,
+        # и считать потолок по ней значит прятать дороги на ровном месте.
+        query = parse_qs(urlparse(self.path).query)
+        try:
+            span = float(query["span"][0])
+        except (KeyError, IndexError, ValueError):
+            span = None
+        limits = map_edits.frame_limits(*box, span=span)
+        report = {}
+        roads = map_edits.load_roads(edits_tiles_dir(), *box,
+                                     limits=limits, report=report)
 
         def described(road):
             flags, cls = road.get("flags", 0), road["cls"]
@@ -1698,7 +2032,96 @@ class Handler(BaseHTTPRequestHandler):
                     # размечены, и работа начинает ходить по кругу.
                     "drawn": bool(flags & map_edits.FLAG_HAND_DRAWN)}
 
-        self._json({"roads": [described(r) for r in roads[:2000]]})
+        # Здесь стоял ВТОРОЙ потолок — roads[:2000], молча и поверх первого.
+        # Именно он обрезал город: файлов читалось шесть, а до панели доезжали
+        # первые две тысячи дорог из них. Два потолка, о которых не знает ни
+        # тот, кто смотрит, ни тот, кто их поставил, — это не защита, а
+        # необъяснимая пустота на экране.
+        report["shown"] = len(roads)
+        self._json({"roads": [described(r) for r in roads], "limits": report})
+
+    def areas_json(self):
+        """Местность из тайлов: вода, зелень, рельсы, кварталы, тротуары, дома.
+
+        Без неё панель показывает не схему, а чертёж — серые линии на чёрном.
+        Ровно так она и выглядела: наборы местности собираются с апреля, а
+        читались только дороги.
+        """
+        box = self._bbox()
+        if box is None:
+            return self._json({"error": "нужна рамка карты"}, 400)
+        self._json({"areas": map_edits.load_areas(edits_tiles_dir(), *box)})
+
+    def candidates_json(self):
+        """Кандидаты от нейросети: обводки зданий, которых в OSM ещё нет.
+
+        Обводить руками то, что уже обвели, — самая дорогая ошибка в этой
+        работе. Замерено на живой рамке центра: нейросеть находит 4 914
+        контуров там, где OSM знает 4 217 домов, и после сверки остаётся 1 090
+        действительно новых — остальные 78 % уже нарисованы.
+
+        Ответ ничего не публикует: принятый кандидат становится обычной
+        правкой и проходит ту же проверку, что нарисованное мышью.
+        """
+        box = self._bbox()
+        if box is None:
+            return self._json({"error": "нужна рамка карты"}, 400)
+        self._json({"houses": map_edits.load_candidates(edits_tiles_dir(), *box)})
+
+    def street_lanes_json(self, conn, field):
+        """Полосы НА ВСЮ УЛИЦУ, а не на кусок.
+
+        Сборка режет дороги по перекрёсткам, чтобы получился граф, и это верно
+        на своём месте. Но полосы — свойство улицы, а не куска: размечать
+        проспект пятнадцатью правками значит платить пятнадцать раз за один
+        ответ. Замерено на центре Ташкента: сто самых длинных улиц это 808
+        правок поштучно и 100 целиком.
+
+        Каждый кусок всё равно получает СВОЮ правку: у них разные опоры и
+        разные версии, и слить их в одну запись значило бы потерять
+        возможность снять одну, не тронув остальные.
+        """
+        lanes = field.get("lanes")
+        if not isinstance(lanes, int) or not (1 <= lanes <= 15):
+            return self._json({"error": "полос от 1 до 15"}, 400)
+        try:
+            lat, lon = float(field["lat"]), float(field["lon"])
+        except (KeyError, TypeError, ValueError):
+            return self._json({"error": "нужна точка"}, 400)
+
+        span = 0.02
+        roads = map_edits.load_roads(edits_tiles_dir(), lat - span, lon - span,
+                                     lat + span, lon + span)
+        result = map_edits.snap((lon, lat), roads)
+        if result.road is None:
+            return self._json({"error": "вне дороги"}, 400)
+        pieces = map_edits.street_pieces(roads, result.road)
+
+        made, failed = [], 0
+        for piece in pieces:
+            middle = map_edits.middle_of(piece["points"])
+            if middle is None:
+                continue
+            spot = map_edits.snap((middle[0], middle[1]), roads)
+            if spot.road is None:
+                failed += 1
+                continue
+            new_id = map_edits.create(
+                conn, "lanes", raw=list(middle), snapped=list(spot.point),
+                anchor=spot.anchor, props={"lanes": lanes},
+                note="улица целиком", author=self.who(),
+                fingerprint_value=map_edits.fingerprint(
+                    (middle[0], middle[1]), roads),
+                status=map_edits.ACCEPTED)
+            made.append(new_id)
+        log_action(conn, None, "edit-street",
+                   f"полосы {lanes} на {len(made)} кусках", who=self.who())
+        conn.commit()
+        # Сколько кусков НЕ получилось — говорим вслух: молчаливая половина
+        # работы выглядит как сделанная целиком.
+        self._json({"made": len(made), "pieces": len(pieces),
+                    "failed": failed,
+                    "name": (result.road.get("name") or "").strip()})
 
     def snap_json(self, field):
         """Магнит. Считает СЕРВЕР, а не браузер, и это не про мощность.
@@ -1748,11 +2171,22 @@ class Handler(BaseHTTPRequestHandler):
                                "bearing": round(item["bearing"], 1),
                                "atNode": False}}
 
+        # Опора на id из OSM — ПОДСКАЗКА к якорю, а не замена ему. Кладём её
+        # рядом с классом, именем и азимутом: воскресная сверка сначала ищет
+        # дорогу по id (мгновенно и точно), и только если id исчез — прежним
+        # геометрическим поиском.
+        anchor = result.anchor
+        if anchor is not None:
+            osm_id = map_edits.identity_at(edits_tiles_dir(), (lon, lat),
+                                           result.bearing_degrees)
+            if osm_id:
+                anchor = dict(anchor, osmId=osm_id)
+
         return self._json({
             "point": list(result.point) if result.road else None,
             "onRoad": result.on_road,
             "atNode": result.at_node,
-            "anchor": result.anchor,
+            "anchor": anchor,
             # Три — потолок не от лени: четыре строки выбора за рулём панели
             # уже не читаются, а четвёртая дорога в радиусе захвата означает,
             # что человек ткнул не туда.
@@ -1800,6 +2234,35 @@ class Handler(BaseHTTPRequestHandler):
         except (IndexError, ValueError):
             return self._json({"error": "номер не число"}, 400)
         self._json({"history": map_edits.history(conn, edit_id)})
+
+    def search_json(self):
+        """Поиск по СВОЕМУ адресному индексу — адрес `/api/address`.
+
+        Имя не случайное: `/api/search` в панели уже занят поиском КАМЕР, и
+        второй обработчик на том же адресе просто никогда не вызвался бы —
+        маршрут разбирается сверху вниз. Ровно это и произошло: строка поиска
+        отвечала `{"found": []}` от чужого обработчика.
+
+        Ни ключа, ни чужого сервиса.
+
+        Геокодер Яндекса требует отдельного ключа и без него отвечает 403 —
+        а на этой странице он и не нужен: адреса собраны нами и лежат рядом с
+        тайлами. Свой поиск работает и когда чужой сервис лежит, и когда за
+        него не заплачено.
+        """
+        query = parse_qs(urlparse(self.path).query)
+        text = (query.get("q") or [""])[0].strip()
+        if not text:
+            return self._json({"places": []})
+        near = None
+        try:
+            near = (float(query["lat"][0]), float(query["lon"][0]))
+        except (KeyError, IndexError, ValueError):
+            near = None
+        found = map_edits.search_addresses(edits_tiles_dir(), text, near=near)
+        self._json({"places": [
+            {"title": f"{item['street']}, {item['house']}",
+             "lat": item["lat"], "lon": item["lon"]} for item in found]})
 
     def geocode_json(self):
         """Поиск адреса — ЧЕРЕЗ СВОЙ сервер, а не из браузера.
@@ -1929,9 +2392,12 @@ class Handler(BaseHTTPRequestHandler):
                 conn, kind, raw=raw_point, snapped=geom,
                 anchor=field.get("anchor"), props=field.get("props") or {},
                 note=str(field.get("note") or ""),
-                author=str(field.get("author") or "panel"),
+                # Автор — ВОШЕДШИЙ, а не то, что прислал браузер. Строка из
+                # тела запроса подписывала бы правку любым именем, и журнал
+                # врал бы именно там, где на него полагаются.
+                author=self.who(),
                 fingerprint_value=field.get("fingerprint"), status=status)
-            log_action(conn, None, "edit-create", f"{kind} #{new_id}")
+            log_action(conn, None, "edit-create", f"{kind} #{new_id}", who=self.who())
             conn.commit()
             return self._json({"id": new_id, "version": 1})
         if not isinstance(version, int):
@@ -1943,7 +2409,7 @@ class Handler(BaseHTTPRequestHandler):
                               note=str(field.get("note") or ""))
         if not ok:
             return self._json({"error": "правку изменили в другом окне"}, 409)
-        log_action(conn, None, "edit-save", f"{kind} #{edit_id}")
+        log_action(conn, None, "edit-save", f"{kind} #{edit_id}", who=self.who())
         conn.commit()
         self._json({"id": int(edit_id), "version": version + 1})
 
@@ -1954,7 +2420,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "нужны id и версия"}, 400)
         if not map_edits.withdraw(conn, edit_id, version):
             return self._json({"error": "правку изменили в другом окне"}, 409)
-        log_action(conn, None, "edit-withdraw", f"#{edit_id}")
+        log_action(conn, None, "edit-withdraw", f"#{edit_id}", who=self.who())
         conn.commit()
         self._json({"ok": True})
 
@@ -2032,10 +2498,20 @@ class Handler(BaseHTTPRequestHandler):
 
         def row(decision):
             edit = decision["edit"]
-            lat, lon = edit["geom"][1], edit["geom"][0]
+            spot = (edit.get("draw") or {}).get("point") or edit["geom"]
+            lat, lon = spot[1], spot[0]
             shift = f' · сдвиг {decision["shift"]} м' if decision["shift"] else ""
             place = esc(u("/editor")) + f"#{lat},{lon},19"
             note = esc(edit.get("note") or "")
+            # Строка обязана отвечать сама: где это, когда завели, кто и на
+            # сколько сдвинулось. Раньше здесь стояло «#5 Своя геометрия», и
+            # чтобы понять хоть что-то, надо было уйти на карту и вернуться —
+            # на каждой строке очереди.
+            where = decision.get("place") or ""
+            who = (edit.get("author") or "").strip()
+            when = ago(edit.get("updated") or edit.get("created") or 0)
+            facts = " · ".join(part for part in (
+                esc(where), esc(when), esc(who)) if part)
             actions = button(edit, "withdraw", "Снять", "ghost")
             # «Всё верно» — по МЕТКЕ, а не по вердикту этой сверки. Метку
             # ставит пересадка, и живёт она в заметке: следующая неделя может
@@ -2044,9 +2520,15 @@ class Handler(BaseHTTPRequestHandler):
             if (osm_queue.CHECK == decision["verdict"]
                     or map_edits.CHECK_MARK in (edit.get("note") or "")):
                 actions = button(edit, "confirm", "Всё верно") + actions
-            return (f'<div class="chg"><b>#{edit["id"]}</b> '
+            return (f'<div class="chg">'
+                    f'<input type="checkbox" class="pick" form="bulk" '
+                    f'name="id" value="{edit["id"]}" '
+                    f'data-version="{edit["version"]}" '
+                    f'aria-label="выбрать правку {edit["id"]}">'
+                    f'<b>#{edit["id"]}</b> '
                     f'{esc(map_edits.kind_name(edit["kind"]))}{shift} '
                     f'<a href="{place}">на карте</a>{actions}'
+                    f'<div class="muted">{facts}</div>'
                     f'<div class="muted">{note}</div>{past(edit)}</div>')
 
         def block(title, verdict, explain):
@@ -2056,6 +2538,19 @@ class Handler(BaseHTTPRequestHandler):
             return (f'<h3>{esc(title)} · {len(rows)}</h3>'
                     f'<div class="muted">{esc(explain)}</div>'
                     + "".join(row(d) for d in rows))
+
+        # Поиск и групповое снятие. Три правки, потерявшие опору, снимались по
+        # одной; при двадцати это перестаёт быть работой и становится
+        # обязанностью. Поиск — по номеру, виду и месту: очередь читают, ища
+        # конкретное, а не подряд.
+        tools = (
+            f'<form method="post" action="{act}" id="bulk" class="bulk">'
+            f'<input type="hidden" name="op" value="withdraw-many">'
+            f'<input class="find" id="qfind" placeholder="Номер, вид или улица" '
+            f'autocomplete="off">'
+            f'<button class="ghost" id="pickall" type="button">Выбрать все</button>'
+            f'<button>Снять выбранные</button>'
+            f'<span class="muted" id="picked"></span></form>')
 
         body = (
             block("Размечено руками — решайте сами", osm_queue.LOCKED,
@@ -2077,9 +2572,45 @@ class Handler(BaseHTTPRequestHandler):
                     "от такого не меняются.")
         )
         if not body:
-            body = (f'<div class="empty">Все {counts.get(osm_queue.KEEP, 0)} правок '
-                    'на месте: вокруг них в OSM ничего не изменилось.</div>')
-        return page("/changes", "Что изменилось", done + body)
+            return page("/changes", "Что изменилось", done +
+                        f'<div class="empty">Все {counts.get(osm_queue.KEEP, 0)} '
+                        'правок на месте: вокруг них в OSM ничего не '
+                        'изменилось.</div>')
+        return page("/changes", "Что изменилось", done + tools + body + CHANGES_JS)
+
+    def changes_bulk(self, conn, form):
+        """Снять сразу несколько правок.
+
+        Три правки, потерявшие опору, снимались по одной; при двадцати это
+        перестаёт быть работой и становится обязанностью.
+
+        Версию каждой правки читаем ЗДЕСЬ, а не берём из формы: между
+        отрисовкой страницы и нажатием кнопки правку могли изменить в другом
+        окне, и групповое действие не должно быть способом обойти проверку
+        версий, которая для одиночного стоит.
+        """
+        ids = []
+        for raw in form.get("id") or []:
+            try:
+                ids.append(int(raw))
+            except ValueError:
+                continue
+        done, stale = 0, 0
+        for edit_id in ids[:200]:
+            edit = map_edits.by_id(conn, edit_id)
+            if edit is None:
+                stale += 1
+                continue
+            if map_edits.withdraw(conn, edit_id, edit["version"]):
+                log_action(conn, None, "edit-withdraw", f"#{edit_id} · пачкой", who=self.who())
+                done += 1
+            else:
+                stale += 1
+        conn.commit()
+        # Возврата у пачки НЕТ, и это сказано вслух на баннере: вернуть
+        # двадцать правок одной кнопкой значит уметь и снять их одной ошибкой.
+        # Поштучный возврат остался — он в строке каждой снятой правки.
+        self._redirect(u("/changes") + f"?done=many&n={done}&stale={stale}")
 
     def changes_banner(self):
         """Что только что сделали и как это отменить.
@@ -2108,13 +2639,22 @@ class Handler(BaseHTTPRequestHandler):
             return f'<div class="warn">Правка #{edit_id} подтверждена.</div>'
         if op == "restore" and edit_id:
             return f'<div class="warn">Правка #{edit_id} возвращена.</div>'
+        if op == "many":
+            done = query.get("n", ["0"])[0]
+            stale = query.get("stale", ["0"])[0]
+            tail = (f' Не вышло: {esc(stale)} — их изменили в другом окне.'
+                    if stale not in ("0", "") else "")
+            return (f'<div class="warn">Снято правок: {esc(done)}.{tail} '
+                    'Вернуть можно каждую по отдельности.</div>')
         if op == "stale":
             return ('<div class="warn">Правку изменили в другом окне — '
                     'страница перечитана.</div>')
         return ""
 
-    def changes_action(self, conn, field):
+    def changes_action(self, conn, field, form=None):
         """Снять, подтвердить или вернуть — одна строка очереди."""
+        if field("op") == "withdraw-many":
+            return self.changes_bulk(conn, form or {})
         try:
             edit_id, version = int(field("id")), int(field("version"))
         except ValueError:
@@ -2131,7 +2671,7 @@ class Handler(BaseHTTPRequestHandler):
             # перезаписать нельзя — модератор открывает панель и с телефона,
             # и с ноутбука, и второе сохранение затёрло бы первое.
             return self._redirect(u("/changes") + "?done=stale")
-        log_action(conn, None, f"changes-{op}", f"#{edit_id}")
+        log_action(conn, None, f"changes-{op}", f"#{edit_id}", who=self.who())
         conn.commit()
         self._redirect(u("/changes") +
                        f"?done={op}&id={edit_id}&version={version + 1}")
@@ -2167,7 +2707,7 @@ class Handler(BaseHTTPRequestHandler):
         conn.execute("INSERT OR REPLACE INTO overrides"
                      "(camera_id, op, lat, lon, type, note, decided_at, published_at) "
                      "VALUES(?,'move',?,?,NULL,'',?,NULL)", (camera_id, lat, lon, now))
-        log_action(conn, camera_id, "move", f"{lat:.6f}, {lon:.6f}")
+        log_action(conn, camera_id, "move", f"{lat:.6f}, {lon:.6f}", who=self.who())
         self.resolve_reports(conn, camera_id, RESOLVED_DONE)
         conn.commit()
         self._json({"ok": True, "moved": round(moved), "pending": self.pending_count(conn)})
@@ -2180,7 +2720,7 @@ class Handler(BaseHTTPRequestHandler):
         except (KeyError, TypeError, ValueError):
             return self._json({"error": "bad fields"}, 400)
         conn.execute("DELETE FROM overrides WHERE camera_id = ?", (camera_id,))
-        log_action(conn, camera_id, "undo")
+        log_action(conn, camera_id, "undo", who=self.who())
         conn.commit()
         camera = cameras().get(camera_id) or {}
         self._json({"ok": True, "pending": self.pending_count(conn),
@@ -2442,6 +2982,63 @@ class Handler(BaseHTTPRequestHandler):
 событий здесь нет и быть не может — только счётчики за сутки. Идентификатор
 ротируется раз в 30 дней.</div></div>""")
 
+    def journal_page(self, conn):
+        """Журнал решений: что делали, когда и кто.
+
+        Отдельной страницей, а не хвостом «Здоровья», и с поиском. Двадцать
+        последних записей отвечают на «что было только что», а спрашивают
+        обычно другое: «кто снял правку #5», «что делали с этой камерой»,
+        «что происходило в прошлый вторник». По списку из двадцати строк без
+        поиска на такое не ответишь.
+        """
+        query = parse_qs(urlparse(self.path).query)
+        want = (query.get("q") or [""])[0].strip()
+        try:
+            limit = min(500, max(20, int((query.get("n") or ["200"])[0])))
+        except ValueError:
+            limit = 200
+
+        sql = ("SELECT at, camera_id, action, detail FROM moderation_log "
+               "{where} ORDER BY id DESC LIMIT ?")
+        args = []
+        where = ""
+        if want:
+            # По действию и по подробностям: там лежат и номер правки, и имя
+            # человека. Поиск по номеру камеры — тем же полем, потому что
+            # спрашивают «что было с 1234», а не «поле camera_id равно».
+            where = "WHERE action LIKE ? OR detail LIKE ? OR camera_id = ?"
+            args = [f"%{want}%", f"%{want}%", want if want.isdigit() else -1]
+        rows = conn.execute(sql.format(where=where), args + [limit]).fetchall()
+
+        def row(item):
+            place = ""
+            if item["camera_id"]:
+                link = esc(u("/map")) + f'#{item["camera_id"]}'
+                place = (f' · <a href="{link}">камера '
+                         f'{esc(camera_title(item["camera_id"]))}</a>')
+            elif item["detail"] and "#" in item["detail"]:
+                # Ссылка на правку: номер лежит в подробностях как «#5».
+                number = item["detail"].split("#", 1)[1].split()[0].strip(" ·,")
+                if number.isdigit():
+                    link = esc(u("/editor")) + f"?edit={number}"
+                    place = f' · <a href="{link}">правка #{esc(number)}</a>'
+            when = time.strftime("%d.%m.%Y %H:%M", time.localtime(item["at"]))
+            return (f'<div class="chg"><b>{esc(item["action"])}</b>'
+                    f'<span class="muted">{esc(when)}{place} · '
+                    f'{esc(item["detail"] or "")}</span></div>')
+
+        found = "".join(row(item) for item in rows)
+        if not found:
+            found = ('<div class="empty">Ничего не нашлось. Попробуйте номер '
+                     'правки, имя человека или вид действия.</div>')
+        act = esc(u("/journal"))
+        tools = (f'<form method="get" action="{act}" class="bulk">'
+                 f'<input class="find" name="q" value="{esc(want)}" '
+                 f'placeholder="Номер правки, имя, действие" autocomplete="off">'
+                 f'<button>Искать</button>'
+                 f'<span class="muted">записей: {len(rows)}</span></form>')
+        return page("/journal", "Журнал", tools + found)
+
     def health_page(self, conn):
         now = time.time()
 
@@ -2514,6 +3111,41 @@ def main():
         return
     if "--set-password" in sys.argv:
         print(admin_auth.set_password_interactively())
+        return
+    if "--add-person" in sys.argv:
+        # Пароль спрашиваем, а не берём из аргументов: командная строка видна
+        # в списке процессов и остаётся в истории оболочки.
+        index = sys.argv.index("--add-person")
+        try:
+            name = sys.argv[index + 1]
+        except IndexError:
+            print("нужно имя: --add-person <имя>")
+            return
+        import getpass
+        password = getpass.getpass(f"Пароль для «{name}»: ")
+        if len(password) < 12:
+            print("слишком короткий пароль: не меньше двенадцати знаков")
+            return
+        if password != getpass.getpass("Ещё раз: "):
+            print("пароли не совпали")
+            return
+        try:
+            print(admin_auth.write_account(name, password))
+        except ValueError as error:
+            print(error)
+        return
+    if "--drop-person" in sys.argv:
+        index = sys.argv.index("--drop-person")
+        try:
+            name = sys.argv[index + 1]
+        except IndexError:
+            print("нужно имя: --drop-person <имя>")
+            return
+        print("убран" if admin_auth.drop_account(name) else "такого нет")
+        return
+    if "--people" in sys.argv:
+        for name in sorted(admin_auth.accounts()):
+            print(name)
         return
     if "--mark-published" in sys.argv:
         index = sys.argv.index("--mark-published")

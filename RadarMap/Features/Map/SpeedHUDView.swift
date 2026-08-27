@@ -13,6 +13,22 @@ struct SpeedHUDView: View {
     var secondary = false
     @Environment(AppEnvironment.self) private var env
 
+    /// Насколько приглушить док.
+    ///
+    /// Ночью на схеме не должно быть ничего ярче камеры — а док скорости
+    /// бывал ярче неё. Это не про красоту: ночью зрачок раскрыт, и самое
+    /// светлое пятно на экране забирает взгляд себе. Камера — единственное,
+    /// ради чего приложение существует, и забирать взгляд должна она.
+    ///
+    /// Но когда камера УЖЕ говорит, приглушать нечего: тревога поднимает всё
+    /// вместе, иначе водитель увидит предупреждение и не увидит, с какой
+    /// скоростью едет.
+    static func dimming(secondary: Bool, night: Bool, alertLevel: Int) -> Double {
+        if alertLevel >= 1 { return 1 }
+        let base = secondary ? 0.85 : 1.0
+        return night ? base * 0.72 : base
+    }
+
     var body: some View {
         let location = env.location
         GlassCard(cornerRadius: 22) {
@@ -37,7 +53,9 @@ struct SpeedHUDView: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
         }
-        .opacity(secondary ? 0.85 : 1)
+        .opacity(SpeedHUDView.dimming(secondary: secondary,
+                                      night: !SketchPalette.daylight,
+                                      alertLevel: env.location.alertLevel))
         .fixedSize(horizontal: false, vertical: true)
         // Чип режима оповещений: видно, почему тихо (город) или голосисто (трасса).
         .overlay(alignment: .topTrailing) {

@@ -54,6 +54,15 @@ final class SketchState {
     /// Вид отвязан от машины.
     private(set) var isInspecting = false
 
+    /// Почему схема сейчас вблизи. nil — обычный обзор.
+    ///
+    /// Хранится, а не считается заново: на нём держится гистерезис, без
+    /// которого один и тот же перекрёсток включал бы и выключал вид каждую
+    /// секунду.
+    private(set) var closeReason: RoadSketch.CloseReason?
+    /// С какого момента ползём. nil — едем.
+    @ObservationIgnored private var crawlSince: Date?
+
     /// Высота вью в пунктах: по ней экранный сдвиг переводится в метры.
     /// Ставит сама вью — состояние про экран ничего не знает.
     @ObservationIgnored var viewHeight: CGFloat = 0
@@ -192,6 +201,17 @@ final class SketchState {
         // и схему не покачивает от бокового шума GPS.
         guard let me = env.location.displayCoordinate
             ?? env.location.currentCoordinate else { return }
+        // Время суток — та же ручка, что у подложки карты. Спрашиваем на тике,
+        // а не подписываемся: ответ солнца меняется дважды в сутки, и лишняя
+        // подписка стоила бы больше, чем сравнение двух Bool.
+        let daylight = env.settings.mapAppearance.isDaylight(at: me, now: now)
+        if SketchPalette.daylight != daylight {
+            SketchPalette.daylight = daylight
+            // Сцена нарисована прежними тонами и обязана пересобраться:
+            // ключ пересборки о палитре не знает, и без сброса схема
+            // осталась бы ночной до ближайшего движения на сотню метров.
+            key = nil
+        }
         unwoundCourse = RoadSketch.unwound(unwoundCourse,
                                            towards: env.location.displayCourse >= 0
                                                ? env.location.displayCourse
@@ -211,9 +231,29 @@ final class SketchState {
         // (bucket) гасят дрожание от каждого километра в час.
         // При осмотре охват держит пользователь: автоматика, продолжая
         // выбирать масштаб, дралась бы с щипком.
+        // Вид вблизи: подход к манёвру, тревожная камера рядом, двор или
+        // пробка. Включает СОБЫТИЕ, а не скорость, и держится с запасом —
+        // вид, дёргающийся между масштабами на каждом перекрёстке, хуже
+        // любого из них.
+        let speed = env.location.speedKmh
+        if speed <= RoadSketch.closeSlowKmh {
+            if crawlSince == nil { crawlSince = Date() }
+        } else if speed > RoadSketch.closeSlowKmh * 1.6 {
+            crawlSince = nil
+        }
+        let crawling = crawlSince.map { Date().timeIntervalSince($0) } ?? 0
+        closeReason = RoadSketch.closeReason(
+            toManeuver: env.route.isActive && env.route.nextStep != nil
+                ? env.route.nextStepDistance : nil,
+            toCamera: alert != nil ? distance : nil,
+            speedKmh: speed, crawlingSeconds: crawling,
+            wasClose: closeReason != nil)
+
         let span = inspectSpan
-            ?? RoadSketch.span(forDistance: alert != nil ? distance : nil,
-                               speedKmh: env.location.speedKmh)
+            ?? (closeReason != nil && !isInspecting
+                ? RoadSketch.closeSpanMeters
+                : RoadSketch.span(forDistance: alert != nil ? distance : nil,
+                                  speedKmh: speed))
         let inRange: Bool = if let distance, alert != nil {
             RoadSketch.isInRange(distance: distance, span: span)
         } else {
@@ -421,6 +461,18 @@ final class SketchState {
         // на текущем охвате, не качается и не разбирается — тот же закон, что
         // у дворовых проездов и кварталов.
         if span < SketchArea.Kind.sidewalk.maxSpanMeters { sets.insert(.sidewalks) }
+        // Дома — тот же закон и самый сильный повод: их 54 094 в одном кадре
+        // центра против семисот дорог, то есть слой домов один весит больше,
+        // чем вся остальная схема. Качаем их только там, где водитель уже
+        // ищет подъезд.
+        if span < SketchArea.Kind.house.maxSpanMeters { sets.insert(.houses) }
+        // Поверхность дороги — ближний охват и только он.
+        //
+        // Штрихами реалистичную дорогу не нарисовать никакой толщиной: у
+        // штриха нет ни кромки, ни площади перекрёстка, ни расширения перед
+        // ним. Всё это посчитано сборкой раз в неделю и лежит готовым; на
+        // дальнем плане полотно вырождается в линию, и там штрих честнее.
+        if span < SketchArea.Kind.road.maxSpanMeters { sets.insert(.surface) }
         // Точки — из того набора, что посчитан по РИСУЕМОЙ сети. Просить оба
         // разом значило бы возить вдвое больше ради слоя, из которого виден
         // ровно один.

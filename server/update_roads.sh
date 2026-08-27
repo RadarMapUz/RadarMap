@@ -17,12 +17,59 @@ WORK="${RADARMAP_WORK:-/opt/radarmap/work}"
 WEBROOT="${RADARMAP_WEBROOT:-/opt/radarmap/www}"
 PBF_URL="${RADARMAP_PBF_URL:-https://download.geofabrik.de/asia/uzbekistan-latest.osm.pbf}"
 CANDIDATE="$WORK/roads_tiles_candidate"
+# Панель живёт своим каталогом и туда её кладёт deploy_api.sh. Копия в work
+# разъезжалась бы с боевой при первом же выкате панели, а сверка правок
+# сравнивала бы очередь со старым кодом.
+ADMIN="${RADARMAP_ADMIN:-/opt/radarmap/api/admin.py}"
+[ -f "$ADMIN" ] || ADMIN="$WORK/admin.py"
 
 cd "$WORK"
+
+# Один прогон за раз — ЗАМКОМ, а не разглядыванием ps.
+#
+# Прогон идёт десятки минут, и его запускают из двух мест: крон по
+# воскресеньям и владелец руками. Наложиться они не должны: каталог работы
+# один, экстракты одни, и вторая сборка писала бы в те же файлы под первой.
+#
+# Проверка через `ps | grep` для этого не годится, и это проверено на себе:
+# строка «update_roads.sh» есть в командной строке самой проверки, поэтому
+# она находит саму себя и отвечает «уже работает» даже на мёртвой машине.
+# Замок ядра не ошибается и снимается сам, когда процесс умирает, — в том
+# числе когда его убивает OOM.
+exec 9>/var/lock/radarmap-roads.lock
+if ! flock -n 9; then
+    echo "=== $(date -Is) прогон уже идёт, второй не запускаем ==="
+    exit 0
+fi
+
 echo "=== $(date -Is) обновление дорог ==="
 
 echo "--- 1/4: свежий OSM"
-curl -sSfL --max-time 900 -o uzbekistan-new.osm.pbf "$PBF_URL"
+# Повторный запуск после сбоя не должен качать страну заново.
+#
+# Экстракт весит 123 МБ, а зеркало отдаёт его неровно: в один заход это две
+# минуты, в другой — десять, и разница решает, доживёт ли закачка до своего
+# лимита. Когда сборку убило по памяти, качать те же байты ещё раз незачем —
+# на диске лежит ровно тот файл, из которого её и собирали.
+#
+#   RADARMAP_REUSE_PBF=1 /opt/radarmap/update_roads.sh
+#
+# Крон эту переменную не ставит и качает всегда: смысл недельного прогона в
+# том, что данные свежие.
+if [ "${RADARMAP_REUSE_PBF:-0}" = "1" ] && [ -s uzbekistan.osm.pbf ]; then
+    echo "    берём лежащий экстракт от $(date -Is -r uzbekistan.osm.pbf)"
+else
+# Лимит и докачка подобраны по ЗАМЕРУ, а не на глаз.
+#
+# Прежние пятнадцать минут выглядели щедро и оказались вдвое меньше нужного:
+# зеркало отдавало 8,5 МБ из 123 за всё это время — около девяти килобайт в
+# секунду. Прогон падал на первом же шаге, уже скачав часть.
+#
+# Отсюда три правки. Час вместо четверти — ночной сборке спешить некуда.
+# --continue-at продолжает с места обрыва, а не начинает сначала. --retry
+# переживает разрыв, а не считает его концом света.
+curl -sSfL --max-time 3600 --retry 3 --retry-delay 30 \
+     --continue-at - -o uzbekistan-new.osm.pbf "$PBF_URL"
 curl -sSfL --max-time 60 -o uzbekistan-new.osm.pbf.md5 "$PBF_URL.md5"
 # Контрольная сумма Geofabrik — первая защита: оборванная закачка не должна
 # становиться новой картой страны.
@@ -40,13 +87,22 @@ if [ -f uzbekistan.osm.pbf ]; then
     fi
 fi
 mv uzbekistan-new.osm.pbf uzbekistan.osm.pbf
+fi
 
 echo "--- 2/4: экстракт дорог и местности"
 # Свой шаг, а не хвост снапа камер: дороги для схемы обновляются по своему
 # расписанию и не зависят от того, гоняли ли снап.
 osmium tags-filter uzbekistan.osm.pbf w/highway -o roads.osm.pbf --overwrite
+# -u type_id добавляет к каждой дороге её идентификатор в OSM («w12345678»).
+#
+# Он не едет в тайл — запись дороги там [класс, биты, дельты, имя?], и пятый
+# элемент отправил бы в nil ВЕСЬ тайл у сборок, которые о нём не знают.
+# Идентификатор нужен только панели: id способа в OSM меняется, когда способ
+# разрезали или удалили, а не когда подвинули точку, — то есть в большинстве
+# случаев он находит ту же дорогу мгновенно и точно, там где геометрический
+# поиск каждую неделю кладёт в очередь «посмотрите» то, что не двигалось.
 osmium export roads.osm.pbf -f geojsonseq --geometry-types=linestring \
-    -o roads.geojsonl --overwrite
+    -u type_id -o roads.geojsonl --overwrite
 echo "    дорог в экстракте: $(wc -l < roads.geojsonl)"
 
 # Вода, зелень и рельсы приезжали в этом же .pbf всё это время и
@@ -78,13 +134,41 @@ osmium export points.osm.pbf -f geojsonseq --geometry-types=point \
     -o points.geojsonl --overwrite
 echo "    точек в экстракте: $(wc -l < points.geojsonl)"
 
+# Дома. Самый большой слой по числу объектов: в одном кадре центра Ташкента их
+# 54 094 против семисот дорог, и приезжают они в том же .pbf, что и всё
+# остальное, — отдельной закачки не нужно.
+#
+# Берём OSM, а не готовые обводки нейросети, и это замер, а не предпочтение: в
+# том же кадре Microsoft ML нашёл 82 418 зданий против 54 094 в OSM — то есть
+# в полтора раза больше контуров, — но НИ ОДНОГО адреса. Адрес есть только в
+# OSM: 21 808 домов с номером и 16 586 с номером и улицей. Дом без адреса
+# отвечает лишь на «сюда ли сворачивать», дом с адресом — ещё и на «куда
+# ехать», а вторая цепочка данных ради полутора раз по контурам стоит дороже,
+# чем даёт.
+osmium tags-filter uzbekistan.osm.pbf wa/building -o houses.osm.pbf --overwrite
+osmium export houses.osm.pbf -f geojsonseq --geometry-types=polygon \
+    -o houses.geojsonl --overwrite
+echo "    домов в экстракте: $(wc -l < houses.geojsonl)"
+
+# Адреса. Берём и узлы, и контуры: в OSM адрес живёт и тем, и другим — в кадре
+# центра Ташкента 17 153 контура против 1 517 точек.
+#
+# Это единственное, ради чего стоит держать свой поиск: поиск в приложении
+# работает через Apple и только по сети. В роуминге, в тоннеле и на краю
+# покрытия «Куда» перестаёт существовать — а свой индекс работает всегда.
+osmium tags-filter uzbekistan.osm.pbf \
+    n/addr:street w/addr:street a/addr:street -o addresses.osm.pbf --overwrite
+osmium export addresses.osm.pbf -f geojsonseq \
+    --geometry-types=point,linestring,polygon -o addresses.geojsonl --overwrite
+echo "    адресов в экстракте: $(wc -l < addresses.geojsonl)"
+
 # Правки конструктора. Снимок, а не приращение: сборка накладывает состояние
 # целиком, и «отменить правку» значит собрать тайлы без этой строки.
 #
 # Нет панели — нет правок, и это не ошибка: сборка обязана работать на машине,
 # где панели никогда не было. Пустой файл в этом случае и пишем.
 EDITS="$WORK/edits.json"
-if python3 "$WORK/admin.py" --export-edits > "$EDITS.new" 2>/dev/null; then
+if python3 "$ADMIN" --export-edits > "$EDITS.new" 2>/dev/null; then
     mv "$EDITS.new" "$EDITS"
     echo "    правок панели: $(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["items"]))' "$EDITS")"
 else
@@ -95,16 +179,38 @@ fi
 
 echo "--- 3/4: сборка кандидата"
 rm -rf "$CANDIDATE" && mkdir -p "$CANDIDATE"
+
+# Поверхность дорог (набор d) пишется потоком, по одной фигуре, — но склейка
+# кусков в улицы всё равно живёт в памяти целиком: улица не должна рваться на
+# границе тайла, значит сеть надо видеть всю сразу. Замерено: 350 байт на
+# дорогу, то есть около 212 МБ на 604 522 дороги страны.
+#
+# Первый боевой прогон эту цену и не выдержал, но не из-за поверхности: слой
+# домов, называвшийся потоковым, в конце всё равно собирал все записи в
+# память — 439 байт на дом при 1 653 195 домах, то есть 0,73 ГБ. Оба места
+# теперь пишут файл сразу; порог остаётся страховкой на случай, когда рядом
+# работают API и панель.
+SURFACE=""
+FREE_MB=$(free -m | awk '/^Mem:/ {print $7}')
+if [ "${FREE_MB:-0}" -lt 600 ]; then
+    SURFACE="--no-surface"
+    echo "    свободно $FREE_MB МБ — поверхность дорог НЕ считаем"
+else
+    echo "    свободно $FREE_MB МБ — поверхность дорог считаем"
+fi
+
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
-    --points points.geojsonl --edits "$EDITS" --tiles "$CANDIDATE"
+    --points points.geojsonl --houses houses.geojsonl \
+    --addresses addresses.geojsonl --edits "$EDITS" $SURFACE --mvt \
+    --tiles "$CANDIDATE"
 
 # Сверка правок конструктора со свежей сетью — ДО публикации.
 #
 # Если правка потеряла опору, узнать об этом надо раньше, чем тайл уедет на
 # телефоны. Автоматика двигает только то, на что имеет право; снятие с
 # публикации остаётся решением человека и ждёт его на странице «Что изменилось».
-if [ -f "$WORK/admin.py" ]; then
-    python3 "$WORK/admin.py" --sweep "$CANDIDATE" || \
+if [ -f "$ADMIN" ]; then
+    python3 "$ADMIN" --sweep "$CANDIDATE" || \
         echo "    сверка правок не удалась — публикуем как есть"
 fi
 
@@ -113,8 +219,15 @@ fi
 # при том что в дорогах не изменилось ничего.
 echo "--- 4/4: детерминизм"
 rm -rf "$CANDIDATE.check" && mkdir -p "$CANDIDATE.check"
+# ТЕ ЖЕ аргументы, что у кандидата. Иначе проверка сравнивает разные сборки и
+# останавливает конвейер на себе самой: слой домов или адресов, поданный одной
+# и не поданный другой, — это гарантированное расхождение. Это же относится и
+# к --mvt: сверяются каталоги целиком, и дерево тайлов, написанное одной
+# сборкой и не написанное другой, остановило бы конвейер на ровном месте.
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
-    --points points.geojsonl --edits "$EDITS" --tiles "$CANDIDATE.check" >/dev/null
+    --points points.geojsonl --houses houses.geojsonl \
+    --addresses addresses.geojsonl --edits "$EDITS" $SURFACE --mvt \
+    --tiles "$CANDIDATE.check" >/dev/null
 if ! diff -rq "$CANDIDATE" "$CANDIDATE.check" >/dev/null; then
     echo "СТОП: две сборки одного экстракта разошлись — сборка недетерминирована"
     exit 1

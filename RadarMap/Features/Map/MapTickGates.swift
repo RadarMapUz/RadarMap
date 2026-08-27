@@ -75,6 +75,35 @@ struct ManeuverBannerGate: View {
 }
 
 /// «Похоже, вы едете» — подсказка включить оповещения; условие читает скорость.
+/// Что показать внизу экрана — ОДНО, а не всё сразу.
+///
+/// Плашки заводились по одной и каждая права по отдельности: ошибка маршрута,
+/// «строим», подсказка о поездке, предложение назначения. Вместе они делят
+/// внимание на четыре, и делят его за рулём — там, где на взгляд есть доля
+/// секунды.
+///
+/// Правило простое и оно тут одно на всех: **то, что требует решения, старше
+/// того, что сообщает**. Ошибка маршрута ждёт ответа, «строим» сообщает о
+/// работе, подсказка о поездке предлагает, назначение — догадка.
+nonisolated enum BottomHint: Equatable {
+    case none
+    case routeError(String)
+    case building
+    case driving
+    case destinations
+
+    static func choose(routeError: String?, isBuilding: Bool,
+                       tripActive: Bool, speedKmh: Double,
+                       speakThreshold: Double,
+                       showsQuickDestinations: Bool) -> BottomHint {
+        if let routeError, !routeError.isEmpty { return .routeError(routeError) }
+        if isBuilding { return .building }
+        if !tripActive && speedKmh >= speakThreshold { return .driving }
+        if showsQuickDestinations { return .destinations }
+        return .none
+    }
+}
+
 struct DrivingHintChip: View {
     @Environment(AppEnvironment.self) private var env
 

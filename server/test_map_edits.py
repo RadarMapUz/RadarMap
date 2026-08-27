@@ -12,6 +12,7 @@
 import json
 import re
 import os
+import shutil
 import sqlite3
 import tempfile
 import unittest
@@ -436,6 +437,70 @@ class WidthContractTests(unittest.TestCase):
         self.assertAlmostEqual(two_way, one_way * 2)
 
 
+class PointRecordTests(unittest.TestCase):
+    """Точка в тайле — запись из ДВУХ чисел.
+
+    Разбор требовал не меньше четырёх и отбрасывал всю обстановку целиком.
+    Заметить это было неоткуда: на боевом лежит формат v1, где точек нет
+    вовсе, и пустой ответ читался как «сервер их ещё не публиковал». На первом
+    же тайле с точками панель осталась бы без светофоров и переходов — и
+    объяснить это никто бы не смог.
+    """
+
+    def payload(self, rows):
+        return {"version": 2, "roads": rows}
+
+    def test_single_point_decodes(self):
+        decoded = map_edits.decode_tile(self.payload([[1, 518, [4131765, 6927664]]]))
+        self.assertEqual(len(decoded), 1)
+        self.assertEqual(decoded[0]["cls"], 1)
+        self.assertAlmostEqual(decoded[0]["points"][0][1], 41.31765, places=5)
+
+    def test_line_still_decodes(self):
+        decoded = map_edits.decode_tile(
+            self.payload([[3, 0, [4130000, 6925000, 100, 0]]]))
+        self.assertEqual(len(decoded[0]["points"]), 2)
+
+    def test_odd_number_of_coordinates_is_refused(self):
+        # Нечётная длина означает потерянное число: половина координат
+        # сдвинулась бы, и объекты разъехались бы по карте молча.
+        self.assertEqual(map_edits.decode_tile(
+            self.payload([[1, 0, [4131765, 6927664, 100]]])), [])
+
+    def test_empty_coordinates_are_refused(self):
+        self.assertEqual(map_edits.decode_tile(self.payload([[1, 0, []]])), [])
+
+    def test_point_carries_azimuth_and_width(self):
+        # Азимут и ширина проезжей части лежат в битах записи с самой первой
+        # сборки точек, и панель их не читала: зебра рисовалась кружком
+        # «здесь переход» вместо того, что нарисовано на асфальте.
+        work = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, work, True)
+        row = int((41.31 + 90) / map_edits.TILE_DEGREES_V2)
+        column = int((69.28 + 180) / map_edits.TILE_DEGREES_V2)
+        # Азимут 90° это 30 шагов по три градуса; ширина 14 м в старших битах.
+        flags = 30 | (14 << map_edits.PFLAG_WIDTH_SHIFT)
+        with open(os.path.join(work, f"road2_{row}_{column}_p.json"),
+                  "w", encoding="utf-8") as handle:
+            json.dump({"version": 2,
+                       "roads": [[5, flags, [4131000, 6928000]]]}, handle)
+        found = map_edits.load_points(work, 41.30, 69.27, 41.32, 69.29)[0]
+        self.assertEqual(found["azimuth"], 90)
+        self.assertEqual(found["width"], 14)
+
+    def test_points_are_read_from_their_own_set(self):
+        work = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, work, True)
+        row = int((41.31 + 90) / map_edits.TILE_DEGREES_V2)
+        column = int((69.28 + 180) / map_edits.TILE_DEGREES_V2)
+        with open(os.path.join(work, f"road2_{row}_{column}_p.json"),
+                  "w", encoding="utf-8") as handle:
+            json.dump(self.payload([[1, 518, [4131000, 6928000]]]), handle)
+        found = map_edits.load_points(work, 41.30, 69.27, 41.32, 69.29)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["kind"], 1)
+
+
 class DrawOfTests(unittest.TestCase):
     """Чем правка рисуется на карте.
 
@@ -780,3 +845,294 @@ class TodoTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SurfaceSetTests(unittest.TestCase):
+    """Набор «d» — единственный, где вид берётся из записи, а не из имени."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir)
+
+    def write(self, rows):
+        path = os.path.join(self.dir, "road2_2626_4985_d.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump({"version": 2, "roads": rows}, handle)
+
+    def test_road_and_junction_come_apart(self):
+        square = [4130000, 6925000, 200, 0, 0, 200, -200, 0]
+        self.write([[map_edits.AREA_ROAD, 1 | (3 << 1), square],
+                    [map_edits.AREA_JUNCTION, 1, square]])
+        areas = map_edits.load_areas(self.dir, 41.29, 69.24, 41.31, 69.26)
+        kinds = sorted(a["kind"] for a in areas)
+        self.assertEqual(kinds, [map_edits.AREA_ROAD, map_edits.AREA_JUNCTION])
+
+    def test_class_travels_in_flags(self):
+        square = [4130000, 6925000, 200, 0, 0, 200, -200, 0]
+        self.write([[map_edits.AREA_ROAD, 1 | (3 << 1), square]])
+        areas = map_edits.load_areas(self.dir, 41.29, 69.24, 41.31, 69.26)
+        self.assertEqual(areas[0]["road"], 3)
+        self.assertTrue(areas[0]["closed"])
+
+
+class CandidateReadTests(unittest.TestCase):
+    """Панель читает кандидатов из файлов рядом с тайлами."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def write(self, key, rings):
+        with open(os.path.join(self.dir, f"cand_{key}.json"), "w",
+                  encoding="utf-8") as handle:
+            json.dump({"version": 1, "houses": rings}, handle)
+
+    def square(self):
+        return [4130000, 6925000, 200, 0, 0, 200, -200, 0]
+
+    def test_candidates_are_read(self):
+        self.write("2626_4985", [self.square()])
+        found = map_edits.load_candidates(self.dir, 41.29, 69.24, 41.31, 69.26)
+        self.assertEqual(len(found), 1)
+        self.assertGreaterEqual(len(found[0]["points"]), 4)
+
+    def test_cells_outside_the_frame_are_not_opened(self):
+        self.write("2600_4900", [self.square()])
+        self.assertEqual(
+            map_edits.load_candidates(self.dir, 41.29, 69.24, 41.31, 69.26), [])
+
+    def test_limit_holds(self):
+        self.write("2626_4985", [self.square()] * 50)
+        found = map_edits.load_candidates(self.dir, 41.29, 69.24, 41.31, 69.26,
+                                          limit=10)
+        self.assertEqual(len(found), 10, "потолок не сработал")
+
+    def test_tiles_are_not_read_as_candidates(self):
+        # Кандидат не тайл: индекс подписан и описывает то, что едет на
+        # телефоны, а кандидата ещё никто не смотрел.
+        with open(os.path.join(self.dir, "road2_2626_4985_h.json"), "w",
+                  encoding="utf-8") as handle:
+            json.dump({"version": 2, "roads": [[6, 1, self.square()]]}, handle)
+        self.assertEqual(
+            map_edits.load_candidates(self.dir, 41.29, 69.24, 41.31, 69.26), [])
+
+
+class OwnSearchTests(unittest.TestCase):
+    """Поиск по своему адресному индексу: без ключа и без чужого сервиса."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        path = os.path.join(self.dir, "road2_262_498_a.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump({"version": 1, "streets": [
+                {"n": "Mustaqillik shoh ko'chasi", "h": ["5", "7"],
+                 "p": [4131000, 6928000, 100, 100]},
+                {"n": "Navoiy ko'chasi", "h": ["1"],
+                 "p": [4132000, 6929000]},
+            ]}, handle)
+
+    def test_cyrillic_finds_latin(self):
+        # 72 % улиц центра записаны латиницей, 28 % кириллицей, и человек
+        # ищет как ему привычно. «Мустакиллик» и «Mustaqillik» — одна улица.
+        found = map_edits.search_addresses(self.dir, "Мустакиллик")
+        self.assertTrue(found)
+        self.assertEqual(found[0]["street"], "Mustaqillik shoh ko'chasi")
+
+    def test_latin_spellings_agree(self):
+        for spelling in ("Mustaqillik", "Mustakillik", "mustaqillik"):
+            self.assertTrue(map_edits.search_addresses(self.dir, spelling),
+                            spelling)
+
+    def test_house_number_narrows(self):
+        found = map_edits.search_addresses(self.dir, "Mustaqillik 7")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["house"], "7")
+
+    def test_nearest_comes_first(self):
+        near = map_edits.search_addresses(self.dir, "ko", near=(41.32, 69.29))
+        self.assertEqual(near[0]["street"], "Navoiy ko'chasi")
+
+    def test_the_same_address_is_not_listed_twice(self):
+        # В OSM адрес висит и точкой, и на контуре дома — в списке из восьми
+        # строк два одинаковых адреса это две строки впустую.
+        path = os.path.join(self.dir, "road2_262_499_a.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump({"version": 1, "streets": [
+                {"n": "Mustaqillik shoh ko'chasi", "h": ["5"],
+                 "p": [4131000, 6928000]},
+            ]}, handle)
+        found = map_edits.search_addresses(self.dir, "Mustaqillik 5")
+        self.assertEqual(len(found), 1)
+
+    def test_empty_query_finds_nothing(self):
+        self.assertEqual(map_edits.search_addresses(self.dir, "  "), [])
+
+    def test_missing_directory_is_not_an_error(self):
+        self.assertEqual(map_edits.search_addresses("/нет", "что-нибудь"), [])
+
+
+class FrameLimitTests(unittest.TestCase):
+    """Потолок по охвату: на квартале всё, на городе — костяк.
+
+    Один потолок на все случаи означал «покажи шестую часть города и молчи»,
+    и молчал он именно там, где пустой экран неотличим от отсутствия данных.
+    """
+
+    def test_close_view_keeps_everything(self):
+        limits = map_edits.frame_limits(41.310, 69.280, 41.315, 69.285)
+        self.assertEqual(limits["class"], 7, "на квартале скрыли дворовые")
+
+    def test_city_view_drops_the_small_roads(self):
+        limits = map_edits.frame_limits(41.20, 69.10, 41.40, 69.40)
+        self.assertLessEqual(limits["class"], 4)
+        self.assertGreater(limits["files"], 6, "на городе осталось шесть файлов")
+
+    def test_wider_view_never_reads_fewer_files(self):
+        spans = [0.005, 0.02, 0.08, 0.3, 2.0]
+        files = [map_edits.frame_limits(41.3, 69.2, 41.3 + s, 69.2 + s)["files"]
+                 for s in spans]
+        self.assertEqual(files, sorted(files), "потолок файлов не растёт с охватом")
+
+    def test_object_ceiling_holds_at_every_span(self):
+        for span in (0.005, 0.02, 0.08, 0.3, 2.0):
+            limits = map_edits.frame_limits(41.3, 69.2, 41.3 + span, 69.2 + span)
+            self.assertLessEqual(limits["objects"], 20_000)
+
+
+class LimitReportTests(unittest.TestCase):
+    """Потолок обязан о себе сообщать."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def tile(self, key, roads):
+        with open(os.path.join(self.dir, f"road2_{key}_s.json"), "w",
+                  encoding="utf-8") as handle:
+            json.dump({"version": 2, "roads": roads}, handle)
+
+    def road(self, cls):
+        return [cls, 0, [4131000, 6928000, 100, 100]]
+
+    def test_thinned_roads_are_counted(self):
+        self.tile("2626_4985", [self.road(3), self.road(7), self.road(7)])
+        report = {}
+        roads = map_edits.load_roads(self.dir, 41.30, 69.27, 41.32, 69.29,
+                                     limits={"files": 9, "class": 4,
+                                             "objects": None},
+                                     report=report)
+        self.assertEqual(len(roads), 1)
+        self.assertEqual(report["thinned"], 2)
+        self.assertEqual(report["worstClass"], 4)
+
+    def test_skipped_files_are_counted(self):
+        for column in range(4985, 4989):
+            self.tile(f"2626_{column}", [self.road(3)])
+        report = {}
+        map_edits.load_roads(self.dir, 41.0, 69.0, 42.0, 70.0,
+                             limits={"files": 2, "class": 7, "objects": None},
+                             report=report)
+        self.assertEqual(report["files"], 2)
+        self.assertEqual(report["skipped"], 2)
+
+    def test_cut_keeps_the_biggest_roads(self):
+        # Обрезать список с конца значило бы выкинуть половину города целиком;
+        # так исчезают самые мелкие проезды, и рисунок города остаётся.
+        self.tile("2626_4985", [self.road(7), self.road(3), self.road(6)])
+        report = {}
+        roads = map_edits.load_roads(self.dir, 41.30, 69.27, 41.32, 69.29,
+                                     limits={"files": 9, "class": 7,
+                                             "objects": 2},
+                                     report=report)
+        self.assertTrue(report["cut"])
+        self.assertEqual(sorted(r["cls"] for r in roads), [3, 6])
+
+    def test_silence_when_nothing_was_hidden(self):
+        self.tile("2626_4985", [self.road(3)])
+        report = {}
+        map_edits.load_roads(self.dir, 41.30, 69.27, 41.32, 69.29,
+                             limits={"files": 9, "class": 7, "objects": None},
+                             report=report)
+        self.assertFalse(report["cut"])
+        self.assertEqual(report["skipped"], 0)
+        self.assertEqual(report["thinned"], 0)
+
+
+class ViewportSpanTests(unittest.TestCase):
+    """Потолок считается по ЭКРАНУ, а не по рамке запроса.
+
+    Рамку мы просим с запасом в 60 % — чтобы движение туда-сюда не стоило
+    запросов. Считать по ней подробность значит перебрасывать вид в более
+    грубую полосу: на зуме 17 дворовые проезды пропадали ровно там, где по ним
+    и работают.
+    """
+
+    def test_margin_does_not_coarsen_the_view(self):
+        # Экран 0,01°, рамка с запасом — 0,022°.
+        by_box = map_edits.frame_limits(41.300, 69.270, 41.322, 69.292)
+        by_screen = map_edits.frame_limits(41.300, 69.270, 41.322, 69.292,
+                                           span=0.01)
+        self.assertEqual(by_screen["class"], 7, "на экране квартала скрыли дворы")
+        self.assertLess(by_box["class"], by_screen["class"],
+                        "проверка ничего не ловит: полосы совпали")
+
+    def test_span_of_none_falls_back_to_the_box(self):
+        # Рамку берём В СЕРЕДИНЕ полосы, а не на её краю: 41.32 − 41.30 в
+        # двоичных дробях равно 0,019999999999996, а 69.29 − 69.27 — уже
+        # 0,020000000000010, и одна и та же рамка попадает в разные полосы.
+        # Тест, стоящий на границе, проверяет округление, а не правило.
+        same = map_edits.frame_limits(41.300, 69.270, 41.305, 69.275)
+        explicit = map_edits.frame_limits(41.300, 69.270, 41.305, 69.275,
+                                          span=0.005)
+        self.assertEqual(same, explicit)
+
+
+class StreetPiecesTests(unittest.TestCase):
+    """Полосы — свойство улицы, а не куска.
+
+    Сборка режет дороги по перекрёсткам, чтобы получился граф. Размечать
+    проспект пятнадцатью правками значит платить пятнадцать раз за один
+    ответ: сто самых длинных улиц центра — 808 правок поштучно и 100 целиком.
+    """
+
+    def road(self, points, name="Навои", cls=3):
+        return {"cls": cls, "name": name, "points": points, "flags": 0}
+
+    def test_connected_pieces_come_together(self):
+        a = self.road([(69.25, 41.30), (69.26, 41.30)])
+        b = self.road([(69.26, 41.30), (69.27, 41.30)])
+        c = self.road([(69.27, 41.30), (69.28, 41.30)])
+        found = map_edits.street_pieces([a, b, c], a)
+        self.assertEqual(len(found), 3)
+
+    def test_same_name_apart_stays_apart(self):
+        # «Мустакиллик» есть в каждом районе: совпало имя — мало.
+        a = self.road([(69.25, 41.30), (69.26, 41.30)])
+        far = self.road([(69.50, 41.40), (69.51, 41.40)])
+        self.assertEqual(len(map_edits.street_pieces([a, far], a)), 1)
+
+    def test_another_class_is_another_street(self):
+        a = self.road([(69.25, 41.30), (69.26, 41.30)])
+        side = self.road([(69.26, 41.30), (69.27, 41.30)], cls=6)
+        self.assertEqual(len(map_edits.street_pieces([a, side], a)), 1)
+
+    def test_nameless_road_is_alone(self):
+        a = self.road([(69.25, 41.30), (69.26, 41.30)], name="")
+        b = self.road([(69.26, 41.30), (69.27, 41.30)], name="")
+        self.assertEqual(map_edits.street_pieces([a, b], a), [a])
+
+    def test_limit_holds(self):
+        chain = [self.road([(69.25 + i * 0.001, 41.30),
+                            (69.251 + i * 0.001, 41.30)]) for i in range(30)]
+        self.assertLessEqual(len(map_edits.street_pieces(chain, chain[0],
+                                                         limit=5)), 5)
+
+    def test_middle_is_by_length_not_by_vertex(self):
+        # У куска из двух точек «средняя вершина» — это его конец, а концы
+        # общие у соседей: правка села бы на перекрёсток вместо дороги.
+        middle = map_edits.middle_of([(69.25, 41.30), (69.27, 41.30)])
+        self.assertAlmostEqual(middle[0], 69.26, places=4)
+
+    def test_middle_of_nothing_is_nothing(self):
+        self.assertIsNone(map_edits.middle_of([]))

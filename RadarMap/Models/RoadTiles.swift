@@ -41,6 +41,20 @@ nonisolated enum RoadTiles {
         /// Тротуары. Своим набором по тому же закону, что вода и зелень: слой,
         /// невидимый на текущем охвате, не качается и не разбирается.
         case sidewalks = "t"
+        /// Дома. Своим набором и по тому же закону, но повод здесь сильнее
+        /// всех: их больше, чем всех остальных объектов схемы вместе.
+        case houses = "h"
+        /// Поверхность дороги: полотно, площадь перекрёстка, фаски подхода.
+        ///
+        /// Считается СБОРКОЙ раз в неделю, а не телефоном на каждый кадр.
+        /// Штрихами реалистичную дорогу не нарисовать никакой толщиной: у
+        /// штриха нет ни кромки, ни площади перекрёстка, ни расширения перед
+        /// ним. Всё это — геометрия, одинаковая для всех и не зависящая от
+        /// зума, и место ей в тайле.
+        ///
+        /// Только ближний охват: на охвате района полотно вырождается в линию,
+        /// и возить туда контуры значит платить за то, чего не видно.
+        case surface = "d"
         /// Точечные объекты. Наборов ДВА: ближний посажен на детальную
         /// геометрию, дальний пересчитан по костяку района — там раздельные
         /// проезжие сведены в одну ось, и точка с детальной сети уехала бы от
@@ -52,7 +66,8 @@ nonisolated enum RoadTiles {
         var isArea: Bool {
             switch self {
             case .far, .streets, .yards, .points, .pointsFar: return false
-            case .water, .green, .rail, .blocks, .sidewalks: return true
+            case .water, .green, .rail, .blocks, .sidewalks, .houses,
+                 .surface: return true
             }
         }
 
@@ -68,6 +83,7 @@ nonisolated enum RoadTiles {
             case .rail:   return .rail
             case .blocks: return .block
             case .sidewalks: return .sidewalk
+            case .houses: return .house
             case .far, .streets, .yards, .points, .pointsFar: return nil
             }
         }
@@ -148,8 +164,20 @@ nonisolated enum RoadTiles {
         areas.reserveCapacity(raw.count)
         for entry in raw {
             guard let kind = SketchArea.Kind(rawValue: entry.code) else { continue }
+            // Этажность дома лежит в БИТАХ записи, старше бита «замкнут».
+            // Пятый элемент записи невозможен: decodeEntries принимает длину
+            // 3 или 4, и пятый отправил бы в nil весь тайл у сборок, которые
+            // о нём не знают. Биты старая сборка просто не видит.
+            // И этажность дома, и класс полотна лежат в ОДНОМ И ТОМ ЖЕ поле
+            // старших битов — у разных видов оно значит разное. Второго поля
+            // не завести: пятый элемент записи возвращает nil на весь тайл у
+            // сборок, которые о нём не знают.
             areas.append(SketchArea(points: entry.points, kind: kind,
-                                    isClosed: entry.flags & 1 != 0))
+                                    isClosed: entry.flags & 1 != 0,
+                                    levels: kind == .house
+                                            ? (entry.flags >> 1) & 0x3F : 0,
+                                    roadClass: kind == .road
+                                            ? (entry.flags >> 1) & 0x0F : 0))
         }
         return areas
     }

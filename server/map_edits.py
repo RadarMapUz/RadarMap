@@ -507,7 +507,12 @@ def row_to_dict(row):
             "anchor": json.loads(row["anchor"]) if row["anchor"] else None,
             "props": json.loads(row["props"]) if row["props"] else {},
             "fingerprint": row["fingerprint"], "note": row["note"],
-            "author": row["author"], "version": row["version"]}
+            "author": row["author"], "version": row["version"],
+            # Когда завели и когда трогали в последний раз. Без этого строка
+            # очереди не отвечает на «свежее это или лежит с весны», и решать
+            # по ней нельзя: правку месячной давности снимают иначе, чем
+            # вчерашнюю.
+            "created": row["created"], "updated": row["updated"]}
     edit["draw"] = draw_of(edit)
     return edit
 
@@ -678,6 +683,95 @@ def road_width_meters(flags, cls):
 DONE_METERS = 30.0
 
 
+# --- Опора на id из OSM -----------------------------------------------------
+#
+# Правка привязывается к дороге геометрией: класс, имя, азимут, отпечаток. Так
+# сделано потому, что id «не переживает» пересборку, — и это верно лишь
+# отчасти. Id способа в OSM меняется, когда способ разрезали или удалили, а не
+# когда подвинули точку: в большинстве случаев он находит ту же дорогу
+# мгновенно и точно, там где геометрический поиск каждую неделю кладёт в
+# очередь «посмотрите» то, что не двигалось вовсе.
+#
+# Поэтому id — ПОДСКАЗКА, а не замена: сначала он, потом прежний геометрический
+# поиск, и только потом «правка потеряла опору».
+
+# Ближе этого опора считается той же дорогой. Двадцать метров — половина
+# захвата магнита: середина улицы за неделю так далеко не уезжает, а соседняя
+# проезжая часть на проспекте дальше.
+IDENTITY_METERS = 20.0
+# И азимут должен сойтись: на развязке две дороги проходят в метрах друг от
+# друга, но под разными углами.
+IDENTITY_BEARING = 25.0
+
+
+def identity_path(tiles_dir, lat, lon):
+    row = int(math.floor((lat + 90) / TILE_DEGREES_V1))
+    column = int(math.floor((lon + 180) / TILE_DEGREES_V1))
+    return os.path.join(tiles_dir, f"ids_{row}_{column}.json")
+
+
+def load_identities(tiles_dir, lat, lon):
+    """Опоры клетки: {id из OSM: (lon, lat, азимут, класс)}.
+
+    Файл лежит рядом с тайлами, но вне индекса: телефон его не просит никогда,
+    читает только панель. Нет файла — пустой словарь, и всё работает как
+    раньше, геометрией.
+    """
+    path = identity_path(tiles_dir, lat, lon)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for row in payload.get("roads") or []:
+        try:
+            osm_id, ilat, ilon, bearing, cls = row
+            out[str(osm_id)] = (float(ilon) / SCALE, float(ilat) / SCALE,
+                                float(bearing), int(cls))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def identity_at(tiles_dir, point, bearing_degrees):
+    """Какая дорога OSM стоит в этом месте под этим углом. None — не нашлось.
+
+    Зовётся в момент правки: человек ткнул в дорогу, и мы записываем, ЧТО это
+    было по мнению OSM на сегодняшней сборке.
+    """
+    lon, lat = point
+    best, best_distance = None, IDENTITY_METERS
+    for osm_id, (ilon, ilat, bearing, _) in load_identities(tiles_dir, lat, lon).items():
+        distance = meters_between((lon, lat), (ilon, ilat))
+        if distance > best_distance:
+            continue
+        if _bearing_apart(bearing, bearing_degrees) > IDENTITY_BEARING:
+            continue
+        best, best_distance = osm_id, distance
+    return best
+
+
+def identity_place(tiles_dir, osm_id, near):
+    """Где эта дорога OSM оказалась на СВЕЖЕЙ сборке. None — id исчез.
+
+    Исчез он ровно в двух случаях: способ разрезали или удалили. Оба означают,
+    что дальше работает геометрический поиск, а не что правка потеряна.
+    """
+    if not osm_id:
+        return None
+    lon, lat = near
+    found = load_identities(tiles_dir, lat, lon).get(str(osm_id))
+    if found is None:
+        return None
+    return (found[0], found[1])
+
+
+def _bearing_apart(one, other):
+    gap = abs((one - other) % 360)
+    return min(gap, 360 - gap)
+
+
 def _center(points):
     return points[len(points) // 2]
 
@@ -764,7 +858,13 @@ def decode_tile(payload):
         if not (3 <= len(entry) <= 4):
             continue
         cls, flags, flat = entry[0], entry[1], entry[2]
-        if len(flat) < 4 or len(flat) % 2:
+        # ДВА числа — тоже запись: у точечного объекта одна координата.
+        #
+        # Порог в четыре числа отбрасывал всю обстановку целиком, и заметить
+        # это было неоткуда: на боевом лежит формат v1, где точек нет вовсе,
+        # поэтому пустой ответ читался как «сервер их ещё не публиковал». На
+        # первом же тайле с точками панель осталась без светофоров и переходов.
+        if len(flat) < 2 or len(flat) % 2:
             continue
         points, lat, lon = [], 0, 0
         for i in range(0, len(flat), 2):
@@ -855,7 +955,44 @@ def _tile_roads(path):
     return roads
 
 
-def load_roads(tiles_dir, south, west, north, east, sets=("s", "y")):
+# Потолок ПО ОХВАТУ, а не один на все случаи.
+#
+# Шесть файлов на набор — это цифра ближнего плана, и там она верна: в рамку
+# квартала больше и не попадает. На охвате города она означала «покажи шестую
+# часть города и молчи»: на схеме оставался лоскут посреди чёрного экрана, и
+# понять, что это потолок, а не отсутствие данных, было неоткуда.
+#
+# Ручек нужно две, и они про разное. Первая — сколько ФАЙЛОВ открыть: она про
+# работу сервера. Вторая — какие дороги на этом охвате вообще нужны: на городе
+# дворовые проезды и служебные съезды не читаются, их там нет и у чужих карт.
+# Одной первой мало: сняв её, мы получили бы миллион объектов в браузере.
+FRAME_LIMITS = (
+    # (охват в градусах, файлов, класс не хуже, объектов)
+    (0.02, 6, 7, 12_000),     # квартал и улица: всё, как есть
+    (0.08, 24, 6, 20_000),    # район: без служебных проездов
+    (0.50, 96, 4, 20_000),    # город целиком: костяк и главные улицы
+    (float("inf"), 96, 3, 20_000),   # область: только магистрали
+)
+
+
+def frame_limits(south, west, north, east, span=None):
+    """Сколько читать и что показывать на этом охвате.
+
+    `span` — охват ЭКРАНА, если он известен; рамка запроса шире экрана на
+    запас, и считать по ней значит перебрасывать вид в более грубую полосу.
+    Замечено на себе: на зуме 17 запас в шестьдесят процентов делал охват
+    «районным», и дворовые проезды пропадали ровно там, где по ним и работают.
+    """
+    if span is None:
+        span = max(north - south, east - west)
+    for edge, files, worst_class, objects in FRAME_LIMITS:
+        if span <= edge:
+            return {"files": files, "class": worst_class, "objects": objects}
+    return {"files": 96, "class": 3, "objects": 20_000}
+
+
+def load_roads(tiles_dir, south, west, north, east, sets=("s", "y"),
+               limits=None, report=None):
     """Дороги из опубликованных тайлов, попадающие в рамку.
 
     Читаем ТО ЖЕ, что уедет на телефон: магнит обязан липнуть к нарисованной
@@ -898,13 +1035,341 @@ def load_roads(tiles_dir, south, west, north, east, sets=("s", "y")):
             continue
         wanted.append(name)
 
+    limits = limits or {"files": MAX_TILES_PER_CALL, "class": 7,
+                        "objects": None}
+    opened = wanted[:limits["files"]]
     roads = []
-    for name in wanted[:MAX_TILES_PER_CALL]:
+    thinned = 0
+    for name in opened:
         for road in _tile_roads(os.path.join(tiles_dir, name)):
+            if road.get("cls", 7) > limits["class"]:
+                thinned += 1
+                continue
             if any(south <= lat <= north and west <= lon <= east
                    for lon, lat in road["points"]):
                 roads.append(road)
+    cut = False
+    if limits["objects"] and len(roads) > limits["objects"]:
+        # Режем ХУДШИЕ по классу, а не первые попавшиеся: обрезать список с
+        # конца значило бы выкинуть половину города целиком, а так исчезают
+        # самые мелкие проезды и рисунок города остаётся.
+        roads.sort(key=lambda road: road.get("cls", 7))
+        roads = roads[:limits["objects"]]
+        cut = True
+    if report is not None:
+        # Потолок обязан о себе сообщать. Молчащий потолок читается как «здесь
+        # нет дорог», и это худшая из возможных подписей под пустым экраном.
+        report.update({"files": len(opened), "skipped": len(wanted) - len(opened),
+                       "thinned": thinned, "cut": cut,
+                       "worstClass": limits["class"]})
     return roads
+
+
+# Наборы местности: вода, зелень, рельсы, кварталы, тротуары, дома.
+# Биты точечной записи: азимут шагом 3° и ширина проезжей части в метрах.
+# Те же числа, что в build_roads.py — контракт формата.
+PFLAG_AZIMUTH_STEP = 3
+PFLAG_AZIMUTH_MASK = 0x7F
+PFLAG_WIDTH_SHIFT = 7
+PFLAG_WIDTH_MASK = 0x3F
+
+AREA_SETS = ("w", "g", "r", "b", "t", "h", "d")
+AREA_KINDS = {"w": 1, "g": 2, "r": 3, "b": 4, "t": 5, "h": 6}
+AREA_CLOSED = 1
+# Поверхность дорог: полотно, перекрёстки и фаски, посчитанные СБОРКОЙ. В
+# наборе «d» лежат два вида сразу, поэтому здесь — единственное место, где вид
+# берётся из самой записи, а не из имени файла.
+AREA_ROAD, AREA_JUNCTION, AREA_MEDIAN = 7, 8, 9
+SURFACE_SET = "d"
+SURFACE_CLASS_SHIFT = 1
+SURFACE_CLASS_MASK = 0b1111
+
+
+def load_areas(tiles_dir, south, west, north, east, sets=AREA_SETS):
+    """Местность из тайлов: вода, зелень, рельсы, кварталы, тротуары, дома.
+
+    Без неё панель показывает не схему, а чертёж: серые линии на чёрном. На
+    боевом сейчас лежит формат v1, где этих наборов нет вовсе, и панель
+    выглядит пустой — но пусто здесь означает «сервер ещё не публиковал
+    местность», а не «местности нет».
+
+    Вид берётся ИЗ ИМЕНИ НАБОРА, а не из записи: у площадных объектов первый
+    элемент — код слоя, и он совпадает с набором, но именно имя файла отвечает
+    на вопрос «что это», когда запись пришла из будущей сборки.
+    """
+    if not tiles_dir or not os.path.isdir(tiles_dir):
+        return []
+    out = []
+    # Потолок — НА КАЖДЫЙ НАБОР, а не на все вместе. Общий потолок в шесть
+    # файлов при шести наборах означал бы «по одному файлу на слой»: в рамке
+    # оказывались вода одного тайла и дома соседнего, а остальное молча
+    # пропадало.
+    opened = {}
+    for name in sorted(os.listdir(tiles_dir)):
+        if not name.startswith("road2_") or not name.endswith(".json"):
+            continue
+        body = name[len("road2_"):-len(".json")].rsplit("_", 1)
+        if len(body) != 2 or body[1] not in sets:
+            continue
+        box = _tile_box(name)
+        if box is None:
+            continue
+        if box[0] > north or box[2] < south or box[1] > east or box[3] < west:
+            continue
+        if opened.get(body[1], 0) >= MAX_TILES_PER_CALL:
+            continue
+        opened[body[1]] = opened.get(body[1], 0) + 1
+        kind = AREA_KINDS.get(body[1], 0)
+        for area in _tile_roads(os.path.join(tiles_dir, name)):
+            points = area["points"]
+            if not any(south <= lat <= north and west <= lon <= east
+                       for lon, lat in points):
+                continue
+            flags = area.get("flags", 0)
+            item = {"kind": kind,
+                    "closed": bool(flags & AREA_CLOSED),
+                    "points": points}
+            if body[1] == SURFACE_SET:
+                item["kind"] = area.get("cls", AREA_ROAD)
+                if item["kind"] == AREA_ROAD:
+                    item["road"] = (flags >> SURFACE_CLASS_SHIFT) & SURFACE_CLASS_MASK
+            out.append(item)
+    return out
+
+
+def load_candidates(tiles_dir, south, west, north, east, limit=1200):
+    """Кандидаты от нейросети: обводки зданий, которых в OSM ещё нет.
+
+    Лежат своими файлами cand_*.json РЯДОМ с тайлами и в подписанный индекс не
+    входят — индекс описывает то, что едет на телефоны, а кандидат ещё никто
+    не смотрел. Принятый становится обычной правкой и проходит ту же проверку,
+    что нарисованное мышью.
+
+    Потолок нужен: в одной клетке центра их больше тысячи, а разбирают их
+    поштучно. Показать двадцать тысяч контуров значит не показать ничего.
+    """
+    if not tiles_dir or not os.path.isdir(tiles_dir):
+        return []
+    out = []
+    for name in sorted(os.listdir(tiles_dir)):
+        if not name.startswith("cand_") or not name.endswith(".json"):
+            continue
+        parts = name[len("cand_"):-len(".json")].split("_")
+        if len(parts) != 2:
+            continue
+        try:
+            row, column = int(parts[0]), int(parts[1])
+        except ValueError:
+            continue
+        step = TILE_DEGREES_V2
+        box = (row * step - 90, column * step - 180,
+               (row + 1) * step - 90, (column + 1) * step - 180)
+        if box[0] > north or box[2] < south or box[1] > east or box[3] < west:
+            continue
+        try:
+            with open(os.path.join(tiles_dir, name), encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, ValueError):
+            continue
+        for flat in payload.get("houses") or []:
+            if len(flat) < 6 or len(flat) % 2:
+                continue
+            points, lat, lon = [], 0, 0
+            for i in range(0, len(flat), 2):
+                if i == 0:
+                    lat, lon = flat[0], flat[1]
+                else:
+                    lat += flat[i]
+                    lon += flat[i + 1]
+                points.append((lon / SCALE, lat / SCALE))
+            if not any(south <= p[1] <= north and west <= p[0] <= east
+                       for p in points):
+                continue
+            out.append({"points": points})
+            if len(out) >= limit:
+                return out
+    return out
+
+
+# --- Поиск по СВОЕМУ адресному индексу -------------------------------------
+#
+# Геокодер Яндекса требует отдельного ключа и отвечает 403 без него, а на
+# странице модератора он и не нужен: адреса уже собраны нами и лежат рядом с
+# тайлами. Свой поиск работает всегда — и когда чужой сервис лежит, и когда за
+# него не заплачено.
+
+# Сведение двух алфавитов. Замерено: 72 % улиц центра записаны латиницей, 28 %
+# кириллицей, и человек ищет как ему привычно. Приведение слабое и намеренно:
+# «Мустакиллик», «Mustaqillik» и «Mustakillik» обязаны находиться одинаково.
+_FOLD = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+    "ж": "j", "з": "z", "и": "i", "й": "i", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "a", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "h", "ц": "s", "ч": "ch", "ш": "sh", "щ": "sh", "ъ": "",
+    "ы": "i", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+    "ў": "u", "қ": "k", "ғ": "g", "ҳ": "h",
+}
+
+
+def fold(text):
+    """Слово к сравнимому виду: кириллица → латиница, q→k, x→h, o→a, zh→j."""
+    out = []
+    for char in (text or "").lower():
+        out.append(_FOLD.get(char, char))
+    word = "".join(out)
+    for was, now in (("zh", "j"), ("kh", "h"), ("ts", "s"), ("yo", "e"),
+                     ("q", "k"), ("x", "h"), ("w", "v"), ("o", "a"),
+                     ("y", "i"), ("ʻ", ""), ("'", ""), ("`", ""), ("’", "")):
+        word = word.replace(was, now)
+    return "".join(ch for ch in word if ch.isalnum())
+
+
+ADDRESS_DEGREES = 0.5
+
+
+def search_addresses(tiles_dir, text, near=None, limit=8):
+    """Найти адрес в своих файлах. near — (lat, lon), чтобы ближнее было выше.
+
+    «Навои» есть не в одном городе, и модератор ищет ту улицу, над которой
+    сейчас сидит: рамка карты решает порядок, а не отсекает результат.
+    """
+    wanted = fold(text)
+    if not wanted or not tiles_dir or not os.path.isdir(tiles_dir):
+        return []
+    number = ""
+    parts = (text or "").split()
+    if len(parts) > 1 and any(ch.isdigit() for ch in parts[-1]):
+        number = parts[-1].strip().lower()
+        wanted = fold(" ".join(parts[:-1]))
+    found = []
+    for name in sorted(os.listdir(tiles_dir)):
+        if not name.startswith("road2_") or not name.endswith("_a.json"):
+            continue
+        try:
+            with open(os.path.join(tiles_dir, name), encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, ValueError):
+            continue
+        for street in payload.get("streets") or []:
+            if wanted not in fold(street.get("n", "")):
+                continue
+            numbers = street.get("h") or []
+            flat = street.get("p") or []
+            lat = lon = 0
+            for index, house in enumerate(numbers):
+                at = index * 2
+                if at + 1 >= len(flat):
+                    break
+                if index == 0:
+                    lat, lon = flat[0], flat[1]
+                else:
+                    lat += flat[at]
+                    lon += flat[at + 1]
+                if number and str(house).lower() != number:
+                    continue
+                found.append({"street": street.get("n", ""), "house": house,
+                              "lat": lat / SCALE, "lon": lon / SCALE})
+                if not number and len(found) > limit * 40:
+                    break
+    if near:
+        found.sort(key=lambda item: (item["lat"] - near[0]) ** 2
+                   + (item["lon"] - near[1]) ** 2)
+    # Один адрес приходит ДВАЖДЫ: в OSM он висит и точкой, и на контуре дома.
+    # В списке из восьми строк два одинаковых «Шахрисабз, 5» — это две строки,
+    # потраченные впустую.
+    out, seen = [], set()
+    for item in found:
+        # Ключ — только улица и номер, без координат.
+        #
+        # Один адрес приходит и точкой, и контуром дома, а в плотной
+        # застройке под одним номером бывает несколько строений. В списке из
+        # восьми строк три «Мустакиллик, 10» — это три строки впустую.
+        # Список отсортирован по близости, поэтому остаётся ближайший.
+        mark = (item["street"], str(item["house"]).lower())
+        if mark in seen:
+            continue
+        seen.add(mark)
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return out
+
+
+# Ближе этого два конца — один узел. Тот же шаг, что у координат в тайле.
+PIECE_EPSILON = 1.5e-5
+
+
+def _same_spot(one, other):
+    return (abs(one[0] - other[0]) < PIECE_EPSILON
+            and abs(one[1] - other[1]) < PIECE_EPSILON)
+
+
+def street_pieces(roads, seed, limit=60):
+    """Все куски ОДНОЙ улицы, начиная с выбранного.
+
+    Полосы задаются на кусок, а улица приезжает кусками: сборка режет дороги
+    по перекрёсткам, чтобы получился граф. Разметить проспект поштучно —
+    пятнадцать правок вместо одной. Замерено на центре Ташкента: сто самых
+    длинных улиц это 808 правок поштучно и 100 целиком.
+
+    Правило то же, что у склейки в сборке, и не случайно: совпало имя — мало,
+    «Мустакиллик» есть в каждом районе, поэтому конец одного куска обязан
+    совпадать с началом другого.
+    """
+    name = (seed.get("name") or "").strip()
+    if not name:
+        return [seed]
+    kin = [road for road in roads
+           if (road.get("name") or "").strip() == name
+           and road.get("cls") == seed.get("cls")
+           and len(road.get("points") or ()) >= 2]
+    found = [seed]
+    taken = {id(seed)}
+    growing = True
+    while growing and len(found) < limit:
+        growing = False
+        for road in kin:
+            # Потолок проверяем ЗДЕСЬ, а не только снаружи: один проход по
+            # соседям добавляет сразу всех, и внешняя проверка узнаёт об этом
+            # уже после. Улица длиной в тридцать кусков проходила потолок в
+            # пять целиком.
+            if len(found) >= limit:
+                break
+            if id(road) in taken:
+                continue
+            for mine in found:
+                ends = (mine["points"][0], mine["points"][-1])
+                theirs = (road["points"][0], road["points"][-1])
+                if any(_same_spot(a, b) for a in ends for b in theirs):
+                    found.append(road)
+                    taken.add(id(road))
+                    growing = True
+                    break
+    return found
+
+
+def middle_of(points):
+    """Точка посередине ломаной ПО ДЛИНЕ, а не по числу вершин.
+
+    У куска из двух точек «средняя вершина» — это его конец, а концы общие у
+    соседей: правка села бы на перекрёсток вместо дороги.
+    """
+    if not points:
+        return None
+    total = sum(meters_between(points[i - 1], points[i])
+                for i in range(1, len(points)))
+    if total <= 0:
+        return list(points[0])
+    walked = 0.0
+    for index in range(1, len(points)):
+        before, after = points[index - 1], points[index]
+        piece = meters_between(before, after)
+        if walked + piece >= total / 2:
+            share = (total / 2 - walked) / piece if piece else 0
+            return [before[0] + (after[0] - before[0]) * share,
+                    before[1] + (after[1] - before[1]) * share]
+        walked += piece
+    return list(points[-1])
 
 
 def load_points(tiles_dir, south, west, north, east):
@@ -941,7 +1406,16 @@ def load_points(tiles_dir, south, west, north, east):
                 continue
             lon, lat = spot
             if south <= lat <= north and west <= lon <= east:
-                out.append({"kind": road["cls"], "flags": road["flags"],
+                flags = road["flags"]
+                # Азимут и ширина проезжей части лежат в битах записи с самой
+                # первой сборки точек. Без них зебра — кружок «здесь переход»;
+                # с ними её можно нарисовать ровно поперёк дороги и ровно во
+                # всю её ширину, то есть так, как она лежит на асфальте.
+                out.append({"kind": road["cls"], "flags": flags,
+                            "azimuth": (flags & PFLAG_AZIMUTH_MASK)
+                                       * PFLAG_AZIMUTH_STEP,
+                            "width": (flags >> PFLAG_WIDTH_SHIFT)
+                                     & PFLAG_WIDTH_MASK,
                             "point": [lon, lat]})
     return out
 

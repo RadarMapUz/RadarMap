@@ -45,8 +45,9 @@ import hashlib
 import json
 import math
 import os
+import shutil
 import sys
-from collections import Counter, defaultdict
+from collections import Counter, OrderedDict, defaultdict
 
 # Что рисуем. Пешеходное, тропы и велодорожки не берём: схема про то, где
 # едет машина, а лишние линии превращают её в паутину.
@@ -458,6 +459,36 @@ def chaikin(points, passes=1):
     return current
 
 
+def _midpoint(points):
+    """Середина линии ПО ДЛИНЕ, а не по номеру вершины.
+
+    Разница не косметическая: у линии из двух точек «вершина посередине» — это
+    её конец, а концы у дорог на перекрёстке общие. Опора, поставленная в
+    общий конец, указывала бы сразу на несколько дорог.
+    """
+    if len(points) < 2:
+        return points[0] if points else None
+    spans = []
+    total = 0.0
+    for i in range(1, len(points)):
+        a, b = points[i - 1], points[i]
+        lon_scale = math.cos(math.radians(a[1]))
+        step = math.hypot((b[0] - a[0]) * lon_scale, b[1] - a[1])
+        spans.append(step)
+        total += step
+    if total <= 0:
+        return points[0]
+    walked = 0.0
+    half = total / 2
+    for i, step in enumerate(spans):
+        if walked + step >= half and step > 0:
+            share = (half - walked) / step
+            a, b = points[i], points[i + 1]
+            return (a[0] + (b[0] - a[0]) * share, a[1] + (b[1] - a[1]) * share)
+        walked += step
+    return points[-1]
+
+
 def _bearing(points):
     first, last = points[0], points[-1]
     lon_scale = math.cos(math.radians(first[1]))
@@ -821,6 +852,291 @@ def collect_areas(source_path, tolerance_deg):
     return areas
 
 
+def collect_houses(source_path, tolerance_deg, floor=None):
+    """Прочитать geojsonl зданий → тот же список (kind, flags, points).
+
+    Отдельной функцией от местности, и не ради порядка: у домов другая цена.
+    В одном кадре центра их 54 094 против семисот дорог, то есть слой домов
+    один весит больше, чем вся остальная схема. Поэтому здесь свой порог
+    размера и своё, более грубое упрощение — замерено: при упрощении в четыре
+    метра и пороге в десять центр Ташкента укладывается в 3 МБ вместо 4,2.
+
+    Дом за рулём отвечает на один вопрос — «мне вот сюда сворачивать?», — и
+    на него отвечает пятно нужного размера в нужном месте, а не точный контур
+    крыльца. Но упрощать его дорожным допуском нельзя: дорога длиной в
+    километр не замечает двенадцати метров сглаживания, а дом сам шириной в
+    десять — см. HOUSE_SIMPLIFY_METERS.
+    """
+    houses = []
+    if floor is None:
+        floor = MIN_HOUSE_METERS
+    if not source_path or not os.path.exists(source_path):
+        return houses
+    with open(source_path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.lstrip("\x1e").strip()
+            if not line:
+                continue
+            try:
+                feature = json.loads(line)
+            except ValueError:
+                continue
+            geometry = feature.get("geometry") or {}
+            if geometry.get("type") != "Polygon":
+                continue
+            rings = geometry.get("coordinates") or []
+            points = rings[0] if rings else []
+            if len(points) < 4:
+                continue
+            points = simplify(points, tolerance_deg)
+            # После упрощения контур обязан остаться контуром: три точки и
+            # замыкание — минимум, ниже которого это уже не пятно.
+            if len(points) < 4:
+                continue
+            if extent_meters(points) < floor:
+                continue
+            houses.append((AREA_HOUSE, AREA_FLAG_CLOSED, points))
+    return houses
+
+
+# --- Адреса -----------------------------------------------------------------
+#
+# Отдельным файлом на город, а НЕ тайлом, и это не прихоть раскладки. Поиск
+# адреса идёт по всему городу сразу: человек ищет то место, куда ещё не
+# приехал, — тайловая окрестность отвечала бы только про то, где он уже стоит.
+#
+# Зачем это вообще, если поиск в приложении и так работает: он работает по
+# сети, через Apple. В роуминге, в подвале парковки, в тоннеле и на краю
+# покрытия «Куда» просто перестаёт существовать. Свой индекс работает всегда.
+#
+# Потолок назван честно и замерен: в кадре центра Ташкента 18 755 объектов с
+# адресом при 54 094 домах. Треть. Остальное так и останется за Apple, и
+# порядок источников это учитывает.
+SET_ADDRESSES = "a"
+
+# Сетка адресов — КРУПНАЯ, 0.5°, та же, что у старого формата тайлов. Полградуса
+# это полсотни километров: город целиком в одной клетке, и поиск по нему не
+# требует собирать десяток файлов.
+ADDRESS_DEGREES = TILE_DEGREES
+
+
+def address_key(lat, lon):
+    return tile_key(lat, lon, ADDRESS_DEGREES)
+
+
+def collect_addresses(source_path):
+    """Прочитать geojsonl с адресами → [(улица, номер, lon, lat)].
+
+    Берём и точки, и контуры: в OSM адрес живёт и тем, и другим — в кадре
+    центра Ташкента 17 153 контура против 1 517 точек. У контура берём
+    середину рамки: подъезд нам неизвестен, а середина дома — честный ответ на
+    «куда ехать».
+
+    Без улицы адрес бесполезен: «дом 12» без названия не найти и не показать.
+    """
+    out = []
+    if not source_path or not os.path.exists(source_path):
+        return out
+    with open(source_path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.lstrip("\x1e").strip()
+            if not line:
+                continue
+            try:
+                feature = json.loads(line)
+            except ValueError:
+                continue
+            properties = feature.get("properties") or {}
+            street = (properties.get("addr:street") or "").strip()
+            number = (properties.get("addr:housenumber") or "").strip()
+            if not street or not number:
+                continue
+            spot = feature_center(feature.get("geometry") or {})
+            if spot is None:
+                continue
+            out.append((street, number, spot[0], spot[1]))
+    return out
+
+
+def feature_center(geometry):
+    """Середина рамки объекта. None — геометрии нет или она не наша."""
+    shape = geometry.get("type")
+    coords = geometry.get("coordinates")
+    if shape == "Point" and isinstance(coords, (list, tuple)) and len(coords) >= 2:
+        try:
+            return float(coords[0]), float(coords[1])
+        except (TypeError, ValueError):
+            return None
+    if shape == "Polygon":
+        rings = coords or []
+        points = rings[0] if rings else []
+    elif shape == "LineString":
+        points = coords or []
+    else:
+        return None
+    good = [p for p in points
+            if isinstance(p, (list, tuple)) and len(p) >= 2]
+    if not good:
+        return None
+    try:
+        lons = [float(p[0]) for p in good]
+        lats = [float(p[1]) for p in good]
+    except (TypeError, ValueError):
+        return None
+    return (min(lons) + max(lons)) / 2, (min(lats) + max(lats)) / 2
+
+
+def addresses_by_cell(rows):
+    """Адреса → {ключ клетки: полезная нагрузка файла}.
+
+    Внутри клетки группируем ПО УЛИЦЕ: название улицы повторяется у каждого
+    дома, а улиц в городе тысячи против десятков тысяч домов. Координаты —
+    целыми 1e-5° и дельтами вдоль улицы, ровно как в тайлах: второй способ
+    паковать координаты в одном проекте — это второй способ ошибиться.
+    """
+    cells = {}
+    for street, number, lon, lat in rows:
+        key = address_key(lat, lon)
+        cells.setdefault(key, {}).setdefault(street, []).append((number, lon, lat))
+    out = {}
+    for key, streets in cells.items():
+        packed = []
+        for street in sorted(streets):
+            houses = sorted(streets[street], key=lambda h: (h[2], h[1]))
+            numbers, points = [], []
+            previous_lat = previous_lon = None
+            for number, lon, lat in houses:
+                ilat, ilon = round(lat * SCALE), round(lon * SCALE)
+                if previous_lat is None:
+                    points.extend((ilat, ilon))
+                else:
+                    points.extend((ilat - previous_lat, ilon - previous_lon))
+                previous_lat, previous_lon = ilat, ilon
+                numbers.append(number)
+            packed.append({"n": street, "h": numbers, "p": points})
+        out[key] = {"version": 1, "streets": packed}
+    return out
+
+
+def stream_houses(source_path, target_dir, degrees, tolerance_deg=None,
+                  floor=None, handles=64):
+    """Разложить дома по тайлам ПОТОКОМ, не держа их в памяти.
+
+    Дома — единственный слой, который в память не влезает. Замерено: в одном
+    кадре центра Ташкента их 54 094 при семистах дорогах; по стране это
+    миллионы контуров, а на сервере 2 ГБ памяти, из которых свободен один, и
+    рядом работают API и панель. Собранный списком слой убил бы их обоих.
+
+    Поэтому дом проходит путь «прочитал — упростил — дописал в файл своего
+    тайла» и больше нигде не задерживается. В памяти одновременно живут один
+    контур и до `handles` открытых файлов.
+
+    Открытых файлов немного и это не жадность: экстракт идёт примерно по
+    порядку обхода земли, поэтому соседние дома попадают в те же тайлы, и
+    вытеснение по редкому использованию почти не срабатывает.
+
+    Возвращает {ключ тайла: записи} — уже посчитанные строки индекса, чтобы
+    write_tiles не пересобирал их заново.
+    """
+    if tolerance_deg is None:
+        tolerance_deg = HOUSE_SIMPLIFY_METERS / 111_320.0
+    if floor is None:
+        floor = MIN_HOUSE_METERS
+    if not source_path or not os.path.exists(source_path):
+        return {}
+
+    work = os.path.join(target_dir, "_houses")
+    shutil.rmtree(work, ignore_errors=True)
+    os.makedirs(work, exist_ok=True)
+    open_files = OrderedDict()
+    keys = set()
+
+    def sink(key):
+        handle = open_files.get(key)
+        if handle is not None:
+            open_files.move_to_end(key)
+            return handle
+        while len(open_files) >= handles:
+            open_files.popitem(last=False)[1].close()
+        handle = open(os.path.join(work, key + ".jsonl"), "a", encoding="utf-8")
+        open_files[key] = handle
+        keys.add(key)
+        return handle
+
+    try:
+        with open(source_path, encoding="utf-8") as source:
+            for line in source:
+                line = line.lstrip("\x1e").strip()
+                if not line:
+                    continue
+                try:
+                    feature = json.loads(line)
+                except ValueError:
+                    continue
+                geometry = feature.get("geometry") or {}
+                if geometry.get("type") != "Polygon":
+                    continue
+                rings = geometry.get("coordinates") or []
+                points = rings[0] if rings else []
+                if len(points) < 4:
+                    continue
+                points = simplify(points, tolerance_deg)
+                if len(points) < 4 or extent_meters(points) < floor:
+                    continue
+                levels = house_levels(feature.get("properties") or {})
+                flags = AREA_FLAG_CLOSED | (levels << HOUSE_LEVELS_SHIFT)
+                record = [AREA_HOUSE, flags, encode(points)]
+                row = json.dumps(record, separators=(",", ":"))
+                for key in tile_keys_of(points, degrees):
+                    sink(key).write(row + "\n")
+    finally:
+        for handle in open_files.values():
+            handle.close()
+
+    written = flush_streamed(work, keys, target_dir, SET_HOUSES)
+    shutil.rmtree(work, ignore_errors=True)
+    return written
+
+
+def flush_streamed(work, keys, target_dir, set_name):
+    """Дописать разложенное по временным файлам в готовые тайлы.
+
+    Возвращает ТОЛЬКО записи индекса, а не строки. Разница не косметическая:
+    раньше здесь собирался словарь «ключ → все строки тайла», то есть слой
+    целиком всё-таки оказывался в памяти — потоковой раскладка была лишь до
+    этого места. На стране это 1 653 195 домов, и сборку убило ядро (Killed на
+    шаге 3/4 при 604 522 дорогах и полутора гигабайтах свободных).
+
+    Теперь тайл пишется на диск сразу, и в памяти одновременно живут строки
+    ОДНОГО тайла.
+    """
+    index = {}
+    for key in sorted(keys):
+        path = os.path.join(work, key + ".jsonl")
+        rows = []
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if line:
+                    rows.append(json.loads(line))
+        if not rows:
+            continue
+        # Порядок внутри тайла УСТОЙЧИВЫЙ. Недетерминированная сборка меняет
+        # sha256 всех тайлов каждую неделю, и каждый телефон перекачивает свои
+        # файлы впустую — при том что в данных не изменилось ничего.
+        rows.sort(key=lambda row: (row[0], row[1], row[2][0], row[2][1],
+                                   len(row[2])))
+        blob = json.dumps({"version": 2, "roads": rows},
+                          separators=(",", ":")).encode()
+        composite = f"{key}_{set_name}"
+        with open(os.path.join(target_dir, f"road2_{composite}.json"), "wb") as out:
+            out.write(blob)
+        index[composite] = {"sha256": hashlib.sha256(blob).hexdigest(),
+                            "bytes": len(blob)}
+        rows.clear()
+    return index
+
+
 def extent_meters(points):
     """Наибольший размер по рамке — им и отсеиваем мелочь."""
     lons = [p[0] for p in points]
@@ -841,6 +1157,12 @@ def collect(source_path):
     lanes_tagged = 0
     sidewalks = []
     arrows = []
+    # Опора для панели: id дороги в OSM и место, где она была на этой сборке.
+    #
+    # Собирается ИЗ СЫРОГО экстракта, до склейки и упрощения, и только здесь
+    # это возможно: после склейки «дорога» — несколько способов OSM, сведённых
+    # в одну линию, и одного id у неё уже нет.
+    identities = []
     read = skipped = 0
 
     with open(source_path, encoding="utf-8") as handle:
@@ -895,11 +1217,239 @@ def collect(source_path):
                 if spot is not None:
                     arrows.append((spot, turns))
             roads.append((code, flags_of(properties, points, code), points, name))
+            osm_id = feature.get("id")
+            if isinstance(osm_id, str) and osm_id:
+                middle = _midpoint(points)
+                identities.append((osm_id, float(middle[0]), float(middle[1]),
+                                   round(_bearing(points), 1), code))
             classes[properties["highway"]] += 1
             flag_counts[roads[-1][1]] += 1
 
     return (roads, classes, flag_counts, read, skipped, lanes_tagged,
-            sidewalks, arrows)
+            sidewalks, arrows, identities)
+
+
+def write_identities(identities, target_dir):
+    """Опора правок: id дороги в OSM → где она была на этой сборке.
+
+    Файлы кладутся РЯДОМ с тайлами, но НЕ в индекс — и это разница по
+    существу. Индекс подписывает владелец, и подпись накрывает то, что едет на
+    телефоны; сюда телефон не ходит никогда, потому что ключа в индексе нет, а
+    окрестность просит только известные наборы. Читает эти файлы одна панель.
+
+    Плата названа прямо: файл вне индекса — значит вне подписи. Тот, кто может
+    его переписать, может сбить привязку правок, но не подсунуть телефонам
+    геометрию. Это ровно та граница, ради которой ключ подписи лежит у
+    владельца.
+    """
+    cells = {}
+    for osm_id, lon, lat, bearing, code in identities:
+        cells.setdefault(address_key(lat, lon), []).append(
+            [osm_id, round(lat * SCALE), round(lon * SCALE), bearing, code])
+    for key, rows in sorted(cells.items()):
+        rows.sort()
+        path = os.path.join(target_dir, f"ids_{key}.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump({"version": 1, "roads": rows}, handle,
+                      separators=(",", ":"), ensure_ascii=False)
+    return len(cells)
+
+
+# --- Поверхность дороги -----------------------------------------------------
+#
+# Сеть остаётся сетью. Куски, разрезанные по перекрёсткам, — это ГРАФ: по нему
+# работают магнит, привязка правок, поиск ближайшей дороги и весь конструктор.
+# Их никто не трогает.
+#
+# Поверхность — ОТДЕЛЬНЫЙ, производный слой: контур полотна, площадь
+# перекрёстка, фаска подхода. Он считается из той же сети раз в неделю и
+# кладётся в тайл готовой геометрией, потому что это ГЕОМЕТРИЯ, а не
+# отрисовка: она не зависит от зума и не меняется, пока не пересобраны тайлы.
+#
+# Считать её в браузере на каждое движение карты неверно в любом движке — и в
+# canvas, и в WebGL. Здесь она считается один раз.
+
+
+def street_key(road):
+    """Что делает два куска одной улицей.
+
+    Имя и класс — мало: «Мустакиллик» есть в каждом районе. Ключ только
+    группирует кандидатов; решает совпадение концов (см. merge_streets).
+
+    Характер тоже в ключе: односторонняя и встречная ей — РАЗНЫЕ улицы, и
+    склеивать их в одну ленту значило бы нарисовать одну проезжую часть там,
+    где их две.
+    """
+    code, flags = road[0], road[1]
+    name = road[3] if len(road) > 3 else ""
+    return (code, name,
+            bool(flags & FLAG_ONEWAY),
+            bool(flags & FLAG_BRIDGE),
+            bool(flags & FLAG_TUNNEL))
+
+
+def street_width(pieces):
+    """Одна ширина на улицу.
+
+    Измеренная побеждает классовую, и из измеренных берётся НАИБОЛЬШАЯ:
+    проспект не сужается на треть посреди квартала. Замерено на живом кадре —
+    у всех восьми улиц центра в одном кадре по две-три разные ширины, и
+    рисовались они пятнадцатью кусками встык.
+    """
+    measured = [p for p in pieces if p[1] & FLAG_LANES_TAGGED and lanes_of(p[1])]
+    source = measured or pieces
+    return max(road_width_meters(p[0], lanes_of(p[1])) for p in source)
+
+
+def merge_streets(roads):
+    """Куски → улицы. [(код, биты, точки, имя, ширина, измерена)]"""
+    return [street for street, _chain in street_chains(roads)]
+
+
+def street_chains(roads):
+    """То же самое, но вместе с кусками, из которых улица собрана.
+
+    Куски нужны перекрёсткам: узел сети живёт на СТЫКЕ кусков, а не на концах
+    улицы, — улица через перекрёсток проходит насквозь. Сеть остаётся сетью.
+
+    Склеиваем только те, у которых КОНЕЦ одного совпадает с началом другого:
+    совпавшего имени мало. Порядок обхода устойчив — от него зависит sha256
+    тайлов, а недетерминированная сборка заставляет каждый телефон
+    перекачивать свои файлы впустую.
+    """
+    groups = {}
+    for road in roads:
+        groups.setdefault(street_key(road), []).append(road)
+
+    streets = []
+    for key in sorted(groups, key=lambda k: (k[0], k[1], k[2], k[3], k[4])):
+        pieces = sorted(groups[key], key=sort_key)
+        used = [False] * len(pieces)
+        # Кто где кончается — СЛОВАРЁМ, а не перебором.
+        #
+        # Перебор всех кусков группы на каждый шаг ленты квадратичен, и
+        # замерено это до выката, а не после: 1000 дорог — 0,04 с, 8000 — 3,1 с,
+        # то есть удвоение данных стоит вчетверо времени. Самая большая группа
+        # склейки — 4295 безымянных кусков; на стране такая сборка не кончилась
+        # бы за ночь и повесила бы еженедельную пересборку.
+        at_spot = defaultdict(list)
+        for other, piece in enumerate(pieces):
+            line = piece[2]
+            for end in (line[0], line[-1]):
+                at_spot[_spot_bucket(end)].append(other)
+        for index, first in enumerate(pieces):
+            if used[index]:
+                continue
+            used[index] = True
+            points = list(first[2])
+            chain = [first]
+            grew = True
+            while grew:
+                grew = False
+                # На конце улицы может сойтись НЕСКОЛЬКО её же кусков: ответвление
+                # с тем же именем, встречная петля, съезд. Брать первый
+                # попавшийся нельзя — лента уходила бы в отросток и обрывалась,
+                # а прямое продолжение оставалось отдельной лентой.
+                #
+                # Берём самое ПРЯМОЕ продолжение и отказываемся от поворота
+                # круче MAX_MERGE_TURN: улица не разворачивается на себя в узле.
+                for at_tail in (True, False):
+                    best, best_turn, best_line = None, None, None
+                    edge = points[-1] if at_tail else points[0]
+                    inner = points[-2] if at_tail else points[1]
+                    for other in _near_spot(at_spot, edge):
+                        if used[other]:
+                            continue
+                        line = pieces[other][2]
+                        if _same_spot(edge, line[0]):
+                            forward = list(line)
+                        elif _same_spot(edge, line[-1]):
+                            forward = list(reversed(line))
+                        else:
+                            continue
+                        if len(forward) < 2:
+                            continue
+                        turn = _turn_between(inner, edge, forward[1])
+                        if turn > MAX_MERGE_TURN:
+                            continue
+                        if best_turn is None or turn < best_turn:
+                            best, best_turn, best_line = other, turn, forward
+                    if best is None:
+                        continue
+                    if at_tail:
+                        points.extend(best_line[1:])
+                    else:
+                        points = list(reversed(best_line))[:-1] + points
+                    used[best] = True
+                    chain.append(pieces[best])
+                    grew = True
+            width = street_width(chain)
+            streets.append(((key[0], first[1], points, key[1],
+                             round(width, 1),
+                             any(p[1] & FLAG_LANES_TAGGED for p in chain)),
+                            chain))
+    return streets
+
+
+# Почему ширина считается ПО ЛЕНТЕ, а не по улице целиком.
+#
+# Первым решением было «одна ширина на всю улицу с этим именем»: замер
+# показывал, что у 44 улиц из 74 в кадре по две-три разные ширины, и это
+# читалось как «несколько дорог склеили». Оказалось — читалось неверно.
+#
+# Данные по «Amir Temur shoh ko'chasi»: 67 кусков КЛАССА 3 (проспект, 3–5
+# полос) и 30 кусков КЛАССА 4 (дублёр с тем же именем, 2–3 полосы). Дублёр
+# действительно уже проспекта, а сам проспект действительно шире у
+# перекрёстков — там добавляются полосы поворота. Разная ширина здесь ПРАВДА.
+#
+# Сведение их к одной ширине было бы враньём в сторону красивой картинки:
+# дублёр стал бы проспектом, а трёхполосный участок — пятиполосным. Поэтому
+# ширина одна на непрерывную ленту — там, где улица физически одна и та же, —
+# и разная между лентами, где она разная в жизни.
+#
+# Настоящей причиной «сосисок» был не разброс ширин между улицами, а СТУПЕНЬ
+# ВНУТРИ одной непрерывной ленты: пятнадцать кусков подряд рисовались каждый
+# своей шириной. Это склейка и чинит.
+
+
+# Ближе этого две вершины — одна и та же: шаг координат в тайле 1e-5°, это
+# чуть больше метра, и после генерализации сошедшиеся концы отличаются в
+# последнем знаке.
+SPOT_EPSILON = 1.5e-5
+
+
+def _turn_between(before, node, after):
+    """Насколько лента поворачивает в узле, градусы. 0 — идёт прямо."""
+    scale = math.cos(math.radians(node[1]))
+    ax, ay = (node[0] - before[0]) * scale, node[1] - before[1]
+    bx, by = (after[0] - node[0]) * scale, after[1] - node[1]
+    if (ax == 0 and ay == 0) or (bx == 0 and by == 0):
+        return 0.0
+    angle = math.degrees(math.atan2(ax * by - ay * bx, ax * bx + ay * by))
+    return abs(angle)
+
+
+def _spot_bucket(point):
+    return (int(point[0] // SPOT_EPSILON), int(point[1] // SPOT_EPSILON))
+
+
+def _near_spot(index, point):
+    """Куски, кончающиеся рядом с точкой. Соседние клетки обходим тоже: две
+    точки ближе эпсилона могут лечь в разные, и половина стыков потерялась бы.
+
+    Порядок устойчив — от него зависит sha256 тайлов.
+    """
+    x, y = _spot_bucket(point)
+    found = set()
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            found.update(index.get((x + dx, y + dy), ()))
+    return sorted(found)
+
+
+def _same_spot(one, other):
+    return (abs(one[0] - other[0]) < SPOT_EPSILON
+            and abs(one[1] - other[1]) < SPOT_EPSILON)
 
 
 def sort_key(road):
@@ -1227,6 +1777,10 @@ SET_WATER, SET_GREEN, SET_RAIL, SET_BLOCKS = "w", "g", "r", "b"
 # их 3 439 — больше, чем всех улиц вместе, и возить их в общем файле значило
 # бы удвоить трафик ради слоя, который виден только вблизи.
 SET_SIDEWALK = "t"
+SET_HOUSES = "h"
+# Поверхность дорог. Только ближний охват: на охвате района полотно вырождается
+# в линию, и возить контуры туда — платить за то, чего не видно.
+SET_SURFACE = "d"
 # Точки. Их ДВА набора, и это не дубль.
 #
 # Дальше 340 м схема рисует не улицы, а костяк района: раздельные проезжие
@@ -1247,7 +1801,45 @@ AREA_WATER, AREA_GREEN, AREA_RAIL, AREA_BLOCK = 1, 2, 3, 4
 # бюджетом. Отдельный конвейер ради ленты, которая ничем не отличается от уже
 # работающей, стоил бы больше, чем экономит.
 AREA_SIDEWALK = 5
+# Дома. Последний слой по важности за рулём и первый по числу объектов: в
+# одном центре Ташкента их 54 094 против семисот дорог. Поэтому у них свой
+# набор, свой порог площади и своё, более грубое упрощение — и показываются
+# они только на ближнем охвате, где водитель уже ищет подъезд, а не поворот.
+AREA_HOUSE = 6
+# Поверхность дороги — ГОТОВАЯ ГЕОМЕТРИЯ, посчитанная здесь, а не в браузере.
+#
+# Сегодня клиент на каждую перерисовку строит из осевых линий полотно,
+# перекрёстки и фаски заново. Это геометрия, а не отрисовка: она одинакова для
+# всех, не зависит от зума и не меняется, пока не пересобраны тайлы. Считать её
+# на каждое движение карты неверно в любом движке — и в canvas, и в WebGL.
+#
+# Осевые при этом НЕ выбрасываются: по ним работает магнит, привязка правок и
+# весь конструктор. Сеть остаётся сетью, поверхность — отдельный слой поверх.
+AREA_ROAD = 7
+AREA_JUNCTION = 8
+# Разделительная — ПОЛОСА ЗЕМЛИ между встречными проезжими, а не краска.
+#
+# На проспекте потоки разделены физически: газон, отбойник, бордюр. Рисовать
+# там пунктир значит утверждать, что это разметка, — и водитель, поймавший
+# враньё, перестанет верить и правде.
+#
+# Знаем мы это не из тегов, а из геометрии: сборка склеила две ОДНОСТОРОННИЕ
+# ленты одной улицы, идущие навстречу в нескольких метрах друг от друга.
+# Полоса между их внутренними кромками и есть разделительная.
+AREA_MEDIAN = 9
 AREA_FLAG_CLOSED = 1
+# Класс дороги — В БИТАХ записи, как этажность у дома. Клиент красит полотно по
+# классу, а не гадает по ширине. Пятый элемент записи невозможен:
+# RoadTiles.decodeEntries принимает длину 3 или 4 и на пятом возвращает nil на
+# ВЕСЬ тайл — потерялась бы не дорога, а регион.
+SURFACE_CLASS_SHIFT = 1
+SURFACE_CLASS_MASK = 0b1111
+# Дворовым проездам полотна не полагается: их больше половины сети, рисуются
+# они тонкой лентой, и контур для них — чистая трата места.
+SURFACE_MAX_CLASS = 6
+# Скруглённый стык: шаг дуги на внешнем углу поворота. Двадцать градусов —
+# по дну: мельче не видно даже на ближнем охвате, а вершины считаются.
+SURFACE_ARC_STEP = 20.0
 
 # Что считаем водой, зеленью и рельсами. Списки нарочно короткие: на приборке
 # нужны ориентиры, а не полнота справочника. Вода — единственный не-серый цвет
@@ -1269,14 +1861,58 @@ MIN_SIDEWALK_METERS = 25.0
 
 # Мелочь на охвате схемы неразличима, а весит столько же, сколько крупное.
 MIN_AREA_METERS = 60.0
+# Дом мельче этого — сарай, гараж или навес. За рулём они не помогают найти
+# подъезд, а по числу их больше, чем самих домов: в замере центра Ташкента
+# порог в десять метров убирает треть объектов и четверть веса.
+MIN_HOUSE_METERS = 10.0
+# Упрощение домов — СВОЁ и мелкое, а не кратное дорожному.
+#
+# Допуск обязан быть соразмерен объекту. Дорога длиной в километр не замечает
+# двенадцати метров сглаживания; типовой дом сам шириной в десять, и такой
+# допуск стирает его целиком — замерено: при кратном дорожному в тайлы
+# доезжала треть домов, остальные схлопывались в точку и отбрасывались.
+#
+# Полтора метра — по дну: координата в тайле лежит с шагом 1e-5°, это 1,1 м, и
+# сглаживать мельче нечего.
+HOUSE_SIMPLIFY_METERS = 1.5
+# Этажность дома — В БИТАХ записи, старше бита «замкнут».
+#
+# Пятый элемент записи невозможен: RoadTiles.decodeEntries принимает длину 3
+# или 4, и пятый отправил бы в nil ВЕСЬ тайл у сборок, которые о нём не знают.
+# Биты же старая сборка просто не видит — она читает флаги масками.
+#
+# Замерено: этажность есть у 39 % домов центра в OSM и у 0 % контуров ML.
+# Значит объём получит меньше половины домов, и это правильнее, чем выдумать
+# высоту остальным: одинаковые коробки по всему городу читаются как макет.
+HOUSE_LEVELS_SHIFT = 1
+HOUSE_LEVELS_MASK = 0x3F
+
+
+def house_levels(properties):
+    """Этажей у дома. 0 — не сказано, и выдумывать нельзя."""
+    raw = properties.get("building:levels")
+    if raw is None:
+        # Высота в метрах — тоже ответ: делим на три метра на этаж.
+        metres = properties.get("height")
+        try:
+            return max(0, min(HOUSE_LEVELS_MASK, int(round(float(metres) / 3))))
+        except (TypeError, ValueError):
+            return 0
+    try:
+        return max(0, min(HOUSE_LEVELS_MASK, int(round(float(raw)))))
+    except (TypeError, ValueError):
+        return 0
 
 
 # Виды местности, которые можно обвести руками. Те же коды, что у слоёв из
 # OSM: панель заводит объект ТОГО ЖЕ вида, а не параллельный, поэтому телефон
 # рисует его тем же кодом и добавлять там нечего.
-DRAWN_AREA_KINDS = {AREA_WATER, AREA_GREEN, AREA_RAIL, AREA_BLOCK}
+DRAWN_AREA_KINDS = {AREA_WATER, AREA_GREEN, AREA_RAIL, AREA_BLOCK, AREA_HOUSE}
 # Меньше этого контур на охвате схемы неразличим, а весит столько же.
 MIN_DRAWN_AREA_METERS = 30.0
+# У дома порог свой и мелкий: типовой дом в периметре — сорок метров, и общий
+# порог местности выбросил бы половину нарисованных руками домов.
+MIN_DRAWN_HOUSE_METERS = 12.0
 
 
 def drawn_areas(edits):
@@ -1301,11 +1937,44 @@ def drawn_areas(edits):
                 break
         if len(points) < 3:
             continue
-        if polyline_meters(points) < MIN_DRAWN_AREA_METERS:
+        floor = (MIN_DRAWN_HOUSE_METERS if kind == AREA_HOUSE
+                 else MIN_DRAWN_AREA_METERS)
+        if polyline_meters(points) < floor:
             continue
         # Замкнутый контур заливается, разомкнутый — лента. Обведённое руками
         # всегда полигон: ленты (рельсы вдоль насыпи) в панели не рисуют.
         out.append((kind, AREA_FLAG_CLOSED, points))
+    return out
+
+
+def drawn_addresses(edits):
+    """Адреса домов, обведённых руками → строки для адресного файла.
+
+    Дом, нарисованный в панели, обязан находиться поиском ровно так же, как
+    пришедший из OSM: телефон не знает и не должен знать, откуда взялся дом.
+
+    Адрес необязателен: контур без адреса — всё равно застройка на схеме, и
+    заставлять человека придумывать номер ради того, чтобы обвести дом, значит
+    получить выдуманные номера.
+    """
+    out = []
+    for edit in edits:
+        if edit.get("kind") != "area":
+            continue
+        props = edit.get("props") or {}
+        if props.get("area") != AREA_HOUSE:
+            continue
+        street = str(props.get("street") or "").strip()
+        number = str(props.get("house") or "").strip()
+        if not street or not number:
+            continue
+        ring = edit.get("geom") or []
+        if len(ring) < 3 or not isinstance(ring[0], (list, tuple)):
+            continue
+        spot = feature_center({"type": "Polygon", "coordinates": [ring]})
+        if spot is None:
+            continue
+        out.append((street, number, spot[0], spot[1]))
     return out
 
 
@@ -1376,7 +2045,8 @@ def signed_area_meters(points):
     return total / 2
 
 
-def build_blocks(roads, min_area=BLOCK_MIN_AREA, max_area=BLOCK_MAX_AREA):
+def build_blocks(roads, min_area=BLOCK_MIN_AREA, max_area=BLOCK_MAX_AREA,
+                 kind=AREA_BLOCK, classes=None):
     """Кварталы как замкнутые грани дорожного графа.
 
     Контур квартала СЛЕДУЕТ из измеренных дорог — он не берётся ниоткуда и не
@@ -1399,6 +2069,8 @@ def build_blocks(roads, min_area=BLOCK_MIN_AREA, max_area=BLOCK_MAX_AREA):
     for road in roads:
         points = road[2]
         if len(points) < 2:
+            continue
+        if classes is not None and road[0] not in classes:
             continue
         half.append((_node(points[0]), _node(points[-1]), points))
         half.append((_node(points[-1]), _node(points[0]), list(reversed(points))))
@@ -1459,8 +2131,29 @@ def build_blocks(roads, min_area=BLOCK_MIN_AREA, max_area=BLOCK_MAX_AREA):
             continue
         if not (min_area <= -area <= max_area):
             continue
-        blocks.append((AREA_BLOCK, AREA_FLAG_CLOSED, ring))
+        blocks.append((kind, AREA_FLAG_CLOSED, ring))
     return blocks
+
+
+# Островок на съезде: грань дорожного графа, слишком маленькая для квартала.
+#
+# Считать его отдельно не надо — он УЖЕ находится там же, где кварталы, и
+# отбрасывается порогом площади. Треугольник между съездом, основным ходом и
+# поперечной улицей — это грань в двадцать-тысячу квадратных метров; квартал
+# начинается с четырёхсот, и в этом окне они пересекаются, поэтому границу
+# островка ведём по СОСТАВУ дорог, а не только по площади.
+ISLAND_MIN_AREA = 20.0
+ISLAND_MAX_AREA = 1200.0
+# Островок окружён магистральной сетью. Дворовая петля той же площади — это
+# двор, а не островок, и красить её асфальтовым бордюром было бы враньём.
+ISLAND_CLASSES = frozenset({1, 2, 3, 4, 5})
+
+
+def build_islands(roads):
+    """Островки на съездах. Тот же обход граней, другое окно площади."""
+    return build_blocks(roads, min_area=ISLAND_MIN_AREA,
+                        max_area=ISLAND_MAX_AREA, kind=AREA_MEDIAN,
+                        classes=ISLAND_CLASSES)
 
 
 # --- Точки: светофоры, лежачие полицейские, стоп-линии ----------------------
@@ -1902,8 +2595,602 @@ def cluster_points(points, meters=POINT_CLUSTER_METERS):
     return kept
 
 
+# --- Поверхность дороги: контур полотна ------------------------------------
+
+
+def _unit(dx, dy):
+    length = math.hypot(dx, dy)
+    return (0.0, 0.0) if length == 0 else (dx / length, dy / length)
+
+
+def _lon_scale(points):
+    return math.cos(math.radians(sum(p[1] for p in points) / len(points)))
+
+
+def _shift(point, normal, half, scale):
+    return (point[0] + normal[0] * half / scale, point[1] + normal[1] * half)
+
+
+def _arc(point, first, second, half, scale, turn):
+    """Дуга скругления на внешнем углу поворота.
+
+    Только на ВНЕШНЕМ: на внутреннем дуга даёт петлю с обратным обходом, и
+    заливка по чётности выест из полотна дырку ровно в месте поворота.
+    """
+    start = math.atan2(first[1], first[0])
+    end = math.atan2(second[1], second[0])
+    span = (end - start + math.pi) % (2 * math.pi) - math.pi
+    if turn * span <= 0:
+        return []
+    steps = max(1, int(abs(math.degrees(span)) / SURFACE_ARC_STEP))
+    out = []
+    for step in range(1, steps):
+        angle = start + span * step / steps
+        out.append(_shift(point, (math.cos(angle), math.sin(angle)), half, scale))
+    return out
+
+
+def _side(points, half, scale):
+    """Одна кромка полотна: осевая, отодвинутая влево на половину ширины."""
+    edge = []
+    previous = None
+    for index in range(len(points) - 1):
+        here, ahead = points[index], points[index + 1]
+        along = _unit((ahead[0] - here[0]) * scale, ahead[1] - here[1])
+        if along == (0.0, 0.0):
+            continue
+        normal = (-along[1], along[0])
+        if previous is not None:
+            turn = previous[0] * normal[1] - previous[1] * normal[0]
+            edge.extend(_arc(here, previous, normal, half, scale, turn))
+        edge.append(_shift(here, normal, half, scale))
+        edge.append(_shift(ahead, normal, half, scale))
+        previous = normal
+    return edge
+
+
+def road_contour(points, width):
+    """Замкнутый контур проезжей части: осевая, раздутая на ширину.
+
+    Торцы срезаны, а не скруглены, и это не упрощение: там, где улица упирается
+    в перекрёсток, шов закрывает площадь узла (AREA_JUNCTION), а не заглушка.
+    """
+    if len(points) < 2 or width <= 0:
+        return []
+    scale = _lon_scale(points) or 1.0
+    half = width / 2.0 / LAT_METERS
+    left = _side(points, half, scale)
+    right = _side(list(reversed(points)), half, scale)
+    if not left or not right:
+        return []
+    return left + right
+
+
+def iter_surface(streets):
+    """Полотно для каждой улицы. Вход — склеенные улицы merge_streets.
+
+    Выдаёт ПО ОДНОЙ фигуре, а не списком: список всех контуров страны в память
+    не влезает, и первый боевой прогон это доказал — ядро убило сборку.
+    """
+    for code, _flags, points, _name, width, _measured in streets:
+        if code > SURFACE_MAX_CLASS:
+            continue
+        ring = road_contour(points, width)
+        if len(ring) < 3:
+            continue
+        flags = AREA_FLAG_CLOSED | (min(code, SURFACE_CLASS_MASK)
+                                    << SURFACE_CLASS_SHIFT)
+        yield (AREA_ROAD, flags, ring)
+
+
+def build_surface(streets):
+    return list(iter_surface(streets))
+
+
+def surface_class(flags):
+    return (flags >> SURFACE_CLASS_SHIFT) & SURFACE_CLASS_MASK
+
+
+# --- Перекрёсток: площадь между кромками, а не круг -------------------------
+
+# Проверено и отвергнуто: круг самой широкой дороги клинья между кромками не
+# закрывает, и круглые торцы вместо срезанных тоже — 31 дырка против 30, в
+# пределах шума. Дело не в торцах: площадь между кромками сходящихся дорог не
+# принадлежит НИ ОДНОЙ из осевых, и накрыть её может только своя фигура.
+MIN_JUNCTION_ARMS = 3
+# Фаска подхода: на последних метрах перед узлом полотно расширяется.
+FLARE_METERS = 8.0
+FLARE_WIDEN_METERS = 1.5
+
+
+def convex_hull(points):
+    """Оболочка по Эндрю. Точки в градусах; долгота сжата по широте, иначе на
+    сорок первой параллели оболочка выходит перекошенной на четверть."""
+    unique = sorted(set(points))
+    if len(unique) < 3:
+        return list(unique)
+    scale = _lon_scale(unique) or 1.0
+
+    def cross(o, a, b):
+        return (((a[0] - o[0]) * scale) * (b[1] - o[1])
+                - (a[1] - o[1]) * ((b[0] - o[0]) * scale))
+
+    def half(source):
+        out = []
+        for point in source:
+            while len(out) > 1 and cross(out[-2], out[-1], point) <= 0:
+                out.pop()
+            out.append(point)
+        return out[:-1]
+
+    return half(unique) + half(list(reversed(unique)))
+
+
+def _node_key(point):
+    return (round(point[0] / SPOT_EPSILON), round(point[1] / SPOT_EPSILON))
+
+
+def junction_arms(chains):
+    """Что сходится в каждом узле сети: (точка, направление наружу, ширина)."""
+    arms = defaultdict(list)
+    for street, chain in chains:
+        width = street[4]
+        if street[0] > SURFACE_MAX_CLASS:
+            continue
+        for piece in chain:
+            points = piece[2]
+            for node, neighbour in ((points[0], points[1]),
+                                    (points[-1], points[-2])):
+                arms[_node_key(node)].append((node, neighbour, width))
+    return arms
+
+
+def _edge_points(node, neighbour, width, scale, back=0.0):
+    """Две кромки дороги в узле: центр ± половина ширины поперёк направления."""
+    along = _unit((neighbour[0] - node[0]) * scale, neighbour[1] - node[1])
+    if along == (0.0, 0.0):
+        return []
+    across = (-along[1], along[0])
+    half = width / 2.0 / LAT_METERS
+    step = back / LAT_METERS
+    base = (node[0] + along[0] * step / scale, node[1] + along[1] * step)
+    return [_shift(base, across, half, scale),
+            _shift(base, (-across[0], -across[1]), half, scale)]
+
+
+# Ближе этого два узла принадлежат ОДНОМУ перекрёстку.
+#
+# Пересечение двух проспектов с раздельными проезжими — это не один узел, а
+# четыре и больше: у каждой проезжей свой конец. Оболочка, построенная по
+# каждому узлу отдельно, накрывает четыре пятачка, а середина между ними не
+# принадлежит ни одному — и остаётся чёрной дырой ровно в центре перекрёстка.
+#
+# Тридцать пять метров — по замеру: между проезжими проспекта 8–40 метров
+# (тот же порог, что у разделительной), а до соседнего перекрёстка в городской
+# сетке заметно дальше.
+JUNCTION_CLUSTER_METERS = 35.0
+
+
+def cluster_junctions(arms):
+    """Свести узлы одного перекрёстка вместе. Возвращает список списков ног."""
+    # Берём и узлы с ДВУМЯ концами, а не только перекрёстки.
+    #
+    # Там, где две ленты одной улицы стыкуются, у контуров срезанные торцы, и
+    # если ленты подходят под разными углами или разной ширины — между
+    # торцами остаётся клин пустоты. Это не перекрёсток, заливать его целиком
+    # незачем, но и оставлять дырой нельзя: замерено, таких стыков в центре
+    # были сотни.
+    spots = [(key, arms[key]) for key in sorted(arms)
+             if len(arms[key]) >= 2]
+    parent = list(range(len(spots)))
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def unite(a, b):
+        ra, rb = root(a), root(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+
+    # Сетка по клеткам размером с порог: перебор всех пар квадратичен, а узлов
+    # в стране сотни тысяч.
+    cell = JUNCTION_CLUSTER_METERS / LAT_METERS
+    buckets = defaultdict(list)
+    for index, (_key, legs) in enumerate(spots):
+        node = legs[0][0]
+        buckets[(int(node[0] / cell), int(node[1] / cell))].append(index)
+    for (bx, by), here in buckets.items():
+        neighbours = []
+        for dx in (0, 1):
+            for dy in (-1, 0, 1):
+                if dx == 0 and dy < 0:
+                    continue
+                neighbours.extend(buckets.get((bx + dx, by + dy), ()))
+        for one in here:
+            for other in neighbours:
+                if one >= other:
+                    continue
+                if meters_between(spots[one][1][0][0],
+                                  spots[other][1][0][0]) <= JUNCTION_CLUSTER_METERS:
+                    unite(one, other)
+
+    groups = {}
+    for index, (_key, legs) in enumerate(spots):
+        groups.setdefault(root(index), []).extend(legs)
+    return [groups[key] for key in sorted(groups)]
+
+
+# Ленты сходятся ровно — заливать нечего. Метр разницы в ширине и пятнадцать
+# градусов поворота: ниже этого торцы совпадают, и клина не видно.
+SEAM_WIDTH_METERS = 1.0
+SEAM_TURN_DEGREES = 15.0
+
+
+def _seam_needs_patch(legs):
+    """Нужна ли заплатка на стыке двух лент."""
+    if len(legs) != 2:
+        return False
+    (node_a, ahead_a, width_a), (node_b, ahead_b, width_b) = legs
+    if abs(width_a - width_b) >= SEAM_WIDTH_METERS:
+        return True
+    # НОЛЬ — ленты идут насквозь, торцы совпадают; угол и есть излом.
+    #
+    # Первая версия сравнивала со 180° и объявляла изломом каждый прямой
+    # стык: обе соседние вершины смотрят НАРУЖУ от узла, и у сквозной ленты
+    # угол между ними равен нулю, а не развёрнутому.
+    return _turn_between(ahead_a, node_a, ahead_b) >= SEAM_TURN_DEGREES
+
+
+# Насколько оболочка заходит вглубь подхода, в ширинах дороги.
+#
+# Подобрано ЗАМЕРОМ, а не на глаз. Дыры — непокрытые точки, окружённые
+# асфальтом с трёх сторон:
+#
+#   заход ×1,0 — 15 % перекрёстков с дырами, площадь вдвое больше ожидаемой
+#   заход ×1,5 — 10 %, площадь втрое
+#   заход ×2,0 —  8 %, площадь впятеро
+#   заход ×3,0 —  7 %, площадь всемеро
+#
+# Полтора — там, где кривая ломается: дальше платим площадью втрое дороже за
+# каждый следующий процент, а лишняя площадь это асфальт на тротуаре.
+JUNCTION_REACH = 1.5
+
+# Потолок площади оболочки, в квадратах самой широкой дороги.
+#
+# Замер нашёл кластеры, где оболочка в 55 раз больше ожидаемой: узлы свелись
+# через полквартала, и выпуклая оболочка залила асфальтом двор целиком. Такой
+# кластер разбираем обратно на отдельные узлы — лучше шов, чем двор под
+# асфальтом.
+JUNCTION_MAX_AREA = 12.0
+
+
+def _hull_of(legs):
+    """Оболочка кромок группы ног. Пустой список — фигуры нет."""
+    scale = _lon_scale([legs[0][0]]) or 1.0
+    edges = []
+    for node, neighbour, width in legs:
+        edges.extend(_edge_points(node, neighbour, width, scale))
+        reach = min(width * JUNCTION_REACH,
+                    meters_between(node, neighbour) * 0.9)
+        if reach > 1.0:
+            edges.extend(_edge_points(node, neighbour, width, scale, back=reach))
+    ring = convex_hull(edges)
+    return ring if len(ring) >= 3 else []
+
+
+def _hull_fits(legs, ring):
+    want = max(leg[2] for leg in legs) ** 2
+    return want <= 0 or abs(signed_area_meters(ring)) <= want * JUNCTION_MAX_AREA
+
+
+def iter_junctions(arms):
+    """Асфальт перекрёстка — оболочка кромок ВСЕХ его дорог, а не одного узла."""
+    for legs in cluster_junctions(arms):
+        if len(legs) < MIN_JUNCTION_ARMS and not _seam_needs_patch(legs):
+            continue
+        ring = _hull_of(legs)
+        if not ring:
+            continue
+        if _hull_fits(legs, ring):
+            yield (AREA_JUNCTION, AREA_FLAG_CLOSED, ring)
+            continue
+        # Кластер растянулся — разбираем обратно по узлам. Лучше шов, чем
+        # двор, залитый асфальтом.
+        by_node = {}
+        for leg in legs:
+            by_node.setdefault(_node_key(leg[0]), []).append(leg)
+        for key in sorted(by_node):
+            alone = by_node[key]
+            if len(alone) < MIN_JUNCTION_ARMS and not _seam_needs_patch(alone):
+                continue
+            small = _hull_of(alone)
+            if small:
+                yield (AREA_JUNCTION, AREA_FLAG_CLOSED, small)
+
+
+def build_junctions(arms):
+    return list(iter_junctions(arms))
+
+
+def iter_flares(arms):
+    """Фаска подхода: полотно расширяется на последних метрах перед узлом.
+
+    Расширение ограничено четвертью ширины и шириной самого узла — иначе
+    дворовый проезд, упирающийся в проспект, раздувается вдвое и читается как
+    ещё один проспект.
+    """
+    for key in sorted(arms):
+        legs = arms[key]
+        if len(legs) < MIN_JUNCTION_ARMS:
+            continue
+        node = legs[0][0]
+        scale = _lon_scale([node]) or 1.0
+        widest = max(leg[2] for leg in legs)
+        for _node, neighbour, width in legs:
+            widen = min(FLARE_WIDEN_METERS, width / 4.0,
+                        max(0.0, (widest - width) / 2.0))
+            if widen <= 0:
+                continue
+            far = _edge_points(node, neighbour, width, scale, FLARE_METERS)
+            near = _edge_points(node, neighbour, width + 2 * widen, scale)
+            if not far or not near:
+                continue
+            yield (AREA_ROAD, AREA_FLAG_CLOSED,
+                   [far[0], near[0], near[1], far[1]])
+
+
+def build_flares(arms):
+    return list(iter_flares(arms))
+
+def stream_surface(roads, target_dir, degrees, handles=64):
+    """Поверхность — на диск потоком, по тому же закону, что дома.
+
+    Контур улицы примерно втрое тяжелее её осевой по вершинам, и держать слой
+    списком нельзя: замерено 433 байта на дорогу, а дорог в стране 604 522.
+    Склейка при этом всё равно идёт по всей сети — иначе улица разорвётся на
+    границе тайла, — но наружу отдаётся только индекс.
+    """
+    work = os.path.join(target_dir, "_surface")
+    shutil.rmtree(work, ignore_errors=True)
+    os.makedirs(work, exist_ok=True)
+    open_files = OrderedDict()
+    keys = set()
+
+    def sink(key):
+        handle = open_files.get(key)
+        if handle is not None:
+            open_files.move_to_end(key)
+            return handle
+        while len(open_files) >= handles:
+            open_files.popitem(last=False)[1].close()
+        handle = open(os.path.join(work, key + ".jsonl"), "a", encoding="utf-8")
+        open_files[key] = handle
+        keys.add(key)
+        return handle
+
+    try:
+        chains = street_chains(roads)
+        arms = junction_arms(chains)
+
+        def put(figure):
+            kind, flags, ring = figure
+            row = json.dumps([kind, flags, encode(ring)], separators=(",", ":"))
+            for key in tile_keys_of(ring, degrees):
+                sink(key).write(row + "\n")
+
+        for figure in iter_surface(street for street, _chain in chains):
+            put(figure)
+        for figure in iter_junctions(arms):
+            put(figure)
+        for figure in iter_flares(arms):
+            put(figure)
+        for figure in build_medians(chains, junction_spots(arms)):
+            put(figure)
+        del chains
+        for figure in build_islands(roads):
+            put(figure)
+    finally:
+        for handle in open_files.values():
+            handle.close()
+
+    written = flush_streamed(work, keys, target_dir, SET_SURFACE)
+    shutil.rmtree(work, ignore_errors=True)
+    return written
+
+
+# Ближе этого две встречные проезжие — одна дорога с разметкой, а не проспект
+# с островком: восемь метров это ширина двух полос, разделять там нечего.
+MEDIAN_MIN_METERS = 8.0
+# Дальше этого это уже две разные улицы, а не проспект.
+MEDIAN_MAX_METERS = 40.0
+# Насколько встречные обязаны быть параллельны. Тридцать градусов — запас на
+# генерализацию и на плавные повороты; больше уже перекрёсток.
+MEDIAN_MAX_TURN = 30.0
+# Реже этого шага полосу не разбиваем: она обязана повторять изгиб проспекта.
+MEDIAN_STEP_METERS = 25.0
+
+
+def _box_of(points):
+    lons = [p[0] for p in points]
+    lats = [p[1] for p in points]
+    return min(lons), min(lats), max(lons), max(lats)
+
+
+def _near_boxes(one, other, meters):
+    """Сходятся ли рамки двух лент ближе, чем на столько метров."""
+    a, b = _box_of(one), _box_of(other)
+    slack = meters / LAT_METERS
+    scale = math.cos(math.radians((a[1] + a[3]) / 2)) or 1.0
+    return not (a[0] - slack / scale > b[2] or b[0] - slack / scale > a[2]
+                or a[1] - slack > b[3] or b[1] - slack > a[3])
+
+
+def _opposite(one, other):
+    """Идут ли ленты навстречу друг другу."""
+    turn = abs(_bearing(one) - _bearing(other))
+    turn = min(turn, 360 - turn)
+    return abs(turn - 180) <= MEDIAN_MAX_TURN
+
+
+def _walk(points, step_meters):
+    """Точки вдоль ломаной с шагом в метрах, вместе с направлением."""
+    out = []
+    travelled = 0.0
+    target = 0.0
+    for index in range(1, len(points)):
+        before, after = points[index - 1], points[index]
+        piece = meters_between(before, after)
+        if piece <= 0:
+            continue
+        while target <= travelled + piece:
+            share = (target - travelled) / piece
+            out.append(((before[0] + (after[0] - before[0]) * share,
+                         before[1] + (after[1] - before[1]) * share),
+                        (before, after)))
+            target += step_meters
+        travelled += piece
+    return out
+
+
+def build_medians(chains, junctions=()):
+    """Полосы земли между встречными проезжими одной улицы.
+
+    `junctions` — узлы, через которые полоса идти НЕ ИМЕЕТ ПРАВА. На
+    перекрёстке встречная проезжая никуда не девается и держится на том же
+    расстоянии, поэтому по одному расстоянию полоса продолжается прямо через
+    узел и закрашивает асфальт тёмным. На карте это чёрная клякса поперёк
+    перекрёстка — ровно то, от чего мы уходили, убирая швы.
+
+    Только там, где они ЕСТЬ: обе ленты односторонние, у обеих одно имя, идут
+    навстречу и держатся друг от друга на расстоянии проспекта. Ни одного
+    островка там, где его нет в жизни.
+    """
+    named = [street for street, _chain in chains
+             if street[3] and street[1] & FLAG_ONEWAY and len(street[2]) >= 2]
+    by_name = {}
+    for street in named:
+        by_name.setdefault((street[0], street[3]), []).append(street)
+
+    out = []
+    for key in sorted(by_name):
+        group = by_name[key]
+        for first in range(len(group)):
+            for second in range(first + 1, len(group)):
+                one, other = group[first], group[second]
+                # Дешёвая отсечка по рамкам ДО всего остального.
+                #
+                # Пар внутри группы квадратично много — у «Abdulla Qodiriy»
+                # 38 лент, то есть 703 пары, — а по стране группы крупнее.
+                # Сравнение четырёх чисел отсекает почти все, и до дорогого
+                # обхода доходят только соседи.
+                if not _near_boxes(one[2], other[2], MEDIAN_MAX_METERS):
+                    continue
+                if not _opposite(one[2], other[2]):
+                    continue
+                strip = _median_strip(one, other, junctions)
+                if strip:
+                    out.append((AREA_MEDIAN, AREA_FLAG_CLOSED, strip))
+    return out
+
+
+def _median_strip(one, other, junctions=()):
+    """Многоугольник между внутренними кромками двух встречных проезжих."""
+    left, right = [], []
+    for spot, _segment in _walk(one[2], MEDIAN_STEP_METERS):
+        near, gap = _nearest_with_gap(spot, other[2])
+        if _at_junction(spot, junctions):
+            near = None
+        if near is None or not (MEDIAN_MIN_METERS <= gap <= MEDIAN_MAX_METERS):
+            # Разрыв — конец полосы: проспект расходится или кончается.
+            # Продолжать через разрыв значило бы нарисовать островок поперёк
+            # перекрёстка.
+            if len(left) >= 2:
+                break
+            left, right = [], []
+            continue
+        scale = _lon_scale([spot]) or 1.0
+        half_one = one[4] / 2.0 / LAT_METERS
+        half_two = other[4] / 2.0 / LAT_METERS
+        toward = _unit((near[0] - spot[0]) * scale, near[1] - spot[1])
+        if toward == (0.0, 0.0):
+            continue
+        left.append(_shift(spot, toward, half_one, scale))
+        right.append(_shift(near, (-toward[0], -toward[1]), half_two, scale))
+    if len(left) < 2:
+        return []
+    return left + list(reversed(right))
+
+
+def _at_junction(point, junctions):
+    """Стоим ли мы в перекрёстке. Радиус — по самой широкой из его дорог."""
+    for node, radius in junctions:
+        if meters_between(point, node) <= radius:
+            return True
+    return False
+
+
+def junction_spots(arms):
+    """Узлы с их радиусами: где полоса обязана прерваться."""
+    out = []
+    for key in sorted(arms):
+        legs = arms[key]
+        if len(legs) < MIN_JUNCTION_ARMS:
+            continue
+        widest = max(leg[2] for leg in legs)
+        # Половина самой широкой плюс запас: полоса должна кончиться ДО
+        # кромки перекрёстка, а не на ней.
+        out.append((legs[0][0], widest / 2.0 + 4.0))
+    return out
+
+
+def _nearest_with_gap(point, line):
+    """Ближайшая точка ломаной И расстояние до неё в метрах.
+
+    Имя не `_nearest_on`: такая функция в файле уже есть и отдаёт только
+    точку. Второе определение молча перекрыло первое, и сведение раздельных
+    проезжих начало получать кортеж вместо координаты — пятнадцать тестов
+    упали разом, ни один из них не про разделительные.
+    """
+    best, gap = None, float("inf")
+    for index in range(1, len(line)):
+        before, after = line[index - 1], line[index]
+        scale = math.cos(math.radians(point[1]))
+        ax = (after[0] - before[0]) * scale
+        ay = after[1] - before[1]
+        length = ax * ax + ay * ay
+        if length == 0:
+            continue
+        share = (((point[0] - before[0]) * scale) * ax
+                 + (point[1] - before[1]) * ay) / length
+        share = max(0.0, min(1.0, share))
+        spot = (before[0] + (after[0] - before[0]) * share,
+                before[1] + (after[1] - before[1]) * share)
+        here = meters_between(point, spot)
+        if here < gap:
+            best, gap = spot, here
+    return best, gap
+
+
+def build_road_surface(roads):
+    """Весь слой поверхности: полотно улиц, перекрёстки, фаски.
+
+    Осевые остаются нетронутыми — по ним работает магнит, привязка правок и
+    конструктор. Это ДОПОЛНИТЕЛЬНЫЙ слой для картинки, а не замена сети.
+    """
+    chains = street_chains(roads)
+    arms = junction_arms(chains)
+    return (list(iter_surface(street for street, _chain in chains))
+            + list(iter_junctions(arms)) + list(iter_flares(arms))
+            + build_medians(chains, junction_spots(arms))
+            + build_islands(roads))
+
+
 def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
-                far_points=(), far=None):
+                far_points=(), far=None, addresses=None, houses=None,
+                surface=True):
     """Разложить дороги по тайлам и собрать индексы v1 и v2.
 
     Дорога, задевшая несколько тайлов, попадает в каждый целиком: дубль на
@@ -1954,14 +3241,18 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
 
     # --- Слои местности: вода, зелень, рельсы. Каждый своим файлом.
     area_sets = {SET_WATER: [], SET_GREEN: [], SET_RAIL: [], SET_BLOCKS: [],
-                 SET_SIDEWALK: []}
+                 SET_SIDEWALK: [], SET_HOUSES: []}
     by_code = {AREA_WATER: SET_WATER, AREA_GREEN: SET_GREEN,
                AREA_RAIL: SET_RAIL, AREA_BLOCK: SET_BLOCKS,
-               AREA_SIDEWALK: SET_SIDEWALK}
+               AREA_SIDEWALK: SET_SIDEWALK, AREA_HOUSE: SET_HOUSES}
+    by_code[AREA_MEDIAN] = SET_SURFACE
     for kind, flags, shape in areas:
         area_sets[by_code[kind]].append((kind, flags, shape))
     # Кварталы считаются из САМОЙ сети, а не приходят из OSM.
     area_sets[SET_BLOCKS].extend(build_blocks(roads))
+    # Поверхность считается ЗДЕСЬ, раз в неделю, а не в браузере на каждый
+    # кадр. Клиенту остаётся залить присланные многоугольники.
+
 
     # --- Новый формат: мелкая сетка, файлы по наборам.
     # Ключ индекса — СОСТАВНОЙ: «тайл_набор». Не вложенный словарь, и это
@@ -1978,11 +3269,19 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
         sets[SET_POINTS_FAR] = list(far_points)
     tiled = {name: tile(items, degrees) for name, items in sets.items()}
     index_v2 = {}
+    # Дома и поверхность СВОИ ФАЙЛЫ УЖЕ НАПИСАЛИ и отдают только записи
+    # индекса. Оба слоя в память не влезают: домов в стране 1 653 195, а
+    # контур улицы втрое тяжелее её осевой по вершинам.
+    if houses:
+        index_v2.update(houses)
+    if surface:
+        index_v2.update(stream_surface(roads, target_dir, degrees))
     for name, by_key in sorted(tiled.items()):
         for key, items in sorted(by_key.items()):
             if not items:
                 continue
-            blob = json.dumps({"version": 2, "roads": encoded(items)},
+            rows = encoded(items)
+            blob = json.dumps({"version": 2, "roads": rows},
                               separators=(",", ":")).encode()
             composite = f"{key}_{name}"
             path = os.path.join(target_dir, f"road2_{composite}.json")
@@ -1990,6 +3289,23 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
                 handle.write(blob)
             index_v2[composite] = {"sha256": hashlib.sha256(blob).hexdigest(),
                                    "bytes": len(blob)}
+
+    # Адреса — своими файлами и В ТОМ ЖЕ ИНДЕКСЕ. Не отдельный подписанный
+    # список: индекс уже подписывается владельцем и уже накрывает файлы через
+    # sha256, а второй такой же механизм — это второе место, где подпись может
+    # разойтись с данными.
+    #
+    # Ключ на крупной сетке (0.5°) и с буквой набора на конце, как у тайлов:
+    # клиент разбирает ключ одним и тем же кодом, а окрестность их не просит —
+    # адреса запрашиваются по месту, а не по рамке.
+    for key, payload in sorted((addresses or {}).items()):
+        blob = json.dumps(payload, separators=(",", ":"),
+                          ensure_ascii=False).encode()
+        composite = f"{key}_{SET_ADDRESSES}"
+        with open(os.path.join(target_dir, f"road2_{composite}.json"), "wb") as handle:
+            handle.write(blob)
+        index_v2[composite] = {"sha256": hashlib.sha256(blob).hexdigest(),
+                               "bytes": len(blob)}
 
     # Байты индекса подписывает владелец (publish_roads.sh): подпись индекса
     # накрывает все тайлы разом через их sha256.
@@ -2016,12 +3332,38 @@ def main():
                         help="geojsonl с водой, зеленью и рельсами (необязателен)")
     parser.add_argument("--points", dest="points", default=None,
                         help="geojsonl узлов: светофоры, лежачие (необязателен)")
+    parser.add_argument("--houses", dest="houses", default=None,
+                        help="geojsonl зданий (необязателен)")
+    parser.add_argument("--addresses", dest="addresses", default=None,
+                        help="geojsonl объектов с addr:street (необязателен)")
+    # Поверхность считается по ВСЕЙ переданной сети, и на боевом с гигабайтом
+    # памяти это не то, что включают молча. Ключом — как дома и адреса.
+    parser.add_argument("--no-surface", dest="surface", action="store_false",
+                        default=True,
+                        help="не считать поверхность дорог (набор d)")
+    # MVT — РЯДОМ с нашим форматом, а не вместо.
+    #
+    # Наш JSON читают телефон и панель, и он остаётся: переход идёт
+    # параллельно. MVT пишется из тех же данных одним лишним шагом кодирования
+    # — это второй вывод одной сборки, а не вторая копия карты.
+    parser.add_argument("--mvt", dest="mvt", action="store_true", default=False,
+                        help="написать ещё и тайлы MVT (mvt/<z>/<x>/<y>.mvt)")
     parser.add_argument("--edits", dest="edits", default=None,
                         help="снимок правок панели (необязателен)")
     args = parser.parse_args()
 
+    # Модуль MVT проверяем ПЕРВЫМ делом, а не после сборки.
+    #
+    # Он импортировался там, где используется, — то есть после часа работы:
+    # закачки страны, шести экстрактов и всей раскладки тайлов. Отсутствие
+    # файла на сервере валило прогон на последнем шаге, уже потратив всё.
+    # Проверка, которая может пройти в первую секунду, обязана проходить в
+    # первую секунду.
+    if args.mvt:
+        import build_mvt
+
     (raw, classes, flag_counts, read, skipped,
-     lanes_tagged, raw_sidewalks, raw_arrows) = collect(args.source)
+     lanes_tagged, raw_sidewalks, raw_arrows, identities) = collect(args.source)
     edits = load_edits(args.edits)
     # Нарисованное руками добавляется ДО генерализации: своя дорога обязана
     # пройти ту же разрезку на узлах и склейку, что и всё остальное, иначе она
@@ -2036,15 +3378,32 @@ def main():
     # А правки СВОЙСТВ накладываются ПОСЛЕ: они посажены на ту геометрию,
     # которая поедет на телефон, а не на сырую.
     roads, edits_applied, edits_missed = apply_edits(roads, edits)
+    # Сырьё дальше не нужно, и держать его — не мелочь.
+    #
+    # Замерено: сырые дороги стоят 1056 байт на штуку, то есть 0,64 ГБ на
+    # 604 522 дороги страны, и жили они до самого конца сборки рядом с
+    # обобщёнными. На машине с двумя гигабайтами это и решало исход: первый
+    # боевой прогон дважды убило ядро на шаге сборки. Для отчёта нужен один
+    # счётчик, а не список.
+    raw_count, hand_count = len(raw), len(hand)
+    del raw, hand
     # Местность упрощаем грубее дорог: контур пруда не несёт геометрии, по
     # которой принимают решения за рулём.
     areas = collect_areas(args.areas, args.tolerance * 3 / 111_320.0)
     # Тротуары — тоже «местность», и упрощаются так же грубо: их дело —
     # показать, где кончается асфальт, а не где повернуть.
     areas = areas + build_sidewalks(raw_sidewalks, args.tolerance * 3 / 111_320.0)
+    del raw_sidewalks
     # Обведённое руками — тем же слоем, что и пришедшее из OSM: телефон не
     # знает и не должен знать, откуда взялся газон.
     areas = areas + drawn_areas(edits)
+    # Дома — последними и своим порогом. Их больше, чем всего остального
+    # вместе взятого, и упрощаются они грубее: за рулём дом отвечает на
+    # вопрос «мне вот сюда сворачивать», а не «где именно у него угол».
+    # Дома НЕ в общем списке местности: их миллионы, и список убил бы память
+    # сервера вместе с работающим рядом API. Раскладываются потоком, прямо в
+    # файлы тайлов.
+    houses = stream_houses(args.houses, args.tiles_dir, args.grid)
     # Точки садим ПОСЛЕ генерализации: сажать надо на ту геометрию, которая
     # поедет на телефон, а не на сырую.
     far = build_far(roads)
@@ -2055,19 +3414,60 @@ def main():
     raw_points = raw_points + [
         (POINT_LANE_ARROWS, pack_turns(0, turns), [spot])
         for spot, turns in raw_arrows] + drawn_points(edits)
+    del raw_arrows
     at_junctions = attach_to_junctions(raw_points, junction_nodes(roads))
     clustered = cluster_points(at_junctions)
     points, dropped = snap_points(clustered, roads)
+    raw_points_count = len(raw_points)
+    junction_count, clustered_count = len(at_junctions), len(clustered)
+    del at_junctions, clustered
     # Дальний набор: только светофоры. Стоп-знак и лежачий на охвате района —
     # шум: решение по ним принимают, когда они уже видны глазами.
     lights = [p for p in raw_points if p[0] == POINT_TRAFFIC_LIGHT]
     far_points, far_dropped = snap_points(
         cluster_points(lights, POINT_FAR_CLUSTER_METERS), far)
+    del lights, raw_points
+    address_rows = collect_addresses(args.addresses) + drawn_addresses(edits)
+    addresses = addresses_by_cell(address_rows)
+    address_count = len(address_rows)
+    address_streets = len({street for street, _, _, _ in address_rows})
+    del address_rows
+    # Опора правок пишется ДО тайлов, а не после: это 604 522 записи, и после
+    # записи файла они памяти уже не занимают.
+    if identities:
+        identity_count = len(identities)
+        identity_cells = write_identities(identities, args.tiles_dir)
+    else:
+        identity_count = identity_cells = 0
+    del identities
     index, index_v2 = write_tiles(roads, args.tiles_dir, args.grid, areas, points,
-                                  far_points, far)
+                                  far_points, far, addresses, houses,
+                                  args.surface)
+
+    if houses:
+        weight = sum(meta["bytes"] for meta in houses.values())
+        print(f"дома: {len(houses)} тайлов, {weight / 1e6:.1f} МБ (потоком)")
+
+    if args.mvt:
+        made = build_mvt.build_mvt(roads, args.tiles_dir, areas=areas,
+                                   points=points, far=far)
+        weight = sum(made.values())
+        print(f"MVT: {len(made)} тайлов, {weight / 1e6:.1f} МБ "
+              f"(зумы {build_mvt.ZOOM_DETAIL} и {build_mvt.ZOOM_FAR})")
+
+    if identity_count:
+        print(f"опора правок: {identity_count} дорог с id из OSM, "
+              f"клеток {identity_cells}")
+    else:
+        print("опора правок: id из OSM в экстракте нет — привязка только "
+              "геометрией (экстракт без -u type_id)")
+
+    if address_count:
+        print(f"адреса: {address_count} на {address_streets} улицах, "
+              f"клеток {len(addresses)}")
 
     points_total = sum(len(r[2]) for r in roads)
-    print(f"склейка и отсев: {len(raw)} → {len(roads)} дорог")
+    print(f"склейка и отсев: {raw_count} → {len(roads)} дорог")
     total_bytes = sum(meta["bytes"] for meta in index.values())
     biggest = max(index.items(), key=lambda kv: kv[1]["bytes"], default=None)
     print(f"прочитано объектов: {read} (не разобрано: {skipped})")
@@ -2081,10 +3481,10 @@ def main():
         counts = Counter(kind for kind, _, _ in areas)
         print(f"местность: вода {counts[AREA_WATER]}, зелень {counts[AREA_GREEN]}, "
               f"рельсы {counts[AREA_RAIL]}, тротуары {counts[AREA_SIDEWALK]}")
-    if raw_points:
+    if raw_points_count:
         kinds = Counter(kind for kind, _, _ in points)
-        print(f"точки: прочитано {len(raw_points)}, на перекрёстках "
-              f"{len(at_junctions)}, после сведения узлов {len(clustered)}, "
+        print(f"точки: прочитано {raw_points_count}, на перекрёстках "
+              f"{junction_count}, после сведения узлов {clustered_count}, "
               f"вне дорог {dropped}, в тайлах {len(points)}")
         print(f"        стрелок полос {kinds[POINT_LANE_ARROWS]}")
         print(f"        светофоров {kinds[POINT_TRAFFIC_LIGHT]}, "
@@ -2113,9 +3513,9 @@ def main():
               f"до {lanes_of(widest[1])}, ширина проезжей части "
               f"{widths[0]:.1f}–{widths[-1]:.1f} м "
               f"(медиана {widths[len(widths) // 2]:.1f})")
-    if edits_applied or edits_missed or hand:
+    if edits_applied or edits_missed or hand_count:
         print(f"правки панели: наложено {edits_applied}, "
-              f"не нашли дороги {edits_missed}, нарисовано руками {len(hand)}, "
+              f"не нашли дороги {edits_missed}, нарисовано руками {hand_count}, "
               f"заменено чужих {replaced}")
     share = 100.0 * lanes_tagged / read if read else 0.0
     print(f"полосы: тегом {lanes_tagged} из {read} ({share:.1f} %), "

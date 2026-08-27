@@ -183,7 +183,9 @@ struct DashboardView: View {
                 Image(systemName: "gearshape.fill")
                     .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.textTertiary)
-                    .frame(width: 40, height: 40)
+                    // 44 pt — не круглое число, а размер подушечки пальца.
+                    // Половина промахов на ходу — это кнопка в сорок.
+                    .frame(width: 44, height: 44)
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)

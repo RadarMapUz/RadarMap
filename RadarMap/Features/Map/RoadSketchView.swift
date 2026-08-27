@@ -147,7 +147,8 @@ struct RoadSketchView: View {
     /// и движется вместе с дорогами само.
     private func world(side: CGFloat, k: CGFloat) -> some View {
         ZStack {
-            SketchRaster(scene: scene, k: k, strokeScale: strokeScale, trim: trim)
+            SketchRaster(scene: scene, k: k, strokeScale: strokeScale, trim: trim,
+                         close: state.closeReason != nil)
                 .equatable()
                 .frame(width: side, height: side)
             RouteOverlay(passed: state.passedPath, maneuver: state.maneuverPath,
@@ -156,6 +157,7 @@ struct RoadSketchView: View {
                 .equatable()
                 .frame(width: side, height: side)
             marks(side: side, k: k)
+            labels(side: side, k: k)
             if let camera = scene.alertCamera {
                 AlertCameraMarker(tint: tint, scale: strokeScale)
                     .position(x: side / 2 + camera.x * k,
@@ -200,6 +202,31 @@ struct RoadSketchView: View {
         }
     }
 
+    /// Подписи улиц.
+    ///
+    /// Тем же слоем, что и значки, и по той же причине: растр целиком
+    /// поворачивается по курсу, и запечённая в него строка на повороте
+    /// ложилась бы набок, а перевёрнутый текст не читается вовсе. Здесь
+    /// каждой подписи возвращён курс — и добавлен её собственный угол вдоль
+    /// улицы, приведённый к читаемой половине круга.
+    private func labels(side: CGFloat, k: CGFloat) -> some View {
+        ForEach(Array(scene.labels.prefix(RoadSketch.labelBudget).enumerated()),
+                id: \.offset) { _, label in
+            Text(label.text)
+                .font(.rounded(11 * strokeScale, .semibold))
+                .foregroundStyle(SketchPalette.label)
+                // Тень, а не подложка: подложка закрывает полотно, и на
+                // перекрёстке подпись прячет ровно то, ради чего смотрят.
+                .shadow(color: SketchPalette.ground, radius: 2 * strokeScale)
+                .shadow(color: SketchPalette.ground, radius: 2 * strokeScale)
+                .lineLimit(1)
+                .fixedSize()
+                .rotationEffect(.degrees(state.courseDegrees + label.angle))
+                .position(x: side / 2 + label.point.x * k,
+                          y: side / 2 - label.point.y * k)
+        }
+    }
+
     /// Угол наклона.
     ///
     /// В перспективе расстояние по экрану НЕЛИНЕЙНО: камера в трёхстах метрах
@@ -216,7 +243,11 @@ struct RoadSketchView: View {
         // Осмотр выпрямляет вид по той же причине, что и тревога: карту
         // осматривают ради расстояний, а в перспективе расстояние по экрану
         // нелинейно.
+        // Вид вблизи выпрямляется по той же причине: на пятидесяти метрах
+        // перспектива врёт о расстоянии сильнее всего, а именно расстояние
+        // там и меряют — до стоп-линии, до поворота, до камеры.
         scene.alertCameraID == nil && !state.isInspecting
+            && state.closeReason == nil
             ? AppConfig.sketchTiltDegrees : 0
     }
 
@@ -676,6 +707,17 @@ private struct RouteOverlay: View, Equatable {
 /// вынесенная: тем же кодом строится и полотно, и стрелка манёвра.
 nonisolated enum SketchGeometry {
 
+    /// Длина ломаной в тех же единицах, в каких лежат её точки.
+    static func length(of points: [CGPoint]) -> CGFloat {
+        guard points.count >= 2 else { return 0 }
+        var total: CGFloat = 0
+        for index in 1..<points.count {
+            total += hypot(points[index].x - points[index - 1].x,
+                           points[index].y - points[index - 1].y)
+        }
+        return total
+    }
+
     static func path(_ points: [CGPoint]) -> Path {
         var path = Path()
         guard let first = points.first else { return path }
@@ -755,10 +797,18 @@ private struct SketchRaster: View, Equatable {
     var strokeScale: CGFloat = 1
     /// Отделка (осевая, шевроны, жила ленты) — гаснет в перегреве.
     var trim: Bool = true
+    /// Схема вблизи: подход к манёвру, камера рядом, двор. Растр рисует
+    /// подробнее — разметку на двухполосной, где на обзоре её нет.
+    ///
+    /// Флагом, а не ссылкой на состояние: растр кэшируется по равенству, и
+    /// живое состояние сделало бы кэш бесполезным — он пересобирался бы на
+    /// каждый тик.
+    var close: Bool = false
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.k == rhs.k && lhs.strokeScale == rhs.strokeScale
-            && lhs.trim == rhs.trim && lhs.scene == rhs.scene
+            && lhs.trim == rhs.trim && lhs.close == rhs.close
+            && lhs.scene == rhs.scene
     }
 
     var body: some View {
@@ -781,7 +831,36 @@ private struct SketchRaster: View, Equatable {
                 if area.isClosed {
                     var closed = shape
                     closed.closeSubpath()
-                    context.fill(closed, with: .color(areaFill(area.kind)))
+                    // Дом с известной этажностью получает объём: сдвинутая
+                    // копия контура под ним читается как тень высоты. Дом без
+                    // этажности остаётся плоским пятном — выдуманная высота
+                    // превращает город в макет из одинаковых коробок, а
+                    // водитель, поймавший выдумку, перестаёт верить и правде.
+                    //
+                    // Тень идёт ВНИЗ ЭКРАНА, то есть «на водителя»: растр
+                    // повёрнут по курсу, и постоянное направление тени в
+                    // мировых координатах крутилось бы вместе с городом.
+                    if area.kind == .house, area.levels > 0 {
+                        let lift = min(CGFloat(area.levels), 12) * 0.7 * strokeScale
+                        var below = shape
+                        below.closeSubpath()
+                        context.fill(
+                            below.offsetBy(dx: 0, dy: lift),
+                            with: .color(SketchPalette.houseShadow))
+                    }
+                    context.fill(closed, with: .color(areaFill(area)))
+                    // Кромка полотна — бордюр. Только у полотна: у площади
+                    // перекрёстка её нет и в жизни, а обведи мы её — на
+                    // перекрёстке появился бы контур поперёк проезжей части,
+                    // то есть ровно то, чего мы избегали швами.
+                    // Бордюр — и у полотна, и у разделительной: у островка он
+                    // есть в жизни, и без него полоса читается провалом в
+                    // асфальте, а не поднятой землёй.
+                    if area.kind == .road || area.kind == .median {
+                        context.stroke(closed, with: .color(SketchPalette.kerb),
+                                       style: .init(lineWidth: 1.1 * strokeScale,
+                                                    lineJoin: .round))
+                    }
                     if area.kind == .water {
                         // Кромка воды: без неё пруд на тёмном фоне читается
                         // дырой, а не поверхностью.
@@ -790,11 +869,10 @@ private struct SketchRaster: View, Equatable {
                                                     lineJoin: .round))
                     }
                 } else {
-                    context.stroke(shape, with: .color(areaFill(area.kind)),
+                    context.stroke(shape, with: .color(areaFill(area)),
                                    style: .init(lineWidth: areaWidth(area.kind),
                                                 lineCap: .round, lineJoin: .round,
-                                                dash: area.kind == .rail
-                                                    ? [9 * strokeScale, 6 * strokeScale] : []))
+                                                dash: areaDash(area.kind)))
                 }
             }
 
@@ -807,6 +885,17 @@ private struct SketchRaster: View, Equatable {
             // мостов, потом ВСЕ каймы, потом ВСЕ полотна, потом ВСЯ разметка.
             // Иначе кайма одной дороги ложилась бы поверх полотна соседней, и
             // каждый перекрёсток рассекался бы швами.
+            // Легло ли готовое полотно.
+            //
+            // Если да — штрихи сети по земле не рисуются вовсе: линия поверх
+            // залитого полотна это вторая дорога поверх первой, и заметно это
+            // именно на перекрёстке, где их края расходятся.
+            //
+            // Мосты и тоннели остаются штрихами при любом раскладе: у них своя
+            // подложка и свой пунктир, и по ним видно, что одно проходит над
+            // другим. Полотно этого не показывает — оно плоское.
+            let paved = scene.areas.contains { $0.kind == .road }
+
             let byLevel = Dictionary(grouping: scene.network.filter { $0.points.count >= 2 },
                                      by: \.level)
             for level in byLevel.keys.sorted() {
@@ -816,8 +905,29 @@ private struct SketchRaster: View, Equatable {
                 // как развязка, а не как перекрёсток.
                 if level > 0 {
                     for line in lines {
-                        context.stroke(path(line.points), with: .color(.black),
-                                       style: .init(lineWidth: width(for: line) + 9 * strokeScale,
+                        let body = width(for: line)
+                        let halo = 6 * strokeScale
+                        // Подложка ЦВЕТОМ ЗЕМЛИ, а не чёрным.
+                        //
+                        // Её работа — показать, что под мостом ничего нет, и
+                        // «ничего нет» на схеме выглядит как земля. Чистый
+                        // чёрный на земле, которая не чёрная, читается дырой в
+                        // полотне — на снимках с приборки это ровно то самое
+                        // «пустое место посреди дороги».
+                        //
+                        // И только там, где мост ДЛИННЕЕ своей же каймы: на
+                        // коротком куске от подложки остаётся один ореол, а
+                        // самого моста не видно вовсе. Такие куски в развязке
+                        // сплошь — съезды режутся на узлах по два-три метра.
+                        // Длина — в ПУНКТАХ, как и ширина: точки линии лежат
+                        // в метрах сцены, k переводит их в экранные пункты.
+                        // Сравнивать метры с пунктами — та же ошибка, что
+                        // однажды раздула оболочку узла вчетверо.
+                        guard SketchGeometry.length(of: line.points) * k
+                                > body + halo * 2 else { continue }
+                        context.stroke(path(line.points),
+                                       with: .color(SketchPalette.ground),
+                                       style: .init(lineWidth: body + halo,
                                                     lineCap: .butt, lineJoin: .round))
                     }
                 }
@@ -825,7 +935,7 @@ private struct SketchRaster: View, Equatable {
                 // параллельные улицы в пятнадцати метрах не сливаются в одну
                 // широкую. Тоннелям каймы нет — они и так пунктиром «под
                 // землёй».
-                for line in lines where level >= 0 {
+                for line in lines where level >= 0 && !(paved && level == 0) {
                     var shape = path(line.points)
                     if line.isRing { shape.closeSubpath() }
                     context.stroke(shape,
@@ -833,7 +943,7 @@ private struct SketchRaster: View, Equatable {
                                    style: .init(lineWidth: width(for: line) + 3.5 * strokeScale,
                                                 lineCap: .butt, lineJoin: .round))
                 }
-                for line in lines {
+                for line in lines where !(paved && level == 0) {
                     // Кольцо замыкается: разомкнутая развязка на схеме
                     // читается тупиком, а не кругом.
                     var shape = path(line.points)
@@ -869,29 +979,66 @@ private struct SketchRaster: View, Equatable {
                 // два и больше концов, кладём диск самой широкой из
                 // встретившихся там дорог. Швов не остаётся ни при какой
                 // геометрии, а стоит это десяток заливок на пересборку.
-                var nodes: [Int64: (point: CGPoint, ends: Int,
-                                    width: CGFloat, color: Color)] = [:]
-                for line in lines {
-                    guard let first = line.points.first,
-                          let last = line.points.last else { continue }
+                // Заглушки узлов нужны только там, где сеть рисуется
+                // штрихами. Пришло полотно — площадь перекрёстка уже посчитана
+                // сборкой и лежит отдельной фигурой; считать её ещё и здесь
+                // значит рисовать одно и то же дважды, разными способами.
+                var nodes: [Int64: SketchNode] = [:]
+                for line in lines where !paved {
+                    guard line.points.count >= 2 else { continue }
                     let lineWidth = width(for: line)
                     let lineColor = fill(for: line)
-                    for point in [first, last] {
+                    let first = line.points[0]
+                    let second = line.points[1]
+                    let last = line.points[line.points.count - 1]
+                    let prior = line.points[line.points.count - 2]
+                    for (point, inner) in [(first, second), (last, prior)] {
                         let key = Int64((point.x).rounded()) &* 1_000_003
                             &+ Int64((point.y).rounded())
-                        if var existing = nodes[key] {
-                            existing.ends += 1
-                            if lineWidth > existing.width {
-                                existing.width = lineWidth
-                                existing.color = lineColor
-                            }
-                            nodes[key] = existing
-                        } else {
-                            nodes[key] = (point, 1, lineWidth, lineColor)
+                        var node = nodes[key] ?? SketchNode(point: point,
+                                                            width: lineWidth,
+                                                            color: lineColor)
+                        node.arms.append(SketchNode.Arm(towards: inner,
+                                                        width: lineWidth / k))
+                        node.ends += 1
+                        if lineWidth > node.width {
+                            node.width = lineWidth
+                            node.color = lineColor
                         }
+                        // Ширина в МЕТРАХ, а не в пунктах.
+                        //
+                        // Точки узла живут в координатах сцены (метры), а
+                        // width(for:) отдаёт пункты — их и рисуют. Смешать их
+                        // здесь значит раздуть оболочку в k раз, где k —
+                        // пунктов на метр: на ближнем охвате это вчетверо, и
+                        // перекрёсток превращается в кляксу поверх кварталов.
+                        node.edges.append(contentsOf:
+                            SketchNode.edgePoints(at: point, towards: inner,
+                                                  width: lineWidth / k))
+                        nodes[key] = node
                     }
                 }
                 for node in nodes.values where node.ends >= 2 {
+                    // Три конца и больше — настоящий перекрёсток, и закрывает
+                    // его ПЛОЩАДЬ между кромками, а не диск.
+                    //
+                    // Диск здесь стоял с самого начала и на прямом стыке двух
+                    // кусков работает. На перекрёстке — нет, и это замерено на
+                    // панели, где была та же беда: круглые торцы вместо
+                    // срезанных дали 31 дырку против 30, в пределах шума.
+                    // Круг закрывает лишь то, что укладывается в его радиус, а
+                    // площадь между кромками дорог разной ширины, сходящихся
+                    // под разными углами, не принадлежит ни одной осевой.
+                    if node.ends >= 3,
+                       let hull = SketchNode.hull(node.edges.map(at)),
+                       hull.count >= 3 {
+                        var shape = Path()
+                        shape.move(to: hull[0])
+                        for point in hull.dropFirst() { shape.addLine(to: point) }
+                        shape.closeSubpath()
+                        context.fill(shape, with: .color(node.color))
+                        continue
+                    }
                     let centre = at(node.point)
                     let radius = node.width / 2
                     context.fill(Path(ellipseIn: CGRect(x: centre.x - radius,
@@ -899,6 +1046,27 @@ private struct SketchRaster: View, Equatable {
                                                         width: radius * 2,
                                                         height: radius * 2)),
                                  with: .color(node.color))
+                }
+
+                // Фаска подхода.
+                //
+                // В жизни улица расширяется перед перекрёстком: полоса
+                // поворота, скруглённый бордюр, карман. Без неё улица
+                // втыкается в проспект прямоугольным торцом, и перекрёсток
+                // читается стыком двух лент, а не местом, куда сворачивают.
+                //
+                // Идёт ПОСЛЕ оболочки узла и тем же цветом: сначала должно
+                // стать видно, что швов нет, и только потом — что подход
+                // расширяется.
+                for node in nodes.values where node.ends >= 3 {
+                    for trapeze in node.flares() {
+                        var shape = Path()
+                        let screen = trapeze.map(at)
+                        shape.move(to: screen[0])
+                        for point in screen.dropFirst() { shape.addLine(to: point) }
+                        shape.closeSubpath()
+                        context.fill(shape, with: .color(node.color))
+                    }
                 }
 
                 // Осевая — только на крупных: на дворовом проезде её нет и в
@@ -1001,6 +1169,7 @@ private struct SketchRaster: View, Equatable {
             // тише: контекст, а не предупреждение.
             for dot in scene.cameras {
                 let isAlert = dot.id == scene.alertCameraID
+                cameraGaze(dot, isAlert: isAlert, in: &context, at: at)
                 if let symbol = context.resolveSymbol(
                     id: SketchSymbol.camera(alert: isAlert)) {
                     context.draw(symbol, at: at(dot.point))
@@ -1019,13 +1188,70 @@ private struct SketchRaster: View, Equatable {
         .drawingGroup()   // одна текстура: transform'ы крутят её без перерисовки
     }
 
-    private func areaFill(_ kind: SketchArea.Kind) -> Color {
-        switch kind {
+    /// Куда смотрит камера.
+    ///
+    /// Главный объект приложения был нарисован беднее всех — кружком, который
+    /// ничего не сообщает о том, ловит ли камера ТВОЁ направление. Теперь она
+    /// смотрит, и ровно настолько уверенно, насколько мы знаем:
+    ///
+    /// — есть `dir` (односторонняя дорога, OSM знает направление однозначно) —
+    ///   конус в эту сторону: камера ловит тех, кто едет туда;
+    /// — есть только ось — створ в обе стороны вдоль оси: «следит вот за этой
+    ///   линией», без стороны;
+    /// — нет ничего — ничего и не рисуем.
+    ///
+    /// Выдуманный конус водитель однажды поймает, и после этого перестанет
+    /// верить и правде. Поэтому третий случай — пустой, а не «примерно туда».
+    private func cameraGaze(_ dot: RoadSketch.CameraDot, isAlert: Bool,
+                            in context: inout GraphicsContext,
+                            at place: (CGPoint) -> CGPoint) {
+        let reach = (isAlert ? 34 : 20) * strokeScale
+        let origin = place(dot.point)
+        let tint = isAlert ? SketchPalette.cameraGazeAlert : SketchPalette.cameraGaze
+
+        func wedge(_ degrees: Double, spread: Double) {
+            // Азимут отсчитывается от севера по часовой, экран — от оси x
+            // против; отсюда −90°.
+            let middle = Angle.degrees(degrees - 90)
+            var path = Path()
+            path.move(to: origin)
+            path.addArc(center: origin, radius: reach,
+                        startAngle: middle - .degrees(spread / 2),
+                        endAngle: middle + .degrees(spread / 2),
+                        clockwise: false)
+            path.closeSubpath()
+            context.fill(path, with: .color(tint))
+        }
+
+        if let facing = dot.facing {
+            wedge(facing, spread: 54)
+        } else if let axis = dot.axis {
+            // Ось ненаправленная: рисуем обе стороны — иначе мы утверждаем
+            // то, чего в данных нет.
+            wedge(axis, spread: 30)
+            wedge(axis + 180, spread: 30)
+        }
+    }
+
+    private func areaFill(_ area: SketchArea) -> Color {
+        // Класс полотна — из самой записи: проспект и двор обязаны отличаться
+        // и в заливке, иначе весь город станет одного тона.
+        if area.kind == .road, area.roadClass > 0 {
+            return SketchPalette.asphalt(RoadTiles.roadClass(code: area.roadClass))
+        }
+        switch area.kind {
+        // Полотно и перекрёсток красятся АСФАЛЬТОМ — тем же, что штрихи сети.
+        // Класс приезжает в битах записи; без него взяли бы средний тон и
+        // потеряли разницу между проспектом и двором ровно там, где она видна
+        // лучше всего.
+        case .road, .junction: return SketchPalette.asphaltUnknown
+        case .median: return SketchPalette.median
         case .water: return SketchPalette.water
         case .green: return SketchPalette.green
         case .rail:  return SketchPalette.rail
         case .block: return SketchPalette.block
         case .sidewalk: return SketchPalette.sidewalk
+        case .house: return SketchPalette.house
         }
     }
 
@@ -1038,6 +1264,29 @@ private struct SketchRaster: View, Equatable {
         case .green, .block: return 3 * strokeScale
         // Тоньше всего на схеме: тротуар — граница асфальта, а не путь.
         case .sidewalk: return 1.6 * strokeScale
+        // Поверхность приходит замкнутым контуром и заливается; ширина нужна
+        // только на случай вырожденного контура, оставшегося лентой.
+        case .road, .junction, .median: return 1.5 * strokeScale
+        // Дом приходит замкнутым контуром и заливается; ширина нужна только
+        // на случай вырожденного контура, оставшегося лентой.
+        case .house: return 1.5 * strokeScale
+        }
+    }
+
+    /// Штрих ленты местности.
+    ///
+    /// Тротуар — ПУНКТИРОМ, и это не украшение. Сплошная линия любой толщины
+    /// читается проезжей частью: глазу за рулём важна не толщина, а
+    /// непрерывность, и тонкая сплошная лента вдоль проспекта выглядела
+    /// дублёром. Пунктир проезжей частью не читается никогда — этим приёмом
+    /// пешеходные пути отделяют от дорог все карты, и по той же причине.
+    ///
+    /// Рельсы остаются длинным штрихом: это шпалы, и они длиннее.
+    private func areaDash(_ kind: SketchArea.Kind) -> [CGFloat] {
+        switch kind {
+        case .rail: return [9 * strokeScale, 6 * strokeScale]
+        case .sidewalk: return [1.4 * strokeScale, 3.2 * strokeScale]
+        default: return []
         }
     }
 
@@ -1204,7 +1453,10 @@ private struct SketchRaster: View, Equatable {
                               shape: Path) {
         guard line.isDetailed else { return }
         let lanes = line.laneCount
-        guard lanes >= 3 else { return }
+        // Вблизи разметка нужна и на двухполосной: там она и есть вся дорога.
+        // На обзоре — от трёх полос, иначе на дальнем плане пунктир между
+        // двумя полосами сливается с осевой в рябь.
+        guard lanes >= (close ? 2 : 3) else { return }
         let full = metricWidth(for: line)
         let lane = full / CGFloat(lanes)
         // Полоса тоньше этого — не разметка, а муар: на схеме останется рябь

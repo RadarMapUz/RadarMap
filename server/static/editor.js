@@ -60,15 +60,38 @@
   const WHYS = ['нет в OSM', 'OSM неверен', 'временная схема'];
   const REMOVE_WHYS = ['нет в жизни', 'перекрыта', 'ошибка OSM'];
   // Виды местности — те же коды, что у слоёв из OSM.
-  const AREAS = { 2: 'Зелень', 1: 'Вода', 4: 'Квартал' };
+  const AREAS = { 2: 'Зелень', 1: 'Вода', 4: 'Квартал', 6: 'Дом' };
+  // Дом обводится по одному, и порог у него свой: типовой дом в периметре —
+  // сорок метров, общий порог местности выбросил бы половину нарисованных.
+  const HOUSE_AREA = 6;
   // Заливка обведённого — тех же тонов, что слои местности на схеме телефона.
-  const AREA_FILL = { 2: '#1d3a2455', 1: '#16324a55', 4: '#1a1d2255' };
+  const AREA_FILL = { 2: '#1d3a2455', 1: '#16324a55', 4: '#1a1d2255',
+                     6: '#21243066' };
   // Обстановка. Коды те же, что у точек из OSM: панель заводит объект ТОГО ЖЕ
   // вида, а не параллельный, поэтому на телефоне он рисуется тем же кодом и
   // добавлять там нечего.
   const POINTS = { 1: 'Светофор', 2: 'Лежачий полицейский', 3: 'Стоп-линия',
                    4: 'Разворот', 5: 'Пешеходный переход' };
-  const DRAFT = 0, ACCEPTED = 1, WITHDRAWN = 3;
+  const DRAFT = 0, ACCEPTED = 1, PUBLISHED = 2, WITHDRAWN = 3;
+
+  // Состояние правки — ТРЕМЯ способами сразу: цветом, штрихом и подписью.
+  //
+  // Одного цвета мало, и это не вкусовщина: на солнце через стекло цвет
+  // умирает первым, а панель открывают и в машине. Штрих переживает солнце,
+  // подпись переживает и штрих.
+  //
+  // Вопрос «черновик, принята или уже на телефонах» — главный, который
+  // модератор задаёт своей работе, и до сих пор ответа на него на карте не
+  // было вовсе: своя дорога выглядела чужой.
+  const STATES = {
+    0: { colour: '#8a8f98', dash: [6, 6], what: 'черновик' },
+    1: { colour: '#ffb020', dash: [14, 6], what: 'принята, ждёт публикации' },
+    2: { colour: '#38e58c', dash: null, what: 'опубликована' },
+  };
+
+  function stateOf(edit) {
+    return STATES[edit.status] || STATES[1];
+  }
 
   // Инструмент по умолчанию — СТРЕЛКА, как в любом редакторе. Пока выбран
   // какой-нибудь «Полосы», щелчок по улице обязан делать полосы; взять улицу
@@ -87,9 +110,24 @@
   let roadsInFrame = [];   // последний ответ /api/roads
   let mineShapes = [];     // своя работа на карте: линии и контуры правок
   let editsInFrame = [];   // последний ответ /api/edits
+  let landInFrame = [];    // местность из тайлов: вода, зелень, дома
+  let landShapes = [];     // её фигуры на карте
+  let streetsInFrame = []; // склеенные улицы последнего кадра: по ним ищем щелчок
   let pointsInFrame = [];  // обстановка: из тайлов и своя
   let markLayer = [];      // её отрисовка на подложке
   let areasInFrame = [];   // размеченные области
+  // Поверхность дорог, посчитанная СБОРКОЙ: полотно, перекрёстки, фаски.
+  // Пусто — значит на сервере лежат тайлы без набора «d»; тогда считаем сами,
+  // как раньше. Пустая карта хуже медленной.
+  let surfaceInFrame = [];
+  // Кандидаты от нейросети: обводки зданий, которых в OSM ещё нет.
+  //
+  // Выключены по умолчанию, и это не осторожность: их сотни на кадр, и
+  // включённые всегда они превратили бы схему в кашу из чужих догадок.
+  // Включает их модератор тогда, когда сел обводить застройку.
+  let candidatesOn = false;
+  let candidatesInFrame = [];
+  const SURFACE_ROAD = 7, SURFACE_JUNCTION = 8, SURFACE_MEDIAN = 9;
   let areaLayer = [];
   let pickLines = [];      // подсветка кандидатов при неоднозначности
   let dragger = null;      // перетаскиваемая метка выбранной правки
@@ -135,26 +173,229 @@
   let walking = false;
   let walkTimer = null;
 
+  // Ответ сервера, который НЕ ВРЁТ.
+  //
+  // Было так: тело ответа разбиралось как JSON, а не разобралось — считалось
+  // пустым объектом. Пятисотка отдаёт HTML, значит `result.error` пуст, значит
+  // панель говорила «сохранено» ровно тогда, когда сервер ничего не сохранил.
+  // Это худший класс ошибки: человек уходит уверенным, что работа сделана.
+  //
+  // Обрыв связи — то же самое: fetch отклоняется, а необработанное отклонение
+  // видно только в консоли, которую за рулём никто не открывает.
+  function answer(response) {
+    return response.json().catch(function () { return {}; }).then(function (body) {
+      if (response.ok) { return body; }
+      if (response.status === 401) {
+        return { error: 'Сессия кончилась. Откройте панель заново.' };
+      }
+      return { error: body.error || ('Сервер ответил ' + response.status +
+                                     '. Правка НЕ сохранена.') };
+    });
+  }
+
+  function offline() {
+    return { error: 'Нет связи с сервером. Правка НЕ сохранена.' };
+  }
+
   function post(url, body) {
     return fetch(base + url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
       body: JSON.stringify(body),
-    }).then(function (r) { return r.json().catch(function () { return {}; }); });
+    }).then(answer, offline);
   }
 
-  function get(url) {
-    return fetch(base + url, { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); });
+  function get(url, signal) {
+    const options = { credentials: 'same-origin' };
+    if (signal) { options.signal = signal; }
+    return fetch(base + url, options)
+      .then(answer, function (error) {
+        // Отменённый запрос — не обрыв связи, а наше собственное решение.
+        // Показывать «нет связи» на каждую отмену значит пугать модератора
+        // ровно тогда, когда всё работает как задумано.
+        if (error && error.name === 'AbortError') { return { aborted: true }; }
+        return offline();
+      })
+      .then(function (body) {
+        if (body && body.aborted) { return body; }
+        // Чтение молчать тоже не вправе: пустой список работы неотличим от
+        // «всё размечено», а пустая карта — от «здесь нет дорог».
+        if (body && body.error) { hint(body.error); return {}; }
+        return body;
+      });
   }
 
   function hint(text) { els.hint.textContent = text; }
 
-  function bbox() {
-    const b = map.getBounds();
-    return '?south=' + b[0][0] + '&west=' + b[0][1] +
-           '&north=' + b[1][0] + '&east=' + b[1][1];
+  const KEYS = [
+    ['Инструменты', [
+      ['V', 'выбрать дорогу'], ['1', 'полосы'], ['2', 'направления полос'],
+      ['3', 'разворот'], ['Z', 'разметить область'],
+    ]],
+    ['Нарисовать', [
+      ['Q', 'проспект'], ['W', 'улица'], ['E', 'жилая'], ['R', 'проезд'],
+      ['H', 'обвести дом'],
+    ]],
+    ['Обстановка', [
+      ['A', 'светофор'], ['S', 'пешеходный переход'], ['D', 'стоп-линия'],
+      ['F', 'разворот'], ['G', 'лежачий полицейский'],
+    ]],
+    ['Во время рисования', [
+      ['Enter', 'закончить'], ['Esc', 'отменить'],
+      ['Backspace', 'убрать последнюю вершину'],
+      ['Delete', 'убрать выбранную вершину'],
+      ['Ctrl+D', 'не примыкать концом'],
+    ]],
+    ['Прочее', [
+      ['\\', 'схема ⇄ спутник'], ['C', 'кандидаты нейросети'],
+      ['[', 'предыдущая работа в очереди'], [']', 'следующая'],
+      ['Ctrl+Z', 'отменить последнее'], ['?', 'этот список'],
+    ]],
+  ];
+
+  let keysShown = false;
+
+  function toggleKeysCard() {
+    keysShown = !keysShown;
+    if (!keysShown) { closeCard(); return; }
+    els.card.hidden = false;
+    els.card.innerHTML = '';
+    els.card.appendChild(node('h3', 'Горячие клавиши'));
+    KEYS.forEach(function (group) {
+      els.card.appendChild(node('div', group[0], 'muted'));
+      group[1].forEach(function (pair) {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.justifyContent = 'space-between';
+        row.style.gap = '12px';
+        const key = document.createElement('b');
+        key.textContent = pair[0];
+        const what = document.createElement('span');
+        what.textContent = pair[1];
+        what.className = 'muted';
+        row.appendChild(key);
+        row.appendChild(what);
+        els.card.appendChild(row);
+      });
+    });
+    // Буквы работают в ОБЕИХ раскладках — это уже так в коде, и об этом
+    // стоит сказать: иначе человек с кириллицей решит, что клавиши не
+    // работают, и вернётся к мыши навсегда.
+    els.card.appendChild(node('div',
+      'Буквы работают и в русской раскладке.', 'muted'));
+  }
+
+  /// Беда показывается РЯДОМ С ОБЪЕКТОМ и не исчезает сама.
+  ///
+  /// Строка внизу — место, где панель ГОВОРИТ: сообщение живёт несколько
+  /// секунд и уходит. Для «сохранено» это верно, для «не сохранено» — нет:
+  /// правка требует решения, а решение нельзя принять, если о нём успели
+  /// забыть, пока смотрели на карту.
+  ///
+  /// Здесь же и повтор: обрыв связи — самая частая причина, и переделывать
+  /// работу заново из-за неё незачем.
+  function problem(text, coords, retry) {
+    if (!coords || !map || !map.balloon) { hint(text); return; }
+    const body = document.createElement('div');
+    const line = document.createElement('div');
+    line.textContent = text;
+    body.appendChild(line);
+    if (retry) {
+      const again = document.createElement('button');
+      again.textContent = 'Повторить';
+      again.className = 'ghost';
+      again.style.marginTop = '8px';
+      again.addEventListener('click', function () {
+        map.balloon.close();
+        retry();
+      });
+      body.appendChild(again);
+    }
+    map.balloon.open([coords[1], coords[0]], { content: body },
+                     { closeButton: true });
+  }
+
+  function boxQuery(box) {
+    return '?south=' + box[0] + '&west=' + box[1] +
+           '&north=' + box[2] + '&east=' + box[3];
+  }
+
+  /// Рамка ДЛЯ ОДИНОЧНОГО запроса: всегда от текущего вида, с тем же запасом.
+  /// Загрузка кадра строит свою рамку сама и держит её — иначе поиск и очередь
+  /// спрашивали бы о месте, где карта была минуту назад.
+  function bbox() { return boxQuery(wide(map.getBounds())); }
+
+  // --- Загрузка: с запасом, со схлопыванием и с отменой --------------------
+  //
+  // Раньше КАЖДОЕ движение карты слало пять запросов, без схлопывания и без
+  // отмены. Проехать туда-сюда значило запустить десятки наложенных запросов,
+  // и поздний ответ на старую рамку затирал свежий кадр: на экране пусто, а
+  // в консоли всё «успешно». Отсюда три правила.
+  //
+  // Первое: просим ЗАПАС вокруг экрана и не спрашиваем ничего, пока рамка из
+  // него не вышла. Движение внутри запаса не стоит ни одного запроса — тот же
+  // приём, которым уже живёт холст, только для данных.
+  //
+  // Второе: движение схлопывается. Пока карту тянут, запрос не уходит.
+  //
+  // Третье: устаревший ответ отбрасывается по номеру поколения, а его запрос
+  // отменяется. Данные на экране обязаны соответствовать рамке на экране.
+
+  // Запас в долях экрана. 0.6 — компромисс замера: меньше не спасает от
+  // движения туда-сюда, больше заставляет сервер отдавать вчетверо больше
+  // объектов на каждый запрос.
+  const MARGIN = 0.6;
+  // Столько ждём тишины после движения. 180 мс — примерно инерция руки: не
+  // ощущается задержкой и схлопывает всю панораму в один запрос.
+  const SETTLE_MS = 180;
+
+  let loadedBox = null;    // [юг, запад, север, восток] — что уже загружено
+  let loadedZoom = -1;
+  let generation = 0;      // номер поколения: поздний чужой ответ отбрасываем
+  let flight = null;       // отмена запросов прошлого поколения
+  let settleTimer = null;
+
+  function wide(b) {
+    const south = b[0][0], west = b[0][1], north = b[1][0], east = b[1][1];
+    const dy = (north - south) * MARGIN, dx = (east - west) * MARGIN;
+    return [south - dy, west - dx, north + dy, east + dx];
+  }
+
+  function inside(box, b) {
+    return box && b[0][0] >= box[0] && b[0][1] >= box[1]
+        && b[1][0] <= box[2] && b[1][1] <= box[3];
+  }
+
+  /// Нужен ли новый запрос. Смена зума требует его всегда: на другом масштабе
+  /// сервер отдаёт другую подробность, и старые данные там не годятся.
+  function needsLoad() {
+    return !loadedBox || map.getZoom() !== loadedZoom
+        || !inside(loadedBox, map.getBounds());
+  }
+
+  function onMapMoved() {
+    if (settleTimer) { clearTimeout(settleTimer); }
+    settleTimer = setTimeout(function () {
+      settleTimer = null;
+      if (!needsLoad()) {
+        // Данных хватает — но за холстом всё равно надо следить.
+        //
+        // Убрать отсюда всё было ошибкой, и она видна сразу: холст
+        // пересобирают actiontick и actionend, а они срабатывают только на
+        // ДЕЙСТВИЯ мышью. Карта двигается и иначе — из адреса, из поиска, из
+        // очереди, — и после такого перехода схема оставалась нарисованной в
+        // прежнем масштабе: посреди чёрного экрана лоскут старой картинки.
+        //
+        // Проверка дешёвая: сравнение зума и четырёх чисел. Перерисовка идёт,
+        // только если холст действительно устарел.
+        placeCanvas();
+        if (canvasIsStale()) { paintSchema(); }
+        return;
+      }
+      drawRoads();
+      reloadEdits();
+    }, SETTLE_MS);
   }
 
   // --- Отмена -------------------------------------------------------------
@@ -213,6 +454,7 @@
   // --- Карточка -----------------------------------------------------------
 
   function closeCard() {
+    keysShown = false;
     els.card.hidden = true;
     current = null;
     clearPicks();
@@ -246,9 +488,20 @@
       els.card.appendChild(give);
     }
 
-    const lanesInput = field('Полос всего', 'number', lanes);
-    els.card.appendChild(lanesInput.label);
     const noteInput = field('Почему', 'text', current.note || '');
+    const lanesInput = field('Полос всего', 'number', lanes);
+    // Enter в поле полос СОХРАНЯЕТ.
+    //
+    // Правка полос стоила четырёх действий: инструмент, щелчок по дороге,
+    // ввод числа, нажатие «Сохранить». Четвёртое ничего не решает — число уже
+    // введено, и других полей у этой правки нет. Модератор, размечающий
+    // полосы час подряд, платил этим щелчком за каждую дорогу.
+    lanesInput.input.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') { return; }
+      e.preventDefault();
+      commit(parseInt(lanesInput.input.value, 10), noteInput.input.value);
+    });
+    els.card.appendChild(lanesInput.label);
     els.card.appendChild(noteInput.label);
 
     const save = node('button', current.id ? 'Сохранить' : 'Принять');
@@ -256,6 +509,39 @@
       commit(parseInt(lanesInput.input.value, 10), noteInput.input.value);
     });
     els.card.appendChild(save);
+
+    // Полосы — свойство УЛИЦЫ, а не куска.
+    //
+    // Сборка режет дороги по перекрёсткам, чтобы получился граф, и это верно
+    // на своём месте. Но размечать проспект пятнадцатью правками значит
+    // платить пятнадцать раз за один ответ: замерено на центре Ташкента —
+    // сто самых длинных улиц это 808 правок поштучно и 100 целиком.
+    if (!current.id && current.kind === 'lanes' && current.raw) {
+      const whole = node('button', 'На всю улицу', 'ghost');
+      whole.addEventListener('click', function () {
+        const lanes = parseInt(lanesInput.input.value, 10);
+        if (!(lanes >= 1 && lanes <= 15)) { hint('Полос от 1 до 15.'); return; }
+        whole.disabled = true;
+        post('/api/edit/street', { lat: current.raw[1], lon: current.raw[0],
+                                   lanes: lanes })
+          .then(function (result) {
+            whole.disabled = false;
+            if (result.error) {
+              problem('Улица НЕ размечена: ' + result.error, current.raw, null);
+              return;
+            }
+            closeCard();
+            // Говорим и о том, что НЕ получилось: молчаливая половина работы
+            // выглядит как сделанная целиком.
+            hint('«' + (result.name || 'улица') + '»: размечено кусков '
+                 + result.made + ' из ' + result.pieces
+                 + (result.failed ? ' · не село ' + result.failed : '')
+                 + '. Публикует владелец со своей машины.');
+            reloadEdits();
+          });
+      });
+      els.card.appendChild(whole);
+    }
 
     if (current.id) {
       const drop = node('button', 'Снять', 'ghost');
@@ -373,7 +659,11 @@
           anchor: snap.anchor, fingerprint: snap.fingerprint,
           props: { point: code }, status: ACCEPTED,
         }).then(function (result) {
-          if (result.error) { hint(result.error); return; }
+          if (result.error) {
+            problem(POINTS[code] + ' НЕ поставлен: ' + result.error,
+                    coords, function () { placePoint(coords, code); });
+            return;
+          }
           hint(POINTS[code] + ' поставлен. Публикует владелец со своей машины.');
           offerUndo(POINTS[code], function () {
             return post('/api/edit/withdraw',
@@ -490,15 +780,96 @@
 
   // --- Слои ---------------------------------------------------------------
 
+  /// Потолок обязан о себе сообщать.
+  ///
+  /// Молчащий потолок читается как «здесь нет дорог» — худшая из подписей под
+  /// пустым экраном. Их было два, и оба молчали: шесть файлов на набор и две
+  /// тысячи дорог в ответе. Модератор видел лоскут посреди черноты и не мог
+  /// узнать, это конец данных или начало обрезки.
+  let limitSaid = '';
+
+  function sayLimits(limits) {
+    if (!limits) { return; }
+    const bits = [];
+    if (limits.skipped) { bits.push('файлов пропущено ' + limits.skipped); }
+    if (limits.thinned) {
+      bits.push('мелких дорог скрыто ' + limits.thinned
+                + ' (охват: до класса ' + limits.worstClass + ')');
+    }
+    if (limits.cut) { bits.push('список обрезан по числу объектов'); }
+
+    if (!bits.length) {
+      // Предупреждение ГАСНЕТ, когда скрывать стало нечего.
+      //
+      // Иначе оно остаётся на экране после приближения и врёт ровно наоборот:
+      // говорит «показано не всё» там, где показано всё. Замечено на себе —
+      // на зуме 16 сервер отвечал «скрыто 0», а надпись висела от прошлого,
+      // городского кадра.
+      //
+      // Гасим ТОЛЬКО свою надпись: между делом там могло появиться «правка
+      // сохранена», и стирать чужое сообщение мы не вправе.
+      if (limitSaid && els.hint.textContent === limitSaid) { hint(''); }
+      limitSaid = '';
+      return;
+    }
+    limitSaid = 'Показано не всё: ' + bits.join(' · ') + '. Приблизьтесь.';
+    hint(limitSaid);
+  }
+
   function drawRoads() {
-    get('/api/roads' + bbox()).then(function (data) {
+    // Новое поколение: всё, что прилетит от прошлого, отбрасываем.
+    if (flight) { flight.abort(); }
+    flight = window.AbortController ? new AbortController() : null;
+    const signal = flight ? flight.signal : undefined;
+    const mine = ++generation;
+    loadedBox = wide(map.getBounds());
+    loadedZoom = map.getZoom();
+    // Охват экрана — отдельным числом: рамку мы просим с запасом, а
+    // подробность обязана считаться по тому, что видит человек.
+    const seen = map.getBounds();
+    const box = boxQuery(loadedBox) + '&span='
+              + Math.max(seen[1][0] - seen[0][0], seen[1][1] - seen[0][1]);
+
+    function fresh(body) {
+      // Ответ чужого поколения — не данные, а эхо прошлой рамки.
+      return mine === generation && body && !body.aborted;
+    }
+
+    get('/api/roads' + box, signal).then(function (data) {
+      if (!fresh(data)) { return; }
+      sayLimits(data.limits);
       roadsInFrame = data.roads || [];
       renderRoads();
       renderCoverage();
     });
     // Обстановка — вторая половина картинки. Без неё схема врёт: дорога есть,
     // а перекрёсток на ней ничем не отличается от прямого участка.
-    get('/api/points' + bbox()).then(function (data) {
+    get('/api/areas' + box, signal).then(function (data) {
+      if (!fresh(data)) { return; }
+      const all = data.areas || [];
+      const isSurface = function (a) {
+        return a.kind === SURFACE_ROAD || a.kind === SURFACE_JUNCTION
+            || a.kind === SURFACE_MEDIAN;
+      };
+      landInFrame = all.filter(function (a) { return !isSurface(a); });
+      surfaceInFrame = all.filter(isSurface);
+      renderLand();
+    });
+    if (candidatesOn) {
+      get('/api/candidates' + box, signal).then(function (data) {
+        if (!fresh(data)) { return; }
+        candidatesInFrame = data.houses || [];
+        renderLand();
+        hint(candidatesInFrame.length
+             ? 'Кандидатов в кадре: ' + candidatesInFrame.length
+               + '. Щёлкните по контуру, чтобы принять.'
+             : 'Кандидатов здесь нет — либо всё уже обведено.');
+      }, function () { hint('Кандидаты недоступны.'); });
+    } else {
+      candidatesInFrame = [];
+    }
+    get('/api/points' + box, signal).then(function (data) {
+      if (!fresh(data)) { return; }
       pointsInFrame = data.points || [];
       renderMarks();
       renderCoverage();
@@ -508,14 +879,59 @@
   // Как обстановка выглядит на подложке. Не пиктограммы приложения — их здесь
   // и не нужно: на карте важно ГДЕ объект и какого он вида, а не как он
   // нарисован на приборке.
+  // Как выглядит обстановка. `paint` — не значок, а КРАСКА на асфальте: то же
+  // деление, что на телефоне (SketchPoint.Kind.isPaint).
+  //
+  // Разница не косметическая, и она видна только на настоящих данных: в одном
+  // кадре центра 939 переходов и 254 светофора, и одинаковыми кругами они
+  // закрывают дороги целиком — то есть ровно то, ради чего на схему смотрят.
+  // Краска лежит поперёк проезжей части тонкой чертой и не спорит за внимание
+  // со значком.
   const MARK_LOOK = {
-    1: { color: '#ff4d4d', size: 9, name: 'Светофор' },
-    2: { color: '#ffb020', size: 7, name: 'Лежачий' },
-    3: { color: '#e8e8e8', size: 7, name: 'Стоп-линия' },
-    4: { color: '#9b7bff', size: 7, name: 'Разворот' },
-    5: { color: '#ffffff', size: 8, name: 'Переход' },
-    6: { color: '#7bd3ff', size: 7, name: 'Стрелки полос' },
+    1: { color: '#ff4d4d', size: 6, name: 'Светофор' },
+    2: { color: '#ffb020', size: 5, name: 'Лежачий' },
+    3: { color: '#e8e8e8', size: 4, name: 'Стоп-линия', paint: true },
+    4: { color: '#9b7bff', size: 5, name: 'Разворот' },
+    5: { color: '#ffffff', size: 4, name: 'Переход', paint: true },
+    6: { color: '#7bd3ff', size: 4, name: 'Стрелки полос', paint: true },
   };
+
+  // Ближе этого охвата обстановка видна, дальше — нет. На двухстах метрах на
+  // экран попадает четверть тысячи объектов, и схема превращается в сыпь.
+  const MARKS_MAX_METERS_PER_PIXEL = 1.2;
+
+  // Значки — ТЕ ЖЕ, что на телефоне (SketchGlyphs.swift) и в палитре слева.
+  //
+  // Один объект не должен выглядеть в двух местах по-разному: модератор,
+  // поставивший «красный кружок», не знает, что увидит водитель, — а он
+  // увидит корпус с тремя линзами. Кружок вместо значка — это панель,
+  // врущая о результате собственной работы.
+  //
+  // Форма важнее цвета: на солнце через лобовое стекло цвет умирает первым,
+  // и объект опознаётся силуэтом. Поэтому светофор вертикальный, лежачий —
+  // горб, разворот — стрелка.
+  const GLYPHS = {
+    1: '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="26" '
+       + 'viewBox="0 0 18 26"><rect x="3" y="1" width="12" height="24" rx="3" '
+       + 'fill="#12151b" stroke="#3a4250" stroke-width="1.2"/>'
+       + '<circle cx="9" cy="7" r="2.6" fill="#ff4d4f"/>'
+       + '<circle cx="9" cy="13" r="2.6" fill="#ffb020"/>'
+       + '<circle cx="9" cy="19" r="2.6" fill="#38e58c"/></svg>',
+    2: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="14" '
+       + 'viewBox="0 0 22 14"><path d="M2 12a9 6 0 0 1 18 0z" fill="#ffb020" '
+       + 'stroke="#0d1116" stroke-width="1.2"/>'
+       + '<path d="M2 12h18" stroke="#0d1116" stroke-width="1.4"/></svg>',
+    4: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" '
+       + 'viewBox="0 0 20 20"><path d="M6 18V9a4 4 0 0 1 8 0v6" fill="none" '
+       + 'stroke="#9b7bff" stroke-width="2.2" stroke-linecap="round"/>'
+       + '<path d="M10.5 14l3.5 5 3.5-5z" fill="#9b7bff"/></svg>',
+  };
+
+  function glyphIcon(kind) {
+    const body = GLYPHS[kind];
+    if (!body) { return null; }
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(body);
+  }
 
   // Сколько в кадре нашего.
   //
@@ -545,31 +961,32 @@
     els.cover.appendChild(only);
   }
 
+  // Краска на асфальте: поперёк дороги и во всю её ширину.
+  //
+  // Данных для этого хватало с самой первой сборки точек: азимут лежит в
+  // младших битах записи, ширина проезжей части — в следующих шести. Панель
+  // рисовала вместо этого кружок «здесь переход» — то есть значок вместо
+  // того, что на асфальте действительно нарисовано.
+  //
+  // Зебра шире на проспекте, чем во дворе, потому что там шире дорога. Это и
+  // есть разница между «отметкой на карте» и схемой: у чужих навигаторов
+  // зебра одинаковая везде, у нас — измеренная.
   function renderMarks() {
+    // Обстановка живёт НА ХОЛСТЕ целиком: и значки, и краска в метрах.
+    //
+    // Замерено на живой панораме: renderMarks занимал 112,9 мс — больше, чем
+    // весь холст со всеми слоями. Причина та же, что когда-то была у дорог:
+    // по геообъекту на объект, а каждая зебра это ещё и ПЯТЬ полос. В кадре
+    // района зебр под тысячу — до пяти тысяч объектов на пересборку.
+    //
+    // Объектом обстановке быть незачем: она не интерактивна, у всех её видов
+    // стоял interactivityModel 'transparent'. Свои объекты правятся через
+    // метки правок, а опубликованный светофор молча съедал бы щелчок по
+    // перекрёстку — там, где их и ставят.
     markLayer.forEach(function (item) { map.geoObjects.remove(item); });
     markLayer = [];
     if (!schema) { return; }
-    pointsInFrame.forEach(function (mark) {
-      const look = MARK_LOOK[mark.kind];
-      if (!look) { return; }
-      const circle = new ymaps.Circle(
-        [[mark.point[1], mark.point[0]], look.size], {
-          hintContent: look.name + (mark.mine ? ' · своя, ещё не опубликована' : ''),
-        }, {
-          fillColor: look.color,
-          // Своя обстановка обведена: модератор должен видеть, что уже уехало
-          // на телефоны, а что ещё лежит в панели и ждёт публикации.
-          strokeColor: mark.mine ? '#ffb020' : look.color,
-          strokeWidth: mark.mine ? 3 : 0,
-          fillOpacity: 0.9, zIndex: 260,
-          // Тоже сквозная: обстановка со схемы — картинка, а не кнопка. Свои
-          // объекты правятся через метки правок, а опубликованный светофор
-          // молча съедал бы щелчок по перекрёстку, где их и ставят.
-          interactivityModel: 'default#transparent',
-        });
-      map.geoObjects.add(circle);
-      markLayer.push(circle);
-    });
+    paintSchema();
   }
 
   // Метров в пикселе на текущем зуме. Ширина проезжей части приходит с сервера
@@ -597,75 +1014,835 @@
     return shape;
   }
 
+  // Местность под дорогами: вода, зелень, рельсы, кварталы, тротуары, дома.
+  //
+  // Без неё панель показывает не схему, а чертёж — серые линии на чёрном.
+  // Именно так она и выглядела: наборы собираются давно, а читались только
+  // дороги, и на вопрос «почему тут ничего нет» ответить было нечем.
+  const LAND_LOOK = {
+    1: { fill: '#16324a', line: '#295176', width: 5 },   // вода
+    2: { fill: '#152a1b', line: '#1f4227', width: 2 },   // зелень
+    3: { fill: '#2a2723', line: '#4a463e', width: 2 },   // рельсы
+    4: { fill: '#12151b', line: '#191d25', width: 1 },   // квартал
+    5: { fill: '#1b1f26', line: '#2b313b', width: 1.4, dash: [1.4, 3.2] }, // тротуар
+    6: { fill: '#1f232c', line: '#2b303a', width: 1 },   // дом
+  };
+  const LAND_ORDER = [4, 6, 2, 1, 3, 5];
+
+  // --- Холст схемы -------------------------------------------------------
+  //
+  // Сеть и местность рисуются в ОДИН canvas, а не геообъектами ymaps.
+  //
+  // Замерено, и это не вкусовщина. Прежний способ создавал и уничтожал 5 916
+  // объектов на КАЖДОЕ движение карты: 4 000 каймы и полотна, 1 904
+  // разделительных. Худший кадр при панораме — 583 мс, шестнадцать кадров из
+  // сорока медленнее 16,7 мс. Это не «подтормаживает», это остановка картинки.
+  //
+  // Тот же кадр в canvas 2D: 7,4 мс медиана, 17,6 мс худший — на холсте
+  // 2400×1400, то есть уже с запасом шире экрана. В семьдесят девять раз
+  // лучше по худшему кадру, и это при ПОЛНОЙ перерисовке.
+  //
+  // WebGL сюда не нужен, и это тоже арифметика: он превратил бы 7,4 мс в
+  // примерно одну, разницу за пределами частоты экрана, — а стоил бы
+  // триангуляции, тесселяции линий, пунктира в шейдере и своего конвейера.
+  // У Яндекса WebGL потому, что они рисуют весь город с подписями и
+  // коллизиями; у нас в кадре тысячи линий, а не миллионы.
+  //
+  // Объектами ymaps остаётся только то, с чем ВЗАИМОДЕЙСТВУЮТ: метки правок,
+  // вершины рисуемой линии, ручки. Их десятки.
+
+  let canvas = null;
+  let brush = null;
+  /// Пиксельная опора холста: глобальные пиксели левого верхнего угла и зум,
+  /// на которых он нарисован. По ним же считается сдвиг при панораме.
+  let painted = null;
+
+  function ensureCanvas() {
+    if (canvas) { return; }
+    canvas = document.createElement('canvas');
+    canvas.style.position = 'absolute';
+    canvas.style.left = '0';
+    canvas.style.top = '0';
+    // Сквозной для мыши: щёлкают по карте, а холст — картинка над ней.
+    canvas.style.pointerEvents = 'none';
+    // Место холста — ВНУТРИ стопки панелей ymaps, сразу над подложечной.
+    //
+    // Снаружи стопки он не работает ни с какой стороны: приклеенный последним
+    // накрывает собой метки, вершины и обстановку — работать с картой нечем;
+    // приклеенный первым сам уходит под непрозрачный фон карты, и схема
+    // пропадает целиком. Оба варианта были проверены.
+    //
+    // Внутри стопки порядок правильный сам собой: плитки под ним, всё
+    // интерактивное — над.
+    const host = document.getElementById('map');
+    const ground = host.querySelector('ymaps[class$="ground-pane"]');
+    if (ground && ground.parentNode) {
+      ground.parentNode.insertBefore(canvas, ground.nextSibling);
+    } else {
+      host.appendChild(canvas);
+    }
+    brush = canvas.getContext('2d');
+  }
+
+  /// Перевести координату в пиксели холста.
+  function atPixel(lon, lat) {
+    const global = map.options.get('projection')
+      .toGlobalPixels([lat, lon], painted.zoom);
+    return [global[0] - painted.left, global[1] - painted.top];
+  }
+
+  function paintSchema() {
+    ensureCanvas();
+    const size = map.container.getSize();
+    const zoom = map.getZoom();
+    const centre = map.getGlobalPixelCenter();
+    // Холст ШИРЕ экрана: панорама в пределах запаса не стоит перерисовки —
+    // готовая картинка просто сдвигается. Тот же приём, что у растра схемы на
+    // телефоне, и он там уже проверен.
+    const margin = 0.25;
+    const width = Math.round(size[0] * (1 + margin * 2));
+    const height = Math.round(size[1] * (1 + margin * 2));
+    // Плотность пикселей ограничена ПОЛУТОРА, а не двумя.
+    //
+    // Замерено: при запасе в четверть экрана и удвоении под retina холст
+    // выходил на одиннадцать миллионов пикселей, и один проход по нему стоил
+    // около ста миллисекунд — это и был худший кадр, который я по очереди
+    // приписывал то пересборке слоёв, то геообъектам обстановки. Полтора
+    // против двух — это на 44 % меньше пикселей, а разницы на схеме, где
+    // самая тонкая линия толщиной в полтора пункта, не видно.
+    const ratio = Math.min(1.5, window.devicePixelRatio || 1);
+
+    painted = { zoom: zoom,
+                left: centre[0] - width / 2,
+                top: centre[1] - height / 2,
+                width: width, height: height, ratio: ratio };
+
+    if (canvas.width !== width * ratio || canvas.height !== height * ratio) {
+      canvas.width = width * ratio;
+      canvas.height = height * ratio;
+    }
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    brush.setTransform(ratio, 0, 0, ratio, 0, 0);
+    placeCanvas();
+
+    // Пересборка идёт ПО КАДРАМ, а не одним куском.
+    //
+    // Замерено на живой панораме: медиана кадра 8,3 мс, девять из десяти
+    // укладываются в 8,8 — но шесть кадров из пяти тысяч заняли до 126 мс.
+    // Все шесть — это пересборка холста: рамка вышла за поля запаса, и
+    // картинка рисовалась заново целиком в одном кадре.
+    //
+    // Работы меньше не станет, а стойка исчезнет: слои рисуются по одному за
+    // кадр. Холст при этом уже очищен и залит землёй, поэтому промежуточные
+    // кадры выглядят «карта достраивается», а не «карта пропала».
+    // Один проход по холсту вместо двух: clearRect и следом fillRect по той
+    // же площади — это одиннадцать миллионов пикселей дважды. На спутнике
+    // холст обязан быть прозрачным, там чистим; на схеме заливаем землёй, и
+    // заливка сама стирает прежнее.
+    if (schema) {
+      brush.fillStyle = '#0e1013';
+      brush.fillRect(0, 0, width, height);
+    } else {
+      brush.clearRect(0, 0, width, height);
+    }
+    const passes = schema
+      ? [paintLand, paintNet, paintMarks, paintCandidates]
+      : [paintThinNet, paintCandidates];
+    runPasses(passes);
+  }
+
+  let painting = 0;
+
+  /// Слои по одному за кадр. Новая пересборка отменяет незаконченную: рисовать
+  /// вчерашнюю рамку поверх сегодняшней незачем.
+  function runPasses(passes) {
+    const mine = ++painting;
+    let at = 0;
+    function step() {
+      if (mine !== painting || at >= passes.length) { return; }
+      passes[at++]();
+      window.requestAnimationFrame(step);
+    }
+    // Первый слой — сразу, без ожидания кадра: иначе при быстром движении
+    // холст остаётся пустым на один кадр дольше нужного.
+    step();
+  }
+
+  /// Поставить холст на место: сдвиг относительно текущего центра карты.
+  /// Только это и происходит при панораме — ни одной перерисовки.
+  function placeCanvas() {
+    if (!canvas || !painted) { return; }
+    const size = map.container.getSize();
+    const centre = map.getGlobalPixelCenter();
+    const dx = painted.left - (centre[0] - size[0] / 2);
+    const dy = painted.top - (centre[1] - size[1] / 2);
+    const scale = Math.pow(2, map.getZoom() - painted.zoom);
+    canvas.style.transformOrigin = '0 0';
+    canvas.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(' + scale + ')';
+  }
+
+  /// Пора ли перерисовывать: ушли за поля запаса или сменился зум.
+  function canvasIsStale() {
+    if (!painted) { return true; }
+    if (map.getZoom() !== painted.zoom) { return true; }
+    const size = map.container.getSize();
+    const centre = map.getGlobalPixelCenter();
+    const left = centre[0] - size[0] / 2;
+    const top = centre[1] - size[1] / 2;
+    return left < painted.left || top < painted.top
+        || left + size[0] > painted.left + painted.width
+        || top + size[1] > painted.top + painted.height;
+  }
+
+  function strokePath(points, colour, width, dashPattern) {
+    if (points.length < 2 || width <= 0) { return; }
+    brush.beginPath();
+    for (let i = 0; i < points.length; i++) {
+      const at = atPixel(points[i][0], points[i][1]);
+      if (i === 0) { brush.moveTo(at[0], at[1]); } else { brush.lineTo(at[0], at[1]); }
+    }
+    brush.strokeStyle = colour;
+    brush.lineWidth = width;
+    brush.lineJoin = 'round';
+    brush.lineCap = 'butt';
+    brush.setLineDash(dashPattern || []);
+    brush.stroke();
+    brush.setLineDash([]);
+  }
+
+  function paintThinNet() {
+    // Поверх спутника — только тонкие оси: подложка занята снимком, а
+    // показать надо, к чему прилипнет магнит.
+    roadsInFrame.forEach(function (road) {
+      if (onlyMine && !road.drawn) { return; }
+      brush.globalAlpha = road.drawn ? 0.9 : 0.45;
+      strokePath(road.points, road.drawn ? '#ffb020' : '#38bdf8',
+                 road.drawn ? 4 : 2);
+    });
+    brush.globalAlpha = 1;
+  }
+
+  function paintLand() {
+    LAND_ORDER.forEach(function (kind) {
+      const look = LAND_LOOK[kind];
+      if (!look) { return; }
+      landInFrame.forEach(function (area) {
+        if (area.kind !== kind || area.points.length < 2) { return; }
+        if (area.closed) {
+          brush.beginPath();
+          area.points.forEach(function (p, i) {
+            const at = atPixel(p[0], p[1]);
+            if (i === 0) { brush.moveTo(at[0], at[1]); } else { brush.lineTo(at[0], at[1]); }
+          });
+          brush.closePath();
+          brush.fillStyle = look.fill;
+          brush.fill();
+          brush.strokeStyle = look.line;
+          brush.lineWidth = 1;
+          brush.stroke();
+        } else {
+          // Тротуар — пунктиром: сплошная лента любой толщины читается
+          // проезжей частью, и вдоль проспекта выглядела дублёром. Тот же
+          // приём, что на телефоне, — панель обязана показывать то же.
+          strokePath(area.points, look.line, look.width, look.dash);
+        }
+      });
+    });
+  }
+
+  // Трапеция подхода: от обычной ширины в восьми метрах от узла к расширенной
+  // у самого узла.
+  const FLARE_METERS = 8;
+
+  function paintFlare(end, inner, width, flare, colour, perPixel) {
+    const scale = Math.cos(end[1] * Math.PI / 180);
+    let dx = (end[0] - inner[0]) * scale, dy = end[1] - inner[1];
+    const length = Math.hypot(dx, dy);
+    if (length === 0) { return; }
+    dx /= length; dy /= length;
+    // Точка в FLARE_METERS от узла вглубь улицы.
+    const back = FLARE_METERS / 111320;
+    const from = [end[0] - dx * back / scale, end[1] - dy * back];
+    // Нормаль к направлению улицы.
+    const nx = -dy, ny = dx;
+    const halfNarrow = (width / 2) / 111320;
+    const halfWide = (width / 2 + flare) / 111320;
+
+    const corner = function (point, half) {
+      return [[point[0] + nx * half / scale, point[1] + ny * half],
+              [point[0] - nx * half / scale, point[1] - ny * half]];
+    };
+    const near = corner(from, halfNarrow);
+    const wide = corner(end, halfWide);
+
+    brush.beginPath();
+    [near[0], wide[0], wide[1], near[1]].forEach(function (p, i) {
+      const at = atPixel(p[0], p[1]);
+      if (i === 0) { brush.moveTo(at[0], at[1]); } else { brush.lineTo(at[0], at[1]); }
+    });
+    brush.closePath();
+    brush.fillStyle = colour;
+    brush.fill();
+  }
+
+  // Выпуклая оболочка точек (обход Эндрю). Нужна перекрёстку: его асфальт —
+  // это площадь между кромками всех сходящихся дорог.
+  function convexHull(points) {
+    if (points.length < 3) { return points; }
+    const sorted = points.slice().sort(function (a, b) {
+      return a[0] - b[0] || a[1] - b[1];
+    });
+    const cross = function (o, a, b) {
+      return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    };
+    const half = function (list) {
+      const out = [];
+      list.forEach(function (p) {
+        while (out.length >= 2
+               && cross(out[out.length - 2], out[out.length - 1], p) <= 0) {
+          out.pop();
+        }
+        out.push(p);
+      });
+      out.pop();
+      return out;
+    };
+    return half(sorted).concat(half(sorted.slice().reverse()));
+  }
+
+  // Кромка полотна — бордюр.
+  //
+  // Делает для «настоящести» больше, чем любой подбор оттенков: без неё
+  // асфальт сливается с землёй и читается плоским пятном, а не поверхностью,
+  // у которой есть край. На телефоне бордюр уже есть — панель обязана
+  // показывать то же самое.
+  const KERB = '#5c5b57';
+
+  function fillRing(points, colour, kerb) {
+    if (points.length < 3) { return; }
+    brush.beginPath();
+    points.forEach(function (p, i) {
+      const at = atPixel(p[0], p[1]);
+      if (i === 0) { brush.moveTo(at[0], at[1]); } else { brush.lineTo(at[0], at[1]); }
+    });
+    brush.closePath();
+    brush.fillStyle = colour;
+    brush.fill();
+    if (!kerb) { return; }
+    brush.strokeStyle = kerb;
+    brush.lineWidth = 1;
+    brush.lineJoin = 'round';
+    brush.stroke();
+  }
+
+  // Картинки значков грузятся один раз и живут в кэше: создавать Image на
+  // каждый светофор в каждом кадре значило бы вернуть ту же беду, только в
+  // другом месте.
+  const glyphImages = {};
+
+  function glyphImage(kind) {
+    if (glyphImages[kind] !== undefined) { return glyphImages[kind]; }
+    const src = glyphIcon(kind);
+    if (!src) { glyphImages[kind] = null; return null; }
+    const image = new Image();
+    // Пока картинка грузится, рисовать нечего; когда загрузится — просим
+    // перерисовку, иначе значки появятся только на следующем движении.
+    image.addEventListener('load', function () { paintSchema(); });
+    image.src = src;
+    glyphImages[kind] = image;
+    return image;
+  }
+
+  /// Краска поперёк дороги — НА ХОЛСТЕ.
+  ///
+  /// Каждая зебра — пять полос, и раньше каждая полоса была отдельным
+  /// геообъектом ymaps. Зебр в кадре района под тысячу, то есть под пять
+  /// тысяч объектов на пересборку — ровно та беда, которую мы победили для
+  /// дорог и не заметили у обстановки. Замерено: 100,9 мс на кадр.
+  function paintAcrossCanvas(mark, look) {
+    const lat = mark.point[1], lon = mark.point[0];
+    const half = mark.width / 2;
+    const across = (mark.azimuth + 90) * Math.PI / 180;
+    const dLat = Math.cos(across) * half / 111320;
+    const dLon = Math.sin(across) * half / (111320 * Math.cos(lat * Math.PI / 180));
+    const perPixel = metersPerPixel();
+    const inPoints = function (metres) { return Math.max(1.5, metres / perPixel); };
+    const colour = mark.mine ? '#ffb020' : look.color;
+
+    function bar(shift, width, opacity) {
+      const along = mark.azimuth * Math.PI / 180;
+      const oLat = Math.cos(along) * shift / 111320;
+      const oLon = Math.sin(along) * shift / (111320 * Math.cos(lat * Math.PI / 180));
+      brush.globalAlpha = opacity;
+      strokePath([[lon - dLon + oLon, lat - dLat + oLat],
+                  [lon + dLon + oLon, lat + dLat + oLat]], colour, width);
+      brush.globalAlpha = 1;
+    }
+
+    if (mark.kind === 5) {
+      // Длина зебры вдоль дороги постоянная — около четырёх метров, как в
+      // жизни: считанная от ширины, она превращала переход в площадь.
+      for (let i = 0; i < 5; i++) { bar((i - 2) * 0.8, inPoints(0.4), 0.9); }
+      return;
+    }
+    if (mark.kind === 3) {
+      // Стоп-линия — сплошная полоса в сорок сантиметров поперёк подхода.
+      bar(0, inPoints(0.4), 0.95);
+      return;
+    }
+    bar(0, inPoints(0.25), 0.8);
+  }
+
+  function paintMarks() {
+    if (!schema) { return; }
+    const close = metersPerPixel() <= MARKS_MAX_METERS_PER_PIXEL;
+    pointsInFrame.forEach(function (mark) {
+      const look = MARK_LOOK[mark.kind];
+      if (!look) { return; }
+      if (!close && !mark.mine) { return; }
+      if (look.paint) {
+        if (mark.width) { paintAcrossCanvas(mark, look); }
+        return;
+      }
+      const image = glyphImage(mark.kind);
+      const at = atPixel(mark.point[0], mark.point[1]);
+      if (image && image.complete && image.naturalWidth) {
+        // Значок стоит ПРЯМО и не растёт с зумом — как на телефоне.
+        brush.drawImage(image, at[0] - 9, at[1] - 26, 18, 26);
+      } else {
+        brush.beginPath();
+        brush.arc(at[0], at[1], look.size, 0, Math.PI * 2);
+        brush.fillStyle = look.color;
+        brush.fill();
+      }
+      if (mark.mine) {
+        // Своё обведено: видно, что уже уехало на телефоны, а что ещё ждёт
+        // публикации.
+        brush.beginPath();
+        brush.arc(at[0], at[1] - 13, look.size + 6, 0, Math.PI * 2);
+        brush.strokeStyle = '#ffb020';
+        brush.lineWidth = 2;
+        brush.stroke();
+      }
+    });
+  }
+
+  function paintCandidates() {
+    if (!candidatesOn) { return; }
+    // Пунктиром и янтарём: кандидат обязан отличаться от нарисованного нами с
+    // первого взгляда. Сплошной серый контур читался бы домом, и модератор
+    // принимал бы за данные то, что ещё никто не смотрел.
+    candidatesInFrame.forEach(function (house) {
+      const ring = house.points.concat([house.points[0]]);
+      strokePath(ring, '#ffb020', 1.2, [3, 3]);
+    });
+  }
+
+  function insideRing(ring, coords) {
+    // Луч вправо: нечётное число пересечений — точка внутри.
+    const y = coords[0], x = coords[1];
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0], yi = ring[i][1];
+      const xj = ring[j][0], yj = ring[j][1];
+      if ((yi > y) !== (yj > y)
+          && x < (xj - xi) * (y - yi) / (yj - yi) + xi) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  function candidateUnder(coords) {
+    for (let i = 0; i < candidatesInFrame.length; i++) {
+      if (insideRing(candidatesInFrame[i].points, coords)) {
+        return candidatesInFrame[i];
+      }
+    }
+    return null;
+  }
+
+  function acceptCandidate(house) {
+    // Принятый кандидат становится ОБЫЧНОЙ правкой и проходит ту же проверку,
+    // что нарисованное мышью: машина предлагает, решает человек.
+    const ring = house.points.slice();
+    post('/api/edit', {
+      kind: 'area', geom: ring, raw: ring[0],
+      props: { area: HOUSE_AREA, source: 'ml' }, status: ACCEPTED,
+    }).then(function (result) {
+      if (result.error) { hint(result.error); return; }
+      candidatesInFrame = candidatesInFrame.filter(function (other) {
+        return other !== house;
+      });
+      renderLand();
+      offerRefine('Дом принят · адрес?',
+        function () { askAddress(result, ring); },
+        function () {
+          return post('/api/edit/withdraw',
+                      { id: result.id, version: result.version });
+        });
+      reloadEdits();
+    });
+  }
+
+  function paintSurface() {
+    // Поверхность приехала готовой — заливаем и не считаем ничего.
+    //
+    // Склейка кусков, ширина, оболочка перекрёстка и трапеции фасок — это
+    // ГЕОМЕТРИЯ, а не отрисовка: она одинакова для всех, не зависит от зума и
+    // не меняется, пока не пересобраны тайлы. Считать её на каждое движение
+    // карты неверно в любом движке; теперь она считается в сборке раз в
+    // неделю. Здесь остаётся заливка.
+    surfaceInFrame.forEach(function (area) {
+      if (area.kind !== SURFACE_ROAD) { return; }
+      fillRing(area.points, asphalt(area.road || 6), KERB);
+    });
+    surfaceInFrame.forEach(function (area) {
+      if (area.kind !== SURFACE_JUNCTION) { return; }
+      fillRing(area.points, asphalt(4));
+    });
+    // Разделительная — ПОВЕРХ асфальта: она его разрезает. Земля, а не
+    // краска: на проспекте потоки разделены газоном или отбойником.
+    surfaceInFrame.forEach(function (area) {
+      // У островка бордюр есть в жизни; без него полоса читается провалом в
+      // асфальте, а не поднятой землёй. У площади перекрёстка бордюра нет —
+      // обведи её, и поперёк проезжей части появился бы контур.
+      if (area.kind !== SURFACE_MEDIAN) { return; }
+      fillRing(area.points, '#12151b', KERB);
+    });
+  }
+
+  function paintNet() {
+    const perPixel = metersPerPixel();
+    const shown = mergeStreets(onlyMine
+      ? roadsInFrame.filter(function (r) { return r.drawn; })
+      : roadsInFrame);
+    // Чем ближе к экрану дороги, тем позже они рисуются: мост обязан лечь
+    // ПОВЕРХ того, что под ним, иначе развязка читается перекрёстком.
+    const ordered = shown.slice().sort(function (a, c) { return a.level - c.level; });
+    streetsInFrame = ordered;
+
+    // Готовая поверхность заменяет ЧЕТЫРЕ прохода: кайму, полотно, оболочку
+    // перекрёстка и фаски. Своя нарисованная дорога в тайлы ещё не попала —
+    // её по-прежнему рисуем сами, иначе конструктор перестанет показывать
+    // результат до ближайшей пересборки. При «только моё» считаем всё сами:
+    // сборка о фильтре не знает.
+    const haveSurface = surfaceInFrame.length > 0 && !onlyMine;
+    if (haveSurface) {
+      paintSurface();
+      ordered.forEach(function (road) {
+        if (!road.drawn) { return; }
+        const width = Math.max(1.5, road.width / perPixel);
+        strokePath(road.points, '#04060a', width + 3);
+        strokePath(road.points, asphalt(road.cls), width);
+      });
+    }
+
+    if (!haveSurface) {
+      // Проходами, а не по улице: сперва ВСЕ каймы, потом ВСЕ полотна. Иначе
+      // кайма одной улицы ложится поверх полотна соседней, и каждый перекрёсток
+      // рассекается швами.
+      ordered.forEach(function (road) {
+        const width = Math.max(1.5, road.width / perPixel);
+        strokePath(road.points, '#04060a', width + 3);
+      });
+      ordered.forEach(function (road) {
+        const width = Math.max(1.5, road.width / perPixel);
+        strokePath(road.points, asphalt(road.cls), width);
+      });
+
+      // Заглушки узлов: три конца и больше — перекрёсток. Два — продолжение
+      // улицы следующим куском, и круг там делает наплыв, а не закрывает шов.
+      const nodes = {};
+      shown.forEach(function (road) {
+        const points = road.points;
+        [[points[0], points[1]],
+         [points[points.length - 1], points[points.length - 2]]]
+          .forEach(function (pair) {
+            const end = pair[0], inner = pair[1];
+            if (!end || !inner) { return; }
+            const key = end[0].toFixed(5) + ' ' + end[1].toFixed(5);
+            const found = nodes[key] || (nodes[key] = {
+              point: end, ends: 0, width: road.width,
+              color: asphalt(road.cls), edges: [] });
+            found.ends += 1;
+            if (road.width > found.width) {
+              found.width = road.width;
+              found.color = asphalt(road.cls);
+            }
+            // Кромки дороги в узле: центр ± половина ширины поперёк её
+            // направления. Из этих точек и складывается площадь перекрёстка.
+            const scale = Math.cos(end[1] * Math.PI / 180);
+            let dx = (end[0] - inner[0]) * scale, dy = end[1] - inner[1];
+            const length = Math.hypot(dx, dy);
+            if (length === 0) { return; }
+            dx /= length; dy /= length;
+            const half = (road.width / 2) / 111320;
+            found.edges.push([end[0] - dy * half / scale, end[1] + dx * half]);
+            found.edges.push([end[0] + dy * half / scale, end[1] - dx * half]);
+          });
+      });
+      // ПЛОЩАДЬ перекрёстка, а не круг самой широкой дороги.
+      //
+      // Круг закрывал только то, что укладывалось в его радиус, а перекрёсток —
+      // не круг: когда четыре дороги разной ширины сходятся под разными углами,
+      // между их кромками остаются чёрные клинья. Замерено на живом кадре: 133
+      // настоящих перекрёстка и 42 стыка кусков с разной шириной, наибольший
+      // скачок — восемь метров.
+      //
+      // Проверено и отвергнуто: круглые торцы вместо срезанных клинья не
+      // закрывают (31 дырка против 30 — в пределах шума). Дело не в торцах.
+      //
+      // Правильная фигура — выпуклая оболочка КРОМОК всех сходящихся дорог:
+      // каждая приходит в узел своей шириной, и площадь между их краями и есть
+      // асфальт перекрёстка. Ровно её и заливаем.
+      Object.keys(nodes).forEach(function (key) {
+        const node = nodes[key];
+        if (node.ends < 3 || !node.edges || node.edges.length < 3) { return; }
+        const hull = convexHull(node.edges.map(function (p) {
+          return atPixel(p[0], p[1]);
+        }));
+        if (hull.length < 3) { return; }
+        brush.beginPath();
+        hull.forEach(function (p, i) {
+          if (i === 0) { brush.moveTo(p[0], p[1]); } else { brush.lineTo(p[0], p[1]); }
+        });
+        brush.closePath();
+        brush.fillStyle = node.color;
+        brush.fill();
+      });
+
+      // Фаска входа в перекрёсток.
+      //
+      // В жизни улица расширяется перед перекрёстком: полоса поворота,
+      // скруглённый бордюр, карман. На схеме без этого улица втыкается в
+      // проспект прямоугольным торцом — и перекрёсток читается стыком двух
+      // лент, а не местом, куда сворачивают. Это самое заметное, чем наш
+      // перекрёсток отличался от чужого.
+      //
+      // Рисуем трапецией по последним восьми метрам: от обычной ширины к
+      // расширенной у самого узла. Расширение — полтора метра на сторону, но
+      // не больше четверти ширины: иначе дворовый проезд у проспекта
+      // раздувается вдвое и выглядит съездом с развязки.
+      ordered.forEach(function (road) {
+        const points = road.points;
+        if (points.length < 2) { return; }
+        [[points[points.length - 1], points[points.length - 2]],
+         [points[0], points[1]]].forEach(function (pair) {
+          const end = pair[0], inner = pair[1];
+          const key = end[0].toFixed(5) + ' ' + end[1].toFixed(5);
+          const node = nodes[key];
+          if (!node || node.ends < 3) { return; }
+          // Фаска не шире самого узла: она подводит улицу к нему, а не
+          // выпирает наружу.
+          const flare = Math.min(1.5, road.width / 4,
+                                 Math.max(0, (node.width - road.width) / 2));
+          if (flare <= 0.2) { return; }
+          paintFlare(end, inner, road.width, flare, asphalt(road.cls), perPixel);
+        });
+      });
+    }
+
+    // Разметка: ритм три метра штрих, девять промежуток — по нашим правилам.
+    // Именно по нему дорога и опознаётся дорогой.
+    const stroke = Math.max(2, 3 / perPixel);
+    const gap = Math.max(4, 9 / perPixel);
+    ordered.forEach(function (road) {
+      if (road.oneWay || road.cls > 4) { return; }
+      if (road.width / perPixel < 8) { return; }
+      brush.globalAlpha = 0.42;
+      strokePath(road.points, '#e0d9b8', 1.3, [stroke, gap]);
+      brush.globalAlpha = 1;
+    });
+
+    // Разделительные — тем же приёмом «полосами», что и на телефоне: широкий
+    // штрих цветом разметки, поверх чуть более узкий цветом асфальта.
+    // Остаётся ровно кромка, то есть сама разделительная.
+    ordered.forEach(function (road) {
+      if (!road.measured || road.lanes < 2) { return; }
+      const width = road.width / perPixel;
+      if (width < 20) { return; }
+      const lane = width / road.lanes;
+      for (let i = 1; i < road.lanes; i++) {
+        if (i === road.lanes / 2) { continue; }
+        const band = Math.abs((i - road.lanes / 2) * lane) * 2;
+        brush.globalAlpha = 0.34;
+        strokePath(road.points, '#d8d3c4', band + 1.2, [stroke, gap]);
+        brush.globalAlpha = 1;
+        strokePath(road.points, asphalt(road.cls), band - 1.2);
+      }
+    });
+  }
+
+  function renderLand() {
+    // Местность рисуется на холсте вместе с сетью: разделять их незачем, а
+    // порядок слоёв важнее, чем возможность перерисовать одно без другого.
+    landShapes.forEach(function (shape) { map.geoObjects.remove(shape); });
+    landShapes = [];
+    paintSchema();
+  }
+
+  function renderLandUnused() {
+    if (!schema) { return; }
+    // Порядок слоёв тот же, что на телефоне: квартал закрывает пустоту между
+    // улицами, дом ложится на него, вода и зелень поверх, тротуар последним.
+    LAND_ORDER.forEach(function (kind) {
+      landInFrame.forEach(function (area) {
+        if (area.kind !== kind) { return; }
+        const look = LAND_LOOK[kind];
+        if (!look) { return; }
+        const path = area.points.map(function (p) { return [p[1], p[0]]; });
+        const zIndex = 100 + LAND_ORDER.indexOf(kind);
+        const shape = area.closed
+          ? new ymaps.Polygon([path], {}, {
+              fillColor: look.fill, strokeColor: look.line, strokeWidth: 1,
+              zIndex: zIndex, interactivityModel: 'default#transparent' })
+          : new ymaps.Polyline(path, {}, {
+              strokeColor: look.line, strokeWidth: look.width,
+              zIndex: zIndex, interactivityModel: 'default#transparent' });
+        map.geoObjects.add(shape);
+        landShapes.push(shape);
+      });
+    });
+  }
+
+  // Склейка кусков в улицы — ПЕРЕД отрисовкой.
+  //
+  // Сборка режет дороги по перекрёсткам, чтобы получился граф, и это правильно
+  // на своём месте. Но рисовать надо улицу, а не куски: замерено на живом
+  // кадре — 413 кусков это ВОСЕМЬ улиц, по пятнадцать кусков на улицу, и у
+  // каждой из восьми в одном кадре две-три разные ширины. Отсюда «сосиски»:
+  // круглые торцы посреди проезжей части, ступени по ширине и тёмные просветы
+  // на стыках.
+  //
+  // У телефона этой беды нет — там перед отрисовкой работает склейка
+  // (RoadGeneralise.merge_ways). Здесь тот же приём.
+  const JOIN_EPSILON = 1e-5;   // шаг координат в тайле, ~1,1 м
+
+  function sameSpot(a, b) {
+    return Math.abs(a[0] - b[0]) < JOIN_EPSILON
+        && Math.abs(a[1] - b[1]) < JOIN_EPSILON;
+  }
+
+  function mergeStreets(roads) {
+    // Склеиваем только куски ОДНОГО класса и одного имени: совпало имя — мало,
+    // «Мустакиллик» есть в каждом районе, поэтому конец одного обязан
+    // совпадать с началом другого.
+    const groups = {};
+    roads.forEach(function (road) {
+      const key = road.cls + '|' + (road.name || '') + '|' + (road.oneWay ? 1 : 0)
+                  + '|' + road.level;
+      (groups[key] = groups[key] || []).push(road);
+    });
+
+    const out = [];
+    Object.keys(groups).forEach(function (key) {
+      const pieces = groups[key].slice();
+      while (pieces.length) {
+        const first = pieces.shift();
+        const chain = { points: first.points.slice(), cls: first.cls,
+                        name: first.name, oneWay: first.oneWay,
+                        level: first.level, lanes: first.lanes,
+                        width: first.width, measured: first.measured,
+                        drawn: first.drawn, pieces: [first] };
+        let grew = true;
+        while (grew) {
+          grew = false;
+          for (let i = 0; i < pieces.length; i++) {
+            const next = pieces[i];
+            const head = chain.points[0];
+            const tail = chain.points[chain.points.length - 1];
+            const from = next.points[0];
+            const to = next.points[next.points.length - 1];
+            let joined = null;
+            if (sameSpot(tail, from)) { joined = next.points.slice(1); }
+            else if (sameSpot(tail, to)) { joined = next.points.slice().reverse().slice(1); }
+            if (joined) {
+              chain.points = chain.points.concat(joined);
+            } else {
+              let ahead = null;
+              if (sameSpot(head, to)) { ahead = next.points.slice(0, -1); }
+              else if (sameSpot(head, from)) { ahead = next.points.slice().reverse().slice(0, -1); }
+              if (!ahead) { continue; }
+              chain.points = ahead.concat(chain.points);
+            }
+            // Ширина — ОДНА на улицу. Улица в жизни не меняет ширину
+            // пятнадцать раз на километр; берём наибольшую измеренную, а если
+            // измеренных нет — наибольшую по классу.
+            if (next.measured && (!chain.measured || next.width > chain.width)) {
+              chain.measured = true;
+              chain.width = next.width;
+              chain.lanes = next.lanes;
+            } else if (!chain.measured && next.width > chain.width) {
+              chain.width = next.width;
+              chain.lanes = next.lanes;
+            }
+            chain.drawn = chain.drawn || next.drawn;
+            chain.pieces.push(next);
+            pieces.splice(i, 1);
+            grew = true;
+            break;
+          }
+        }
+        out.push(chain);
+      }
+    });
+    return out;
+  }
+
+  // Какой кусок улицы под щелчком. Склейка — дело отрисовки; правка остаётся
+  // за куском, потому что именно кусок лежит в тайле.
+  // Какая улица под щелчком. null — мимо всех.
+  //
+  // Порог — половина ширины полотна плюс три метра на промах пальцем: щелчок
+  // по асфальту обязан попадать в дорогу, а щелчок рядом с ней — в карту.
+  function streetUnder(coords) {
+    const lat = coords[0], lon = coords[1];
+    const scale = Math.cos(lat * Math.PI / 180);
+    let best = null, bestMeters = Infinity;
+    streetsInFrame.forEach(function (street) {
+      const points = street.points;
+      for (let i = 1; i < points.length; i++) {
+        const metres = pointToSegment(lon, lat, points[i - 1], points[i], scale);
+        const reach = street.width / 2 + 3;
+        if (metres <= reach && metres < bestMeters) {
+          bestMeters = metres;
+          best = street;
+        }
+      }
+    });
+    return best;
+  }
+
+  function pointToSegment(lon, lat, from, to, scale) {
+    const ax = (lon - from[0]) * scale * 111320;
+    const ay = (lat - from[1]) * 111320;
+    const bx = (to[0] - from[0]) * scale * 111320;
+    const by = (to[1] - from[1]) * 111320;
+    const length = bx * bx + by * by;
+    const share = length > 0 ? Math.max(0, Math.min(1, (ax * bx + ay * by) / length)) : 0;
+    return Math.hypot(ax - bx * share, ay - by * share);
+  }
+
+  function nearestPiece(street, coords) {
+    const pieces = street.pieces || [street];
+    if (pieces.length === 1) { return pieces[0]; }
+    const lat = coords[0], lon = coords[1];
+    let best = pieces[0], bestDistance = Infinity;
+    pieces.forEach(function (piece) {
+      piece.points.forEach(function (p) {
+        const d = Math.hypot(p[0] - lon, p[1] - lat);
+        if (d < bestDistance) { bestDistance = d; best = piece; }
+      });
+    });
+    return best;
+  }
+
   function renderRoads() {
     netLines.forEach(function (shape) { map.geoObjects.remove(shape); });
     netLines = [];
-
-    if (!schema) {
-      // Поверх спутника — только тонкие оси: подложка и так занята снимком,
-      // а показать надо, к чему прилипнет магнит. Своё выделено цветом: на
-      // снимке его иначе не отличить от чужого.
-      roadsInFrame.forEach(function (road) {
-        if (onlyMine && !road.drawn) { return; }
-        line(road.points, {
-          strokeColor: road.drawn ? '#ffb020' : '#38bdf8',
-          strokeWidth: road.drawn ? 4 : 2,
-          strokeOpacity: road.drawn ? 0.9 : 0.45, zIndex: 200 });
-      });
-      return;
-    }
-
-    // Земля — фон холста, а не полигон по рамке. Полигон приходилось
-    // перерисовывать на каждое движение карты, и он всегда отставал: по краю
-    // экрана оставалась светлая полоса чужой подложки.
-
-    const perPixel = metersPerPixel();
-    // Чем ближе к экрану дороги, тем позже они рисуются: мост обязан лечь
-    // ПОВЕРХ того, что под ним, иначе развязка читается перекрёстком.
-    // «Только наше» — отдельный взгляд на карту: видно, что сделано руками,
-    // без чужого под ним. Без него своя работа тонет в восьмидесяти тысячах
-    // чужих линий и кажется меньше, чем она есть.
-    const shown = onlyMine
-      ? roadsInFrame.filter(function (r) { return r.drawn; })
-      : roadsInFrame;
-    const ordered = shown.slice().sort(function (a, c) {
-      return a.level - c.level;
-    });
-    ordered.forEach(function (road) {
-      const width = Math.max(1.5, road.width / perPixel);
-      // Кайма ТЕМНЕЕ земли: полотно читается лежащим на ней, а две улицы в
-      // пятнадцати метрах не сливаются в одну широкую.
-      line(road.points, { strokeColor: '#04060a', strokeWidth: width + 3,
-                          strokeOpacity: 1, zIndex: 200 + road.level * 10 });
-      const polotno = line(road.points,
-        { strokeColor: asphalt(road.cls), strokeWidth: width,
-          strokeOpacity: 1, zIndex: 201 + road.level * 10 });
-      // Щелчок по полотну — взять эту дорогу в правку. Перерисовать
-      // существующую улицу иначе нельзя: рисование с нуля дало бы вторую
-      // линию рядом с первой, а не исправленную первую.
-      polotno.events.add('click', function (e) {
-        e.stopPropagation();
-        // Во время рисования полотно — это фон, а не объект. Обводя парк или
-        // дотягивая дорогу до перекрёстка, вершину ставят прямо поверх
-        // асфальта, и карточка «перерисовать эту улицу» посреди обводки
-        // отменяла бы работу вопросом, которого никто не задавал.
-        if (drawing) { addVertex(e.get('coords')); return; }
-        // Инструмент главнее полотна. Выбран светофор — щелчок по улице
-        // ставит светофор, а не открывает её геометрию: иначе палитра
-        // обещала бы одно, а карта делала другое.
-        if (kind !== 'select') { place(e.get('coords'), null); return; }
-        askReshape(road);
-      });
-    });
-    ordered.forEach(function (road) {
-      // Осевая — только там, где она есть в жизни: на дворовом проезде её нет,
-      // а нарисованная была бы выдуманной деталью.
-      if (road.oneWay || road.cls > 4) { return; }
-      if (road.width / perPixel < 8) { return; }
-      line(road.points, { strokeColor: '#e0d9b8', strokeWidth: 1.2,
-                          strokeOpacity: 0.30, strokeStyle: 'shortdash',
-                          zIndex: 240 });
-    });
+    paintSchema();
   }
 
   // Взять существующую дорогу в правку.
@@ -822,6 +1999,7 @@
     schema = !schema;
     markView();
     map.setType(schema ? 'rm#own' : 'yandex#hybrid');
+    renderLand();
     renderRoads();
     renderMarks();
     renderCoverage();
@@ -851,14 +2029,22 @@
       const drawn = edit.draw || {};
       if (drawn.shape === 'line' && edit.kind === 'geometry') {
         const width = Math.max(2, (drawn.width || 6) / perPixel);
+        const state = stateOf(edit);
         add(new ymaps.Polyline(path(edit.geom), {}, {
           strokeColor: '#04060a', strokeWidth: width + 3, zIndex: 320,
           interactivityModel: 'default#transparent' }));
         add(new ymaps.Polyline(path(edit.geom), {
           hintContent: 'Своя дорога · класс ' + (drawn.cls || '?') + ' · ' +
-                       (drawn.lanes || '?') + ' полос · ещё не опубликована',
+                       (drawn.lanes || '?') + ' полос · ' + state.what,
         }, { strokeColor: asphalt(drawn.cls || 6), strokeWidth: width,
              zIndex: 321, interactivityModel: 'default#transparent' }));
+        // Кайма состояния поверх полотна: цвет говорит что, штрих — то же
+        // самое вторым способом. Опубликованная идёт сплошной: она уже часть
+        // карты, и отличать её надо мягче, чем ждущую решения.
+        add(new ymaps.Polyline(path(edit.geom), {}, {
+          strokeColor: state.colour, strokeWidth: 2,
+          strokeStyle: state.dash ? state.dash.join(' ') : 'solid',
+          zIndex: 322, interactivityModel: 'default#transparent' }));
         // Пунктир поверх полотна — единственное, чем своё отличается от
         // чужого. Через месяц работы отличить их иначе будет нельзя.
         add(new ymaps.Polyline(path(edit.geom), {}, {
@@ -889,7 +2075,9 @@
   }
 
   function reloadEdits() {
-    get('/api/edits' + bbox()).then(function (data) {
+    const mine = generation;
+    get('/api/edits' + (loadedBox ? boxQuery(loadedBox) : bbox())).then(function (data) {
+      if (mine !== generation || (data && data.aborted)) { return; }
       known = {};
       const edits = data.edits || [];
       areasInFrame = edits
@@ -1344,12 +2532,27 @@
         kind: 'area', geom: ring, raw: ring[0],
         props: { area: code }, status: ACCEPTED,
       }).then(function (result) {
-        if (result.error) { hint(result.error); return; }
-        hint(AREAS[code] + ' обведена. Публикует владелец со своей машины.');
-        offerUndo(AREAS[code], function () {
-          return post('/api/edit/withdraw',
-                      { id: result.id, version: result.version });
-        });
+        if (result.error) {
+          problem(AREAS[code] + ' НЕ сохранён: ' + result.error, ring[0], null);
+          return;
+        }
+        hint(AREAS[code] + ' обведён. Публикует владелец со своей машины.');
+        // Дому предлагаем адрес — но не требуем. Контур без адреса всё равно
+        // застройка на схеме, а требование номера ради обводки дало бы
+        // выдуманные номера.
+        if (code === HOUSE_AREA) {
+          offerRefine(AREAS[code] + ' обведён · адрес?',
+            function () { askAddress(result, ring); },
+            function () {
+              return post('/api/edit/withdraw',
+                          { id: result.id, version: result.version });
+            });
+        } else {
+          offerUndo(AREAS[code], function () {
+            return post('/api/edit/withdraw',
+                        { id: result.id, version: result.version });
+          });
+        }
         walking = false;
         reloadEdits();
       });
@@ -1381,6 +2584,46 @@
     });
   }
 
+  // Адрес нарисованного дома.
+  //
+  // Он едет в тот же адресный файл, что и адреса из OSM: дом, обведённый
+  // руками, обязан находиться поиском ровно так же, как пришедший из экстракта
+  // — телефон не знает и не должен знать, откуда взялся дом.
+  function askAddress(made, ring) {
+    els.card.hidden = false;
+    els.card.innerHTML = '';
+    els.card.appendChild(node('h3', 'Адрес дома'));
+    els.card.appendChild(node('div',
+      'Без адреса дом всё равно будет на схеме — просто его не найдёт поиск.',
+      'muted'));
+    const street = field('Улица', 'text', '');
+    const house = field('Номер', 'text', '');
+    els.card.appendChild(street.label);
+    els.card.appendChild(house.label);
+    const save = node('button', 'Сохранить адрес');
+    save.addEventListener('click', function () {
+      const name = street.input.value.trim();
+      const number = house.input.value.trim();
+      if (!name || !number) { hint('Нужны и улица, и номер.'); return; }
+      post('/api/edit', {
+        id: made.id, version: made.version, kind: 'area',
+        geom: ring, raw: ring[0],
+        props: { area: HOUSE_AREA, street: name, house: number },
+        status: ACCEPTED,
+      }).then(function (result) {
+        if (result.error) { hint(result.error); return; }
+        closeCard();
+        hint('Адрес сохранён: ' + name + ', ' + number);
+        walking = false;
+        reloadEdits();
+      });
+    });
+    els.card.appendChild(save);
+    const skip = node('button', 'Без адреса', 'ghost');
+    skip.addEventListener('click', closeCard);
+    els.card.appendChild(skip);
+  }
+
   function cancelDrawing(quiet) {
     drawing = null;
     chosenVertex = -1;
@@ -1400,7 +2643,13 @@
     current.props = props;
     current.status = ACCEPTED;
     post('/api/edit', current).then(function (result) {
-      if (result.error) { hint(result.error); return; }
+      if (result.error) {
+        // Геометрия рисовалась руками и стоила десятка щелчков — потерять её
+        // из-за обрыва связи нельзя. Повтор шлёт ровно то же самое.
+        problem('Дорога НЕ сохранена: ' + result.error, points[0],
+                function () { saveRoad(points, cls, was, props); });
+        return;
+      }
       const also = held.map(function (key) {
         const road = was.joined[key];
         return post('/api/edit', {
@@ -1676,7 +2925,22 @@
     });
     map.events.add('click', function (e) {
       if (drawing) { addVertex(e.get('coords')); return; }
-      if (markingArea) { markArea(e.get('coords')); markingArea = false; return; }
+      if (candidatesOn && !markingArea && !pointCode) {
+        const house = candidateUnder(e.get('coords'));
+        if (house) { acceptCandidate(house); return; }
+      }
+      // Дорога больше не объект — она нарисована на холсте, и щелчок по ней
+      // ловим сами: координата → ближайшая улица в загруженном списке. Это
+      // тот же расчёт, что делает магнит на сервере, только локально, и он
+      // дешевле, чем шесть тысяч обработчиков на объектах.
+      if (schema && kind === 'select' && !markingArea && !pointCode) {
+        const street = streetUnder(e.get('coords'));
+        if (street) { askReshape(nearestPiece(street, e.get('coords'))); return; }
+      }
+      // Инструмент НЕ сбрасывается после одного объекта — так же, как
+      // обстановка. Области размечают подряд, и возвращаться к плитке после
+      // каждой значило бы платить щелчком за каждую следующую.
+      if (markingArea) { markArea(e.get('coords')); return; }
       if (pointCode) { placePoint(e.get('coords'), pointCode); return; }
       if (current && current.id) { closeCard(); return; }
       place(e.get('coords'), null);
@@ -1687,15 +2951,35 @@
     });
     // reloadEdits сам обновляет очередь: поставленная правка снимает работу
     // из списка, и звать обе вручную значило бы качать очередь дважды.
-    map.events.add('boundschange', function () { drawRoads(); reloadEdits(); });
+    map.events.add('boundschange', onMapMoved);
+    // Панорама — СДВИГ готового холста, а не перерисовка. Перерисовываем
+    // только когда ушли за поля запаса или сменился зум: ровно ради этого
+    // холст и строится шире экрана.
+    map.events.add('actiontick', function () {
+      // ПОКА ТЯНУТ И ЗУМЯТ — только сдвиг и масштаб готовой картинки.
+      //
+      // Здесь стояла ещё и пересборка «если холст устарел». При зуме зум
+      // меняется НА КАЖДОМ КАДРЕ анимации, то есть холст объявлялся
+      // устаревшим шестьдесят раз в секунду и перерисовывался целиком
+      // столько же — карта вставала колом ровно во время зума.
+      //
+      // Сдвиг и масштаб — это один transform, он бесплатен. Пересборка ждёт
+      // конца движения: ровно тот же приём, которым живёт растр на телефоне.
+      placeCanvas();
+    });
+    map.events.add('sizechange', function () { paintSchema(); });
     // Зум меняет метры на пиксель, то есть ВСЮ ширину полотна. Без пересчёта
     // схема на другом масштабе врала бы о том, что увидит водитель.
     map.events.add('actionend', function () {
       // Зум меняет метры на пиксель, то есть ширину полотна — и у чужих дорог,
       // и у своих. Своя дорога, нарисованная в прежнем масштабе, иначе
       // осталась бы шире или уже соседней того же класса.
+      placeCanvas();
       renderMine();
-      if (schema) { renderRoads(); }
+      // renderMarks сам просит пересборку холста: значки и краска живут там.
+      // Отдельный paintSchema рядом означал бы двойную работу на каждое
+      // движение карты.
+      renderMarks();
     });
     drawRoads();
     reloadEdits();
@@ -1712,8 +2996,45 @@
     }
 
     const buttons = Array.prototype.slice.call(document.querySelectorAll('.tool'));
+
+    /// Инструмент, которым работали в прошлый раз, — возвращается сам.
+    ///
+    /// Список плиток одинаков всегда, и модератор, размечающий полосы час
+    /// подряд, каждый раз ищет ту же плитку среди двадцати. Порядок при этом
+    /// НЕ меняем: переставлять плитки под руку значит ломать привычку
+    /// каждого следующего дня. Меняется только то, что выбрано при открытии.
+    const LAST_TOOL = 'radarmap.tool';
+
+    function rememberTool(button) {
+      try {
+        window.localStorage.setItem(LAST_TOOL, button.dataset.tool
+          || button.getAttribute('data-kind') || '');
+      } catch (e) { /* приватное окно — просто не помним */ }
+    }
+
+    function restoreTool() {
+      let want = '';
+      try { want = window.localStorage.getItem(LAST_TOOL) || ''; }
+      catch (e) { return; }
+      if (!want) { return; }
+      const found = buttons.filter(function (b) {
+        return (b.dataset.tool || b.getAttribute('data-kind') || '') === want;
+      })[0];
+      // «Выбрать» возвращать незачем — это и так состояние по умолчанию.
+      if (found && want !== 'select') { found.click(); }
+    }
+
     buttons.forEach(function (button) {
+      // Метка инструмента — одна строка на все виды плиток: у них разные
+      // атрибуты, и сравнивать их по одному значило бы завести четыре ветки
+      // там, где нужна одна.
+      button.dataset.tool = [button.getAttribute('data-kind'),
+                             button.getAttribute('data-cls'),
+                             button.getAttribute('data-area'),
+                             button.getAttribute('data-point')]
+                            .filter(Boolean).join(':');
       button.addEventListener('click', function () {
+        rememberTool(button);
         buttons.forEach(function (b) { b.classList.remove('on'); });
         button.classList.add('on');
         kind = button.getAttribute('data-kind');
@@ -1736,6 +3057,7 @@
         }
       });
     });
+    restoreTool();
 
     els.find.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); search(els.find.value); }
@@ -1797,6 +3119,17 @@
         return;
       }
       if (inField) { return; }
+
+      // Экран горячих клавиш по «?».
+      //
+      // Их полтора десятка, и узнать о них было неоткуда: подсказка в углу
+      // говорит о текущем инструменте, а первая же карточка её закрывает.
+      // Клавиша, о которой не знают, не существует.
+      if (e.key === '?' || e.key === '/' || e.key === ',') {
+        e.preventDefault();
+        toggleKeysCard();
+        return;
+      }
       if (e.key === '\\' || e.key === 'ё') { toggleSchema(); return; }
       if (e.key === ']' || e.key === 'ъ') { goTo(queueAt + 1); return; }
       if (e.key === '[' || e.key === 'х') { goTo(queueAt - 1); return; }
@@ -1811,6 +3144,18 @@
       }
       // Обстановка — на соседнем ряду букв: рука не путает ряды так, как
       // путает соседние клавиши в одном.
+      if (e.key.toLowerCase() === 'h' || e.key.toLowerCase() === 'р') {
+        const button = document.querySelector('[data-area="6"]');
+        if (button) { button.click(); }
+        return;
+      }
+      if (e.key.toLowerCase() === 'c' || e.key.toLowerCase() === 'с') {
+        candidatesOn = !candidatesOn;
+        hint(candidatesOn ? 'Кандидаты нейросети включены.'
+                          : 'Кандидаты выключены.');
+        drawRoads();
+        return;
+      }
       if (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'я') {
         const button = document.querySelector('[data-kind="lock"]');
         if (button) { button.click(); }

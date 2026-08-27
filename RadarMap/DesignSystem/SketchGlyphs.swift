@@ -19,33 +19,88 @@
 import SwiftUI
 
 /// Светофор: корпус с тремя линзами.
+///
+/// Сделан подробнее остальных намеренно. Светофор — самый узнаваемый предмет
+/// на дороге, и именно по нему схема опознаётся как КАРТА ГОРОДА, а не как
+/// чертёж: плоский прямоугольник с тремя кружками читается схемой метро.
+///
+/// Что здесь есть и зачем каждое:
+/// — корпус с вертикальным переходом тона: сверху светлее, снизу темнее, и
+///   предмет читается объёмным при одной заливке вместо трёх слоёв;
+/// — блик по верхнему краю: он и даёт «металл», и отделяет корпус от асфальта
+///   надёжнее обводки, потому что светлая линия на тёмном видна и на солнце;
+/// — козырёк над каждой линзой — деталь, по которой светофор узнают даже
+///   боковым зрением, а стоит она одной дуги;
+/// — свечение линз: не заливка, а радиальный переход. Плоский круг на восьми
+///   пунктах выглядит наклейкой, светящийся — лампой.
+///
+/// Всё это — ОДИН символ Canvas: он растеризуется единожды на весь растр,
+/// сколько бы светофоров ни стояло в кадре. Подробность здесь ничего не стоит
+/// на кадр, и ровно поэтому она себе позволена.
 nonisolated struct TrafficLightGlyph: View {
     let scale: CGFloat
 
+    private var width: CGFloat { 9.2 * scale }
+
     var body: some View {
-        VStack(spacing: 0.9 * scale) {
+        VStack(spacing: 0.85 * scale) {
             lens(SketchPalette.signalRed)
             lens(SketchPalette.signalAmber)
             lens(SketchPalette.signalGreen)
         }
-        .padding(.vertical, 1.5 * scale)
-        .padding(.horizontal, 1.6 * scale)
-        .background {
-            RoundedRectangle(cornerRadius: 1.9 * scale, style: .continuous)
-                .fill(SketchPalette.markBody)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 1.9 * scale, style: .continuous)
-                        .strokeBorder(SketchPalette.markEdge.opacity(0.75),
-                                      lineWidth: 0.8 * scale)
-                }
-        }
+        .padding(.vertical, 1.6 * scale)
+        .padding(.horizontal, 1.7 * scale)
+        .background { body(width: width) }
         // Тёмный ореол: корпус почти чёрный, и на тёмном асфальте без него
         // теряется край. Тень тут дешевле обводки — она вне растра не живёт.
-        .shadow(color: .black.opacity(0.7), radius: 1.6 * scale)
+        .shadow(color: .black.opacity(0.75), radius: 1.8 * scale)
+    }
+
+    private func body(width: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 2.1 * scale, style: .continuous)
+        return shape
+            .fill(LinearGradient(
+                colors: [SketchPalette.markBody.opacity(1.0),
+                         SketchPalette.signalCase],
+                startPoint: .top, endPoint: .bottom))
+            .overlay {
+                shape.strokeBorder(SketchPalette.markEdge.opacity(0.55),
+                                   lineWidth: 0.7 * scale)
+            }
+            .overlay(alignment: .top) {
+                // Блик по верхней кромке: одна светлая линия делает для
+                // объёма больше, чем любая обводка.
+                Capsule()
+                    .fill(SketchPalette.signalGloss)
+                    .frame(width: width * 0.52, height: 0.7 * scale)
+                    .padding(.top, 0.9 * scale)
+            }
     }
 
     private func lens(_ colour: Color) -> some View {
-        Circle().fill(colour).frame(width: 2.6 * scale, height: 2.6 * scale)
+        let size = 2.7 * scale
+        return ZStack {
+            // Гнездо линзы: тёмное кольцо под ней. Без него лампа висит на
+            // корпусе, а не сидит в нём.
+            Circle()
+                .fill(SketchPalette.signalSocket)
+                .frame(width: size + 0.9 * scale, height: size + 0.9 * scale)
+            Circle()
+                .fill(RadialGradient(
+                    colors: [.white.opacity(0.55), colour, colour.opacity(0.85)],
+                    center: UnitPoint(x: 0.35, y: 0.3),
+                    startRadius: 0, endRadius: size * 0.75))
+                .frame(width: size, height: size)
+            // Козырёк: дуга сверху линзы. Деталь, по которой светофор узнают
+            // боковым зрением.
+            Circle()
+                .trim(from: 0.56, to: 0.94)
+                .stroke(SketchPalette.signalVisor,
+                        style: StrokeStyle(lineWidth: 0.85 * scale, lineCap: .round))
+                .frame(width: size + 1.3 * scale, height: size + 1.3 * scale)
+                .offset(y: -0.25 * scale)
+        }
+        .frame(width: size + 0.9 * scale, height: size + 0.9 * scale)
     }
 }
 

@@ -164,10 +164,8 @@ struct CarPlayMapScreen: View {
     /// а не по часам: в декабре в 18:30 уже темно, и белая карта слепит.
     private static func daylight(appearance: MapAppearance,
                                  coordinate: CLLocationCoordinate2D?) -> Bool {
-        switch appearance {
-        case .dark:  return false
-        case .light: return true
-        case .auto:  return Sun.isDaytime(at: coordinate, now: Date())
-        }
+        // Решение переехало в MapAppearance: его спрашивает и схема приборки,
+        // а две копии одного правила разошлись бы молча.
+        appearance.isDaylight(at: coordinate)
     }
 }

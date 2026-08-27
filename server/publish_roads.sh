@@ -68,7 +68,28 @@ if [ "$AUTO" = "1" ]; then
 else
     echo "=== 1/4: сборка тайлов на VPS (экстракт лежит там) ==="
     scp -q "$(dirname "$0")/build_roads.py" "$HOST:/opt/radarmap/work/build_roads.py"
-    ssh "$HOST" "python3 /opt/radarmap/work/build_roads.py --in '$EXTRACT' --tiles '$TILES'"
+    # ТЕ ЖЕ слои, что собирает крон.
+    #
+    # Здесь стояла одна строка «--in roads --tiles», и это была мина: ручная
+    # публикация пересобирала тайлы ОДНИМИ ДОРОГАМИ. Индекс после неё
+    # перечисляет только то, что написано в этот раз, — то есть местность,
+    # обстановка, дома, адреса и правки панели пропадали с карты целиком, а
+    # заметить это можно было только на телефоне.
+    #
+    # Каждый слой подаётся, только если его экстракт на месте: сборка обязана
+    # работать и на машине, где половины файлов ещё нет.
+    ssh "$HOST" "
+      set -e
+      cd /opt/radarmap/work
+      args=''
+      for pair in areas:areas.geojsonl points:points.geojsonl \
+                  houses:houses.geojsonl addresses:addresses.geojsonl \
+                  edits:edits.json; do
+          key=\${pair%%:*}; file=\${pair#*:}
+          [ -s \"\$file\" ] && args=\"\$args --\$key \$file\"
+      done
+      echo \"    слои: \$args\"
+      python3 build_roads.py --in '$EXTRACT' \$args --tiles '$TILES'"
 fi
 
 echo "=== 2/4: подпись индексов локально ==="
@@ -141,12 +162,46 @@ ssh "$HOST" "set -e; rm -rf '$WEBROOT/roads_prev'; \
     if [ -f '$WEBROOT/roads_index.json' ]; then cp '$WEBROOT/roads_index.json' '$WEBROOT/roads_prev_index.json'; fi; \
     if [ -f '$WEBROOT/roads_index_v2.json' ]; then cp '$WEBROOT/roads_index_v2.json' '$WEBROOT/roads_prev_index_v2.json'; fi"
 
+# Через find, а не через маску оболочки.
+#
+# Маска разворачивается в список аргументов, и на первой же сборке страны
+# `cp $TILES/road2_*.json` упёрлась в предел: «Argument list too long» при
+# 41 041 файле. Хуже, что упёрлась она ПОСЛЕ удаления старых: вебрут остался
+# без тайлов, а индекс ещё указывал на них.
+#
+# find … -exec … + сам делит список на порции, и предела у него нет.
 ssh "$HOST" "set -e; mkdir -p '$WEBROOT/roads'; \
-    rm -f '$WEBROOT/roads'/tile_*.json '$WEBROOT/roads'/tile_*.json.gz \
-          '$WEBROOT/roads'/road2_*.json '$WEBROOT/roads'/road2_*.json.gz; \
-    cp '$TILES'/tile_*.json '$WEBROOT/roads/'; \
-    cp '$TILES'/road2_*.json '$WEBROOT/roads/'; \
-    gzip -kf '$WEBROOT/roads/'tile_*.json '$WEBROOT/roads/'road2_*.json"
+    find '$WEBROOT/roads' -maxdepth 1 \( -name 'tile_*.json' -o -name 'tile_*.json.gz' \
+         -o -name 'road2_*.json' -o -name 'road2_*.json.gz' \) -delete; \
+    find '$TILES' -maxdepth 1 \( -name 'tile_*.json' -o -name 'road2_*.json' \) \
+         -exec cp -t '$WEBROOT/roads/' {} +; \
+    find '$WEBROOT/roads' -maxdepth 1 -name '*.json' -exec gzip -kf {} +; \
+    echo \"    в вебруте: \$(find '$WEBROOT/roads' -name '*.json' | wc -l) файлов\""
+
+# --- MVT: рядом, если сборка его написала.
+#
+# Наш формат остаётся главным: его читают телефон и панель. MVT нужен всему,
+# что умеет рисовать векторные карты в браузере, и лежит он отдельным деревом
+# mvt/<z>/<x>/<y>.mvt — не в индексе и не под подписью.
+#
+# Подпись здесь не потеря, а разграничение. Индекс подписан ради ТЕЛЕФОНА:
+# взломанный сервер не должен подсунуть водителю свою геометрию. MVT читает
+# панель, а она за входом и работает по своей сессии; заводить вторую подпись
+# на дерево из тысяч файлов значило бы завести второе место, где подпись
+# расходится с данными.
+if ssh "$HOST" "[ -d '$TILES/mvt' ]"; then
+    echo "=== 3б/4: MVT рядом ==="
+    ssh "$HOST" "set -e; rm -rf '$WEBROOT/mvt.new'; \
+        cp -r '$TILES/mvt' '$WEBROOT/mvt.new'; \
+        find '$WEBROOT/mvt.new' -name '*.mvt' -exec gzip -kf {} +; \
+        rm -rf '$WEBROOT/mvt.old'; \
+        if [ -d '$WEBROOT/mvt' ]; then mv '$WEBROOT/mvt' '$WEBROOT/mvt.old'; fi; \
+        mv '$WEBROOT/mvt.new' '$WEBROOT/mvt'; \
+        rm -rf '$WEBROOT/mvt.old'; \
+        echo \"    тайлов MVT: \$(find '$WEBROOT/mvt' -name '*.mvt' | wc -l)\""
+else
+    echo "MVT в кандидате нет — сборка шла без --mvt, пропускаем"
+fi
 
 echo "=== 4/4: подписанные индексы — последними ==="
 # Порядок публикации не случаен: сначала тайлы, потом индексы. Пока индекс

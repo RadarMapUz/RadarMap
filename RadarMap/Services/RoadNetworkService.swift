@@ -323,6 +323,59 @@ final class RoadNetworkService {
         finish(key: key, decoded: decoded)
     }
 
+    // MARK: - Адреса
+
+    /// Файл адресов города: с диска, иначе с сервера, и в обоих случаях sha256
+    /// сверяется с подписанным индексом.
+    ///
+    /// Отдельным входом, а не через покрытие: адреса не окрестность. Их просят
+    /// один раз на город и по имени клетки, а не по рамке экрана, поэтому
+    /// ensureCoverage о них ничего не знает и знать не должен.
+    ///
+    /// nil — «адресов нет»: индекс их не знает, сеть не ответила или файл не
+    /// сошёлся по подписи. Честный пустой ответ здесь лучше половины списка:
+    /// поиск после него уходит к Apple, а не показывает неполный город как
+    /// полный.
+    func addressBook(for coordinate: CLLocationCoordinate2D) async -> AddressBook? {
+        let key = AddressBook.key(for: coordinate)
+        guard indexVersion >= RoadTiles.formatVersionV2,
+              let expected = index?.tiles[key], !broken.contains(key)
+        else { return nil }
+
+        let fileURL = directory.appendingPathComponent(
+            RoadTiles.fileName(key: key, version: indexVersion))
+        if let fromDisk = await Task.detached(priority: .utility, operation: {
+            () -> AddressBook? in
+            guard let data = try? Data(contentsOf: fileURL),
+                  RoadTiles.sha256Hex(of: data) == expected.sha256 else { return nil }
+            return AddressBook.decode(data)
+        }).value {
+            return fromDisk
+        }
+
+        guard let data = try? await api.getData(
+            "roads/" + RoadTiles.fileName(key: key, version: indexVersion))
+        else { return nil }
+        let directory = self.directory
+        let decoded = await Task.detached(priority: .utility) { () -> AddressBook? in
+            guard RoadTiles.sha256Hex(of: data) == expected.sha256,
+                  let book = AddressBook.decode(data) else { return nil }
+            do {
+                try FileManager.default.createDirectory(
+                    at: directory, withIntermediateDirectories: true)
+                try data.write(to: fileURL, options: .atomic)
+            } catch {
+                Log.route.error("адреса не записались: \(error.localizedDescription, privacy: .public)")
+            }
+            return book
+        }.value
+        if decoded == nil {
+            broken.insert(key)
+            Log.route.error("адреса \(key, privacy: .public) не сошлись по sha или формату — отброшены")
+        }
+        return decoded
+    }
+
     /// Что лежит в наборе: дороги или местность.
     private nonisolated enum Decoded {
         case roads([RoadLine])

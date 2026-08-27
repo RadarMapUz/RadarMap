@@ -16,9 +16,25 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
         didSet {
             answered = false
             completer.queryFragment = query
+            mine = book?.search(query, near: near) ?? []
         }
     }
+
+    /// Где стоит машина: ближний дом в списке выше дальнего. Улица с одним
+    /// названием есть в каждом районе, и без этого первым показывался бы
+    /// случайный из них.
+    var near: CLLocationCoordinate2D?
     private(set) var results: [MKLocalSearchCompletion] = []
+
+    /// Свои адреса — из подписанного файла города, без сети.
+    ///
+    /// Первым источником, а не заменой. Apple лучше знает заведения, опечатки
+    /// и то, что человек называет «Корзинка на Чиланзаре»; своё берёт другим —
+    /// оно отвечает мгновенно и отвечает всегда: в роуминге, в подвале
+    /// парковки и в тоннеле, где сетевого поиска просто нет.
+    private(set) var mine: [Address] = []
+    private var book: AddressBook?
+    private var bookAsked = false
 
     /// Завершитель ответил на текущий запрос. Без этого флага пустой список
     /// нельзя показать как «ничего не найдено»: ровно так же он выглядит,
@@ -47,6 +63,17 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
             self.results = []
             self.answered = true
         }
+    }
+
+    /// Забрать файл адресов города. Один раз за показ экрана: город не
+    /// меняется, пока человек набирает запрос.
+    func loadBook(from roads: RoadNetworkService,
+                  at coordinate: CLLocationCoordinate2D?) async {
+        guard !bookAsked, let coordinate else { return }
+        bookAsked = true
+        near = coordinate
+        book = await roads.addressBook(for: coordinate)
+        mine = book?.search(query, near: near) ?? []
     }
 
     func resolve(_ completion: MKLocalSearchCompletion) async -> CLLocationCoordinate2D? {
@@ -82,6 +109,7 @@ struct SearchView: View {
                     placesSection
                     if model.query.isEmpty { recentsSection }
                 }
+                mineSection
                 resultsSection
             }
             .listStyle(.insetGrouped)
@@ -98,6 +126,10 @@ struct SearchView: View {
         }
         .presentationDetents([.large])
         .onAppear { assigning = initialAssign }
+        .task {
+            await model.loadBook(from: env.roads,
+                                 at: env.location.currentCoordinate)
+        }
         .alert("Не удалось открыть адрес", isPresented: $resolveFailed) {
             Button("Понятно", role: .cancel) { }
         } message: {
@@ -245,6 +277,64 @@ struct SearchView: View {
         }
     }
 
+    // MARK: - Свои адреса
+
+    /// Отдельной секцией и ВЫШЕ сетевых результатов.
+    ///
+    /// Не вперемешку: свои адреса появляются мгновенно, сетевые — через
+    /// полсекунды, и список, в который они досыпаются, прыгает под пальцем.
+    /// Отдельный заголовок ещё и честен: он говорит, что этот кусок работает
+    /// без сети, а тот — нет.
+    @ViewBuilder private var mineSection: some View {
+        if !model.mine.isEmpty {
+            Section {
+                ForEach(model.mine, id: \.title) { address in
+                    mineRow(address)
+                }
+            } header: {
+                Text("Из своей карты · без сети")
+            }
+            .listRowBackground(Theme.surface)
+        }
+    }
+
+    private func mineRow(_ address: Address) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                if let slot = assigning {
+                    assign(slot, coordinate: address.point, title: address.title)
+                } else {
+                    onSelect?(address.point)
+                    dismiss()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "house.fill")
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(width: 24)
+                    Text(address.title)
+                        .font(.rounded(15, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if let onRoute, assigning == nil {
+                Button {
+                    onRoute(address.point, address.title)
+                    dismiss()
+                } label: {
+                    Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
+                        .font(.rounded(24))
+                        .foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
     // MARK: - Результаты поиска
 
     @ViewBuilder private var resultsSection: some View {
@@ -255,7 +345,7 @@ struct SearchView: View {
                 }
             }
             .listRowBackground(Theme.surface)
-        } else if !model.query.isEmpty, model.answered {
+        } else if !model.query.isEmpty, model.answered, model.mine.isEmpty {
             // Пустой список без единого слова читается как зависшее
             // приложение: человек ждёт результата, которого уже не будет.
             Section {
@@ -263,7 +353,8 @@ struct SearchView: View {
                     Text("Ничего не найдено")
                         .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.textPrimary)
-                    Text("Попробуйте название улицы или ближайший ориентир.")
+                    Text("Попробуйте название улицы или ближайший ориентир. "
+                         + "Свои адреса ищутся и без сети — «улица, номер».")
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textSecondary)
                 }

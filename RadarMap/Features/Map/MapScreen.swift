@@ -763,7 +763,27 @@ struct MapScreen: View {
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else if !controlsHidden {
-                    if env.route.isBuilding {
+                    // ОДНА плашка, а не четыре разом.
+                    //
+                    // Каждая заводилась по своей причине и права по
+                    // отдельности; вместе они делили внимание на четыре — за
+                    // рулём, где на взгляд есть доля секунды. Приоритет
+                    // считается один раз (BottomHint.choose) и не
+                    // оспаривается: требующее решения старше сообщающего.
+                    switch BottomHint.choose(
+                        routeError: env.route.errorMessage,
+                        isBuilding: env.route.isBuilding,
+                        tripActive: env.location.isTripActive,
+                        speedKmh: env.location.speedKmh,
+                        speakThreshold: AppConfig.speakSpeedThresholdKmh,
+                        showsQuickDestinations: mode.showsQuickDestinations) {
+                    case .routeError(let error):
+                        Text(error)
+                            .font(.rounded(12, .medium)).foregroundStyle(Theme.danger)
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .onTapGesture { env.route.clear() }
+                    case .building:
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
                             Text("Строим маршрут…")
@@ -771,25 +791,20 @@ struct MapScreen: View {
                         }
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .background(.ultraThinMaterial, in: Capsule())
-                    }
-                    if let error = env.route.errorMessage {
-                        Text(error)
-                            .font(.rounded(12, .medium)).foregroundStyle(Theme.danger)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .onTapGesture { env.route.clear() }
-                    }
-                    // Отдельная вью: условие читает скорость (каждый тик GPS).
-                    DrivingHintChip()
-                    // Куда поедем — одной строкой и только когда есть уверенная
-                    // догадка. Два круга Дом/Работа стояли здесь всегда, и
-                    // незаданные выглядели невыполненным заданием от приложения
-                    // человеку; распорядок оно знает само (FrequentPlaces).
-                    if mode.showsQuickDestinations {
+                    case .driving:
+                        DrivingHintChip()
+                    case .destinations:
+                        // Куда поедем — одной строкой и только когда есть
+                        // уверенная догадка. Два круга Дом/Работа стояли здесь
+                        // всегда, и незаданные выглядели невыполненным
+                        // заданием от приложения человеку; распорядок оно
+                        // знает само (FrequentPlaces).
                         DestinationSuggestionBar { coordinate, name in
                             buildRoute(to: coordinate, name: name)
                         }
                         tripButton
+                    case .none:
+                        EmptyView()
                     }
                 }
                 if mode.showsActionBar, !controlsHidden {

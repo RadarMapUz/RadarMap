@@ -241,6 +241,21 @@ enum MapAppearance: String, CaseIterable, Identifiable {
         case .light: return String(localized: "Светлая")
         }
     }
+
+    /// День ли сейчас. Одна ручка на подложку карты И на схему приборки.
+    ///
+    /// Вторая настройка «а теперь для схемы» была бы вопросом, ответ на
+    /// который человек уже дал: он выбирает не тему карты, а как ему видно.
+    /// Ручной выбор старше автоматики — та же иерархия, что у тишины и у вида
+    /// на CarPlay.
+    func isDaylight(at coordinate: CLLocationCoordinate2D?,
+                    now: Date = Date()) -> Bool {
+        switch self {
+        case .dark:  return false
+        case .light: return true
+        case .auto:  return Sun.isDaytime(at: coordinate, now: now)
+        }
+    }
 }
 
 /// Профиль оповещений — одна строка вместо четырёх перечислений.

@@ -48,6 +48,18 @@ fi
 "${SSH[@]}" "$HOST" "mkdir -p $STATIC"
 "${SCP[@]}" "$DIR/static/moderate.js" "$HOST:$STATIC/moderate.js"
 "${SCP[@]}" "$DIR/static/editor.js" "$HOST:$STATIC/editor.js"
+# Панель на MapLibre — рядом с рабочей, за адресом /editor-gl. Библиотека
+# лежит своим файлом: CSP страницы запрещает чужие источники скриптов, и это
+# не формальность — на этой странице сессия модератора.
+"${SSH[@]}" "$HOST" "mkdir -p $STATIC/vendor"
+"${SCP[@]}" "$DIR/static/editor_gl.js" "$HOST:$STATIC/editor_gl.js"
+"${SCP[@]}" "$DIR/static/vendor/maplibre-gl.js" "$HOST:$STATIC/vendor/maplibre-gl.js"
+"${SCP[@]}" "$DIR/static/vendor/maplibre-gl.css" "$HOST:$STATIC/vendor/maplibre-gl.css"
+# Глифы подписей: три диапазона из трёхсот килобайт — латиница, латиница с
+# диакритикой (в узбекских названиях есть oʻ и gʻ) и кириллица. Чужой сервис
+# глифов подключается одной строкой и роняет карту модератора вместе с собой.
+"${SSH[@]}" "$HOST" "mkdir -p $STATIC/vendor/glyphs"
+"${SCP[@]}" "$DIR/static/vendor/glyphs/"*.pbf "$HOST:$STATIC/vendor/glyphs/"
 
 echo "→ Проверка синтаксиса, подмена, рестарт…"
 # ВАЖНО: проверять надо ТОЙ ЖЕ версией Python, что стоит на сервере, и падать

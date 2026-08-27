@@ -22,6 +22,8 @@ postgres, minio, prometheus, outline. Всё, что мы делаем, долж
 | Бэкапы | `/opt/radarmap/backups`, 7 последних, cron 03:17 |
 | Сторож | `/opt/radarmap/healthcheck.sh`, cron каждые 5 мин |
 | Дороги, кандидат | `/opt/radarmap/update_roads.sh`, cron вс 04:17 — свежий OSM, сборка, отчёт; НЕ публикует |
+| Установка конвейера | `bash server/install_roads_pipeline.sh [--run] [--swap] [--status]` — сборщик, недельный скрипт, крон, подкачка |
+| Кандидаты нейросети | `bash server/fetch_candidates.sh` — руками и редко; в панели клавиша `C`. В индекс НЕ входят |
 | Дороги, публикация | `publish_roads.sh --auto` на маке владельца, launchd вс 10:00 — ворота, подпись, выкладка |
 | Дороги, откат | `bash server/rollback_roads.sh` — вернуть прошлый набор из `roads_prev` |
 | Логи | `/var/log/radarmap-{backup,health}.log`, `journalctl -u radarmap-api` |

@@ -39,6 +39,7 @@ import hmac
 import os
 import secrets
 import time
+from urllib.parse import quote, unquote
 
 CONFIG_PATH = os.environ.get("RADARMAP_ADMIN_CONF", "/opt/radarmap/admin.conf")
 
@@ -89,13 +90,89 @@ def write_password(password, path=None):
     config = read_config(path)
     config["password_hash"] = hash_password(password)
     config["session_secret"] = secrets.token_urlsafe(32)
-    body = "".join(f"{key}={value}\n" for key, value in sorted(config.items()))
     # Права до записи содержимого: между созданием файла и chmod не должно быть
     # окна, в котором хэш лежит доступным всем.
+    _write_config(config, path)
+    return path
+
+
+# --------------------------------------------------------------------------
+# Люди
+# --------------------------------------------------------------------------
+#
+# Учётная запись перестала быть одна, и это не про удобство. Журнал панели
+# пишет «edit-withdraw #5», а на вопрос «кто снял» ответить было нечем: пароль
+# один, значит все действия одинаковы и безымянны. Пока модератор один, это
+# терпимо; на втором человеке становится дырой — снятую чужую правку не
+# отличить от своей.
+#
+# Формат прежний, KEY=VALUE: `user_иван=scrypt$...`. Старый `password_hash`
+# остаётся и работает как учётная запись владельца — иначе обновление панели
+# выкинуло бы из неё единственного человека.
+
+OWNER = "владелец"
+
+
+def accounts(config=None):
+    """Кто может войти → {имя: хэш}. Пусто — панель ещё не настроена."""
+    config = config if config is not None else read_config()
+    out = {}
+    legacy = config.get("password_hash")
+    if legacy:
+        out[OWNER] = legacy
+    for key, value in config.items():
+        if key.startswith("user_") and len(key) > 5 and value:
+            out[key[5:]] = value
+    return out
+
+
+def who_signs_in(name, password, config=None):
+    """Проверить имя и пароль → имя вошедшего или None.
+
+    Пустое имя — вход владельца: так входили до появления имён, и ломать это
+    ради формы нельзя.
+
+    Перебираем ВСЕ записи, даже когда имя не найдено: ранний выход отвечал бы
+    заметно быстрее на несуществующее имя, и по времени ответа список людей
+    вычитывался бы снаружи.
+    """
+    people = accounts(config)
+    if not people:
+        return None
+    wanted = (name or "").strip() or OWNER
+    matched = None
+    for account, stored in sorted(people.items()):
+        if check_password(password, stored) and account == wanted:
+            matched = account
+    return matched
+
+
+def write_account(name, password, path=None):
+    """Завести или сменить пароль человека."""
+    name = (name or "").strip()
+    if not name or "=" in name or name == OWNER:
+        raise ValueError("имя пустое, с «=» или занято владельцем")
+    path = path or CONFIG_PATH
+    config = read_config(path)
+    config[f"user_{name}"] = hash_password(password)
+    _write_config(config, path)
+    return path
+
+
+def drop_account(name, path=None):
+    path = path or CONFIG_PATH
+    config = read_config(path)
+    if config.pop(f"user_{(name or '').strip()}", None) is None:
+        return False
+    _write_config(config, path)
+    return True
+
+
+def _write_config(config, path):
+    body = "".join(f"{key}={value}\n" for key, value in sorted(config.items()))
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         handle.write(body)
-    return path
 
 
 # --------------------------------------------------------------------------
@@ -168,9 +245,20 @@ class Sessions:
     def _sign(self, payload):
         return hmac.new(self._key(), payload.encode(), hashlib.sha256).hexdigest()[:32]
 
-    def issue(self, now=None):
+    def issue(self, now=None, name=""):
+        """Кука несёт срок И ИМЯ вошедшего.
+
+        Имя внутри подписи, а не рядом с ней: иначе его можно было бы
+        подменить в браузере и подписать чужие действия чужим именем — то
+        есть ровно сломать то, ради чего имена и заводились.
+        """
         now = now if now is not None else time.time()
         payload = str(int(now + self.ttl))
+        if name:
+            # Имя в куке — ПРОЦЕНТНЫМ кодированием. Заголовки HTTP это
+            # latin-1, и кириллическое имя роняло весь ответ на входе: человек
+            # вводил верный пароль и получал оборванное соединение.
+            payload += "|" + quote(name, safe="")
         return payload + "." + self._sign(payload)
 
     def valid(self, token, now=None):
@@ -182,10 +270,19 @@ class Sessions:
         # веры содержимому куки до проверки.
         if not hmac.compare_digest(self._sign(payload), signature):
             return False
+        expiry, _, _name = payload.partition("|")
         try:
-            return int(payload) > now
+            return int(expiry) > now
         except ValueError:
             return False
+
+    def name_of(self, token):
+        """Кто вошёл по этой куке. Пусто — кука без имени, то есть выданная
+        до появления учётных записей: такой человек и есть владелец."""
+        if not self.valid(token):
+            return ""
+        payload = token.partition(".")[0]
+        return unquote(payload.partition("|")[2])
 
     def drop(self, token=None):
         """Выход: перевыпускаем секрет, и все выданные куки перестают сходиться.

@@ -81,7 +81,11 @@ struct CameraAnnotationView: View {
             .fill(camera.kind.tint.opacity(isGhost ? 0.45 : 1))
             .frame(width: size, height: size)
             .overlay(pinShape.stroke(.white.opacity(0.75), lineWidth: 1))
-            .frame(width: 30, height: 30)       // тап-мишень больше самой точки
+            // Тап-мишень больше самой точки, и не на глаз: 44 pt — размер
+            // подушечки пальца. По камере тыкают НА ХОДУ, из держателя, и
+            // тридцать точек здесь означали промах через раз — по объекту,
+            // ради которого приложение и существует.
+            .frame(width: 44, height: 44)
             .contentShape(Circle())
     }
 

@@ -7,7 +7,11 @@
 решение человека, и подменять его удобством нельзя: правка, снятая молча, не
 оставит следа, по которому через полгода можно было бы понять, что случилось.
 """
+import json
+import os
+import shutil
 import sqlite3
+import tempfile
 import unittest
 
 import map_edits
@@ -290,3 +294,84 @@ class SweepTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class IdentityReconcileTests(unittest.TestCase):
+    """Сверка по id из OSM.
+
+    Смысл опоры — снять из очереди то, что не двигалось. До неё в «пересажены,
+    стоит посмотреть» падало всё, что шевельнулось хоть на метр, и очередь
+    росла пропорционально числу правок.
+
+    Порядок обязателен: отпечаток → id → геометрия. Id не заменяет
+    геометрический поиск, а предшествует ему, и его исчезновение возвращает
+    ровно прежнее поведение.
+    """
+
+    def setUp(self):
+        self.work = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.work, True)
+
+    def identities(self, rows):
+        row = int((41.30 + 90) / map_edits.TILE_DEGREES_V1)
+        column = int((69.25 + 180) / map_edits.TILE_DEGREES_V1)
+        with open(os.path.join(self.work, f"ids_{row}_{column}.json"),
+                  "w", encoding="utf-8") as handle:
+            json.dump({"version": 1, "roads": rows}, handle)
+
+    def road(self, lat=41.30, lon=69.25):
+        return {"cls": 3, "flags": 0, "name": "Навои",
+                "points": [(lon, lat), (lon, lat + 0.002)]}
+
+    def edit(self, osm_id=None, lat=41.30, lon=69.25):
+        anchor = {"cls": 3, "name": "Навои", "bearing": 0.0, "atNode": False}
+        if osm_id:
+            anchor["osmId"] = osm_id
+        return {"kind": "lanes", "raw": [lon, lat], "geom": [lon, lat],
+                "anchor": anchor, "props": {}, "fingerprint": None}
+
+    def test_road_that_did_not_move_stays_out_of_the_queue(self):
+        self.identities([["w1", round(41.30 * 1e5), round(69.25 * 1e5), 0.0, 3]])
+        verdict, point, shift = osm_queue.reconcile(
+            self.edit("w1"), [self.road()], (), self.work)
+        self.assertEqual(verdict, osm_queue.KEEP)
+        self.assertIsNone(point)
+
+    def test_small_move_is_resettled_silently_by_id(self):
+        self.identities([["w1", round(41.3001 * 1e5), round(69.25 * 1e5), 0.0, 3]])
+        verdict, point, shift = osm_queue.reconcile(
+            self.edit("w1"), [self.road()], (), self.work)
+        self.assertEqual(verdict, osm_queue.RESETTLED)
+        self.assertIsNotNone(point)
+        self.assertGreater(shift, 0)
+
+    def test_big_move_with_the_same_id_asks_a_human(self):
+        # Дорога с тем же id уехала дальше, чем бывает от правки геометрии.
+        self.identities([["w1", round(41.303 * 1e5), round(69.25 * 1e5), 0.0, 3]])
+        verdict, _, shift = osm_queue.reconcile(
+            self.edit("w1"), [self.road()], (), self.work)
+        self.assertEqual(verdict, osm_queue.CHECK)
+        self.assertGreater(shift, osm_queue.SILENT_METERS)
+
+    def test_vanished_id_falls_back_to_geometry(self):
+        # Способ разрезали или удалили — работает прежний путь, а не «потеряла
+        # опору».
+        self.identities([["w999", round(41.30 * 1e5), round(69.25 * 1e5), 0.0, 3]])
+        verdict, _, _ = osm_queue.reconcile(
+            self.edit("w1"), [self.road()], (), self.work)
+        self.assertIn(verdict, (osm_queue.KEEP, osm_queue.RESETTLED))
+
+    def test_without_identity_files_nothing_changes(self):
+        # Экстракт без -u type_id: опоры нет, всё работает как раньше.
+        verdict, _, _ = osm_queue.reconcile(
+            self.edit("w1"), [self.road()], (), self.work)
+        self.assertIn(verdict, (osm_queue.KEEP, osm_queue.RESETTLED))
+
+    def test_marked_area_still_wins_over_the_identity(self):
+        # Внутри размеченной области автоматика не двигает НИЧЕГО, даже когда
+        # уверена: там разбирались руками.
+        self.identities([["w1", round(41.3001 * 1e5), round(69.25 * 1e5), 0.0, 3]])
+        verdict, point, shift = osm_queue.reconcile(
+            self.edit("w1"), [self.road()], [((69.25, 41.30), 150.0)], self.work)
+        self.assertEqual(verdict, osm_queue.LOCKED)
+        self.assertIsNone(point)
+

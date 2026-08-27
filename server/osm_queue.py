@@ -38,7 +38,7 @@ CHECK_METERS = 15.0
 CAUGHT_UP_METERS = 20.0
 
 
-def reconcile(edit, roads, areas=()):
+def reconcile(edit, roads, areas=(), tiles_dir=None):
     """Что делать с одной правкой после пересборки → (решение, точка, сдвиг).
 
     Точка — куда пересадить; None означает «не двигаем».
@@ -58,6 +58,31 @@ def reconcile(edit, roads, areas=()):
     if edit.get("fingerprint") and \
             edit["fingerprint"] == map_edits.fingerprint(origin, roads):
         return KEEP, None, 0.0
+
+    # Опора на id из OSM — ПЕРЕД геометрией и после отпечатка.
+    #
+    # Id способа меняется, когда способ разрезали или удалили, а не когда
+    # подвинули точку. Значит в большинстве случаев он отвечает на «та же ли
+    # это дорога» точно, там где геометрический поиск отвечает похоже — и
+    # каждую неделю кладёт в очередь «посмотрите» то, что не двигалось.
+    #
+    # Не заменяет геометрию, а предшествует ей: id исчез — работает прежний
+    # путь, и это ровно то поведение, которое было до появления опоры.
+    anchor = edit.get("anchor") or {}
+    if tiles_dir and anchor.get("osmId"):
+        moved = map_edits.identity_place(tiles_dir, anchor["osmId"], origin)
+        if moved is not None:
+            shift = map_edits.meters_between(origin, moved)
+            if areas and map_edits.inside_lock(origin, areas):
+                return ((LOCKED, None, shift) if shift > SILENT_METERS
+                        else (KEEP, None, 0.0))
+            if shift <= SILENT_METERS:
+                return KEEP, None, shift
+            if shift <= CHECK_METERS:
+                return RESETTLED, list(moved), shift
+            # Дорога с тем же id уехала дальше, чем бывает от правки геометрии.
+            # Это уже не «подвинули точку», и решать должен человек.
+            return CHECK, list(moved), shift
 
     result = map_edits.snap(origin, roads)
     if not result.on_road:
@@ -80,6 +105,41 @@ def reconcile(edit, roads, areas=()):
     if shift <= CHECK_METERS:
         return CHECK, list(result.point), shift
     return LOST, None, shift
+
+
+def place_of(edit, roads):
+    """Где эта правка — словами. Пусто, если сказать нечем.
+
+    Строка очереди обязана отвечать сама. «#5 Своя геометрия» не говорит ни
+    где это, ни что там: чтобы понять, приходилось уходить на карту и
+    возвращаться — на каждой строке.
+
+    Имя берём у ближайшей дороги, а если его нет (в тайле имя есть примерно у
+    одной дороги из семи) — направление и класс, как в очереди работы. «Класс
+    3 с юга на север» — не адрес, но по нему место узнаётся, а по номеру
+    правки не узнаётся ничего.
+    """
+    raw = edit.get("raw") or edit.get("geom") or []
+    if len(raw) < 2 or isinstance(raw[0], (list, tuple)):
+        raw = raw[0] if raw and isinstance(raw[0], (list, tuple)) else raw
+    if len(raw) < 2:
+        return ""
+    try:
+        origin = (float(raw[0]), float(raw[1]))
+    except (TypeError, ValueError):
+        return ""
+    result = map_edits.snap(origin, roads)
+    road = result.road
+    if road is None:
+        anchor = edit.get("anchor") or {}
+        return anchor.get("name") or ""
+    name = (road.get("name") or "").strip()
+    if name:
+        return name
+    points = road.get("points") or []
+    if len(points) < 2:
+        return ""
+    return f'класс {road.get("cls", "?")} · {map_edits.heading_words(points)}'
 
 
 def caught_up(edit, roads, meters=CAUGHT_UP_METERS):
@@ -137,9 +197,9 @@ def sweep(conn, roads=None, tiles_dir=None):
             out.append({"edit": edit, "verdict": CAUGHT_UP, "point": None,
                         "shift": 0.0})
             continue
-        verdict, point, shift = reconcile(edit, near, areas)
+        verdict, point, shift = reconcile(edit, near, areas, tiles_dir)
         out.append({"edit": edit, "verdict": verdict, "point": point,
-                    "shift": round(shift, 1)})
+                    "shift": round(shift, 1), "place": place_of(edit, near)})
     return out
 
 

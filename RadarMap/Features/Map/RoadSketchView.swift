@@ -74,13 +74,26 @@ struct RoadSketchView: View {
                 world(side: side, k: k)
                     .position(pivot)
                 vignette
-                if !state.hasCourse {
+                if cursor.isAway {
+                    // Машина ушла за край. Стрелка «я», которой не видно, хуже
+                    // отсутствующей: вместо неё по краю показываем, В КАКУЮ
+                    // СТОРОНУ осталась машина.
+                    //
+                    // Проверяется ПЕРВЫМ, раньше курса. Указатель считается от
+                    // прижатия к краю, а не от направления движения, — значит
+                    // верен и до первого фикса курса. Точка «я», прижатая к
+                    // краю на его месте, утверждала бы «машина здесь»: ровно
+                    // та ложь, против которой заведён весь осмотр.
+                    MeAway(scale: strokeScale, angle: cursor.angle)
+                        .frame(width: 30 * strokeScale, height: 30 * strokeScale)
+                        .position(cursor.point)
+                } else if !state.hasCourse {
                     // Курса нет: ни стрелки, ни конуса — оба обещали бы
                     // направление, которого мы не знаем.
                     MeDot(scale: strokeScale)
                         .frame(width: 22 * strokeScale, height: 22 * strokeScale)
                         .position(cursor.point)
-                } else if !cursor.isAway {
+                } else {
                     ViewCone(scale: strokeScale)
                         .frame(width: 92 * strokeScale, height: 170 * strokeScale)
                         .position(x: cursor.point.x,
@@ -88,13 +101,6 @@ struct RoadSketchView: View {
                         .allowsHitTesting(false)
                     MeCursor(scale: strokeScale)
                         .frame(width: 34 * strokeScale, height: 40 * strokeScale)
-                        .position(cursor.point)
-                } else {
-                    // Машина ушла за край. Стрелка «я», которой не видно, хуже
-                    // отсутствующей: вместо неё по краю показываем, В КАКУЮ
-                    // СТОРОНУ осталась машина.
-                    MeAway(scale: strokeScale, angle: cursor.angle)
-                        .frame(width: 30 * strokeScale, height: 30 * strokeScale)
                         .position(cursor.point)
                 }
                 laneBubble

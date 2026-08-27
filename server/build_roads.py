@@ -706,6 +706,131 @@ def tile_keys_of(points, degrees=TILE_DEGREES):
     return {tile_key(lat, lon, degrees) for lon, lat in points}
 
 
+def tile_box_of(key, degrees=TILE_DEGREES):
+    """Кусок земли тайла по его ключу → (юг, запад, север, восток)."""
+    row, column = (int(part) for part in key.split("_"))
+    south = row * degrees - 90
+    west = column * degrees - 180
+    return (south, west, south + degrees, west + degrees)
+
+
+def clip_ring(points, box, margin):
+    """Обрезать замкнутое кольцо по прямоугольнику тайла. Сазерленд — Ходжман.
+
+    Раньше объект, задевший несколько тайлов, попадал в каждый ЦЕЛИКОМ: «дубль
+    на границе дешевле, чем склейка на клиенте». Для улицы это верно — у неё
+    десяток вершин. Для озера это неверно на два порядка.
+
+    Замерено на боевом экстракте: озеро Хайдаркуль после упрощения — 12 734
+    вершины и 103 тайла, то есть 1,3 миллиона копий вершин ради одного
+    объекта. Все крупные кольца страны вместе дают 2,4 миллиона копий: тайл у
+    берега вёз 180 КБ контура, которого на нём не видно.
+
+    Отсечение выпуклым прямоугольником — ровно тот случай, где Сазерленд —
+    Ходжман точен и не требует ничего сверх четырёх проходов.
+    """
+    south, west, north, east = box
+    south -= margin; west -= margin; north += margin; east += margin
+    edges = (
+        lambda p: p[0] >= west,   # слева
+        lambda p: p[0] <= east,
+        lambda p: p[1] >= south,
+        lambda p: p[1] <= north,
+    )
+    cuts = (
+        lambda a, bb: _cross_x(a, bb, west),
+        lambda a, bb: _cross_x(a, bb, east),
+        lambda a, bb: _cross_y(a, bb, south),
+        lambda a, bb: _cross_y(a, bb, north),
+    )
+    out = list(points)
+    if out and out[0] == out[-1]:
+        out = out[:-1]
+    for inside, cut in zip(edges, cuts):
+        if not out:
+            return []
+        clipped = []
+        for i, point in enumerate(out):
+            before = out[i - 1]
+            if inside(point):
+                if not inside(before):
+                    clipped.append(cut(before, point))
+                clipped.append(point)
+            elif inside(before):
+                clipped.append(cut(before, point))
+        out = clipped
+    if len(out) < 3:
+        return []
+    out.append(out[0])
+    return out
+
+
+def clip_line(points, box, margin):
+    """Обрезать НЕЗАМКНУТУЮ ломаную по тайлу → список кусков.
+
+    Кусков может быть несколько: река входит в тайл, выходит и возвращается.
+    Склеивать их обратно нельзя — получилась бы хорда через чужую землю.
+    """
+    south, west, north, east = box
+    south -= margin; west -= margin; north += margin; east += margin
+    inside = lambda p: west <= p[0] <= east and south <= p[1] <= north
+    out, piece = [], []
+    for i in range(1, len(points)):
+        part = _clip_segment(points[i - 1], points[i], south, west, north, east)
+        if part is None:
+            if len(piece) > 1:
+                out.append(piece)
+            piece = []
+            continue
+        start, end = part
+        if not piece:
+            piece = [start, end]
+        elif piece[-1] == start:
+            piece.append(end)
+        else:
+            if len(piece) > 1:
+                out.append(piece)
+            piece = [start, end]
+    if len(piece) > 1:
+        out.append(piece)
+    return out
+
+
+def _cross_x(one, two, x):
+    share = (x - one[0]) / (two[0] - one[0]) if two[0] != one[0] else 0.0
+    return (x, one[1] + (two[1] - one[1]) * share)
+
+
+def _cross_y(one, two, y):
+    share = (y - one[1]) / (two[1] - one[1]) if two[1] != one[1] else 0.0
+    return (one[0] + (two[0] - one[0]) * share, y)
+
+
+def _clip_segment(one, two, south, west, north, east):
+    """Отрезок внутри рамки → (начало, конец). None — не задевает."""
+    dx, dy = two[0] - one[0], two[1] - one[1]
+    low, high = 0.0, 1.0
+    for edge, delta in ((west - one[0], dx), (one[0] - east, -dx),
+                        (south - one[1], dy), (one[1] - north, -dy)):
+        if delta == 0:
+            if edge > 0:
+                return None
+            continue
+        step = edge / delta
+        if delta > 0:
+            if step > high:
+                return None
+            low = max(low, step)
+        else:
+            if step < low:
+                return None
+            high = min(high, step)
+    if low > high:
+        return None
+    return ((one[0] + dx * low, one[1] + dy * low),
+            (one[0] + dx * high, one[1] + dy * high))
+
+
 def perpendicular_distance(point, start, end):
     """Расстояние от точки до отрезка в градусах, с поправкой на широту."""
     lat_scale = math.cos(math.radians(point[1]))
@@ -1837,6 +1962,11 @@ SET_POINTS, SET_POINTS_FAR = "p", "q"
 # Ранг в коде записи, как класс у дороги: по нему клиент решает, с какого
 # охвата подписывать. Город виден с охвата области, кишлак — с районного;
 # показать всё сразу значит закрыть карту словами.
+# Крупным считается кольцо, которое НЕ влезает в тайл целиком по числу
+# вершин. Мелочь режется впустую: она и так лежит в одном-двух тайлах, а
+# отсечение стоило бы дороже переноса.
+BIG_AREA_POINTS = 64
+
 SET_PLACES = "n"
 PLACE_RANKS = {"city": 1, "town": 2, "village": 3, "hamlet": 4,
                "suburb": 5, "neighbourhood": 6}
@@ -3323,11 +3453,39 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
             out.append(entry)
         return out
 
-    def tile(items, step):
+    def tile(items, step, clip=False):
         by_key = defaultdict(list)
         for road in items:
             for key in tile_keys_of(road[2], step):
                 by_key[key].append(road)
+        if not clip:
+            return by_key
+        # Крупную местность режем ПО ТАЙЛУ, а не возим целиком.
+        #
+        # Правило «дубль на границе дешевле склейки» верно для улицы с
+        # десятком вершин и неверно для озера с двенадцатью тысячами: замерено
+        # на боевом экстракте — 2,4 миллиона копий вершин у крупных колец, из
+        # них 1,3 миллиона у одного Хайдаркуля.
+        #
+        # Запас в пол-тайла: объект, обрезанный ровно по краю, на клиенте
+        # обнажает шов, а лишние полкилометра ничего не стоят.
+        margin = step / 2
+        for key, rows in by_key.items():
+            box = tile_box_of(key, step)
+            cut = []
+            for row in rows:
+                if len(row[2]) < BIG_AREA_POINTS:
+                    cut.append(row)
+                    continue
+                closed = bool(row[1] & AREA_FLAG_CLOSED)
+                if closed:
+                    ring = clip_ring(row[2], box, margin)
+                    if len(ring) >= 4:
+                        cut.append((row[0], row[1], ring) + tuple(row[3:]))
+                else:
+                    for piece in clip_line(row[2], box, margin):
+                        cut.append((row[0], row[1], piece) + tuple(row[3:]))
+            by_key[key] = cut
         return by_key
 
     # --- Старый формат: та же сетка 0.5°, один файл, всё вместе.
@@ -3373,7 +3531,9 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
         sets[SET_POINTS_FAR] = list(far_points)
     if places:
         sets[SET_PLACES] = list(places)
-    tiled = {name: tile(items, degrees) for name, items in sets.items()}
+    land = set(area_sets)
+    tiled = {name: tile(items, degrees, clip=name in land)
+             for name, items in sets.items()}
     index_v2 = {}
     # Дома и поверхность СВОИ ФАЙЛЫ УЖЕ НАПИСАЛИ и отдают только записи
     # индекса. Оба слоя в память не влезают: домов в стране 1 653 195, а

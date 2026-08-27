@@ -2858,3 +2858,88 @@ class PlaceSetTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as work:
             build_roads.write_tiles([road], work)
             self.assertFalse([n for n in os.listdir(work) if n.endswith("_n.json")])
+
+
+class ClipToTileTests(unittest.TestCase):
+    """Крупная местность режется ПО ТАЙЛУ, а не возится целиком.
+
+    Правило «дубль на границе дешевле склейки на клиенте» верно для улицы с
+    десятком вершин и неверно для озера с двенадцатью тысячами. Замерено на
+    боевом экстракте: 2,4 миллиона копий вершин у крупных колец страны, из них
+    1,3 миллиона — у одного Хайдаркуля (12 734 вершины × 103 тайла). Тайл у
+    берега вёз 180 КБ контура, которого на нём не видно.
+    """
+
+    BOX = (41.30, 69.25, 41.35, 69.30)      # юг, запад, север, восток
+
+    def ring(self, south, west, north, east, step=0.001):
+        """Прямоугольное кольцо с частыми вершинами — «крупный» объект."""
+        out = []
+        lon = west
+        while lon < east:
+            out.append((lon, south)); lon += step
+        lat = south
+        while lat < north:
+            out.append((east, lat)); lat += step
+        lon = east
+        while lon > west:
+            out.append((lon, north)); lon -= step
+        lat = north
+        while lat > south:
+            out.append((west, lat)); lat -= step
+        out.append(out[0])
+        return out
+
+    def test_a_lake_bigger_than_the_tile_is_cut_down(self):
+        huge = self.ring(41.0, 69.0, 41.6, 69.6)
+        cut = build_roads.clip_ring(huge, self.BOX, 0.025)
+        self.assertTrue(cut, "кольцо исчезло целиком")
+        self.assertLess(len(cut), len(huge) // 4,
+                        "обрезка не уменьшила кольцо")
+        for lon, lat in cut:
+            self.assertGreaterEqual(lat, self.BOX[0] - 0.026)
+            self.assertLessEqual(lat, self.BOX[2] + 0.026)
+            self.assertGreaterEqual(lon, self.BOX[1] - 0.026)
+            self.assertLessEqual(lon, self.BOX[3] + 0.026)
+
+    def test_the_ring_stays_closed(self):
+        cut = build_roads.clip_ring(self.ring(41.0, 69.0, 41.6, 69.6),
+                                    self.BOX, 0.025)
+        self.assertEqual(cut[0], cut[-1], "кольцо перестало быть кольцом")
+
+    def test_a_small_pond_survives_untouched(self):
+        pond = [(69.27, 41.31), (69.272, 41.31), (69.272, 41.312),
+                (69.27, 41.312), (69.27, 41.31)]
+        self.assertEqual(build_roads.clip_ring(pond, self.BOX, 0.025), pond)
+
+    def test_a_ring_outside_the_tile_disappears(self):
+        far = [(60.0, 30.0), (60.1, 30.0), (60.1, 30.1), (60.0, 30.0)]
+        self.assertEqual(build_roads.clip_ring(far, self.BOX, 0.025), [])
+
+    def test_a_river_returns_in_pieces(self):
+        # Река входит в тайл, выходит и возвращается — склеивать куски нельзя,
+        # получилась бы хорда через чужую землю.
+        river = [(69.20, 41.32), (69.28, 41.32), (69.40, 41.32),
+                 (69.40, 41.33), (69.28, 41.33), (69.20, 41.33)]
+        pieces = build_roads.clip_line(river, self.BOX, 0.0)
+        self.assertEqual(len(pieces), 2, "река склеилась в одну ломаную")
+        for piece in pieces:
+            for lon, lat in piece:
+                self.assertLessEqual(lon, self.BOX[3] + 1e-9)
+                self.assertGreaterEqual(lon, self.BOX[1] - 1e-9)
+
+    def test_tiles_get_only_their_own_share(self):
+        lake = (build_roads.AREA_WATER, build_roads.AREA_FLAG_CLOSED,
+                self.ring(41.0, 69.0, 41.6, 69.6))
+        road = (3, 0, [(69.25, 41.300), (69.25, 41.302)], "")
+        with tempfile.TemporaryDirectory() as work:
+            build_roads.write_tiles([road], work, areas=[lake])
+            water = [n for n in os.listdir(work) if n.endswith("_w.json")]
+            self.assertGreater(len(water), 4, "озеро легло в один тайл?")
+            whole = len(lake[2])
+            for name in water:
+                with open(os.path.join(work, name), encoding="utf-8") as handle:
+                    rows = json.load(handle)["roads"]
+                points = sum(len(row[2]) // 2 for row in rows)
+                self.assertLess(points, whole // 3,
+                                f"{name} везёт почти всё озеро целиком")

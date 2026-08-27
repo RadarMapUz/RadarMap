@@ -370,8 +370,18 @@ class TileSourceTests(unittest.TestCase):
                           "w", encoding="utf-8") as handle:
                     json.dump({"version": 1, "roads":
                                [[3, 0, [4_130_000, 6_925_000, 100, 0]]]}, handle)
-            loaded = map_edits.load_roads(work, -90, -180, 90, 180)
-            self.assertLessEqual(len(loaded), map_edits.MAX_TILES_PER_CALL)
+            report = {}
+            one = os.path.getsize(os.path.join(work, "tile_250_498.json"))
+            budget = one * 3 + 1
+            map_edits.load_roads(work, -90, -180, 90, 180,
+                                 limits={"bytes": budget, "class": 7,
+                                         "objects": None},
+                                 report=report)
+            # Мера — БАЙТЫ на разбор, а не число файлов: двадцать пять тайлов
+            # костяка дешевле одного тайла улиц центра, и запрещать их числом
+            # значило бы запрещать не то, что стоит денег.
+            self.assertLessEqual(report["bytes"], budget)
+            self.assertGreater(report["skipped"], 0)
 
     def test_roads_near_asks_for_a_frame_not_for_the_world(self):
         with tempfile.TemporaryDirectory() as work:
@@ -986,13 +996,23 @@ class FrameLimitTests(unittest.TestCase):
     def test_city_view_drops_the_small_roads(self):
         limits = map_edits.frame_limits(41.20, 69.10, 41.40, 69.40)
         self.assertLessEqual(limits["class"], 4)
-        self.assertGreater(limits["files"], 6, "на городе осталось шесть файлов")
 
-    def test_wider_view_never_reads_fewer_files(self):
-        spans = [0.005, 0.02, 0.08, 0.3, 2.0]
-        files = [map_edits.frame_limits(41.3, 69.2, 41.3 + s, 69.2 + s)["files"]
-                 for s in spans]
-        self.assertEqual(files, sorted(files), "потолок файлов не растёт с охватом")
+    def test_city_view_reads_the_skeleton_not_the_streets(self):
+        # Кадр города на наборе улиц — 134 файла и 3,7 МБ; он же костяком —
+        # 0,6 МБ. Костяк для дальнего плана и посчитан.
+        far = map_edits.frame_limits(41.0, 68.9, 41.6, 69.7, mpp=19.0)
+        self.assertEqual(far["sets"], ("f",))
+        self.assertTrue(far["skeleton"])
+        near = map_edits.frame_limits(41.310, 69.280, 41.315, 69.285, mpp=0.9)
+        self.assertEqual(near["sets"], ("s", "y"))
+        self.assertFalse(near["skeleton"])
+
+    def test_wider_view_never_gets_a_smaller_budget(self):
+        # Бюджет считаем в БАЙТАХ: файл — плохая мера работы, тайл костяка
+        # весит килобайт, а тайл улиц центра — сто тридцать три.
+        budget = [map_edits.frame_limits(41.3, 69.2, 41.4, 69.3, mpp=m)["bytes"]
+                  for m in (0.5, 2.0, 6.0, 12.0, 40.0)]
+        self.assertEqual(budget, sorted(budget), "бюджет не растёт с масштабом")
 
     def test_object_ceiling_holds_at_every_span(self):
         for span in (0.005, 0.02, 0.08, 0.3, 2.0):
@@ -1030,11 +1050,34 @@ class LimitReportTests(unittest.TestCase):
         for column in range(4985, 4989):
             self.tile(f"2626_{column}", [self.road(3)])
         report = {}
+        one = os.path.getsize(os.path.join(self.dir, "road2_2626_4985_s.json"))
         map_edits.load_roads(self.dir, 41.0, 69.0, 42.0, 70.0,
-                             limits={"files": 2, "class": 7, "objects": None},
+                             limits={"bytes": one * 2 + 1, "class": 7,
+                                     "objects": None},
                              report=report)
         self.assertEqual(report["files"], 2)
         self.assertEqual(report["skipped"], 2)
+        self.assertLessEqual(report["bytes"], one * 2 + 1)
+
+    def test_the_budget_drops_the_edges_and_keeps_the_middle(self):
+        # Прежний потолок брал ПЕРВЫЕ имена, а имена идут с юга на север:
+        # у модератора северная половина города просто не приезжала, ровным
+        # горизонтальным срезом. Если резать всё же придётся, теряем окраины.
+        for row in range(2620, 2633):
+            self.tile(f"{row}_4985", [self.road(3)])
+        one = os.path.getsize(os.path.join(self.dir, "road2_2620_4985_s.json"))
+        middle = {}
+        map_edits.load_roads(self.dir, 41.0, 69.2, 41.6, 69.3,
+                             limits={"bytes": one * 3 + 1, "class": 7,
+                                     "objects": None},
+                             report=middle)
+        self.assertEqual(middle["files"], 3)
+        self.assertGreater(middle["skipped"], 0)
+        # Середина кадра — 41.3, то есть ряды 2626 и соседние.
+        kept = map_edits.load_roads(self.dir, 41.29, 69.2, 41.31, 69.3,
+                                    limits={"bytes": one * 3 + 1, "class": 7,
+                                            "objects": None})
+        self.assertTrue(kept, "центр кадра остался пустым")
 
     def test_cut_keeps_the_biggest_roads(self):
         # Обрезать список с конца значило бы выкинуть половину города целиком;
@@ -1261,3 +1304,138 @@ class PanelShadowTests(unittest.TestCase):
                                       f"{start + offset}")
                         break
         self.assertEqual(deadly, [], "затенение убьёт кадр: " + "; ".join(deadly))
+
+
+class TileListingCacheTests(unittest.TestCase):
+    """Перечисление имён — тоже работа, и на боевом она была самой дорогой.
+
+    Каждый запрос делал sorted(os.listdir()) по каталогу с 82 496 файлами:
+    230 мс ещё до того, как открыт хоть один тайл. Набор воды из тысячи
+    объектов «стоил» столько же, сколько набор кварталов из пятнадцати тысяч —
+    вот по этому совпадению и нашлось.
+
+    Кэш обязан отпускать после публикации: подменённый каталог с новыми
+    тайлами, о котором панель не узнала, — это вчерашняя карта без единого
+    признака того, что она вчерашняя.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        map_edits._NAMES_CACHE.clear()
+
+    def write(self, name):
+        with open(os.path.join(self.dir, name), "w", encoding="utf-8") as handle:
+            json.dump({"version": 2, "roads": [[3, 0, [4131000, 6928000, 10, 10]]]},
+                      handle)
+
+    def test_second_call_does_not_list_again(self):
+        self.write("road2_2626_4985_s.json")
+        first = map_edits._tile_names(self.dir)
+        calls = []
+        real = os.listdir
+
+        def counted(path):
+            calls.append(path)
+            return real(path)
+
+        os.listdir = counted
+        try:
+            again = map_edits._tile_names(self.dir)
+        finally:
+            os.listdir = real
+        self.assertEqual(first, again)
+        self.assertEqual(calls, [], "каталог перечитан впустую")
+
+    def test_publishing_new_tiles_is_noticed(self):
+        self.write("road2_2626_4985_s.json")
+        self.assertEqual(len(map_edits._tile_names(self.dir)), 1)
+        # Публикация меняет каталог — вместе с ним и его метку времени.
+        self.write("road2_2626_4986_s.json")
+        os.utime(self.dir, (0, 0))
+        self.assertEqual(len(map_edits._tile_names(self.dir)), 2,
+                         "панель не заметила новых тайлов")
+
+    def test_a_missing_directory_is_not_an_exception(self):
+        self.assertEqual(map_edits._tile_names(os.path.join(self.dir, "нет")), [])
+
+
+class AreaCeilingTests(unittest.TestCase):
+    """Потолок местности режет по размеру, а не по порядку файлов.
+
+    У дорог эту работу делает класс: проспект переживает прореживание, двор —
+    нет. У местности класса нет. Резать с конца списка нельзя: файлы идут по
+    порядку имён, то есть по земле, и с конца стирались бы целые области.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        map_edits._NAMES_CACHE.clear()
+
+    def tile(self, key, areas):
+        with open(os.path.join(self.dir, f"road2_{key}_g.json"), "w",
+                  encoding="utf-8") as handle:
+            json.dump({"version": 2, "roads": areas}, handle)
+
+    def patch(self, size):
+        # Квадрат со стороной size (в стотысячных градуса) от одной точки.
+        return [2, map_edits.AREA_CLOSED,
+                [4131000, 6928000, size, 0, 0, size, -size, 0]]
+
+    def test_the_biggest_survive(self):
+        self.tile("2626_4985", [self.patch(20), self.patch(4000), self.patch(50)])
+        kept = map_edits.load_areas(self.dir, 41.30, 69.27, 41.36, 69.33,
+                                    sets=("g",), objects=1)
+        self.assertEqual(len(kept), 1)
+        self.assertGreater(map_edits._area_extent(kept[0]), 0.01,
+                           "потолок оставил мелочь, а не крупное")
+
+    def test_no_ceiling_keeps_everything(self):
+        self.tile("2626_4985", [self.patch(20), self.patch(4000), self.patch(50)])
+        self.assertEqual(len(map_edits.load_areas(self.dir, 41.30, 69.27,
+                                                  41.36, 69.33, sets=("g",))), 3)
+
+    def test_sets_thin_out_with_the_scale(self):
+        # Полотно дорог на кадре города — 4,8 МБ ради ленты в полтора пикселя,
+        # поверх которой и так рисуется сама дорога.
+        self.assertIn("d", map_edits.area_sets(0.9))
+        self.assertNotIn("d", map_edits.area_sets(19.0))
+        self.assertNotIn("t", map_edits.area_sets(19.0))
+        self.assertIn("w", map_edits.area_sets(19.0), "вода нужна на любом охвате")
+
+
+class ThinPointsTests(unittest.TestCase):
+    """Вершины, ложащиеся в один пиксель, — это байты, которых не видно.
+
+    Порог держим в ОДИН пиксель. На двух уже видно, как скругляются углы
+    кварталов, а кольцо обязано остаться кольцом: заливка по двум точкам не
+    рисуется вовсе.
+    """
+
+    def ring(self, count):
+        return [[69.28 + i * 0.00001, 41.31] for i in range(count)]
+
+    def test_close_vertices_go(self):
+        # Шаг между вершинами — около метра; порог в пятьдесят.
+        kept = map_edits.thin_points(self.ring(60), 50)
+        self.assertLess(len(kept), 10)
+        self.assertGreaterEqual(len(kept), 3)
+
+    def test_the_ends_are_never_dropped(self):
+        points = self.ring(60)
+        kept = map_edits.thin_points(points, 50)
+        self.assertEqual(kept[0], points[0], "начало кольца потеряно")
+        self.assertEqual(kept[-1], points[-1], "замыкание кольца потеряно")
+
+    def test_a_triangle_survives_any_threshold(self):
+        triangle = [[69.28, 41.31], [69.2801, 41.31], [69.28, 41.3101]]
+        self.assertEqual(map_edits.thin_points(triangle, 10_000), triangle)
+
+    def test_sparse_geometry_is_left_alone(self):
+        wide = [[69.28, 41.31], [69.29, 41.31], [69.29, 41.32], [69.28, 41.32]]
+        self.assertEqual(map_edits.thin_points(wide, 5), wide)
+
+    def test_no_threshold_changes_nothing(self):
+        points = self.ring(60)
+        self.assertEqual(map_edits.thin_points(points, 0), points)

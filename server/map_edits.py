@@ -906,6 +906,51 @@ TILE_CACHE_SIZE = 2
 MAX_TILES_PER_CALL = 6
 
 
+# Список файлов каталога: считается один раз на публикацию.
+#
+# Каждый запрос делал sorted(os.listdir()) по каталогу тайлов, а там 82 496
+# файлов. Замерено на боевом: 230 мс на КАЖДЫЙ /api/roads и /api/areas ещё до
+# того, как открыт хоть один тайл — набор воды из тысячи объектов «стоил»
+# столько же, сколько набор кварталов из пятнадцати тысяч. Это была не
+# отрисовка и не разбор, это перечисление имён.
+#
+# Ключ — время правки каталога: публикация подменяет его целиком, и метка
+# меняется вместе с содержимым.
+_NAMES_CACHE = {}
+
+
+def _tile_names(tiles_dir):
+    """Имена файлов каталога, отсортированные. Кэш живёт до публикации."""
+    try:
+        stamp = os.stat(tiles_dir).st_mtime_ns
+    except OSError:
+        return []
+    known = _NAMES_CACHE.get(tiles_dir)
+    if known and known[0] == stamp:
+        return known[1]
+    names = sorted(os.listdir(tiles_dir))
+    _NAMES_CACHE[tiles_dir] = (stamp, names)
+    return names
+
+
+def _tile_gap(name, middle):
+    """Насколько тайл далёк от середины кадра. Порядок обхода, а не расстояние."""
+    box = _tile_box(name)
+    if box is None:
+        return float("inf")
+    lat = (box[0] + box[2]) / 2 - middle[0]
+    lon = (box[1] + box[3]) / 2 - middle[1]
+    return lat * lat + lon * lon
+
+
+def _tile_size(path):
+    """Вес файла в байтах. Ноль — файла нет: пусть его откроют и промолчат."""
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
+
+
 def _tile_box(name):
     """Кусок земли, лежащий в файле, по его ИМЕНИ → (юг, запад, север, восток).
 
@@ -979,11 +1024,33 @@ FRAME_LIMITS = (
 # сколько земли влезло в окно. На большом мониторе тот же зум даёт вдвое
 # больший охват, и панель прятала дворовые проезды на семнадцатом зуме — там,
 # где по ним и работают.
-MPP_LIMITS = (
-    (1.2, 6, 7, 12_000),      # виден дом и подъезд: всё, как есть
-    (4.0, 24, 6, 20_000),     # виден квартал: без служебных проездов
-    (20.0, 96, 4, 20_000),    # виден район: костяк и главные улицы
-    (float("inf"), 96, 3, 20_000),
+# Полосы подробности по МЕТРАМ НА ПИКСЕЛЬ, замеренные на боевых тайлах.
+#
+# Потолок по числу файлов отсюда убран, и это не послабление, а исправление
+# вранья. Файл — плохая мера работы: кадр города это 134 файла набора «s» и
+# 3,7 МБ, а тот же кадр костяком — 130 файлов и 0,6 МБ. Потолок в 96 файлов
+# резал кадр ГЕОГРАФИЧЕСКИ: файлы отбирались по имени, то есть с юга на
+# север, и северная половина города просто не приезжала. Модератор видел
+# лоскут посреди черноты и ровным горизонтальным срезом сверху.
+#
+# Мерим тем, что стоит денег: БАЙТАМИ на разбор. И набор выбираем по
+# масштабу, потому что костяк для дальнего плана и посчитан.
+#
+# Замерено на боевом сервере, окно 3000 пикселей:
+#
+#   кадр   м/пкс   набор s              набор f (костяк)
+#    6 км    2,0    6 ф / 0,7 МБ / 30 мс   6 ф / 0,1 МБ /  4 мс
+#   18 км    6,0   15 ф / 1,5 МБ / 59 мс  15 ф / 0,3 МБ /  9 мс
+#   33 км   11,0   36 ф / 2,3 МБ / 80 мс  36 ф / 0,4 МБ / 13 мс
+#   58 км   19,5  134 ф / 3,7 МБ / 249 мс 130 ф / 0,6 МБ / 51 мс
+#
+# Дальний план на костяке дешевле улиц в пять раз — и при этом ПОЛНЫЙ.
+SCALE_PLAN = (
+    # м/пиксель, наборы, класс не хуже, объектов, байт на разбор
+    (1.2, ("s", "y"), 7, 12_000, 8 << 20),   # дом и подъезд: всё, как есть
+    (4.0, ("s", "y"), 6, 20_000, 8 << 20),   # квартал: без служебных проездов
+    (8.0, ("s",), 5, 20_000, 8 << 20),       # район: улицы без дворов
+    (float("inf"), ("f",), 4, 40_000, 16 << 20),   # город и область: костяк
 )
 
 
@@ -996,16 +1063,20 @@ def frame_limits(south, west, north, east, span=None, mpp=None):
     «районным», и дворовые проезды пропадали ровно там, где по ним и работают.
     """
     if mpp is not None and mpp > 0:
-        for edge, files, worst_class, objects in MPP_LIMITS:
+        for edge, sets, worst_class, objects, budget in SCALE_PLAN:
             if mpp <= edge:
-                return {"files": files, "class": worst_class,
-                        "objects": objects}
+                return {"class": worst_class, "objects": objects,
+                        "sets": sets, "bytes": budget,
+                        "skeleton": sets == ("f",)}
     if span is None:
         span = max(north - south, east - west)
     for edge, files, worst_class, objects in FRAME_LIMITS:
         if span <= edge:
-            return {"files": files, "class": worst_class, "objects": objects}
-    return {"files": 96, "class": 3, "objects": 20_000}
+            return {"class": worst_class, "objects": objects,
+                    "sets": ("s", "y"), "bytes": files * (1 << 20),
+                    "skeleton": False}
+    return {"class": 3, "objects": 20_000, "sets": ("f",),
+            "bytes": 16 << 20, "skeleton": True}
 
 
 def load_roads(tiles_dir, south, west, north, east, sets=("s", "y"),
@@ -1024,7 +1095,7 @@ def load_roads(tiles_dir, south, west, north, east, sets=("s", "y"),
     """
     if not tiles_dir or not os.path.isdir(tiles_dir):
         return []
-    names = sorted(os.listdir(tiles_dir))
+    names = _tile_names(tiles_dir)
     has_v2 = any(name.startswith("road2_") for name in names)
 
     wanted = []
@@ -1052,9 +1123,23 @@ def load_roads(tiles_dir, south, west, north, east, sets=("s", "y"),
             continue
         wanted.append(name)
 
-    limits = limits or {"files": MAX_TILES_PER_CALL, "class": 7,
-                        "objects": None}
-    opened = wanted[:limits["files"]]
+    limits = limits or {"class": 7, "objects": None,
+                        "bytes": MAX_TILES_PER_CALL << 20}
+    # Отбираем по БАЙТАМ и от центра кадра наружу.
+    #
+    # Прежний потолок брал первые N имён, а имена идут с юга на север: кадр
+    # резался географически, и северная половина города просто не приезжала —
+    # ровным горизонтальным срезом. Если урезать всё же придётся, терять надо
+    # ОКРАИНЫ кадра, а не его половину.
+    opened, taken = [], 0
+    budget = limits.get("bytes") or (MAX_TILES_PER_CALL << 20)
+    middle = ((south + north) / 2, (west + east) / 2)
+    for name in sorted(wanted, key=lambda name: _tile_gap(name, middle)):
+        size = _tile_size(os.path.join(tiles_dir, name))
+        if opened and taken + size > budget:
+            continue
+        opened.append(name)
+        taken += size
     roads = []
     thinned = 0
     for name in opened:
@@ -1102,7 +1187,9 @@ def load_roads(tiles_dir, south, west, north, east, sets=("s", "y"),
         # нет дорог», и это худшая из возможных подписей под пустым экраном.
         report.update({"files": len(opened), "skipped": len(wanted) - len(opened),
                        "thinned": thinned, "cut": cut,
-                       "worstClass": limits["class"]})
+                       "worstClass": limits["class"],
+                       "bytes": taken,
+                       "skeleton": bool(limits.get("skeleton"))})
     return roads
 
 
@@ -1126,7 +1213,53 @@ SURFACE_CLASS_SHIFT = 1
 SURFACE_CLASS_MASK = 0b1111
 
 
-def load_areas(tiles_dir, south, west, north, east, sets=AREA_SETS):
+# Какая местность имеет смысл на этом масштабе — и сколько она весит.
+#
+# Замерено на боевом, окно 3000 пикселей. Тяжелее всего полотно дорог: кадр
+# города это 4,8 МБ набора «d» — ради ленты шириной в полтора пикселя, поверх
+# которой и так рисуется сама дорога. Тротуар шириной два метра на шести
+# метрах в пикселе — это треть пикселя.
+#
+#   кадр   м/пкс   b      d      g     r    t     w
+#    6 км    2,0   356 КБ 919 КБ  80    20  212    12
+#   18 км    6,0   824 КБ 2,0 МБ 121    36  295    28
+#   58 км   19,3   1,4 МБ 4,8 МБ 192    71  345   202
+# Потолок у местности СВОЙ, а не общий с дорогами.
+#
+# Замерено на боевых тайлах: дорога в ответе весит около 190 байт, площадной
+# объект — около 320. Общий потолок в 40 000 давал 12,5 МБ местности на кадр
+# страны, и это при том, что дорог там на два мегабайта.
+AREA_PLAN = (
+    # м/пиксель, наборы, объектов
+    (1.2, ("w", "g", "r", "b", "t", "h", "d"), 20_000),   # всё, как есть
+    (4.0, ("w", "g", "r", "b", "h", "d"), 20_000),        # без тротуаров
+    (8.0, ("w", "g", "r", "b", "h"), 16_000),   # без полотна: оно уже линия
+    (float("inf"), ("w", "g", "r", "b"), 12_000),   # вода, зелень, кварталы
+)
+
+
+def area_sets(mpp=None):
+    """Наборы местности для этого масштаба."""
+    if mpp is None or mpp <= 0:
+        return AREA_SETS
+    for edge, sets, _ in AREA_PLAN:
+        if mpp <= edge:
+            return sets
+    return AREA_PLAN[-1][1]
+
+
+def area_objects(mpp=None):
+    """Сколько площадных объектов имеет смысл слать на этом масштабе."""
+    if mpp is None or mpp <= 0:
+        return AREA_PLAN[0][2]
+    for edge, _, objects in AREA_PLAN:
+        if mpp <= edge:
+            return objects
+    return AREA_PLAN[-1][2]
+
+
+def load_areas(tiles_dir, south, west, north, east, sets=AREA_SETS,
+               budget=None, objects=None, keep=0):
     """Местность из тайлов: вода, зелень, рельсы, кварталы, тротуары, дома.
 
     Без неё панель показывает не схему, а чертёж: серые линии на чёрном. На
@@ -1141,12 +1274,16 @@ def load_areas(tiles_dir, south, west, north, east, sets=AREA_SETS):
     if not tiles_dir or not os.path.isdir(tiles_dir):
         return []
     out = []
-    # Потолок — НА КАЖДЫЙ НАБОР, а не на все вместе. Общий потолок в шесть
-    # файлов при шести наборах означал бы «по одному файлу на слой»: в рамке
-    # оказывались вода одного тайла и дома соседнего, а остальное молча
-    # пропадало.
-    opened = {}
-    for name in sorted(os.listdir(tiles_dir)):
+    # Бюджет — НА КАЖДЫЙ НАБОР, а не на все вместе: общий означал бы, что дома
+    # съедают его целиком и на воду с зеленью не остаётся ничего.
+    #
+    # Считаем в байтах, а не в файлах. Потолок в шесть файлов на набор резал
+    # кадр географически — и ровно так же, как у дорог: имена идут с юга на
+    # север, и северная часть местности не приезжала вовсе.
+    budget = budget or (MAX_TILES_PER_CALL << 20)
+    middle = ((south + north) / 2, (west + east) / 2)
+    wanted = []
+    for name in _tile_names(tiles_dir):
         if not name.startswith("road2_") or not name.endswith(".json"):
             continue
         body = name[len("road2_"):-len(".json")].rsplit("_", 1)
@@ -1157,9 +1294,17 @@ def load_areas(tiles_dir, south, west, north, east, sets=AREA_SETS):
             continue
         if box[0] > north or box[2] < south or box[1] > east or box[3] < west:
             continue
-        if opened.get(body[1], 0) >= MAX_TILES_PER_CALL:
+        wanted.append((name, body[1]))
+    taken = {}
+    opened = []
+    for name, kind_set in sorted(wanted, key=lambda pair: _tile_gap(pair[0], middle)):
+        size = _tile_size(os.path.join(tiles_dir, name))
+        if taken.get(kind_set) and taken[kind_set] + size > budget:
             continue
-        opened[body[1]] = opened.get(body[1], 0) + 1
+        taken[kind_set] = taken.get(kind_set, 0) + size
+        opened.append((name, kind_set))
+    for name, set_name in opened:
+        body = [None, set_name]
         kind = AREA_KINDS.get(body[1], 0)
         for area in _tile_roads(os.path.join(tiles_dir, name)):
             points = area["points"]
@@ -1175,7 +1320,61 @@ def load_areas(tiles_dir, south, west, north, east, sets=AREA_SETS):
                 if item["kind"] == AREA_ROAD:
                     item["road"] = (flags >> SURFACE_CLASS_SHIFT) & SURFACE_CLASS_MASK
             out.append(item)
+    # Потолок по числу объектов — по РАЗМЕРУ, самые крупные вперёд.
+    #
+    # У дорог эту роль играет класс: проспект переживает прореживание, двор —
+    # нет. У местности класса нет, и её мера — размах на местности: на охвате
+    # страны водохранилище обязано остаться, а двор в тридцать метров всё
+    # равно занял бы полпикселя.
+    #
+    # Замерено: кадр страны это 13 МБ местности и 17 415 объектов. Резать с
+    # конца списка значило бы стереть целые области — файлы идут по порядку
+    # имён, то есть по земле.
+    if objects and len(out) > objects:
+        out.sort(key=_area_extent, reverse=True)
+        del out[objects:]
+    if keep:
+        for item in out:
+            item["points"] = thin_points(item["points"], keep)
     return out
+
+
+def thin_points(points, step):
+    """Выкинуть вершины ближе `step` метров друг к другу.
+
+    На дальнем плане две соседние вершины ложатся в один пиксель, и разница
+    между ними — это байты, которых не видно. Порог держим в ОДИН пиксель:
+    больше — уже видно, как скругляются углы кварталов.
+
+    Замерено на кадре страны: 318 тысяч точек и 7,2 МБ превращаются в 235
+    тысяч и 5,5 МБ. Три вершины остаются всегда — иначе кольцо перестанет быть
+    кольцом и заливка исчезнет.
+    """
+    if step <= 0 or len(points) <= 3:
+        return points
+    out = [points[0]]
+    for point in points[1:-1]:
+        gap_x = (point[0] - out[-1][0]) * 111320 * 0.75
+        gap_y = (point[1] - out[-1][1]) * 111320
+        if gap_x * gap_x + gap_y * gap_y >= step * step:
+            out.append(point)
+    out.append(points[-1])
+    if len(out) < 3:
+        # Осталось два конца — добираем середину, а НЕ первые три точки.
+        # points[:3] выбрасывал последнюю вершину, то есть замыкание кольца:
+        # заливка после такого прореживания разъезжалась. Поймано тестом.
+        return [points[0], points[len(points) // 2], points[-1]]
+    return out
+
+
+def _area_extent(area):
+    """Наибольшая сторона объекта в градусах. Мера «видно ли его вообще»."""
+    points = area["points"]
+    if not points:
+        return 0.0
+    lons = [point[0] for point in points]
+    lats = [point[1] for point in points]
+    return max(max(lons) - min(lons), max(lats) - min(lats))
 
 
 def load_candidates(tiles_dir, south, west, north, east, limit=1200):
@@ -1192,7 +1391,7 @@ def load_candidates(tiles_dir, south, west, north, east, limit=1200):
     if not tiles_dir or not os.path.isdir(tiles_dir):
         return []
     out = []
-    for name in sorted(os.listdir(tiles_dir)):
+    for name in _tile_names(tiles_dir):
         if not name.startswith("cand_") or not name.endswith(".json"):
             continue
         parts = name[len("cand_"):-len(".json")].split("_")
@@ -1283,7 +1482,7 @@ def search_addresses(tiles_dir, text, near=None, limit=8):
         number = parts[-1].strip().lower()
         wanted = fold(" ".join(parts[:-1]))
     found = []
-    for name in sorted(os.listdir(tiles_dir)):
+    for name in _tile_names(tiles_dir):
         if not name.startswith("road2_") or not name.endswith("_a.json"):
             continue
         try:
@@ -1431,7 +1630,7 @@ def load_points(tiles_dir, south, west, north, east):
     if not tiles_dir or not os.path.isdir(tiles_dir):
         return []
     out = []
-    for name in sorted(os.listdir(tiles_dir)):
+    for name in _tile_names(tiles_dir):
         if not name.startswith("road2_") or not name.endswith(".json"):
             continue
         body = name[len("road2_"):-len(".json")].rsplit("_", 1)

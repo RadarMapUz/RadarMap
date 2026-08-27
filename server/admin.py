@@ -2014,6 +2014,7 @@ class Handler(BaseHTTPRequestHandler):
         limits = map_edits.frame_limits(*box, span=span, mpp=mpp)
         report = {}
         roads = map_edits.load_roads(edits_tiles_dir(), *box,
+                                     sets=limits["sets"],
                                      limits=limits, report=report)
 
         def described(road):
@@ -2054,7 +2055,20 @@ class Handler(BaseHTTPRequestHandler):
         box = self._bbox()
         if box is None:
             return self._json({"error": "нужна рамка карты"}, 400)
-        self._json({"areas": map_edits.load_areas(edits_tiles_dir(), *box)})
+        query = parse_qs(urlparse(self.path).query)
+        try:
+            mpp = float(query["mpp"][0])
+        except (KeyError, IndexError, ValueError):
+            mpp = None
+        # Наборы — по масштабу. Полотно дорог на кадре города это 4,8 МБ ради
+        # ленты шириной в полтора пикселя, поверх которой и так рисуется сама
+        # дорога; тротуар в два метра на девятнадцати метрах в пикселе — это
+        # одна десятая пикселя.
+        limits = map_edits.frame_limits(*box, mpp=mpp)
+        self._json({"areas": map_edits.load_areas(
+            edits_tiles_dir(), *box, sets=map_edits.area_sets(mpp),
+            budget=limits["bytes"], objects=map_edits.area_objects(mpp),
+            keep=(mpp or 0))})
 
     def candidates_json(self):
         """Кандидаты от нейросети: обводки зданий, которых в OSM ещё нет.

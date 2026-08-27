@@ -3220,3 +3220,39 @@ class OrphanRingTests(unittest.TestCase):
         areas = build_roads.collect_areas(path, 0)
         self.assertEqual(len(areas), 1)
         self.assertEqual(areas[0][1], 0, "арык приехал замкнутым")
+
+
+class SimplifyToleranceTests(unittest.TestCase):
+    """Допуск упрощения виден на экране, поэтому у него есть потолок.
+
+    Замерено на 400 улицах центра: при четырёх метрах отклонение от настоящей
+    оси — медиана 2,4 м, худшее 4,0. На виде вблизи (100 метров на высоту
+    экрана) метр это восемь пунктов: улица уезжала на двадцать пунктов при
+    ширине полотна около шестидесяти, и полотно, построенное по этой же оси,
+    повторяло зигзаг краями. Это и есть «ломаные дороги».
+    """
+
+    def test_the_tolerance_stays_under_a_metre_and_a_half(self):
+        self.assertLessEqual(build_roads.SIMPLIFY_METERS, 1.5,
+                             "подробный допуск снова огрубили — дороги сломаются")
+
+    def test_the_far_network_stays_coarse(self):
+        # Костяк района — другое дело: там метр не виден, а вес виден.
+        self.assertGreater(build_roads.FAR_SIMPLIFY_METERS,
+                           build_roads.SIMPLIFY_METERS * 4,
+                           "костяк стал не грубее подробной сети — он и не нужен")
+
+    def test_a_straight_street_keeps_its_shape(self):
+        # Прямая с мелкой рябью обязана остаться прямой.
+        line = [(69.28 + i * 0.0001, 41.31 + (0.000004 if i % 2 else 0))
+                for i in range(40)]
+        kept = build_roads.simplify(line, build_roads.SIMPLIFY_METERS / 111_320.0)
+        self.assertLess(len(kept), 8, "рябь не убралась")
+
+    def test_a_real_curve_survives(self):
+        # Дуга поворота: её вершины несут форму, и терять их нельзя.
+        import math
+        arc = [(69.28 + 0.0006 * math.cos(t / 12), 41.31 + 0.0006 * math.sin(t / 12))
+               for t in range(20)]
+        kept = build_roads.simplify(arc, build_roads.SIMPLIFY_METERS / 111_320.0)
+        self.assertGreaterEqual(len(kept), 6, "поворот срезали в хорду")

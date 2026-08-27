@@ -13272,6 +13272,38 @@
           }
         }
       }
+    },
+    "Своя схема в движении": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Своя схема в движении"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Harakatda o'z sxemamiz"
+          }
+        }
+      }
+    },
+    "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nСвоя схема — наша карта вместо Apple: полотно, перекрёстки, разметка. Включается только в движении; на стоянке остаётся карта Apple, где ищут адрес и ставят камеру.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nСвоя схема — наша карта вместо Apple: полотно, перекрёстки, разметка. Включается только в движении; на стоянке остаётся карта Apple, где ищут адрес и ставят камеру."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Avto» — kunduzi yorug' asos (quyoshda qorasi ko'zni qamashtiradi), kechasi doim qorong'i. Interfeys qorong'i qoladi.\n\nO'z sxemamiz — Apple o'rniga bizning xaritamiz: yo'l qoplamasi, chorrahalar, chiziqlar. Faqat harakatda yoqiladi; to'xtaganda Apple xaritasi qoladi — manzil qidirish va kamera qo'yish uchun."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

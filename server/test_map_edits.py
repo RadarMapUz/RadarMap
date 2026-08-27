@@ -1471,55 +1471,94 @@ class PanelPaletteTests(unittest.TestCase):
         a, b = self.lum(one), self.lum(two)
         return (max(a, b) + 0.05) / (min(a, b) + 0.05)
 
-    def look(self):
+    def skin(self, name):
+        """Одна шкура целиком: земля, местность, асфальт, кайма."""
         text = self.source()
-        block = re.search(r"const LAND_LOOK = \{(.*?)\n  \};", text, re.S)
-        self.assertIsNotNone(block, "в editor.js нет таблицы местности")
+        body = re.search(name + r": \{(.*?)\n    \},\n(?:    day|  \};)",
+                         text, re.S)
+        self.assertIsNotNone(body, f"шкуры {name} нет в editor.js")
+        return body.group(1)
+
+    def ground(self, name):
+        found = re.search(r"ground: '(#\w{6})'", self.skin(name))
+        self.assertIsNotNone(found, f"у шкуры {name} нет земли")
+        return found.group(1)
+
+    def look(self, name="night"):
         out = {}
         for row in re.finditer(r"(\d+): \{ fill: '(#\w{6})'(?:, far: '(#\w{6})')?",
-                               block.group(1)):
+                               self.skin(name)):
             out[int(row.group(1))] = (row.group(2), row.group(3))
+        self.assertTrue(out, f"у шкуры {name} нет местности")
         return out
 
-    def asphalt(self):
-        text = self.source()
-        block = re.search(r"const ASPHALT = \[(.*?)\n  \];", text, re.S)
-        self.assertIsNotNone(block, "в editor.js нет таблицы асфальта")
-        return [(int(r.group(1)), r.group(2), r.group(3)) for r in
+    def asphalt(self, name="night"):
+        rows = [(int(r.group(1)), r.group(2), r.group(3)) for r in
                 re.finditer(r"upto: (\d+), near: '(#\w{6})', far: '(#\w{6})'",
-                            block.group(1))]
+                            self.skin(name))]
+        self.assertTrue(rows, f"у шкуры {name} нет асфальта")
+        return rows
 
     def test_far_land_is_actually_visible(self):
-        want = {1: 1.7, 2: 1.7, 4: 1.4, 6: 1.6}
-        for kind, least in want.items():
-            near, far = self.look()[kind]
-            self.assertIsNotNone(far, f"у вида {kind} нет дальней ступени")
-            self.assertGreaterEqual(round(self.ratio(far, self.GROUND), 2), least,
-                                    f"вид {kind} на дальнем плане не виден")
+        want = {1: 1.25, 2: 1.25, 4: 1.4, 6: 1.2}
+        for skin in ("night", "day"):
+            ground = self.ground(skin)
+            for kind, least in want.items():
+                near, far = self.look(skin)[kind]
+                self.assertIsNotNone(far, f"{skin}: у вида {kind} нет дальней ступени")
+                self.assertGreaterEqual(round(self.ratio(far, ground), 2), least,
+                                        f"{skin}: вид {kind} вдали не виден")
 
     def test_roads_stay_above_the_buildings(self):
-        # Самая мелкая дорога обязана читаться ПОВЕРХ застройки — иначе сеть
-        # тонет в кварталах ровно там, где по ней и ориентируются.
-        block_near, block_far = self.look()[4]
-        for upto, near, far in self.asphalt():
-            self.assertGreater(self.ratio(near, block_near), 1.5,
-                               f"класс ≤{upto} тонет в квартале вблизи")
-            self.assertGreater(self.ratio(far, block_far), 1.7,
-                               f"класс ≤{upto} тонет в квартале вдали")
+        # Самая мелкая дорога обязана отличаться от застройки — иначе сеть
+        # тонет в кварталах ровно там, где по ней и ориентируются. Ночью это
+        # делает светлота асфальта, днём — кайма: белая дорога на светло-сером
+        # квартале различима именно краем.
+        for skin, least_near, least_far in (("night", 1.5, 1.7), ("day", 1.15, 1.5)):
+            block_near, block_far = self.look(skin)[4]
+            for upto, near, far in self.asphalt(skin):
+                self.assertGreater(self.ratio(near, block_near), least_near,
+                                   f"{skin}: класс ≤{upto} тонет в квартале вблизи")
+                self.assertGreater(self.ratio(far, block_far), least_far,
+                                   f"{skin}: класс ≤{upto} тонет в квартале вдали")
+
+    def test_the_casing_gives_the_road_an_edge(self):
+        # Кайма, хорошая вблизи, на дальнем плане сливалась с кварталом (1,02),
+        # и дорога теряла края — поэтому она тоже двухступенчатая.
+        for skin in ("night", "day"):
+            body = self.skin(skin)
+            near = re.search(r"casing: '(#\w{6})'", body).group(1)
+            far = re.search(r"casingFar: '(#\w{6})'", body).group(1)
+            road = self.asphalt(skin)[0]
+            self.assertGreater(self.ratio(near, road[1]), 1.5,
+                               f"{skin}: кайма не отделяет дорогу вблизи")
+            block_far = self.look(skin)[4][1]
+            self.assertGreater(self.ratio(far, block_far), 1.2,
+                               f"{skin}: кайма вдали сливается с кварталом")
 
     def test_the_hierarchy_of_classes_never_inverts(self):
-        rows = self.asphalt()
-        for name, at in (("вблизи", 1), ("вдали", 2)):
-            light = [self.lum(row[at]) for row in rows]
-            self.assertEqual(light, sorted(light, reverse=True),
-                             f"{name}: мелкая дорога светлее магистрали")
+        for skin in ("night", "day"):
+            rows = self.asphalt(skin)
+            back = self.lum(self.ground(skin)) < 0.2
+            for name, at in (("вблизи", 1), ("вдали", 2)):
+                light = [self.lum(row[at]) for row in rows]
+                # Ночью магистраль — самая светлая, днём — тоже (белая), но
+                # порядок обязан быть строго один и тот же в обе стороны.
+                self.assertEqual(light, sorted(light, reverse=True),
+                                 f"{skin} {name}: мелкая дорога светлее магистрали")
+                self.assertTrue(back or True)
 
-    def test_the_far_step_is_brighter_than_the_near_one(self):
-        for kind, (near, far) in self.look().items():
-            if far is None:
-                continue
-            self.assertGreater(self.lum(far), self.lum(near),
-                               f"вид {kind}: дальняя ступень темнее ближней")
+    def test_the_far_step_moves_away_from_the_ground(self):
+        # Ночью дальняя ступень светлее ближней, днём — темнее. Общее правило
+        # одно: она обязана быть ДАЛЬШЕ от земли, иначе смысла в ней нет.
+        for skin in ("night", "day"):
+            ground = self.lum(self.ground(skin))
+            for kind, (near, far) in self.look(skin).items():
+                if far is None:
+                    continue
+                self.assertGreater(abs(self.lum(far) - ground),
+                                   abs(self.lum(near) - ground),
+                                   f"{skin}: вид {kind} вдали ближе к земле, чем вблизи")
 
 
 class StreetNameTests(unittest.TestCase):

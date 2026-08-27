@@ -156,6 +156,7 @@
     cover: document.getElementById('cover'),
     viewSchema: document.getElementById('viewschema'),
     viewSat: document.getElementById('viewsat'),
+    viewDay: document.getElementById('viewday'),
   };
 
   let onlyMine = false;   // показывать только нарисованное руками
@@ -1054,23 +1055,98 @@
     return out;
   }
 
-  const ASPHALT = [
-    { upto: 2, near: '#6b6a63', far: '#8a8981' },
-    { upto: 3, near: '#5e5d58', far: '#7d7c75' },
-    { upto: 4, near: '#525252', far: '#6c6c6c' },
-    { upto: 6, near: '#464646', far: '#606060' },
-    { upto: 9, near: '#3c3c3c', far: '#595959' },
-  ];
+  // Две шкуры: ночная и дневная.
+  //
+  // Днём у окна тёмная схема нечитаема вовсе — на телефоне дневной режим есть
+  // с апреля, в панели его не было. Это не перекраска: днём меняются РОЛИ.
+  // Ночью асфальт светлее земли, днём — наоборот, и работу по разделению
+  // дороги и застройки берёт на себя кайма.
+  //
+  // Дневные цвета подобраны по контрасту, а не на глаз (земля #f4f6f9):
+  //
+  //   квартал вблизи 1,12   вдали 1,45      зелень 1,26   вода 1,30
+  //   белая дорога к кварталу вдали 1,57    кайма к дороге 1,61
+  //   кайма вдали #a3abbd: к кварталу 1,47, к дороге 2,30
+  //
+  // Кайма тоже двухступенчатая: та, что хороша вблизи, на дальнем плане
+  // сливается с кварталом (1,02) и дорога теряет края.
+  const SKIN = {
+    night: {
+      ground: '#0e1013',
+      casing: '#04060a', casingFar: '#04060a',
+      kerb: '#5c5b57', median: '#12151b',
+      lane: '#e0d9b8', laneWide: '#d8d3c4',
+      label: '#d7dae0', labelHalo: 'rgba(6, 8, 12, 0.85)',
+      asphalt: [
+        { upto: 2, near: '#6b6a63', far: '#8a8981' },
+        { upto: 3, near: '#5e5d58', far: '#7d7c75' },
+        { upto: 4, near: '#525252', far: '#6c6c6c' },
+        { upto: 6, near: '#464646', far: '#606060' },
+        { upto: 9, near: '#3c3c3c', far: '#595959' },
+      ],
+      land: {
+        1: { fill: '#16324a', far: '#1d4262', line: '#295176', width: 5, metres: 9 },
+        2: { fill: '#152a1b', far: '#23462d', line: '#1f4227', width: 2 },
+        3: { fill: '#2a2723', far: '#3f3b35', line: '#4a463e', width: 2, metres: 5 },
+        4: { fill: '#12151b', far: '#2c3342', line: '#191d25', width: 1 },
+        5: { fill: '#1b1f26', line: '#2b313b', width: 1.4, dash: [1.4, 3.2] },
+        6: { fill: '#1f232c', far: '#353b4b', line: '#2b303a', width: 1 },
+      },
+    },
+    day: {
+      ground: '#f4f6f9',
+      casing: '#c7ccd7', casingFar: '#a3abbd',
+      kerb: '#b7bcc6', median: '#dfe3ea',
+      lane: '#b7bcc6', laneWide: '#a8aeb9',
+      label: '#1d2129', labelHalo: 'rgba(255, 255, 255, 0.9)',
+      asphalt: [
+        { upto: 2, near: '#ffffff', far: '#ffffff' },
+        { upto: 3, near: '#fcfcfd', far: '#fcfcfd' },
+        { upto: 4, near: '#f6f7f9', far: '#f6f7f9' },
+        { upto: 6, near: '#eff1f4', far: '#eff1f4' },
+        { upto: 9, near: '#e9ebef', far: '#e9ebef' },
+      ],
+      land: {
+        1: { fill: '#c5dcf0', far: '#a9cbe8', line: '#8fb8dc', width: 5, metres: 9 },
+        2: { fill: '#d0e3c1', far: '#bcd7a8', line: '#a3c88c', width: 2 },
+        3: { fill: '#ded8cd', far: '#cbc3b3', line: '#b0a794', width: 2, metres: 5 },
+        4: { fill: '#d2d9e7', far: '#b6c2d6', line: '#c0c9db', width: 1 },
+        5: { fill: '#e4e8ef', line: '#cfd6e0', width: 1.4, dash: [1.4, 3.2] },
+        6: { fill: '#c2cbdb', far: '#aeb9cd', line: '#aab5c9', width: 1 },
+      },
+    },
+  };
+
+  const DAY_KEY = 'rm.editor.day';
+  let skin = SKIN.night;
+  try {
+    if (window.localStorage.getItem(DAY_KEY) === '1') { skin = SKIN.day; }
+  } catch (error) { skin = SKIN.night; }
+
+  function daylight() { return skin === SKIN.day; }
+
+  function setDaylight(on) {
+    skin = on ? SKIN.day : SKIN.night;
+    try { window.localStorage.setItem(DAY_KEY, on ? '1' : '0'); } catch (error) { }
+    if (painted) { painted = null; }
+    paintSchema();
+  }
 
   // Цвет асфальта по классу — те же тона, что на схеме телефона.
   function asphalt(cls) {
-    for (let i = 0; i < ASPHALT.length; i++) {
-      if (cls <= ASPHALT[i].upto) {
-        return blend(ASPHALT[i].near, ASPHALT[i].far, farNow);
+    const table = skin.asphalt;
+    for (let i = 0; i < table.length; i++) {
+      if (cls <= table[i].upto) {
+        return blend(table[i].near, table[i].far, farNow);
       }
     }
-    return blend(ASPHALT[ASPHALT.length - 1].near,
-                 ASPHALT[ASPHALT.length - 1].far, farNow);
+    return blend(table[table.length - 1].near, table[table.length - 1].far, farNow);
+  }
+
+  /// Кайма дороги: вблизи одна, вдали другая. Та, что хороша вблизи, на
+  /// дальнем плане сливается с кварталом, и дорога теряет края.
+  function casing() {
+    return blend(skin.casing, skin.casingFar, farNow);
   }
 
   function line(points, options) {
@@ -1091,14 +1167,7 @@
   // области арык шириной восемь метров выходил на карте шириной в сто сорок:
   // город тонул в синей сетке каналов, а сам был еле виден. Толщина в метрах
   // с полом в один пункт эту ложь убирает и на близком плане ничего не меняет.
-  const LAND_LOOK = {
-    1: { fill: '#16324a', far: '#1d4262', line: '#295176', width: 5, metres: 9 },
-    2: { fill: '#152a1b', far: '#23462d', line: '#1f4227', width: 2 },
-    3: { fill: '#2a2723', far: '#3f3b35', line: '#4a463e', width: 2, metres: 5 },
-    4: { fill: '#12151b', far: '#2c3342', line: '#191d25', width: 1 },
-    5: { fill: '#1b1f26', line: '#2b313b', width: 1.4, dash: [1.4, 3.2] },
-    6: { fill: '#1f232c', far: '#353b4b', line: '#2b303a', width: 1 },
-  };
+
   const LAND_ORDER = [4, 6, 2, 1, 3, 5];
 
   // --- Холст схемы -------------------------------------------------------
@@ -1261,7 +1330,7 @@
     // тысяч раз за кадр.
     farNow = farShare(metersPerPixel());
     if (schema) {
-      brush.fillStyle = '#0e1013';
+      brush.fillStyle = skin.ground;
       brush.fillRect(0, 0, width, height);
     } else {
       brush.clearRect(0, 0, width, height);
@@ -1384,7 +1453,7 @@
   function paintLand() {
     const perPixel = metersPerPixel();
     LAND_ORDER.forEach(function (kind) {
-      const look = LAND_LOOK[kind];
+      const look = skin.land[kind];
       if (!look) { return; }
       const thick = look.metres
         ? Math.max(1, Math.min(look.width, look.metres / perPixel))
@@ -1551,10 +1620,10 @@
     brush.translate(centre[0], centre[1]);
     brush.rotate(angle);
     // Обводка тёмным: подпись лежит на асфальте, а он светлее фона.
-    brush.strokeStyle = 'rgba(6, 8, 12, 0.85)';
+    brush.strokeStyle = skin.labelHalo;
     brush.lineWidth = 3;
     brush.strokeText(text, 0, 0);
-    brush.fillStyle = '#d7dae0';
+    brush.fillStyle = skin.label;
     brush.fillText(text, 0, 0);
     brush.setTransform(painted.ratio, 0, 0, painted.ratio, 0, 0);
     return true;
@@ -1626,7 +1695,7 @@
   // асфальт сливается с землёй и читается плоским пятном, а не поверхностью,
   // у которой есть край. На телефоне бордюр уже есть — панель обязана
   // показывать то же самое.
-  const KERB = '#5c5b57';
+
 
   function fillRing(points, colour, kerb) {
     if (points.length < 3) { return; }
@@ -1805,7 +1874,7 @@
     // неделю. Здесь остаётся заливка.
     surfaceInFrame.forEach(function (area) {
       if (area.kind !== SURFACE_ROAD) { return; }
-      fillRing(area.points, asphalt(area.road || 6), KERB);
+      fillRing(area.points, asphalt(area.road || 6), skin.kerb);
     });
     surfaceInFrame.forEach(function (area) {
       if (area.kind !== SURFACE_JUNCTION) { return; }
@@ -1818,7 +1887,7 @@
       // асфальте, а не поднятой землёй. У площади перекрёстка бордюра нет —
       // обведи её, и поперёк проезжей части появился бы контур.
       if (area.kind !== SURFACE_MEDIAN) { return; }
-      fillRing(area.points, '#12151b', KERB);
+      fillRing(area.points, skin.median, skin.kerb);
     });
   }
 
@@ -1843,7 +1912,7 @@
       ordered.forEach(function (road) {
         if (!road.drawn) { return; }
         const width = Math.max(1.5, road.width / perPixel);
-        strokePath(road.points, '#04060a', width + 3);
+        strokePath(road.points, casing(), width + 3);
         strokePath(road.points, asphalt(road.cls), width);
       });
     }
@@ -1854,7 +1923,7 @@
       // рассекается швами.
       ordered.forEach(function (road) {
         const width = Math.max(1.5, road.width / perPixel);
-        strokePath(road.points, '#04060a', width + 3);
+        strokePath(road.points, casing(), width + 3);
       });
       ordered.forEach(function (road) {
         const width = Math.max(1.5, road.width / perPixel);
@@ -1961,7 +2030,7 @@
       if (road.oneWay || road.cls > 4) { return; }
       if (road.width / perPixel < 8) { return; }
       brush.globalAlpha = 0.42;
-      strokePath(road.points, '#e0d9b8', 1.3, [stroke, gap]);
+      strokePath(road.points, skin.lane, 1.3, [stroke, gap]);
       brush.globalAlpha = 1;
     });
 
@@ -1977,7 +2046,7 @@
         if (i === road.lanes / 2) { continue; }
         const band = Math.abs((i - road.lanes / 2) * lane) * 2;
         brush.globalAlpha = 0.34;
-        strokePath(road.points, '#d8d3c4', band + 1.2, [stroke, gap]);
+        strokePath(road.points, skin.laneWide, band + 1.2, [stroke, gap]);
         brush.globalAlpha = 1;
         strokePath(road.points, asphalt(road.cls), band - 1.2);
       }
@@ -1999,7 +2068,7 @@
     LAND_ORDER.forEach(function (kind) {
       landInFrame.forEach(function (area) {
         if (area.kind !== kind) { return; }
-        const look = LAND_LOOK[kind];
+        const look = skin.land[kind];
         if (!look) { return; }
         const path = area.points.map(function (p) { return [p[1], p[0]]; });
         const zIndex = 100 + LAND_ORDER.indexOf(kind);
@@ -2306,6 +2375,10 @@
     if (!els.viewSchema) { return; }
     els.viewSchema.classList.toggle('on', schema);
     els.viewSat.classList.toggle('on', !schema);
+    if (els.viewDay) {
+      els.viewDay.classList.toggle('on', daylight());
+      els.viewDay.textContent = daylight() ? 'День' : 'Ночь';
+    }
   }
 
   function toggleSchema() {
@@ -2344,7 +2417,7 @@
         const width = Math.max(2, (drawn.width || 6) / perPixel);
         const state = stateOf(edit);
         add(new ymaps.Polyline(path(edit.geom), {}, {
-          strokeColor: '#04060a', strokeWidth: width + 3, zIndex: 320,
+          strokeColor: casing(), strokeWidth: width + 3, zIndex: 320,
           interactivityModel: 'default#transparent' }));
         add(new ymaps.Polyline(path(edit.geom), {
           hintContent: 'Своя дорога · класс ' + (drawn.cls || '?') + ' · ' +
@@ -2670,7 +2743,7 @@
         const meters = lanes ? lanes * (LANE_METERS[drawing.cls] || 3.5)
                              : classWidth(drawing.cls);
         const width = Math.max(3, meters / metersPerPixel());
-        [[width + 3, '#04060a', 298], [width, asphalt(drawing.cls), 299]]
+        [[width + 3, casing(), 298], [width, asphalt(drawing.cls), 299]]
           .forEach(function (layer) {
             const band = new ymaps.Polyline(path, {},
               { strokeColor: layer[1], strokeWidth: layer[0],
@@ -3308,6 +3381,12 @@
     if (els.viewSchema) {
       els.viewSchema.addEventListener('click', function () { showView(true); });
       els.viewSat.addEventListener('click', function () { showView(false); });
+      if (els.viewDay) {
+        els.viewDay.addEventListener('click', function () {
+          setDaylight(!daylight());
+          markView();
+        });
+      }
       markView();
     }
 

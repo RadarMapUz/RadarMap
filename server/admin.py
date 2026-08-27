@@ -975,6 +975,9 @@ border-radius:10px;padding:4px}}
 .view{{flex:1;padding:8px 10px;border-radius:8px;border:0;background:transparent;
 color:#8ea0bb;font-size:13px;cursor:pointer}}
 .view.on{{background:#101f2e;color:#3cdcff}}
+/* Дневная схема — отдельная кнопка, а не третий вид карты: спутник и своя
+   карта исключают друг друга, а день со спутником — нет. */
+.view.day{{flex:0 0 auto;padding:8px 12px}}
 .legend{{background:#12161de6;border:1px solid #232a35;border-radius:10px;
 padding:9px 11px;font-size:12px;color:#8ea0bb;line-height:1.5}}
 .card{{position:absolute;top:64px;right:12px;width:300px;z-index:5;
@@ -1070,6 +1073,7 @@ font-size:12px;cursor:pointer;line-height:1.35}}
   <div class="views">
     <button id="viewschema" class="view on">Своя карта</button>
     <button id="viewsat" class="view">Спутник</button>
+    <button id="viewday" class="view day" title="Дневная и ночная схема (Y)">День</button>
   </div>
   <div class="toolrow">
     {tool_button(SELECT_ICON, "Выбрать", "V", 'data-kind="select"', " on")}

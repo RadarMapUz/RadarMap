@@ -72,6 +72,14 @@ nonisolated enum RoadSketch {
         /// Этажей у дома; 0 — не сказано. Едет до вью, потому что объём
         /// рисуется именно там, а сцена живёт сотни метров и считается раз.
         var levels: Int = 0
+        /// Класс дороги у полотна; 0 — не сказано. Едет тем же путём и по той
+        /// же причине, что этажность: цвет асфальта выбирает вью.
+        ///
+        /// Поля здесь не было, а вью его спрашивало — модуль не собирался.
+        /// Проспект и двор обязаны отличаться заливкой, иначе город станет
+        /// одного тона; без класса пришлось бы взять средний и потерять
+        /// разницу ровно там, где она видна лучше всего.
+        var roadClass: Int = 0
     }
 
     /// Точечный объект в сцене: метры от опоры. Нарисован руками в панели,
@@ -954,7 +962,8 @@ nonisolated enum RoadSketch {
                 let points = nearby(area.points)
                 guard points.count >= (area.isClosed ? 3 : 2) else { continue }
                 kept.append(Area(points: points, kind: area.kind,
-                                 isClosed: area.isClosed, levels: area.levels))
+                                 isClosed: area.isClosed, levels: area.levels,
+                                 roadClass: area.roadClass))
                 if kept.count >= areaBudget { break }
             }
             // Вода поверх зелени, кварталы под всем: порядок задаётся здесь,

@@ -3,6 +3,7 @@
 //  RadarMapTests
 //
 
+import CoreGraphics
 import Testing
 
 @testable import RadarMap
@@ -49,6 +50,19 @@ struct SurfaceLayerTests {
         #expect(areas[0].kind == .house)
         #expect(areas[0].levels == 9)
         #expect(areas[0].roadClass == 0)
+    }
+
+    @Test("Класс полотна доезжает до сцены, а не теряется по дороге")
+    func roadClassReachesTheScene() {
+        // Класс лежит в записи тайла, а красит по нему ВЬЮ. Между ними —
+        // сцена, и поля для класса в ней не было вовсе: вью спрашивало
+        // `area.roadClass` у типа, где его нет, и модуль не собирался.
+        // Проспект и двор обязаны отличаться заливкой, иначе город станет
+        // одного тона.
+        let area = RoadSketch.Area(points: [.zero, CGPoint(x: 1, y: 1)],
+                                   kind: .road, isClosed: true,
+                                   levels: 0, roadClass: 3)
+        #expect(area.roadClass == 3)
     }
 
     @Test("Поверхность — ближний охват и только он")

@@ -75,7 +75,15 @@ nonisolated enum RoadTiles {
         /// вместо ломаной.
         var isPoints: Bool { self == .points || self == .pointsFar }
 
-        /// Вид местности набора. nil — набор дорожный.
+        /// Вид местности набора. nil — вид из набора НЕ следует.
+        ///
+        /// Так у дорожных наборов, и так же у поверхности: в наборе «d» лежат
+        /// сразу три вида — полотно, площадь перекрёстка и разделительная, —
+        /// и вид каждой записи берётся из неё самой, а не из буквы файла.
+        /// Вернуть отсюда один вид значило бы соврать про две трети набора.
+        ///
+        /// Без этой ветки switch переставал быть исчерпывающим, и МОДУЛЬ НЕ
+        /// СОБИРАЛСЯ вовсе: набор «d» завели, а сюда его не дописали.
         var areaKind: SketchArea.Kind? {
             switch self {
             case .water:  return .water
@@ -84,6 +92,7 @@ nonisolated enum RoadTiles {
             case .blocks: return .block
             case .sidewalks: return .sidewalk
             case .houses: return .house
+            case .surface: return nil
             case .far, .streets, .yards, .points, .pointsFar: return nil
             }
         }

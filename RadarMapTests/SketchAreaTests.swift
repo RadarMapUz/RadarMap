@@ -49,6 +49,10 @@ final class SketchAreaTests: XCTestCase {
         XCTAssertTrue(RoadTiles.Set.water.isArea)
         XCTAssertEqual(RoadTiles.Set.blocks.areaKind, .block)
         XCTAssertNil(RoadTiles.Set.yards.areaKind)
+        // Поверхность — набор с ТРЕМЯ видами внутри: полотно, перекрёсток и
+        // разделительная. Вид берётся из записи, а не из буквы файла, и
+        // вернуть отсюда один значило бы соврать про две трети набора.
+        XCTAssertNil(RoadTiles.Set.surface.areaKind)
     }
 
     // MARK: - Правила слоёв

@@ -1233,7 +1233,7 @@ private struct SketchRaster: View, Equatable {
         }
     }
 
-    private func areaFill(_ area: SketchArea) -> Color {
+    private func areaFill(_ area: RoadSketch.Area) -> Color {
         // Класс полотна — из самой записи: проспект и двор обязаны отличаться
         // и в заливке, иначе весь город станет одного тона.
         if area.kind == .road, area.roadClass > 0 {

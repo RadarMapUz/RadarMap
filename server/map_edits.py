@@ -1042,12 +1042,36 @@ def load_roads(tiles_dir, south, west, north, east, sets=("s", "y"),
     thinned = 0
     for name in opened:
         for road in _tile_roads(os.path.join(tiles_dir, name)):
+            # Сначала РАМКА, потом класс.
+            #
+            # В обратном порядке счётчик скрытого считал и дороги за пределами
+            # кадра: файл покрывает шесть километров, а в рамке квартал. На
+            # окраине это давало «скрыто 876» там, где в кадре не было ни
+            # одной дороги вовсе, и я полдня искал беду по этой цифре.
+            if not any(south <= lat <= north and west <= lon <= east
+                       for lon, lat in road["points"]):
+                continue
             if road.get("cls", 7) > limits["class"]:
                 thinned += 1
                 continue
-            if any(south <= lat <= north and west <= lon <= east
-                   for lon, lat in road["points"]):
-                roads.append(road)
+            roads.append(road)
+    # Прореживание не имеет права оставить ПУСТОЙ экран.
+    #
+    # Замерено на живом кадре окраины: 876 дорог в тайлах, все класса 7, и
+    # потолок охвата скрыл их целиком. На экране чернота и совет
+    # «приблизьтесь» — то есть мы знали, что показать, и не показали.
+    #
+    # Правило простое: мелкие дороги лучше пустоты. Если после прореживания не
+    # осталось ничего, показываем что есть — потолок по числу объектов при
+    # этом остаётся, он и защищает браузер.
+    if not roads and thinned:
+        for name in opened:
+            for road in _tile_roads(os.path.join(tiles_dir, name)):
+                if any(south <= lat <= north and west <= lon <= east
+                       for lon, lat in road["points"]):
+                    roads.append(road)
+        thinned = 0
+
     cut = False
     if limits["objects"] and len(roads) > limits["objects"]:
         # Режем ХУДШИЕ по классу, а не первые попавшиеся: обрезать список с

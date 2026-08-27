@@ -1136,3 +1136,45 @@ class StreetPiecesTests(unittest.TestCase):
 
     def test_middle_of_nothing_is_nothing(self):
         self.assertIsNone(map_edits.middle_of([]))
+
+
+class NeverEmptyTests(unittest.TestCase):
+    """Прореживание не имеет права оставить пустой экран.
+
+    Замерено на живом кадре окраины: 876 дорог в тайлах, все класса 7, и
+    потолок охвата скрыл их целиком. На экране чернота и совет «приблизьтесь»
+    — то есть мы знали, что показать, и не показали.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        with open(os.path.join(self.dir, "road2_2626_4985_y.json"), "w",
+                  encoding="utf-8") as handle:
+            json.dump({"version": 2, "roads": [
+                [7, 0, [4131000, 6928000, 100, 100]],
+                [7, 0, [4131200, 6928200, 100, 100]],
+            ]}, handle)
+
+    def test_yards_are_shown_when_nothing_else_is_left(self):
+        report = {}
+        roads = map_edits.load_roads(self.dir, 41.30, 69.27, 41.32, 69.29,
+                                     limits={"files": 9, "class": 4,
+                                             "objects": 100},
+                                     report=report)
+        self.assertEqual(len(roads), 2, "экран остался пустым")
+        self.assertEqual(report["thinned"], 0, "о скрытом сказано неправду")
+
+    def test_thinning_still_works_when_something_remains(self):
+        with open(os.path.join(self.dir, "road2_2626_4985_s.json"), "w",
+                  encoding="utf-8") as handle:
+            json.dump({"version": 2, "roads": [
+                [3, 0, [4131000, 6928000, 100, 100]],
+            ]}, handle)
+        report = {}
+        roads = map_edits.load_roads(self.dir, 41.30, 69.27, 41.32, 69.29,
+                                     limits={"files": 9, "class": 4,
+                                             "objects": 100},
+                                     report=report)
+        self.assertEqual(len(roads), 1)
+        self.assertEqual(report["thinned"], 2)

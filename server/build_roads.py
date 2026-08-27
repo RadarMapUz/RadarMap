@@ -3333,7 +3333,7 @@ def stream_surface(roads, target_dir, degrees, handles=64):
             put(figure)
         for figure in iter_flares(arms):
             put(figure)
-        for figure in build_medians(chains, junction_spots(arms)):
+        for figure in build_medians(chains, junction_index(junction_spots(arms))):
             put(figure)
         del chains
         for figure in build_islands(roads):
@@ -3470,8 +3470,45 @@ def _median_strip(one, other, junctions=()):
     return left + list(reversed(right))
 
 
+# Клетка поиска перекрёстка. Больше любого радиуса узла: половина самой
+# широкой дороги страны (56 м) плюс запас — это 32 метра, и шестьдесят четыре
+# с проверкой соседних клеток накрывают их с двойным запасом.
+JUNCTION_CELL_METERS = 64.0
+
+
+def junction_index(spots):
+    """Узлы, разложенные по клеткам. Тот же приём, что спас склейку.
+
+    Проверка «стоим ли в перекрёстке» шла ЛИНЕЙНО по всем узлам страны, и
+    звалась она на каждый двадцатипятиметровый шаг каждой разделительной
+    полосы. Замерено профайлером на живой сборке: процесс просидел в
+    `_at_junction` четыре часа сорок шесть минут при ста процентах ЦП и НУЛЕ
+    записей на диск — арифметика сходится, узлов сотни тысяч, шагов десятки
+    тысяч, произведение — десятки миллиардов расстояний.
+    """
+    cell = JUNCTION_CELL_METERS / LAT_METERS
+    index = defaultdict(list)
+    for node, radius in spots:
+        index[(int(node[0] / cell), int(node[1] / cell))].append((node, radius))
+    return index
+
+
 def _at_junction(point, junctions):
-    """Стоим ли мы в перекрёстке. Радиус — по самой широкой из его дорог."""
+    """Стоим ли мы в перекрёстке. Радиус — по самой широкой из его дорог.
+
+    Принимает и разложенный по клеткам индекс, и простой список: вызовы из
+    тестов и старого кода обязаны продолжать работать, а список из десятка
+    узлов перебрать дешевле, чем разложить.
+    """
+    if isinstance(junctions, dict):
+        cell = JUNCTION_CELL_METERS / LAT_METERS
+        x, y = int(point[0] / cell), int(point[1] / cell)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for node, radius in junctions.get((x + dx, y + dy), ()):
+                    if meters_between(point, node) <= radius:
+                        return True
+        return False
     for node, radius in junctions:
         if meters_between(point, node) <= radius:
             return True

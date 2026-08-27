@@ -3098,3 +3098,63 @@ class HouseGeometryTests(unittest.TestCase):
         path = self.write([line])
         with tempfile.TemporaryDirectory() as work:
             self.assertEqual(build_roads.stream_houses(path, work, 0.05), {})
+
+
+class JunctionIndexTests(unittest.TestCase):
+    """Проверка «стоим ли в перекрёстке» шла линейно по всем узлам страны.
+
+    Звалась она на каждый двадцатипятиметровый шаг каждой разделительной
+    полосы. Замерено профайлером на живой сборке: процесс просидел в
+    `_at_junction` четыре часа сорок шесть минут при ста процентах ЦП и НУЛЕ
+    записей на диск. Арифметика сходится: узлов сотни тысяч, шагов десятки
+    тысяч, произведение — десятки миллиардов расстояний.
+
+    Тот же приём, что когда-то спас склейку кусков: клетки вместо перебора.
+    """
+
+    def spots(self, count, radius=20.0):
+        return [((69.20 + i * 0.002, 41.30 + (i % 17) * 0.002), radius)
+                for i in range(count)]
+
+    def test_the_answer_is_the_same_as_the_plain_scan(self):
+        spots = self.spots(400)
+        index = build_roads.junction_index(spots)
+        # Пробуем и попадания, и промахи, и края клеток.
+        probes = [(69.20, 41.30), (69.2001, 41.3001), (69.5, 41.5),
+                  (69.26, 41.31), (69.2 + 0.002 * 33, 41.30 + 0.002 * 16)]
+        for point in probes:
+            self.assertEqual(build_roads._at_junction(point, index),
+                             build_roads._at_junction(point, spots),
+                             f"клетки разошлись со сплошным перебором на {point}")
+
+    def test_a_node_just_outside_the_radius_is_not_a_junction(self):
+        node = (69.20, 41.30)
+        index = build_roads.junction_index([(node, 20.0)])
+        far = (69.20 + 30.0 / (111_320 * 0.75), 41.30)
+        self.assertFalse(build_roads._at_junction(far, index))
+
+    def test_a_node_in_the_next_cell_is_still_found(self):
+        # Узел за границей клетки, но в пределах радиуса: соседние клетки
+        # обходим именно ради этого случая.
+        cell = build_roads.JUNCTION_CELL_METERS / build_roads.LAT_METERS
+        node = (69.20 + cell * 0.999, 41.30)
+        index = build_roads.junction_index([(node, 30.0)])
+        point = (69.20 + cell * 1.0001, 41.30)
+        self.assertTrue(build_roads._at_junction(point, index),
+                        "узел за границей клетки потерялся")
+
+    def test_the_index_is_much_cheaper(self):
+        import time
+        spots = self.spots(20_000)
+        index = build_roads.junction_index(spots)
+        probes = [(69.20 + i * 0.001, 41.31) for i in range(200)]
+        start = time.time()
+        for point in probes:
+            build_roads._at_junction(point, index)
+        fast = time.time() - start
+        start = time.time()
+        for point in probes[:20]:
+            build_roads._at_junction(point, spots)
+        slow = (time.time() - start) * 10
+        self.assertLess(fast * 5, slow,
+                        f"клетки не дали выигрыша: {fast:.3f} против {slow:.3f}")

@@ -453,6 +453,21 @@ final class AppSettings {
         didSet { store.set(mapAppearance.rawValue, forKey: Keys.mapAppearance) }
     }
 
+    /// Своя схема вместо карты Apple — ТОЛЬКО В ДВИЖЕНИИ.
+    ///
+    /// Схему рисуем сами по своим тайлам: полотно, перекрёстки, разметка,
+    /// дома. Она отвечает на вопрос «что впереди», и за рулём это ровно тот
+    /// вопрос, который есть. Карта Apple отвечает на «где это вообще» — и
+    /// нужна там, где ищут адрес и ставят камеру, то есть на стоянке.
+    ///
+    /// По умолчанию ВЫКЛЮЧЕНО, и это не осторожность из вежливости: своя
+    /// карта знает только то, что мы собрали, и день за рулём с ней —
+    /// единственный способ выяснить, чего в ней не хватает. Менять умолчание
+    /// до этого дня значило бы решать за водителя вслепую.
+    var sketchWhileDriving: Bool {
+        didSet { store.set(sketchWhileDriving, forKey: Keys.sketchWhileDriving) }
+    }
+
     /// Выбранный язык интерфейса (применяется при следующем запуске — см. AppLanguage).
     var appLanguage: AppLanguage {
         didSet {
@@ -494,6 +509,7 @@ final class AppSettings {
         static let tripodHints = "tripodHints"
         static let mapTraffic = "mapTraffic"
         static let mapPlaces = "mapPlaces"
+        static let sketchWhileDriving = "sketchWhileDriving"
         static let alertMode = "alertMode"
         static let knownCarAudio = "knownCarAudio"
         static let usageStats = "usageStatsDisabled"
@@ -573,6 +589,7 @@ final class AppSettings {
         tripodHints = store.bool(forKey: Keys.tripodHints)
         mapTraffic = store.bool(forKey: Keys.mapTraffic)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)
+        sketchWhileDriving = store.bool(forKey: Keys.sketchWhileDriving)
         alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []
         weeklyDigest = store.bool(forKey: Keys.digest)

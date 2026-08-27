@@ -20,6 +20,9 @@ struct MapScreen: View {
     @State private var hideControlsTask: Task<Void, Never>?
     /// Режим «Спидометр» — тап по HUD (телефон в держателе).
     @State private var showDashboard = false
+    /// Экранная модель своей схемы. Живёт всегда, а считается только когда
+    /// схема действительно на экране: пустая модель не стоит ничего.
+    @State private var sketch = SketchState()
     /// Спидометр закрыли руками в этой поездке — до её конца не навязываемся.
     /// Флаг живёт здесь, а не в настройках: это решение «сейчас», не «всегда».
     @State private var dashboardDismissedInTrip = false
@@ -49,6 +52,20 @@ struct MapScreen: View {
         MapMode.current(isTripActive: env.location.isTripActive, hasRoute: env.route.isActive)
     }
 
+    /// Своя схема вместо карты Apple — только В ДВИЖЕНИИ и только по тумблеру.
+    ///
+    /// Схема отвечает на вопрос «что впереди» и знает ровно то, что мы
+    /// собрали. Карта Apple отвечает на «где это вообще»: там ищут адрес,
+    /// ставят камеру и смотрят город целиком — то есть на стоянке.
+    ///
+    /// Пока схема не построена (первые секунды поездки, пустой тайл, чужая
+    /// страна), показываем карту: пустой чёрный экран за рулём хуже чужой
+    /// карты.
+    private var showsSketchMap: Bool {
+        env.settings.sketchWhileDriving && mode.allowsSketchMap
+            && !showDashboard && (sketch.scene?.isEmpty == false)
+    }
+
     var body: some View {
         @Bindable var map = map
         // Событие, а не интервал: у пересборки тела нет длительности, которую
@@ -65,9 +82,7 @@ struct MapScreen: View {
         ZStack {
             // Тема только у карты: интерфейс остаётся тёмным «радар-детектором»,
             // а подложка днём может быть светлой (тёмная на солнце бликует).
-            mapLayer
-                .ignoresSafeArea()
-                .environment(\.colorScheme, mapColorScheme)
+            baseLayer
 
             // Затемнение под статус-баром: часы и батарея не тонут в карте.
             VStack(spacing: 0) {
@@ -99,6 +114,11 @@ struct MapScreen: View {
 
             // Следование за GPS: единственный подписчик locationTick.
             LocationFollowDriver(map: map, isCovered: showDashboard)
+            // Схема считается ТОЛЬКО когда она на экране: тумблер выключен или
+            // стоим — модель пуста и не стоит ни одного тика.
+            if env.settings.sketchWhileDriving && mode.allowsSketchMap && !showDashboard {
+                SketchRefreshDriver(sketch: sketch)
+            }
             MobilePassDriver()
         }
         .mapScope(mapScope)
@@ -273,6 +293,43 @@ struct MapScreen: View {
             return Sun.isDaytime(at: map.focus ?? env.location.currentCoordinate,
                                  now: Date())
                 ? .light : .dark
+        }
+    }
+
+    /// Тон схемы по близости камеры — те же три ступени, что на приборке.
+    /// Ближе трети радиуса — опасность, ближе двух третей — внимание, иначе
+    /// нейтральный акцент. Второй такой лестницы в приложении заводить
+    /// нельзя: водитель читает цвет, а не число, и две разные лестницы —
+    /// это два разных смысла у одного красного.
+    private var sketchTint: Color {
+        guard let distance = env.location.distanceToNearest else { return Theme.accent }
+        let radius = AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
+                                                 baseRadius: env.settings.alertRadius)
+        if distance <= radius * 0.3 { return Theme.danger }
+        if distance <= radius * 0.6 { return Theme.warning }
+        return Theme.accent
+    }
+
+    /// Подложка экрана: своя схема или карта Apple.
+    ///
+    /// Отдельным свойством, а не `if` внутри стопки: тело MapScreen и без
+    /// того на пределе — компилятор перестал его выводить за разумное время,
+    /// как только развилка встала прямо в ZStack.
+    @ViewBuilder
+    private var baseLayer: some View {
+        if showsSketchMap, let scene = sketch.scene {
+            // Своя схема во весь экран. Панели поверх остаются те же: они
+            // говорят про скорость и камеры, а не про подложку.
+            ZStack {
+                Color.black
+                RoadSketchView(scene: scene, state: sketch, tint: sketchTint,
+                               trim: env.thermal.mode.sketchTrim)
+            }
+            .ignoresSafeArea()
+        } else {
+            mapLayer
+                .ignoresSafeArea()
+                .environment(\.colorScheme, mapColorScheme)
         }
     }
 

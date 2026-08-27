@@ -20,6 +20,15 @@ final class MapModeTests: XCTestCase {
     }
 
     /// В покое экран про «куда поедем» — и ничего из ездового.
+    func testSketchMapIsForMovingOnly() {
+        // Своя схема отвечает на «что впереди». На стоянке вопрос другой —
+        // «где это вообще»: там ищут адрес и ставят камеру, и для этого нужна
+        // карта Apple, а не наши тайлы.
+        XCTAssertFalse(MapMode.idle.allowsSketchMap)
+        XCTAssertTrue(MapMode.driving.allowsSketchMap)
+        XCTAssertTrue(MapMode.navigating.allowsSketchMap)
+    }
+
     func testIdleShowsDestinationTools() {
         let mode = MapMode.idle
         XCTAssertTrue(mode.showsQuickDestinations)

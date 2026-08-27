@@ -161,6 +161,34 @@ struct MobilePassDriver: View {
 }
 
 /// Следование карты за GPS: единственный подписчик locationTick.
+/// Тик GPS → своя схема на главном экране.
+///
+/// Отдельной вью по той же причине, по какой отдельной сделан
+/// `LocationFollowDriver`: чтение `locationTick` в теле MapScreen пересобирало
+/// бы весь экран с картой каждую секунду. Здесь тик читает пустой прямоугольник
+/// без единого пикселя.
+///
+/// Монтируется только когда схема ДЕЙСТВИТЕЛЬНО на экране: тумблер включён и
+/// мы в движении. Выключен тумблер — эта вью не существует, и схема не стоит
+/// ни одного тика.
+struct SketchRefreshDriver: View {
+    @Environment(AppEnvironment.self) private var env
+    let sketch: SketchState
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .onChange(of: env.location.locationTick) { _, _ in
+                // Телефон в кармане — считать схему некому и не для кого. Тот
+                // же гейт, что у приборки.
+                guard env.isPhoneSceneActive else { return }
+                sketch.refresh(env)
+            }
+            .onAppear { sketch.refresh(env) }
+    }
+}
+
+
 struct LocationFollowDriver: View {
     @Environment(AppEnvironment.self) private var env
     let map: MapState

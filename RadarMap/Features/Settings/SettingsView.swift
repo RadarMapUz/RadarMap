@@ -238,10 +238,11 @@ struct SettingsView: View {
                     Picker("Тема карты", selection: $settings.mapAppearance) {
                         ForEach(MapAppearance.allCases) { Text($0.title).tag($0) }
                     }
+                    Toggle("Своя схема в движении", isOn: $settings.sketchWhileDriving)
                 } header: {
                     Text("Карта")
                 } footer: {
-                    Text("«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.")
+                    Text("«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nСвоя схема — наша карта вместо Apple: полотно, перекрёстки, разметка. Включается только в движении; на стоянке остаётся карта Apple, где ищут адрес и ставят камеру.")
                         .fixedSize(horizontal: false, vertical: true)
                 }
 

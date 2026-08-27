@@ -975,7 +975,19 @@ FRAME_LIMITS = (
 )
 
 
-def frame_limits(south, west, north, east, span=None):
+# То же самое, но по МЕТРАМ НА ПИКСЕЛЬ: подробность решает масштаб, а не то,
+# сколько земли влезло в окно. На большом мониторе тот же зум даёт вдвое
+# больший охват, и панель прятала дворовые проезды на семнадцатом зуме — там,
+# где по ним и работают.
+MPP_LIMITS = (
+    (1.2, 6, 7, 12_000),      # виден дом и подъезд: всё, как есть
+    (4.0, 24, 6, 20_000),     # виден квартал: без служебных проездов
+    (20.0, 96, 4, 20_000),    # виден район: костяк и главные улицы
+    (float("inf"), 96, 3, 20_000),
+)
+
+
+def frame_limits(south, west, north, east, span=None, mpp=None):
     """Сколько читать и что показывать на этом охвате.
 
     `span` — охват ЭКРАНА, если он известен; рамка запроса шире экрана на
@@ -983,6 +995,11 @@ def frame_limits(south, west, north, east, span=None):
     Замечено на себе: на зуме 17 запас в шестьдесят процентов делал охват
     «районным», и дворовые проезды пропадали ровно там, где по ним и работают.
     """
+    if mpp is not None and mpp > 0:
+        for edge, files, worst_class, objects in MPP_LIMITS:
+            if mpp <= edge:
+                return {"files": files, "class": worst_class,
+                        "objects": objects}
     if span is None:
         span = max(north - south, east - west)
     for edge, files, worst_class, objects in FRAME_LIMITS:

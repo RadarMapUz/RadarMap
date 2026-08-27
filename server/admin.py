@@ -2007,7 +2007,11 @@ class Handler(BaseHTTPRequestHandler):
             span = float(query["span"][0])
         except (KeyError, IndexError, ValueError):
             span = None
-        limits = map_edits.frame_limits(*box, span=span)
+        try:
+            mpp = float(query["mpp"][0])
+        except (KeyError, IndexError, ValueError):
+            mpp = None
+        limits = map_edits.frame_limits(*box, span=span, mpp=mpp)
         report = {}
         roads = map_edits.load_roads(edits_tiles_dir(), *box,
                                      limits=limits, report=report)

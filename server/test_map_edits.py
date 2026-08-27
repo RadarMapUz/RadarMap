@@ -1178,3 +1178,86 @@ class NeverEmptyTests(unittest.TestCase):
                                      report=report)
         self.assertEqual(len(roads), 1)
         self.assertEqual(report["thinned"], 2)
+
+
+class ScaleLimitTests(unittest.TestCase):
+    """Подробность решает МАСШТАБ, а не размер окна.
+
+    Полосы считались по охвату рамки в градусах, и на большом мониторе тот же
+    зум давал вдвое больший охват: панель прятала дворовые проезды на
+    семнадцатом зуме — там, где по ним и работают.
+    """
+
+    def test_same_zoom_gives_same_detail_on_any_screen(self):
+        small = map_edits.frame_limits(41.300, 69.270, 41.310, 69.280, mpp=1.0)
+        big = map_edits.frame_limits(41.280, 69.250, 41.330, 69.320, mpp=1.0)
+        self.assertEqual(small, big)
+        self.assertEqual(small["class"], 7, "на рабочем масштабе скрыли дворы")
+
+    def test_zooming_out_thins_the_small_roads(self):
+        self.assertEqual(
+            map_edits.frame_limits(41.2, 69.1, 41.4, 69.4, mpp=10.0)["class"], 4)
+
+    def test_span_still_works_when_scale_is_unknown(self):
+        # Старые вкладки шлют только охват — они обязаны продолжать работать.
+        by_span = map_edits.frame_limits(41.300, 69.270, 41.305, 69.275)
+        self.assertEqual(by_span["class"], 7)
+
+    def test_scale_beats_span_when_both_are_given(self):
+        both = map_edits.frame_limits(41.2, 69.1, 41.4, 69.4, span=0.3, mpp=0.8)
+        self.assertEqual(both["class"], 7, "масштаб проиграл охвату")
+
+
+class PanelShadowTests(unittest.TestCase):
+    """Своя переменная не имеет права звать функцию тем же именем.
+
+    `const wide = ...` внутри drawRoads перекрыл функцию `wide()`, которую
+    та же drawRoads зовёт двумя строками выше. Это не предупреждение, а
+    смерть кадра: ReferenceError на первой строке, отрисовка не начинается,
+    карта остаётся чёрной — и никакой разбор файла об этом не скажет,
+    `node --check` такой файл принимает.
+
+    Сторожим ровно смертельный случай — затенение В ТОМ ЖЕ теле, которое
+    функцию зовёт. Безобидные тёзки в чужих телах не трогаем: запрет,
+    требующий переименовывать работающий код, снимут первым.
+    """
+
+    def bodies(self):
+        source = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "static", "editor.js")
+        with open(source, encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+        names = set()
+        for text in lines:
+            head = re.match(r"^  (?:async )?function (\w+)\s*\(", text)
+            if head:
+                names.add(head.group(1))
+        out, start, name = [], None, None
+        for number, text in enumerate(lines, 1):
+            head = re.match(r"^  (?:async )?function (\w+)\s*\(", text)
+            if head:
+                start, name = number, head.group(1)
+            elif text == "  }" and start is not None:
+                out.append((name, start, lines[start:number - 1]))
+                start = None
+        return names, out
+
+    def test_no_local_shadows_a_function_its_own_body_calls(self):
+        names, bodies = self.bodies()
+        self.assertGreater(len(names), 50, "функции верхнего уровня не нашлись")
+        deadly = []
+        for owner, start, body in bodies:
+            taken = set()
+            for text in body:
+                own = re.match(r"^\s{3,}(?:const|let|var)\s+(\w+)\s*[=;]", text)
+                if own and own.group(1) in names:
+                    taken.add(own.group(1))
+            for shadow in sorted(taken):
+                for offset, text in enumerate(body):
+                    call = re.search(r"(?<![.\w])" + shadow + r"\s*\(", text)
+                    if call and not re.match(r"^\s*(?:const|let|var)\s+" + shadow, text):
+                        deadly.append(f"{owner} (строка {start}): "
+                                      f"{shadow} затенён и вызван на "
+                                      f"{start + offset}")
+                        break
+        self.assertEqual(deadly, [], "затенение убьёт кадр: " + "; ".join(deadly))

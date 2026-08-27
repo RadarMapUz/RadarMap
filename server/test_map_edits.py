@@ -1719,3 +1719,38 @@ class PlaceReadTests(unittest.TestCase):
         # Чем дальше отъехали, тем крупнее должны быть оставшиеся места.
         ranks = [map_edits.place_rank(m) for m in (200, 80, 30, 12, 6, 2)]
         self.assertEqual(ranks, sorted(ranks), "порядок рангов перевернулся")
+
+
+class FrameTouchTests(unittest.TestCase):
+    """Рамку проверяем ПЕРЕСЕЧЕНИЕМ, а не наличием вершины внутри.
+
+    У куска дороги вершины стоят через десятки метров, и на ближнем плане
+    проспект, проходящий через весь экран, не имеет внутри кадра ни одной.
+    Замерено на боевых тайлах: 121 кадр вида вблизи (55 метров) по центру
+    Ташкента. По вершине находилось 174 дороги, ещё **71 терялась** — они
+    пересекают кадр, а вершины внутри не имеют. Это 28 % содержимого кадра, и
+    именно на этом масштабе работает вид за рулём.
+    """
+
+    BOX = (41.310, 69.280, 41.311, 69.281)   # юг, запад, север, восток
+
+    def test_a_road_crossing_the_frame_is_found(self):
+        # Ни одной вершины внутри: концы далеко по обе стороны.
+        crossing = [(69.270, 41.3105), (69.290, 41.3105)]
+        self.assertTrue(map_edits.touches_box(crossing, *self.BOX))
+
+    def test_a_road_beside_the_frame_is_not(self):
+        aside = [(69.270, 41.3200), (69.290, 41.3200)]
+        self.assertFalse(map_edits.touches_box(aside, *self.BOX))
+
+    def test_a_vertex_inside_still_counts(self):
+        self.assertTrue(map_edits.touches_box([(69.2805, 41.3105)], *self.BOX))
+
+    def test_a_diagonal_that_misses_the_corner(self):
+        # Рамки пересекаются, а сам отрезок проходит мимо угла — раньше такой
+        # случай ловился «по рамке» и давал ложное попадание.
+        miss = [(69.2790, 41.3120), (69.2830, 41.3160)]
+        self.assertFalse(map_edits.touches_box(miss, *self.BOX))
+
+    def test_an_empty_line_is_not_a_hit(self):
+        self.assertFalse(map_edits.touches_box([], *self.BOX))

@@ -496,18 +496,42 @@ nonisolated enum RoadSketch {
 
         var out: [Label] = []
         var placed: [CGPoint] = []
-        for (line, _) in ranked {
+        for (line, length) in ranked {
             guard out.count < limit else { break }
             // Одна улица — одна подпись в кадре: склейка оставляет длинные
             // улицы целыми, но рядом бывает её же дублирующий кусок.
             guard !out.contains(where: { $0.text == line.name }) else { continue }
-            let middle = line.points.count / 2
-            let point = line.points[middle]
+            // Середина берётся по ПРОЙДЕННОМУ ПУТИ, а не по номеру точки.
+            //
+            // После Дугласа — Пекера вершины лежат неравномерно: прямой
+            // участок — одно звено, поворот — несколько подряд. Середина
+            // индекса поэтому уезжает в поворот, а у прямой улицы, от которой
+            // осталось две точки, попадает на КОНЕЦ — то есть подпись садится
+            // в перекрёсток.
+            var point = line.points[line.points.count - 1]
+            var before = line.points[0]
+            var after = point
+            var walked = 0.0
+            for index in 1..<line.points.count {
+                let from = line.points[index - 1]
+                let to = line.points[index]
+                let step = hypot(Double(to.x - from.x), Double(to.y - from.y))
+                guard step > 0 else { continue }
+                if walked + step >= length / 2 {
+                    let share = CGFloat((length / 2 - walked) / step)
+                    point = CGPoint(x: from.x + (to.x - from.x) * share,
+                                    y: from.y + (to.y - from.y) * share)
+                    // Угол — по СВОЕМУ звену: соседние вершины могут лежать за
+                    // поворотом, и подпись легла бы поперёк улицы.
+                    before = from
+                    after = to
+                    break
+                }
+                walked += step
+            }
             guard !placed.contains(where: {
                 hypot(Double($0.x - point.x), Double($0.y - point.y)) < labelApartMeters
             }) else { continue }
-            let before = line.points[max(0, middle - 1)]
-            let after = line.points[min(line.points.count - 1, middle + 1)]
             var angle = atan2(Double(after.y - before.y),
                               Double(after.x - before.x)) * 180 / .pi
             // Экранный y растёт вниз, мир — вверх: знак угла обратный.
@@ -958,13 +982,40 @@ nonisolated enum RoadSketch {
         if areaBudget > 0 && !areas.isEmpty {
             var kept: [Area] = []
             kept.reserveCapacity(min(areas.count, areaBudget))
-            for area in areas where area.kind.maxSpanMeters >= spanMeters {
-                let points = nearby(area.points)
-                guard points.count >= (area.isClosed ? 3 : 2) else { continue }
-                kept.append(Area(points: points, kind: area.kind,
-                                 isClosed: area.isClosed, levels: area.levels,
-                                 roadClass: area.roadClass))
-                if kept.count >= areaBudget { break }
+            // Обход — ПО СЛОЯМ, а не по массиву.
+            //
+            // `areas` приезжает как flatMap по МНОЖЕСТВУ тайлов, то есть его
+            // порядок — порядок хеша. Пока бюджет не заполняется, это никого
+            // не трогает; как только заполняется — «первые N по порядку»
+            // означает «кто выжил, решил хеш»: река исчезала бы через раз на
+            // одном и том же месте, вытесненная пачкой домов из тайла,
+            // который просто оказался раньше в обходе.
+            //
+            // Заполняться бюджет начнёт ровно тогда, когда поедут дома: их
+            // 54 094 в одном кадре центра против четырёхсот мест в бюджете.
+            //
+            // Ключ приоритета — уже объявленный maxSpanMeters: он и есть мера
+            // «ориентир или деталь ближнего плана». Второе число для этого
+            // заводить незачем.
+            let layers = SketchArea.Kind.allCases
+                .filter { $0.maxSpanMeters >= spanMeters }
+                .sorted {
+                    // Второй ключ нужен: у воды, зелени и рельсов охват
+                    // одинаков, а sorted в Swift не устойчива — без него
+                    // порядок внутри равных снова стал бы деталью реализации.
+                    $0.maxSpanMeters == $1.maxSpanMeters
+                        ? $0.rawValue < $1.rawValue
+                        : $0.maxSpanMeters > $1.maxSpanMeters
+                }
+            layers: for layer in layers {
+                for area in areas where area.kind == layer {
+                    let points = nearby(area.points)
+                    guard points.count >= (area.isClosed ? 3 : 2) else { continue }
+                    kept.append(Area(points: points, kind: area.kind,
+                                     isClosed: area.isClosed, levels: area.levels,
+                                     roadClass: area.roadClass))
+                    if kept.count >= areaBudget { break layers }
+                }
             }
             // Вода поверх зелени, кварталы под всем: порядок задаётся здесь,
             // чтобы рендерер не сортировал на каждой пересборке.

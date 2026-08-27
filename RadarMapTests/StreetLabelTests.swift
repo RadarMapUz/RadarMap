@@ -116,4 +116,31 @@ final class StreetLabelTests: XCTestCase {
         XCTAssertEqual(labels.first?.point.x ?? 0, 100, accuracy: 1)
         XCTAssertEqual(labels.first?.point.y ?? 99, 0, accuracy: 1)
     }
+
+    func testLabelSitsAtTheMiddleByLengthNotByIndex() {
+        // Вершины после Дугласа — Пекера лежат неравномерно: прямой участок —
+        // одно звено, поворот — несколько подряд. Середина ИНДЕКСА уезжает в
+        // поворот, а у прямой улицы, от которой осталось две точки, попадает
+        // на конец — то есть подпись садится в перекрёсток.
+        let uneven = RoadSketch.Line(
+            points: [.zero, CGPoint(x: 180, y: 0), CGPoint(x: 190, y: 0),
+                     CGPoint(x: 200, y: 0)],
+            kind: .secondary, level: 0, isOneWay: false, isDetailed: true,
+            name: "Неровная")
+        let labels = RoadSketch.labels(for: [uneven])
+        XCTAssertEqual(labels.first?.point.x ?? 0, 100, accuracy: 2,
+                       "подпись села по номеру точки, а не по пути")
+    }
+
+    func testATwoPointStreetIsLabelledInTheMiddle() {
+        // Самый частый случай на прямой улице: осталось ровно две вершины, и
+        // середина индекса — это её КОНЕЦ.
+        let straight = RoadSketch.Line(
+            points: [.zero, CGPoint(x: 200, y: 0)],
+            kind: .secondary, level: 0, isOneWay: false, isDetailed: true,
+            name: "Прямая")
+        let labels = RoadSketch.labels(for: [straight])
+        XCTAssertEqual(labels.first?.point.x ?? 0, 100, accuracy: 2,
+                       "подпись села на конец улицы")
+    }
 }

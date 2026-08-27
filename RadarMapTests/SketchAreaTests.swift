@@ -99,6 +99,30 @@ final class SketchAreaTests: XCTestCase {
                              "камеры не гаснут никогда")
     }
 
+    func testAreaBudgetKeepsLandmarksBeforeHouses() {
+        // Бюджет местности режет по СЛОЯМ, а не по порядку массива. Массив
+        // приезжает flatMap-ом по множеству тайлов, то есть его порядок —
+        // порядок хеша: «первые N» означало бы «кто выжил, решил хеш». Река
+        // исчезала бы через раз, вытесненная пачкой домов из тайла, который
+        // просто оказался раньше в обходе.
+        //
+        // Заполняться бюджет начнёт ровно тогда, когда поедут дома: их 54 094
+        // в одном кадре центра против четырёхсот мест в бюджете.
+        var mixed: [SketchArea] = (0..<30).map {
+            SketchArea(points: ring(at: 41.3 + Double($0) * 0.0001, 69.25),
+                       kind: .house, isClosed: true)
+        }
+        mixed.append(SketchArea(points: ring(at: 41.3005, 69.2505),
+                                kind: .water, isClosed: true))
+        let scene = RoadSketch.scene(alertCamera: nil, alertInRange: false,
+                                     areas: mixed, areaBudget: 5,
+                                     anchor: .init(latitude: 41.3, longitude: 69.25),
+                                     spanMeters: 150)
+        XCTAssertEqual(scene.areas.count, 5)
+        XCTAssertTrue(scene.areas.contains { $0.kind == .water },
+                      "вода — ориентир, она обязана пережить дома")
+    }
+
     func testAreaBudgetIsRespected() {
         let many = (0..<50).map {
             SketchArea(points: ring(at: 41.3 + Double($0) * 0.0001, 69.25),

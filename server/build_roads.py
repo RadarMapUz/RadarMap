@@ -1041,10 +1041,13 @@ def collect_houses(source_path, tolerance_deg, floor=None):
             except ValueError:
                 continue
             geometry = feature.get("geometry") or {}
-            if geometry.get("type") != "Polygon":
+            # Osmium пишет площадь как MultiPolygon — см. _shapes_of. Третье
+            # место с этой же проверкой; первые два молча теряли всю зелень и
+            # все дома страны.
+            shapes = [pts for closed, pts in _shapes_of(geometry) if closed]
+            if not shapes:
                 continue
-            rings = geometry.get("coordinates") or []
-            points = rings[0] if rings else []
+            points = shapes[0]
             if len(points) < 4:
                 continue
             points = simplify(points, tolerance_deg)
@@ -1126,7 +1129,15 @@ def feature_center(geometry):
             return float(coords[0]), float(coords[1])
         except (TypeError, ValueError):
             return None
-    if shape == "Polygon":
+    if shape == "MultiPolygon":
+        # Адрес чаще всего висит на КОНТУРЕ здания, а контур приезжает
+        # многоугольником. Без этой ветки адресный индекс терял ровно те
+        # объекты, ради которых он и заводился.
+        points = []
+        for polygon in coords or []:
+            if polygon and polygon[0]:
+                points.extend(polygon[0])
+    elif shape == "Polygon":
         rings = coords or []
         points = rings[0] if rings else []
     elif shape == "LineString":

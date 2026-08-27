@@ -417,10 +417,19 @@ class AreaTests(unittest.TestCase):
     """
 
     def feature(self, props, coords, shape="Polygon"):
-        geometry = {"type": shape,
-                    "coordinates": [coords] if shape == "Polygon" else coords}
+        # «Polygon» здесь — вымысел, удобный для теста. ЖИВОЙ osmium пишет
+        # площадь как MultiPolygon всегда, даже когда кольцо одно. Разбор
+        # искал «Polygon», не находил и молча выбрасывал КАЖДУЮ площадь —
+        # а тесты этого не видели, потому что кормили его геометрией,
+        # которой в природе нет. Оба вида поддержаны и оба проверены.
+        if shape == "Polygon":
+            body = [coords]
+        elif shape == "MultiPolygon":
+            body = [[coords]]
+        else:
+            body = coords
         return json.dumps({"type": "Feature", "properties": props,
-                           "geometry": geometry})
+                           "geometry": {"type": shape, "coordinates": body}})
 
     def write(self, lines):
         handle = tempfile.NamedTemporaryFile("w", suffix=".geojsonl",
@@ -2689,3 +2698,83 @@ class JunctionShapeTests(unittest.TestCase):
         node = (69.25, 41.30)
         self.assertTrue(build_roads._seam_needs_patch(
             [(node, (69.26, 41.30), 20.0), (node, (69.24, 41.30), 7.0)]))
+
+
+class OsmiumGeometryTests(unittest.TestCase):
+    """Разбор обязан понимать то, что пишет НАСТОЯЩИЙ osmium.
+
+    Замерено на боевом экстракте, 300 тысяч записей: колец из многоугольников
+    38 755, замкнутых линий 37 761, линий без кольца-двойника — 2, колец без
+    линии-двойника — 946. Последние и терялись целиком: это площади-отношения,
+    большие парки и озёра с островами, у которых своей линии нет.
+
+    Замкнутое кольцо приезжает ДВАЖДЫ: многоугольником и линией с совпавшими
+    концами. Класть в тайл надо одно.
+    """
+
+    def feature(self, props, geometry):
+        return json.dumps({"type": "Feature", "properties": props,
+                           "geometry": geometry})
+
+    def ring(self, lat, lon, size):
+        return [[lon, lat], [lon + size, lat], [lon + size, lat + size],
+                [lon, lat + size], [lon, lat]]
+
+    def write(self, lines):
+        handle = tempfile.NamedTemporaryFile("w", suffix=".geojsonl",
+                                             delete=False, encoding="utf-8")
+        handle.write("\n".join(lines))
+        handle.close()
+        self.addCleanup(os.unlink, handle.name)
+        return handle.name
+
+    def test_multipolygon_is_a_closed_area(self):
+        path = self.write([self.feature(
+            {"leisure": "park"},
+            {"type": "MultiPolygon", "coordinates": [[self.ring(41.3, 69.25, 0.003)]]})])
+        areas = build_roads.collect_areas(path, 0)
+        self.assertEqual(len(areas), 1, "площадь osmium потерялась при разборе")
+        self.assertEqual(areas[0][0], build_roads.AREA_GREEN)
+        self.assertEqual(areas[0][1], build_roads.AREA_FLAG_CLOSED,
+                         "парк приехал контуром вместо заливки")
+
+    def test_the_line_twin_of_an_area_is_dropped(self):
+        # То же кольцо, что и выше, но вторым телом — линией.
+        path = self.write([
+            self.feature({"leisure": "park"},
+                         {"type": "MultiPolygon",
+                          "coordinates": [[self.ring(41.3, 69.25, 0.003)]]}),
+            self.feature({"leisure": "park"},
+                         {"type": "LineString",
+                          "coordinates": self.ring(41.3, 69.25, 0.003)}),
+        ])
+        self.assertEqual(len(build_roads.collect_areas(path, 0)), 1,
+                         "площадь легла в тайл дважды")
+
+    def test_an_open_line_still_travels(self):
+        # Арык и рельсы — настоящие линии, у них двойника нет.
+        path = self.write([self.feature(
+            {"waterway": "canal"},
+            {"type": "LineString", "coordinates": [[69.25, 41.30], [69.26, 41.31]]})])
+        areas = build_roads.collect_areas(path, 0)
+        self.assertEqual(len(areas), 1)
+        self.assertEqual(areas[0][1], 0, "линия приехала замкнутой")
+
+    def test_every_ring_of_a_multipolygon_arrives(self):
+        path = self.write([self.feature(
+            {"natural": "water"},
+            {"type": "MultiPolygon",
+             "coordinates": [[self.ring(41.30, 69.25, 0.003)],
+                             [self.ring(41.32, 69.28, 0.003)]]})])
+        self.assertEqual(len(build_roads.collect_areas(path, 0)), 2)
+
+    def test_a_hole_does_not_become_an_area(self):
+        # Пруд внутри парка рисуется своим объектом набора воды поверх зелени;
+        # в записи тайла лежит ОДНО кольцо.
+        outer = self.ring(41.30, 69.25, 0.01)
+        inner = self.ring(41.303, 69.253, 0.002)
+        path = self.write([self.feature(
+            {"leisure": "park"},
+            {"type": "MultiPolygon", "coordinates": [[outer, inner]]})])
+        areas = build_roads.collect_areas(path, 0)
+        self.assertEqual(len(areas), 1, "дырка приехала отдельной площадью")

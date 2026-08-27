@@ -831,25 +831,59 @@ def collect_areas(source_path, tolerance_deg):
             if kind is None:
                 continue
             geometry = feature.get("geometry") or {}
-            shape = geometry.get("type")
-            if shape == "Polygon":
-                rings = geometry.get("coordinates") or []
-                points = rings[0] if rings else []
-                closed = True
-            elif shape == "LineString":
-                points = geometry.get("coordinates") or []
-                closed = False
-            else:
-                continue
-            if len(points) < 3 if closed else len(points) < 2:
-                continue
-            points = simplify(points, tolerance_deg)
-            if len(points) < (3 if closed else 2):
-                continue
-            if extent_meters(points) < MIN_AREA_METERS:
-                continue
-            areas.append((kind, AREA_FLAG_CLOSED if closed else 0, points))
+            for closed, points in _shapes_of(geometry):
+                if len(points) < (3 if closed else 2):
+                    continue
+                points = simplify(points, tolerance_deg)
+                if len(points) < (3 if closed else 2):
+                    continue
+                if extent_meters(points) < MIN_AREA_METERS:
+                    continue
+                areas.append((kind, AREA_FLAG_CLOSED if closed else 0, points))
     return areas
+
+
+def _shapes_of(geometry):
+    """Геометрия osmium → список (замкнуто, точки).
+
+    Osmium НЕ пишет «Polygon». Площадь у него всегда MultiPolygon, даже когда
+    контур один: внутри его модели площадь — это мультиполигон по определению.
+    Разбор искал «Polygon», не находил и уходил в `continue` — то есть каждая
+    площадь молча выбрасывалась.
+
+    Уцелевало от неё второе тело: то же замкнутое кольцо osmium пишет ЕЩЁ РАЗ
+    как LineString, геометрией самой линии. Его мы и клали в тайл — без бита
+    замыкания. Парки и пруды приезжали на панель контуром вместо заливки, и
+    это было не «старые тайлы», а потеря на разборе.
+
+    Замерено на боевом экстракте (300 тысяч записей):
+
+        колец из многоугольников   38 755, различных 38 703
+        замкнутых линий            37 761, различных 37 759
+        линий без кольца-двойника  2
+        колец без линии-двойника   946   ← это и терялось целиком
+
+    Отсюда правило: площадь берём из многоугольника, линию — только НЕЗАМКНУТУЮ.
+    Оно теряет две записи из тридцати восьми тысяч и возвращает 946 площадей,
+    которых на карте не было вовсе: это площади-отношения — большие парки и
+    озёра с островами, у которых своей линии нет.
+
+    Дырки (внутренние кольца) пропускаем: в записи тайла лежит ОДНО кольцо, и
+    пруд внутри парка рисуется своим объектом набора воды поверх зелени.
+    """
+    shape = geometry.get("type")
+    coordinates = geometry.get("coordinates") or []
+    if shape == "MultiPolygon":
+        return [(True, polygon[0]) for polygon in coordinates
+                if polygon and polygon[0]]
+    if shape == "Polygon":
+        return [(True, coordinates[0])] if coordinates and coordinates[0] else []
+    if shape == "LineString":
+        if len(coordinates) > 2 and coordinates[0] == coordinates[-1]:
+            # Второе тело площади. Кольцо приедет многоугольником.
+            return []
+        return [(False, coordinates)]
+    return []
 
 
 def collect_houses(source_path, tolerance_deg, floor=None):

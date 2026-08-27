@@ -1439,3 +1439,84 @@ class ThinPointsTests(unittest.TestCase):
     def test_no_threshold_changes_nothing(self):
         points = self.ring(60)
         self.assertEqual(map_edits.thin_points(points, 0), points)
+
+
+class PanelPaletteTests(unittest.TestCase):
+    """Контраст палитры — число, а не впечатление.
+
+    Отсюда и взялся квартал #12151b при фоне #0e1013: кто-то посмотрел и
+    решил, что видно. Контраст 1,04 — это невидимо, и на охвате области
+    застройка не давала городу никакой массы.
+
+    Поднять её на всех масштабах нельзя: вблизи дорога идёт ПО кварталу, и
+    при контрасте 1,51 дворовый проезд к нему — 1,15, то есть исчезает.
+    Поэтому палитр две, и сторожим обе.
+    """
+
+    GROUND = "#0e1013"
+
+    def source(self):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "static", "editor.js")
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+
+    def lum(self, colour):
+        parts = [int(colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        parts = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+                 for c in parts]
+        return 0.2126 * parts[0] + 0.7152 * parts[1] + 0.0722 * parts[2]
+
+    def ratio(self, one, two):
+        a, b = self.lum(one), self.lum(two)
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+
+    def look(self):
+        text = self.source()
+        block = re.search(r"const LAND_LOOK = \{(.*?)\n  \};", text, re.S)
+        self.assertIsNotNone(block, "в editor.js нет таблицы местности")
+        out = {}
+        for row in re.finditer(r"(\d+): \{ fill: '(#\w{6})'(?:, far: '(#\w{6})')?",
+                               block.group(1)):
+            out[int(row.group(1))] = (row.group(2), row.group(3))
+        return out
+
+    def asphalt(self):
+        text = self.source()
+        block = re.search(r"const ASPHALT = \[(.*?)\n  \];", text, re.S)
+        self.assertIsNotNone(block, "в editor.js нет таблицы асфальта")
+        return [(int(r.group(1)), r.group(2), r.group(3)) for r in
+                re.finditer(r"upto: (\d+), near: '(#\w{6})', far: '(#\w{6})'",
+                            block.group(1))]
+
+    def test_far_land_is_actually_visible(self):
+        want = {1: 1.7, 2: 1.7, 4: 1.4, 6: 1.6}
+        for kind, least in want.items():
+            near, far = self.look()[kind]
+            self.assertIsNotNone(far, f"у вида {kind} нет дальней ступени")
+            self.assertGreaterEqual(round(self.ratio(far, self.GROUND), 2), least,
+                                    f"вид {kind} на дальнем плане не виден")
+
+    def test_roads_stay_above_the_buildings(self):
+        # Самая мелкая дорога обязана читаться ПОВЕРХ застройки — иначе сеть
+        # тонет в кварталах ровно там, где по ней и ориентируются.
+        block_near, block_far = self.look()[4]
+        for upto, near, far in self.asphalt():
+            self.assertGreater(self.ratio(near, block_near), 1.5,
+                               f"класс ≤{upto} тонет в квартале вблизи")
+            self.assertGreater(self.ratio(far, block_far), 1.7,
+                               f"класс ≤{upto} тонет в квартале вдали")
+
+    def test_the_hierarchy_of_classes_never_inverts(self):
+        rows = self.asphalt()
+        for name, at in (("вблизи", 1), ("вдали", 2)):
+            light = [self.lum(row[at]) for row in rows]
+            self.assertEqual(light, sorted(light, reverse=True),
+                             f"{name}: мелкая дорога светлее магистрали")
+
+    def test_the_far_step_is_brighter_than_the_near_one(self):
+        for kind, (near, far) in self.look().items():
+            if far is None:
+                continue
+            self.assertGreater(self.lum(far), self.lum(near),
+                               f"вид {kind}: дальняя ступень темнее ближней")

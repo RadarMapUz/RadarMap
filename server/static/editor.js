@@ -1013,13 +1013,64 @@
     return 156543.03392 * Math.cos(lat) / Math.pow(2, map.getZoom());
   }
 
+  // Палитра ЗАВИСИТ ОТ МАСШТАБА, и это не украшение.
+  //
+  // Замерено по формуле относительной яркости, фон карты #0e1013: квартал
+  // #12151b даёт контраст 1,04 — то есть невидим. Отсюда и «город еле виден»
+  // на охвате области: застройка, которая должна давать городу массу, не
+  // отличается от пустой земли ни на глаз, ни по числу.
+  //
+  // Поднять её на всех масштабах нельзя: на близком плане дорога идёт ПО
+  // кварталу, и при контрасте квартала 1,51 дворовый проезд к нему — 1,15,
+  // то есть исчезает внутри застройки. Замерено, а не предположено.
+  //
+  // Поэтому две палитры и переход между ними. Вблизи, где дорога широкая, —
+  // тёмная застройка и спокойный асфальт. Вдали, где дорога вырождается в
+  // полуторапиксельную нить, — застройка светлее и асфальт ярче, чтобы сеть
+  // осталась поверх неё:
+  //
+  //          вблизи        вдали     к фону   дорога к кварталу
+  //   квартал #12151b  →  #2c3342   1,04→1,51
+  //   улица   #525252  →  #6c6c6c            1,62→2,41
+  //   проезд  #3c3c3c  →  #595959            1,15→1,81
+  const FAR_FROM = 4, FAR_TO = 16;   // метров на пиксель
+  let farNow = 0;
+
+  function farShare(perPixel) {
+    if (perPixel <= FAR_FROM) { return 0; }
+    if (perPixel >= FAR_TO) { return 1; }
+    return (perPixel - FAR_FROM) / (FAR_TO - FAR_FROM);
+  }
+
+  function blend(near, far, share) {
+    if (share <= 0) { return near; }
+    if (share >= 1) { return far; }
+    let out = '#';
+    for (let i = 1; i < 7; i += 2) {
+      const a = parseInt(near.substr(i, 2), 16);
+      const b = parseInt(far.substr(i, 2), 16);
+      out += ('0' + Math.round(a + (b - a) * share).toString(16)).slice(-2);
+    }
+    return out;
+  }
+
+  const ASPHALT = [
+    { upto: 2, near: '#6b6a63', far: '#8a8981' },
+    { upto: 3, near: '#5e5d58', far: '#7d7c75' },
+    { upto: 4, near: '#525252', far: '#6c6c6c' },
+    { upto: 6, near: '#464646', far: '#606060' },
+    { upto: 9, near: '#3c3c3c', far: '#595959' },
+  ];
+
   // Цвет асфальта по классу — те же тона, что на схеме телефона.
   function asphalt(cls) {
-    if (cls <= 2) { return '#6b6a63'; }
-    if (cls === 3) { return '#5e5d58'; }
-    if (cls === 4) { return '#525252'; }
-    if (cls <= 6) { return '#464646'; }
-    return '#3c3c3c';
+    for (let i = 0; i < ASPHALT.length; i++) {
+      if (cls <= ASPHALT[i].upto) {
+        return blend(ASPHALT[i].near, ASPHALT[i].far, farNow);
+      }
+    }
+    return blend(ASPHALT[ASPHALT.length - 1].near,
+                 ASPHALT[ASPHALT.length - 1].far, farNow);
   }
 
   function line(points, options) {
@@ -1041,12 +1092,12 @@
   // город тонул в синей сетке каналов, а сам был еле виден. Толщина в метрах
   // с полом в один пункт эту ложь убирает и на близком плане ничего не меняет.
   const LAND_LOOK = {
-    1: { fill: '#16324a', line: '#295176', width: 5, metres: 9 },   // вода
-    2: { fill: '#152a1b', line: '#1f4227', width: 2 },   // зелень
-    3: { fill: '#2a2723', line: '#4a463e', width: 2, metres: 5 },   // рельсы
-    4: { fill: '#12151b', line: '#191d25', width: 1 },   // квартал
-    5: { fill: '#1b1f26', line: '#2b313b', width: 1.4, dash: [1.4, 3.2] }, // тротуар
-    6: { fill: '#1f232c', line: '#2b303a', width: 1 },   // дом
+    1: { fill: '#16324a', far: '#1d4262', line: '#295176', width: 5, metres: 9 },
+    2: { fill: '#152a1b', far: '#23462d', line: '#1f4227', width: 2 },
+    3: { fill: '#2a2723', far: '#3f3b35', line: '#4a463e', width: 2, metres: 5 },
+    4: { fill: '#12151b', far: '#2c3342', line: '#191d25', width: 1 },
+    5: { fill: '#1b1f26', line: '#2b313b', width: 1.4, dash: [1.4, 3.2] },
+    6: { fill: '#1f232c', far: '#353b4b', line: '#2b303a', width: 1 },
   };
   const LAND_ORDER = [4, 6, 2, 1, 3, 5];
 
@@ -1205,6 +1256,10 @@
     // же площади — это одиннадцать миллионов пикселей дважды. На спутнике
     // холст обязан быть прозрачным, там чистим; на схеме заливаем землёй, и
     // заливка сама стирает прежнее.
+    // Доля дальнего плана — один раз на пересборку. Спрашивать масштаб у
+    // карты на каждый объект значит звать getCenter и getZoom по двадцать
+    // тысяч раз за кадр.
+    farNow = farShare(metersPerPixel());
     if (schema) {
       brush.fillStyle = '#0e1013';
       brush.fillRect(0, 0, width, height);
@@ -1317,7 +1372,7 @@
             if (i === 0) { brush.moveTo(at[0], at[1]); } else { brush.lineTo(at[0], at[1]); }
           });
           brush.closePath();
-          brush.fillStyle = look.fill;
+          brush.fillStyle = look.far ? blend(look.fill, look.far, farNow) : look.fill;
           brush.fill();
           brush.strokeStyle = look.line;
           brush.lineWidth = 1;

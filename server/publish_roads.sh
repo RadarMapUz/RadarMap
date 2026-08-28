@@ -241,8 +241,11 @@ fi
 GLYPHS_SRC="$(cd "$(dirname "$0")" && pwd)/static/vendor/glyphs"
 if [ -d "$GLYPHS_SRC" ]; then
     echo "=== 3в/4: глифы подписей ==="
-    ssh "$HOST" "mkdir -p '$WEBROOT/glyphs/Noto Sans Regular'"
-    scp -q "$GLYPHS_SRC"/*.pbf "$HOST:'$WEBROOT/glyphs/Noto Sans Regular/'"
+    # Через tar, а не scp: в имени шрифтового набора ЕСТЬ ПРОБЕЛЫ («Noto Sans
+    # Regular» — так его просит движок в {fontstack}), и scp с таким путём
+    # ломается на удалённом mkdir, обрывая всю публикацию на полпути. Один
+    # обрыв это уже стоило: тайлы уехали, а индекс — нет.
+    tar c -C "$GLYPHS_SRC" . | ssh "$HOST" "mkdir -p '$WEBROOT/glyphs/Noto Sans Regular' && tar x -C '$WEBROOT/glyphs/Noto Sans Regular'"
     ssh "$HOST" "echo \"    диапазонов: \$(ls '$WEBROOT/glyphs/Noto Sans Regular' | wc -l)\""
 else
     echo "глифов нет в $GLYPHS_SRC — пропускаем"

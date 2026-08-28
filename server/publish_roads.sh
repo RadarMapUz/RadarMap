@@ -113,6 +113,12 @@ sign_index() {
 
 scp -q "$HOST:$TILES/index_payload.json" "$WORK/index_payload.json"
 scp -q "$HOST:$TILES/index_payload_v2.json" "$WORK/index_payload_v2.json"
+# Индекс MVT забираем ОТДЕЛЬНО и терпимо к отсутствию: сборки без --mvt его не
+# пишут, и это не повод останавливать публикацию. Строку легко забыть — я и
+# забыл: подпись стояла, а файла на маке не появлялось, и индекс молча не
+# выкладывался.
+rm -f "$WORK/mvt_index_payload.json"
+scp -q "$HOST:$TILES/mvt_index_payload.json" "$WORK/mvt_index_payload.json" 2>/dev/null || true
 sign_index "$WORK/index_payload.json" "$WORK/roads_index.json"
 sign_index "$WORK/index_payload_v2.json" "$WORK/roads_index_v2.json"
 # Индекс MVT — под той же подписью, если сборка шла с --mvt. Пока его читала

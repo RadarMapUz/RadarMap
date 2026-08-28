@@ -115,6 +115,12 @@ scp -q "$HOST:$TILES/index_payload.json" "$WORK/index_payload.json"
 scp -q "$HOST:$TILES/index_payload_v2.json" "$WORK/index_payload_v2.json"
 sign_index "$WORK/index_payload.json" "$WORK/roads_index.json"
 sign_index "$WORK/index_payload_v2.json" "$WORK/roads_index_v2.json"
+# Индекс MVT — под той же подписью, если сборка шла с --mvt. Пока его читала
+# одна панель, подпись была не нужна; телефон на движке читает ту же
+# геометрию, и неподписанной она приходить не вправе.
+if [ -f "$WORK/mvt_index_payload.json" ]; then
+    sign_index "$WORK/mvt_index_payload.json" "$WORK/mvt_index.json"
+fi
 
 count_of() { python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))['tiles']))" "$1"; }
 TILE_COUNT=$(count_of "$WORK/index_payload.json")
@@ -215,11 +221,39 @@ else
     echo "MVT в кандидате нет — сборка шла без --mvt, пропускаем"
 fi
 
+# Глифы подписей рядом с MVT.
+#
+# Раньше их отдавала ТОЛЬКО панель модератора, из-под входа: там подписи и
+# были нужны. Как только карту на движке начинает рисовать телефон, глифы
+# становятся частью данных карты, а не панели, — и лежать они обязаны в
+# открытом вебруте, рядом с тайлами.
+#
+# Их три диапазона на триста килобайт, и это не экономия ради экономии:
+# 72 % улиц центра записаны латиницей, 28 % — кириллицей, и в узбекских
+# названиях есть oʻ и gʻ. Остальные двести пятьдесят диапазонов набора —
+# иероглифы и арабица, которых на наших улицах нет.
+GLYPHS_SRC="$(cd "$(dirname "$0")" && pwd)/static/vendor/glyphs"
+if [ -d "$GLYPHS_SRC" ]; then
+    echo "=== 3в/4: глифы подписей ==="
+    ssh "$HOST" "mkdir -p '$WEBROOT/glyphs/Noto Sans Regular'"
+    scp -q "$GLYPHS_SRC"/*.pbf "$HOST:'$WEBROOT/glyphs/Noto Sans Regular/'"
+    ssh "$HOST" "echo \"    диапазонов: \$(ls '$WEBROOT/glyphs/Noto Sans Regular' | wc -l)\""
+else
+    echo "глифов нет в $GLYPHS_SRC — пропускаем"
+fi
+
 echo "=== 4/4: подписанные индексы — последними ==="
 # Порядок публикации не случаен: сначала тайлы, потом индексы. Пока индекс
 # старый, клиенты видят согласованный старый набор.
 scp -q "$WORK/roads_index.json" "$HOST:$WEBROOT/roads_index.json"
 scp -q "$WORK/roads_index_v2.json" "$HOST:$WEBROOT/roads_index_v2.json"
+# Индекс MVT кладётся ПОСЛЕ самих тайлов и последним из индексов: пока его
+# нет, телефон на движке просто не начнёт читать дерево, а не прочитает
+# половину.
+if [ -f "$WORK/mvt_index.json" ]; then
+    scp -q "$WORK/mvt_index.json" "$HOST:$WEBROOT/mvt_index.json"
+    echo "    индекс MVT подписан и выложен"
+fi
 echo "готово: v1 — $TILE_COUNT тайлов, v2 — $TILE_COUNT_V2 файлов"
 notify "опубликовано. $GATE_OUT"
 echo "телефоны подхватят при проверке (раз в трое суток), свежая установка — сразу"

@@ -8,6 +8,7 @@
 дважды была убита ядром по памяти, и оба слоя, которые её убивали, теперь
 пишут файл сразу. Здесь тот же приём с самого начала.
 """
+import hashlib
 import json
 import os
 import shutil
@@ -218,6 +219,21 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         path = os.path.join(folder, f"{tile_y}.mvt")
         with open(path, "wb") as out:
             out.write(blob)
-        written[f"{zoom_at}/{tile_x}/{tile_y}"] = len(blob)
+        written[f"{zoom_at}/{tile_x}/{tile_y}"] = {
+            "sha256": hashlib.sha256(blob).hexdigest(),
+            "bytes": len(blob),
+        }
     shutil.rmtree(work, ignore_errors=True)
+    # Индекс MVT — рядом с тайлами и по той же форме, что у нашего формата.
+    #
+    # Раньше дерево MVT ехало без подписи, и это было записано осознанно:
+    # «MVT читает панель, а она за входом». В день, когда его начинает читать
+    # ТЕЛЕФОН, посылка становится ложной: геометрия дорог у водителя обязана
+    # приходить только от владельца ключа, иначе взломанный сервер рисует
+    # человеку свои дороги. Правило 19 из ARCHITECTURE.md не смягчается —
+    # подпись накрывает все тайлы разом через их sha256.
+    payload = json.dumps({"version": 1, "tiles": written},
+                         separators=(",", ":")).encode()
+    with open(os.path.join(target_dir, "mvt_index_payload.json"), "wb") as handle:
+        handle.write(payload)
     return written

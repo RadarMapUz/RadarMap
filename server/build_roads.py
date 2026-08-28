@@ -446,8 +446,40 @@ def merge_ways(roads):
 
 
 def drop_stubs(roads, meters):
-    """Убрать то, что после склейки осталось короче порога."""
-    return [r for r in roads if polyline_meters(r[2]) >= meters]
+    """Убрать ХВОСТЫ короче порога — но не перемычки.
+
+    Обрубок — это кусок, у которого хотя бы один конец ни к чему не примыкает:
+    остаток геометрии после разреза, подъездной аппендикс, дрожь мыши. Кусок,
+    у которого ОБА конца лежат в узлах сети, — это перемычка, и короткая она по
+    делу: кусок проспекта между двумя примыканиями, съезд с развязки, вставка
+    между разделёнными проезжими.
+
+    Пока правило было «короче двадцати метров — вон», такие перемычки
+    удалялись, и на их месте оставалась ДЫРА ПОСРЕДИ УЛИЦЫ. Именно она и
+    читалась как «дороги сломанные» — на любой отрисовке, потому что чинить
+    рисование бессмысленно, когда куска нет в данных.
+
+    Замерено на боевых тайлах в круге 600 метров вокруг перекрёстка Фурката и
+    Ислама Каримова: 16 разрывов на улицах класса «проспект» и «жилая»,
+    величина 3,7–47 метров, медиана 15,2 — то есть ровно под порогом. Среди
+    порванных: Фурката (дважды), Ислама Каримова, Бунёдкор, Ќоратош.
+    """
+    degree = Counter()
+    for road in roads:
+        points = road[2]
+        degree[_node(points[0])] += 1
+        degree[_node(points[-1])] += 1
+    kept = []
+    for road in roads:
+        if polyline_meters(road[2]) >= meters:
+            kept.append(road)
+            continue
+        first, last = _node(road[2][0]), _node(road[2][-1])
+        # Оба конца делятся с кем-то ещё — перемычка. Удалить её значит
+        # разорвать улицу, а не убрать обрубок.
+        if degree[first] > 1 and degree[last] > 1:
+            kept.append(road)
+    return kept
 
 
 def chaikin(points, passes=1):
@@ -3935,7 +3967,7 @@ def main():
     if args.mvt:
         made = build_mvt.build_mvt(roads, args.tiles_dir, areas=areas,
                                    points=points, far=far)
-        weight = sum(made.values())
+        weight = sum(meta["bytes"] for meta in made.values())
         print(f"MVT: {len(made)} тайлов, {weight / 1e6:.1f} МБ "
               f"(зумы {build_mvt.ZOOM_DETAIL} и {build_mvt.ZOOM_FAR})")
 

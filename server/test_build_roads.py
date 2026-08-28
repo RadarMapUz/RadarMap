@@ -222,6 +222,40 @@ class GeneraliseTests(unittest.TestCase):
                                  (41.3 + 10 / build_roads.LAT_METERS, 69.25)])
         self.assertEqual(build_roads.generalise([short], 0), [])
 
+    def test_short_link_between_junctions_survives(self):
+        """Перемычка короче порога — НЕ обрубок.
+
+        Это причина жалобы «дороги сломанные», которую три раза подряд чинили
+        отрисовкой. Кусок улицы между двумя примыканиями бывает короче
+        двадцати метров сплошь и рядом, а правило «короче порога — вон»
+        удаляло его вместе с хвостами. На его месте оставалась дыра ПОСРЕДИ
+        улицы, и никакой рендер её закрыть не мог.
+
+        Замерено на боевых тайлах вокруг перекрёстка Фурката и Ислама
+        Каримова: 16 разрывов в круге 600 метров, медиана 15,2 м.
+        """
+        step = 30 / build_roads.LAT_METERS
+        link = 12 / build_roads.LAT_METERS
+        west = self.road(3, 0, [(41.3, 69.25), (41.3, 69.25 + step)])
+        # перемычка: оба конца — в узлах, где стоят соседи
+        middle = self.road(3, 0, [(41.3, 69.25 + step),
+                                  (41.3, 69.25 + step + link)])
+        east = self.road(4, 0, [(41.3, 69.25 + step + link),
+                                (41.3, 69.25 + step + link + step)])
+        kept = build_roads.drop_stubs([west, middle, east],
+                                      build_roads.STUB_METERS)
+        self.assertEqual(len(kept), 3, "перемычку выбросили — улица порвана")
+
+    def test_short_tail_at_a_free_end_still_goes(self):
+        # А вот хвост, у которого один конец висит, по-прежнему обрубок.
+        step = 30 / build_roads.LAT_METERS
+        tail = 12 / build_roads.LAT_METERS
+        street = self.road(3, 0, [(41.3, 69.25), (41.3, 69.25 + step)])
+        stub = self.road(7, 0, [(41.3, 69.25 + step),
+                                (41.3, 69.25 + step + tail)])
+        kept = build_roads.drop_stubs([street, stub], build_roads.STUB_METERS)
+        self.assertEqual(len(kept), 1)
+
     def test_chaikin_keeps_ends_and_rounds_corner(self):
         corner = [(0.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
         smoothed = build_roads.chaikin(corner)

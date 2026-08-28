@@ -16,6 +16,7 @@
 //  стоит карты целиком.
 //
 
+import CoreLocation
 import SwiftUI
 
 /// Красное свечение по краям при превышении у камеры.
@@ -179,8 +180,30 @@ struct SketchRefreshDriver: View {
         Color.clear
             .allowsHitTesting(false)
             .onChange(of: env.location.locationTick) { _, _ in
-                // Телефон в кармане — считать схему некому и не для кого. Тот
+                // Телефон в кармане — считать схему некому и не для чего. Тот
                 // же гейт, что у приборки.
+                guard env.isPhoneSceneActive else { return }
+                sketch.refresh(env)
+            }
+            // СТОЯ фиксов нет, и тик не растёт: фильтр GPS — десять метров.
+            //
+            // Пока сцена строилась только по тику, человек, включивший свою
+            // схему на стоянке, видел карту Apple: сцены нет — значит рисовать
+            // нечем, и подложка честно откатывалась. Выглядело это ровно как
+            // «переключил, а ничего не изменилось».
+            //
+            // Поэтому пересборка ещё на трёх событиях: пришёл первый фикс,
+            // приехали дорожные тайлы, обновился индекс лимитов. Все три
+            // случаются считанные разы за поездку — это не тик.
+            .onChange(of: env.location.currentCoordinate?.latitude) { _, _ in
+                guard env.isPhoneSceneActive else { return }
+                sketch.refresh(env)
+            }
+            .onChange(of: env.roads.revision) { _, _ in
+                guard env.isPhoneSceneActive else { return }
+                sketch.refresh(env)
+            }
+            .onChange(of: env.speedLimits.indexRevision) { _, _ in
                 guard env.isPhoneSceneActive else { return }
                 sketch.refresh(env)
             }

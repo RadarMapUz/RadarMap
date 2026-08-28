@@ -53,9 +53,17 @@ struct SpeedHUDView: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
         }
-        .opacity(SpeedHUDView.dimming(secondary: secondary,
-                                      night: !SketchPalette.daylight,
-                                      alertLevel: env.location.alertLevel))
+        // День или ночь спрашиваем у НАСТРОЙКИ, а не у флага палитры схемы.
+        //
+        // Флаг пишется только внутри SketchState.refresh, то есть лишь когда
+        // на экране своя схема или спидометр. На карте Apple он оставался
+        // ложью по умолчанию — приложение считало, что ночь, и приглушало
+        // карточку до 0,72 (в навигации до 0,61) ровно в том сценарии, ради
+        // которого она и сделана: телефон в держателе на солнце.
+        .opacity(SpeedHUDView.dimming(
+            secondary: secondary,
+            night: !env.settings.mapAppearance.isDaylight(at: env.location.currentCoordinate),
+            alertLevel: env.location.alertLevel))
         .fixedSize(horizontal: false, vertical: true)
         // Чип режима оповещений: видно, почему тихо (город) или голосисто (трасса).
         .overlay(alignment: .topTrailing) {

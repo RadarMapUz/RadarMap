@@ -92,8 +92,11 @@ struct MapLayersControl: View {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 base = option
             }
-            isExpanded = false
-            collapseTask?.cancel()
+            // Панель НЕ закрывается на выборе, и это не мелочь: подложки
+            // сравнивают на одном и том же месте, переключая туда-сюда. Панель,
+            // захлопывающаяся после каждого выбора, требует двух тапов на
+            // каждое сравнение. Закроется сама.
+            postpone()
         } label: {
             HStack(spacing: 9) {
                 Image(systemName: option.symbol)

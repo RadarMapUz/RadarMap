@@ -29,17 +29,6 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Язык приложения", selection: $settings.appLanguage) {
-                        ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
-                    }
-                    .onChange(of: settings.appLanguage) { _, _ in
-                        showLanguageRestart = true
-                    }
-                } header: {
-                    Text("Язык")
-                }
-
-                Section {
                     Toggle("Звук", isOn: $settings.soundEnabled)
                     if settings.soundEnabled {
                         HStack(spacing: 10) {
@@ -107,54 +96,6 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                // Что приложение выучивает само. Обе вещи меняют поведение
-                // молча (камера перестала называться вслух, на экране появилась
-                // подсказка «Домой»), поэтому им нужен и тумблер, и объяснение:
-                // необъяснённая догадка читается как сбой.
-                Section {
-                    Toggle("Умная тишина у знакомых камер", isOn: $settings.smartSilence)
-                        .onChange(of: settings.smartSilence) { _, _ in
-                            env.location.refreshFamiliarCameras()
-                        }
-                    Toggle("Подсказка «Домой» и «На работу»", isOn: $settings.destinationSuggestions)
-                        .onChange(of: settings.destinationSuggestions) { _, _ in
-                            env.refreshLearnedPlaces()
-                        }
-                    // Выключенная настройка не должна оставлять данные лежать:
-                    // человек выключил подсказки — значит и списку мест на
-                    // диске взяться неоткуда.
-                    Toggle("Подсказки о треногах по памяти", isOn: $settings.tripodHints)
-                        .onChange(of: settings.tripodHints) { _, enabled in
-                            if enabled {
-                                Task { await env.hotspots.refresh() }
-                            } else {
-                                env.hotspots.clear()
-                            }
-                        }
-                } header: {
-                    Text("Приложение учится")
-                } footer: {
-                    Text("Камеру, которую вы проезжаете шесть и больше раз за месяц и ни разу с превышением, приложение перестаёт называть вслух: на карте у неё галочка, в панели — «своя камера», предупреждение остаётся. Одно превышение — и она снова говорит; о передвижных радарах, треногах и ДТП голос звучит всегда. Дом и работа определяются по распорядку поездок — куда вы приезжаете вечером и куда утром буднего дня. Всё считается на телефоне и никуда не отправляется.")
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Section {
-                    Picker("Старт поездки", selection: $settings.tripStartMode) {
-                        ForEach(TripStartMode.allCases) { Text($0.title).tag($0) }
-                    }
-                    .onChange(of: settings.tripStartMode) { _, _ in env.motion.syncEnabled() }
-                    Toggle("Не гасить экран в поездке", isOn: $settings.keepScreenOn)
-                        .onChange(of: settings.keepScreenOn) { _, keepOn in
-                            if env.location.isTripActive {
-                                UIApplication.shared.isIdleTimerDisabled = keepOn
-                            }
-                        }
-                    Toggle("Спидометр при старте поездки", isOn: $settings.dashboardAutoOpens)
-                } footer: {
-                    Text("«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов. Спидометр — самый экономный экран: чёрный фон и схема вместо карты; закрыли его руками — до конца поездки не откроется сам.")
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
@@ -196,6 +137,38 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Picker("Тип камер", selection: $settings.filter) {
+                        ForEach(CameraFilter.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    Picker("Тема карты", selection: $settings.mapAppearance) {
+                        ForEach(MapAppearance.allCases) { Text($0.title).tag($0) }
+                    }
+                } header: {
+                    Text("Карта")
+                } footer: {
+                    Text("«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nЧем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу.")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Section {
+                    Picker("Старт поездки", selection: $settings.tripStartMode) {
+                        ForEach(TripStartMode.allCases) { Text($0.title).tag($0) }
+                    }
+                    .onChange(of: settings.tripStartMode) { _, _ in env.motion.syncEnabled() }
+                    Toggle("Не гасить экран в поездке", isOn: $settings.keepScreenOn)
+                        .onChange(of: settings.keepScreenOn) { _, keepOn in
+                            if env.location.isTripActive {
+                                UIApplication.shared.isIdleTimerDisabled = keepOn
+                            }
+                        }
+                    Toggle("Спидометр при старте поездки", isOn: $settings.dashboardAutoOpens)
+                } footer: {
+                    Text("«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов. Спидометр — самый экономный экран: чёрный фон и схема вместо карты; закрыли его руками — до конца поездки не откроется сам.")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Section {
                     Toggle("Голосовая навигация", isOn: $settings.turnByTurnVoice)
                     Toggle("Варианты маршрута", isOn: $settings.routeAlternatives)
                     Toggle("Следующая камера в панели", isOn: $settings.showNextCamera)
@@ -219,6 +192,37 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                // Что приложение выучивает само. Обе вещи меняют поведение
+                // молча (камера перестала называться вслух, на экране появилась
+                // подсказка «Домой»), поэтому им нужен и тумблер, и объяснение:
+                // необъяснённая догадка читается как сбой.
+                Section {
+                    Toggle("Умная тишина у знакомых камер", isOn: $settings.smartSilence)
+                        .onChange(of: settings.smartSilence) { _, _ in
+                            env.location.refreshFamiliarCameras()
+                        }
+                    Toggle("Подсказка «Домой» и «На работу»", isOn: $settings.destinationSuggestions)
+                        .onChange(of: settings.destinationSuggestions) { _, _ in
+                            env.refreshLearnedPlaces()
+                        }
+                    // Выключенная настройка не должна оставлять данные лежать:
+                    // человек выключил подсказки — значит и списку мест на
+                    // диске взяться неоткуда.
+                    Toggle("Подсказки о треногах по памяти", isOn: $settings.tripodHints)
+                        .onChange(of: settings.tripodHints) { _, enabled in
+                            if enabled {
+                                Task { await env.hotspots.refresh() }
+                            } else {
+                                env.hotspots.clear()
+                            }
+                        }
+                } header: {
+                    Text("Приложение учится")
+                } footer: {
+                    Text("Камеру, которую вы проезжаете шесть и больше раз за месяц и ни разу с превышением, приложение перестаёт называть вслух: на карте у неё галочка, в панели — «своя камера», предупреждение остаётся. Одно превышение — и она снова говорит; о передвижных радарах, треногах и ДТП голос звучит всегда. Дом и работа определяются по распорядку поездок — куда вы приезжаете вечером и куда утром буднего дня. Всё считается на телефоне и никуда не отправляется.")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 Section {
                     ForEach(PlaceSlot.allCases) { slot in
                         placeRow(slot)
@@ -227,22 +231,6 @@ struct SettingsView: View {
                     Text("Мои места")
                 } footer: {
                     Text("Маршрут в один тап из «Поиска» — домой или на работу.")
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Section {
-                    Picker("Тип камер", selection: $settings.filter) {
-                        ForEach(CameraFilter.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    Picker("Тема карты", selection: $settings.mapAppearance) {
-                        ForEach(MapAppearance.allCases) { Text($0.title).tag($0) }
-                    }
-                    Toggle("Своя схема в движении", isOn: $settings.sketchWhileDriving)
-                } header: {
-                    Text("Карта")
-                } footer: {
-                    Text("«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nСвоя схема — наша карта вместо Apple: полотно, перекрёстки, разметка. Включается только в движении; на стоянке остаётся карта Apple, где ищут адрес и ставят камеру.")
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -299,9 +287,17 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                // Страховка от необратимой потери: история живёт только на
-                // этом телефоне, и без копии смена устройства стирает месяцы.
-                BackupSection()
+                Section {
+                    Picker("Язык приложения", selection: $settings.appLanguage) {
+                        ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
+                    }
+                    .onChange(of: settings.appLanguage) { _, _ in
+                        showLanguageRestart = true
+                    }
+                } header: {
+                    Text("Язык")
+                }
+
 
                 // Страница проекта: что это, откуда данные, политика,
                 // возможность помочь. Внутрь приложения платёжная кнопка не

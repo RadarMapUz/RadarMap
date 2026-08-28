@@ -19,21 +19,57 @@ final class MapModeTests: XCTestCase {
         XCTAssertEqual(MapMode.current(isTripActive: true, hasRoute: true), .navigating)
     }
 
-    /// В покое экран про «куда поедем» — и ничего из ездового.
-    func testSketchMapIsForMovingOnly() {
-        // Своя схема отвечает на «что впереди». На стоянке вопрос другой —
-        // «где это вообще»: там ищут адрес и ставят камеру, и для этого нужна
-        // карта Apple, а не наши тайлы.
-        XCTAssertFalse(MapMode.idle.allowsSketchMap)
-        XCTAssertTrue(MapMode.driving.allowsSketchMap)
-        XCTAssertTrue(MapMode.navigating.allowsSketchMap)
+    /// Подложку выбирает ЧЕЛОВЕК, а не режим.
+    ///
+    /// Раньше здесь стоял обратный тест: `idle` запрещал свою схему. Правило
+    /// выглядело разумным («на стоянке ищут адрес»), но на деле перебивало
+    /// выбор человека: включивший схему видел карту Apple и делал
+    /// единственный возможный вывод — не работает. Теперь режим про подложку
+    /// не знает вовсе, а правило живёт в MapBase.resolved.
+    func testModeDoesNotDecideTheBaseMap() {
+        for mode in [MapMode.idle, .driving, .navigating] {
+            XCTAssertEqual(MapBase.resolved(chosen: .sketch, isAddingCamera: false,
+                                            hasPressedPoint: false, sketchReady: true,
+                                            engineAvailable: true),
+                           .sketch, "режим \(mode) не вправе отменять выбор")
+        }
+    }
+
+    func testAppleComesBackOnlyForWhatNeedsIt() {
+        // Постановка камеры и точка по долгому тапу без карты Apple
+        // невозможны — на это время она возвращается, и только на это.
+        XCTAssertEqual(MapBase.resolved(chosen: .sketch, isAddingCamera: true,
+                                        hasPressedPoint: false, sketchReady: true,
+                                        engineAvailable: true), .apple)
+        XCTAssertEqual(MapBase.resolved(chosen: .engine, isAddingCamera: false,
+                                        hasPressedPoint: true, sketchReady: true,
+                                        engineAvailable: true), .apple)
+    }
+
+    func testMissingThingsFallBackInsteadOfShowingNothing() {
+        // Схема без сцены и движок без пакета — это отказ, а не пустой экран:
+        // без карты за рулём хуже, чем с чужой.
+        XCTAssertEqual(MapBase.resolved(chosen: .sketch, isAddingCamera: false,
+                                        hasPressedPoint: false, sketchReady: false,
+                                        engineAvailable: true), .apple)
+        XCTAssertEqual(MapBase.resolved(chosen: .engine, isAddingCamera: false,
+                                        hasPressedPoint: false, sketchReady: true,
+                                        engineAvailable: false), .apple)
+    }
+
+    func testChosenBaseSurvivesEverythingElse() {
+        XCTAssertEqual(MapBase.resolved(chosen: .apple, isAddingCamera: false,
+                                        hasPressedPoint: false, sketchReady: true,
+                                        engineAvailable: true), .apple)
+        XCTAssertEqual(MapBase.resolved(chosen: .engine, isAddingCamera: false,
+                                        hasPressedPoint: false, sketchReady: true,
+                                        engineAvailable: true), .engine)
     }
 
     func testIdleShowsDestinationTools() {
         let mode = MapMode.idle
         XCTAssertTrue(mode.showsQuickDestinations)
         XCTAssertTrue(mode.showsActionBar)
-        XCTAssertTrue(mode.showsLegend)
         XCTAssertTrue(mode.showsRoutePanel)
         XCTAssertFalse(mode.showsTripBar)
         XCTAssertFalse(mode.showsReportButton)
@@ -47,7 +83,6 @@ final class MapModeTests: XCTestCase {
         let mode = MapMode.driving
         XCTAssertFalse(mode.showsQuickDestinations)
         XCTAssertFalse(mode.showsActionBar)
-        XCTAssertFalse(mode.showsLegend, "легенда типов за рулём — шум")
         XCTAssertTrue(mode.showsTripBar)
         XCTAssertTrue(mode.showsReportButton)
         XCTAssertFalse(mode.showsManeuver, "маршрута нет — поворачивать некуда")
@@ -61,7 +96,6 @@ final class MapModeTests: XCTestCase {
         XCTAssertTrue(mode.showsManeuver)
         XCTAssertTrue(mode.showsTripBar)
         XCTAssertFalse(mode.showsRoutePanel, "панель вариантов — до старта")
-        XCTAssertFalse(mode.showsLegend)
         XCTAssertEqual(mode.focus, .maneuver)
     }
 

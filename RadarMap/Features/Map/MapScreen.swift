@@ -16,13 +16,15 @@ struct MapScreen: View {
     @State private var dismissedApproachID: Int?
     @State private var showRouteCameras = false
     // Умные кнопки: в поездке через 5 с бездействия интерфейс прячется, тап по карте возвращает.
-    @State private var controlsHidden = false
-    @State private var hideControlsTask: Task<Void, Never>?
     /// Режим «Спидометр» — тап по HUD (телефон в держателе).
     @State private var showDashboard = false
     /// Экранная модель своей схемы. Живёт всегда, а считается только когда
     /// схема действительно на экране: пустая модель не стоит ничего.
     @State private var sketch = SketchState()
+    /// Нижняя кромка верхних панелей и верхняя кромка нижних, в пунктах окна.
+    /// Меряют сами панели; схема переводит их в доли своей высоты.
+    @State private var topPanelEdge: CGFloat = 0
+    @State private var bottomPanelEdge: CGFloat = 0
     /// Спидометр закрыли руками в этой поездке — до её конца не навязываемся.
     /// Флаг живёт здесь, а не в настройках: это решение «сейчас», не «всегда».
     @State private var dashboardDismissedInTrip = false
@@ -32,8 +34,6 @@ struct MapScreen: View {
     /// «Спидометр тратит меньше» — когда поездка началась на карте, батарея
     /// тает и зарядки нет.
     @State private var showBatterySaverHint = false
-    @State private var legendExpanded = false
-    @State private var legendCollapseTask: Task<Void, Never>?
     /// Быстрые тумблеры оповещений (долгий тап по HUD).
     @State private var showQuickToggles = false
     /// Итог только что завершённой поездки («Поездка сохранена») и деталка из него.
@@ -50,20 +50,6 @@ struct MapScreen: View {
     /// а не россыпью условий по вёрстке (см. MapMode.swift).
     private var mode: MapMode {
         MapMode.current(isTripActive: env.location.isTripActive, hasRoute: env.route.isActive)
-    }
-
-    /// Своя схема вместо карты Apple — только В ДВИЖЕНИИ и только по тумблеру.
-    ///
-    /// Схема отвечает на вопрос «что впереди» и знает ровно то, что мы
-    /// собрали. Карта Apple отвечает на «где это вообще»: там ищут адрес,
-    /// ставят камеру и смотрят город целиком — то есть на стоянке.
-    ///
-    /// Пока схема не построена (первые секунды поездки, пустой тайл, чужая
-    /// страна), показываем карту: пустой чёрный экран за рулём хуже чужой
-    /// карты.
-    private var showsSketchMap: Bool {
-        env.settings.sketchWhileDriving && mode.allowsSketchMap
-            && !showDashboard && (sketch.scene?.isEmpty == false)
     }
 
     var body: some View {
@@ -116,7 +102,7 @@ struct MapScreen: View {
             LocationFollowDriver(map: map, isCovered: showDashboard)
             // Схема считается ТОЛЬКО когда она на экране: тумблер выключен или
             // стоим — модель пуста и не стоит ни одного тика.
-            if env.settings.sketchWhileDriving && mode.allowsSketchMap && !showDashboard {
+            if env.settings.mapBase == .sketch && !showDashboard {
                 SketchRefreshDriver(sketch: sketch)
             }
             MobilePassDriver()
@@ -222,7 +208,6 @@ struct MapScreen: View {
                       course: env.location.currentCourse, inTrip: active)
             if active {
                 withAnimation { tripEndRecord = nil }   // поехали снова — старый итог не актуален
-                scheduleControlsHide()
                 // Поездка = спидометр: он строился ради батареи (чёрный OLED и
                 // растр вместо тайлов с двумя сотнями маркеров), но был
                 // секретным экраном за тапом по HUD. Открываем сами — если
@@ -237,7 +222,6 @@ struct MapScreen: View {
                     maybeSuggestDashboardForBattery()
                 }
             } else {
-                revealControls()
                 dashboardDismissedInTrip = false   // новая поездка — с чистого листа
                 showDashboard = false              // поездка кончилась — спидометр не нужен
                 maybeShowTripEnd()
@@ -310,28 +294,121 @@ struct MapScreen: View {
         return Theme.accent
     }
 
+    /// Отдать схеме измеренные кромки панелей.
+    ///
+    /// Одной точкой, а не двумя вызовами из двух замеров: поля приходят
+    /// парой, и половина пары — это неверная проекция на один кадр.
+    private func applySketchInsets() {
+        sketch.setPanelEdges(top: topPanelEdge, bottom: bottomPanelEdge)
+    }
+
     /// Подложка экрана: своя схема или карта Apple.
     ///
     /// Отдельным свойством, а не `if` внутри стопки: тело MapScreen и без
     /// того на пределе — компилятор перестал его выводить за разумное время,
     /// как только развилка встала прямо в ZStack.
+    /// Что рисует карту прямо сейчас. Решает ВЫБОР ЧЕЛОВЕКА, а не режим:
+    /// правило целиком в `MapBase.resolved` и покрыто тестами.
+    private var shownBase: MapBase {
+        MapBase.resolved(chosen: env.settings.mapBase,
+                         isAddingCamera: map.isAddingCamera,
+                         hasPressedPoint: map.pressedPoint != nil,
+                         sketchReady: !showDashboard && sketch.scene?.isEmpty == false,
+                         engineAvailable: !showDashboard && Self.engineAvailable)
+    }
+
+    /// Есть ли в сборке движок. Пакета может не быть — тогда его нет и в
+    /// списке подложек, а не «есть, но молча не работает».
+    static var engineAvailable: Bool {
+        #if canImport(MapLibre)
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    static var availableBases: [MapBase] {
+        MapBase.allCases.filter { $0 != .engine || engineAvailable }
+    }
+
     @ViewBuilder
     private var baseLayer: some View {
-        if showsSketchMap, let scene = sketch.scene {
-            // Своя схема во весь экран. Панели поверх остаются те же: они
-            // говорят про скорость и камеры, а не про подложку.
-            ZStack {
-                Color.black
-                RoadSketchView(scene: scene, state: sketch, tint: sketchTint,
-                               trim: env.thermal.mode.sketchTrim)
+        switch shownBase {
+        case .engine:
+            #if canImport(MapLibre)
+            // Карту рисует движок. Панели поверх — те же: они про скорость и
+            // камеры, а не про подложку.
+            engineLayer.ignoresSafeArea()
+            #else
+            mapLayer.ignoresSafeArea().environment(\.colorScheme, mapColorScheme)
+            #endif
+        case .sketch:
+            if let scene = sketch.scene {
+                // Своя схема во весь экран.
+                sketchLayer(scene: scene)
+            } else {
+                mapLayer.ignoresSafeArea().environment(\.colorScheme, mapColorScheme)
             }
-            .ignoresSafeArea()
-        } else {
+        case .apple:
             mapLayer
                 .ignoresSafeArea()
                 .environment(\.colorScheme, mapColorScheme)
         }
     }
+
+    /// Своя схема во весь экран.
+    private func sketchLayer(scene: RoadSketch.Scene) -> some View {
+        ZStack {
+            // Подложка — ЗЕМЛЯ схемы, а не чёрное. Днём чёрная подложка
+            // проступала по краям и в переходах и выглядела дырой.
+            SketchPalette.ground
+            RoadSketchView(scene: scene, state: sketch, tint: sketchTint,
+                           trim: env.thermal.mode.sketchTrim)
+        }
+        .ignoresSafeArea()
+    }
+
+    #if canImport(MapLibre)
+    /// Карта на движке. Правила точки зрения — ТЕ ЖЕ, что у схемы: охват по
+    /// скорости и дистанции до камеры, поля вида от панелей, наклон уходит в
+    /// ноль, когда камера в охвате. Один закон на два рендера, иначе
+    /// переключатель сравнивал бы не рендеры, а две разные логики.
+    @ViewBuilder
+    private var engineLayer: some View {
+        let me = env.location.displayCoordinate ?? env.location.currentCoordinate
+        if let me {
+            let insets = sketch.insets
+            let distance = env.location.nearestCamera != nil
+                ? env.location.distanceToNearest : nil
+            let span = RoadSketch.span(forDistance: distance,
+                                       speedKmh: env.location.speedKmh,
+                                       insets: insets)
+            let inRange = distance.map {
+                RoadSketch.isInRange(distance: $0, span: span, insets: insets)
+            } ?? false
+            ZStack {
+                EngineMapView(
+                    coordinate: me,
+                    courseDegrees: env.location.displayCourse,
+                    spanMeters: span,
+                    pitchDegrees: inRange ? 0 : AppConfig.engineMapPitchDegrees,
+                    daylight: env.settings.mapAppearance.isDaylight(at: me, now: Date()),
+                    cameras: env.cameras.nearest(to: me, limit: 40),
+                    alertCameraID: inRange ? env.location.nearestCamera?.id : nil,
+                    route: env.route.routeCoordinates)
+                // Курсор машины — своим слоем поверх карты, как и в схеме:
+                // движку он не нужен, а нам нужен ровно тот же.
+                MeCursor(scale: 1)
+                    .frame(width: 34, height: 40)
+                    .position(x: UIScreen.main.bounds.width / 2,
+                              y: UIScreen.main.bounds.height * insets.meY)
+                    .allowsHitTesting(false)
+            }
+        } else {
+            SketchPalette.ground
+        }
+    }
+    #endif
 
     private var mapLayer: some View {
         MapReader { proxy in
@@ -351,12 +428,16 @@ struct MapScreen: View {
         }
     }
 
-    /// Места на подложке. Полностью стерильная карта была мертва в покое: ни
-    /// заправки, ни больницы — то есть ровно того, ради чего карту открывают,
-    /// когда никуда не едешь. За рулём подписи гасим сами: на скорости они
-    /// только засоряют, а водитель смотрит на дорогу, а не читает вывески.
+    /// Места на подложке. Полностью стерильная карта мертва: ни заправки, ни
+    /// больницы — то есть ровно того, ради чего карту и открывают.
+    ///
+    /// Раньше в поездке места гасились ПРИНУДИТЕЛЬНО, независимо от тумблера,
+    /// а рядом подписывалось «в поездке места скрыты». Это тот же порок, что и
+    /// подложка, включавшаяся только после старта поездки: настройка есть,
+    /// человек её тронул, а приложение решило за него. Заправка нужна как раз
+    /// в дороге — тумблер значит ровно то, что на нём написано.
     private var pointsOfInterest: PointOfInterestCategories {
-        guard env.settings.mapPlaces, !env.location.isTripActive else { return .excludingAll }
+        guard env.settings.mapPlaces else { return .excludingAll }
         return .including([.gasStation, .parking, .hospital, .pharmacy, .police])
     }
 
@@ -479,7 +560,6 @@ struct MapScreen: View {
         // Любое касание карты будит спрятанные кнопки (не мешая тапам по маркерам)
         // и закрывает бар точки долгого тапа.
         .simultaneousGesture(TapGesture().onEnded {
-            revealControls()
             if map.pressedPoint != nil {
                 withAnimation(.spring(duration: 0.3)) { map.pressedPoint = nil }
             }
@@ -488,14 +568,7 @@ struct MapScreen: View {
         // onMapCameraChange: тот срабатывает и на собственные анимации следования,
         // и режим «по ходу движения» гасил бы сам себя на каждом кадре.
         .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
-            revealControls()
             map.releaseOrientation()
-        })
-        // Тап возвращает спрятанный интерфейс — как во всех навигаторах.
-        // Раньше контролы возвращал только жест «потянуть карту», и в поездке
-        // до настроек было не добраться: тапаешь — ничего не происходит.
-        .simultaneousGesture(TapGesture().onEnded {
-            if controlsHidden { revealControls() }
         })
     }
 
@@ -545,41 +618,18 @@ struct MapScreen: View {
 
     // MARK: - Умные кнопки
 
-    /// В поездке интерфейс не нужен постоянно: прячем всё, кроме HUD, манёвра и панели.
-    private func scheduleControlsHide() {
-        hideControlsTask?.cancel()
-        guard env.location.isTripActive else { return }
-        hideControlsTask = Task {
-            await Task.pause(seconds: 5)
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.45)) { controlsHidden = true }
-        }
-    }
-
-    private func revealControls() {
-        hideControlsTask?.cancel()
-        if controlsHidden {
-            withAnimation(.easeOut(duration: 0.25)) { controlsHidden = false }
-        }
-        scheduleControlsHide()
-    }
-
-    /// Пилюля «Спидометр» над панелью поездки — видимая дверь на приборку.
-    private var dashboardPill: some View {
-        Button {
-            showDashboard = true
-        } label: {
-            Label("Спидометр", systemImage: "gauge.with.needle")
-                .font(.rounded(12, .semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .padding(.horizontal, 13).padding(.vertical, 9)
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().stroke(Theme.stroke, lineWidth: 1))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(PressableStyle())
-        .accessibilityLabel(Text("Открыть спидометр"))
-    }
+    // Автоскрытие интерфейса УДАЛЕНО, и это не упрощение ради упрощения.
+    //
+    // Механизм заводился правильной мыслью — в поездке максимум экрана отдан
+    // карте, — но по факту не делал ничего. Он включался только под `guard
+    // env.location.isTripActive`, а прятал ровно три вещи: легенду типов
+    // камер, нижний бар действий и разовые подсказки. Все три показываются
+    // ТОЛЬКО в покое (MapMode.showsLegend, showsActionBar). Таймер на пять
+    // секунд, задача на каждое касание и анимация двух слоёв работали ради
+    // состояния, которого не бывает.
+    //
+    // Проверять такие механизмы надо перебором режимов, а не на глаз: в план
+    // я сначала записал «прячет нужное» — и это оказалось неверно.
 
     private var crosshair: some View {
         Image(systemName: "scope")
@@ -591,7 +641,13 @@ struct MapScreen: View {
 
     // MARK: - Верх: HUD + подсказка
 
-    private var topLayer: some View {
+    /// Панели поверх карты сверху: объявления, HUD, тумблеры, манёвр.
+    ///
+    /// Отдельным свойством не ради красоты, а ради ЗАМЕРА: схеме нужно знать,
+    /// докуда её закрыли, и мерить надо ровно эти панели — без кнопок справа
+    /// (они не поперёк экрана) и без распорки.
+    @ViewBuilder
+    private var topPanels: some View {
         VStack(spacing: 10) {
             // Почему приложение работает не в полную силу: объявление сервера,
             // серая карта без сети, урезанная карта в жару, отсутствие лимитов.
@@ -640,6 +696,24 @@ struct MapScreen: View {
             // Turn-by-turn: ближайший манёвр — в поездке по маршруту.
             // Отдельная вью: дистанция до манёвра меняется каждый тик GPS.
             ManeuverBannerGate()
+        }
+    }
+
+    private var topLayer: some View {
+        VStack(spacing: 10) {
+            topPanels
+                // Кромка панелей — схеме.
+                //
+                // Схема лежит во весь экран, а видно из неё столько, сколько
+                // оставили панели: 17 % высоты забирает карточка скорости, 26 %
+                // — она же с объявлением о перегреве. Пока проекция считала от
+                // ПОЛНОГО экрана, тревожная камера садилась на 12 % сверху, то
+                // есть ПОД карточкой: на снимке живой поездки «344 м до камеры»
+                // в карточке и ни одной камеры на карте.
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: {
+                    topPanelEdge = $0 + 8
+                    applySketchInsets()
+                }
             // Кнопки навигации — сразу под HUD справа. Не прячутся: см. controlColumn.
             if !map.isAddingCamera {
                 HStack {
@@ -653,7 +727,6 @@ struct MapScreen: View {
         .padding(.horizontal, 16)
         .padding(.top, 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(.easeInOut(duration: 0.3), value: controlsHidden)
     }
 
     /// Баннер пассажирского режима: молчание — осознанное, выход — один тап.
@@ -692,11 +765,24 @@ struct MapScreen: View {
     /// нужно хром (легенду, быстрые цели, бар действий), а не органы управления.
     private var controlColumn: some View {
         VStack(spacing: 12) {
+            // Слои карты — первой в колонке и в ЛЮБОМ режиме.
+            //
+            // Подложка лежала в десятом разделе настроек и включалась только
+            // после старта поездки; пробки и места жили в отдельной панели,
+            // которой в поездке не бывало вовсе. Теперь это одна панель, и она
+            // на месте всегда.
+            MapLayersControl(base: Binding(get: { env.settings.mapBase },
+                                           set: { env.settings.mapBase = $0 }),
+                             traffic: Binding(get: { env.settings.mapTraffic },
+                                              set: { env.settings.mapTraffic = $0 }),
+                             places: Binding(get: { env.settings.mapPlaces },
+                                             set: { env.settings.mapPlaces = $0 }),
+                             available: Self.availableBases,
+                             showsLegend: shownBase == .apple)
             MapOrientationControl(orientation: map.orientation) {
                 map.cycleOrientation(coordinate: env.location.currentCoordinate,
                                      course: env.location.currentCourse,
                                      inTrip: env.location.isTripActive)
-                revealControls()
             }
             // «Радар здесь!» одним тапом — отметить передвижной радар для
             // других водителей (то же самое умеет Siri голосом).
@@ -708,29 +794,37 @@ struct MapScreen: View {
                     withAnimation(.spring(duration: 0.3)) {
                         reportPoint = MapPoint(coordinate: coordinate)   // выбор типа отметки
                     }
-                    revealControls()
                 }
                 .transition(.scale.combined(with: .opacity))
             }
-            // Слои карты — здесь же, а не отдельным кружком в другом углу:
-            // всё, что управляет КАРТОЙ, живёт одной колонкой справа под
-            // большим пальцем. Раньше эта кнопка висела слева внизу и читалась
-            // как случайно забытый элемент.
-            if mode.showsLegend, !controlsHidden {
-                smartLegend
-                    .transition(.scale.combined(with: .opacity))
+            // Спидометр — здесь же, а не отдельной пилюлей над панелью
+            // поездки. Пилюля была четвёртой формой на экране (карточка,
+            // круглые кнопки, капсула, панель) и висела в пустоте у нижнего
+            // края; дверь на приборку от переезда в общую колонку не
+            // пропадает, а экран перестаёт говорить четырьмя голосами.
+            if mode.showsTripBar {
+                CircleControl(systemName: "gauge.with.needle", tint: Theme.textPrimary,
+                              accessibilityLabel: "Открыть спидометр") {
+                    showDashboard = true
+                }
+                .transition(.scale.combined(with: .opacity))
             }
             // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
+        .animation(.spring(duration: 0.3), value: mode.showsTripBar)
         .animation(.spring(duration: 0.3), value: mode.showsReportButton)
-        .animation(.spring(duration: 0.3), value: mode.showsLegend)
     }
 
     // MARK: - Низ: панель действий / режим добавления
 
-    private var bottomLayer: some View {
+    /// Панели поверх карты снизу: панель поездки, плашки, кнопки действий.
+    ///
+    /// Отдельным свойством по той же причине, что и верхние: схема обязана
+    /// знать, докуда её закрыли снизу, а измерить это можно только у самих
+    /// панелей — у стопки с распоркой высота всегда во весь экран.
+    @ViewBuilder
+    private var bottomPanels: some View {
         VStack(spacing: 10) {
-            Spacer()
             if map.isAddingCamera {
                 AddCameraBar(
                     onCancel: { map.isAddingCamera = false },
@@ -803,23 +897,17 @@ struct MapScreen: View {
                 if mode.showsTripBar {
                     // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
                     // максимум экрана отдан карте, и она не прячется вместе с кнопками.
-                    VStack(alignment: .trailing, spacing: 10) {
-                        // Видимый вход на спидометр: раньше он был только
-                        // секретным тапом по HUD, и о существовании экрана
-                        // экономии узнавали случайно (или никогда).
-                        dashboardPill
-                        TripLiveBar(
-                            onShowCameras: { showRouteCameras = true },
-                            onStop: { toggleTrip() }
-                        )
-                    }
+                    TripLiveBar(
+                        onShowCameras: { showRouteCameras = true },
+                        onStop: { toggleTrip() }
+                    )
                 } else if mode.showsRoutePanel, env.route.isActive {
                     RoutePanel(
                         onShowCameras: { showRouteCameras = true },
                         onTripToggle: { toggleTrip() }
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-                } else if !controlsHidden {
+                } else {
                     // ОДНА плашка, а не четыре разом.
                     //
                     // Каждая заводилась по своей причине и права по
@@ -864,11 +952,22 @@ struct MapScreen: View {
                         EmptyView()
                     }
                 }
-                if mode.showsActionBar, !controlsHidden {
+                if mode.showsActionBar {
                     actionBar
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
+        }
+    }
+
+    private var bottomLayer: some View {
+        VStack(spacing: 10) {
+            Spacer()
+            bottomPanels
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
+                    bottomPanelEdge = $0 - 8
+                    applySketchInsets()
+                }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
@@ -876,7 +975,6 @@ struct MapScreen: View {
         .animation(.spring(duration: 0.3), value: map.isAddingCamera)
         .animation(.spring(duration: 0.3), value: map.pressedPoint)
         .animation(.spring(duration: 0.3), value: reportPoint)
-        .animation(.easeInOut(duration: 0.3), value: controlsHidden)
     }
 
     /// Долгий тап: маркер + бар действий (кроме режима прицела добавления камеры).
@@ -886,7 +984,6 @@ struct MapScreen: View {
         withAnimation(.spring(duration: 0.3)) {
             map.pressedPoint = MapPoint(coordinate: coordinate)
         }
-        revealControls()
     }
 
     private func toggleTrip() {
@@ -986,8 +1083,8 @@ struct MapScreen: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 7)
-        .backport.glassEffect(.regular, in: .rect(cornerRadius: 26))
-        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
+        .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerPanel))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
             .strokeBorder(LinearGradient(colors: [.white.opacity(0.16), .white.opacity(0.02)],
                                          startPoint: .top, endPoint: .bottom), lineWidth: 1))
         .shadow(color: .black.opacity(0.3), radius: 14, y: 6)
@@ -1015,109 +1112,6 @@ struct MapScreen: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .contentShape(Rectangle())
-    }
-
-    /// Кнопка слоёв: свёрнута в компактный кружок, тап раскрывает панель —
-    /// легенда типов плюс два тумблера подложки. Тумблеры живут именно здесь,
-    /// а не в настройках: это решение «что показать на карте прямо сейчас»,
-    /// и принимают его глядя на карту.
-    @ViewBuilder private var smartLegend: some View {
-        @Bindable var settings = env.settings
-        if legendExpanded {
-            VStack(alignment: .leading, spacing: 8) {
-                // Панель занимает место кнопки, которая её открыла, — значит
-                // сама и обязана предложить выход. Без этого закрыть её можно
-                // было только ожиданием: двенадцать секунд смотреть на карту,
-                // которую она закрывает.
-                HStack {
-                    Spacer(minLength: 0)
-                    Button { toggleLegend() } label: {
-                        Image(systemName: "xmark")
-                            .font(.rounded(11, .bold))
-                            .foregroundStyle(Theme.textSecondary)
-                            .frame(width: 26, height: 26)
-                            .background(Theme.surface, in: Circle())
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("Закрыть слои"))
-                }
-                .padding(.bottom, 2)
-                LegendChip(color: Theme.Types.camera, symbol: "camera.fill", text: "Камера")
-                LegendChip(color: Theme.Types.radar, symbol: "speedometer", text: "Радар")
-                LegendChip(color: Theme.Types.intelligent, symbol: "camera.metering.matrix", text: "Интеллект.")
-                LegendChip(color: Theme.Types.mobile, symbol: "dot.radiowaves.left.and.right", text: "Передвижной")
-
-                Rectangle().fill(Theme.stroke).frame(height: 1).padding(.vertical, 2)
-
-                layerToggle("Пробки", "car.2.fill", isOn: $settings.mapTraffic)
-                layerToggle("Места", "fuelpump.fill", isOn: $settings.mapPlaces)
-                if env.location.isTripActive, env.settings.mapPlaces {
-                    Text("в поездке места скрыты")
-                        .font(.rounded(10))
-                        .foregroundStyle(Theme.textTertiary)
-                }
-            }
-            .padding(12)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
-            .transition(.scale(scale: 0.7, anchor: .topTrailing).combined(with: .opacity))
-        } else {
-            CircleControl(systemName: "square.3.layers.3d", size: 44,
-                          accessibilityLabel: "Слои карты") {
-                toggleLegend()
-            }
-            .transition(.scale(scale: 0.7, anchor: .topTrailing).combined(with: .opacity))
-        }
-    }
-
-    /// Строка-тумблер слоя. Тап по ней не сворачивает панель — иначе включить
-    /// оба слоя за один заход было бы нельзя.
-    private func layerToggle(_ title: LocalizedStringKey, _ icon: String,
-                             isOn: Binding<Bool>) -> some View {
-        Button {
-            isOn.wrappedValue.toggle()
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            postponeLegendCollapse()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.rounded(12, .semibold))
-                    .foregroundStyle(isOn.wrappedValue ? Theme.accent : Theme.textTertiary)
-                    .frame(width: 18)
-                Text(title)
-                    .font(.rounded(12, .medium))
-                    .foregroundStyle(Theme.textPrimary)
-                Spacer(minLength: 10)
-                Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
-                    .font(.rounded(13))
-                    .foregroundStyle(isOn.wrappedValue ? Theme.accent : Theme.textTertiary)
-            }
-            // Мишень до 44 pt: сам ряд остаётся тонким, растёт только область
-            // касания — отсюда padding ДО contentShape.
-            .padding(.vertical, 11)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isOn.wrappedValue ? [.isButton, .isSelected] : .isButton)
-    }
-
-    private func toggleLegend() {
-        legendCollapseTask?.cancel()
-        withAnimation(.spring(duration: 0.35)) { legendExpanded.toggle() }
-        if legendExpanded { postponeLegendCollapse() }
-    }
-
-    /// Панель сворачивается сама — каждое действие в ней отодвигает срок,
-    /// иначе она закрывалась бы под рукой. Шесть секунд хватало справочной
-    /// легенде; с тумблерами нужно успеть прочитать И переключить.
-    private func postponeLegendCollapse() {
-        legendCollapseTask?.cancel()
-        legendCollapseTask = Task {
-            await Task.pause(seconds: 12)
-            guard !Task.isCancelled else { return }
-            withAnimation(.spring(duration: 0.35)) { legendExpanded = false }
-        }
     }
 
     @ViewBuilder private var permissionBanner: some View {

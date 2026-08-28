@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4B4D4C03300649860097B8CA /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = 4B4D4C02300649860097B8CA /* MapLibre */; };
 		4B1546CB300649860097B8CA /* RadarMapWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4B1546C0300649860097B8CA /* RadarMapWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4BFACE0B300649860097B8CA /* RadarWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 4BFACE01300649860097B8CA /* RadarWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -131,6 +132,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4B4D4C03300649860097B8CA /* MapLibre in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -206,6 +208,7 @@
 			);
 			name = RadarMap;
 			packageProductDependencies = (
+				4B4D4C02300649860097B8CA /* MapLibre */,
 			);
 			productName = RadarMap;
 			productReference = 4B154695300649860097B8CA /* RadarMap.app */;
@@ -311,6 +314,9 @@
 				uz,
 			);
 			mainGroup = 4B15468C300649860097B8CA;
+			packageReferences = (
+				4B4D4C01300649860097B8CA /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
+			);
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4B154696300649860097B8CA /* Products */;
@@ -527,7 +533,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = RadarMap/RadarMapCarPlay.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RL7M4Z58CJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -568,7 +574,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = RadarMap/RadarMapCarPlay.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RL7M4Z58CJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -606,7 +612,7 @@
 				CODE_SIGN_ENTITLEMENTS = RadarMapWidgets/RadarMapWidgets.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RL7M4Z58CJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RadarMapWidgets/Info.plist;
@@ -636,7 +642,7 @@
 				CODE_SIGN_ENTITLEMENTS = RadarMapWidgets/RadarMapWidgets.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RL7M4Z58CJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RadarMapWidgets/Info.plist;
@@ -665,7 +671,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RL7M4Z58CJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -689,7 +695,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RL7M4Z58CJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
@@ -715,7 +721,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = RadarWatch/RadarWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RL7M4Z58CJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -747,7 +753,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = RadarWatch/RadarWatch.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RL7M4Z58CJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -821,6 +827,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		4B4D4C01300649860097B8CA /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.29.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4B4D4C02300649860097B8CA /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4B4D4C01300649860097B8CA /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
+			productName = MapLibre;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 4B15468D300649860097B8CA /* Project object */;
 }

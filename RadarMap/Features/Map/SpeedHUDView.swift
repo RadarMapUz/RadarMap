@@ -31,7 +31,7 @@ struct SpeedHUDView: View {
 
     var body: some View {
         let location = env.location
-        GlassCard(cornerRadius: 22) {
+        GlassCard(cornerRadius: Theme.cornerPanel) {
             HStack(spacing: 0) {
                 speedBlock(location.speedKmh)
 

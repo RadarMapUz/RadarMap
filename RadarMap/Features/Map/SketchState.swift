@@ -62,10 +62,75 @@ final class SketchState {
     private(set) var closeReason: RoadSketch.CloseReason?
     /// С какого момента ползём. nil — едем.
     @ObservationIgnored private var crawlSince: Date?
+    /// Ключ сцены, под которую сажались подписи.
+    @ObservationIgnored private var labelsKey: RoadSketch.RebuildKey?
 
     /// Высота вью в пунктах: по ней экранный сдвиг переводится в метры.
     /// Ставит сама вью — состояние про экран ничего не знает.
-    @ObservationIgnored var viewHeight: CGFloat = 0
+    ///
+    /// На изменении поля пересчитываются: панели свою высоту меряют один раз
+    /// при раскладке, а схема появляется позже (её монтируют, только когда
+    /// она на экране). Без пересчёта первый показ шёл бы с пустыми полями —
+    /// то есть ровно с той проекцией, которую мы и чиним.
+    @ObservationIgnored var viewHeight: CGFloat = 0 {
+        didSet {
+            guard viewHeight != oldValue else { return }
+            applyPanelEdges()
+        }
+    }
+    /// Последние кромки панелей в пунктах окна: хранятся, потому что высота
+    /// вью и замер панелей приходят в разном порядке.
+    @ObservationIgnored private var panelTop: CGFloat = 0
+    @ObservationIgnored private var panelBottom: CGFloat = 0
+    /// Ширина вью в пунктах: нужна подписям, чтобы резать улицы по видимому
+    /// прямоугольнику, а не по одной высоте.
+    @ObservationIgnored var viewWidth: CGFloat = 0
+
+    /// Поля вида: какую долю высоты закрывают панели хоста.
+    ///
+    /// Ставит ХОЗЯИН экрана, а не вью схемы: панели знает он. На приборке и в
+    /// CarPlay схема ничем не закрыта, и поля остаются пустыми.
+    private(set) var insets = RoadSketch.Insets.none
+
+    /// Подписи улиц на текущий кадр.
+    ///
+    /// Не в сцене, а здесь, и это главная правка подписей: сцена живёт сотни
+    /// метров и не знает, что именно видно СЕЙЧАС. Подпись, посаженная в
+    /// середину улицы по всему растру, уезжала за экран вместе с этой
+    /// серединой — на четырёх снимках живой поездки не было ни одной подписи
+    /// при пяти-восьми подписываемых улицах в кадре.
+    private(set) var labels: [RoadSketch.Label] = []
+
+    /// Хост измерил свои панели: нижняя кромка верхней стопки и верхняя
+    /// кромка нижней, в пунктах окна. Схема сама переводит их в доли своей
+    /// высоты — про экран знает она, про панели знает хост.
+    func setPanelEdges(top: CGFloat, bottom: CGFloat) {
+        panelTop = top
+        panelBottom = bottom
+        applyPanelEdges()
+    }
+
+    private func applyPanelEdges() {
+        guard viewHeight > 0 else { return }
+        let top = panelTop, bottom = panelBottom
+        let height = Double(viewHeight)
+        // Ноль снизу — «ещё не мерили», а не «панель во весь экран»: до
+        // первого замера поле обязано быть пустым, иначе первый же кадр
+        // схемы сожмётся в треть экрана.
+        let bottomInset = bottom > 0 ? max(0, height - Double(bottom)) / height : 0
+        setInsets(top: max(0, Double(top)) / height, bottom: bottomInset)
+    }
+
+    /// Хост измерил свои панели. Пишем только на изменение: поля приходят из
+    /// раскладки, а раскладка случается чаще, чем меняются высоты.
+    func setInsets(top: Double, bottom: Double) {
+        let fresh = RoadSketch.Insets(top: top, bottom: bottom)
+        guard fresh != insets else { return }
+        insets = fresh
+        // Проекция изменилась: растр собран под прежние поля, и «я» в нём
+        // стоит не там, где теперь смотрят.
+        key = nil
+    }
     /// Охват на момент начала осмотра: во время него он держится сам, а не
     /// выбирается по скорости и расстоянию до камеры.
     @ObservationIgnored private var inspectSpan: Double?
@@ -238,24 +303,34 @@ final class SketchState {
         let speed = env.location.speedKmh
         if speed <= RoadSketch.closeSlowKmh {
             if crawlSince == nil { crawlSince = Date() }
-        } else if speed > RoadSketch.closeSlowKmh * 1.6 {
+        } else if speed > RoadSketch.closeSlowKmh * RoadSketch.closeSlowExitFactor {
             crawlSince = nil
         }
         let crawling = crawlSince.map { Date().timeIntervalSince($0) } ?? 0
+        let toManeuver = env.route.isActive && env.route.nextStep != nil
+            ? env.route.nextStepDistance : nil
+        let toCamera = alert != nil ? distance : nil
         closeReason = RoadSketch.closeReason(
-            toManeuver: env.route.isActive && env.route.nextStep != nil
-                ? env.route.nextStepDistance : nil,
-            toCamera: alert != nil ? distance : nil,
+            toManeuver: toManeuver,
+            toCamera: toCamera,
             speedKmh: speed, crawlingSeconds: crawling,
+            // Двор берём с прошлого тика: решение о мелких улицах считается
+            // ниже, по уже выбранному охвату, и одного тика задержки здесь не
+            // видно — у самого решения гистерезис в два тика.
+            onMinorRoad: minorsVisible,
             wasClose: closeReason != nil)
 
         let span = inspectSpan
-            ?? (closeReason != nil && !isInspecting
-                ? RoadSketch.closeSpanMeters
-                : RoadSketch.span(forDistance: alert != nil ? distance : nil,
-                                  speedKmh: speed))
+            ?? (closeReason.map { reason in
+                isInspecting
+                    ? RoadSketch.span(forDistance: toCamera, speedKmh: speed,
+                                      insets: insets)
+                    : RoadSketch.closeSpan(reason: reason, toManeuver: toManeuver,
+                                           toCamera: toCamera, insets: insets)
+            } ?? RoadSketch.span(forDistance: toCamera, speedKmh: speed,
+                                 insets: insets))
         let inRange: Bool = if let distance, alert != nil {
-            RoadSketch.isInRange(distance: distance, span: span)
+            RoadSketch.isInRange(distance: distance, span: span, insets: insets)
         } else {
             false
         }
@@ -381,6 +456,42 @@ final class SketchState {
         }
         key = freshKey
         refreshRouteLayers(env)
+        refreshLabels(span: span)
+    }
+
+    /// Подписи улиц под текущую точку зрения.
+    ///
+    /// Каждый тик, а не на пересборке растра: подпись обязана сидеть в том
+    /// куске улицы, который виден СЕЙЧАС. Дюжина строк на дюжину улиц — цена
+    /// одного перебора сети, уже урезанной бюджетом.
+    ///
+    /// Только на ближнем плане: на дальнем схема рисует костяк района, где
+    /// раздельные проезжие сведены в одну ось, и подпись висела бы между
+    /// двумя проезжими частями. Тот же порог, что у обстановки.
+    private func refreshLabels(span: Double) {
+        guard let scene, span <= RoadSketch.farNetworkSpan,
+              viewHeight > 0, viewWidth > 0 else {
+            if !labels.isEmpty { labels = [] }
+            return
+        }
+        let aspect = Double(viewWidth / viewHeight)
+        let anchor = CGPoint(x: meOffset.width, y: meOffset.height)
+        // Пока все подписи на экране и сеть та же — не трогаем: подпись,
+        // пересаживаемая на каждом фиксе, ползала бы по улице.
+        if !labels.isEmpty, labelsKey == key,
+           labels.allSatisfy({ RoadSketch.isSeated($0.point, meOffset: anchor,
+                                                   courseDegrees: courseDegrees,
+                                                   spanMeters: spanMeters,
+                                                   aspect: aspect, insets: insets) }) {
+            return
+        }
+        labelsKey = key
+        let fresh = RoadSketch.labels(
+            for: scene.network,
+            meOffset: anchor,
+            courseDegrees: courseDegrees, spanMeters: spanMeters,
+            aspect: aspect, insets: insets, viewHeight: Double(viewHeight))
+        if fresh != labels { labels = fresh }
     }
 
     /// Мировые слои маршрута: стрелка манёвра и пройденный кусок.

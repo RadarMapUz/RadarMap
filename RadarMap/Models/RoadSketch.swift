@@ -164,8 +164,6 @@ nonisolated enum RoadSketch {
         var markings: [Marking] = []
         /// Светофоры, развороты и прочее, нарисованное руками.
         var marks: [Mark] = []
-        /// Подписи улиц.
-        var labels: [Label] = []
         /// Окрестная дорожная сеть — перекрёстки, развязки, параллельные улицы.
         var network: [Line] = []
         /// Проезжая часть тревожной камеры, продлённая по её направлению.
@@ -194,6 +192,15 @@ nonisolated enum RoadSketch {
         var spanAtBuild: Double = minSpanMeters
         /// Радиус содержимого сцены вокруг опоры, метры.
         var radiusMeters: Double = 0
+        /// Полотно легло ЦЕЛИКОМ: все проезжие части кадра и все площади
+        /// перекрёстков поместились в бюджет.
+        ///
+        /// Признаком, а не подсчётом во вью. Вью раньше спрашивало «есть ли
+        /// хоть одна фигура полотна» и по этому ответу переставало чертить
+        /// сеть штрихами — а в перегреве бюджет резал полотно посередине:
+        /// оставались куски асфальта без перекрёстков и без штрихов между
+        /// ними. Ровно это и выглядело как рваные дороги.
+        var hasPavement = false
 
         var anchor: CLLocationCoordinate2D {
             CLLocationCoordinate2D(latitude: anchorLatitude, longitude: anchorLongitude)
@@ -337,7 +344,56 @@ nonisolated enum RoadSketch {
 
     /// Где стоит «я»: не в центре, а ниже — впереди должно быть видно больше,
     /// чем позади. Тот же приём, что у любого навигатора.
+    ///
+    /// Доля ВИДИМОЙ части вида, а не всего экрана: панели поверх схемы
+    /// забирают себе четверть высоты, и считать от неё — значит ставить «я» и
+    /// камеру не туда, где на них смотрят (см. Insets).
     static let meY: Double = 0.78
+
+    /// Где стоит тревожная камера, когда охват выбирается по ней. Доля
+    /// видимой части сверху.
+    ///
+    /// Пятнадцать процентов, а не двенадцать процентов ЭКРАНА, как было. Разница не
+    /// в трёх процентах, а в том, от чего они считаются: карточка скорости
+    /// занимает 17 % высоты (26 % с объявлением о перегреве), и камера,
+    /// поставленная на 12 % экрана, рисовалась ПОД карточкой на каждом
+    /// подходе. Проверено на снимке живой поездки: «344 м до камеры» в
+    /// карточке — и ни одной камеры на карте.
+    static let cameraTopShare: Double = 0.15
+
+    /// Насколько близко к верхней кромке видимого камера ещё считается
+    /// попавшей в охват. Ниже этого она была бы наполовину за краем.
+    static let cameraEdgeShare: Double = 0.05
+
+    /// Поля вида: какую долю высоты забирают панели поверх схемы.
+    ///
+    /// Схема лежит во весь экран, а видно из неё не всё: сверху карточка
+    /// скорости и объявления, снизу панель поездки. Вся проекция считается от
+    /// ВИДИМОГО прямоугольника — «я», камера, попадание в охват, поля растра.
+    /// Хост измеряет свои панели сам и кладёт их сюда; приборка и CarPlay
+    /// оставляют поля пустыми, потому что там схема ничем не закрыта.
+    struct Insets: Equatable, Sendable {
+        var top: Double = 0
+        var bottom: Double = 0
+
+        static let none = Insets()
+
+        /// Потолок полей. Панель, забравшая больше двух третей экрана, — это
+        /// уже не схема с панелью, и геометрия не обязана считать такой
+        /// случай осмысленным; она обязана не сойти с ума.
+        var safeTop: Double { min(max(0, top), 0.45) }
+        var safeBottom: Double { min(max(0, bottom), 0.35) }
+
+        /// Доля высоты, которая видна.
+        var visible: Double { max(0.35, 1 - safeTop - safeBottom) }
+
+        /// Где стоит «я» — доля ПОЛНОЙ высоты вида.
+        var meY: Double { safeTop + visible * RoadSketch.meY }
+        /// Куда охват ставит тревожную камеру — доля полной высоты.
+        var cameraY: Double { safeTop + visible * RoadSketch.cameraTopShare }
+        /// Верхняя кромка, за которую камера уже не считается видимой.
+        var cameraEdgeY: Double { safeTop + visible * RoadSketch.cameraEdgeShare }
+    }
 
     /// Минимальный охват: на близкой дистанции нельзя раздувать масштаб до
     /// сантиметров, иначе схема дёргается от шума GPS.
@@ -367,6 +423,13 @@ nonisolated enum RoadSketch {
     /// Медленнее этого и дольше `closeSlowSeconds` — двор или пробка.
     static let closeSlowKmh: Double = 20
     static let closeSlowSeconds: Double = 5
+
+    /// Запас на выходе из ползания. Был 1,6 — то есть вид вблизи отпускал
+    /// только выше 32 км/ч, а 32 км/ч это скорость городского потока, а не
+    /// признак пробки. Постояли пять секунд на светофоре — и схема ехала на
+    /// пятидесяти пяти метрах весь маршрут. Проверено на снимке: 29 км/ч,
+    /// весь экран — стена асфальта.
+    static let closeSlowExitFactor: Double = 1.25
 
     /// Выход обратно — с ЗАПАСОМ. Вид, дёргающийся между двумя масштабами на
     /// каждом перекрёстке, хуже любого из них, поэтому порог выхода дальше
@@ -429,18 +492,43 @@ nonisolated enum RoadSketch {
                             toCamera camera: Double?,
                             speedKmh: Double,
                             crawlingSeconds: Double,
+                            onMinorRoad: Bool = false,
                             wasClose: Bool) -> CloseReason? {
         let enter = wasClose ? closeExitMeters : closeManeuverMeters
         if let maneuver, maneuver <= enter { return .maneuver }
         let cameraEnter = wasClose ? closeExitMeters : closeCameraMeters
         if let camera, camera <= cameraEnter { return .camera }
-        // Ползём: порог выхода по скорости тоже с запасом — иначе на светофоре
-        // вид моргал бы на каждом трогании.
-        let slowEnough = wasClose ? closeSlowKmh * 1.6 : closeSlowKmh
-        if speedKmh <= slowEnough, crawlingSeconds >= closeSlowSeconds {
+        // Ползание САМО ПО СЕБЕ вида вблизи не даёт, и это главная правка.
+        // В пробке на прямом проспекте вблизи смотреть не на что, а масштаб,
+        // залипший на светофоре, потом едет с водителем весь маршрут. Нужен
+        // повод рядом: манёвр и камера проверены выше, остаётся двор — там
+        // ползут не от пробки, а потому что приехали.
+        let slowEnough = wasClose ? closeSlowKmh * closeSlowExitFactor : closeSlowKmh
+        if onMinorRoad, speedKmh <= slowEnough, crawlingSeconds >= closeSlowSeconds {
             return .crawl
         }
         return nil
+    }
+
+    /// Охват вида вблизи. Не константа: он обязан ВМЕЩАТЬ свою причину.
+    ///
+    /// Вид включался из-за камеры в 120 метрах и показывал 43 метра вперёд —
+    /// то есть первым делом стирал с экрана то, из-за чего включился, и
+    /// возвращал камеру только с сорока метров. Восемьдесят метров подхода
+    /// водитель смотрел на пустой асфальт и цифру в карточке.
+    ///
+    /// Правило простое: ступень вблизи — это НИЖНЯЯ граница охвата, а не сам
+    /// охват. Пока причина далеко, охват её догоняет; чем ближе она, тем
+    /// крупнее план, и на последних метрах он приходит к тем самым 55.
+    static func closeSpan(reason: CloseReason, toManeuver: Double?,
+                          toCamera: Double?, insets: Insets = .none) -> Double {
+        let cause: Double? = switch reason {
+        case .maneuver: toManeuver
+        case .camera: toCamera
+        case .crawl: nil
+        }
+        guard let cause, cause > 0 else { return closeSpanMeters }
+        return min(maxSpanMeters, max(closeSpanMeters, cause / reach(insets)))
     }
 
     /// Охват, с которого схема переходит на костяк района: там раздельные
@@ -461,42 +549,174 @@ nonisolated enum RoadSketch {
     /// которому уже не видно дорог.
     static let labelBudget = 12
 
-    /// Ближе этого две подписи считаются одной: соседние куски одной улицы не
-    /// должны подписываться дважды.
-    static let labelApartMeters: Double = 90
+    /// Ближе этого по ЭКРАНУ две подписи читаются как одна — доля высоты
+    /// вида, а не метры. Правило про чтение, а не про землю: девяносто метров,
+    /// как было, на охвате вблизи означали одну подпись на весь экран, а на
+    /// охвате района — толпу подписей в углу.
+    static let labelApartShare: Double = 0.1
 
-    /// Короче этого улицу не подписываем: строка длиннее самой дороги читается
-    /// как подпись к соседней.
-    static let labelMinLengthMeters: Double = 60
+    /// Сколько экранных пунктов занимает буква подписи. Точную ширину строки
+    /// в модели считать нечем и незачем: нужен ответ «влезает ли имя в видимый
+    /// кусок улицы», и он не меняется от третьего знака.
+    static let labelPointsPerCharacter: Double = 6.5
+
+    /// Поля видимого прямоугольника, в которые подпись не заезжает.
+    static let labelMarginShare: Double = 0.04
+
+    /// Подпись ещё сидит на экране.
+    ///
+    /// Нужна, чтобы не пересаживать подписи каждый тик: пересчитанная на
+    /// каждом фиксе подпись ползала бы по улице туда-сюда. Пока она видна —
+    /// стоит где стояла; ушла за край — сажаем заново. Поле вдвое меньше
+    /// того, с которым сажали: иначе подпись у самой кромки пересчитывалась
+    /// бы каждый тик.
+    static func isSeated(_ point: CGPoint, meOffset: CGPoint,
+                         courseDegrees: Double, spanMeters: Double,
+                         aspect: Double, insets: Insets = .none) -> Bool {
+        guard spanMeters > 0, aspect > 0 else { return false }
+        let seat = screenPoint(point, meOffset: meOffset, courseDegrees: courseDegrees,
+                               spanMeters: spanMeters, aspect: aspect, insets: insets)
+        let margin = labelMarginShare / 2
+        return Double(seat.y) >= insets.safeTop + margin
+            && Double(seat.y) <= 1 - insets.safeBottom - margin
+            && Double(seat.x) >= margin / aspect
+            && Double(seat.x) <= 1 - margin / aspect
+    }
 
     /// Подписи для видимой сети.
     ///
+    /// Считаются от ТОЧКИ ЗРЕНИЯ, а не от одной сцены, и в этом вся правка.
+    /// Раньше подпись садилась в середину улицы, посчитанной по всему растру
+    /// (радиус 185–990 метров), а человек смотрит в его сотую часть: середина
+    /// уезжала за экран вместе с подписью. На четырёх снимках живой поездки
+    /// не было НИ ОДНОЙ подписи при пяти-восьми подписываемых улицах в кадре.
+    ///
+    /// Теперь улица режется прямоугольником вида, и подпись садится в
+    /// середину самого длинного ВИДИМОГО куска. Заодно отпадает порог длины в
+    /// метрах: спрашиваем не «длинна ли улица», а «влезает ли в неё имя».
+    ///
     /// Порядок отбора — по классу, а не по близости: на перекрёстке проспекта
     /// с проездом подписать надо проспект. При равном классе выигрывает более
-    /// длинный кусок: он и виден лучше, и вероятнее та самая улица, а не её
-    /// огрызок за поворотом.
-    static func labels(for network: [Line], limit: Int = labelBudget) -> [Label] {
-        let named = network.filter { !$0.name.isEmpty && $0.points.count >= 2 }
-        let ranked = named
-            .map { line -> (line: Line, length: Double) in
-                var total = 0.0
-                for i in 1..<line.points.count {
-                    total += hypot(Double(line.points[i].x - line.points[i - 1].x),
-                                   Double(line.points[i].y - line.points[i - 1].y))
+    /// длинный видимый кусок.
+    static func labels(for network: [Line], meOffset: CGPoint = .zero,
+                       courseDegrees: Double = 0,
+                       spanMeters: Double = minSpanMeters,
+                       aspect: Double = 0.5, insets: Insets = .none,
+                       viewHeight: Double = 800,
+                       limit: Int = labelBudget) -> [Label] {
+        guard spanMeters > 0, viewHeight > 0, aspect > 0 else { return [] }
+        let marginY = labelMarginShare
+        let minY = insets.safeTop + marginY
+        let maxY = 1 - insets.safeBottom - marginY
+        // По горизонтали поле в тех же долях ЭКРАНА, а не ширины: x у
+        // screenPoint — доля ширины, и без деления на aspect поле сбоку вышло
+        // бы вдвое уже поля сверху.
+        let marginX = marginY / aspect
+        let minX = marginX, maxX = 1 - marginX
+
+        func screen(_ point: CGPoint) -> CGPoint {
+            screenPoint(point, meOffset: meOffset, courseDegrees: courseDegrees,
+                        spanMeters: spanMeters, aspect: aspect, insets: insets)
+        }
+        /// Видимая доля отрезка (Лианг — Барски). nil — отрезок целиком за
+        /// краем. Доли, а не точки: преобразование вида аффинное, поэтому
+        /// параметр отрезка одинаков на экране и в метрах сцены.
+        func clip(_ a: CGPoint, _ b: CGPoint) -> (Double, Double)? {
+            var near = 0.0, far = 1.0
+            let dx = Double(b.x - a.x), dy = Double(b.y - a.y)
+            let edges: [(Double, Double)] = [
+                (-dx, Double(a.x) - minX), (dx, maxX - Double(a.x)),
+                (-dy, Double(a.y) - minY), (dy, maxY - Double(a.y)),
+            ]
+            for (slope, room) in edges {
+                if slope == 0 {
+                    if room < 0 { return nil }
+                    continue
                 }
-                return (line, total)
+                let cut = room / slope
+                if slope < 0 {
+                    if cut > far { return nil }
+                    if cut > near { near = cut }
+                } else {
+                    if cut < near { return nil }
+                    if cut < far { far = cut }
+                }
             }
-            .filter { $0.length >= labelMinLengthMeters }
-            .sorted {
-                let left = RoadGeneralise.rank($0.line.kind)
-                let right = RoadGeneralise.rank($1.line.kind)
-                if left != right { return left < right }
-                return $0.length > $1.length
+            return near < far ? (near, far) : nil
+        }
+        func between(_ a: CGPoint, _ b: CGPoint, _ share: Double) -> CGPoint {
+            CGPoint(x: a.x + (b.x - a.x) * CGFloat(share),
+                    y: a.y + (b.y - a.y) * CGFloat(share))
+        }
+
+        /// Самый длинный непрерывный кусок улицы внутри вида.
+        func visibleRun(_ line: Line) -> [CGPoint] {
+            var best: [CGPoint] = [], bestLength = 0.0
+            var current: [CGPoint] = [], length = 0.0
+            var touchedEnd = false
+            func flush() {
+                if length > bestLength { bestLength = length; best = current }
+                current = []; length = 0
             }
+            for index in 1..<line.points.count {
+                let a = line.points[index - 1], b = line.points[index]
+                guard let (near, far) = clip(screen(a), screen(b)) else {
+                    flush(); touchedEnd = false; continue
+                }
+                let from = between(a, b, near), to = between(a, b, far)
+                if !touchedEnd || near > 0 {
+                    flush()
+                    current = [from]
+                }
+                current.append(to)
+                length += Double(hypot(to.x - from.x, to.y - from.y))
+                touchedEnd = far >= 1
+            }
+            flush()
+            return best
+        }
+
+        // Разбито на цикл, а не цепочку map/filter/sorted: цепочка с
+        // кортежами не выводится компилятором за разумное время — он так и
+        // говорит, и это уже второе такое место в проекте.
+        struct Candidate {
+            let line: Line
+            let run: [CGPoint]
+            let length: Double
+        }
+        let pointsPerMeter = viewHeight / spanMeters
+        var ranked: [Candidate] = []
+        for line in network where !line.name.isEmpty && line.points.count >= 2 {
+            let run = visibleRun(line)
+            guard run.count >= 2 else { continue }
+            var total = 0.0
+            for index in 1..<run.count {
+                total += Double(hypot(run[index].x - run[index - 1].x,
+                                      run[index].y - run[index - 1].y))
+            }
+            // Имя должно ВЛЕЗТЬ в видимый кусок: строка, торчащая за концы
+            // улицы, читается как подпись к соседней. Порог длины в метрах
+            // для этого не годится — на разных охватах одни и те же метры
+            // занимают разное число пунктов.
+            let needed = Double(line.name.count) * labelPointsPerCharacter * 1.15
+            guard total * pointsPerMeter >= needed else { continue }
+            ranked.append(Candidate(line: line, run: run, length: total))
+        }
+        // Порядок отбора — по классу, а не по близости: на перекрёстке
+        // проспекта с проездом подписать надо проспект.
+        ranked.sort {
+            let left = RoadGeneralise.rank($0.line.kind)
+            let right = RoadGeneralise.rank($1.line.kind)
+            if left != right { return left < right }
+            return $0.length > $1.length
+        }
 
         var out: [Label] = []
         var placed: [CGPoint] = []
-        for (line, length) in ranked {
+        for candidate in ranked {
+            let line = candidate.line
+            let run = candidate.run
+            let length = candidate.length
             guard out.count < limit else { break }
             // Одна улица — одна подпись в кадре: склейка оставляет длинные
             // улицы целыми, но рядом бывает её же дублирующий кусок.
@@ -508,14 +728,14 @@ nonisolated enum RoadSketch {
             // индекса поэтому уезжает в поворот, а у прямой улицы, от которой
             // осталось две точки, попадает на КОНЕЦ — то есть подпись садится
             // в перекрёсток.
-            var point = line.points[line.points.count - 1]
-            var before = line.points[0]
+            var point = run[run.count - 1]
+            var before = run[0]
             var after = point
             var walked = 0.0
-            for index in 1..<line.points.count {
-                let from = line.points[index - 1]
-                let to = line.points[index]
-                let step = hypot(Double(to.x - from.x), Double(to.y - from.y))
+            for index in 1..<run.count {
+                let from = run[index - 1]
+                let to = run[index]
+                let step = Double(hypot(to.x - from.x, to.y - from.y))
                 guard step > 0 else { continue }
                 if walked + step >= length / 2 {
                     let share = CGFloat((length / 2 - walked) / step)
@@ -529,8 +749,12 @@ nonisolated enum RoadSketch {
                 }
                 walked += step
             }
+            // Расстояние между подписями меряется на ЭКРАНЕ: по горизонтали
+            // доли ширины приводятся к долям высоты через aspect.
+            let seat = screen(point)
             guard !placed.contains(where: {
-                hypot(Double($0.x - point.x), Double($0.y - point.y)) < labelApartMeters
+                hypot(Double($0.x - seat.x) * aspect,
+                      Double($0.y - seat.y)) < labelApartShare
             }) else { continue }
             var angle = atan2(Double(after.y - before.y),
                               Double(after.x - before.x)) * 180 / .pi
@@ -540,7 +764,7 @@ nonisolated enum RoadSketch {
             if angle > 90 { angle -= 180 }
             if angle < -90 { angle += 180 }
             out.append(Label(text: line.name, point: point, angle: angle))
-            placed.append(point)
+            placed.append(seat)
         }
         return out
     }
@@ -623,7 +847,11 @@ nonisolated enum RoadSketch {
     /// это пересборка каждые полсотни метров, то есть каждые пару секунд по
     /// городу. Запас оплачивается стороной растра, а не тиками.
     static func driftMeters(forSpan span: Double) -> Double {
-        max(rebuildDriftFactor * span, 100)
+        // Пол в сто метров писался под охват 140 и на виде вблизи означал
+        // запас ВТРОЕ больше самого вида: растр раздувался до трёх с
+        // половиной тысяч пунктов там, где видно пятьдесят пять метров.
+        // Запас не бывает больше того, что он окружает.
+        max(rebuildDriftFactor * span, min(100, span))
     }
 
     /// Радиус сцены: круг видимости при любом повороте (до дальнего угла
@@ -650,24 +878,44 @@ nonisolated enum RoadSketch {
     /// нечего, кроме своей улицы), едем — вид отъезжает ровно настолько, чтобы
     /// в кадре был тот же отрезок времени. Иначе на трассе схема показывала
     /// пять секунд дороги, и по ней нельзя было понять даже, куда она ведёт.
-    static func span(forDistance distance: Double?, speedKmh: Double = 0) -> Double {
+    static func span(forDistance distance: Double?, speedKmh: Double = 0,
+                     insets: Insets = .none) -> Double {
         let floorSpan = min(maxSpanMeters,
                             max(minSpanMeters, speedKmh / 3.6 * lookAheadSeconds))
         guard let distance else { return floorSpan }
-        return min(maxSpanMeters, max(floorSpan, distance / (meY - 0.12)))
+        return min(maxSpanMeters, max(floorSpan, distance / reach(insets)))
+    }
+
+    /// Сколько высоты вида остаётся между «я» и местом камеры. Из него и
+    /// считается охват: он и есть «во сколько раз охват больше дистанции».
+    static func reach(_ insets: Insets) -> Double {
+        max(0.1, insets.meY - insets.cameraY)
     }
 
     /// Камера в охвате вида. За охватом она не рисуется вовсе: показать её у
     /// края значило бы соврать масштабом, а дотянуть к ней дорогу — геометрией.
-    static func isInRange(distance: Double, span: Double) -> Bool {
-        distance <= span * (meY - 0.05)
+    ///
+    /// «В охвате» означает буквально «попадает в видимый прямоугольник»: тот
+    /// же расчёт, что у проекции, а не отдельная константа рядом с ней.
+    static func isInRange(distance: Double, span: Double,
+                          insets: Insets = .none) -> Bool {
+        guard span > 0 else { return false }
+        return insets.meY - distance / span >= insets.cameraEdgeY
     }
 
     /// Ступень масштаба ≤ охвата: растр выходит чуть детальнее, чем нужно,
     /// и scaleEffect только СЖИМАЕТ (резкость не теряется).
+    ///
+    /// Лестница начинается от охвата ВБЛИЗИ, а не от обычной нижней ступени.
+    /// Пока она начиналась со 140 метров, вид вблизи (55 м) получал растр,
+    /// нарисованный под 140, и scaleEffect РАСТЯГИВАЛ его в 2,55 раза: всё,
+    /// ради чего вид вблизи заведён — разделительные, стоп-линия, зебра —
+    /// рисовалось при шести пунктах на метр и увеличивалось втрое. Тест на
+    /// ступени перебирал охваты от 140 и выше и этого не видел.
     static func bucket(forSpan span: Double) -> Double {
-        let steps = floor(log(span / minSpanMeters) / log(bucketRatio))
-        return minSpanMeters * pow(bucketRatio, max(0, steps))
+        let base = closeSpanMeters
+        let steps = floor(log(span / base) / log(bucketRatio))
+        return base * pow(bucketRatio, max(0, steps))
     }
 
     /// Размотанный курс: переход 359°→1° должен крутить схему на +2°, а не
@@ -690,7 +938,7 @@ nonisolated enum RoadSketch {
     /// поворота проверяют именно эту функцию.
     static func screenPoint(_ point: CGPoint, meOffset: CGPoint,
                             courseDegrees: Double, spanMeters: Double,
-                            aspect: Double) -> CGPoint {
+                            aspect: Double, insets: Insets = .none) -> CGPoint {
         let east = point.x - meOffset.x
         let north = point.y - meOffset.y
         // Знак положительный, и это не мелочь: точка по курсу обязана
@@ -700,7 +948,8 @@ nonisolated enum RoadSketch {
         let angle = courseDegrees * .pi / 180
         let x = east * cos(angle) - north * sin(angle)
         let y = east * sin(angle) + north * cos(angle)
-        return CGPoint(x: 0.5 + x / (spanMeters * aspect), y: meY - y / spanMeters)
+        return CGPoint(x: 0.5 + x / (spanMeters * aspect),
+                       y: insets.meY - y / spanMeters)
     }
 
     // MARK: - Куски маршрута (стрелка манёвра и пройденное)
@@ -982,6 +1231,35 @@ nonisolated enum RoadSketch {
         if areaBudget > 0 && !areas.isEmpty {
             var kept: [Area] = []
             kept.reserveCapacity(min(areas.count, areaBudget))
+
+            func clipped(_ area: SketchArea) -> Area? {
+                let points = nearby(area.points)
+                guard points.count >= (area.isClosed ? 3 : 2) else { return nil }
+                return Area(points: points, kind: area.kind, isClosed: area.isClosed,
+                            levels: area.levels, roadClass: area.roadClass)
+            }
+
+            // ПОЛОТНО — ОДНОЙ ПАЧКОЙ, прежде всего остального.
+            //
+            // Проезжая часть, площади перекрёстков и разделительные — это
+            // одна фигура, разрезанная на файлы. Дорога без площади
+            // перекрёстка — ленты, которые не сходятся; дорога, у которой
+            // выброшен каждый пятый кусок, — рваная. Поэтому либо помещается
+            // всё, либо не рисуется ничего, и тогда сеть чертится штрихом:
+            // он дёшев, всегда непрерывен и сам закрывает узлы заглушками.
+            //
+            // Замерено на боевых тайлах в перегреве (бюджет 120): терялись
+            // ВСЕ 41 площади перекрёстков и 20 из 82 кусков полотна — при том,
+            // что очередь по maxSpanMeters пропускала вперёд воду, зелень и
+            // кварталы. Слой, отвечающий на вопрос «где дорога», стоял в
+            // очереди четвёртым.
+            let pavement = areas
+                .filter { $0.kind.isPavement && $0.kind.maxSpanMeters >= spanMeters }
+                .compactMap(clipped)
+            if !pavement.isEmpty && pavement.count <= areaBudget {
+                kept = pavement
+                scene.hasPavement = true
+            }
             // Обход — ПО СЛОЯМ, а не по массиву.
             //
             // `areas` приезжает как flatMap по МНОЖЕСТВУ тайлов, то есть его
@@ -994,27 +1272,18 @@ nonisolated enum RoadSketch {
             // Заполняться бюджет начнёт ровно тогда, когда поедут дома: их
             // 54 094 в одном кадре центра против четырёхсот мест в бюджете.
             //
-            // Ключ приоритета — уже объявленный maxSpanMeters: он и есть мера
-            // «ориентир или деталь ближнего плана». Второе число для этого
-            // заводить незачем.
+            // Ключ приоритета — budgetRank, отдельное число. maxSpanMeters,
+            // стоявший здесь раньше, отвечает на другой вопрос — «с какого
+            // масштаба слой осмыслен», — и ключом бюджета ставил зелень
+            // впереди проезжей части.
             let layers = SketchArea.Kind.allCases
-                .filter { $0.maxSpanMeters >= spanMeters }
-                .sorted {
-                    // Второй ключ нужен: у воды, зелени и рельсов охват
-                    // одинаков, а sorted в Swift не устойчива — без него
-                    // порядок внутри равных снова стал бы деталью реализации.
-                    $0.maxSpanMeters == $1.maxSpanMeters
-                        ? $0.rawValue < $1.rawValue
-                        : $0.maxSpanMeters > $1.maxSpanMeters
-                }
+                .filter { !$0.isPavement && $0.maxSpanMeters >= spanMeters }
+                .sorted { $0.budgetRank < $1.budgetRank }
             layers: for layer in layers {
                 for area in areas where area.kind == layer {
-                    let points = nearby(area.points)
-                    guard points.count >= (area.isClosed ? 3 : 2) else { continue }
-                    kept.append(Area(points: points, kind: area.kind,
-                                     isClosed: area.isClosed, levels: area.levels,
-                                     roadClass: area.roadClass))
-                    if kept.count >= areaBudget { break layers }
+                    guard kept.count < areaBudget else { break layers }
+                    guard let area = clipped(area) else { continue }
+                    kept.append(area)
                 }
             }
             // Вода поверх зелени, кварталы под всем: порядок задаётся здесь,
@@ -1112,16 +1381,10 @@ nonisolated enum RoadSketch {
             scene.road = extended(raw, toReach: min(spanMeters * 0.5, maxExtensionMeters))
         }
 
-        // Подписи считаем по ТОЙ ЖЕ сети, что легла в сцену, — после
-        // генерализации и бюджета. Иначе подпись стояла бы над улицей,
-        // которую в перегреве уже не рисуют.
-        //
-        // Только на ближнем плане: на дальнем схема рисует костяк района, где
-        // раздельные проезжие сведены в одну ось, и подпись висела бы между
-        // двумя проезжими частями. Тот же порог, что у обстановки.
-        if spanMeters <= farNetworkSpan {
-            scene.labels = labels(for: scene.network)
-        }
+        // Подписей в сцене нет: они зависят от точки зрения (что именно
+        // видно сейчас), а сцена живёт сотни метров. Их считает состояние на
+        // тике — по ТОЙ ЖЕ сети, что легла сюда, после генерализации и
+        // бюджета.
         return scene
     }
 

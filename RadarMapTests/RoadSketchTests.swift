@@ -179,14 +179,88 @@ final class RoadSketchTests: XCTestCase {
     // MARK: - Ступени масштаба и пересборка растра
 
     func testBucketStaysWithinOneStepBelowSpan() {
-        for span in stride(from: 140.0, through: 700, by: 7) {
+        // Перебор идёт ОТ ОХВАТА ВБЛИЗИ, а не от обычной нижней ступени, и
+        // это не придирка к границам. Пока лестница начиналась со 140 метров,
+        // вид вблизи (55 м) получал растр, нарисованный под 140, и
+        // scaleEffect растягивал его в 2,55 раза: разделительные, стоп-линия
+        // и зебра рисовались при шести пунктах на метр и увеличивались втрое.
+        // Прежний перебор начинался со 140 и этого не видел ни разу.
+        for span in stride(from: RoadSketch.closeSpanMeters, through: 700, by: 3) {
             let bucket = RoadSketch.bucket(forSpan: span)
             XCTAssertLessThanOrEqual(bucket, span + 0.001,
                                      "ступень выше охвата = scaleEffect растянул бы растр")
             XCTAssertGreaterThan(bucket, span / RoadSketch.bucketRatio - 0.001)
         }
-        XCTAssertEqual(RoadSketch.bucket(forSpan: RoadSketch.minSpanMeters),
-                       RoadSketch.minSpanMeters)
+        XCTAssertEqual(RoadSketch.bucket(forSpan: RoadSketch.closeSpanMeters),
+                       RoadSketch.closeSpanMeters)
+    }
+
+    func testRasterMarginNeverOutgrowsItsOwnView() {
+        // Пол дрейфа в сто метров писался под охват 140 и на виде вблизи
+        // означал запас втрое больше самого вида — растр раздувался туда, где
+        // видно пятьдесят пять метров.
+        for span in stride(from: RoadSketch.closeSpanMeters, through: 700, by: 5) {
+            XCTAssertLessThanOrEqual(RoadSketch.driftMeters(forSpan: span), span + 0.001,
+                                     "запас растра больше самого вида: охват \(span)")
+        }
+    }
+
+    // MARK: - Поля вида: панели закрывают схему, и проекция обязана это знать
+
+    func testAlertCameraNeverLandsUnderThePanel() {
+        // Замерено на снимках живой поездки: карточка скорости занимает 17 %
+        // высоты, с объявлением о перегреве — 26 %. А охват ставил камеру на
+        // 12 % ЭКРАНА — то есть под карточку, на каждом подходе. На снимке
+        // «344 м до камеры» в карточке и ни одной камеры на карте.
+        for top in [0.0, 0.10, 0.17, 0.26, 0.34] {
+            let insets = RoadSketch.Insets(top: top, bottom: 0.08)
+            for distance in stride(from: 60.0, through: 900, by: 20) {
+                let span = RoadSketch.span(forDistance: distance, speedKmh: 60,
+                                           insets: insets)
+                guard RoadSketch.isInRange(distance: distance, span: span,
+                                           insets: insets) else { continue }
+                let point = RoadSketch.screenPoint(scenePoint(metres: distance, bearing: 0),
+                                                   meOffset: .zero, courseDegrees: 0,
+                                                   spanMeters: span, aspect: 0.46,
+                                                   insets: insets)
+                XCTAssertGreaterThanOrEqual(Double(point.y), insets.safeTop,
+                                            "камера в \(distance) м под панелью (поле \(top))")
+                XCTAssertLessThanOrEqual(Double(point.y), 1 - insets.safeBottom,
+                                         "камера в \(distance) м под нижней панелью")
+            }
+        }
+    }
+
+    func testMeStandsInsideTheVisibleRect() {
+        // «Я» держится на своей доле ВИДИМОГО, а не экрана: иначе с высокой
+        // карточкой стрелка уезжает к нижней панели и впереди видно меньше,
+        // чем позади.
+        for top in [0.0, 0.17, 0.26] {
+            let insets = RoadSketch.Insets(top: top, bottom: 0.08)
+            XCTAssertGreaterThan(insets.meY, insets.safeTop)
+            XCTAssertLessThan(insets.meY, 1 - insets.safeBottom)
+            let share = (insets.meY - insets.safeTop) / insets.visible
+            XCTAssertEqual(share, RoadSketch.meY, accuracy: 1e-9,
+                           "доля «я» внутри видимого обязана быть одной и той же")
+        }
+    }
+
+    func testInRangeMeansItIsActuallyOnScreen() {
+        // «В охвате» обязано значить буквально «видно»: два разных ответа на
+        // один вопрос — это ровно тот случай, когда камера рисуется там, где
+        // на неё не смотрят.
+        let insets = RoadSketch.Insets(top: 0.2, bottom: 0.1)
+        for distance in stride(from: 20.0, through: 800, by: 10) {
+            let span = RoadSketch.span(forDistance: distance, insets: insets)
+            let point = RoadSketch.screenPoint(scenePoint(metres: distance, bearing: 0),
+                                               meOffset: .zero, courseDegrees: 0,
+                                               spanMeters: span, aspect: 0.46,
+                                               insets: insets)
+            let onScreen = Double(point.y) >= insets.cameraEdgeY - 1e-9
+            XCTAssertEqual(RoadSketch.isInRange(distance: distance, span: span,
+                                                insets: insets), onScreen,
+                           "«в охвате» и «на экране» разошлись на \(distance) м")
+        }
     }
 
     func testRebuildOnlyOnDriftOrDataChange() {

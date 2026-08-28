@@ -54,14 +54,19 @@ struct RoadSketchView: View {
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
+            // «Я» стоит по ВИДИМОЙ части, а не по всей высоте: панели хоста
+            // забирают себе четверть экрана, и проекция обязана считать от
+            // того прямоугольника, в который смотрят.
             let pivot = CGPoint(x: size.width / 2,
-                                y: size.height * RoadSketch.meY)
+                                y: size.height * state.insets.meY)
             // Пунктов на метр растра: по высоте вид покрывает spanBucket метров.
             let k = size.height / scene.spanBucket
             // Сторона квадрата растра: круг видимости вокруг «я» при любом
             // повороте (до дальнего угла вида), с запасом на сжатие
             // scaleEffect (≤ 1/bucketRatio) и на дрейф до пересборки растра.
-            let viewRadius = hypot(size.width / 2, size.height * RoadSketch.meY)
+            let viewRadius = hypot(size.width / 2,
+                                   size.height * max(state.insets.meY,
+                                                     1 - state.insets.meY))
             let side = 2 * (viewRadius * RoadSketch.bucketRatio
                             + RoadSketch.driftMeters(forSpan: scene.spanAtBuild) * k)
 
@@ -122,6 +127,7 @@ struct RoadSketchView: View {
                 DragGesture(minimumDistance: 6)
                     .onChanged { value in
                         state.viewHeight = size.height
+                        state.viewWidth = size.width
                         state.beginInspect()
                         state.pan(by: CGSize(width: value.translation.width - dragged.width,
                                              height: value.translation.height - dragged.height))
@@ -134,6 +140,7 @@ struct RoadSketchView: View {
                     .simultaneously(with: MagnifyGesture()
                         .onChanged { value in
                             state.viewHeight = size.height
+                            state.viewWidth = size.width
                             state.beginInspect()
                             state.zoom(by: value.magnification / pinched)
                             pinched = value.magnification
@@ -143,7 +150,10 @@ struct RoadSketchView: View {
                             state.endInspect()
                         })
             )
-            .onAppear { state.viewHeight = size.height }
+            .onAppear {
+                state.viewHeight = size.height
+                state.viewWidth = size.width
+            }
         }
         .accessibilityHidden(true)   // цифру и сторону рядом VoiceOver уже читает
     }
@@ -216,7 +226,7 @@ struct RoadSketchView: View {
     /// каждой подписи возвращён курс — и добавлен её собственный угол вдоль
     /// улицы, приведённый к читаемой половине круга.
     private func labels(side: CGFloat, k: CGFloat) -> some View {
-        ForEach(Array(scene.labels.prefix(RoadSketch.labelBudget).enumerated()),
+        ForEach(Array(state.labels.prefix(RoadSketch.labelBudget).enumerated()),
                 id: \.offset) { _, label in
             Text(label.text)
                 .font(.rounded(11 * strokeScale, .semibold))
@@ -274,25 +284,38 @@ struct RoadSketchView: View {
     /// карточкой с отчётливой рамкой по периметру. Чёрный — фон обоих хостов,
     /// поэтому в него уходит и полотно, и сама земля, и края нет вовсе.
     private var vignette: some View {
+        // Цвет края — не чёрный, а «то, чем кончается карта»: ночью чернота,
+        // днём земля. Чёрная рама на светлой схеме читалась не мягким краем,
+        // а грязью по периметру экрана.
+        let edge = SketchPalette.edgeFade
         let horizontal = LinearGradient(
             gradient: Gradient(stops: [
-                .init(color: .black, location: 0),
+                .init(color: edge, location: 0),
                 .init(color: .clear, location: 0.13),
                 .init(color: .clear, location: 0.87),
-                .init(color: .black, location: 1),
+                .init(color: edge, location: 1),
             ]), startPoint: .leading, endPoint: .trailing)
         let vertical = LinearGradient(
             gradient: Gradient(stops: [
-                .init(color: .black, location: 0),
+                .init(color: edge, location: 0),
                 .init(color: .clear, location: 0.10),
                 .init(color: .clear, location: 0.90),
-                .init(color: .black, location: 1),
+                .init(color: edge, location: 1),
             ]), startPoint: .top, endPoint: .bottom)
         return Color.clear
             .overlay(horizontal)
             .overlay(vertical)
             .allowsHitTesting(false)
     }
+
+    /// Сколько пунктов схемы закрыто панелями хоста.
+    ///
+    /// Экранные подсказки схемы обязаны стоять НАД панелями, а не под ними:
+    /// имя улицы и линейка масштаба прижимались к нижнему краю экрана, то
+    /// есть прятались под панелью поездки и не показывались никогда, а ряд
+    /// полос — под карточкой скорости.
+    private var topCover: CGFloat { CGFloat(state.insets.safeTop) * state.viewHeight }
+    private var bottomCover: CGFloat { CGFloat(state.insets.safeBottom) * state.viewHeight }
 
     /// Полосы на подходе к манёвру — экранным слоем сверху по центру, как у
     /// больших навигаторов: ряд не вращается вместе с картой, потому что
@@ -319,7 +342,7 @@ struct RoadSketchView: View {
                         in: Capsule())
             .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .padding(.top, 6 * strokeScale)
+            .padding(.top, 6 * strokeScale + topCover)
             .allowsHitTesting(false)
         }
     }
@@ -345,7 +368,7 @@ struct RoadSketchView: View {
                 .background(Color.black.opacity(0.55), in: Capsule())
                 .frame(maxWidth: 220 * strokeScale)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .padding(.bottom, 34 * strokeScale)
+                .padding(.bottom, 14 * strokeScale + bottomCover)
                 .allowsHitTesting(false)
                 .transition(.opacity)
                 .animation(.easeInOut(duration: 0.35), value: street)
@@ -442,7 +465,7 @@ struct RoadSketchView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity,
                alignment: .bottomLeading)
         .padding(.leading, 30)
-        .padding(.bottom, 8 * strokeScale)
+        .padding(.bottom, 8 * strokeScale + bottomCover)
         .allowsHitTesting(false)
     }
 }
@@ -456,7 +479,10 @@ struct RoadSketchView: View {
 /// Объём даётся тремя тонами одного цвета и посадкой на тень, а не рисованной
 /// перспективой: плоский треугольник читался указателем на чертеже, а не
 /// машиной на дороге. Всё статично — ни одного пересчёта на тик.
-private struct MeCursor: View {
+/// Курсор машины. Не приватный: его рисуют ДВА рендера — своя схема и карта
+/// на движке, — и рисовать «я» по-разному в двух подложках значило бы менять
+/// вместе с подложкой самый важный предмет на экране.
+struct MeCursor: View {
     var scale: CGFloat = 1
 
     var body: some View {
@@ -855,6 +881,15 @@ private struct SketchRaster: View, Equatable {
                             with: .color(SketchPalette.houseShadow))
                     }
                     context.fill(closed, with: .color(areaFill(area)))
+                    // Контур дома. Самое дешёвое из всего, что делает
+                    // застройку застройкой: девяносто домов в кадре без
+                    // контуров сливаются в одно серое поле — именно это и
+                    // было на снимках живой поездки.
+                    if area.kind == .house {
+                        context.stroke(closed, with: .color(SketchPalette.houseEdge),
+                                       style: .init(lineWidth: 0.7 * strokeScale,
+                                                    lineJoin: .round))
+                    }
                     // Кромка полотна — бордюр. Только у полотна: у площади
                     // перекрёстка её нет и в жизни, а обведи мы её — на
                     // перекрёстке появился бы контур поперёк проезжей части,
@@ -900,7 +935,13 @@ private struct SketchRaster: View, Equatable {
             // Мосты и тоннели остаются штрихами при любом раскладе: у них своя
             // подложка и свой пунктир, и по ним видно, что одно проходит над
             // другим. Полотно этого не показывает — оно плоское.
-            let paved = scene.areas.contains { $0.kind == .road }
+            // Полотно легло ЦЕЛИКОМ — спрашиваем у сцены, а не считаем сами.
+            //
+            // Здесь стояло «есть ли хоть одна фигура полотна», и в перегреве
+            // это было ложью: бюджет резал поверхность посередине, штрихи
+            // сети выключались целиком, и на экране оставались куски асфальта
+            // без перекрёстков и без линий между ними — рваные дороги.
+            let paved = scene.hasPavement
 
             let byLevel = Dictionary(grouping: scene.network.filter { $0.points.count >= 2 },
                                      by: \.level)

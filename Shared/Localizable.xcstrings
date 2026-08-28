@@ -13304,6 +13304,125 @@
           }
         }
       }
+    },
+    "Карта на движке": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта на движке"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita dvijokda"
+          }
+        }
+      }
+    },
+    "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nСвоя схема — наша карта вместо Apple: полотно, перекрёстки, разметка. Включается только в движении; на стоянке остаётся карта Apple, где ищут адрес и ставят камеру.\n\nКарта на движке — те же наши данные, но рисует их настоящий картографический движок: кайма и полотно двумя проходами, круглые стыки, подписи вдоль улиц. Пока сравниваем с своей схемой на живой дороге.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nСвоя схема — наша карта вместо Apple: полотно, перекрёстки, разметка. Включается только в движении; на стоянке остаётся карта Apple, где ищут адрес и ставят камеру.\n\nКарта на движке — те же наши данные, но рисует их настоящий картографический движок: кайма и полотно двумя проходами, круглые стыки, подписи вдоль улиц. Пока сравниваем с своей схемой на живой дороге."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Avto» — kunduzi yorug' asos (quyoshda qorasi ko'zni qamashtiradi), kechasi doim qorong'i. Interfeys qorong'i qoladi.\n\nO'z sxemamiz — Apple o'rniga bizning xaritamiz: yo'l qoplamasi, chorrahalar, chiziqlar. Faqat harakatda yoqiladi; to'xtaganda Apple xaritasi qoladi — manzil qidirish va kamera qo'yish uchun.\n\nXarita dvijokda — o‘sha bizning ma’lumotlarimiz, lekin ularni haqiqiy kartografik dvijok chizadi: chekka va qatlam ikki o‘tishda, dumaloq tutashuvlar, ko‘chalar bo‘ylab yozuvlar. Hozircha o‘z sxemamiz bilan yo‘lda solishtiryapmiz."
+          }
+        }
+      }
+    },
+    "Apple": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple"
+          }
+        }
+      }
+    },
+    "Своя схема": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Своя схема"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘z sxemamiz"
+          }
+        }
+      }
+    },
+    "Движок": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Движок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dvijok"
+          }
+        }
+      }
+    },
+    "Подложка карты": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подложка карты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita asosi"
+          }
+        }
+      }
+    },
+    "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nЧем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nЧем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Avto» — kunduzi yorug‘ asos (quyoshda qorasi yaltiraydi), kechasi doim qorong‘i. Interfeys qorong‘iligicha qoladi.\n\nXaritani nima chizishi — Apple, o‘z sxemamiz yoki dvijok — xaritadagi qatlamlar tugmasi bilan tanlanadi: natija o‘sha yerda ko‘rinadi va o‘zgarish darhol amal qiladi."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

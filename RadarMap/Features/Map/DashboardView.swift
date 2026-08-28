@@ -413,7 +413,7 @@ struct DashboardView: View {
         .padding(.vertical, 18)
         .frame(maxWidth: .infinity)
         .background(alertColor.opacity(0.10),
-                    in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
         .padding(.horizontal, 28)
     }
 

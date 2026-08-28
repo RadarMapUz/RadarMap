@@ -258,6 +258,63 @@ enum MapAppearance: String, CaseIterable, Identifiable {
     }
 }
 
+/// Чем рисуется карта. Одно значение вместо двух тумблеров.
+///
+/// Тумблеров было два («Своя схема в движении» и «Карта на движке»), и они
+/// умели противоречить друг другу. Хуже того: оба лежали в девятом разделе
+/// настроек, а показывались только после старта поездки — то есть человек
+/// включал карту и видел прежнюю. Здесь выбор один, живёт он на самой карте и
+/// применяется немедленно.
+nonisolated enum MapBase: String, CaseIterable, Identifiable, Sendable {
+    /// Карта Apple: где ищут адрес, смотрят город и ставят камеру.
+    case apple
+    /// Своя схема: то, что мы собрали, нарисованное нами.
+    case sketch
+    /// Наши же данные, нарисованные настоящим картографическим движком.
+    case engine
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .apple:  return String(localized: "Apple")
+        case .sketch: return String(localized: "Своя схема")
+        case .engine: return String(localized: "Движок")
+        }
+    }
+
+    /// Значок — он же показывает выбранное, когда список свёрнут.
+    var symbol: String {
+        switch self {
+        case .apple:  return "map"
+        case .sketch: return "scribble.variable"
+        case .engine: return "square.3.layers.3d"
+        }
+    }
+
+    /// Что показать НА САМОМ ДЕЛЕ.
+    ///
+    /// Выбор человека сильнее режима — это и есть главное правило нового
+    /// экрана. Прежнее `allowsSketchMap` перебивало выбор: на стоянке своей
+    /// карты не бывало вовсе, и включивший её видел карту Apple.
+    ///
+    /// Apple возвращается ровно в двух случаях, и оба не вкусовые: операция,
+    /// которой без неё нет (постановка камеры, точка по долгому тапу), и
+    /// отсутствие того, что выбрано (схема без сцены, движок без пакета).
+    /// Второе — отказ, а не подмена: пустой экран вместо карты оставил бы
+    /// водителя вообще без карты.
+    static func resolved(chosen: MapBase, isAddingCamera: Bool,
+                         hasPressedPoint: Bool, sketchReady: Bool,
+                         engineAvailable: Bool) -> MapBase {
+        if isAddingCamera || hasPressedPoint { return .apple }
+        switch chosen {
+        case .apple:  return .apple
+        case .sketch: return sketchReady ? .sketch : .apple
+        case .engine: return engineAvailable ? .engine : .apple
+        }
+    }
+}
+
 /// Профиль оповещений — одна строка вместо четырёх перечислений.
 ///
 /// Поведение задавали `VoiceMode`, `AlertMode`, `BackgroundAlertMode` и
@@ -468,6 +525,25 @@ final class AppSettings {
         didSet { store.set(sketchWhileDriving, forKey: Keys.sketchWhileDriving) }
     }
 
+    /// Чем рисуется карта. Меняется кнопкой слоёв НА КАРТЕ и действует сразу.
+    var mapBase: MapBase {
+        didSet { store.set(mapBase.rawValue, forKey: Keys.mapBase) }
+    }
+
+    /// Карту рисует ДВИЖОК (MapLibre) вместо самописной схемы.
+    ///
+    /// Третья подложка рядом с двумя существующими, а не замена им, и это не
+    /// нерешительность: ровно так в проекте уже сделан переход панели —
+    /// страница на движке встала рядом с рабочей, и обе сравнивались на одних
+    /// и тех же местах. Пока новый рендер не выиграл по замерам на живом
+    /// телефоне (нагрев, батарея, CarPlay), выключатель обязан быть у
+    /// водителя, а не в голове у разработчика.
+    ///
+    /// По умолчанию ВЫКЛЮЧЕНО.
+    var engineMap: Bool {
+        didSet { store.set(engineMap, forKey: Keys.engineMap) }
+    }
+
     /// Выбранный язык интерфейса (применяется при следующем запуске — см. AppLanguage).
     var appLanguage: AppLanguage {
         didSet {
@@ -510,6 +586,8 @@ final class AppSettings {
         static let mapTraffic = "mapTraffic"
         static let mapPlaces = "mapPlaces"
         static let sketchWhileDriving = "sketchWhileDriving"
+        static let engineMap = "engineMapEnabled"
+        static let mapBase = "mapBase"
         static let alertMode = "alertMode"
         static let knownCarAudio = "knownCarAudio"
         static let usageStats = "usageStatsDisabled"
@@ -590,6 +668,19 @@ final class AppSettings {
         mapTraffic = store.bool(forKey: Keys.mapTraffic)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)
         sketchWhileDriving = store.bool(forKey: Keys.sketchWhileDriving)
+        engineMap = store.bool(forKey: Keys.engineMap)
+        // Перенос со старых тумблеров: выбор человека не теряется при
+        // обновлении — кто включил схему, с ней и останется.
+        if let saved = store.string(forKey: Keys.mapBase),
+           let base = MapBase(rawValue: saved) {
+            mapBase = base
+        } else if store.bool(forKey: Keys.engineMap) {
+            mapBase = .engine
+        } else if store.bool(forKey: Keys.sketchWhileDriving) {
+            mapBase = .sketch
+        } else {
+            mapBase = .apple
+        }
         alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []
         weeklyDigest = store.bool(forKey: Keys.digest)

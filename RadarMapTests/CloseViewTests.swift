@@ -17,10 +17,11 @@ final class CloseViewTests: XCTestCase {
 
     private func reason(maneuver: Double? = nil, camera: Double? = nil,
                         speed: Double = 60, crawling: Double = 0,
+                        inYard: Bool = true,
                         wasClose: Bool = false) -> RoadSketch.CloseReason? {
         RoadSketch.closeReason(toManeuver: maneuver, toCamera: camera,
                                speedKmh: speed, crawlingSeconds: crawling,
-                               wasClose: wasClose)
+                               onMinorRoad: inYard, wasClose: wasClose)
     }
 
     // MARK: - Что включает
@@ -43,8 +44,16 @@ final class CloseViewTests: XCTestCase {
         XCTAssertEqual(reason(maneuver: 140), .maneuver)
     }
 
-    func testCrawlTurnsItOn() {
+    func testCrawlInAYardTurnsItOn() {
         XCTAssertEqual(reason(speed: 10, crawling: 6), .crawl)
+    }
+
+    func testCrawlOnAMainRoadDoesNot() {
+        // Пробка на прямом проспекте — не повод смотреть вблизи: там нечего
+        // разглядывать, а масштаб, залипший на светофоре, потом едет с
+        // водителем весь маршрут. Ровно это и было на снимке живой поездки:
+        // 29 км/ч, весь экран — стена асфальта.
+        XCTAssertNil(reason(speed: 10, crawling: 30, inYard: false))
     }
 
     func testSlowButBrieflyDoesNot() {
@@ -70,10 +79,14 @@ final class CloseViewTests: XCTestCase {
         XCTAssertNil(reason(maneuver: 400, wasClose: true))
     }
 
-    func testCrawlAlsoHoldsWithMargin() {
-        // На светофоре тронулись — вид не должен моргать на каждом трогании.
-        XCTAssertNil(reason(speed: 28, crawling: 9))
-        XCTAssertEqual(reason(speed: 28, crawling: 9, wasClose: true), .crawl)
+    func testCrawlHoldsWithMarginButLetsGoInTraffic() {
+        // На светофоре тронулись — вид не должен моргать на каждом трогании,
+        // поэтому выход по скорости с запасом. Но запас МАЛЕНЬКИЙ: был 1,6
+        // (то есть до 32 км/ч), а 32 км/ч — это скорость городского потока, а
+        // не признак двора. С таким запасом вид вблизи не отпускал никогда.
+        XCTAssertEqual(reason(speed: 22, crawling: 9, wasClose: true), .crawl)
+        XCTAssertNil(reason(speed: 28, crawling: 9, wasClose: true),
+                     "поток 28 км/ч держал схему на пятидесяти пяти метрах")
     }
 
     // MARK: - Порядок причин
@@ -87,6 +100,39 @@ final class CloseViewTests: XCTestCase {
         // Ступень вблизи обязана быть ниже обычной нижней: иначе это не новый
         // вид, а тот же самый.
         XCTAssertLessThan(RoadSketch.closeSpanMeters, RoadSketch.minSpanMeters)
+    }
+
+    // MARK: - Вид вблизи обязан вмещать свою причину
+
+    func testCloseViewShowsTheCameraThatTurnedItOn() {
+        // Самое стыдное из найденного: вид включался при камере в 120 метрах
+        // и показывал вперёд 43 метра, то есть первым делом стирал с экрана
+        // ту самую камеру. Она возвращалась только с сорока метров — почти
+        // восемьдесят метров подхода водитель смотрел на пустой асфальт и
+        // цифру в карточке.
+        for distance in stride(from: 40.0, through: 250, by: 10) {
+            let span = RoadSketch.closeSpan(reason: .camera, toManeuver: nil,
+                                            toCamera: distance)
+            XCTAssertTrue(RoadSketch.isInRange(distance: distance, span: span),
+                          "камера в \(distance) м не попала в вид вблизи")
+        }
+    }
+
+    func testCloseSpanShrinksToTheStepAsWeArrive() {
+        // Чем ближе причина, тем крупнее план: на последних метрах охват
+        // приходит к самой ступени и не идёт ниже — иначе схему затрясло бы
+        // от шума GPS.
+        let far = RoadSketch.closeSpan(reason: .camera, toManeuver: nil, toCamera: 200)
+        let near = RoadSketch.closeSpan(reason: .camera, toManeuver: nil, toCamera: 30)
+        XCTAssertGreaterThan(far, near)
+        XCTAssertEqual(near, RoadSketch.closeSpanMeters)
+    }
+
+    func testCrawlHasNoCauseToFrame() {
+        // У ползания причины на местности нет — берём саму ступень.
+        XCTAssertEqual(RoadSketch.closeSpan(reason: .crawl, toManeuver: nil,
+                                            toCamera: 900),
+                       RoadSketch.closeSpanMeters)
     }
 
     func testExitIsFartherThanEntry() {

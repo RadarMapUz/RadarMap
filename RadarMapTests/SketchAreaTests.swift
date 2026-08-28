@@ -57,11 +57,77 @@ final class SketchAreaTests: XCTestCase {
 
     // MARK: - Правила слоёв
 
-    func testBlocksAreNearOnlyWhileWaterIsAlways() {
+    func testBlocksLiveAtEveryScaleNow() {
         // Вода и зелень — крупные ориентиры, они читаются на любом охвате.
-        // Кварталы вблизи, где их вообще видно.
+        // Кварталы — тоже, и это правка: они гасли после 340 метров, ровно
+        // там, где город должен превращаться в массу застройки. Вместо неё
+        // оставалось пустое поле, а кварталов в кадре на полкилометра всего
+        // восемьдесят восемь — это дёшево.
         XCTAssertEqual(SketchArea.Kind.water.maxSpanMeters, .greatestFiniteMagnitude)
-        XCTAssertEqual(SketchArea.Kind.block.maxSpanMeters, RoadSketch.farNetworkSpan)
+        XCTAssertEqual(SketchArea.Kind.block.maxSpanMeters, .greatestFiniteMagnitude)
+        // А дом и тротуар остаются вблизи: их по числу больше всего
+        // остального вместе, и на дальнем плане они шум, а не ориентир.
+        XCTAssertLessThan(SketchArea.Kind.house.maxSpanMeters, RoadSketch.farNetworkSpan)
+        XCTAssertLessThan(SketchArea.Kind.sidewalk.maxSpanMeters,
+                          SketchArea.Kind.house.maxSpanMeters)
+    }
+
+    // MARK: - Очередь бюджета
+
+    func testPavementOutranksEverything() {
+        // Очередь бюджета была по maxSpanMeters, а он отвечает на другой
+        // вопрос — «с какого масштаба слой осмыслен». Ключом бюджета он ставил
+        // воду, зелень и кварталы ВПЕРЕДИ проезжей части: на боевых тайлах в
+        // перегреве 72 места из 120 уходили на местность прежде, чем
+        // рисовалась первая дорога.
+        let ranks = SketchArea.Kind.allCases.sorted { $0.budgetRank < $1.budgetRank }
+        XCTAssertEqual(Array(ranks.prefix(3)), [.road, .junction, .median])
+        XCTAssertEqual(Array(ranks.suffix(2)), [.house, .sidewalk])
+    }
+
+    func testRoadAndJunctionsLiveOrDieTogether() {
+        // Дорога без площади перекрёстка — это ленты, которые не сходятся, а
+        // дорога, у которой выброшен каждый пятый кусок, — рваная. Замерено в
+        // перегреве на боевых тайлах: при бюджете 120 терялись ВСЕ 41 площадь
+        // перекрёстка и 20 из 82 кусков полотна. Ровно это и было на снимке
+        // с баннером «Телефон перегрелся».
+        let pavement = (0..<6).map { index in
+            SketchArea(points: ring(at: 41.3 + Double(index) * 0.0001, 69.25),
+                       kind: index < 4 ? .road : .junction, isClosed: true)
+        }
+        let tight = RoadSketch.scene(alertCamera: nil, alertInRange: false,
+                                     areas: pavement, areaBudget: 5,
+                                     anchor: .init(latitude: 41.3, longitude: 69.25),
+                                     spanMeters: 200)
+        XCTAssertFalse(tight.areas.contains { $0.kind.isPavement },
+                       "полотно нарисовано наполовину — это и есть рваные дороги")
+        XCTAssertFalse(tight.hasPavement,
+                       "вью обязана узнать, что полотна нет, и чертить сеть штрихом")
+
+        let enough = RoadSketch.scene(alertCamera: nil, alertInRange: false,
+                                      areas: pavement, areaBudget: 6,
+                                      anchor: .init(latitude: 41.3, longitude: 69.25),
+                                      spanMeters: 200)
+        XCTAssertEqual(enough.areas.filter { $0.kind.isPavement }.count, 6)
+        XCTAssertTrue(enough.hasPavement)
+    }
+
+    func testTerrainIsCutBeforeTheRoad() {
+        // Когда мест меньше, чем фигур, уходит местность, а не асфальт.
+        var mixed: [SketchArea] = (0..<3).map {
+            SketchArea(points: ring(at: 41.3 + Double($0) * 0.0001, 69.25),
+                       kind: .road, isClosed: true)
+        }
+        mixed += (0..<20).map {
+            SketchArea(points: ring(at: 41.3 + Double($0) * 0.0001, 69.2505),
+                       kind: .green, isClosed: true)
+        }
+        let scene = RoadSketch.scene(alertCamera: nil, alertInRange: false,
+                                     areas: mixed, areaBudget: 6,
+                                     anchor: .init(latitude: 41.3, longitude: 69.25),
+                                     spanMeters: 200)
+        XCTAssertEqual(scene.areas.filter { $0.kind == .road }.count, 3)
+        XCTAssertEqual(scene.areas.count, 6)
     }
 
     func testTerrainIsDrawnUnderRoads() {
@@ -84,8 +150,8 @@ final class SketchAreaTests: XCTestCase {
                                    areas: [block, water],
                                    anchor: .init(latitude: 41.3, longitude: 69.25),
                                    spanMeters: 600)
-        XCTAssertEqual(Set(far.areas.map(\.kind)), [.water],
-                       "квартал на охвате района неразличим и не рисуется")
+        XCTAssertEqual(Set(far.areas.map(\.kind)), [.block, .water],
+                       "на дальнем плане город держится кварталами — без них пустое поле")
     }
 
     func testThermalBudgetSilencesTerrainFirst() {

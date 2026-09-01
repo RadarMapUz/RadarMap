@@ -26,6 +26,16 @@ final class ReportGuardTests: XCTestCase {
 
     // MARK: - Кнопка «Радар!»
 
+    /// Пост ДПС снова предлагается рукой — по прямой просьбе водителя.
+    ///
+    /// Тип был в коде, но не в пикере (риск по Guideline 1.4.4), и отметить
+    /// пост было нечем: «радар» его не заменяет — у поста и время жизни
+    /// другое, шесть часов против трёх.
+    func testEveryKindTheServerKnowsCanBeTapped() {
+        XCTAssertEqual(Set(ReportKind.offered), Set(ReportKind.allCases),
+                       "тип есть на сервере, а нажать его негде")
+    }
+
     func testReportGoesThroughWhileDriving() {
         XCTAssertNil(ReportGuard.check(kind: .radar, coordinate: me, speedKmh: 60,
                                        isTripActive: true, lastSent: nil, now: now))

@@ -35,6 +35,9 @@ struct EngineMapView: UIViewRepresentable {
     /// Наклон, градусы.
     var pitchDegrees: Double
     var daylight: Bool
+    /// Дома. Тот же тумблер, что у своей схемы: подложка меняется, а правило
+    /// «за что мы платим трафиком» остаётся одно на оба рендера.
+    var houses: Bool = false
     /// Камеры окрестности; `alert` — та, о которой сейчас предупреждаем.
     var cameras: [Camera]
     var alertCameraID: Int?
@@ -53,7 +56,9 @@ struct EngineMapView: UIViewRepresentable {
         MLNOfflineStorage.shared.setMaximumAmbientCacheSize(
             UInt(AppConfig.engineMapCacheBytes)) { _ in }
         let view = MLNMapView(frame: .zero)
-        view.styleJSON = EngineMapStyle.json(daylight: daylight, base: AppConfig.syncBaseURL)
+        view.styleJSON = EngineMapStyle.json(daylight: daylight,
+                                             base: AppConfig.syncBaseURL,
+                                             houses: houses)
         // Жесты карты выключены целиком: за рулём вид ведёт машина, а не
         // палец. Осмотр и щипок вернутся отдельной работой, вместе с
         // автовозвратом, как в схеме.
@@ -87,6 +92,7 @@ struct EngineMapView: UIViewRepresentable {
         weak var view: MLNMapView?
         private var styleReady = false
         private var lastDaylight: Bool?
+        private var lastHouses: Bool?
         private var lastCameras: [Int] = []
         private var lastRouteCount = -1
 
@@ -101,10 +107,12 @@ struct EngineMapView: UIViewRepresentable {
             guard styleReady else { pending = model; return }
             pending = nil
 
-            if lastDaylight != model.daylight {
+            if lastDaylight != model.daylight || lastHouses != model.houses {
                 lastDaylight = model.daylight
+                lastHouses = model.houses
                 view.styleJSON = EngineMapStyle.json(daylight: model.daylight,
-                                                     base: AppConfig.syncBaseURL)
+                                                     base: AppConfig.syncBaseURL,
+                                                     houses: model.houses)
                 styleReady = false
                 pending = model
                 return

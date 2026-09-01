@@ -517,6 +517,20 @@ final class AppSettings {
     /// засоряют карту, а стоя они и есть то, ради чего карту открывают.
     var mapTraffic: Bool { didSet { store.set(mapTraffic, forKey: Keys.mapTraffic) } }
     var mapPlaces: Bool { didSet { store.set(mapPlaces, forKey: Keys.mapPlaces) } }
+    /// Дома на своей схеме. ВЫКЛЮЧЕНЫ по умолчанию, и это не экономия ради
+    /// экономии.
+    ///
+    /// Замерено по подписанному индексу: набор домов весит 78 МБ из 347 МБ
+    /// всей страны и 6,72 МБ из 13,86 МБ той окрестности, которую телефон
+    /// тянет, стоя в центре Ташкента, — то есть половину всего трафика схемы
+    /// ради слоя, который отвечает на вопрос последних двухсот метров. За
+    /// рулём этот вопрос задают раз в поездку, а платят за него всю дорогу.
+    /// Кто ищет подъезд — включит.
+    var mapHouses: Bool { didSet { store.set(mapHouses, forKey: Keys.mapHouses) } }
+    /// Тротуары. Тот же закон и та же причина, только дешевле: их 3 439 в
+    /// одном центре против 8 455 дорог, и объясняют они, где кончается
+    /// асфальт, — вопрос пешехода, а не водителя.
+    var mapSidewalks: Bool { didSet { store.set(mapSidewalks, forKey: Keys.mapSidewalks) } }
     /// Имена знакомых автомобильных магнитол (BT): подключены к своей машине —
     /// автостарт не переспрашивает «вы за рулём?».
     var knownCarAudio: [String] { didSet { store.set(knownCarAudio, forKey: Keys.knownCarAudio) } }
@@ -604,6 +618,8 @@ final class AppSettings {
         static let tripodHints = "tripodHints"
         static let mapTraffic = "mapTraffic"
         static let mapPlaces = "mapPlaces"
+        static let mapHouses = "mapHouses"
+        static let mapSidewalks = "mapSidewalks"
         static let sketchWhileDriving = "sketchWhileDriving"
         static let engineMap = "engineMapEnabled"
         static let mapBase = "mapBase"
@@ -686,6 +702,11 @@ final class AppSettings {
         tripodHints = store.bool(forKey: Keys.tripodHints)
         mapTraffic = store.bool(forKey: Keys.mapTraffic)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)
+        // Дома и тротуары — единственные слои схемы БЕЗ значения по умолчанию
+        // в register: `bool(forKey:)` даёт false там, где ключа ещё нет, и это
+        // ровно тот ответ, который нужен. Кто их включит — включит осознанно.
+        mapHouses = store.bool(forKey: Keys.mapHouses)
+        mapSidewalks = store.bool(forKey: Keys.mapSidewalks)
         sketchWhileDriving = store.bool(forKey: Keys.sketchWhileDriving)
         engineMap = store.bool(forKey: Keys.engineMap)
         // Перенос со старых тумблеров: выбор человека не теряется при

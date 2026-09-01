@@ -59,12 +59,19 @@ final class SketchAreaTests: XCTestCase {
 
     func testBlocksLiveAtEveryScaleNow() {
         // Вода и зелень — крупные ориентиры, они читаются на любом охвате.
-        // Кварталы — тоже, и это правка: они гасли после 340 метров, ровно
-        // там, где город должен превращаться в массу застройки. Вместо неё
-        // оставалось пустое поле, а кварталов в кадре на полкилометра всего
+        // Кварталы — почти на любом: они гасли после 340 метров, ровно там,
+        // где город должен превращаться в массу застройки, а вместо неё
+        // оставалось пустое поле. Кварталов в кадре на полкилометра всего
         // восемьдесят восемь — это дёшево.
+        //
+        // Но не БЕСКОНЕЧНО: с осмотром до двадцати километров бесконечность
+        // означала бы восемьдесят один тайл кварталов ради фигур мельче
+        // пикселя. Потолок обязан быть выше района и много ниже осмотра.
         XCTAssertEqual(SketchArea.Kind.water.maxSpanMeters, .greatestFiniteMagnitude)
-        XCTAssertEqual(SketchArea.Kind.block.maxSpanMeters, .greatestFiniteMagnitude)
+        XCTAssertGreaterThan(SketchArea.Kind.block.maxSpanMeters,
+                             RoadSketch.maxSpanMeters)
+        XCTAssertLessThan(SketchArea.Kind.block.maxSpanMeters,
+                          RoadSketch.inspectMaxSpanMeters)
         // А дом и тротуар остаются вблизи: их по числу больше всего
         // остального вместе, и на дальнем плане они шум, а не ориентир.
         XCTAssertLessThan(SketchArea.Kind.house.maxSpanMeters, RoadSketch.farNetworkSpan)

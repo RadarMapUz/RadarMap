@@ -376,7 +376,8 @@ struct MapScreen: View {
             // проступала по краям и в переходах и выглядела дырой.
             SketchPalette.ground
             RoadSketchView(scene: scene, state: sketch, tint: sketchTint,
-                           trim: env.thermal.mode.sketchTrim)
+                           trim: env.thermal.mode.sketchTrim,
+                           loading: env.roads.pending)
         }
         .ignoresSafeArea()
     }
@@ -406,6 +407,7 @@ struct MapScreen: View {
                     spanMeters: span,
                     pitchDegrees: inRange ? 0 : AppConfig.engineMapPitchDegrees,
                     daylight: env.settings.mapAppearance.isDaylight(at: me, now: Date()),
+                    houses: env.settings.mapHouses,
                     cameras: env.cameras.nearest(to: me, limit: 40),
                     alertCameraID: inRange ? env.location.nearestCamera?.id : nil,
                     route: env.route.routeCoordinates)
@@ -790,6 +792,11 @@ struct MapScreen: View {
                                               set: { env.settings.mapTraffic = $0 }),
                              places: Binding(get: { env.settings.mapPlaces },
                                              set: { env.settings.mapPlaces = $0 }),
+                             houses: Binding(get: { env.settings.mapHouses },
+                                             set: { env.settings.mapHouses = $0 }),
+                             sidewalks: Binding(get: { env.settings.mapSidewalks },
+                                                set: { env.settings.mapSidewalks = $0 }),
+                             showsBuildingLayers: shownBase != .apple,
                              available: Self.availableBases,
                              showsLegend: shownBase == .apple)
             MapOrientationControl(orientation: map.orientation) {

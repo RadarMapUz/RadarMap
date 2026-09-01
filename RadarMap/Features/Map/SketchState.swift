@@ -182,25 +182,40 @@ final class SketchState {
                               height: meOffset.height - viewOffset.height)
     }
 
-    /// Щипок. Границы те же, что у автоматики: ближе минимума схему трясёт от
-    /// шума GPS, дальше максимума она перестаёт отвечать на свой вопрос.
+    /// Щипок. Нижняя граница та же, что у автоматики: ближе минимума схему
+    /// трясёт от шума GPS. Верхняя — СВОЯ и много дальше.
+    ///
+    /// Потолок автоматики (700 м) отвечал на вопрос «что впереди», и упирать
+    /// в него руку человека было ошибкой: он спрашивает другое — «а что там
+    /// дальше», — и получал в ответ ту же картинку, что и без щипка.
     func zoom(by factor: Double) {
         guard isInspecting, let base = inspectSpan else { return }
         let wanted = base / max(0.2, factor)
-        inspectSpan = min(RoadSketch.maxSpanMeters,
+        inspectSpan = min(RoadSketch.inspectMaxSpanMeters,
                           max(RoadSketch.minSpanMeters, wanted))
     }
 
-    /// Палец отпущен: заводим автовозврат.
+    /// Палец отпущен: заводим автовозврат — если он вообще положен.
+    ///
+    /// В поездке положен: экран, молча оставшийся не там, где машина, — самое
+    /// опасное, что можно сделать за рулём. На стоянке не положен: там осмотр
+    /// это карта, и отнимать её через шесть секунд значит запрещать смотреть.
     func endInspect() {
         guard isInspecting else { return }
         returnTask?.cancel()
+        returnTask = nil
+        guard let seconds = RoadSketch.inspectReturn(isTripActive: isTripActive)
+        else { return }
         returnTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(RoadSketch.inspectReturnSeconds))
+            try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
             self?.returnToMe()
         }
     }
+
+    /// Поездка идёт. Ставится тиком; от неё зависит, отнимается ли осмотр сам
+    /// и вправе ли камера его перебить.
+    @ObservationIgnored private var isTripActive = false
 
     /// Вернуться к машине. Зовётся кнопкой, автовозвратом и тревогой.
     func returnToMe() {
@@ -352,10 +367,25 @@ final class SketchState {
             false
         }
 
-        // Тревожная камера отменяет осмотр немедленно: камера впереди — не тот
-        // момент, когда на экране чужой район. Это единственный случай, когда
-        // рука пользователя перебивается.
-        if inRange, isInspecting { returnToMe() }
+        // Поездка началась, пока вид был отведён в сторону: возвращаем сразу
+        // и без разговоров. Осмотр на стоянке — карта, осмотр на ходу —
+        // отвлечение, и решает это не палец, а факт начала поездки.
+        let wasTripActive = isTripActive
+        isTripActive = env.location.isTripActive
+        if isTripActive, !wasTripActive, isInspecting { returnToMe() }
+
+        // Тревожная камера перебивает руку — но только на ПОДЪЕЗДЕ.
+        //
+        // Перебивала любая камера в охвате, и осмотра из-за этого не бывало
+        // вовсе: камера стоит у перекрёстка, у перекрёстка же и стоят на
+        // светофоре, `inRange` истинно постоянно — а значит возврат срабатывал
+        // каждую секунду. Ни отодвинуть, ни сдвинуть карту было нельзя.
+        if isInspecting,
+           RoadSketch.alertInterruptsInspect(isTripActive: isTripActive,
+                                             speedKmh: speed,
+                                             alertInRange: inRange) {
+            returnToMe()
+        }
 
         // Мелкие улицы: видны, только когда мы сами на такой. Решение с
         // гистерезисом в два тика — иначе на границе двора с проспектом
@@ -394,12 +424,19 @@ final class SketchState {
         // «охват вырос» и «костяк загрузился» на детальные улицы лёг бы набор,
         // посчитанный по другой геометрии.
         let onFarNetwork = usesFarNetwork(env, span: span)
-        env.roads.setWantedSets(wantedSets(span: span, minors: minorsVisible,
-                                           far: onFarNetwork))
+        env.roads.setWantedSets(RoadTiles.wantedSets(
+            span: span, minors: minorsVisible, far: onFarNetwork,
+            houses: env.settings.mapHouses,
+            sidewalks: env.settings.mapSidewalks))
         // Тайлы просим вокруг ЦЕНТРА ВИДА, а не вокруг машины: при осмотре
         // взгляд уходит туда, где тайлов ещё нет, и без этого панорама
         // упиралась бы в чёрное.
-        env.roads.ensureCoverage(around: viewCentre(from: me))
+        // Радиус покрытия — ПО ОХВАТУ, а не жёсткие 3×3 тайла.
+        //
+        // Три на три это ±5,5 км: под ближний план с запасом, а на обзорном
+        // охвате в двадцать километров — пятно данных в середине пустого
+        // экрана. Просим ровно тот круг, который сцена и рисует.
+        env.roads.ensureCoverage(around: viewCentre(from: me), radiusMeters: span)
 
         let freshKey = RoadSketch.RebuildKey(
             alertCameraID: inRange ? alert?.id : nil,
@@ -573,45 +610,6 @@ final class SketchState {
         }
     }
 
-    /// Наборы тайлов, нужные на этом охвате.
-    ///
-    /// Костяк и улицы — всегда: без них схемы нет. Дворы — когда мы сами на
-    /// мелкой улице. Местность — вода, зелень, рельсы — тоже всегда: это
-    /// крупные ориентиры, они дёшевы и читаются на любом охвате. Кварталы —
-    /// только вблизи, где они и различимы.
-    private func wantedSets(span: Double, minors: Bool,
-                            far: Bool) -> Set<RoadTiles.Set> {
-        var sets: Set<RoadTiles.Set> = [.far, .streets, .water, .green, .rail]
-        if minors { sets.insert(.yards) }
-        if span < SketchArea.Kind.block.maxSpanMeters { sets.insert(.blocks) }
-        // Тротуаров больше, чем всех улиц вместе (3 439 против 8 455 дорог в
-        // одном центре Ташкента), а видны они только вблизи. Слой, невидимый
-        // на текущем охвате, не качается и не разбирается — тот же закон, что
-        // у дворовых проездов и кварталов.
-        if span < SketchArea.Kind.sidewalk.maxSpanMeters { sets.insert(.sidewalks) }
-        // Дома — тот же закон и самый сильный повод: их 54 094 в одном кадре
-        // центра против семисот дорог, то есть слой домов один весит больше,
-        // чем вся остальная схема. Качаем их только там, где водитель уже
-        // ищет подъезд.
-        if span < SketchArea.Kind.house.maxSpanMeters { sets.insert(.houses) }
-        // Поверхность дороги — ближний охват и только он.
-        //
-        // Штрихами реалистичную дорогу не нарисовать никакой толщиной: у
-        // штриха нет ни кромки, ни площади перекрёстка, ни расширения перед
-        // ним. Всё это посчитано сборкой раз в неделю и лежит готовым; на
-        // дальнем плане полотно вырождается в линию, и там штрих честнее.
-        if span < SketchArea.Kind.road.maxSpanMeters { sets.insert(.surface) }
-        // Точки — из того набора, что посчитан по РИСУЕМОЙ сети. Просить оба
-        // разом значило бы возить вдвое больше ради слоя, из которого виден
-        // ровно один.
-        if far {
-            sets.insert(.pointsFar)
-        } else if SketchPoint.Kind.allCases.contains(where: { $0.maxSpanMeters >= span }) {
-            sets.insert(.points)
-        }
-        return sets
-    }
-
     /// Точки под текущую сеть. Та же развилка, что у самой сети: рисуем
     /// костяк — берём точки костяка.
     private func sketchPoints(_ env: AppEnvironment, span: Double) -> [SketchPoint] {
@@ -669,11 +667,19 @@ final class SketchState {
                                 // Свои тайлы (классы, мосты, дворы), где они
                                 // уже есть; иначе — сеть из индекса лимитов.
                                 network: network(env, span: span),
-                                networkBudget: env.thermal.mode.sketchNetworkBudget,
+                                // Бюджет — от жары И ОТ ОХВАТА. Одно число на
+                                // все масштабы означало пятачок линий вокруг
+                                // машины и пустоту вокруг, как только вид
+                                // отъезжал дальше своего квартала.
+                                networkBudget: RoadSketch.networkBudget(
+                                    base: env.thermal.mode.sketchNetworkBudget,
+                                    span: span),
                                 showMinorRoads: minorsVisible,
                                 precomputed: env.roads.isPrecomputed,
                                 areas: env.roads.areas,
-                                areaBudget: env.thermal.mode.sketchAreaBudget,
+                                areaBudget: RoadSketch.areaBudget(
+                                    base: env.thermal.mode.sketchAreaBudget,
+                                    span: span),
                                 points: sketchPoints(env, span: span),
                                 route: env.route.routeCoordinates,
                                 track: env.trip.recentTrack(),

@@ -40,7 +40,11 @@ nonisolated enum EngineMapStyle {
     /// линия наконец получает ту ширину, которая записана в тайле.
     private static let metresToPixels = 1.7e-5
 
-    static func json(daylight: Bool, base: URL) -> String {
+    /// `houses` — тумблер застройки, общий со схемой. Слой не «прячется»
+    /// прозрачностью, а НЕ ПОПАДАЕТ в стиль вовсе: движок не качает того, чего
+    /// нет в стиле, и выключенные дома перестают стоить трафика, а не только
+    /// внимания.
+    static func json(daylight: Bool, base: URL, houses: Bool = false) -> String {
         // Адреса собираются СТРОКОЙ, а не appendingPathComponent.
         //
         // Тот кодирует фигурные скобки в %7B и %7D, и движок уходит за
@@ -97,7 +101,8 @@ nonisolated enum EngineMapStyle {
             ],
             "layers": layers(ground: ground, casing: casing, label: label,
                              halo: halo, paint: paint,
-                             land: landColour, asphalt: asphaltColour),
+                             land: landColour, asphalt: asphaltColour,
+                             houses: houses),
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: style),
               let text = String(data: data, encoding: .utf8) else { return "" }
@@ -127,7 +132,8 @@ nonisolated enum EngineMapStyle {
 
     private static func layers(ground: String, casing: String, label: String,
                                halo: String, paint: String,
-                               land: [Any], asphalt: [Any]) -> [[String: Any]] {
+                               land: [Any], asphalt: [Any],
+                               houses: Bool) -> [[String: Any]] {
         var out: [[String: Any]] = [
             ["id": "ground", "type": "background",
              "paint": ["background-color": ground]],
@@ -143,12 +149,14 @@ nonisolated enum EngineMapStyle {
             if zoom { layer["minzoom"] = detailFromZoom } else { layer["maxzoom"] = detailFromZoom }
             out.append(layer)
         }
-        out.append([
-            "id": "houses", "type": "fill", "source": "near", "source-layer": "houses",
-            "minzoom": 15.2,
-            "paint": ["fill-color": SketchPalette.houseTone.hex,
-                      "fill-outline-color": SketchPalette.houseEdgeTone.hex],
-        ])
+        if houses {
+            out.append([
+                "id": "houses", "type": "fill", "source": "near", "source-layer": "houses",
+                "minzoom": 15.2,
+                "paint": ["fill-color": SketchPalette.houseTone.hex,
+                          "fill-outline-color": SketchPalette.houseEdgeTone.hex],
+            ])
+        }
         // ДВА ПРОХОДА, и это главное отличие от самописного рендера: сначала
         // ВСЕ каймы, потом ВСЕ полотна. Пока кайма рисовалась вместе со своей
         // дорогой, она ложилась поверх соседней и рассекала перекрёсток швом.

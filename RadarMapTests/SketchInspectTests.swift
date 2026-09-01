@@ -94,8 +94,8 @@ final class SketchInspectTests: XCTestCase {
 
     @MainActor
     func testZoomStaysInsideTheSameBoundsAsAutomatic() {
-        // Свободный зум до сантиметров дал бы дрожание от шума GPS, до
-        // километров — пустой экран. Границы те же, что у автоматики.
+        // Нижняя граница та же, что у автоматики: свободный зум до сантиметров
+        // дал бы дрожание от шума GPS. Верхняя — СВОЯ и много дальше.
         let state = freshState()
         state.beginInspect()
         for _ in 0..<40 { state.zoom(by: 1.6) }
@@ -103,7 +103,20 @@ final class SketchInspectTests: XCTestCase {
                                     RoadSketch.minSpanMeters)
         for _ in 0..<80 { state.zoom(by: 0.5) }
         XCTAssertLessThanOrEqual(state.inspectSpanForTests ?? .infinity,
-                                 RoadSketch.maxSpanMeters)
+                                 RoadSketch.inspectMaxSpanMeters)
+    }
+
+    @MainActor
+    func testZoomReachesTheWholeCityNotJustTheDistrict() {
+        // Щипок упирался в потолок автоматики — семьсот метров. Человек,
+        // спросивший «а что там дальше», получал ту же картинку, что и без
+        // щипка: жалоба «карта не уменьшается» ровно про это.
+        let state = freshState()
+        state.beginInspect()
+        for _ in 0..<80 { state.zoom(by: 0.5) }
+        XCTAssertGreaterThan(state.inspectSpanForTests ?? 0,
+                             RoadSketch.maxSpanMeters * 5,
+                             "осмотр обязан доходить до масштаба города")
     }
 
     @MainActor

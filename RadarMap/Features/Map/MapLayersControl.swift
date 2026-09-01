@@ -24,6 +24,14 @@ struct MapLayersControl: View {
     @Binding var base: MapBase
     @Binding var traffic: Bool
     @Binding var places: Bool
+    /// Дома и тротуары своей схемы. Отдельными тумблерами, а не «подробнее»
+    /// одной ручкой: платят за них по-разному (дома — 78 МБ из 347 по стране,
+    /// тротуары — один), и нужны они разным людям.
+    @Binding var houses: Bool
+    @Binding var sidewalks: Bool
+    /// Тумблеры застройки показываются там, где они что-то меняют: на карте
+    /// Apple ни домов наших, ни тротуаров нет.
+    var showsBuildingLayers: Bool
     /// Какие подложки есть в этой сборке (движка может не быть).
     var available: [MapBase]
     /// Легенда типов камер — только там, где эти маркеры и рисуются.
@@ -61,6 +69,11 @@ struct MapLayersControl: View {
 
             toggle("Пробки", "car.2.fill", isOn: $traffic)
             toggle("Места", "fuelpump.fill", isOn: $places)
+
+            if showsBuildingLayers {
+                toggle("Дома", "building.2.fill", isOn: $houses)
+                toggle("Тротуары", "figure.walk", isOn: $sidewalks)
+            }
 
             if showsLegend {
                 Rectangle().fill(Theme.stroke).frame(height: 1).padding(.vertical, 4)

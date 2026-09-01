@@ -50,6 +50,12 @@ struct RoadSketchView: View {
     /// Рисовать ли отделку: осевую, шевроны, жилу ленты. В перегреве гаснет
     /// первой — см. PerformanceMode.sketchTrim.
     var trim: Bool = true
+    /// Сколько файлов окрестности ещё едет. Ноль — карта полная.
+    ///
+    /// Молчаливая деградация читается как поломка: пустая земля вместо города
+    /// — это «приложение сломалось», а не «сейчас догрузится». Признак нужен
+    /// самый тихий: не плашка на пол-экрана, а строка у линейки масштаба.
+    var loading: Int = 0
 
     var body: some View {
         GeometryReader { geometry in
@@ -116,6 +122,7 @@ struct RoadSketchView: View {
                     compass
                 }
                 scaleBar(height: size.height)
+                loadingChip
                 recenterButton
             }
             .clipped()
@@ -450,6 +457,53 @@ struct RoadSketchView: View {
     /// ли перекрёсток. Ширина следует за охватом и анимируется вместе с ним.
     /// Кегль и толщина растут с strokeScale: линии схемы на экране машины
     /// в 1.6 раза толще, а линейка оставалась телефонной — на грани видимости.
+    /// «Карта загружается» — тихо, у нижней кромки, и только пока едет.
+    ///
+    /// Считаем ТАЙЛЫ, а не проценты: процент требует знать конечный объём,
+    /// а он меняется от каждого движения вида. Число файлов честно и не врёт.
+    @ViewBuilder
+    private var loadingChip: some View {
+        if loading > 0 {
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.mini)
+                    .tint(Theme.textTertiary)
+                Text("Карта загружается")
+                    .font(.rounded(11 * max(1, strokeScale * 0.9), .medium))
+                    .foregroundStyle(Theme.textTertiary)
+                Text(String(loading))
+                    .font(.rounded(11 * max(1, strokeScale * 0.9), .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.textTertiary.opacity(0.7))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.black.opacity(0.55),
+                        in: Capsule())
+            .overlay(Capsule().stroke(.white.opacity(0.1), lineWidth: 1))
+            .frame(maxWidth: .infinity, maxHeight: .infinity,
+                   alignment: .bottomLeading)
+            .padding(.leading, 30)
+            .padding(.bottom, 34 * strokeScale + bottomCover)
+            .allowsHitTesting(false)
+            .transition(.opacity)
+            .animation(.easeOut(duration: 0.2), value: loading > 0)
+        }
+    }
+
+    /// Подпись деления линейки.
+    ///
+    /// Своя, а не общая Formatting.distance: та пишет «1,0 км» — верно для
+    /// расстояния до камеры, где десятая доля значит сорок метров подхода, и
+    /// нелепо для круглого деления линейки. Здесь числа всегда круглые, и
+    /// запятая с нулём — только шум.
+    static func scaleLabel(_ meters: Double) -> String {
+        meters < 1000
+            ? String(format: String(localized: "%@ м"), String(Int(meters.rounded())))
+            : String(format: String(localized: "%@ км"),
+                     String(Int((meters / 1000).rounded())))
+    }
+
     private func scaleBar(height: CGFloat) -> some View {
         let meters = RoadSketch.scaleBarMeters(forSpan: state.spanMeters)
         let width = CGFloat(meters) * height / CGFloat(state.spanMeters)
@@ -457,7 +511,7 @@ struct RoadSketchView: View {
             Capsule()
                 .fill(.white.opacity(0.35))
                 .frame(width: width, height: 2 * strokeScale)
-            Text(Formatting.distance(meters))
+            Text(Self.scaleLabel(meters))
                 .font(.rounded(11 * max(1, strokeScale * 0.9), .medium))
                 .monospacedDigit()
                 .foregroundStyle(Theme.textTertiary)

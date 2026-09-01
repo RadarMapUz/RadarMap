@@ -75,6 +75,35 @@ nonisolated enum RoadTiles {
         /// вместо ломаной.
         var isPoints: Bool { self == .points || self == .pointsFar }
 
+        /// Очередь закачки: кого тянем первым, когда тайлов больше, чем
+        /// соединений.
+        ///
+        /// Раньше очереди не было вовсе — все недостающие файлы уходили в сеть
+        /// одним залпом (в центре Ташкента это до девяноста девяти запросов и
+        /// 13,86 МБ), и первым приезжал тот, кому повезло. А снимок сети
+        /// собирался только когда приедут ВСЕ, то есть до последнего дома
+        /// экран оставался пустой землёй.
+        ///
+        /// Порядок отвечает на вопрос «без чего схемы нет»: костяк, улицы,
+        /// крупные ориентиры, потом форма города, и в самом конце асфальт и
+        /// застройка — они украшают то, что уже нарисовано.
+        var loadRank: Int {
+            switch self {
+            case .far:       return 0
+            case .streets:   return 1
+            case .water:     return 2
+            case .green:     return 3
+            case .rail:      return 4
+            case .blocks:    return 5
+            case .pointsFar: return 6
+            case .points:    return 7
+            case .yards:     return 8
+            case .surface:   return 9
+            case .sidewalks: return 10
+            case .houses:    return 11
+            }
+        }
+
         /// Вид местности набора. nil — вид из набора НЕ следует.
         ///
         /// Так у дорожных наборов, и так же у поверхности: в наборе «d» лежат
@@ -96,6 +125,59 @@ nonisolated enum RoadTiles {
             case .far, .streets, .yards, .points, .pointsFar: return nil
             }
         }
+    }
+
+    /// Наборы тайлов, нужные на этом охвате.
+    ///
+    /// Чистая функция и живёт в модели, а не во вью: это РЕШЕНИЕ про трафик,
+    /// самое дорогое в схеме, и проверять его надо тестом, а не на глаз по
+    /// счётчику мегабайт.
+    ///
+    /// Костяк — всегда: без него схемы нет. Улицы и дворы — пока охват их
+    /// касается. Местность — вода, зелень, рельсы — тоже всегда: крупные
+    /// ориентиры, дёшевы и читаются на любом охвате. Кварталы — до трёх
+    /// километров, где они ещё различимы. Дома и тротуары — по согласию.
+    static func wantedSets(span: Double, minors: Bool, far: Bool,
+                           houses: Bool, sidewalks: Bool) -> Swift.Set<Set> {
+        var sets: Swift.Set<Set> = [.far, .water, .green, .rail]
+        // Улицы — пока охват их вообще касается. Дальше рисуется костяк
+        // района, и возить набор улиц на восемьдесят один тайл окрестности
+        // значит платить за линии, которых не будет на экране.
+        if span < RoadSketch.streetsMaxSpan { sets.insert(.streets) }
+        if minors, span < RoadSketch.streetsMaxSpan { sets.insert(.yards) }
+        if span < SketchArea.Kind.block.maxSpanMeters { sets.insert(.blocks) }
+        // Тротуаров больше, чем всех улиц вместе (3 439 против 8 455 дорог в
+        // одном центре Ташкента), а видны они только вблизи. Слой, невидимый
+        // на текущем охвате, не качается и не разбирается — тот же закон, что
+        // у дворовых проездов и кварталов. И спрашивается СОГЛАСИЕ: слой
+        // объясняет, где кончается асфальт, — вопрос пешехода, а не водителя.
+        if sidewalks, span < SketchArea.Kind.sidewalk.maxSpanMeters {
+            sets.insert(.sidewalks)
+        }
+        // Дома — тот же закон и самый сильный повод: их 54 094 в одном кадре
+        // центра против семисот дорог, а по стране это 78 МБ из 347 и 6,72 МБ
+        // из 13,86 МБ одной окрестности. Слой, отвечающий на вопрос последних
+        // двухсот метров, по умолчанию ВЫКЛЮЧЕН: этот вопрос задают раз в
+        // поездку, а платят за него всю дорогу.
+        if houses, span < SketchArea.Kind.house.maxSpanMeters {
+            sets.insert(.houses)
+        }
+        // Поверхность дороги — ближний охват и только он.
+        //
+        // Штрихами реалистичную дорогу не нарисовать никакой толщиной: у
+        // штриха нет ни кромки, ни площади перекрёстка, ни расширения перед
+        // ним. Всё это посчитано сборкой раз в неделю и лежит готовым; на
+        // дальнем плане полотно вырождается в линию, и там штрих честнее.
+        if span < SketchArea.Kind.road.maxSpanMeters { sets.insert(.surface) }
+        // Точки — из того набора, что посчитан по РИСУЕМОЙ сети. Просить оба
+        // разом значило бы возить вдвое больше ради слоя, из которого виден
+        // ровно один.
+        if far {
+            sets.insert(.pointsFar)
+        } else if SketchPoint.Kind.allCases.contains(where: { $0.maxSpanMeters >= span }) {
+            sets.insert(.points)
+        }
+        return sets
     }
 
     static func setKey(_ tile: String, _ set: Set) -> String { "\(tile)_\(set.rawValue)" }
@@ -132,12 +214,47 @@ nonisolated enum RoadTiles {
     /// быть краем мира на схеме.
     static func neighborhood(of coordinate: CLLocationCoordinate2D,
                              tileDegrees: Double) -> [String] {
+        coverage(of: coordinate, tileDegrees: tileDegrees, steps: 1)
+    }
+
+    /// Сколько тайлов в стороне нужно, чтобы накрыть круг такого радиуса.
+    ///
+    /// Тайл 0,05° — это 5,5 км по широте и 4,2 км по долготе на широте
+    /// Ташкента; считаем по УЗКОЙ стороне, иначе на востоке и западе от
+    /// машины окажется незакрытая полоса.
+    /// Потолок — четыре тайла в сторону, то есть окрестность 9×9.
+    ///
+    /// Это ±18,8 км на широте Ташкента: как раз обзорный охват целиком.
+    /// Выше потолка растёт не польза, а число запросов: тайлов в окрестности
+    /// (2n+1)², и шестой шаг стоил бы вдвое больше пятого ради полосы, до
+    /// которой взгляд не доходит.
+    static func steps(forRadius meters: Double, tileDegrees: Double,
+                      latitude: Double, limit: Int = 4) -> Int {
+        let metresPerLon = 111_320.0 * max(0.2, cos(latitude * .pi / 180))
+        let side = tileDegrees * min(111_320.0, metresPerLon)
+        guard side > 0 else { return 1 }
+        return max(1, min(limit, Int(ceil(meters / side))))
+    }
+
+    /// Окрестность (2·steps+1)² тайлов, БЛИЖНИМИ КОЛЬЦАМИ ВПЕРЁД.
+    ///
+    /// Порядок здесь не для красоты: он же порядок закачки. Тайлы приезжают по
+    /// одному, и первым обязан приехать тот, на котором стоит машина, а не
+    /// тот, чей ключ оказался раньше в переборе. Пока порядок был построчным,
+    /// первым качался левый верхний угол окрестности — то есть угол экрана.
+    static func coverage(of coordinate: CLLocationCoordinate2D,
+                         tileDegrees: Double, steps: Int) -> [String] {
         var keys: [String] = []
-        for latStep in -1...1 {
-            for lonStep in -1...1 {
-                keys.append(tileKey(latitude: coordinate.latitude + Double(latStep) * tileDegrees,
-                                    longitude: coordinate.longitude + Double(lonStep) * tileDegrees,
-                                    tileDegrees: tileDegrees))
+        keys.reserveCapacity((2 * steps + 1) * (2 * steps + 1))
+        for ring in 0...max(0, steps) {
+            for latStep in -ring...ring {
+                for lonStep in -ring...ring {
+                    guard max(abs(latStep), abs(lonStep)) == ring else { continue }
+                    keys.append(tileKey(
+                        latitude: coordinate.latitude + Double(latStep) * tileDegrees,
+                        longitude: coordinate.longitude + Double(lonStep) * tileDegrees,
+                        tileDegrees: tileDegrees))
+                }
             }
         }
         return keys

@@ -44,6 +44,10 @@ final class RoadNetworkService {
     nonisolated deinit {}
     /// Растёт при каждой смене снимка сети — по нему схема пересобирает растр.
     private(set) var revision = 0
+    /// Сколько файлов окрестности ещё не приехало. Ноль — карта на экране
+    /// полная. Наружу это нужно ровно затем, чтобы честно сказать «карта
+    /// загружается» вместо пустой земли, которую читают как поломку.
+    private(set) var pending = 0
     /// Снимок загруженных тайлов под кэшем окрестности. Пустой, пока тайлы
     /// не приехали, — вызывающий обязан держать фолбэк, а не пустоту.
     private(set) var network: any RoadNetworkSource = EmptyRoadNetwork()
@@ -87,6 +91,16 @@ final class RoadNetworkService {
     /// Битые или отсутствующие на сервере — не долбим по кругу до нового индекса.
     @ObservationIgnored private var broken: Set<String> = []
     @ObservationIgnored private var downloading: Set<String> = []
+    /// Очередь закачки: что ещё не отдано соединениям. Порядок значимый —
+    /// ближние кольца и важные наборы впереди (см. coverageKeys).
+    @ObservationIgnored private var queue: [String] = []
+    /// Радиус покрытия прошлой проверки, в тайлах. Гейт обязан пропустить
+    /// проверку, когда охват ВЫРОС: иначе отодвинутый вид ждал бы, пока
+    /// машина проедет полтайла, — а она стоит.
+    @ObservationIgnored private var lastSteps = 0
+    /// Когда собирали снимок в прошлый раз: пересборка на каждый долетевший
+    /// тайл стоила бы девяносто девять пересборок на одну окрестность.
+    @ObservationIgnored private var lastSnapshotAt = Date.distantPast
     @ObservationIgnored private var snapshotKeys: Set<String> = []
     @ObservationIgnored private var started = false
     /// Где проверяли покрытие в прошлый раз (гейт ensureCoverage).
@@ -115,9 +129,34 @@ final class RoadNetworkService {
     func start() {
         guard !started else { return }
         started = true
+        excludeFromBackup()
         Task {
             await loadLocalIndex()
             await refreshIndexIfNeeded()
+        }
+    }
+
+    /// Тайлы — ВНЕ резервной копии, и это не гигиена, а правило платформы.
+    ///
+    /// В папке лежит до 347 МБ (столько весит вся страна по подписанному
+    /// индексу), и всё это скачано с нашего же сервера: восстановимое
+    /// содержимое в iCloud-копии пользователя. Apple такое отдельно запрещает
+    /// в Data Storage Guidelines — а расплачивается за это человек, у которого
+    /// копия перестала влезать в бесплатные пять гигабайт.
+    ///
+    /// Ставится на ПАПКУ и на старте: флаг наследуется файлами, созданными
+    /// внутри, и один вызов закрывает вопрос для всех тайлов сразу — включая
+    /// те, что уже лежат с прошлых версий.
+    private func excludeFromBackup() {
+        var url = directory
+        do {
+            try FileManager.default.createDirectory(at: url,
+                                                    withIntermediateDirectories: true)
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try url.setResourceValues(values)
+        } catch {
+            Log.route.error("папка тайлов не исключена из копии: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -232,43 +271,75 @@ final class RoadNetworkService {
 
     /// Обеспечить тайлы вокруг точки (3×3). Дёргается тиком приборки: дёшево,
     /// когда всё на месте; скачивает только недостающее.
-    func ensureCoverage(around coordinate: CLLocationCoordinate2D) {
+    func ensureCoverage(around coordinate: CLLocationCoordinate2D,
+                        radiusMeters: Double = 0) {
         guard let index else { return }
-        // Гейт: тайл — 55 км, состав окрестности меняется раз в десятки минут,
-        // а тик приборки дёргает нас каждую секунду — и 9 строковых ключей с
-        // тремя Set'ами каждый раз выбрасывались. Пока не отъехали на километр
-        // и ничего не в полёте, выходим по одному сравнению расстояния.
+        let steps = RoadTiles.steps(forRadius: radiusMeters,
+                                    tileDegrees: index.tileDegrees,
+                                    latitude: coordinate.latitude)
+        // Гейт: состав окрестности меняется раз в десятки минут, а тик
+        // приборки дёргает нас каждую секунду. Порог — доля СТОРОНЫ ТАЙЛА, а
+        // не круглый километр: сетка сменилась с 0,5° на 0,05°, и километр из
+        // «шестидесятой доли тайла» превратился в его пятую часть — то есть в
+        // полосу, которую можно проехать, оставшись без покрытия.
+        //
         // Условия «есть снимок» тут намеренно НЕТ: там, где под машиной
         // тайлов нет вовсе (сеть молчала, sha не сошлась), snapshotKeys
         // остаётся пустым — и гейт, зависящий от него, не срабатывал бы
         // никогда, то есть ровно в самом плохом случае мы бы и работали
         // каждую секунду. Пересборку снимка после долетевшего тайла даёт
         // finish(), он же сбрасывает lastEnsureAt.
-        if let last = lastEnsureAt, downloading.isEmpty,
+        let gate = index.tileDegrees * 111_320.0 * 0.15
+        if let last = lastEnsureAt, steps <= lastSteps,
+           downloading.isEmpty, queue.isEmpty,
            GeoMath.fastDistance(last.latitude, last.longitude,
-                                coordinate.latitude, coordinate.longitude) < 1000 {
+                                coordinate.latitude, coordinate.longitude) < gate {
             return
         }
         lastEnsureAt = coordinate
+        lastSteps = steps
         // Тайлы, которых нет в подписанном индексе, не существуют и не
         // запрашиваются: индекс — единственный источник правды о наборе.
-        let wanted = Set(coverageKeys(around: coordinate, index: index))
+        let ordered = coverageKeys(around: coordinate, index: index, steps: steps)
+        let wanted = Set(ordered)
 
-        var missing: [String] = []
-        for key in wanted where !isLoaded(key) && !broken.contains(key)
-            && !downloading.contains(key) {
-            missing.append(key)
-        }
-        for key in missing {
-            downloading.insert(key)
-            Task { await load(key: key, expected: index.tiles[key]!) }
-        }
+        // Очередь, а не залп. Раньше каждый недостающий файл уходил в сеть
+        // своей Task немедленно: в центре Ташкента это до девяноста девяти
+        // одновременных запросов и 13,86 МБ — сотовый канал делится на всех,
+        // и первый нужный тайл приезжал последним.
+        queue = ordered.filter { !isLoaded($0) && !broken.contains($0)
+                                 && !downloading.contains($0) }
+        pending = queue.count + downloading.count
+        pump(index: index)
+
         // Снимок пересобирается, когда состав окрестности изменился и всё,
         // что можно было получить, получено.
         let ready = wanted.filter { isLoaded($0) }
-        if missing.isEmpty, downloading.isEmpty, ready != snapshotKeys {
+        if queue.isEmpty, downloading.isEmpty, ready != snapshotKeys {
             rebuildSnapshot(keys: ready)
         }
+    }
+
+    /// Сколько соединений держим разом.
+    ///
+    /// Шесть — не подобранное число, а то же, что держит любой браузер на
+    /// хост, и по той же причине: на сотовом канале семнадцатый запрос не
+    /// ускоряет первый, он его замедляет. Тайл нужен ЦЕЛИКОМ, чтобы сойтись
+    /// по sha, поэтому половина каждого из девяноста девяти файлов не рисует
+    /// ничего, а шесть законченных рисуют шесть тайлов.
+    private static let maxInFlight = 6
+
+    /// Занять свободные соединения следующими тайлами очереди.
+    private func pump(index: RoadTiles.Index) {
+        while downloading.count < Self.maxInFlight, !queue.isEmpty {
+            let key = queue.removeFirst()
+            guard !isLoaded(key), !broken.contains(key),
+                  !downloading.contains(key), let expected = index.tiles[key]
+            else { continue }
+            downloading.insert(key)
+            Task { await load(key: key, expected: expected) }
+        }
+        pending = queue.count + downloading.count
     }
 
     /// Какие файлы нужны вокруг точки.
@@ -279,21 +350,33 @@ final class RoadNetworkService {
     /// перестаёт ехать на телефон ради случая, который наступает под конец
     /// поездки.
     private func coverageKeys(around coordinate: CLLocationCoordinate2D,
-                              index: RoadTiles.Index) -> [String] {
-        let tiles = RoadTiles.neighborhood(of: coordinate,
-                                           tileDegrees: index.tileDegrees)
+                              index: RoadTiles.Index, steps: Int) -> [String] {
+        let tiles = RoadTiles.coverage(of: coordinate,
+                                       tileDegrees: index.tileDegrees, steps: steps)
         guard index.version >= RoadTiles.formatVersionV2 else {
             return tiles.filter { index.tiles[$0] != nil }
         }
+        // Порядок двойной: сперва кольцо (тайл под машиной раньше угла
+        // окрестности), внутри тайла — набор по loadRank. Так первым на экране
+        // появляется костяк того места, где мы стоим, а не дома соседнего
+        // района.
+        let sets = wantedSets.sorted { $0.loadRank < $1.loadRank }
         return tiles.flatMap { tile in
-            wantedSets.map { RoadTiles.setKey(tile, $0) }
+            sets.map { RoadTiles.setKey(tile, $0) }
         }.filter { index.tiles[$0] != nil }
     }
 
     /// Тайл: сперва диск, затем сеть; в обоих случаях sha256 сверяется с
     /// подписанным индексом, несходство — «тайла нет», не «сойдёт и так».
     private func load(key: String, expected: RoadTiles.Index.TileMeta) async {
-        defer { downloading.remove(key) }
+        // Соединение освободилось — занимаем его следующим тайлом очереди.
+        // Без этого очередь встала бы после первых шести файлов: никто не
+        // спрашивал бы её до следующего ensureCoverage, то есть до километра
+        // пути или до смены охвата.
+        defer {
+            downloading.remove(key)
+            if let index { pump(index: index) } else { pending = queue.count }
+        }
         let fileURL = directory.appendingPathComponent(
             RoadTiles.fileName(key: key, version: indexVersion))
 
@@ -445,14 +528,33 @@ final class RoadNetworkService {
         // Состав окрестности изменился — следующий тик обязан пройти гейт,
         // иначе новый тайл ждал бы километра пути.
         lastEnsureAt = nil
-        // Снимок собираем один раз, когда долетела вся пачка; следующий
-        // ensureCoverage сузит его до окрестности и выселит дальние тайлы.
-        guard downloading.isEmpty else { return }
+        // Снимок собирается ПО МЕРЕ ПРИЛЁТА, а не когда долетит вся пачка.
+        //
+        // Ждали всю: `guard downloading.isEmpty else { return }`. В центре
+        // Ташкента пачка — это 13,86 МБ и до девяноста девяти файлов, и до
+        // последнего дома на экране не было НИ ОДНОЙ дороги, только земля.
+        // Ровно это и называют словами «карта не рисует остальное место»:
+        // данные уже на телефоне, а показать их некому.
+        //
+        // Порог по ВРЕМЕНИ, а не по числу тайлов: пересборка стоит одинаково,
+        // сколько бы тайлов ни прибавилось, и на быстром Wi-Fi без порога мы
+        // заплатили бы её девяносто девять раз подряд.
+        let last = downloading.isEmpty && queue.isEmpty
+        let now = Date()
+        guard last || now.timeIntervalSince(lastSnapshotAt) >= Self.snapshotThrottle
+        else { return }
+        lastSnapshotAt = now
+        // Выселение — только на ПОСЛЕДНЕМ проходе. На промежуточных «ключи
+        // снимка» это половина окрестности, и выселение по ним выбросило бы
+        // из памяти тайлы, которые уже приехали и вот-вот понадобятся.
         rebuildSnapshot(keys: Set(loaded.keys).union(loadedAreas.keys)
-            .union(loadedPoints.keys).union(loadedPointsFar.keys))
+            .union(loadedPoints.keys).union(loadedPointsFar.keys), evict: last)
     }
 
-    private func rebuildSnapshot(keys: Set<String>) {
+    /// Не чаще этого собираем снимок во время закачки пачки.
+    private static let snapshotThrottle: TimeInterval = 0.5
+
+    private func rebuildSnapshot(keys: Set<String>, evict: Bool = true) {
         // Дальние тайлы — вон из памяти (файлы остаются на диске).
         //
         // Порог считается ОТ РАЗМЕРА ОКРЕСТНОСТИ, а не константой в двенадцать.
@@ -462,7 +564,7 @@ final class RoadNetworkService {
         // порог срабатывал бы всегда, и запас, ради которого он и написан,
         // исчез бы: разворот через границу тайла заставлял бы перечитывать
         // файлы с диска заново.
-        if loaded.count + loadedAreas.count + loadedPoints.count
+        if evict, loaded.count + loadedAreas.count + loadedPoints.count
             + loadedPointsFar.count > keys.count + 9 {
             for key in loaded.keys where !keys.contains(key) {
                 loaded.removeValue(forKey: key)

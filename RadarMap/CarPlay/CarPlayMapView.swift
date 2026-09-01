@@ -173,6 +173,12 @@ struct CarPlayMapView: UIViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, MKMapViewDelegate {
+
+    /// Снос без прыжка на актор — тот же обход бага рантайма, что у моделей:
+    /// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor изолирует КАЖДЫЙ класс, а не
+    /// только помеченный @MainActor, и синтезированный isolated deinit ведёт
+    /// в свободу указателя, который никто не выделял (см. MapState).
+    nonisolated deinit {}
         private let repository: CameraStore
         private let speedLimits: SpeedLimitService
         /// Нужны для важности маркера: где машина и какие камеры на маршруте.

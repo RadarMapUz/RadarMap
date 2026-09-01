@@ -13,6 +13,23 @@ import CoreLocation
 @MainActor
 @Observable
 final class MapState {
+
+    /// Снос — БЕЗ прыжка на актор, и это не стиль, а обход живого бага рантайма.
+    ///
+    /// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor синтезирует isolated deinit
+    /// каждому @MainActor-классу, даже когда своего deinit нет. Такой deinit
+    /// уходит в swift_task_deinitOnExecutor, тот в синхронном кадре главного
+    /// потока (текущей Task нет) заводит TaskLocal::StopLookupScope, а
+    /// MarkerItem::create в рантайме iOS 26 берёт память у task-аллокатора
+    /// БЕЗУСЛОВНО — при task == nullptr это статический слэб внутри
+    /// libswift_Concurrency. Item::destroy потом зовёт free() по этому
+    /// указателю: «pointer being freed was not allocated» → SIGABRT.
+    ///
+    /// Условия сходятся ровно там, где SwiftUI сносит вью с @State-моделью
+    /// внутри GraphHost.runTransaction: там жива task-local привязка. В ветке
+    /// main рантайма баг уже исправлен; до выхода такой iOS помогает одно —
+    /// не синтезировать isolated deinit вовсе.
+    nonisolated deinit {}
     var visibleCameras: [Camera] = []
     var clusters: [CameraCluster] = []
     /// Лимит дороги у видимых камер (id → км/ч): посчитан вместе со слоем вне

@@ -105,12 +105,26 @@ nonisolated enum AlertPolicy {
                          isCrawling: Bool = false) -> Decision {
         if voice == .off { return Decision(style: .silent) }
         if isSuddenCamera || isOverspeeding { return Decision(style: .urgent) }
-        if voice == .smart { return Decision(style: .silent) }
         if isCrawling { return Decision(style: .silent) }
         let context: Context = switch mode {
         case .auto: detected
         case .city: .city
         case .highway: .highway
+        }
+        // «Умно» — это молчание В ГОРОДЕ, а не молчание вообще.
+        //
+        // Раньше проверка стояла ВЫШЕ этой развилки и гасила голос везде,
+        // включая трассу. Обоснование («фраза на каждую камеру превращала
+        // голос в белый шум») верно ровно для города, где камеры идут одна за
+        // другой; на трассе следующая через два километра, увидеть её заранее
+        // нельзя, и молчание там — это отказ от работы, ради которой
+        // приложение поставлено.
+        //
+        // Настройка это и обещала дословно: «Авто — в городе коротко, на
+        // трассе полной фразой». Обещание не выполнялось никогда: ветка
+        // трассы была достижима только при «Обо всех».
+        if voice == .smart {
+            return Decision(style: context == .highway ? .calm : .silent)
         }
         return Decision(style: context == .highway ? .calm : .brief)
     }

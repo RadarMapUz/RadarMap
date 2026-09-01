@@ -20,6 +20,12 @@ import SwiftUI   // Theme и kind.tint — цвета SwiftUI
 import UIKit
 
 final class CameraClusterView: MKAnnotationView {
+
+    /// Снос без прыжка на актор — тот же обход бага рантайма, что у моделей:
+    /// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor изолирует КАЖДЫЙ класс, а не
+    /// только помеченный @MainActor, и синтезированный isolated deinit ведёт
+    /// к свободе указателя, который никто не выделял (см. MapState).
+    nonisolated deinit {}
     nonisolated static let reuseID = MKMapViewDefaultClusterAnnotationViewReuseIdentifier
 
     override var annotation: (any MKAnnotation)? {

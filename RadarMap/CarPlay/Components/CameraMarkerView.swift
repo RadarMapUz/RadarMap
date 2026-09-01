@@ -27,6 +27,12 @@ import SwiftUI
 import UIKit
 
 final class CameraAnnotation: NSObject, MKAnnotation {
+
+    /// Снос без прыжка на актор — тот же обход бага рантайма, что у моделей:
+    /// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor изолирует КАЖДЫЙ класс, а не
+    /// только помеченный @MainActor, и синтезированный isolated deinit ведёт
+    /// к свободе указателя, который никто не выделял (см. MapState).
+    nonisolated deinit {}
     let camera: Camera
     /// Лимит дороги у камеры (OSM): есть — маркер рисуется знаком «60».
     let limit: Int?
@@ -53,6 +59,12 @@ final class CameraAnnotation: NSObject, MKAnnotation {
 /// Маркер камеры: знак ограничения там, где лимит известен, иначе цветной круг
 /// с глифом типа. Картинки кэшируются по паре «тип + лимит».
 final class CameraMarkerView: MKAnnotationView {
+
+    /// Снос без прыжка на актор — тот же обход бага рантайма, что у моделей:
+    /// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor изолирует КАЖДЫЙ класс, а не
+    /// только помеченный @MainActor, и синтезированный isolated deinit ведёт
+    /// к свободе указателя, который никто не выделял (см. MapState).
+    nonisolated deinit {}
     nonisolated static let reuseID = "camera"
     private static var cache: [String: UIImage] = [:]
     private var halo: CAShapeLayer?

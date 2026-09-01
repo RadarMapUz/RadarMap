@@ -127,14 +127,38 @@ final class AlertPolicyTests: XCTestCase {
     // MARK: - «Умно» — боевой режим по умолчанию
 
     /// Главная жалоба: в городе фраза на каждую камеру звучала поверх музыки.
-    /// В «Умно» голоса нет, пока едем в лимите, — камеру показывает панель.
-    func testSmartIsSilentInLimitEverywhere() {
-        for context in [AlertPolicy.Context.city, .highway] {
-            let decision = decide(voice: .smart, detected: context)
-            XCTAssertEqual(decision.style, .silent, "в лимите молчим (\(context))")
-            XCTAssertFalse(decision.voice, "музыка не должна нырять на каждую камеру")
-            XCTAssertFalse(decision.beeps)
-        }
+    /// В «Умно» в ГОРОДЕ голоса нет, пока едем в лимите, — камеру показывает
+    /// панель.
+    func testSmartIsSilentInTheCity() {
+        let decision = decide(voice: .smart, detected: .city)
+        XCTAssertEqual(decision.style, .silent, "в городе в лимите молчим")
+        XCTAssertFalse(decision.voice, "музыка не должна нырять на каждую камеру")
+        XCTAssertFalse(decision.beeps)
+    }
+
+    /// А на ТРАССЕ «Умно» говорит, и это правка по живой поездке.
+    ///
+    /// Проверка `voice == .smart` стояла выше развилки «город или трасса» и
+    /// гасила голос везде. Водитель проехал Ташкент — Зомин, приложение
+    /// насчитало 32 проезда камер и не сказало ни о одной. При этом описание
+    /// профиля «Авто» обещает дословно: «в городе коротко, на трассе полной
+    /// фразой» — ветка трассы была недостижима.
+    ///
+    /// Обоснование тишины («фраза на каждую камеру — белый шум») верно ровно
+    /// для города: там камеры идут одна за другой. На трассе следующая через
+    /// километры, увидеть её заранее нельзя, и молчание там — отказ от работы.
+    func testSmartSpeaksOnTheHighway() {
+        let decision = decide(voice: .smart, detected: .highway)
+        XCTAssertEqual(decision.style, .calm, "на трассе в лимите — полная фраза")
+        XCTAssertTrue(decision.voice)
+        XCTAssertFalse(decision.beeps, "это не тревога, а предупреждение")
+    }
+
+    /// Ползём — молчим на любой дороге: камера в трёхстах метрах не решение
+    /// водителя, стоящего в пробке.
+    func testCrawlingIsSilentEvenOnTheHighway() {
+        XCTAssertEqual(decide(voice: .smart, detected: .highway, crawling: true).style, .silent)
+        XCTAssertEqual(decide(voice: .always, detected: .highway, crawling: true).style, .silent)
     }
 
     /// Но ради чего приложение и нужно — говорит.

@@ -86,9 +86,11 @@ enum AlertMode: String, CaseIterable, Identifiable {
 enum VoiceMode: String, CaseIterable, Identifiable {
     /// Ни слова: камеру показывает панель, предупреждает вибрация.
     case off
-    /// По умолчанию. Молчит, пока едешь в лимите; голос — при превышении
-    /// и о внезапных точках (передвижной радар, тренога, ДТП), которые
-    /// водитель знать заранее не может.
+    /// По умолчанию. В городе молчит, пока едешь в лимите: камеры там идут
+    /// одна за другой, и фраза на каждую превращается в белый шум. На трассе
+    /// говорит полной фразой — следующая камера через километры, и увидеть её
+    /// заранее нельзя. Плюс голос при превышении и о внезапных точках
+    /// (передвижной радар, тренога, ДТП), которых водитель знать не может.
     case smart
     /// О каждой камере: в городе коротко, на трассе полной фразой.
     case always
@@ -409,6 +411,23 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 @MainActor
 @Observable
 final class AppSettings {
+
+    /// Снос — БЕЗ прыжка на актор, и это не стиль, а обход живого бага рантайма.
+    ///
+    /// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor синтезирует isolated deinit
+    /// каждому @MainActor-классу, даже когда своего deinit нет. Такой deinit
+    /// уходит в swift_task_deinitOnExecutor, тот в синхронном кадре главного
+    /// потока (текущей Task нет) заводит TaskLocal::StopLookupScope, а
+    /// MarkerItem::create в рантайме iOS 26 берёт память у task-аллокатора
+    /// БЕЗУСЛОВНО — при task == nullptr это статический слэб внутри
+    /// libswift_Concurrency. Item::destroy потом зовёт free() по этому
+    /// указателю: «pointer being freed was not allocated» → SIGABRT.
+    ///
+    /// Условия сходятся ровно там, где SwiftUI сносит вью с @State-моделью
+    /// внутри GraphHost.runTransaction: там жива task-local привязка. В ветке
+    /// main рантайма баг уже исправлен; до выхода такой iOS помогает одно —
+    /// не синтезировать isolated deinit вовсе.
+    nonisolated deinit {}
     var soundEnabled: Bool { didSet { store.set(soundEnabled, forKey: Keys.sound) } }
     /// Голос о камерах — единственная настройка на этот счёт.
     var voiceMode: VoiceMode { didSet { store.set(voiceMode.rawValue, forKey: Keys.voiceMode) } }

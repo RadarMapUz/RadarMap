@@ -235,6 +235,12 @@ struct CarPlayAheadPanel: View {
 /// сразу, а не через полсотни метров.
 @Observable
 final class AheadModel {
+
+    /// Снос без прыжка на актор — тот же обход бага рантайма, что у моделей:
+    /// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor изолирует КАЖДЫЙ класс, а не
+    /// только помеченный @MainActor, и синтезированный isolated deinit ведёт
+    /// к свободе указателя, который никто не выделял (см. MapState).
+    nonisolated deinit {}
     private(set) var items: [CarPlayAhead.Item] = []
     /// Курс потерян (стоим): лента держит последнее известное приглушённо,
     /// вместо того чтобы схлопнуться и мигать на каждом светофоре.

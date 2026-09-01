@@ -78,6 +78,12 @@ struct EngineMapView: UIViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, MLNMapViewDelegate {
+
+    /// Снос без прыжка на актор — тот же обход бага рантайма, что у моделей:
+    /// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor изолирует КАЖДЫЙ класс, а не
+    /// только помеченный @MainActor, и синтезированный isolated deinit ведёт
+    /// в свободу указателя, который никто не выделял (см. MapState).
+    nonisolated deinit {}
         weak var view: MLNMapView?
         private var styleReady = false
         private var lastDaylight: Bool?

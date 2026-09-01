@@ -20,6 +20,23 @@ import Observation
 @MainActor
 @Observable
 final class MobileCameraService {
+
+    /// Снос — БЕЗ прыжка на актор, и это не стиль, а обход живого бага рантайма.
+    ///
+    /// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor синтезирует isolated deinit
+    /// каждому @MainActor-классу, даже когда своего deinit нет. Такой deinit
+    /// уходит в swift_task_deinitOnExecutor, тот в синхронном кадре главного
+    /// потока (текущей Task нет) заводит TaskLocal::StopLookupScope, а
+    /// MarkerItem::create в рантайме iOS 26 берёт память у task-аллокатора
+    /// БЕЗУСЛОВНО — при task == nullptr это статический слэб внутри
+    /// libswift_Concurrency. Item::destroy потом зовёт free() по этому
+    /// указателю: «pointer being freed was not allocated» → SIGABRT.
+    ///
+    /// Условия сходятся ровно там, где SwiftUI сносит вью с @State-моделью
+    /// внутри GraphHost.runTransaction: там жива task-local привязка. В ветке
+    /// main рантайма баг уже исправлен; до выхода такой iOS помогает одно —
+    /// не синтезировать isolated deinit вовсе.
+    nonisolated deinit {}
     enum ReportResult { case created, confirmed, amended, failed }
 
     private(set) var reports: [Camera] = []
@@ -305,9 +322,17 @@ final class MobileCameraService {
         [MyReport].self, for: .myReports) ?? []
 
     /// Свои отметки за окно — цифра для Итогов.
+    /// Итог по своим отметкам: сколько поставил и сколько подтвердили.
+    ///
+    /// Отжившие (`gone`) в счёт не идут, и это не косметика. Флаг ставится
+    /// здесь же, в reconcileMine, когда отметка ушла из живого списка —
+    /// истекла или снята, — но `mineSummary` его не читал, и экран годами
+    /// показывал бы «N · ждут подтверждения» про точки, которых на сервере
+    /// уже нет физически: ретенция стирает их через сутки после протухания.
+    /// Строка «4 · ждут подтверждения» на снимке — ровно этот случай.
     func mineSummary(days: Int = 30, now: Date = Date()) -> (total: Int, confirmed: Int) {
         let since = now.addingTimeInterval(-Double(days) * 86400)
-        let window = mine.filter { $0.at >= since }
+        let window = mine.filter { $0.at >= since && !$0.gone }
         return (window.count, window.count { $0.confirmed })
     }
 

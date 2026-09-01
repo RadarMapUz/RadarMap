@@ -302,20 +302,10 @@ struct DashboardView: View {
             }
             Spacer(minLength: 8)
             BatteryChip(sinceStartPercent: env.trip.startBatteryPercent)
-            Button {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                // Тот же путь, что стоп на карте; приборку закроет сам конец
-                // поездки (MapScreen прячет её по isTripActive).
-                env.location.endTrip()
-            } label: {
-                Image(systemName: "stop.fill")
-                    .font(.rounded(16, .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(Theme.danger.gradient,
-                                in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
-            .accessibilityLabel(Text("Завершить поездку"))
+            // Тот же путь, что стоп на карте, и то же подтверждение в два
+            // касания; приборку закроет сам конец поездки (MapScreen прячет её
+            // по isTripActive).
+            StopTripButton { env.location.endTrip() }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(Theme.surface.opacity(0.6),
@@ -406,7 +396,8 @@ struct DashboardView: View {
             // Полосу показываем только внутри радиуса: снаружи она всё равно
             // пуста, а пустая шкала читается как сломанная.
             if distance <= AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
-                                                       baseRadius: env.settings.alertRadius) {
+                                                       baseRadius: env.settings.alertRadius,
+                                                       context: env.location.alertContext) {
                 approachBar(distance: distance)
             }
         }
@@ -421,7 +412,8 @@ struct DashboardView: View {
     /// это разные сведения, и второе читается вообще без чтения.
     private func approachBar(distance: CLLocationDistance) -> some View {
         let radius = AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
-                                                 baseRadius: env.settings.alertRadius)
+                                                 baseRadius: env.settings.alertRadius,
+                                                 context: env.location.alertContext)
         let progress = max(0, min(1, 1 - distance / max(radius, 1)))
         return GeometryReader { geometry in
             ZStack(alignment: .leading) {
@@ -461,7 +453,8 @@ struct DashboardView: View {
     private var alertColor: Color {
         guard let distance = env.location.distanceToNearest else { return Theme.accent }
         let radius = AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
-                                                 baseRadius: env.settings.alertRadius)
+                                                 baseRadius: env.settings.alertRadius,
+                                                 context: env.location.alertContext)
         // Три ступени: вплотную — опасность, в средней зоне — внимание,
         // в радиусе — нейтральный акцент. Раньше вторая ветка звала
         // Theme.role(.alarm) — тот же danger, и эскалация была двухступенчатой.

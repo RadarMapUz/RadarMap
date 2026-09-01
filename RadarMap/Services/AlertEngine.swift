@@ -25,10 +25,32 @@ nonisolated struct AlertEngine {
     /// Достигнутый уровень по каждой камере — повторно на том же уровне не сигналим.
     private var announcedLevel: [Int: Int] = [:]
 
-    /// Умный радиус: предупреждаем за `alertLeadTimeSeconds` до камеры.
+    /// Сколько секунд запаса даём: городские 22 внизу, трассовые 29 наверху,
+    /// линейный переход между ними (см. AppConfig).
+    ///
+    /// `isHighway` — вердикт детектора город/трасса. Без него запас зависел
+    /// только от скорости, и стоило встать за фурой на 70 км/ч, как трасса
+    /// молча превращалась в город: 428 метров вместо 564. Между тем впереди
+    /// по-прежнему трасса, камер мало, и разогнаться после обгона можно за
+    /// несколько секунд. Бдительность не должна зависеть от того, попали ли
+    /// вы в пробку.
+    static func leadTime(speedKmh: Double, isHighway: Bool = false) -> Double {
+        if isHighway { return AppConfig.alertLeadTimeHighwaySeconds }
+        let from = AppConfig.alertLeadRampFromKmh
+        let to = AppConfig.alertLeadRampToKmh
+        let city = AppConfig.alertLeadTimeSeconds
+        let highway = AppConfig.alertLeadTimeHighwaySeconds
+        if speedKmh <= from { return city }
+        if speedKmh >= to { return highway }
+        return city + (highway - city) * (speedKmh - from) / (to - from)
+    }
+
+    /// Умный радиус: предупреждаем за `leadTime` до камеры.
     /// Растёт со скоростью (на трассе — раньше), но не ниже базового из настроек.
-    static func effectiveRadius(speedKmh: Double, baseRadius: CLLocationDistance) -> CLLocationDistance {
-        let bySpeed = (speedKmh / 3.6) * AppConfig.alertLeadTimeSeconds
+    static func effectiveRadius(speedKmh: Double, baseRadius: CLLocationDistance,
+                                context: AlertPolicy.Context = .city) -> CLLocationDistance {
+        let bySpeed = (speedKmh / 3.6) * leadTime(speedKmh: speedKmh,
+                                                  isHighway: context == .highway)
         return min(AppConfig.maxDynamicRadius, max(baseRadius, bySpeed))
     }
 

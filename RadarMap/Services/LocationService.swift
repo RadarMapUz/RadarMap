@@ -612,7 +612,14 @@ final class LocationService: NSObject {
 
     /// Пересобрать мониторинг вокруг текущей позиции (после добавления/скрытия
     /// камеры, догрузки базы или смены радиуса).
-    func refreshMonitoring() {
+    ///
+    /// `evaluateNow` — «оповести немедленно, не жди следующего фикса». Нужен
+    /// приезду чужой отметки: движок оповещений живёт внутри обработчика
+    /// локации, и без этого флага водитель узнавал о радаре впереди только со
+    /// следующим фиксом, попавшим в ретайл. Внутри всё идемпотентно
+    /// (`alertEngine.evaluate` помнит уровень по камере), лишний вызов не
+    /// добавляет ни фразы, ни писка.
+    func refreshMonitoring(evaluateNow: Bool = false) {
         anchor = nil
         guard let coordinate = currentCoordinate else { return }
         retile(around: coordinate)
@@ -623,6 +630,9 @@ final class LocationService: NSObject {
         // видны — она читает базу напрямую, а оповещения ждали окна.
         recomputeNearest(from: coordinate)
         recomputeDirection()
+        // Тот же гейт, что и в обработчике локации: активное оповещение — это
+        // поездка или открытый экран. В тихом фоне о камере говорят геозоны.
+        if evaluateNow, isTripActive || isForeground { runAlertEngine() }
     }
 
     // MARK: - Пере-тайлинг 20 ближайших
@@ -645,6 +655,8 @@ final class LocationService: NSObject {
     /// Геозоны сейчас стоят вокруг актуальной точки. Ложь означает «их надо
     /// пересобрать при первом же уходе в тихий фон».
     @ObservationIgnored private var geofencesArmed = false
+    /// Что именно стоит в locationd — чтобы не переставлять то же самое.
+    @ObservationIgnored private var geofencePlan = GeofencePlan()
 
     private func retile(around coordinate: CLLocationCoordinate2D) {
         // Якорь ставим здесь, а не только в retileIfNeeded: refreshMonitoring
@@ -691,9 +703,16 @@ final class LocationService: NSObject {
             // уезжает, а они остаются вокруг точки, где экран открыли. Помним
             // это, чтобы уход в тихий фон их пересобрал ровно один раз.
             geofencesArmed = false
+            geofencePlan.disarm()
             return
         }
         geofencesArmed = true
+        // Хук доставки отметок зовёт refreshMonitoring на каждое изменение
+        // списка, а изменением считается и чужая отметка за пять километров —
+        // в двадцатку ближайших она не попадает, и переставлять из-за неё
+        // сорок геозон значит платить за краудсорс батареей стоящего телефона.
+        guard geofencePlan.needsRearm(cameras: nearest, radius: settings.alertRadius) else { return }
+        geofencePlan.arm(cameras: nearest, radius: settings.alertRadius)
         // Сорок синхронных походов в locationd — самый дорогой участок главного
         // потока во всём приложении. Под меткой: если сторож поймает фриз здесь,
         // спорить будет не о чем.
@@ -895,7 +914,10 @@ final class LocationService: NSObject {
                 announce: isTripActive && settings.voiceEnabled
                     && !willSpeakAboutCameraAhead
                     && settings.overspeedVoice.allows(cameraAhead: cameraAhead),
-                fallbackClass: nearestCamera?.roadClass ?? .unknown)
+                fallbackClass: nearestCamera?.roadClass ?? .unknown,
+                // ПДД различают не класс дороги, а населённый пункт: в городе
+                // 70 хоть на проспекте, хоть на жилой улице, за городом 100.
+                inSettlement: alertContext == .city)
             // Память о треногах — строго ПОСЛЕ speedLimits.update: подсказка
             // звучит только при превышении, а знает о нём именно он.
             announceHotspotIfNeeded(from: coordinate)
@@ -931,7 +953,7 @@ final class LocationService: NSObject {
                 idleAfter: AppConfig.dashboardDimIdleSeconds)
             if standing != isStandingStill { isStandingStill = standing }
             // Умный режим: детектор города/трассы (дёшево — пара сравнений).
-            contextDetector.update(roadLimitKmh: speedLimits?.currentLimit,
+            contextDetector.update(roadLimitKmh: speedLimits?.certainLimit,
                                    camerasWithin3km: cameraDensity3km,
                                    speedKmh: speedKmh,
                                    roadClass: nearestCamera?.roadClass ?? .unknown)
@@ -1153,8 +1175,14 @@ final class LocationService: NSObject {
     }
 
     /// Умный радиус оповещения — растёт со скоростью (см. AlertEngine).
-    private var effectiveAlertRadius: CLLocationDistance {
-        AlertEngine.effectiveRadius(speedKmh: speedKmh, baseRadius: settings.alertRadius)
+    ///
+    /// Не приватный: этот же радиус обязан показывать экран. Полноэкранное
+    /// предупреждение брало базовые 400 м из настроек, а тревога поднималась
+    /// по эффективному — на 130 км/ч это 794 м, и кольцо приближения честно
+    /// показывало ноль первые 394 метра, то есть почти одиннадцать секунд.
+    var effectiveAlertRadius: CLLocationDistance {
+        AlertEngine.effectiveRadius(speedKmh: speedKmh, baseRadius: settings.alertRadius,
+                                    context: alertContext)
     }
 
     /// 0…1 — насколько глубоко вошли в радиус оповещения (полоска приближения в HUD).

@@ -99,13 +99,20 @@ final class SpeedLimitService {
     /// Возвращает и признак «предположено» — его обязан показать вызывающий.
     func limit(for camera: Camera) -> (kmh: Int, isAssumed: Bool)? {
         if let known = index?.limit(near: camera.coordinate) { return (known, false) }
-        guard let assumed = camera.roadClass.assumedLimitKmh else { return nil }
+        guard let assumed = camera.roadClass.assumedLimitKmhOffline else { return nil }
         return (assumed, true)
     }
 
     /// Сам индекс — для пакетных запросов вне main (слой маркеров карты
     /// спрашивает лимиты двух сотен камер разом; LimitIndex — Sendable).
     var limitIndex: LimitIndex? { index }
+
+    /// Лимит, за который можно ручаться: только из OSM, без догадок.
+    ///
+    /// Детектору город/трасса нужен именно такой. Предположенный лимит там,
+    /// где его вес самый большой (два голоса из четырёх), замкнул бы петлю:
+    /// контекст решал бы, какую догадку взять, а догадка — какой контекст.
+    var certainLimit: Int? { isCurrentLimitAssumed ? nil : currentLimit }
 
     /// База лимитов есть. Без неё не считаются ни превышения, ни рейтинг, ни
     /// «возможные штрафы» — то есть половина Итогов пустая, и по экрану
@@ -189,8 +196,13 @@ final class SpeedLimitService {
     /// Класс камеры — лучший доступный признак дороги, по которой мы едем:
     /// камера стоит НАД этой дорогой, и её `cls` проставлен снапом у 3455 из
     /// 3467 записей базы.
+    /// `inSettlement` — «мы в населённом пункте»: от этого, а не от класса
+    /// дороги, зависит догадка о лимите (ПДД РУз, пункт 10). Приходит из
+    /// детектора город/трасса, который считается независимо — в том числе
+    /// БЕЗ участия предположенных лимитов, иначе догадка кормила бы сама себя.
     func update(coordinate: CLLocationCoordinate2D, course: CLLocationDirection,
-                speedKmh: Double, announce: Bool, fallbackClass: RoadClass = .unknown) {
+                speedKmh: Double, announce: Bool, fallbackClass: RoadClass = .unknown,
+                inSettlement: Bool = true) {
         guard settings.speedLimitsEnabled, let index else {
             currentLimit = nil; isCurrentLimitAssumed = false; clearOverspeed()
             currentRoadHit = nil
@@ -214,7 +226,7 @@ final class SpeedLimitService {
                     // Данных по дороге нет — предполагаем по классу. Раньше
                     // здесь наступал nil, и вместе с ним пропадали превышение,
                     // рейтинг и голос о камере в режиме по умолчанию.
-                    let assumed = fallbackClass.assumedLimitKmh
+                    let assumed = fallbackClass.assumedLimitKmh(inSettlement: inSettlement)
                     if assumed != currentLimit { currentLimit = assumed }
                     if isCurrentLimitAssumed != (assumed != nil) {
                         isCurrentLimitAssumed = assumed != nil

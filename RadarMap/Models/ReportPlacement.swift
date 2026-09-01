@@ -30,6 +30,40 @@ import CoreLocation
 
 nonisolated enum ReportPlacement {
 
+    // MARK: - Отступ назад на время реакции
+
+    /// Сколько секунд проходит между «увидел» и «нажал».
+    ///
+    /// Отметку ставят, ПРОЕХАВ объект: треногу за кустом или патруль на
+    /// обочине замечают в упор, а палец идёт к экрану ещё секунду-полторы.
+    /// Плюс возраст фикса: координата в момент тапа — это место, где телефон
+    /// был до секунды назад. На 110 км/ч две секунды — это 61 метр вперёд от
+    /// настоящего радара.
+    ///
+    /// Ошибка несимметрична, и в этом всё дело. Отметка, поставленная РАНЬШЕ
+    /// радара, предупредит следующего водителя чуть загодя — он ничего не
+    /// заметит. Отметка, поставленная ПОЗЖЕ, сработает, когда он уже проехал,
+    /// то есть не сработает вовсе. Поэтому сдвигаем строго назад по курсу.
+    static let reactionSeconds: Double = 2
+    /// Потолок сдвига: на 130 км/ч формула даёт 72 метра, но на случай
+    /// выброса скорости дальше ста двадцати не уходим — иначе отметка уедет
+    /// за перекрёсток, которого водитель и не проезжал.
+    static let maxBackdateMeters: CLLocationDistance = 120
+    /// Медленнее — не сдвигаем: в пробке и на стоянке «две секунды назад» это
+    /// то же самое место, а курс на такой скорости недостоверен.
+    static let minBackdateSpeedKmh: Double = 20
+
+    /// Где водитель был `seconds` назад — туда и ставим отметку.
+    static func backdated(_ coordinate: CLLocationCoordinate2D,
+                          course: Double,
+                          speedKmh: Double,
+                          seconds: Double = reactionSeconds) -> CLLocationCoordinate2D {
+        guard course >= 0, speedKmh >= minBackdateSpeedKmh, seconds > 0 else { return coordinate }
+        let meters = min(maxBackdateMeters, (speedKmh / 3.6) * seconds)
+        let back = (course + 180).truncatingRemainder(dividingBy: 360)
+        return GeoMath.destination(from: coordinate, bearing: back, distanceMeters: meters)
+    }
+
     /// Куда встала отметка после снапа.
     struct Placement: Equatable {
         let coordinate: CLLocationCoordinate2D

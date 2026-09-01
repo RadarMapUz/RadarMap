@@ -102,16 +102,20 @@ final class CameraStore: CameraRepository {
     /// меняли только тип и `mobileConfirmed`, а id оставляли прежним. Для
     /// такого списка `==` возвращал true, и обновление до карты не доезжало:
     /// призрак-маркер оставался призраком, а «тренога» на экране — «радаром».
-    func setMobileCameras(_ cameras: [Camera]) {
+    /// Возвращает «список изменился»: по этому ответу служба отметок будит
+    /// пересчёт ближайшей камеры, не дожидаясь ни экрана, ни ретайла.
+    @discardableResult
+    func setMobileCameras(_ cameras: [Camera]) -> Bool {
         let changed = cameras.count != mobile.count
             || zip(cameras, mobile).contains { new, old in
                 new.id != old.id || new.type != old.type
                     || new.mobileConfirmed != old.mobileConfirmed
                     || new.lat != old.lat || new.lon != old.lon
             }
-        guard changed else { return }
+        guard changed else { return false }
         mobile = cameras
         dataChanged()
+        return true
     }
 
     private static let firstCustomID = 1_000_001

@@ -132,7 +132,8 @@ struct CarPlaySketchView: View {
         }
         guard let distance = env.location.distanceToNearest else { return Theme.accent }
         let radius = AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
-                                                 baseRadius: env.settings.alertRadius)
+                                                 baseRadius: env.settings.alertRadius,
+                                                 context: env.location.alertContext)
         if distance <= radius * 0.3 { return Theme.danger }
         if distance <= radius * 0.6 { return Theme.warning }
         return Theme.accent

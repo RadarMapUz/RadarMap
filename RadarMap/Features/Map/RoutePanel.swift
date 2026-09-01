@@ -212,15 +212,12 @@ struct TripLiveBar: View {
             BatteryChip(sinceStartPercent: env.trip.startBatteryPercent)
             // «Радар!» слева от «стоп» — в поездке это самая частая кнопка
             // после самой остановки, и до неё палец должен доходить не глядя.
+            // Она же крупнее соседки: промах между ними стоил поездки, и
+            // разница в размере — второй признак, кроме цвета, который читается
+            // боковым зрением.
             ReportRadarButton()
-            Button(action: onStop) {
-                Image(systemName: "stop.fill")
-                    .font(.rounded(16, .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(Theme.danger.gradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            }
-            .accessibilityLabel(Text("Завершить поездку"))
+                .padding(.trailing, 6)
+            StopTripButton(action: onStop)
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))

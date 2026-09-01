@@ -438,10 +438,50 @@ final class AlertEngineTests: XCTestCase {
     func testEffectiveRadiusGrowsWithSpeedAndClamps() {
         // Город: базовый радиус побеждает скоростной.
         XCTAssertEqual(AlertEngine.effectiveRadius(speedKmh: 40, baseRadius: 500), 500)
-        // Трасса 110 км/ч: 30.6 м/с × 22 с ≈ 672 м.
-        XCTAssertEqual(AlertEngine.effectiveRadius(speedKmh: 110, baseRadius: 500), 672, accuracy: 1)
+        // Трасса 110 км/ч: 30.6 м/с × 29 с ≈ 886 м. Было 22 секунды и 672 м —
+        // водитель получал предупреждение, уже видя знак камеры глазами.
+        XCTAssertEqual(AlertEngine.effectiveRadius(speedKmh: 110, baseRadius: 500), 886, accuracy: 1)
         // Потолок динамического радиуса.
-        XCTAssertEqual(AlertEngine.effectiveRadius(speedKmh: 250, baseRadius: 500), 1000)
+        XCTAssertEqual(AlertEngine.effectiveRadius(speedKmh: 250, baseRadius: 500), 1100)
+    }
+
+    func testLeadTimeRampsFromCityToHighway() {
+        // Городской запас держится до начала разгона...
+        XCTAssertEqual(AlertEngine.leadTime(speedKmh: 40), 22)
+        XCTAssertEqual(AlertEngine.leadTime(speedKmh: 80), 22)
+        // ...дальше плавно переходит в трассовый: скачок в одной точке дал бы
+        // камеру, которая «то видна, то нет», когда стрелка дрожит у порога.
+        XCTAssertEqual(AlertEngine.leadTime(speedKmh: 90), 25.5, accuracy: 0.01)
+        XCTAssertEqual(AlertEngine.leadTime(speedKmh: 100), 29)
+        XCTAssertEqual(AlertEngine.leadTime(speedKmh: 150), 29)
+    }
+
+    func testHighwayContextKeepsTheLeadWhenStuckBehindATruck() {
+        // Встали за фурой на 70 км/ч — трасса от этого не стала городом:
+        // камер впереди по-прежнему мало, а разогнаться после обгона можно за
+        // несколько секунд.
+        let cityLike = AlertEngine.effectiveRadius(speedKmh: 70, baseRadius: 400, context: .city)
+        let highway = AlertEngine.effectiveRadius(speedKmh: 70, baseRadius: 400, context: .highway)
+        XCTAssertGreaterThan(highway, cityLike)
+        XCTAssertEqual(highway / (70 / 3.6), AppConfig.alertLeadTimeHighwaySeconds, accuracy: 0.1)
+    }
+
+    func testContextCannotShrinkTheRadiusBelowTheSetting() {
+        // В пробке на трассе 20 км/ч скоростной радиус мал в метрах — базовый
+        // из настроек обязан победить, а не «трасса» обнулить его.
+        XCTAssertEqual(AlertEngine.effectiveRadius(speedKmh: 20, baseRadius: 400, context: .highway),
+                       400)
+    }
+
+    func testHighwayWarningKeepsTwentyNineSecondsOfRoad() {
+        // Просьба, с которой всё началось: «на трассе не 400 метров, а чуть
+        // больше». Проверяем не метры, а СЕКУНДЫ — метры сами по себе ни о чём
+        // не говорят, пока не поделены на скорость.
+        for speed in [100.0, 110, 120, 130] {
+            let radius = AlertEngine.effectiveRadius(speedKmh: speed, baseRadius: 400)
+            XCTAssertEqual(radius / (speed / 3.6), 29, accuracy: 0.2,
+                           "\(Int(speed)) км/ч: запас должен быть 29 секунд")
+        }
     }
 }
 

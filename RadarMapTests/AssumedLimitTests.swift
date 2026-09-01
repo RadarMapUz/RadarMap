@@ -13,31 +13,61 @@ import XCTest
 
 final class AssumedLimitTests: XCTestCase {
 
-    // MARK: - Справочник
+    // MARK: - Справочник: решает населённый пункт, а не класс дороги
 
-    func testAssumedLimitsAreOrderedByRoadClass() {
-        let motorway = try? XCTUnwrap(RoadClass.motorway.assumedLimitKmh)
-        let trunk = try? XCTUnwrap(RoadClass.trunk.assumedLimitKmh)
-        let primary = try? XCTUnwrap(RoadClass.primary.assumedLimitKmh)
-        let residential = try? XCTUnwrap(RoadClass.residential.assumedLimitKmh)
-        XCTAssertGreaterThan(motorway ?? 0, trunk ?? 0)
-        XCTAssertGreaterThan(trunk ?? 0, primary ?? 0)
-        XCTAssertGreaterThan(primary ?? 0, residential ?? 0)
+    func testInsideSettlementEveryRoadIsSeventy() {
+        // Пункт 10 ПДД РУз: в населённом пункте легковому 70 км/ч, и класс
+        // дороги в этом правиле не участвует вовсе — ни проспект, ни жилая
+        // улица не делают из него исключения.
+        for road in [RoadClass.trunk, .primary, .secondary, .tertiary, .residential] {
+            XCTAssertEqual(road.assumedLimitKmh(inSettlement: true), 70,
+                           "\(road) в населённом пункте — 70 по ПДД")
+        }
+    }
+
+    func testOutsideSettlementOrdinaryRoadsAreHundred() {
+        for road in [RoadClass.trunk, .primary, .secondary, .tertiary, .residential] {
+            XCTAssertEqual(road.assumedLimitKmh(inSettlement: false), 100,
+                           "\(road) вне населённого пункта — 100 по ПДД")
+        }
+    }
+
+    func testMotorwayIsOneHundredTenEverywhere() {
+        XCTAssertEqual(RoadClass.motorway.assumedLimitKmh(inSettlement: true), 110)
+        XCTAssertEqual(RoadClass.motorway.assumedLimitKmh(inSettlement: false), 110)
     }
 
     func testNoGuessWhereThereIsNothingToGuessFrom() {
-        XCTAssertNil(RoadClass.unknown.assumedLimitKmh,
-                     "неизвестный класс — не повод выдумывать лимит")
-        XCTAssertNil(RoadClass.pedestrian.assumedLimitKmh,
-                     "тротуар — ошибка снапа, а не дорога с лимитом")
+        for inSettlement in [true, false] {
+            XCTAssertNil(RoadClass.unknown.assumedLimitKmh(inSettlement: inSettlement),
+                         "неизвестный класс — не повод выдумывать лимит")
+            XCTAssertNil(RoadClass.pedestrian.assumedLimitKmh(inSettlement: inSettlement),
+                         "тротуар — ошибка снапа, а не дорога с лимитом")
+            XCTAssertNil(RoadClass.service.assumedLimitKmh(inSettlement: inSettlement),
+                         "камера главной улицы, севшая на служебный проезд, объявляла бы "
+                         + "нарушением любое движение")
+        }
     }
 
-    func testAssumptionsAreNotLowballed() {
-        // Заниженное предположение рисует превышение там, где его нет, — это
-        // худшая из двух ошибок: приложение начинает врать в свою пользу.
-        XCTAssertGreaterThanOrEqual(RoadClass.primary.assumedLimitKmh ?? 0, 70,
-                                    "в населённом пункте Узбекистана 70 с 2021 года")
-        XCTAssertGreaterThanOrEqual(RoadClass.trunk.assumedLimitKmh ?? 0, 100)
+    func testNoAssumptionEverInventsAViolation() {
+        // Главная защита этого справочника. Заниженная догадка рисует
+        // превышение там, где его нет; завышенная только промолчит о нём.
+        // Ни одно значение не имеет права оказаться ниже законного минимума
+        // для своего места.
+        for road in [RoadClass.motorway, .trunk, .primary, .secondary, .tertiary, .residential] {
+            XCTAssertGreaterThanOrEqual(road.assumedLimitKmh(inSettlement: true) ?? 0, 70,
+                                        "\(road): в городе законные 70 объявлены нарушением")
+            XCTAssertGreaterThanOrEqual(road.assumedLimitKmh(inSettlement: false) ?? 0, 100,
+                                        "\(road): за городом законные 100 объявлены нарушением")
+        }
+    }
+
+    func testOfflineGuessTreatsHighwayClassesAsOutOfTown() {
+        // Карточка камеры живого контекста не знает: класс — единственный признак.
+        XCTAssertEqual(RoadClass.trunk.assumedLimitKmhOffline, 100)
+        XCTAssertEqual(RoadClass.motorway.assumedLimitKmhOffline, 110)
+        XCTAssertEqual(RoadClass.primary.assumedLimitKmhOffline, 70)
+        XCTAssertEqual(RoadClass.residential.assumedLimitKmhOffline, 70)
     }
 
     // MARK: - Граница «догадка не превращается в деньги»

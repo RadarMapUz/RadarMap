@@ -58,7 +58,14 @@ nonisolated struct RoadCorridor {
             : AppConfig.corridorCityMeters)
         let ahead = max(0, along)
         guard ahead > AppConfig.corridorNearFieldMeters else { return base }
-        return base + (ahead - AppConfig.corridorNearFieldMeters) * AppConfig.corridorFarSlope
+        let widened = base + (ahead - AppConfig.corridorNearFieldMeters) * AppConfig.corridorFarSlope
+        // Потолок: коридор не может стать шире, чем расстояние до соседней
+        // дороги. `max(base,…)` — на случай широкой известной проезжей части:
+        // потолок не имеет права оказаться ниже ближней зоны.
+        let ceiling = max(base, context == .highway
+            ? AppConfig.corridorHighwayMaxMeters
+            : AppConfig.corridorCityMaxMeters)
+        return min(widened, ceiling)
     }
 
     /// Камера лежит на нашей дороге впереди?

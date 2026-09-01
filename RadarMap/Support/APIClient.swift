@@ -36,6 +36,29 @@ nonisolated struct APIClient {
         return try decode(data, path: path)
     }
 
+    /// GET «только если изменилось»: отпечаток прошлого ответа уходит в
+    /// `If-None-Match`, и сервер на неизменившийся список отвечает 304 без тела.
+    ///
+    /// `nil` в ответе — это и есть 304: у нас уже есть ровно то же самое.
+    /// Разница для телефона не в трафике как таковом, а в работе радио и в
+    /// разборе JSON: пустой ответ дешевле полного списка отметок по стране на
+    /// порядок, и именно он позволяет спрашивать чаще.
+    ///
+    /// Кэш URLSession здесь обходим намеренно: он ответил бы нам двухсоткой из
+    /// своей памяти, и мы бы заново разбирали тот же JSON, не узнав, что
+    /// ничего не изменилось.
+    func getIfChanged<T: Decodable>(_ path: String, as type: T.Type,
+                                    etag: String?) async throws -> (value: T, etag: String?)? {
+        var req = request(path)
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        if let etag { req.setValue(etag, forHTTPHeaderField: "If-None-Match") }
+        let (data, response) = try await transport(req)
+        if let http = response as? HTTPURLResponse, http.statusCode == 304 { return nil }
+        try Self.checkStatus(response, path: path)
+        let fresh = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag")
+        return (try decode(data, path: path), fresh)
+    }
+
     /// GET сырых данных (файлы базы) с проверкой статуса.
     func getData(_ path: String, cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy) async throws -> Data {
         var req = request(path)

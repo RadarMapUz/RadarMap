@@ -31,6 +31,18 @@ def _call(port, method, path, payload=None, ip=None):
         return e.code, json.loads(e.read())
 
 
+def _get_raw(port, path, etag=None):
+    """GET с заголовками ответа: 304 без тела проверить через _call нельзя."""
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", method="GET")
+    if etag:
+        req.add_header("If-None-Match", etag)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status, dict(resp.headers), resp.read()
+    except urllib.error.HTTPError as e:
+        return e.code, dict(e.headers), e.read()
+
+
 class APITest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -56,6 +68,61 @@ class APITest(unittest.TestCase):
             api._ip_counters.clear()
         with api._cleanup_lock:
             api._last_cleanup = 0.0
+        # Мемо ответа /api/mobile переживает удаление строк напрямую из базы:
+        # версию оно бампает только на запись через API.
+        with api._mobile_lock:
+            api._mobile_cache = None
+
+    # --- дешёвый опрос: ETag и 304 ---
+
+    def test_unchanged_list_answers_304_without_body(self):
+        """Ради этого всё и делалось: телефон в поездке спрашивает часто, а
+        платит за ответ только когда есть новости."""
+        _call(self.port, "POST", "/api/report",
+              {"lat": 41.31, "lon": 69.25, "device": "me"})
+        status, headers, body = _get_raw(self.port, "/api/mobile")
+        self.assertEqual(status, 200)
+        etag = headers.get("ETag")
+        self.assertTrue(etag, "ответ обязан нести отпечаток")
+        again, headers2, body2 = _get_raw(self.port, "/api/mobile", etag=etag)
+        self.assertEqual(again, 304, "список не менялся, а сервер прислал тело")
+        self.assertEqual(body2, b"")
+        self.assertEqual(headers2.get("ETag"), etag)
+
+    def test_new_report_changes_the_etag(self):
+        _, _headers, _body = _get_raw(self.port, "/api/mobile")
+        first = _headers.get("ETag")
+        _call(self.port, "POST", "/api/report",
+              {"lat": 41.31, "lon": 69.25, "device": "me"})
+        status, headers, _ = _get_raw(self.port, "/api/mobile", etag=first)
+        self.assertEqual(status, 200, "появилась отметка, а телефону сказали 304")
+        self.assertNotEqual(headers.get("ETag"), first)
+
+    def test_memo_does_not_hide_a_fresh_report(self):
+        """Мемо живёт секунду, и без сброса версии отметка, поставленная сразу
+        после чужого опроса, ждала бы эту секунду — ровно того водителя, что
+        едет следом, она и касается."""
+        _get_raw(self.port, "/api/mobile")
+        _call(self.port, "POST", "/api/report",
+              {"lat": 41.32, "lon": 69.26, "device": "me"})
+        _, live = _call(self.port, "GET", "/api/mobile")
+        self.assertEqual(len(live["reports"]), 1)
+
+    def test_etag_does_not_drift_while_nothing_changes(self):
+        """Отпечаток считается по содержимому, а не по времени сборки: иначе
+        304 не случился бы никогда."""
+        _call(self.port, "POST", "/api/report",
+              {"lat": 41.31, "lon": 69.25, "device": "me"})
+        _, first, _ = _get_raw(self.port, "/api/mobile")
+        with api._mobile_lock:
+            api._mobile_cache = None      # заставляем пересобрать тело заново
+        _, second, _ = _get_raw(self.port, "/api/mobile")
+        self.assertEqual(first.get("ETag"), second.get("ETag"))
+
+    def test_cache_control_forbids_silent_reuse(self):
+        _, headers, _ = _get_raw(self.port, "/api/mobile")
+        self.assertEqual(headers.get("Cache-Control"), "no-cache",
+                         "max-age дал бы телефону право не спрашивать вовсе")
 
     # --- передвижные радары ---
 

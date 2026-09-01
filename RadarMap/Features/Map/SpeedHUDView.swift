@@ -159,7 +159,10 @@ struct SpeedHUDView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 6)
         } else if let camera, let distance {
-            let near = distance <= env.settings.alertRadius
+            // Тот же радиус, по которому поднимается тревога: с базовым
+            // значок на трассе оставался «далёким» уже после того, как
+            // голос о камере сказал.
+            let near = distance <= env.location.effectiveAlertRadius
             HStack(spacing: 12) {
                 ZStack {
                     Image(systemName: camera.kind.symbolName)
@@ -226,7 +229,7 @@ struct SpeedHUDView: View {
     /// далеко — спокойный серый, на подходе — приглушённый цвет типа, в зоне
     /// оповещения — полный цвет со свечением.
     private func proximityTint(_ distance: Double, _ camera: Camera) -> Color {
-        let radius = env.settings.alertRadius
+        let radius = env.location.effectiveAlertRadius
         if distance <= radius { return camera.kind.tint }
         if distance <= radius * 3 { return camera.kind.tint.opacity(0.5) }
         return Theme.textTertiary

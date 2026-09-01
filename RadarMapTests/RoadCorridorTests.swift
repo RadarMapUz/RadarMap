@@ -135,4 +135,37 @@ final class RoadCorridorTests: XCTestCase {
                            "курс \(Int(course))°: параллельная улица")
         }
     }
+    // MARK: - Потолок расширения
+
+    func testWideningStopsAtTheCeiling() {
+        // Наклон рос без ограничения, и это было терпимо, пока камеру
+        // рассматривали за 670 м. С трассовым запасом в 29 секунд она попадает
+        // в расчёт за 1047 м, и прежняя формула давала 190 м вбок — это уже
+        // соседнее шоссе, а не «дорога повернула».
+        let far = RoadCorridor.allowedAcross(along: 1047, context: .highway)
+        XCTAssertEqual(far, AppConfig.corridorHighwayMaxMeters,
+                       "на километре коридор обязан упереться в потолок")
+        XCTAssertLessThan(RoadCorridor.allowedAcross(along: 400, context: .highway), far,
+                          "до потолка коридор ещё растёт")
+    }
+
+    func testCityWideningIsCappedToo() {
+        XCTAssertLessThanOrEqual(RoadCorridor.allowedAcross(along: 5000, context: .city),
+                                 AppConfig.corridorCityMaxMeters)
+    }
+
+    func testCeilingNeverCutsBelowTheKnownRoadWidth() {
+        // Широкая известная проезжая часть: потолок не имеет права оказаться
+        // ниже ближней зоны, иначе он отрежет саму дорогу.
+        XCTAssertGreaterThanOrEqual(
+            RoadCorridor.allowedAcross(along: 3000, context: .city, nearWidth: 200), 200)
+    }
+
+    func testCameraOnTheParallelHighwayStaysOutAtAKilometre() {
+        // То, ради чего потолок и появился.
+        let fix = RoadCorridor.Fix(along: 1000, across: 170)
+        XCTAssertFalse(RoadCorridor.contains(fix, context: .highway),
+                       "камера в 170 м вбок за километр — это встречное шоссе")
+    }
+
 }

@@ -37,6 +37,7 @@ Endpoints:
 и копит решения в таблице overrides; публикует их владелец локальной командой
 server/publish_overrides.sh — ключ подписи на VPS не хранится.
 """
+import hashlib
 import json
 import math
 import os
@@ -356,6 +357,31 @@ _ip_counters = {}
 _cleanup_lock = threading.Lock()
 _last_cleanup = 0.0
 
+# Ответ GET /api/mobile — общий для всех: это один и тот же список отметок по
+# стране. Его собирали заново на каждый запрос каждого телефона, хотя между
+# запросами он меняется редко.
+#
+# Отсюда две вещи, и обе — про батарею телефона, а не про сервер.
+#
+# ETag: тело считается один раз, его отпечаток уходит заголовком, и телефон
+# присылает его обратно. Не изменилось — 304 без тела. Радио на приём пустого
+# ответа тратит десятки миллиджоулей вместо сотен на разбор двухсот килобайт
+# JSON; именно это позволяет опрашивать ЧАЩЕ, не платя за это временем работы.
+#
+# Мемо на секунду: одновременный опрос с сотни телефонов сканировал таблицу
+# сто раз. Версия в ключе делает мемо честным — любая запись (отметка, голос,
+# отзыв) обнуляет его сразу, а не через секунду.
+_mobile_lock = threading.Lock()
+_mobile_cache = None          # (version, built_at, etag, body)
+_mobile_version = 0
+MOBILE_MEMO_SECONDS = 1.0
+
+def bump_mobile_version():
+    """Список отметок изменился — мемо ответа больше не действительно."""
+    global _mobile_version
+    with _mobile_lock:
+        _mobile_version += 1
+
 def ip_quota_exceeded(bucket, ip, cap):
     """True — суточный кап этого IP по данному бакету исчерпан (и счёт +1)."""
     if not ip:
@@ -435,6 +461,28 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _json_cached(self, body, etag):
+        """Готовое тело с отпечатком: 304, если у телефона уже есть это самое.
+
+        Заголовок Cache-Control обязателен и обязан быть no-cache, а не
+        max-age: список отметок обязан перепроверяться каждый раз, просто
+        дёшево. max-age отдал бы телефону право не спрашивать вовсе, и свежая
+        тренога ждала бы истечения срока.
+        """
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("ETag", etag)
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _ip(self):
         """IP клиента.
 
@@ -466,17 +514,24 @@ class Handler(BaseHTTPRequestHandler):
             return None
 
     def do_GET(self):
+        global _last_cleanup, _mobile_cache
         path = self.path.split("?", 1)[0].rstrip("/")   # /api/mobile/?x — тот же эндпоинт
         if path == "/api/health":
             return self._json(200, {"ok": True})
         if path == "/api/mobile":
             now = time.time()
+            # Свежее мемо той же версии — отдаём, не трогая базу вовсе.
+            with _mobile_lock:
+                cached = _mobile_cache
+                version = _mobile_version
+            if (cached and cached[0] == version
+                    and now - cached[1] < MOBILE_MEMO_SECONDS):
+                return self._json_cached(cached[3], cached[2])
             conn = db()
             try:
                 # Чистку не гоняем на каждый GET: это два DELETE и commit в
                 # файле, куда параллельно пишет /api/report, — при 10 r/s с IP
                 # чтение превращалось в постоянную запись. Раз в минуту хватает.
-                global _last_cleanup
                 with _cleanup_lock:
                     due = now - _last_cleanup >= 60
                     if due:
@@ -486,6 +541,7 @@ class Handler(BaseHTTPRequestHandler):
                     # голоса удалённых отметок — сироты, без чистки таблица растёт вечно
                     conn.execute("DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)")
                     conn.commit()
+                    bump_mobile_version()
                 # confirmed — по разным устройству И адресу (см.
                 # confirmed_independently): клиент рисует неподтверждённые
                 # полупрозрачными и говорит «возможно, радар», а не «радар».
@@ -496,10 +552,22 @@ class Handler(BaseHTTPRequestHandler):
                     "FROM reports r WHERE r.active = 1 AND r.expires > ?", (now,)).fetchall()
             finally:
                 conn.close()
-            return self._json(200, {"reports": [
+            body = json.dumps({"reports": [
                 {"id": r[0], "lat": r[1], "lon": r[2], "created": r[3],
                  "expires": r[4], "up": r[5], "down": r[6], "type": r[7],
-                 "confirmed": bool(r[8])} for r in rows]})
+                 "confirmed": bool(r[8])} for r in rows]}).encode()
+            # Отпечаток — по СОДЕРЖИМОМУ, а не по времени сборки: пока список
+            # не меняется, ETag тот же, и телефон получает 304 хоть каждую
+            # секунду. По времени он менялся бы на каждой пересборке, и весь
+            # смысл 304 пропал бы.
+            etag = '"%s"' % hashlib.sha1(body).hexdigest()[:32]
+            with _mobile_lock:
+                # Версию перечитываем: пока шёл SELECT, кто-то мог записать
+                # отметку. Тогда наше тело уже старое — отдаём его этому
+                # клиенту, но в мемо не кладём.
+                if _mobile_version == version:
+                    _mobile_cache = (version, now, etag, body)
+            return self._json_cached(body, etag)
         self._json(404, {"error": "not found"})
 
     def do_POST(self):
@@ -767,6 +835,7 @@ class Handler(BaseHTTPRequestHandler):
                     conn.execute("UPDATE reports SET type = ? WHERE id = ?",
                                  (rtype, r[0]))
                     conn.commit()
+                    bump_mobile_version()
                     # merged=True — для старых клиентов, знающих только это поле.
                     return self._json(200, {"id": r[0], "merged": True,
                                             "amended": True})
@@ -809,6 +878,7 @@ class Handler(BaseHTTPRequestHandler):
                     conn.execute("UPDATE reports SET up = ?, expires = ? WHERE id = ?",
                                  (up, new_exp, r[0]))
                     conn.commit()
+                    bump_mobile_version()
                     return self._json(200, {"id": r[0], "merged": True})
 
             # Глобальный кап: ротация device не должна ни заваливать карту
@@ -839,6 +909,7 @@ class Handler(BaseHTTPRequestHandler):
                 (lat, lon, now, now + ttl, device, rtype, ip, cls,
                  0 if blocked else 1, "blocked" if blocked else ""))
             conn.commit()
+            bump_mobile_version()
             return self._json(200, {"id": cur.lastrowid, "merged": False})
         finally:
             conn.close()
@@ -884,6 +955,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(409, {"error": "confirmed by others"})
             conn.execute("UPDATE reports SET active = 0, closed = 'author' WHERE id = ?", (rid,))
             conn.commit()
+            bump_mobile_version()
             return self._json(200, {"ok": True})
         finally:
             conn.close()
@@ -966,6 +1038,7 @@ class Handler(BaseHTTPRequestHandler):
                          "closed = CASE WHEN ? = 0 THEN 'quorum' ELSE closed END WHERE id = ?",
                          (up, down, expires, active, active, rid))
             conn.commit()
+            bump_mobile_version()
             return self._json(200, {"ok": True, "up": up, "down": down, "active": bool(active)})
         finally:
             conn.close()

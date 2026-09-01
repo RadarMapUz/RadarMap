@@ -466,7 +466,7 @@ struct CarPlayOverlay: View {
     /// Цвет значка камеры по БЛИЗОСТИ, а не по типу: красный кружок при камере
     /// в трёх километрах читается как тревога, хотя ехать до неё минуты.
     private func proximityTint(_ distance: CLLocationDistance, _ camera: Camera) -> Color {
-        let radius = env.settings.alertRadius
+        let radius = env.location.effectiveAlertRadius
         if distance <= radius { return camera.kind.tint }
         if distance <= radius * 3 { return camera.kind.tint.opacity(0.55) }
         return Theme.textTertiary

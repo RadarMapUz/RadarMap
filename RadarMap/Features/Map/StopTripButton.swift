@@ -1,0 +1,90 @@
+//
+//  StopTripButton.swift
+//  RadarMap
+//
+//  «Стоп» в два касания.
+//
+//  Кнопка завершения поездки стоит в сантиметре от кнопки отметки — самой
+//  частой в поездке, той, по которой бьют вслепую большим пальцем на ходу.
+//  Промах вправо заканчивал поездку молча и сразу: без вопроса, без отмены,
+//  без возможности вернуться. Дальше запись обрывается, а поездка в истории
+//  разваливается на куски — ровно то, что человек и увидел в списке своих
+//  поездок в Зомин и обратно.
+//
+//  Поэтому первое касание не завершает, а взводит: кнопка на три секунды
+//  становится «Точно?» и ждёт второго. Не дождалась — сама вернулась в
+//  исходное. Для того, кто ДЕЙСТВИТЕЛЬНО хочет закончить, цена — одно лишнее
+//  касание по кнопке, которая в этот момент стала шире и подписана словом.
+//
+
+import SwiftUI
+
+struct StopTripButton: View {
+    @Environment(AppEnvironment.self) private var env
+    var action: () -> Void
+
+    @State private var isArmed = false
+    @State private var disarmTask: Task<Void, Never>?
+
+    /// Сколько ждём второго касания. Три секунды — столько, сколько человек
+    /// готов держать в голове «я нажал»; дольше — и взведённая кнопка станет
+    /// ловушкой для следующего промаха.
+    private static let armedSeconds: Duration = .seconds(3)
+
+    /// На стоянке подтверждение не нужно: тап осознанный, и лишнее касание там
+    /// только раздражает. Порог — тот же, что у экрана машины, где эта развилка
+    /// появилась раньше и уже проверена в поездках.
+    private var needsConfirm: Bool {
+        env.location.speedKmh >= AppConfig.carPlayEndTripConfirmKmh
+    }
+
+    var body: some View {
+        Button(action: tap) {
+            HStack(spacing: 6) {
+                Image(systemName: isArmed ? "questionmark" : "stop.fill")
+                    .font(.rounded(16, .bold))
+                    .contentTransition(.symbolEffect(.replace))
+                if isArmed {
+                    Text("Точно?")
+                        .font(.rounded(15, .heavy))
+                        .lineLimit(1)
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, isArmed ? 14 : 0)
+            .frame(minWidth: 44)
+            .frame(height: 44)
+            .background(Theme.danger.gradient,
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isArmed)
+        .accessibilityLabel(Text(isArmed ? "Подтвердить завершение поездки"
+                                         : "Завершить поездку"))
+        .accessibilityHint(Text("Нажмите дважды: первое касание спрашивает подтверждение"))
+        .onDisappear { disarmTask?.cancel() }
+    }
+
+    private func tap() {
+        disarmTask?.cancel()
+        guard needsConfirm else {
+            isArmed = false
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            action()
+            return
+        }
+        guard isArmed else {
+            isArmed = true
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            disarmTask = Task {
+                try? await Task.sleep(for: Self.armedSeconds)
+                guard !Task.isCancelled else { return }
+                isArmed = false
+            }
+            return
+        }
+        isArmed = false
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        action()
+    }
+}

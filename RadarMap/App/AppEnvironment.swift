@@ -195,6 +195,18 @@ final class AppEnvironment {
         mobile.network = network
         // Единственная новость, ради которой стоит трогать человека по поводу
         // краудсорса: она отвечает на вопрос «работает ли мой тап вообще».
+        // Расписание опроса смотрит на скорость и на нагрев: чаще на трассе,
+        // где чужая отметка устаревает за минуту, реже на стоянке и на жаре.
+        mobile.drivingContext = { [weak location, weak thermal] in
+            (speedKmh: location?.speedKmh ?? 0, thermal: thermal?.mode ?? .full)
+        }
+        // Чужая отметка приехала — пересобрать окно ближайших камер и оповестить
+        // немедленно, не дожидаясь ни экрана, ни следующего ретайла. Вешаем
+        // здесь, а не во вью: среда жива всегда, тело вью со сложенным
+        // телефоном не исполняется вовсе — а именно там водитель и едет.
+        mobile.onReportsChanged = { [weak location] in
+            location?.refreshMonitoring(evaluateNow: true)
+        }
         mobile.onMyReportConfirmed = { [weak notifications] report in
             let kind = ReportKind(rawValue: report.kind)?.title
                 ?? String(localized: "отметка")

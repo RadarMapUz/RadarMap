@@ -13,6 +13,18 @@
 //  подтверждений и выбора типа — «радар» покрывает почти все случаи, а
 //  уточнить тип можно из меню на стоянке. Координата берётся текущая.
 //
+//  Тип — ВТОРЫМ движением того же пальца. Просьба из поездки была прямой:
+//  «отметка например 3 ножка или радар или дпс должно комфортно нажиматься».
+//  Через окно уточнения после отправки это не работает: плашка живёт
+//  несколько секунд, и попасть в неё надо ещё раз, уже вслепую и уже проехав.
+//  Поэтому здесь — веер: задержал палец (или дёрнул вверх) — над кнопкой
+//  встали строки типов, ведёшь палец вверх, каждая новая строка отзывается
+//  щелчком, отпустил — ушла она. Целиться некуда: строки во всю ширину, важна
+//  только высота. Увёл палец вниз — «Отмена» тем же движением, ничего не
+//  отправлено.
+//
+//  Быстрый тап при этом остался ровно тем, чем был: радар, одно касание.
+//
 //  Ответ обязателен и обязан ЗВУЧАТЬ: за рулём на экран не смотрят, и
 //  беззвучная кнопка читается как сломанная — человек жмёт ещё раз, плодя
 //  дубли. Поэтому голос произносит итог всегда, даже отказ.
@@ -28,19 +40,146 @@ struct ReportRadarButton: View {
 
     @State private var isSending = false
     @State private var flash: Flash?
+    @State private var fan: FanState?
+    @State private var holdTask: Task<Void, Never>?
 
     private enum Flash: Equatable { case ok, no }
 
+    /// Открытый веер: какая строка под пальцем и не увели ли палец на отмену.
+    private struct FanState: Equatable {
+        var index: Int
+        var isCancelling: Bool
+    }
+
+    /// Шаг строки веера в точках — он же шаг выбора по вертикали. Одно число
+    /// на картинку и на жест: если развести их, палец будет выбирать не ту
+    /// строку, которую подсвечивает экран.
+    private static let rowPitch: CGFloat = 62
+    private static let rowHeight: CGFloat = 56
+    /// Рывок вверх на столько — веер открылся, не дожидаясь удержания.
+    private static let flickToOpen: CGFloat = 28
+    /// Палец ушёл ниже старта на столько — это «передумал».
+    private static let dragToCancel: CGFloat = 44
+    private static let holdToOpen: Duration = .milliseconds(280)
+
+    private var kinds: [ReportKind] { ReportKind.offered }
+
     var body: some View {
-        Button(action: send) {
+        Group {
             if isLarge { largeLabel } else { compactLabel }
         }
-        .buttonStyle(PressableStyle())
-        .disabled(isSending)
+        .scaleEffect(fan == nil ? 1 : 0.96)
+        .contentShape(Rectangle())
+        .gesture(fanGesture)
+        .overlay(alignment: .bottom) { fanOverlay }
+        .allowsHitTesting(!isSending)
         .animation(.easeOut(duration: 0.25), value: flash)
         .animation(.easeOut(duration: 0.2), value: isSending)
+        .animation(.spring(response: 0.28, dampingFraction: 0.82), value: fan)
         .accessibilityLabel(Text("Отметить радар"))
-        .accessibilityHint(Text("Отправляет отметку другим водителям"))
+        .accessibilityHint(Text("Отправляет отметку другим водителям. Удержание — выбор типа"))
+        // VoiceOver пальцем по экрану не ведёт: для него типы — обычные действия.
+        .accessibilityActions {
+            ForEach(kinds) { kind in
+                Button(kind.title) { send(kind: kind) }
+            }
+        }
+    }
+
+    // MARK: - Веер типов
+
+    private var fanGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard !isSending else { return }
+                if fan == nil {
+                    // Первое событие приходит уже на касании (minimumDistance: 0):
+                    // здесь заводим удержание, а рывок вверх открывает веер сразу.
+                    if holdTask == nil { armHold() }
+                    guard value.translation.height <= -Self.flickToOpen else { return }
+                    openFan()
+                }
+                update(for: value.translation)
+            }
+            .onEnded { _ in
+                holdTask?.cancel()
+                holdTask = nil
+                guard let state = fan else {
+                    // Веер не открывался — это обычный тап, всё как было.
+                    if !isSending { send(kind: .radar) }
+                    return
+                }
+                fan = nil
+                guard !state.isCancelling else {
+                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                    return
+                }
+                send(kind: kinds[min(state.index, kinds.count - 1)])
+            }
+    }
+
+    private func armHold() {
+        holdTask = Task {
+            try? await Task.sleep(for: Self.holdToOpen)
+            guard !Task.isCancelled, fan == nil, !isSending else { return }
+            openFan()
+        }
+    }
+
+    private func openFan() {
+        fan = FanState(index: 0, isCancelling: false)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+
+    private func update(for translation: CGSize) {
+        guard let current = fan else { return }
+        let cancelling = translation.height > Self.dragToCancel
+        let up = max(0, -translation.height)
+        let index = min(kinds.count - 1, Int(up / Self.rowPitch))
+        let next = FanState(index: index, isCancelling: cancelling)
+        guard next != current else { return }
+        // Щелчок на каждой смене строки: выбор слышен пальцем, на экран
+        // смотреть не нужно.
+        UISelectionFeedbackGenerator().selectionChanged()
+        fan = next
+    }
+
+    @ViewBuilder private var fanOverlay: some View {
+        if let fan {
+            VStack(spacing: Self.rowPitch - Self.rowHeight) {
+                ForEach(Array(kinds.enumerated()).reversed(), id: \.offset) { index, kind in
+                    fanRow(kind, isActive: index == fan.index && !fan.isCancelling)
+                }
+            }
+            .fixedSize()
+            .offset(y: -((isLarge ? 62 : 56) + 12))
+            .allowsHitTesting(false)
+            .transition(.scale(scale: 0.9, anchor: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private func fanRow(_ kind: ReportKind, isActive: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: kind.symbol)
+                .font(.rounded(18, .bold))
+                .frame(width: 24)
+            Text(kind.title)
+                .font(.rounded(17, .semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(isActive ? .white : Theme.textSecondary)
+        .padding(.horizontal, 18)
+        .frame(minWidth: 210, alignment: .leading)
+        .frame(height: Self.rowHeight)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(isActive ? AnyShapeStyle(Theme.warning.gradient)
+                               : AnyShapeStyle(.ultraThinMaterial))
+        }
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(isActive ? Color.white.opacity(0.5) : Theme.stroke, lineWidth: 1))
+        .scaleEffect(isActive ? 1.04 : 1)
+        .shadow(color: .black.opacity(isActive ? 0.3 : 0.15), radius: isActive ? 10 : 4, y: 3)
     }
 
     /// Приборка: капсула во всю ширину. Тап делается вслепую, и промахнуться
@@ -56,8 +195,9 @@ struct ReportRadarButton: View {
                     .font(.system(size: 22, weight: .bold))
                     .contentTransition(.symbolEffect(.replace))
             }
-            Text("Радар")
+            Text(fan?.isCancelling == true ? "Отмена" : "Радар")
                 .font(.rounded(21, .heavy))
+                .contentTransition(.numericText())
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity)
@@ -87,10 +227,12 @@ struct ReportRadarButton: View {
                     .foregroundStyle(.white)
             }
         }
-        .frame(width: 44, height: 44)
+        // Крупнее «стопа» рядом: по ней бьют вслепую и чаще всего.
+        .frame(width: 56, height: 56)
     }
 
     private var symbol: String {
+        if fan?.isCancelling == true { return "arrow.uturn.backward" }
         switch flash {
         case .ok: return "checkmark"
         case .no: return "xmark"
@@ -99,6 +241,9 @@ struct ReportRadarButton: View {
     }
 
     private var background: Color {
+        // Палец увели вниз — кнопка на глазах становится «Отменой»: решение
+        // видно ДО отпускания, а не после отправки.
+        if fan?.isCancelling == true { return Theme.textTertiary }
         switch flash {
         case .ok: return Theme.success
         case .no: return Theme.textTertiary
@@ -106,7 +251,7 @@ struct ReportRadarButton: View {
         }
     }
 
-    private func send() {
+    private func send(kind: ReportKind) {
         guard !isSending else { return }
         isSending = true
         // Тактильный отклик СРАЗУ по нажатию, до сети: подтверждает, что тап
@@ -115,6 +260,7 @@ struct ReportRadarButton: View {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         Task {
             let outcome = await env.mobile.quickReport(
+                kind: kind,
                 coordinate: env.location.currentCoordinate,
                 speedKmh: env.location.speedKmh,
                 isTripActive: env.location.isTripActive,

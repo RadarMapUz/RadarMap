@@ -300,7 +300,8 @@ struct MapScreen: View {
     private var sketchTint: Color {
         guard let distance = env.location.distanceToNearest else { return Theme.accent }
         let radius = AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
-                                                 baseRadius: env.settings.alertRadius)
+                                                 baseRadius: env.settings.alertRadius,
+                                                 context: env.location.alertContext)
         if distance <= radius * 0.3 { return Theme.danger }
         if distance <= radius * 0.6 { return Theme.warning }
         return Theme.accent
@@ -871,8 +872,22 @@ struct MapScreen: View {
             } else if let report = reportPoint {
                 ReportPickerBar(
                     onPick: { kind in
-                        UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        Task { await env.mobile.report(at: report.coordinate, kind: kind) }
+                        // Место показано пальцем, тип выбран из списка — это
+                        // осознанная постановка: проверку «вы стоите» она
+                        // проходит, а защиту от дублей и счётчик получает.
+                        // Отклик — ПО ИТОГУ, а не сразу: прежний безусловный
+                        // «успех» звучал одинаково и когда отметка ушла, и
+                        // когда её отбросили как дубль.
+                        Task {
+                            let outcome = await env.mobile.quickReport(
+                                kind: kind,
+                                coordinate: report.coordinate,
+                                speedKmh: env.location.speedKmh,
+                                isTripActive: env.location.isTripActive,
+                                placement: .deliberate)
+                            UINotificationFeedbackGenerator()
+                                .notificationOccurred(outcome.isSuccess ? .success : .warning)
+                        }
                         withAnimation { reportPoint = nil }
                     },
                     onCancel: { withAnimation { reportPoint = nil } }
@@ -1162,9 +1177,13 @@ struct MapScreen: View {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         case .mobile:
             Task {
-                let result = await env.mobile.report(at: center)
+                let outcome = await env.mobile.quickReport(
+                    coordinate: center,
+                    speedKmh: env.location.speedKmh,
+                    isTripActive: env.location.isTripActive,
+                    placement: .deliberate)
                 UINotificationFeedbackGenerator()
-                    .notificationOccurred(result == .failed ? .error : .success)
+                    .notificationOccurred(outcome.isSuccess ? .success : .error)
             }
         }
         withAnimation { map.isAddingCamera = false }

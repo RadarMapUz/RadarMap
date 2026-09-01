@@ -176,4 +176,44 @@ final class ReportGuardTests: XCTestCase {
         XCTAssertNil(MobilePassWatch.update(tracks: &tracks, mobileCameras: [first, second],
                                             from: point(metresEast: 300)))
     }
+    // MARK: - Откуда взялась координата
+
+    func testDeliberatePlacementIsAllowedWhileParked() {
+        // Точку показали пальцем на карте и выбрали тип из списка — это не
+        // слепой тап «а как оно работает», это осознанная постановка. Глушить
+        // её проверкой на стоянку значит терять отметки пассажира и того, кто
+        // отмечает на обочине сразу после проезда.
+        let refusal = ReportGuard.check(kind: .tripod,
+                                        coordinate: CLLocationCoordinate2D(latitude: 41.31,
+                                                                           longitude: 69.25),
+                                        speedKmh: 0, isTripActive: false,
+                                        placement: .deliberate,
+                                        lastSent: nil, now: Date())
+        XCTAssertNil(refusal)
+    }
+
+    func testBlindTapWhileParkedIsStillRefused() {
+        let refusal = ReportGuard.check(kind: .radar,
+                                        coordinate: CLLocationCoordinate2D(latitude: 41.31,
+                                                                           longitude: 69.25),
+                                        speedKmh: 0, isTripActive: false,
+                                        placement: .blind,
+                                        lastSent: nil, now: Date())
+        XCTAssertEqual(refusal, .notDriving, "тап из кресла дома рождает радар посреди двора")
+    }
+
+    func testDeliberatePlacementStillObeysTheDuplicateGuard() {
+        // Осознанность снимает только проверку на стоянку. Дубли она не
+        // легализует: пять отметок на один пост портят карту всем одинаково,
+        // кто бы их ни поставил.
+        let point = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.25)
+        let sent = ReportGuard.Sent(kind: .radar, latitude: point.latitude,
+                                    longitude: point.longitude, at: Date())
+        let refusal = ReportGuard.check(kind: .radar, coordinate: point,
+                                        speedKmh: 0, isTripActive: false,
+                                        placement: .deliberate,
+                                        lastSent: sent, now: Date())
+        XCTAssertEqual(refusal, .duplicate)
+    }
+
 }

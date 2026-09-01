@@ -50,7 +50,12 @@ struct ApproachOverlayGate: View {
                     distance: distance,
                     speedKmh: env.location.speedKmh,
                     relativeBearing: env.location.relativeBearingToNearest,
-                    alertRadius: env.settings.alertRadius,
+                    // Радиус — ЭФФЕКТИВНЫЙ, а не базовый из настроек. С базовым
+                    // кольцо приближения показывало ноль, пока водитель не
+                    // въедет в 400 м, хотя предупреждение уже прозвучало на
+                    // 794 (130 км/ч). Одиннадцать секунд экран говорил «ещё
+                    // далеко» про камеру, о которой уже сказал голос.
+                    alertRadius: env.location.effectiveAlertRadius,
                     onDismiss: { dismissedID = camera.id }
                 )
             }

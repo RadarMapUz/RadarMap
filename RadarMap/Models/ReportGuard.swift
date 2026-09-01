@@ -57,6 +57,22 @@ nonisolated enum ReportGuard {
     static let duplicateWindowSeconds: TimeInterval = 180
     static let duplicateRadiusMeters: CLLocationDistance = 400
 
+    /// Откуда взялась координата отметки — от этого зависит проверка на стоянке.
+    ///
+    /// `blind` — кнопка, CarPlay, Siri: точка взята из GPS, водитель на экран
+    /// не смотрел. Здесь проверка на стоянке и нужна: тап из кресла дома
+    /// рождает радар посреди двора.
+    ///
+    /// `deliberate` — долгое нажатие на карте и прицел в «Ещё»: человек
+    /// показал пальцем конкретное место и выбрал тип из списка. Это ровно то,
+    /// что делают, стоя на обочине или уже приехав, — глушить такую отметку
+    /// нечестно, она осмысленнее слепого тапа. Защита от дублей, дневной
+    /// счётчик и очередь без сети остаются те же.
+    enum Placement {
+        case blind
+        case deliberate
+    }
+
     /// Ниже этой скорости считаем, что водитель не едет. Порог низкий (3 км/ч)
     /// намеренно: в пробке рядом с постом отметить НАДО, а вот из кресла дома —
     /// нет.
@@ -71,13 +87,14 @@ nonisolated enum ReportGuard {
                       coordinate: CLLocationCoordinate2D?,
                       speedKmh: Double,
                       isTripActive: Bool,
+                      placement: Placement = .blind,
                       lastSent: Sent?,
                       now: Date) -> Refusal? {
         guard let coordinate, CLLocationCoordinate2DIsValid(coordinate),
               !(coordinate.latitude == 0 && coordinate.longitude == 0)
         else { return .noPosition }
 
-        if !isTripActive, speedKmh < minSpeedKmh { return .notDriving }
+        if placement == .blind, !isTripActive, speedKmh < minSpeedKmh { return .notDriving }
 
         if let lastSent, lastSent.kind == kind,
            now.timeIntervalSince(lastSent.at) < duplicateWindowSeconds,

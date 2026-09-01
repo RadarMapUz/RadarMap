@@ -153,4 +153,41 @@ final class ReportPlacementTests: XCTestCase {
         XCTAssertTrue(send.isEmpty)
         XCTAssertTrue(expired.isEmpty)
     }
+    // MARK: - Отступ назад на время реакции
+
+    private var here: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: 41.31, longitude: 69.25)
+    }
+
+    private func metres(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+        GeoMath.fastDistance(a.latitude, a.longitude, b.latitude, b.longitude)
+    }
+
+    func testMarkLandsWhereTheDriverWasTwoSecondsAgo() {
+        // Отметку ставят, ПРОЕХАВ объект: пока палец идёт к экрану, машина
+        // уезжает. На 110 км/ч две секунды — это 61 метр.
+        let back = ReportPlacement.backdated(here, course: 0, speedKmh: 110)
+        XCTAssertEqual(metres(here, back), 61, accuracy: 3)
+        XCTAssertLessThan(back.latitude, here.latitude,
+                          "курс на север — отметка обязана лечь южнее, то есть позади")
+    }
+
+    func testNoCourseNoShift() {
+        // Недостоверный курс — двигать не по чему, и выдумывать направление
+        // хуже, чем оставить точку на месте.
+        XCTAssertEqual(metres(here, ReportPlacement.backdated(here, course: -1, speedKmh: 110)), 0,
+                       accuracy: 0.01)
+    }
+
+    func testStandingStillIsNotShifted() {
+        XCTAssertEqual(metres(here, ReportPlacement.backdated(here, course: 0, speedKmh: 5)), 0,
+                       accuracy: 0.01)
+    }
+
+    func testShiftHasACeiling() {
+        let wild = ReportPlacement.backdated(here, course: 90, speedKmh: 400)
+        XCTAssertLessThanOrEqual(metres(here, wild), ReportPlacement.maxBackdateMeters + 1,
+                                 "выброс скорости не должен унести отметку за перекрёсток")
+    }
+
 }

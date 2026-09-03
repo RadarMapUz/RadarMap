@@ -263,7 +263,13 @@ nonisolated enum TripHistory {
                                  },
                                  trackSpeeds: track.map(\.speedKmh)),
                              stops: record.stops,
-                             endedManually: record.endedManually)
+                             endedManually: record.endedManually,
+                             // Чистка выбрасывает ЛОЖНЫЕ проезды камер и
+                             // пересчитывает балл — к расходу заряда это
+                             // отношения не имеет. Поле с дефолтом nil, и без
+                             // явной передачи честно измеренная цифра молча
+                             // исчезала при обновлении приложения.
+                             batteryDropPercent: record.batteryDropPercent)
             return out
         }
         return (cleaned, changed)
@@ -298,7 +304,8 @@ nonisolated enum TripHistory {
                                   },
                                   trackSpeeds: track.map(\.speedKmh)),
                               stops: record.stops,
-                              endedManually: record.endedManually)
+                              endedManually: record.endedManually,
+                              batteryDropPercent: record.batteryDropPercent)
         }
         return (cleaned, changed)
     }
@@ -331,21 +338,37 @@ nonisolated enum TripHistory {
         let total = headLength + tailLength
         let headShare = total > 0 ? headLength / total : 0.5
 
+        // Расход заряда делим ПО ВРЕМЕНИ, а не по километрам: батарея садится
+        // за часы, а не за расстояние — в пробке она тратится, а километры нет.
+        // Остаток отдаём второй ноге целиком, поэтому сумма половин равна
+        // исходной цифре ровно — это обратная операция к TripMerge, которая при
+        // склейке расходы складывает.
+        let headSeconds = stop.from.timeIntervalSince(record.startedAt)
+        let tailSeconds = record.endedAt.timeIntervalSince(stop.to)
+        let batterySeconds = headSeconds + tailSeconds
+        let batteryShare = batterySeconds > 0 ? headSeconds / batterySeconds : headShare
+        let headDrop = record.batteryDropPercent
+            .map { Int((Double($0) * batteryShare).rounded()) }
+        let tailDrop = record.batteryDropPercent
+            .flatMap { total in headDrop.map { total - $0 } }
+
         let remaining = (record.stops ?? []).filter { $0.id != stop.id }
         let first = leg(of: record, track: head, stops: remaining.filter { $0.to <= stop.from },
                         from: record.startedAt, to: stop.from,
                         distance: record.distanceMeters * headShare,
-                        passes: record.passed.filter { $0.date <= stop.from })
+                        passes: record.passed.filter { $0.date <= stop.from },
+                        batteryDrop: headDrop)
         let second = leg(of: record, track: tail, stops: remaining.filter { $0.from >= stop.to },
                          from: stop.to, to: record.endedAt,
                          distance: record.distanceMeters * (1 - headShare),
-                         passes: record.passed.filter { $0.date > stop.from })
+                         passes: record.passed.filter { $0.date > stop.from },
+                         batteryDrop: tailDrop)
         return [second, first]   // история идёт от новых к старым
     }
 
     private static func leg(of record: TripRecord, track: [TrackPoint], stops: [TripStop],
                             from: Date, to: Date, distance: CLLocationDistance,
-                            passes: [PassedCamera]) -> TripRecord {
+                            passes: [PassedCamera], batteryDrop: Int?) -> TripRecord {
         let speeds = track.map(\.speedKmh)
         return TripRecord(
             id: from.timeIntervalSince1970,
@@ -361,7 +384,8 @@ nonisolated enum TripHistory {
                 },
                 trackSpeeds: speeds),
             stops: stops.isEmpty ? nil : stops,
-            endedManually: record.endedManually)
+            endedManually: record.endedManually,
+            batteryDropPercent: batteryDrop)
     }
 
     private static func polylineLength(_ points: [TrackPoint]) -> Double {

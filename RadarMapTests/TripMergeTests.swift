@@ -170,6 +170,95 @@ final class TripMergeTests: XCTestCase {
                        "делить нечего — возвращаем запись как есть")
     }
 
+    /// Расход заряда при разделении делится, а не теряется.
+    ///
+    /// `TripMerge.merged` при склейке расходы СКЛАДЫВАЕТ, значит разделение
+    /// обязано быть обратной операцией — иначе «разделить и снова объединить»
+    /// стирает честно измеренную цифру. Делим по времени, а не по километрам:
+    /// батарея садится за часы, а в пробке километров нет вообще.
+    func testSplitDividesBatteryDropExactly() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+        let points = (0..<11).map { Double($0) }.flatMap { i -> [Double] in
+            let p = GeoMath.destination(from: base, bearing: 0, distanceMeters: i * 100)
+            return [p.latitude, p.longitude, 50]
+        }
+        let stopAt = GeoMath.destination(from: base, bearing: 0, distanceMeters: 500)
+        // Едем 600 с, стоим 600 с, едем ещё 800 с — доля первой ноги 600/1400.
+        let stop = TripStop(id: UUID(), lat: stopAt.latitude, lon: stopAt.longitude,
+                            from: start.addingTimeInterval(600),
+                            to: start.addingTimeInterval(1200))
+        let record = TripRecord(id: start.timeIntervalSince1970, startedAt: start,
+                                endedAt: start.addingTimeInterval(2000),
+                                distanceMeters: 1000, maxSpeedKmh: 60, passed: [],
+                                track: points, stops: [stop],
+                                batteryDropPercent: 10)
+
+        let legs = TripHistory.split(record, at: stop)
+        XCTAssertEqual(legs.count, 2)
+        let (second, first) = (legs[0], legs[1])
+        let head = try? XCTUnwrap(first.batteryDropPercent)
+        let tail = try? XCTUnwrap(second.batteryDropPercent)
+        XCTAssertNotNil(head, "первая нога потеряла расход заряда")
+        XCTAssertNotNil(tail, "вторая нога потеряла расход заряда")
+        XCTAssertEqual((head ?? 0) + (tail ?? 0), 10,
+                       "сумма половин обязана равняться исходной цифре ровно")
+        XCTAssertLessThan(head ?? 0, tail ?? 0,
+                          "первая нога короче по времени — и доля у неё меньше")
+    }
+
+    /// Неизвестный расход остаётся неизвестным у обеих ног: «−0 %» за поездку,
+    /// стоившую пять, хуже, чем промолчать (та же логика, что у mergedBatteryDrop).
+    func testSplitKeepsUnknownBatteryDropUnknown() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+        let points = (0..<11).map { Double($0) }.flatMap { i -> [Double] in
+            let p = GeoMath.destination(from: base, bearing: 0, distanceMeters: i * 100)
+            return [p.latitude, p.longitude, 50]
+        }
+        let stopAt = GeoMath.destination(from: base, bearing: 0, distanceMeters: 500)
+        let stop = TripStop(id: UUID(), lat: stopAt.latitude, lon: stopAt.longitude,
+                            from: start.addingTimeInterval(600),
+                            to: start.addingTimeInterval(1200))
+        let record = TripRecord(id: 1, startedAt: start,
+                                endedAt: start.addingTimeInterval(2000),
+                                distanceMeters: 1000, maxSpeedKmh: 60, passed: [],
+                                track: points, stops: [stop])
+
+        for leg in TripHistory.split(record, at: stop) {
+            XCTAssertNil(leg.batteryDropPercent)
+        }
+    }
+
+    /// Ретро-чистка выбрасывает ложные проезды камер — и НЕ должна попутно
+    /// стирать расход заряда: поле с дефолтом nil, а запись пересобиралась
+    /// вручную по полям, поэтому цифра исчезала при обновлении приложения.
+    func testSanitizeKeepsBatteryDrop() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+        let points = (0..<11).map { Double($0) }.flatMap { i -> [Double] in
+            let p = GeoMath.destination(from: base, bearing: 0, distanceMeters: i * 100)
+            return [p.latitude, p.longitude, 50]
+        }
+        // Камера в пяти километрах в сторону: трек к ней не подходил, значит
+        // это ложный проезд и чистка обязана его убрать.
+        let far = GeoMath.destination(from: base, bearing: 90, distanceMeters: 5000)
+        let ghost = PassedCamera(id: UUID(), cameraID: 9, typeRaw: "Стационар радар",
+                                 location: "мимо", speedKmh: 80,
+                                 date: start.addingTimeInterval(300),
+                                 lat: far.latitude, lon: far.longitude, limitKmh: 60)
+        let record = TripRecord(id: 1, startedAt: start,
+                                endedAt: start.addingTimeInterval(2000),
+                                distanceMeters: 1000, maxSpeedKmh: 80, passed: [ghost],
+                                track: points, batteryDropPercent: 7)
+
+        let (cleaned, changed) = TripHistory.sanitized([record])
+        XCTAssertTrue(changed, "ложный проезд обязан быть убран — иначе тест не о том")
+        XCTAssertEqual(cleaned.first?.passed.count, 0)
+        XCTAssertEqual(cleaned.first?.batteryDropPercent, 7,
+                       "чистка проездов стёрла расход заряда")
+    }
+
     // MARK: - Ручное объединение записей
 
     private let base = Date(timeIntervalSince1970: 1_800_000_000)   // 08:00 UTC

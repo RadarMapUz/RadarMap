@@ -141,7 +141,13 @@ final class ThermalService {
         }
     }
 
-    deinit {
+    /// Снос без прыжка на актор: SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
+    /// синтезирует isolated deinit КАЖДОМУ классу, а он в рантайме iOS 26
+    /// ведёт в free() по указателю, который никто не выделял (подробный
+    /// разбор — в MotionService). Этот класс был одним из двух, кому
+    /// пометку забыли поставить, — и единственным, кто в deinit ещё и
+    /// делает работу, то есть попадает в баг охотнее пустого.
+    nonisolated deinit {
         if let observer { NotificationCenter.default.removeObserver(observer) }
     }
 

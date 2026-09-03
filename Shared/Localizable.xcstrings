@@ -8038,23 +8038,6 @@
         }
       }
     },
-    "Попробуйте название улицы или ближайший ориентир.": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Попробуйте название улицы или ближайший ориентир."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ko‘cha nomini yoki eng yaqin mo‘ljalni kiriting."
-          }
-        }
-      }
-    },
     "Последние поездки": {
       "localizations": {
         "ru": {
@@ -13420,6 +13403,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "«Avto» — kunduzi yorug‘ asos (quyoshda qorasi yaltiraydi), kechasi doim qorong‘i. Interfeys qorong‘iligicha qoladi.\n\nXaritani nima chizishi — Apple, o‘z sxemamiz yoki dvijok — xaritadagi qatlamlar tugmasi bilan tanlanadi: natija o‘sha yerda ko‘rinadi va o‘zgarish darhol amal qiladi."
+          }
+        }
+      }
+    },
+    "Из своей карты · без сети": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из своей карты · без сети"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘z xaritangizdan · internetsiz"
+          }
+        }
+      }
+    },
+    "Карта загружается": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта загружается"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita yuklanmoqda"
+          }
+        }
+      }
+    },
+    "Нажмите дважды: первое касание спрашивает подтверждение": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нажмите дважды: первое касание спрашивает подтверждение"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikki marta bosing: birinchi tegish tasdiq so‘raydi"
+          }
+        }
+      }
+    },
+    "Отправляет отметку другим водителям. Удержание — выбор типа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправляет отметку другим водителям. Удержание — выбор типа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgini boshqa haydovchilarga yuboradi. Bosib turish — turini tanlash"
+          }
+        }
+      }
+    },
+    "Попробуйте название улицы или ближайший ориентир. Свои адреса ищутся и без сети — «улица, номер».": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Попробуйте название улицы или ближайший ориентир. Свои адреса ищутся и без сети — «улица, номер»."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ko‘cha nomini yoki eng yaqin mo‘ljalni kiritib ko‘ring. O‘z manzillaringiz internetsiz ham topiladi — «ko‘cha, raqam»."
+          }
+        }
+      }
+    },
+    "Точно?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Точно?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aniqmi?"
+          }
+        }
+      }
+    },
+    "С": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sh"
           }
         }
       }

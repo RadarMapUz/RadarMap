@@ -55,6 +55,12 @@ nonisolated enum RoadTiles {
         /// Только ближний охват: на охвате района полотно вырождается в линию,
         /// и возить туда контуры значит платить за то, чего не видно.
         case surface = "d"
+        /// Названия населённых пунктов. Сервер считает их с самого перехода
+        /// на формат 2, а приложение не забирало ни разу: случая в этом
+        /// перечислении просто не завели. Весь набор — 0,7 МБ на страну и
+        /// 0,2 КБ на тайл, и он единственное, что делает обзорный охват
+        /// читаемым: без имён это сеть серых линий без ответа на «где я».
+        case places = "n"
         /// Точечные объекты. Наборов ДВА: ближний посажен на детальную
         /// геометрию, дальний пересчитан по костяку района — там раздельные
         /// проезжие сведены в одну ось, и точка с детальной сети уехала бы от
@@ -65,7 +71,7 @@ nonisolated enum RoadTiles {
         /// Наборы местности разбираются в SketchArea, дорожные — в RoadLine.
         var isArea: Bool {
             switch self {
-            case .far, .streets, .yards, .points, .pointsFar: return false
+            case .far, .streets, .yards, .points, .pointsFar, .places: return false
             case .water, .green, .rail, .blocks, .sidewalks, .houses,
                  .surface: return true
             }
@@ -74,6 +80,9 @@ nonisolated enum RoadTiles {
         /// Набор точечных объектов: у него своя распаковка — одна координата
         /// вместо ломаной.
         var isPoints: Bool { self == .points || self == .pointsFar }
+
+        /// Набор названий: своя распаковка — одна координата и строка.
+        var isPlaces: Bool { self == .places }
 
         /// Очередь закачки: кого тянем первым, когда тайлов больше, чем
         /// соединений.
@@ -96,11 +105,12 @@ nonisolated enum RoadTiles {
             case .rail:      return 4
             case .blocks:    return 5
             case .pointsFar: return 6
-            case .points:    return 7
-            case .yards:     return 8
-            case .surface:   return 9
-            case .sidewalks: return 10
-            case .houses:    return 11
+            case .places:    return 7
+            case .points:    return 8
+            case .yards:     return 9
+            case .surface:   return 10
+            case .sidewalks: return 11
+            case .houses:    return 12
             }
         }
 
@@ -122,7 +132,7 @@ nonisolated enum RoadTiles {
             case .sidewalks: return .sidewalk
             case .houses: return .house
             case .surface: return nil
-            case .far, .streets, .yards, .points, .pointsFar: return nil
+            case .far, .streets, .yards, .points, .pointsFar, .places: return nil
             }
         }
     }
@@ -169,6 +179,10 @@ nonisolated enum RoadTiles {
         // ним. Всё это посчитано сборкой раз в неделю и лежит готовым; на
         // дальнем плане полотно вырождается в линию, и там штрих честнее.
         if span < SketchArea.Kind.road.maxSpanMeters { sets.insert(.surface) }
+        // Названия — начиная с того охвата, где с карты уходят улицы.
+        // Ближе них подписаны улицы, и второе имя поверх них — шум; дальше
+        // них имя посёлка единственное, что отличает город от степи.
+        if span >= RoadSketch.farNetworkSpan { sets.insert(.places) }
         // Точки — из того набора, что посчитан по РИСУЕМОЙ сети. Просить оба
         // разом значило бы возить вдвое больше ради слоя, из которого виден
         // ровно один.
@@ -358,6 +372,22 @@ nonisolated enum RoadTiles {
                                azimuthDegrees: Double(entry.flags & 0x7F) * 3,
                                widthMeters: Double((entry.flags >> 7) & 0x3F),
                                turns: turns)
+        }
+    }
+
+    /// Распаковать тайл названий.
+    ///
+    /// Формат — тот же, что у точек, плюс имя четвёртым элементом записи:
+    /// [ранг, биты, [lat, lon], "Имя"]. Ранг, которого приложение не знает,
+    /// пропускается, а не валит тайл: сервер вправе завести новый раньше, чем
+    /// выйдет сборка. Без имени запись бесполезна — подписывать нечем.
+    static func decodePlaces(_ data: Data) -> [SketchPlace]? {
+        guard let raw = decodeEntries(data, minimumCoordinates: 1) else { return nil }
+        return raw.compactMap { entry in
+            guard let rank = SketchPlace.Rank(rawValue: entry.code),
+                  let point = entry.points.first,
+                  !entry.name.isEmpty else { return nil }
+            return SketchPlace(coordinate: point, rank: rank, name: entry.name)
         }
     }
 

@@ -236,8 +236,14 @@ struct RoadSketchView: View {
         ForEach(Array(state.labels.prefix(RoadSketch.labelBudget).enumerated()),
                 id: \.offset) { _, label in
             Text(label.text)
-                .font(.rounded(11 * strokeScale, .semibold))
-                .foregroundStyle(SketchPalette.label)
+                // Кегль от ранга: название города обязано читаться раньше
+                // названия кишлака, а имя улицы тише обоих. Иерархия размером,
+                // а не цветом, — так устроена любая карта, и не из вкуса:
+                // цвет на схеме уже занят смыслом (вода, камера, маршрут).
+                .font(.rounded(11 * strokeScale * label.scale,
+                               label.isPlace ? .bold : .semibold))
+                .foregroundStyle(label.isPlace ? SketchPalette.placeLabel
+                                               : SketchPalette.label)
                 // Тень, а не подложка: подложка закрывает полотно, и на
                 // перекрёстке подпись прячет ровно то, ради чего смотрят.
                 .shadow(color: SketchPalette.ground, radius: 2 * strokeScale)

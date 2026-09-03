@@ -510,7 +510,7 @@ final class SketchState {
         }
         key = freshKey
         refreshRouteLayers(env)
-        refreshLabels(span: span)
+        refreshLabels(span: span, places: env.roads.places)
     }
 
     /// Подписи улиц под текущую точку зрения.
@@ -522,14 +522,37 @@ final class SketchState {
     /// Только на ближнем плане: на дальнем схема рисует костяк района, где
     /// раздельные проезжие сведены в одну ось, и подпись висела бы между
     /// двумя проезжими частями. Тот же порог, что у обстановки.
-    private func refreshLabels(span: Double) {
-        guard let scene, span <= RoadSketch.farNetworkSpan,
-              viewHeight > 0, viewWidth > 0 else {
+    private func refreshLabels(span: Double, places: [SketchPlace]) {
+        guard let scene, viewHeight > 0, viewWidth > 0 else {
             if !labels.isEmpty { labels = [] }
             return
         }
         let aspect = Double(viewWidth / viewHeight)
-        let anchor = CGPoint(x: meOffset.width, y: meOffset.height)
+        // Опора отсчёта — ЦЕНТР ВИДА, а не машина.
+        //
+        // Обычно это одно и то же, и разошлись они ровно тогда, когда осмотр
+        // перестал отменяться на каждом тике. Отведённый в сторону вид с
+        // опорой на машину означал бы, что подписи отбираются по прямоугольнику
+        // вокруг машины, а рисуются там, куда смотрят: на экране их не было бы
+        // вовсе, а за экраном — сколько угодно. Мировой слой во вью сдвинут на
+        // тот же viewOffset, так что это ещё и просто согласованность с ним.
+        let anchor = CGPoint(x: viewOffset.width, y: viewOffset.height)
+        // Дальше костяка района подписываются НЕ улицы, а населённые пункты.
+        //
+        // Улицы там не подписываются по замыслу: раздельные проезжие сведены
+        // в одну ось, и подпись висела бы между двумя проезжими частями. Но
+        // и молчать нельзя — остаётся сеть серых линий, по которой не понять,
+        // город это или трасса между кишлаками.
+        guard span <= RoadSketch.farNetworkSpan else {
+            let fresh = RoadSketch.placeLabels(
+                for: places,
+                anchor: CLLocationCoordinate2D(latitude: scene.anchorLatitude,
+                                               longitude: scene.anchorLongitude),
+                meOffset: anchor, courseDegrees: courseDegrees,
+                spanMeters: spanMeters, aspect: aspect, insets: insets)
+            if fresh != labels { labels = fresh }
+            return
+        }
         // Пока все подписи на экране и сеть та же — не трогаем: подпись,
         // пересаживаемая на каждом фиксе, ползала бы по улице.
         if !labels.isEmpty, labelsKey == key,

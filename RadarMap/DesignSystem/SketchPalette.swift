@@ -193,6 +193,13 @@ nonisolated enum SketchPalette {
                                       Tone(0.191, 0.200, 0.222)) }
     static var label: Color { labelTone.color }
 
+    /// Имя населённого пункта. Ярче названия улицы, и это не украшение:
+    /// на обзорном охвате оно единственное, что отвечает на вопрос «где я»,
+    /// а улиц там нет вовсе. Контраст к земле 12,5 против 8,5 у улицы.
+    static var placeLabelTone: Tone { pick(Tone(0.80, 0.82, 0.86),
+                                           Tone(0.09, 0.10, 0.12)) }
+    static var placeLabel: Color { placeLabelTone.color }
+
     /// Корпус светофора снизу: темнее верха, отчего предмет читается объёмным
     /// при одной заливке вместо трёх слоёв.
     static let signalCase = Color(red: 0.055, green: 0.062, blue: 0.075)

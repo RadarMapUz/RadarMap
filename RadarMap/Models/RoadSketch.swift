@@ -105,6 +105,87 @@ nonisolated enum RoadSketch {
         var point: CGPoint
         /// Направление улицы на экране, градусы.
         var angle: Double
+        /// Во сколько раз крупнее базового кегля. Единица — подпись улицы.
+        /// Название города обязано читаться раньше названия кишлака: на
+        /// обзорном охвате это и есть вся иерархия карты.
+        var scale: Double = 1
+        /// Название населённого пункта, а не улицы. Рисуется ярче и без
+        /// поворота вдоль линии: у города нет направления.
+        var isPlace: Bool = false
+    }
+
+    /// Подписи населённых пунктов на текущий кадр.
+    ///
+    /// Чистая функция и отдельная от `labels`: у улицы подпись садится ВДОЛЬ
+    /// линии и ищется по видимому куску, у города — точка и всё. Общего кода
+    /// между ними на три строки, а разного — на всю функцию.
+    ///
+    /// Порядок отбора — по рангу, потом по близости к середине вида: когда
+    /// имён больше, чем места, подписать надо город, а не махаллю рядом.
+    static func placeLabels(for places: [SketchPlace],
+                            anchor: CLLocationCoordinate2D,
+                            meOffset: CGPoint = .zero,
+                            courseDegrees: Double = 0,
+                            spanMeters: Double,
+                            aspect: Double = 0.5,
+                            insets: Insets = .none,
+                            limit: Int = labelBudget) -> [Label] {
+        guard spanMeters > 0, aspect > 0, !places.isEmpty else { return [] }
+        let marginY = labelMarginShare
+        let minY = insets.safeTop + marginY
+        let maxY = 1 - insets.safeBottom - marginY
+        let marginX = marginY / aspect
+        let metresPerLon = 111_320.0 * cos(anchor.latitude * .pi / 180)
+
+        struct Seat {
+            let label: Label
+            let screen: CGPoint
+            let priority: Int
+            let fromCentre: Double
+        }
+        let centre = CGPoint(x: 0.5, y: (minY + maxY) / 2)
+        var seats: [Seat] = []
+        for place in places where place.rank.isVisible(atSpan: spanMeters) {
+            guard !place.name.isEmpty else { continue }
+            let point = CGPoint(
+                x: (place.coordinate.longitude - anchor.longitude) * metresPerLon,
+                y: (place.coordinate.latitude - anchor.latitude) * 111_320.0)
+            let screen = screenPoint(point, meOffset: meOffset,
+                                     courseDegrees: courseDegrees,
+                                     spanMeters: spanMeters, aspect: aspect,
+                                     insets: insets)
+            guard screen.x >= marginX, screen.x <= 1 - marginX,
+                  screen.y >= minY, screen.y <= maxY else { continue }
+            seats.append(Seat(
+                label: Label(text: place.name, point: point, angle: 0,
+                             scale: place.rank.fontScale, isPlace: true),
+                screen: screen,
+                priority: place.rank.priority,
+                fromCentre: Double(hypot(screen.x - centre.x,
+                                         (screen.y - centre.y) * CGFloat(1 / aspect)))))
+        }
+        seats.sort {
+            $0.priority != $1.priority
+                ? $0.priority < $1.priority
+                : $0.fromCentre < $1.fromCentre
+        }
+
+        var out: [Label] = []
+        var placed: [CGPoint] = []
+        for seat in seats {
+            guard out.count < limit else { break }
+            // Одно имя в кадре: у крупного города в OSM бывает и узел, и
+            // граница, и обе приезжают своими записями.
+            guard !out.contains(where: { $0.text == seat.label.text }) else { continue }
+            // Ближе этого по экрану два имени читаются как одно.
+            guard !placed.contains(where: {
+                hypot(Double(seat.screen.x - $0.x),
+                      Double(seat.screen.y - $0.y)) < labelApartShare
+            }) else { continue }
+            placed.append(seat.screen)
+            out.append(seat.label)
+        }
+        return out
     }
 
     /// Краска на асфальте: зебра, стоп-линия. Отрезок ПОПЕРЁК проезжей части,

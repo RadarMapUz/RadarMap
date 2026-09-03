@@ -36,6 +36,7 @@ struct MapPointBar: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.rounded(20))
                         .foregroundStyle(Theme.textTertiary)
+                        .tapTarget()
                 }
                 .accessibilityLabel(Text("Закрыть"))
             }
@@ -91,6 +92,7 @@ struct ReportPickerBar: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.rounded(20))
                         .foregroundStyle(Theme.textTertiary)
+                        .tapTarget()
                 }
                 .accessibilityLabel(Text("Закрыть"))
             }

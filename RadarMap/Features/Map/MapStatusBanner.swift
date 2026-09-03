@@ -137,8 +137,7 @@ struct MapStatusBanner: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Theme.textTertiary)
-                    .padding(6)          // палец за рулём крупнее крестика
-                    .contentShape(Rectangle())
+                    .tapTarget()         // палец за рулём крупнее крестика
             }
             .accessibilityLabel(Text("Закрыть объявление"))
         }

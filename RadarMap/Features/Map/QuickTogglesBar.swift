@@ -24,6 +24,7 @@ struct QuickTogglesBar: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.rounded(18))
                         .foregroundStyle(Theme.textTertiary)
+                        .tapTarget()
                 }
                 .accessibilityLabel(Text("Закрыть"))
             }

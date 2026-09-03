@@ -48,6 +48,7 @@ struct TripEndCard: View {
                         .foregroundStyle(Theme.textTertiary)
                         .frame(width: 32, height: 32)
                         .background(Theme.surface, in: Circle())
+                        .tapTarget()
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Скрыть итог поездки"))

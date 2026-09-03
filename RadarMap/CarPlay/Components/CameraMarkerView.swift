@@ -74,8 +74,12 @@ final class CameraMarkerView: MKAnnotationView {
             guard let annotation = annotation as? CameraAnnotation else { return }
             centerOffset = .zero
             collisionMode = .circle
-            displayPriority = .defaultHigh
+            // Тир — до важности: маркер переиспользуется, и на нём ещё висит
+            // ключ кластеризации от прошлой камеры. `displayPriority` запускает
+            // пересборку групп немедленно, так что к этой строке ключ обязан
+            // быть уже от новой аннотации.
             applyTier(annotation.tier)
+            if displayPriority != .defaultHigh { displayPriority = .defaultHigh }
         }
     }
 
@@ -83,6 +87,11 @@ final class CameraMarkerView: MKAnnotationView {
         super.prepareForReuse()
         setTarget(false)
         applyTier(.near)
+        // Аннотации к этому моменту может уже не быть, и оба вызова выше тогда
+        // выходят по guard — маркер ушёл бы в пул с ключом чужой цели.
+        if clusteringIdentifier != Self.baseClusterID {
+            clusteringIdentifier = Self.baseClusterID
+        }
     }
 
     /// Важность маркера: дальние гасим, но не убираем — пропавшая камера хуже
@@ -98,7 +107,37 @@ final class CameraMarkerView: MKAnnotationView {
         // Слипшиеся маркеры собираются в счётчик вместо того, чтобы
         // прятать друг друга. Камера оповещения из кластеров исключена:
         // её нужно видеть отдельно и с пульсом.
-        clusteringIdentifier = tier == .target ? nil : "camera"
+        setClusterID(isTarget: tier == .target, cameraID: annotation.camera.id)
+    }
+
+    /// Ключ кластеризации — НИКОГДА не nil, и это не стиль, а починка падения.
+    ///
+    /// Раньше цель исключалась из кластеров через `clusteringIdentifier = nil`,
+    /// и на живом маркере, который MapKit уже держит в своей кластеризации, это
+    /// его ломает: следующее присваивание `displayPriority` синхронно, прямо
+    /// внутри сеттера, запускает пересборку групп, та доходит до
+    /// `_existingClusterViewsForClusterID:` с nil-идентификатором и кладёт nil
+    /// ключом в словарь — «key cannot be nil», SIGABRT. Четырнадцать падений с
+    /// 28 августа, все с этой подписью, все на карте машины.
+    ///
+    /// Своего ключа достаточно: группа собирается из ДВУХ и более маркеров с
+    /// одинаковым идентификатором, а ключ цели уникален по номеру камеры —
+    /// слипнуться ей не с кем, и nil в MapKit не попадает.
+    nonisolated static func clusterID(isTarget: Bool, cameraID: Int) -> String {
+        isTarget ? "camera.target.\(cameraID)" : baseClusterID
+    }
+
+    /// Общая группа обычных маркеров. Совпадает по значению с `reuseID`, но это
+    /// разные вещи: тот про пул переиспользования, этот про то, кто с кем
+    /// слипается в счётчик, — и разойтись они вправе.
+    nonisolated static let baseClusterID = "camera"
+
+    /// Присваиваем только на изменение: каждое присваивание идентификатора
+    /// заставляет MapKit пересобрать группы, а `setTarget` приходит каждый тик.
+    private func setClusterID(isTarget: Bool, cameraID: Int) {
+        let fresh = Self.clusterID(isTarget: isTarget, cameraID: cameraID)
+        guard clusteringIdentifier != fresh else { return }
+        clusteringIdentifier = fresh
     }
 
     /// Цель оповещения: крупнее, поверх соседей и с пульсирующим кольцом —
@@ -116,7 +155,18 @@ final class CameraMarkerView: MKAnnotationView {
                                 tier: isTarget ? .target : annotation.tier)
         }
         transform = isTarget ? CGAffineTransform(scaleX: 1.3, y: 1.3) : .identity
-        displayPriority = isTarget ? .required : .defaultHigh
+        // Ключ кластеризации — ДО важности, и порядок здесь существенный:
+        // присваивание `displayPriority` запускает пересборку групп сразу, и к
+        // этому моменту маркер обязан уже числиться в правильной группе. И
+        // обязательно симметрично: раньше цель получала свой ключ в applyTier,
+        // а обратно его возвращал только следующий пересчёт тиров в
+        // reloadCameras — тот реже, чем applyTarget, и в это окно на карте жил
+        // маркер с чужим ключом.
+        if let annotation = annotation as? CameraAnnotation {
+            setClusterID(isTarget: isTarget, cameraID: annotation.camera.id)
+        }
+        let priority: MKFeatureDisplayPriority = isTarget ? .required : .defaultHigh
+        if displayPriority != priority { displayPriority = priority }
         zPriority = isTarget ? .max : .defaultUnselected
 
         guard isTarget else {

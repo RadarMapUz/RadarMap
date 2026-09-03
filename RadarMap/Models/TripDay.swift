@@ -164,9 +164,18 @@ nonisolated enum TripDayBook {
         return days
     }
 
-    /// Дни, попадающие в интервал.
+    /// Дни, попадающие в интервал — ПОЛУИНТЕРВАЛ [start, end).
+    ///
+    /// `DateInterval.contains` включает оба конца, а `calendar.dateInterval(of:)`
+    /// отдаёт окна, где конец одного РАВЕН началу следующего. При этом
+    /// `TripDay.day` — всегда ровно полночь. Значит первый день текущей недели
+    /// проходил фильтр и прошлой недели тоже: `previousDistance` и
+    /// `previousRating` в PeriodSummary включали день, по которому считается
+    /// сам период, и дельта «стало лучше/хуже» врала на каждом переходе, если
+    /// в первый день периода ездили. Это не пограничный шум: у дневных
+    /// агрегатов совпадение с границей не случайность, а норма.
     static func days(_ days: [TripDay], in interval: DateInterval) -> [TripDay] {
-        days.filter { interval.contains($0.day) }
+        days.filter { $0.day >= interval.start && $0.day < interval.end }
     }
 
     /// Взвешенная сумма баллов окна и её вес — знаменатель самого рейтинга.
@@ -230,10 +239,11 @@ nonisolated enum RatingTrend {
 
     /// Последние `count` календарных недель, старые → новые (порядок оси).
     ///
-    /// Границы недель — полуинтервалы [start, end): `DateInterval.contains`
-    /// включает конец, и день, равный началу следующей недели, посчитался бы
-    /// в обеих. Для сводок периода это редкий пограничный шум, для графика
-    /// из 12 колонок — заметное враньё, поэтому здесь фильтр свой.
+    /// Границы недель — полуинтервалы [start, end): день, равный началу
+    /// следующей недели, иначе посчитался бы в обеих. Раньше фильтр здесь был
+    /// свой, потому что общий включал конец; теперь правило одно и живёт в
+    /// `TripDayBook.days(_:in:)` — двух разных ответов на «в каком окне этот
+    /// день» в проекте больше нет.
     static func weekly(days: [TripDay], count: Int,
                        calendar: Calendar = .current, now: Date = Date()) -> [Week] {
         guard count > 0,
@@ -241,7 +251,7 @@ nonisolated enum RatingTrend {
         else { return [] }
         var result: [Week] = []
         for _ in 0..<count {
-            let window = days.filter { $0.day >= interval.start && $0.day < interval.end }
+            let window = TripDayBook.days(days, in: interval)
             let score = window.reduce((sum: 0.0, weight: 0.0)) {
                 ($0.sum + $1.scoreSum, $0.weight + $1.scoreWeight)
             }

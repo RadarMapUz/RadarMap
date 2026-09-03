@@ -222,4 +222,61 @@ final class TripDayTests: XCTestCase {
         XCTAssertEqual(leading, (weekday - utc.firstWeekday + 7) % 7)
     }
 
+    /// Первый день периода принадлежит ТОЛЬКО этому периоду.
+    ///
+    /// `calendar.dateInterval(of:)` стыкует окна секунда в секунду, а
+    /// `DateInterval.contains` включает оба конца — при том, что `TripDay.day`
+    /// это всегда ровно полночь. Пока фильтр дней шёл через `contains`, день,
+    /// открывающий текущую неделю, проходил и фильтр прошлой: `previousDistance`
+    /// завышался на него, и дельта «стало лучше/хуже» врала на каждом переходе
+    /// периода, если в первый день ездили. Здесь это проверяется сложением.
+    func testPeriodStartDayCountsOnlyInItsOwnPeriod() {
+        let interval = StatsPeriod.week.interval(containing: now, calendar: utc)
+        // Якорь — середина текущей недели, чтобы первый её день был уже позади.
+        let anchor = interval.start.addingTimeInterval(3 * day)
+
+        func trip(at start: Date, km: Double) -> TripRecord {
+            TripRecord(id: start.timeIntervalSince1970, startedAt: start,
+                       endedAt: start.addingTimeInterval(1800),
+                       distanceMeters: km * 1000, maxSpeedKmh: 90,
+                       passed: [], score: 80)
+        }
+
+        let onBoundaryDay = trip(at: interval.start.addingTimeInterval(9 * 3600), km: 40)
+        let weekBefore = trip(at: interval.start.addingTimeInterval(-2 * day), km: 10)
+        let history = [onBoundaryDay, weekBefore]
+        let days = TripDayBook.rebuilt(from: history, calendar: utc)
+
+        let summary = TripHistory.summary(days: days, history: history, period: .week,
+                                          anchor: anchor, calendar: utc)
+
+        XCTAssertEqual(summary.distance, 40_000, accuracy: 1,
+                       "первый день недели обязан попасть в саму неделю")
+        XCTAssertEqual(summary.previousDistance, 10_000, accuracy: 1,
+                       "день, открывающий текущую неделю, посчитан ещё и в прошлой")
+    }
+
+    /// Тот же день не имеет права попасть в два соседних окна ни в каком месте
+    /// проекта: фильтр окна теперь один на всех (TripDayBook.days).
+    func testAdjacentWindowsNeverShareADay() {
+        let interval = StatsPeriod.week.interval(containing: now, calendar: utc)
+        guard let previous = StatsPeriod.week.previousInterval(containing: now,
+                                                               calendar: utc) else {
+            return XCTFail("не построился прошлый интервал")
+        }
+        XCTAssertEqual(previous.end, interval.start,
+                       "календарь стыкует окна встык — на этом и держится проверка")
+
+        let history = [
+            TripRecord(id: 1, startedAt: interval.start,
+                       endedAt: interval.start.addingTimeInterval(600),
+                       distanceMeters: 5000, maxSpeedKmh: 80, passed: [], score: 90),
+        ]
+        let days = TripDayBook.rebuilt(from: history, calendar: utc)
+
+        XCTAssertEqual(TripDayBook.days(days, in: interval).count, 1)
+        XCTAssertEqual(TripDayBook.days(days, in: previous).count, 0,
+                       "полночь начала окна принадлежит ему, а не предыдущему")
+    }
+
 }

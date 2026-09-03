@@ -16,6 +16,10 @@
 set -euo pipefail
 
 VERSION="${1:?номер версии правок (предыдущая +1)}"
+# Только цифры: строка уходит внутрь ssh-команды, то есть в шелл на VPS от
+# root. `publish_overrides.sh '1; systemctl stop radarmap-api'` исполнял там
+# всё после точки с запятой.
+[[ "$VERSION" =~ ^[0-9]+$ ]] || { echo "версия правок — только цифры: $VERSION"; exit 1; }
 DRY_RUN=0
 [ "${2:-}" = "--dry-run" ] && DRY_RUN=1
 

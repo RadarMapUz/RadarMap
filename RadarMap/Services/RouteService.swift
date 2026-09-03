@@ -232,7 +232,8 @@ final class RouteService {
         do {
             let built = try await calculate(from: source, to: destination, alternatives: alternatives)
             guard gen == generation else { return }   // пока считали — маршрут сбросили/заменили
-            await apply(built, name: name, destination: destination, cameras: cameras)
+            await apply(built, name: name, destination: destination,
+                        cameras: cameras, gen: gen)
         } catch RouteError.serverUnreachable {
             errorMessage = String(localized: "Нет связи с сервером маршрутов — проверьте интернет")
         } catch {
@@ -365,7 +366,8 @@ final class RouteService {
             }
             guard gen == generation else { return }   // маршрут успели сбросить/заменить
             rerouteFailures = 0
-            await apply(built, name: name, destination: destination, cameras: cameras)
+            await apply(built, name: name, destination: destination,
+                        cameras: cameras, gen: gen)
             onRerouted?()
         }
     }
@@ -619,7 +621,8 @@ final class RouteService {
     // MARK: - Применение результата
 
     private func apply(_ built: [BuiltVariant], name: String,
-                       destination: CLLocationCoordinate2D, cameras: [Camera]) async {
+                       destination: CLLocationCoordinate2D, cameras: [Camera],
+                       gen: Int) async {
         // Камеры по коридору каждого варианта считаем ВНЕ главного потока —
         // длинные маршруты не должны дёргать UI даже на старых устройствах.
         let inputs = built.filter { $0.points.count >= 2 }
@@ -634,6 +637,14 @@ final class RouteService {
                                          centerLat: centerLat, cameras: cameras)
             }
         }.value
+
+        // Второй раз, и это не дублирование проверки у вызывающего: тот
+        // сверял поколение ДО входа сюда, а внутри мы сами ушли в await на
+        // время подсчёта камер по коридору. Успел человек за это время нажать
+        // «отменить» или перестроить — generation вырос, и запись ниже вернула
+        // бы на карту маршрут, который уже отменён. Правило 12: после каждого
+        // await состояние перепроверяется, а не досчитывается по памяти.
+        guard gen == generation else { return }
 
         variants = inputs.enumerated().map { index, variant in
             Variant(id: index,

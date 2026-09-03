@@ -1429,20 +1429,42 @@ class Handler(BaseHTTPRequestHandler):
 
     # --- Вход ---
 
+    def _client_address(self):
+        """Адрес НАСТОЯЩЕГО клиента, а не TCP-пира.
+
+        За nginx пир всегда 127.0.0.1, поэтому и троттлинг перебора, и
+        петлевое послабление require_secure считались по петле. Первое — прямой
+        DoS против модерации: восемь неверных паролей откуда угодно блокировали
+        вход СРАЗУ ВСЕМ на пятнадцать минут, и повторять это можно было
+        бесконечно. Второе — дыра в самом require_secure: запрос по открытому
+        HTTP через nginx проходил как «локальный», хотя пришёл из интернета.
+
+        X-Real-IP верим ТОЛЬКО когда пир — петля, то есть заголовок поставил
+        наш же nginx; пришедший снаружи такой заголовок подделал бы клиент.
+        SSH-туннель идёт прямо на 8093, без nginx и без заголовка, — там
+        остаётся честная петля и послабление работает как раньше.
+        """
+        peer = self.client_address[0]
+        if peer.startswith("127.") or peer == "::1":
+            forwarded = (self.headers.get("X-Real-IP") or "").strip()
+            if forwarded:
+                return forwarded
+        return peer
+
     def _authorized(self):
         """Пропускать ли дальше. Заодно единственное место, где решается
         вопрос «безопасно ли вообще принимать пароль по этому соединению»."""
-        if not admin_auth.require_secure(self.headers, self.client_address[0]):
+        if not admin_auth.require_secure(self.headers, self._client_address()):
             return False
         return SESSIONS.valid(admin_auth.cookie_token(self.headers.get("Cookie")))
 
     def _send_login(self, message="", code=200):
-        secure = admin_auth.require_secure(self.headers, self.client_address[0])
+        secure = admin_auth.require_secure(self.headers, self._client_address())
         configured = bool(admin_auth.read_config().get("password_hash"))
         self._send(code, login_page(message, secure=secure, configured=configured))
 
     def _do_login(self, field):
-        address = self.client_address[0]
+        address = self._client_address()
         if not admin_auth.require_secure(self.headers, address):
             return self._send_login(code=403)
         # Перебор гасим ДО проверки пароля: иначе scrypt честно считает хэш
@@ -1460,10 +1482,16 @@ class Handler(BaseHTTPRequestHandler):
             # верный пароль и снова видит форму. Lax блокирует то же, ради чего
             # Strict и ставился, — межсайтовый POST, — но переход по своей же
             # ссылке не ломает.
+            # Secure — только когда соединение и правда TLS. Ставить его
+            # безусловно нельзя: панель штатно открывают и через SSH-туннель
+            # по http://127.0.0.1:8093, а часть браузеров такую куку не
+            # сохранит — человек введёт верный пароль и снова увидит форму.
+            https = (self.headers.get("X-Forwarded-Proto") or "").lower() == "https"
             self.send_header("Set-Cookie",
                              f"{admin_auth.SESSION_COOKIE}={token}; Path=/; "
-                             "HttpOnly; SameSite=Lax; Max-Age="
-                             f"{admin_auth.SESSION_TTL}")
+                             "HttpOnly; SameSite=Lax"
+                             + ("; Secure" if https else "")
+                             + f"; Max-Age={admin_auth.SESSION_TTL}")
             self.send_header("Content-Length", "0")
             return self.end_headers()
         SESSIONS.note_failure(address)
@@ -1478,7 +1506,15 @@ class Handler(BaseHTTPRequestHandler):
         return SESSIONS.name_of(token) or admin_auth.OWNER
 
     def _do_logout(self):
-        SESSIONS.drop(admin_auth.cookie_token(self.headers.get("Cookie")))
+        token = admin_auth.cookie_token(self.headers.get("Cookie"))
+        # Секрет перевыпускаем ТОЛЬКО по годной куке. Этот путь стоит до
+        # _authorized() — без этого выйти было бы нельзя, — а drop() обрывает
+        # разом ВСЕ выданные куки. Поэтому анонимный GET /logout (краулер,
+        # <img src> на чужой странице, curl в цикле) выкидывал из панели всех
+        # модераторов, и повторять это можно было сколько угодно. Куку в
+        # браузере всё равно гасим: по просроченной люди тоже нажимают «Выход».
+        if SESSIONS.valid(token):
+            SESSIONS.drop(token)
         self.send_response(303)
         self.send_header("Location", "/login")
         self.send_header("Set-Cookie",

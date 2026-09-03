@@ -1404,6 +1404,165 @@ class EditorApiTests(AdminTest):
         self.assertEqual(len(still["edits"]), 1)
 
 
+class SessionEdgeTests(unittest.TestCase):
+    """Границы сессии: чей это адрес и кто имеет право оборвать все куки.
+
+    Свой стенд и НЕ наследуясь от AdminTest — по той же причине, что у
+    AccountTests: здесь перевыпускается секрет подписи сессий, и общий стенд
+    после такого отвечал бы 401 всем остальным тестам на ровном месте.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.saved = (api.DB_PATH, admin.DB_PATH, admin.CAMERAS_PATH,
+                     admin_auth.CONFIG_PATH, COOKIE["value"])
+
+        handle = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        handle.close()
+        cls.db = handle.name
+        api.DB_PATH = admin.DB_PATH = cls.db
+        api.init_db()
+        admin.init_db()
+
+        cameras = tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w")
+        json.dump([], cameras)
+        cameras.close()
+        admin.CAMERAS_PATH = cameras.name
+        cls.cameras_path = cameras.name
+
+        conf = tempfile.NamedTemporaryFile(suffix=".conf", delete=False)
+        conf.close()
+        cls.conf = conf.name
+        admin_auth.CONFIG_PATH = cls.conf
+        admin_auth.write_password(TEST_PASSWORD, cls.conf)
+
+        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), admin.Handler)
+        cls.port = cls.server.server_address[1]
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        (api.DB_PATH, admin.DB_PATH, admin.CAMERAS_PATH,
+         admin_auth.CONFIG_PATH, COOKIE["value"]) = cls.saved
+        for path in (cls.db, cls.cameras_path, cls.conf):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+    def login(self, headers=None):
+        """Войти и вернуть (заголовок Cookie, все заголовки ответа)."""
+        data = urllib.parse.urlencode({"password": TEST_PASSWORD}).encode()
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/login",
+                                     data=data, method="POST")
+        for name, value in (headers or {}).items():
+            req.add_header(name, value)
+
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *args, **kwargs):
+                return None
+        opener = urllib.request.build_opener(NoRedirect)
+        try:
+            with opener.open(req, timeout=10) as resp:
+                head = dict(resp.headers)
+        except urllib.error.HTTPError as e:
+            head = dict(e.headers or {})
+        raw = head.get("Set-Cookie", "")
+        return (raw.split(";")[0] if raw else ""), head
+
+    def request(self, path, headers=None, cookie=None, fields=None):
+        data = urllib.parse.urlencode(fields).encode() if fields else None
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}",
+                                     data=data,
+                                     method="POST" if fields else "GET")
+        for name, value in (headers or {}).items():
+            req.add_header(name, value)
+        if cookie:
+            req.add_header("Cookie", cookie)
+
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *args, **kwargs):
+                return None
+        opener = urllib.request.build_opener(NoRedirect)
+        try:
+            with opener.open(req, timeout=10) as resp:
+                return resp.status, dict(resp.headers)
+        except urllib.error.HTTPError as e:
+            return e.code, dict(e.headers or {})
+
+    # --- адрес клиента ---
+
+    def test_throttle_counts_the_real_client_not_the_loopback_peer(self):
+        """Перебор с одного адреса не должен запирать панель остальным.
+
+        За nginx TCP-пир всегда 127.0.0.1, поэтому счётчик попыток считался по
+        петле: восемь неверных паролей откуда угодно блокировали вход СРАЗУ
+        ВСЕМ модераторам на пятнадцать минут, и повторять это можно было
+        бесконечно.
+        """
+        victim, bystander = "203.0.113.9", "203.0.113.10"
+        self.addCleanup(admin.SESSIONS.note_success, victim)
+        self.addCleanup(admin.SESSIONS.note_success, bystander)
+        for _ in range(admin_auth.MAX_ATTEMPTS):
+            admin.SESSIONS.note_failure(victim)
+
+        https = {"X-Forwarded-Proto": "https"}
+        code, _ = self.request("/login", {**https, "X-Real-IP": victim},
+                               fields={"password": "мимо"})
+        self.assertEqual(code, 429, "перебор с этого адреса обязан отсекаться")
+
+        code, _ = self.request("/login", {**https, "X-Real-IP": bystander},
+                               fields={"password": "мимо"})
+        self.assertEqual(code, 401,
+                         "чужой перебор запер вход всем модераторам сразу")
+
+    def test_plain_http_from_outside_is_not_treated_as_local(self):
+        # Раньше проходило: пир — 127.0.0.1, значит «локально», хотя запрос
+        # пришёл из интернета и пароль ехал открытым текстом.
+        code, _ = self.request("/login", {"X-Real-IP": "203.0.113.11",
+                                          "X-Forwarded-Proto": "http"},
+                               fields={"password": TEST_PASSWORD})
+        self.assertEqual(code, 403, "пароль принят по открытому HTTP извне")
+
+    def test_secure_cookie_only_over_tls(self):
+        _, head = self.login({"X-Forwarded-Proto": "https",
+                              "X-Real-IP": "203.0.113.13"})
+        self.assertIn("Secure", head.get("Set-Cookie", ""),
+                      "по TLS кука обязана быть Secure")
+
+        _, plain = self.login()
+        self.assertNotIn("Secure", plain.get("Set-Cookie", ""),
+                         "по SSH-туннелю Secure убьёт вход: куку не сохранят")
+
+    # --- выход ---
+
+    def test_anonymous_logout_does_not_kill_live_sessions(self):
+        """`/logout` стоит ДО проверки сессии — иначе выйти было бы нельзя, —
+        а гасит он секрет подписи, то есть все выданные куки разом. Значит
+        анонимный GET (краулер, <img src> на чужой странице, curl в цикле)
+        выкидывал из панели всех модераторов, и сколько угодно раз."""
+        live, _ = self.login()
+        self.assertTrue(live, "стенд не смог войти")
+
+        code, _ = self.request("/logout")
+        self.assertIn(code, (200, 303))
+
+        code, _ = self.request("/", cookie=live)
+        self.assertEqual(code, 200,
+                         "анонимный GET /logout оборвал живую сессию")
+
+    def test_logout_with_a_valid_cookie_still_ends_the_session(self):
+        # Обратная сторона: честный выход обязан работать как раньше.
+        live, _ = self.login()
+        self.assertEqual(self.request("/", cookie=live)[0], 200)
+
+        self.request("/logout", cookie=live)
+
+        code, _ = self.request("/", cookie=live)
+        self.assertEqual(code, 401, "выход по годной куке не оборвал сессию")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

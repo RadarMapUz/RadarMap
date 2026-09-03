@@ -88,6 +88,14 @@ struct RootView: View {
             env.startDrivingServices()
             guard hasCompletedOnboarding else { return }
             env.location.setForeground(true)
+            // И здесь тоже, а не только в onChange(of: scenePhase): SwiftUI не
+            // присылает onChange для НАЧАЛЬНОГО значения фазы, поэтому у
+            // прошедшего онбординг флаг оставался false до первого честного
+            // круга «свернул-развернул». А на нём стоит остановка опроса
+            // отметок: поездка, которая на холодном старте сама началась по
+            // CoreMotion и сама кончилась, гасила опрос треног, пока карта
+            // всё это время была на переднем плане.
+            env.setPhoneSceneActive(true)
         }
         .onChange(of: scenePhase) { _, phase in
             guard hasCompletedOnboarding else { return }

@@ -14,6 +14,17 @@ RadarMap (Xcode project name; product name "RadarMap", bundle `uz.radarmap.ios`)
 
 Single-scheme project (`RadarMap`). Four targets: the app (`uz.radarmap.ios`, which also hosts the CarPlay scene), `RadarMapWidgets` (`…ios.widgets` — Live Activity + home widget), `RadarWatch` (`…ios.watchkitapp`, watchOS companion, deploys **watchOS 11.0**), and `RadarMapTests` (`…ios.tests`, XCTest). App + widgets deploy to **iOS 18.0**; the test target and project baseline are iOS 26.2. All four targets sign with `DEVELOPMENT_TEAM = RL7M4Z58CJ` — the paid team. They must stay on one team: the app target used to sit on a personal team, and a personal team can register neither App Groups nor CarPlay, so every device install meant hand-editing the bundle id and emptying entitlements. The app target signs with `RadarMap/RadarMap.entitlements` on device and `RadarMap/RadarMapCarPlay.entitlements` on `iphonesimulator*` only — the simulator does not check the CarPlay entitlement against a profile, so the CarPlay icon appears without Apple's grant (application text: `docs/appstore/carplay-application.md`).
 
+**Build numbers in git are not what ships.** `GENERATE_INFOPLIST_FILE = YES`
+merges `CURRENT_PROJECT_VERSION` into `CFBundleVersion`, but the builds that
+actually reached TestFlight carried 38, 44 and 46 while the repo read 11–15 —
+Xcode's «Manage Version and Build Number» assigns its own number at upload. The
+cost is real: a crash arriving from «build 46» could not be mapped to a commit,
+which is exactly what makes MetricKit triage slow. The repo was moved to 47 to
+catch up; keep bumping it here and leave that checkbox off, so a field build
+names a commit. Field build numbers live in the diagnostics themselves —
+`crashDiagnostics[].diagnosticMetaData.appBuildVersion` (plus `appVersion` and
+`isTestFlightApp`) in the `metrics` table on the VPS.
+
 **Use the `mcp__xcode__*` tools for everything Xcode-related — building, tests, previews, build logs, diagnostics, and project-file edits. They are the only supported build/test path for this project — do not use `xcodebuild` or other CLI tools.** They drive the already-open Xcode instance, so they reuse its build state and are far faster on the iterative loop. If Xcode is not running, open the project in Xcode first rather than reaching for a CLI build.
 
 **Every `mcp__xcode__*` tool takes a `tabIdentifier`.** Call `mcp__xcode__XcodeListWindows` once at the start of a session to get it (it also reports the active scheme and run destination), then reuse that identifier for all subsequent calls.

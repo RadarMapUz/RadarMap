@@ -56,7 +56,7 @@ final class MapState {
     /// когда карта строго на север и он не значит ничего), «моё
     /// местоположение» и «по ходу движения». Все три — про одно, и Apple свела
     /// их в один контрол не от бедности.
-    enum Orientation: Equatable {
+    nonisolated enum Orientation: Equatable {
         /// Карту тянут рукой — она никуда не едет сама.
         case free
         /// Центр на себе, север вверху.
@@ -66,6 +66,27 @@ final class MapState {
     }
 
     private(set) var orientation: Orientation = .following
+
+    /// Ориентацию выбрали пальцем, а не вывел режим.
+    ///
+    /// Без этого флага выбор человека терялся ДВАЖДЫ за поездку: старт ставил
+    /// «по ходу движения», стоп возвращал на север — оба раза молча и поверх
+    /// нажатой кнопки. Тот же случай, что был с подложкой карты, и лечится тем
+    /// же правилом: выбранное человеком сильнее режима и держится до
+    /// следующего выбора (plan_app_ui.md, У10).
+    private(set) var orientationChosenByHand = false
+
+    /// Что делать с ориентацией на старте и стопе поездки; `nil` — не трогать.
+    ///
+    /// Свобода (карту отодвинули рукой) выбором не считается намеренно: она
+    /// наступает сама от протяжки, а поехавшая машина — новое положение дел, в
+    /// котором брошенная карта бесполезна. Кнопку же нажимают осознанно.
+    nonisolated static func orientationOnTripChange(active: Bool,
+                                                    current: Orientation,
+                                                    chosenByHand: Bool) -> Orientation? {
+        if chosenByHand, current != .free { return nil }
+        return active ? .heading : .following
+    }
 
     /// Куда повёрнут «верх экрана» карты, градусы от севера; nil — неизвестно
     /// (карта крутится сама за компасом устройства).
@@ -343,6 +364,7 @@ final class MapState {
     func cycleOrientation(coordinate: CLLocationCoordinate2D?,
                           course: CLLocationDirection, inTrip: Bool) {
         let next: Orientation = orientation == .following ? .heading : .following
+        orientationChosenByHand = true   // дальше режим её не перебивает
         apply(orientation: next, coordinate: coordinate, course: course, inTrip: inTrip)
     }
 

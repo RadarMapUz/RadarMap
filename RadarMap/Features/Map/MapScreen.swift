@@ -202,10 +202,18 @@ struct MapScreen: View {
         // (MapTickGates): onChange(locationTick) прямо здесь делал весь body
         // зависимым от тика — второй подписчик в обход правила изоляторов.
         .onChange(of: env.location.isTripActive) { _, active in
-            // В поездке карта сама встаёт «по ходу движения», после — назад на север.
-            map.apply(orientation: active ? .heading : .following,
-                      coordinate: env.location.currentCoordinate,
-                      course: env.location.currentCourse, inTrip: active)
+            // Карта сама встаёт «по ходу движения» на старте и возвращается на
+            // север после — но только если человек не выбирал ориентацию сам.
+            // Раньше выбор терялся дважды за поездку, молча и поверх нажатой
+            // кнопки (plan_app_ui.md, У10).
+            if let next = MapState.orientationOnTripChange(
+                active: active,
+                current: map.orientation,
+                chosenByHand: map.orientationChosenByHand) {
+                map.apply(orientation: next,
+                          coordinate: env.location.currentCoordinate,
+                          course: env.location.currentCourse, inTrip: active)
+            }
             if active {
                 withAnimation { tripEndRecord = nil }   // поехали снова — старый итог не актуален
                 // Поездка = спидометр: он строился ради батареи (чёрный OLED и

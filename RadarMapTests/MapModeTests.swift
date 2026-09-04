@@ -139,4 +139,34 @@ final class ThemePaletteTests: XCTestCase {
         // Исключение — ДТП: это событие, а не характеристика точки.
         XCTAssertEqual(CameraType.accident.tint, Theme.danger)
     }
+
+    // MARK: - Ориентация карты и старт/стоп поездки (У10)
+
+    /// Никто ничего не выбирал — режим вправе решать сам.
+    func testOrientationFollowsTripWhenNobodyChose() {
+        XCTAssertEqual(MapState.orientationOnTripChange(active: true, current: .following,
+                                                        chosenByHand: false), .heading)
+        XCTAssertEqual(MapState.orientationOnTripChange(active: false, current: .heading,
+                                                        chosenByHand: false), .following)
+    }
+
+    /// Выбор пальцем сильнее режима — и на старте, и на стопе.
+    ///
+    /// Это ровно тот случай, что был с подложкой карты: правило выглядело
+    /// разумным, а на деле дважды за поездку отменяло нажатую кнопку.
+    func testHandChoiceSurvivesBothEndsOfTheTrip() {
+        XCTAssertNil(MapState.orientationOnTripChange(active: true, current: .following,
+                                                      chosenByHand: true))
+        XCTAssertNil(MapState.orientationOnTripChange(active: false, current: .heading,
+                                                      chosenByHand: true))
+    }
+
+    /// Свобода — не выбор: её наступление означает протяжку пальцем, а
+    /// поехавшая машина делает брошенную карту бесполезной.
+    func testFreeMapReturnsToTheDriverWhenTripStarts() {
+        XCTAssertEqual(MapState.orientationOnTripChange(active: true, current: .free,
+                                                        chosenByHand: true), .heading)
+        XCTAssertEqual(MapState.orientationOnTripChange(active: false, current: .free,
+                                                        chosenByHand: true), .following)
+    }
 }

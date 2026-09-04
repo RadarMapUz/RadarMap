@@ -698,11 +698,6 @@ struct MapScreen: View {
                 .accessibilityAction(named: Text("Быстрые тумблеры")) {
                     withAnimation(.spring(duration: 0.3)) { showQuickToggles.toggle() }
                 }
-            if showQuickToggles {
-                QuickTogglesBar {
-                    withAnimation(.spring(duration: 0.3)) { showQuickToggles = false }
-                }
-            }
             // Разовые подсказки по жестам и экономии — по одной, не простынёй.
             if let hint = activeHint {
                 HintChip(text: hint.text)
@@ -719,6 +714,21 @@ struct MapScreen: View {
             // Turn-by-turn: ближайший манёвр — в поездке по маршруту.
             // Отдельная вью: дистанция до манёвра меняется каждый тик GPS.
             ManeuverBannerGate()
+            // Быстрые тумблеры — ПОСЛЕДНИМИ в стопке, и это не про красоту.
+            //
+            // Раскрывались они между HUD и манёвром, то есть сдвигали баннер
+            // манёвра вниз на свою высоту — треть экрана. Главный элемент
+            // навигации уезжал из-под взгляда ровно в тот момент, когда
+            // водитель тянется к экрану заглушить голос; вернуть его на место
+            // мог только повторный тап. Панель открывают осознанно и закрывают
+            // сразу, а поворот на перекрёстке ждать не умеет — поэтому растёт
+            // она вниз, поверх карты, и ничто над ней не двигается
+            // (plan_app_ui.md, У11).
+            if showQuickToggles {
+                QuickTogglesBar {
+                    withAnimation(.spring(duration: 0.3)) { showQuickToggles = false }
+                }
+            }
         }
     }
 

@@ -846,6 +846,27 @@ struct MapScreen: View {
                 }
                 .transition(.scale.combined(with: .opacity))
             }
+            // Семь функций, до которых в поездке было не добраться.
+            //
+            // Поиск, «Рядом», «Итоги», «Добавить камеру» и Настройки живут в
+            // нижнем баре, а бар показывается только в покое: стоило поездке
+            // начаться — и с главного экрана они пропадали все разом. Причина
+            // верная (за рулём экран отдан карте), следствие нет: адрес ищут и
+            // список камер смотрят именно в дороге, а единственным способом
+            // было остановить запись поездки — то есть испортить её же данные.
+            //
+            // Меню, а не пять кнопок: в колонке живёт то, чем управляют на
+            // ходу, остальное открывается одним тапом и одним взглядом
+            // (plan_app_ui.md, У6).
+            if mode.showsTripBar {
+                Menu {
+                    tripActionItems
+                } label: {
+                    CircleControlFace(systemName: "ellipsis")
+                }
+                .accessibilityLabel(Text("Ещё"))
+                .transition(.scale.combined(with: .opacity))
+            }
             // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
         .animation(.spring(duration: 0.3), value: mode.showsTripBar)
@@ -1147,14 +1168,7 @@ struct MapScreen: View {
             actionButton("Рядом", "list.bullet") { map.showNearbySheet = true }
             actionButton("Итоги", "chart.bar.fill") { map.showStats = true }
             Menu {
-                Button {
-                    withAnimation { map.isAddingCamera = true }
-                } label: {
-                    Label("Добавить камеру", systemImage: "plus.circle.fill")
-                }
-                Button { map.showSettings = true } label: {
-                    Label("Настройки", systemImage: "gearshape.fill")
-                }
+                moreActionItems
             } label: {
                 actionLabel("Ещё", "ellipsis.circle.fill")
             }
@@ -1167,6 +1181,36 @@ struct MapScreen: View {
             .strokeBorder(LinearGradient(colors: [.white.opacity(0.16), .white.opacity(0.02)],
                                          startPoint: .top, endPoint: .bottom), lineWidth: 1))
         .shadow(color: .black.opacity(0.3), radius: 14, y: 6)
+    }
+
+    /// Пункты меню поездки: то, что в покое лежит в нижнем баре.
+    ///
+    /// Один список на оба входа. Разойдутся они мгновенно, стоит завести
+    /// второй, — это уже было с двумя жёлтыми кнопками «Радар», у которых
+    /// одинаковый вид давал разное действие.
+    @ViewBuilder private var tripActionItems: some View {
+        Button { map.showSearch = true } label: {
+            Label("Поиск", systemImage: "magnifyingglass")
+        }
+        Button { map.showNearbySheet = true } label: {
+            Label("Рядом", systemImage: "list.bullet")
+        }
+        Button { map.showStats = true } label: {
+            Label("Итоги", systemImage: "chart.bar.fill")
+        }
+        moreActionItems
+    }
+
+    /// Редкое: в баре место занимало бы всегда, а нужно раз в месяц.
+    @ViewBuilder private var moreActionItems: some View {
+        Button {
+            withAnimation { map.isAddingCamera = true }
+        } label: {
+            Label("Добавить камеру", systemImage: "plus.circle.fill")
+        }
+        Button { map.showSettings = true } label: {
+            Label("Настройки", systemImage: "gearshape.fill")
+        }
     }
 
     private func actionButton(_ title: LocalizedStringKey, _ icon: String, tint: Color = Theme.textPrimary,

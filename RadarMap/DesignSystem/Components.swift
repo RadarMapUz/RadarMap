@@ -131,22 +131,38 @@ struct CircleControl: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.rounded(size > 48 ? 19 : 17, .semibold))
-                .foregroundStyle(tint)
-                .frame(width: size, height: size)
-                // Та же тёмная подложка: кнопки поверх карты обязаны читаться и
-                // на светлом фоне — иначе белая иконка на белом стекле пропадает.
-                .background(Theme.background.opacity(0.42), in: Circle())
-                .backport.glassEffect(.interactive(isEnabled: true), in: .circle)
-                // Тонкая световая кромка сверху — стекло ловит свет, как у системных кнопок.
-                .overlay(Circle().strokeBorder(
-                    LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.04)],
-                                   startPoint: .top, endPoint: .bottom), lineWidth: 1))
+            CircleControlFace(systemName: systemName, tint: tint, size: size)
                 .accessibilityLabel(Text(accessibilityLabel))
         }
         .buttonStyle(PressableStyle())
-        .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+    }
+}
+
+/// Облик круглой кнопки — отдельно от самой кнопки.
+///
+/// Тот же круг носит `Menu`, а меню не принимает `Button` своим label. Без
+/// этого разделения меню в колонке карты пришлось бы рисовать вторым набором
+/// тех же градиентов, и «один язык панелей» кончился бы на второй кнопке.
+/// Ровно так же в MapScreen отделён `actionLabel` от `actionButton`.
+struct CircleControlFace: View {
+    let systemName: String
+    var tint: Color = Theme.textPrimary
+    var size: CGFloat = 46
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.rounded(size > 48 ? 19 : 17, .semibold))
+            .foregroundStyle(tint)
+            .frame(width: size, height: size)
+            // Та же тёмная подложка: кнопки поверх карты обязаны читаться и
+            // на светлом фоне — иначе белая иконка на белом стекле пропадает.
+            .background(Theme.background.opacity(0.42), in: Circle())
+            .backport.glassEffect(.interactive(isEnabled: true), in: .circle)
+            // Тонкая световая кромка сверху — стекло ловит свет, как у системных кнопок.
+            .overlay(Circle().strokeBorder(
+                LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.04)],
+                               startPoint: .top, endPoint: .bottom), lineWidth: 1))
+            .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
     }
 }
 

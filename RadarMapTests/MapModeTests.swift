@@ -169,4 +169,26 @@ final class ThemePaletteTests: XCTestCase {
         XCTAssertEqual(MapState.orientationOnTripChange(active: false, current: .free,
                                                         chosenByHand: true), .following)
     }
+
+    // MARK: - Кнопка «Начать поездку» (У3)
+
+    /// Приложение умеет начать поездку само — значит не спрашивает.
+    func testStartButtonStepsBackWhenTheTripStartsItself() {
+        XCTAssertEqual(TripStartPrompt.prominence(startsByItself: true), .secondary)
+    }
+
+    /// Никто, кроме человека, поездку не начнёт — кнопка обязана быть главной.
+    func testStartButtonStaysMainWhenNothingElseWillStartTheTrip() {
+        XCTAssertEqual(TripStartPrompt.prominence(startsByItself: false), .primary)
+    }
+
+    /// Связь с настройкой: «авто» и «умный» стартуют сами, «ручной» — нет.
+    func testEveryStartModeGetsTheRightProminence() {
+        XCTAssertEqual(TripStartPrompt.prominence(startsByItself: TripStartMode.auto.usesMotion),
+                       .secondary)
+        XCTAssertEqual(TripStartPrompt.prominence(startsByItself: TripStartMode.smart.usesMotion),
+                       .secondary)
+        XCTAssertEqual(TripStartPrompt.prominence(startsByItself: TripStartMode.manual.usesMotion),
+                       .primary)
+    }
 }

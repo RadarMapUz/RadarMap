@@ -1081,9 +1081,38 @@ struct MapScreen: View {
         }
     }
 
-    /// CTA: градиент со световой кромкой сверху и двойной тенью — премиальный
-    /// объём, высота 52 в линию с кругами Дом/Работа.
+    /// «Начать поездку»: громкость кнопки решает правило, а не вёрстка.
+    @ViewBuilder
     private var tripButton: some View {
+        switch TripStartPrompt.prominence(
+            startsByItself: env.settings.tripStartMode.usesMotion) {
+        case .primary:   tripButtonPrimary
+        case .secondary: tripButtonSecondary
+        }
+    }
+
+    /// Запасной выход там, где поездка начнётся и без него. Язык тот же, что у
+    /// «Я пассажир»: серый текст на Theme.surface — видно, но не кричит.
+    private var tripButtonSecondary: some View {
+        Button {
+            toggleTrip()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "play.fill").font(.rounded(11, .semibold))
+                Text("Начать поездку").font(.rounded(13, .semibold))
+            }
+            .foregroundStyle(Theme.textSecondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(Theme.surface, in: Capsule())
+        }
+        .buttonStyle(PressableStyle())
+    }
+
+    /// CTA: градиент со световой кромкой сверху и двойной тенью — премиальный
+    /// объём, высота 52 в линию с кругами Дом/Работа. Остаётся тем, у кого
+    /// автостарт выключен: без нажатия поездки не будет вовсе.
+    private var tripButtonPrimary: some View {
         Button {
             toggleTrip()
         } label: {

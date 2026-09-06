@@ -19,6 +19,9 @@
 //
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 enum Theme {
 
@@ -198,8 +201,54 @@ extension Font {
         return best
     }
 
+    // MARK: - Системное «Размер текста»
+    //
+    // Font.system(size:) не масштабируется ВООБЩЕ. Человек, увеличивший текст в
+    // настройках iOS, не получал от приложения ничего — а это приложение, на
+    // которое смотрят за рулём и в которое приходят не только двадцатилетние.
+    //
+    // Потолок разный по кеглю, и это не перестраховка. Цифра скорости видна с
+    // вытянутой руки и без роста, а карточка вокруг неё тесная: плюс треть
+    // выбьет цифру за её пределы, и «доступность» обернётся нечитаемым HUD.
+    // Мелкий текст растёт полностью — он и есть нечитаемый.
+
+    /// Насколько увеличить кегль. Чистое правило, отдельно от того, откуда
+    /// взялся коэффициент, — иначе его нельзя проверить.
+    nonisolated static func typeFactor(raw: Double, size: CGFloat) -> Double {
+        let ceiling: Double = size >= 20 ? 1.10 : 1.30
+        return min(max(raw, 0.9), ceiling)
+    }
+
+    #if canImport(UIKit)
+    /// Коэффициент считается ОДИН раз на изменение настройки, а не на каждый
+    /// `Text`: `rounded` зовут сотни раз за кадр, и поход в UIKit на каждый из
+    /// них свёл бы на нет работу по изоляции пересборок.
+    @MainActor private static var factorCache: (category: UIContentSizeCategory,
+                                                value: Double)?
+    #endif
+
+    @MainActor private static var rawTypeFactor: Double {
+        #if canImport(UIKit)
+        let traits = UITraitCollection.current
+        let category = traits.preferredContentSizeCategory
+        if let cache = factorCache, cache.category == category { return cache.value }
+        let reference: CGFloat = 17
+        let scaled = UIFontMetrics(forTextStyle: .body)
+            .scaledValue(for: reference, compatibleWith: traits)
+        let value = reference > 0 ? Double(scaled / reference) : 1
+        factorCache = (category, value)
+        return value
+        #else
+        // watchOS: UIKit нет, а системный кегль там свой — не наше дело.
+        1
+        #endif
+    }
+
     static func rounded(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .system(size: snapType(size), weight: weight, design: .rounded)
+        let step = snapType(size)
+        let factor = typeFactor(raw: rawTypeFactor, size: step)
+        return .system(size: (step * CGFloat(factor)).rounded(),
+                       weight: weight, design: .rounded)
     }
 
     /// Кегль ВНЕ шкалы — для подписей, растущих вместе с масштабом схемы.

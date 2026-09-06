@@ -48,4 +48,32 @@ final class TypeScaleTests: XCTestCase {
         XCTAssertEqual(Theme.snapType(9), 10)
         XCTAssertEqual(Theme.snapType(48), 30)
     }
+
+    // MARK: - Системное «Размер текста» (Д2)
+
+    /// Мелкий текст растёт полностью — он и есть нечитаемый.
+    func testSmallTextGrowsToTheFullCeiling() {
+        XCTAssertEqual(Theme.typeFactor(raw: 1.6, size: 12), 1.30, accuracy: 0.001)
+        XCTAssertEqual(Theme.typeFactor(raw: 1.2, size: 12), 1.20, accuracy: 0.001)
+    }
+
+    /// Крупный — почти нет: цифра скорости и так видна, а карточка вокруг
+    /// тесная, и рост на треть выбьет её за пределы.
+    func testLargeTextIsHeldBack() {
+        XCTAssertEqual(Theme.typeFactor(raw: 1.6, size: 30), 1.10, accuracy: 0.001)
+        XCTAssertEqual(Theme.typeFactor(raw: 1.6, size: 20), 1.10, accuracy: 0.001)
+    }
+
+    /// Кто уменьшил текст в системе — тоже человек, но не до нечитаемости.
+    func testShrinkingIsAllowedButBounded() {
+        XCTAssertEqual(Theme.typeFactor(raw: 0.95, size: 12), 0.95, accuracy: 0.001)
+        XCTAssertEqual(Theme.typeFactor(raw: 0.5, size: 12), 0.9, accuracy: 0.001)
+    }
+
+    /// Обычная настройка ничего не меняет — сегодняшний вид остаётся собой.
+    func testDefaultSettingChangesNothing() {
+        for step in Theme.typeSteps {
+            XCTAssertEqual(Theme.typeFactor(raw: 1, size: step), 1, accuracy: 0.001)
+        }
+    }
 }

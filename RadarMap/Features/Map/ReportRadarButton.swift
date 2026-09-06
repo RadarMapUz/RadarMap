@@ -206,18 +206,17 @@ struct ReportRadarButton: View {
             LinearGradient(colors: [background.opacity(0.98), background.opacity(0.72)],
                            startPoint: .top, endPoint: .bottom), in: Capsule())
         .overlay(Capsule().strokeBorder(
-            LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.03)],
-                           startPoint: .top, endPoint: .bottom), lineWidth: 1))
+            Theme.edgeAccent, lineWidth: 1))
         // Свечение вместо рамки: кнопка должна находиться боковым зрением
         // на чёрном экране, не крича громче предупреждения о камере.
         .shadow(color: background.opacity(0.35), radius: 14, y: 5)
-        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+        .liftAccent()
     }
 
     /// Строка маршрута: компактный квадрат в ряду других кнопок.
     private var compactLabel: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous)
                 .fill(background.gradient)
             if isSending {
                 ProgressView().controlSize(.small).tint(.white)

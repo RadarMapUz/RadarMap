@@ -1091,12 +1091,11 @@ struct MapScreen: View {
                 LinearGradient(colors: [Theme.success.opacity(0.98), Theme.success.opacity(0.72)],
                                startPoint: .top, endPoint: .bottom), in: Capsule())
             .overlay(Capsule().strokeBorder(
-                LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.03)],
-                               startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                Theme.edgeAccent, lineWidth: 1))
         }
         .buttonStyle(PressableStyle())
         .shadow(color: Theme.success.opacity(0.35), radius: 14, y: 5)
-        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+        .liftAccent()
     }
 
     /// Док действий: стекло со световой кромкой и глубокая тень — в одном
@@ -1120,9 +1119,8 @@ struct MapScreen: View {
         .padding(.vertical, 7)
         .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerPanel))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
-            .strokeBorder(LinearGradient(colors: [.white.opacity(0.16), .white.opacity(0.02)],
-                                         startPoint: .top, endPoint: .bottom), lineWidth: 1))
-        .shadow(color: .black.opacity(0.3), radius: 14, y: 6)
+            .strokeBorder(Theme.edgePanel, lineWidth: 1))
+        .liftPanel()
     }
 
     /// Пункты меню поездки: то, что в покое лежит в нижнем баре.

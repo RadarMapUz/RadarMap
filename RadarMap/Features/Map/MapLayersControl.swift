@@ -91,9 +91,8 @@ struct MapLayersControl: View {
                     in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
         .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerPanel))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
-            .strokeBorder(LinearGradient(colors: [.white.opacity(0.16), .white.opacity(0.02)],
-                                         startPoint: .top, endPoint: .bottom), lineWidth: 1))
-        .shadow(color: .black.opacity(0.3), radius: 14, y: 6)
+            .strokeBorder(Theme.edgePanel, lineWidth: 1))
+        .liftPanel()
         .transition(.scale(scale: 0.86, anchor: .bottomTrailing).combined(with: .opacity))
     }
 

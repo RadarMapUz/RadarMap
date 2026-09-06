@@ -38,8 +38,7 @@ struct GlassCard<Content: View>: View {
             .backport.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
             // Световая кромка сверху — единый премиальный язык стекла в приложении.
             .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(LinearGradient(colors: [.white.opacity(0.16), .white.opacity(0.02)],
-                                             startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                .strokeBorder(Theme.edgePanel, lineWidth: 1))
             .shadow(color: .black.opacity(0.25), radius: 14, y: 6)
     }
 }
@@ -160,9 +159,27 @@ struct CircleControlFace: View {
             .backport.glassEffect(.interactive(isEnabled: true), in: .circle)
             // Тонкая световая кромка сверху — стекло ловит свет, как у системных кнопок.
             .overlay(Circle().strokeBorder(
-                LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.04)],
-                               startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                Theme.edgeControl, lineWidth: 1))
             .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+    }
+}
+
+/// Подъём над картой — вторая половина той же поверхности, что и кромка.
+///
+/// Названы только ДВЕ тени из семи, и это не полумера: именно эти две
+/// повторяются и означают одну роль. Остальные пять — по одной на место
+/// (свечение CTA, полноэкранное предупреждение, маркер), и заводить им токены
+/// значило бы завести словарь из синонимов.
+extension View {
+    /// Панель поверх карты: карточка, бар действий, панель слоёв.
+    func liftPanel() -> some View {
+        shadow(color: .black.opacity(0.3), radius: 14, y: 6)
+    }
+
+    /// Ближняя тень акцентной кнопки — та, что даёт объём под пальцем. Ходит
+    /// в паре с цветным свечением, поэтому названа отдельно от него.
+    func liftAccent() -> some View {
+        shadow(color: .black.opacity(0.25), radius: 4, y: 2)
     }
 }
 

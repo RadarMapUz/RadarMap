@@ -55,7 +55,7 @@ struct StopTripButton: View {
             .frame(minWidth: 44)
             .frame(height: 44)
             .background(Theme.danger.gradient,
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
         }
         .buttonStyle(.plain)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isArmed)

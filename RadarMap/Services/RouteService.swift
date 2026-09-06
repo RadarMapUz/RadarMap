@@ -102,6 +102,15 @@ final class RouteService {
                                                "RouteService.onManeuver") }
     }
 
+    /// Тип впервые произнесённого манёвра — для суточного счётчика. Отдельно
+    /// от `onManeuver`: тот несёт фразу и срабатывает до трёх раз на манёвр, а
+    /// считать надо манёвры, а не повторы. Этот счётчик поймал бы «поверните
+    /// направо» на прямой дороге за один день (plan_algorithms.md, А3).
+    @ObservationIgnored var onManeuverSpoken: ((String) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onManeuverSpoken,
+                                               "RouteService.onManeuverSpoken") }
+    }
+
     @ObservationIgnored private var offRouteTicks = 0
     @ObservationIgnored private var lastSplitAlong: CLLocationDistance = -1
     @ObservationIgnored private var lastRebuildAt: Date = .distantPast
@@ -409,6 +418,11 @@ final class RouteService {
             announcedStage[index] = 2
             onManeuver?(String(format: String(localized: "Через %lld метров — %@"),
                                Int((distance / 100).rounded() * 100), step.text))
+        }
+        // Считаем манёвр один раз — при первом объявлении. Хранимые ступени
+        // это 0…2, поэтому «было 3» означает «до сих пор не объявляли».
+        if stage == 3, announcedStage[index] != nil {
+            onManeuverSpoken?(step.kind?.rawValue ?? "unknown")
         }
     }
 

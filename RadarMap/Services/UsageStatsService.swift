@@ -82,7 +82,21 @@ final class UsageStatsService {
     }
 
     func noteAlert() { note { $0.alerts += 1 } }
-    func notePass() { note { $0.passes += 1 } }
+    /// Проезд камеры и то, чем мы его судили.
+    ///
+    /// Раньше метод существовал, но не вызывался ниоткуда — счётчик проездов в
+    /// суточном отчёте был всегда нулевым. Теперь он подключён и заодно несёт
+    /// источник лимита.
+    func notePass(limitSource: String) {
+        note {
+            $0.passes += 1
+            $0.limitSource[limitSource, default: 0] += 1
+        }
+    }
+
+    func noteManeuver(_ kind: String) { note { $0.maneuvers[kind, default: 0] += 1 } }
+
+    func noteTripDropped(_ reason: String) { note { $0.tripsDropped[reason, default: 0] += 1 } }
     func noteReport() { note { $0.reports += 1 } }
     func noteScreen(_ name: String) { note { $0.screens[name, default: 0] += 1 } }
 

@@ -138,6 +138,7 @@ final class TripStats {
         // Склейка — самый частый ответ на «поездки нет»: она есть, но внутри
         // предыдущей записи. В журнале это должно быть видно.
         Log.trips.notice("поездка продолжена склейкой: запись от \(record.startedAt, privacy: .public), \(Int(record.distanceMeters), privacy: .public) м")
+        noteDropped("merged")
         history.removeAll { $0.id == record.id }
         // Запись возвращается в живую сессию — вычитаем её из дневного агрегата,
         // иначе после финиша склеенной поездки день посчитает её дважды.
@@ -228,6 +229,15 @@ final class TripStats {
 
     /// `endedManually` — нажали «Завершить» (а не автостоп по CoreMotion).
     /// Флаг едет в запись: он запрещает склейку следующей поездки (см. TripMerge).
+    /// Поездки не стало, и вот почему. Строка едет в суточный отчёт счётчиком:
+    /// `short`, `merged`, `notDriver`, `crashShort`.
+    @ObservationIgnored var onTripDropped: ((String) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onTripDropped,
+                                               "TripStats.onTripDropped") }
+    }
+
+    func noteDropped(_ reason: String) { onTripDropped?(reason) }
+
     func finish(endedManually: Bool = true, batteryPercent: Int? = nil) {
         finishedDuration = durationSeconds
         // Поездка завершена штатно — страховочный слепок больше не нужен.
@@ -244,6 +254,7 @@ final class TripStats {
         }
         guard distanceMeters >= 100 else {
             Log.trips.notice("поездка не сохранена: \(Int(distanceMeters), privacy: .public) м, короче порога 100 м")
+            noteDropped("short")
             return
         }
         // Рейтинг считаем по сырому треку (упрощённый теряет пики скорости).
@@ -868,6 +879,7 @@ final class TripStats {
         defer { removeCheckpoint() }
         guard let record = Self.record(from: snapshot) else {
             Log.trips.notice("слепок незавершённой поездки короче 100 м — не восстановлен")
+            noteDropped("crashShort")
             return
         }
         history.insert(record, at: 0)

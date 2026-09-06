@@ -120,6 +120,14 @@ final class LocationService: NSObject {
                                                "LocationService.onTripStateChanged") }
     }
 
+    /// Записан проезд камеры; строка — чем мы его судили: `tag`, `assumed`
+    /// или `none`. Именно из проезда растут деньги, рейтинг и тишина, поэтому
+    /// источник лимита считается здесь, а не на каждом тике.
+    @ObservationIgnored var onPassRecorded: ((String) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onPassRecorded,
+                                               "LocationService.onPassRecorded") }
+    }
+
     /// Точка последнего пере-тайлинга. Координата, а не `CLLocation`: расстояние
     /// до неё меряется тем же `GeoMath.fastDistance`, что и всё остальное в
     /// пайплайне, и не создаёт двух объектов на каждый тик ради одного числа.
@@ -336,6 +344,7 @@ final class LocationService: NSObject {
             // ответить, записи не будет вовсе, и без журнала это неотличимо
             // от потери (docs/plan_drive_complaints.md, Ж4).
             Log.trips.notice("автостарт отклонён: режим «умный», машина незнакомая — ждём ответа «вы за рулём?»")
+            trip.noteDropped("notDriver")
             notifier.askDriverCheck()
             return
         }
@@ -483,6 +492,8 @@ final class LocationService: NSObject {
         for pass in passes {
             trip.registerPass(camera: pass.camera, speedKmh: pass.speedKmh,
                               limitKmh: pass.limitKmh, limitAssumed: pass.limitAssumed)
+            onPassRecorded?(pass.limitKmh == nil ? "none"
+                            : (pass.limitAssumed ? "assumed" : "tag"))
         }
     }
 

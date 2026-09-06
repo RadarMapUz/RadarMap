@@ -188,6 +188,13 @@ final class AppEnvironment {
         // а звать его было некому. Главная цифра воронки — «сколько раз в день
         // приложение реально предупредило» — была ложью.
         location.onAlertFired = { [weak usage] in usage?.noteAlert() }
+        // Качество решений, а не только их число (plan_algorithms.md, А3).
+        // Счётчик проездов был такой же ложью, что и счётчик оповещений:
+        // notePass существовал и не звался ниоткуда. Теперь он подключён и
+        // заодно приносит источник лимита, которым проезд судили.
+        location.onPassRecorded = { [weak usage] source in usage?.notePass(limitSource: source) }
+        route.onManeuverSpoken = { [weak usage] kind in usage?.noteManeuver(kind) }
+        trip.onTripDropped = { [weak usage] reason in usage?.noteTripDropped(reason) }
         // Снап отметки на ось дороги и очередь без сети — обе зависимости
         // слабые: отметка обязана уходить и когда тайлов нет, и когда сеть
         // молчит.

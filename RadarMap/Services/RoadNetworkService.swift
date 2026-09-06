@@ -124,6 +124,10 @@ final class RoadNetworkService {
     }
     /// Версия действующего индекса. Старый формат остаётся рабочим: сервер
     /// публикует оба, пока в проде есть сборки, знающие только его.
+    /// Монитор сети — слабо, как у отметок: тайлы обязаны отдаваться с диска и
+    /// когда монитора нет вовсе.
+    @ObservationIgnored weak var network: NetworkMonitor?
+
     @ObservationIgnored private var indexVersion = RoadTiles.formatVersionV2
 
     // MARK: - Старт и индекс
@@ -400,9 +404,18 @@ final class RoadNetworkService {
             return
         }
 
+        // Связи нет — в сеть не идём вовсе.
+        //
+        // Комментарий ниже («попробуем при следующем ensureCoverage») описывал
+        // правильное поведение при ОДИНОЧНОЙ ошибке, но на дороге без покрытия
+        // оборачивался другим: десятки непокрытых тайлов пробовались заново на
+        // каждом тике приборки, по шесть соединений разом, час за часом. Это
+        // ровно та дорога между городами, ради которой заведён NetworkMonitor.
+        // Диск при этом читается как читался — кэш работает и без сети.
+        guard network?.isOnline ?? true else { return }
         guard let data = try? await api.getData(
             "roads/" + RoadTiles.fileName(key: key, version: indexVersion)) else {
-            // Сеть — не приговор: попробуем при следующем ensureCoverage.
+            // Одиночная ошибка — не приговор: попробуем при следующем ensureCoverage.
             return
         }
         let directory = self.directory
@@ -457,8 +470,9 @@ final class RoadNetworkService {
             return fromDisk
         }
 
-        guard let data = try? await api.getData(
-            "roads/" + RoadTiles.fileName(key: key, version: indexVersion))
+        guard network?.isOnline ?? true,
+              let data = try? await api.getData(
+                "roads/" + RoadTiles.fileName(key: key, version: indexVersion))
         else { return nil }
         let directory = self.directory
         let decoded = await Task.detached(priority: .utility) { () -> AddressBook? in

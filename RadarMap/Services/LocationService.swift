@@ -120,6 +120,28 @@ final class LocationService: NSObject {
                                                "LocationService.onTripStateChanged") }
     }
 
+    /// «Похоже, вы едете, а поездка не включена».
+    ///
+    /// Грубый флаг вместо сырой скорости — и это про производительность, а не
+    /// про удобство. Нижние панели решают по нему, какую плашку показать, и
+    /// пока они читали `speedKmh`, тело главного экрана зависело от значения,
+    /// которое пишется КАЖДЫМ фиксом: экран с картой и маркерами пересобирался
+    /// раз в секунду ради строки, меняющейся раз в поездку.
+    ///
+    /// Здесь же гистерезис: у самого порога сглаженная скорость колеблется, а
+    /// каждое переключение флага — это пересборка панелей.
+    private(set) var isProbablyDriving = false
+
+    /// Чистое правило флага — отдельно, чтобы его можно было проверить.
+    nonisolated static func probablyDriving(was: Bool, speedKmh: Double,
+                                            tripActive: Bool) -> Bool {
+        if tripActive { return false }
+        let threshold = was
+            ? AppConfig.speakSpeedThresholdKmh - AppConfig.drivingHintHysteresisKmh
+            : AppConfig.speakSpeedThresholdKmh
+        return speedKmh >= threshold
+    }
+
     /// Записан проезд камеры; строка — чем мы его судили: `tag`, `assumed`
     /// или `none`. Именно из проезда растут деньги, рейтинг и тишина, поэтому
     /// источник лимита считается здесь, а не на каждом тике.
@@ -904,6 +926,11 @@ final class LocationService: NSObject {
         // проезда, и один такой фикс занизил бы записанную скорость у камеры.
         if speed >= 0 {
             speedKmh = speedSmoother.update(rawKmh: speed * 3.6, at: Date())
+            // Присваиваем ТОЛЬКО на изменение: @Observable будит подписчиков на
+            // каждую запись, а смысл флага ровно в том, чтобы их не будить.
+            let driving = Self.probablyDriving(was: isProbablyDriving, speedKmh: speedKmh,
+                                               tripActive: isTripActive)
+            if driving != isProbablyDriving { isProbablyDriving = driving }
         }
         if speedKmh >= 3 { lastMovementAt = Date() }
         currentCourse = course

@@ -65,10 +65,14 @@ struct MapScreen: View {
         // требует `View`. Тем же приёмом пользуется `Self._printChanges()`.
         let _ = Perf.event(Perf.Name.mapBody)
 
+        // Один расчёт на проход body, а не три. Внутри «Авто» лежит NOAA-счёт
+        // восхода: он дешёвый, но вызывать его трижды за кадр незачем.
+        let scheme = mapColorScheme
+
         ZStack {
             // Тема только у карты: интерфейс остаётся тёмным «радар-детектором»,
             // а подложка днём может быть светлой (тёмная на солнце бликует).
-            baseLayer
+            baseLayer(scheme: scheme)
 
             // Затемнение под статус-баром: часы и батарея не тонут в карте.
             VStack(spacing: 0) {
@@ -85,9 +89,9 @@ struct MapScreen: View {
             // Панели знают, что под ними светлая карта: днём их фон плотнее,
             // иначе белые цифры на солнце тонут в стекле.
             topLayer
-                .environment(\.onLightMap, mapColorScheme == .light)
+                .environment(\.onLightMap, scheme == .light)
             bottomLayer
-                .environment(\.onLightMap, mapColorScheme == .light)
+                .environment(\.onLightMap, scheme == .light)
 
             // Превышение у камеры: свечение по краям. Отдельная вью: условие
             // читает скорость и дистанцию, меняющиеся каждый тик GPS, — в body
@@ -300,21 +304,6 @@ struct MapScreen: View {
         }
     }
 
-    /// Тон схемы по близости камеры — те же три ступени, что на приборке.
-    /// Ближе трети радиуса — опасность, ближе двух третей — внимание, иначе
-    /// нейтральный акцент. Второй такой лестницы в приложении заводить
-    /// нельзя: водитель читает цвет, а не число, и две разные лестницы —
-    /// это два разных смысла у одного красного.
-    private var sketchTint: Color {
-        guard let distance = env.location.distanceToNearest else { return Theme.accent }
-        let radius = AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
-                                                 baseRadius: env.settings.alertRadius,
-                                                 context: env.location.alertContext)
-        if distance <= radius * 0.3 { return Theme.danger }
-        if distance <= radius * 0.6 { return Theme.warning }
-        return Theme.accent
-    }
-
     /// Отдать схеме измеренные кромки панелей.
     ///
     /// Одной точкой, а не двумя вызовами из двух замеров: поля приходят
@@ -353,85 +342,33 @@ struct MapScreen: View {
     }
 
     @ViewBuilder
-    private var baseLayer: some View {
+    /// Подложка. Сам этот кусок body НЕ читает ничего, что пишется на тике:
+    /// обе свои карты вынесены отдельными вью (MapBaseLayers), и чтение
+    /// скорости, дистанции и координаты заперто внутри них. Пока они лежали
+    /// здесь, включённая своя схема пересобирала весь экран раз в секунду.
+    @ViewBuilder
+    private func baseLayer(scheme: ColorScheme) -> some View {
         switch shownBase {
         case .engine:
             #if canImport(MapLibre)
             // Карту рисует движок. Панели поверх — те же: они про скорость и
             // камеры, а не про подложку.
-            engineLayer.ignoresSafeArea()
+            EngineBaseLayer(state: sketch).ignoresSafeArea()
             #else
-            mapLayer.ignoresSafeArea().environment(\.colorScheme, mapColorScheme)
+            mapLayer.ignoresSafeArea().environment(\.colorScheme, scheme)
             #endif
         case .sketch:
             if let scene = sketch.scene {
-                // Своя схема во весь экран.
-                sketchLayer(scene: scene)
+                SketchBaseLayer(scene: scene, state: sketch)
             } else {
-                mapLayer.ignoresSafeArea().environment(\.colorScheme, mapColorScheme)
+                mapLayer.ignoresSafeArea().environment(\.colorScheme, scheme)
             }
         case .apple:
             mapLayer
                 .ignoresSafeArea()
-                .environment(\.colorScheme, mapColorScheme)
+                .environment(\.colorScheme, scheme)
         }
     }
-
-    /// Своя схема во весь экран.
-    private func sketchLayer(scene: RoadSketch.Scene) -> some View {
-        ZStack {
-            // Подложка — ЗЕМЛЯ схемы, а не чёрное. Днём чёрная подложка
-            // проступала по краям и в переходах и выглядела дырой.
-            SketchPalette.ground
-            RoadSketchView(scene: scene, state: sketch, tint: sketchTint,
-                           trim: env.thermal.mode.sketchTrim,
-                           loading: env.roads.pending)
-        }
-        .ignoresSafeArea()
-    }
-
-    #if canImport(MapLibre)
-    /// Карта на движке. Правила точки зрения — ТЕ ЖЕ, что у схемы: охват по
-    /// скорости и дистанции до камеры, поля вида от панелей, наклон уходит в
-    /// ноль, когда камера в охвате. Один закон на два рендера, иначе
-    /// переключатель сравнивал бы не рендеры, а две разные логики.
-    @ViewBuilder
-    private var engineLayer: some View {
-        let me = env.location.displayCoordinate ?? env.location.currentCoordinate
-        if let me {
-            let insets = sketch.insets
-            let distance = env.location.nearestCamera != nil
-                ? env.location.distanceToNearest : nil
-            let span = RoadSketch.span(forDistance: distance,
-                                       speedKmh: env.location.speedKmh,
-                                       insets: insets)
-            let inRange = distance.map {
-                RoadSketch.isInRange(distance: $0, span: span, insets: insets)
-            } ?? false
-            ZStack {
-                EngineMapView(
-                    coordinate: me,
-                    courseDegrees: env.location.displayCourse,
-                    spanMeters: span,
-                    pitchDegrees: inRange ? 0 : AppConfig.engineMapPitchDegrees,
-                    daylight: env.settings.mapAppearance.isDaylight(at: me, now: Date()),
-                    houses: env.settings.mapHouses,
-                    cameras: env.cameras.nearest(to: me, limit: 40),
-                    alertCameraID: inRange ? env.location.nearestCamera?.id : nil,
-                    route: env.route.routeCoordinates)
-                // Курсор машины — своим слоем поверх карты, как и в схеме:
-                // движку он не нужен, а нам нужен ровно тот же.
-                MeCursor(scale: 1)
-                    .frame(width: 34, height: 40)
-                    .position(x: UIScreen.main.bounds.width / 2,
-                              y: UIScreen.main.bounds.height * insets.meY)
-                    .allowsHitTesting(false)
-            }
-        } else {
-            SketchPalette.ground
-        }
-    }
-    #endif
 
     private var mapLayer: some View {
         MapReader { proxy in
@@ -989,9 +926,7 @@ struct MapScreen: View {
                     switch BottomHint.choose(
                         routeError: env.route.errorMessage,
                         isBuilding: env.route.isBuilding,
-                        tripActive: env.location.isTripActive,
-                        speedKmh: env.location.speedKmh,
-                        speakThreshold: AppConfig.speakSpeedThresholdKmh,
+                        isProbablyDriving: env.location.isProbablyDriving,
                         showsQuickDestinations: mode.showsQuickDestinations) {
                     case .routeError(let error):
                         Text(error)

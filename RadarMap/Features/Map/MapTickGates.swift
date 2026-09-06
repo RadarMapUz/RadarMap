@@ -98,13 +98,16 @@ nonisolated enum BottomHint: Equatable {
     case driving
     case destinations
 
+    /// `isProbablyDriving` — грубый флаг из LocationService, а не сырая
+    /// скорость. Скорость пишется каждым фиксом, и её чтение в теле экрана
+    /// делало пересборку главного экрана ежесекундной ради строки, которая
+    /// меняется раз в поездку. Флаг уже учитывает и поездку, и гистерезис.
     static func choose(routeError: String?, isBuilding: Bool,
-                       tripActive: Bool, speedKmh: Double,
-                       speakThreshold: Double,
+                       isProbablyDriving: Bool,
                        showsQuickDestinations: Bool) -> BottomHint {
         if let routeError, !routeError.isEmpty { return .routeError(routeError) }
         if isBuilding { return .building }
-        if !tripActive && speedKmh >= speakThreshold { return .driving }
+        if isProbablyDriving { return .driving }
         if showsQuickDestinations { return .destinations }
         return .none
     }
@@ -114,8 +117,7 @@ struct DrivingHintChip: View {
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        if !env.location.isTripActive
-            && env.location.speedKmh >= AppConfig.speakSpeedThresholdKmh {
+        if env.location.isProbablyDriving {
             Text("Похоже, вы едете — включите оповещения")
                 .font(.rounded(12, .medium))
                 .foregroundStyle(Theme.success)

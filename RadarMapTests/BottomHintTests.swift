@@ -14,8 +14,8 @@ struct BottomHintTests {
                         trip: Bool = false, speed: Double = 0,
                         destinations: Bool = true) -> BottomHint {
         BottomHint.choose(routeError: error, isBuilding: building,
-                          tripActive: trip, speedKmh: speed,
-                          speakThreshold: 20, showsQuickDestinations: destinations)
+                          isProbablyDriving: !trip && speed >= 20,
+                          showsQuickDestinations: destinations)
     }
 
     @Test("Ошибка старше всего: она ждёт решения")
@@ -80,5 +80,40 @@ struct NightDimmingTests {
         let main = SpeedHUDView.dimming(secondary: false, night: false, alertLevel: 0)
         let side = SpeedHUDView.dimming(secondary: true, night: false, alertLevel: 0)
         #expect(side < main)
+    }
+}
+
+@Suite("Флаг «похоже, вы едете» не щёлкает у порога")
+struct ProbablyDrivingTests {
+
+    private let threshold = AppConfig.speakSpeedThresholdKmh
+
+    @Test("На пороге включается")
+    func turnsOnAtThreshold() {
+        #expect(LocationService.probablyDriving(was: false, speedKmh: threshold,
+                                                tripActive: false))
+    }
+
+    @Test("Ниже порога не включается")
+    func staysOffBelow() {
+        #expect(!LocationService.probablyDriving(was: false, speedKmh: threshold - 0.1,
+                                                 tripActive: false))
+    }
+
+    /// Ради этого запаса всё и заведено: у самого порога сглаженная скорость
+    /// колеблется, а каждое переключение флага — это пересборка панелей.
+    @Test("Гаснет не на пороге, а с запасом")
+    func releaseNeedsHysteresis() {
+        #expect(LocationService.probablyDriving(was: true, speedKmh: threshold - 1,
+                                                tripActive: false))
+        #expect(!LocationService.probablyDriving(
+            was: true,
+            speedKmh: threshold - AppConfig.drivingHintHysteresisKmh - 0.1,
+            tripActive: false))
+    }
+
+    @Test("В поездке подсказка не нужна вовсе")
+    func tripSilencesIt() {
+        #expect(!LocationService.probablyDriving(was: true, speedKmh: 90, tripActive: true))
     }
 }

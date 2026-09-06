@@ -117,6 +117,33 @@ nonisolated enum RoadClass: Equatable {
         self == .motorway || self == .trunk
     }
 
+    /// Разбор кода из базы лимитов (формат 2). Контракт с сервером:
+    /// ROAD_CLASS_CODES в server/extract_speed_limits.py присылает ровно эти
+    /// числа, и тест на стороне сервера сторожит их диапазон. Чужое число —
+    /// `.unknown`, а не падение: файл приезжает без подписи.
+    init(code: Int) {
+        switch code {
+        case 1:  self = .motorway
+        case 2:  self = .trunk
+        case 3:  self = .primary
+        case 4:  self = .secondary
+        case 5:  self = .tertiary
+        case 6:  self = .residential
+        case 7:  self = .service
+        case 8:  self = .pedestrian
+        default: self = .unknown
+        }
+    }
+
+    /// Магистральная дорога: та, где малый лимит — заявление, а не норма.
+    /// На дворовом проезде 30 законны, на проспекте — повод усомниться.
+    var isMajor: Bool {
+        switch self {
+        case .motorway, .trunk, .primary, .secondary: return true
+        default: return false
+        }
+    }
+
     /// Городская улица — тихий режим оповещений даже при разгоне.
     var isCityStreet: Bool {
         self == .residential || self == .service

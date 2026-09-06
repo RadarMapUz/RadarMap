@@ -44,6 +44,30 @@ MAX_TOTAL_DELTA = 0.25
 # Ниже этого числа выгрузка заведомо битая.
 MIN_SEGMENTS = 5000
 
+# Код класса дороги. Контракт с клиентом: RoadClass в RadarMap/Models/RoadShape.swift
+# читает ровно эти числа. Класс нужен, потому что лимит без него — половина
+# ответа: вдоль ташкентского проспекта идёт дублёр, он параллелен и проходит
+# проверку направления, а у проспекта тега maxspeed может не быть вовсе. Отличить
+# их по одной геометрии нечем, и приложение объявляло лимит дублёра
+# (docs/plan_drive_complaints.md, Ж2).
+ROAD_CLASS_CODES = {
+    "motorway": 1, "motorway_link": 1,
+    "trunk": 2, "trunk_link": 2,
+    "primary": 3, "primary_link": 3,
+    "secondary": 4, "secondary_link": 4,
+    "tertiary": 5, "tertiary_link": 5,
+    "residential": 6, "living_street": 6, "unclassified": 6,
+    "service": 7, "track": 7,
+    "footway": 8, "path": 8, "cycleway": 8, "steps": 8, "pedestrian": 8,
+    "platform": 8, "bus_stop": 8,
+}
+
+
+def road_class_code(raw):
+    """OSM highway -> код класса; неизвестный тип — 0, как unknown у клиента."""
+    return ROAD_CLASS_CODES.get(raw, 0)
+
+
 def parse_limit(v):
     """"70", "70 km/h" -> 70; mph/none/signals/walk пропускаем."""
     v = v.strip().lower()
@@ -85,7 +109,7 @@ def previous_count(path):
 
 
 def collect(pbf):
-    """Пройти выгрузку и собрать [[limit, [lat,lon,...]], ...]."""
+    """Пройти выгрузку и собрать [[limit, cls, [lat,lon,...]], ...]."""
     import osmium
 
     class Handler(osmium.SimpleHandler):
@@ -110,7 +134,7 @@ def collect(pbf):
                 self.skipped += 1
                 return
             if len(flat) >= 4:
-                self.segments.append([limit, flat])
+                self.segments.append([limit, road_class_code(w.tags.get("highway")), flat])
 
     h = Handler()
     h.apply_file(pbf, locations=True)
@@ -138,16 +162,34 @@ def main():
         print("unchanged: %d segments" % len(segments))
         return 0
 
-    body = json.dumps({"version": int(time.time()), "segments": segments},
+    # ДВА файла, и это не запас на будущее.
+    #
+    # Приложения с прошлых сборок читают segments как [limit, geometry] и на
+    # записи из трёх элементов просто отбросят СЕГМЕНТ — то есть у них молча
+    # исчезнут все лимиты. Поэтому старый файл остаётся байт в байт прежним, а
+    # класс дороги едет во втором. Ровно так же в проекте разведены
+    # roads_index.json и roads_index_v2.json.
+    version = int(time.time())
+    legacy = [[limit, flat] for limit, _cls, flat in segments]
+    body = json.dumps({"version": version, "segments": legacy},
                       separators=(",", ":"))
     tmp = OUT + ".tmp"
     with open(tmp, "w") as f:
         f.write(body)
     os.replace(tmp, OUT)
+
+    body_v2 = json.dumps({"version": version, "format": 2, "segments": segments},
+                         separators=(",", ":"))
+    out_v2 = OUT.replace(".json", "_v2.json")
+    tmp_v2 = out_v2 + ".tmp"
+    with open(tmp_v2, "w") as f:
+        f.write(body_v2)
+    os.replace(tmp_v2, out_v2)
+
     with open(hash_file, "w") as f:
         f.write(new_hash)
-    print("written: %d segments, %d KiB, skipped %d" % (
-        len(segments), len(body) // 1024, skipped))
+    print("written: %d segments, %d KiB (+v2 %d KiB), skipped %d" % (
+        len(segments), len(body) // 1024, len(body_v2) // 1024, skipped))
     return 0
 
 

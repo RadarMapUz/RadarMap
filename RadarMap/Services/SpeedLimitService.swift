@@ -46,6 +46,16 @@ final class SpeedLimitService {
     /// превращается в конкретную сумму штрафа: деньги требуют уверенности,
     /// а предположение её не даёт.
     private(set) var isCurrentLimitAssumed = false
+
+    /// Лимит НАЙДЕН, но противоречит ПДД на дороге такого класса.
+    ///
+    /// Это не то же самое, что `isCurrentLimitAssumed`: там мы ничего не нашли
+    /// и вывели число по классу дороги — такому числу верить можно, оно и есть
+    /// ПДД. Здесь число есть, но оно ниже законного на магистральной дороге, а
+    /// в Ташкенте так размечен весь город: 84,6 % сегментов несут 60 при норме
+    /// 70, и законные 65 превращались в «превышение» с сиреной у камеры.
+    /// Такой лимит показываем (со знаком «≈»), но не вменяем.
+    private(set) var isCurrentLimitDoubtful = false
     /// Мгновенное превышение — только для подсветки цифры на HUD: флаг щёлкает
     /// на одном GPS-фиксе, а GPS шумит (68 → 71 → 66 при лимите 60).
     private(set) var isOverspeeding = false
@@ -171,8 +181,20 @@ final class SpeedLimitService {
         isDownloading = true
         defer { isDownloading = false }
         // Недельная фоновая проверка: сбой сети не критичен, попробуем в следующий раз.
-        guard let data = try? await api.getData("speed_limits.json",
-                                                cachePolicy: .reloadIgnoringLocalCacheData) else { return }
+        // Формат 2 несёт класс дороги и потому предпочтителен. Формат 1
+        // остаётся на сервере для уже установленных сборок, а нам служит
+        // запасным, пока новый файл не выложен: сборка лимитов запускается
+        // раз в месяц вручную.
+        let data: Data
+        if let v2 = try? await api.getData("speed_limits_v2.json",
+                                           cachePolicy: .reloadIgnoringLocalCacheData) {
+            data = v2
+        } else if let v1 = try? await api.getData("speed_limits.json",
+                                                  cachePolicy: .reloadIgnoringLocalCacheData) {
+            data = v1
+        } else {
+            return
+        }
 
         let url = fileURL
         let built = await Task.detached(priority: .utility) { () -> LimitIndex? in
@@ -217,7 +239,14 @@ final class SpeedLimitService {
             if let hit = index.matchHit(coordinate, courseDegrees: course) {
                 currentRoadHit = hit
                 if hit.limit != currentLimit { currentLimit = hit.limit }
-                if isCurrentLimitAssumed { isCurrentLimitAssumed = false }
+                // Найденный лимит — ещё не факт. Класс берём из базы (формат 2),
+                // а пока её нет — у дороги ближайшей камеры: проезды считаются
+                // именно у камер, то есть там, где ошибка и стоит денег.
+                let onClass = hit.cls == .unknown ? fallbackClass : hit.cls
+                let doubtful = LimitConfidence.of(limitKmh: hit.limit, roadClass: onClass,
+                                                  inSettlement: inSettlement) == .doubtful
+                if isCurrentLimitDoubtful != doubtful { isCurrentLimitDoubtful = doubtful }
+                if isCurrentLimitAssumed != doubtful { isCurrentLimitAssumed = doubtful }
                 missCount = 0
             } else {
                 currentRoadHit = nil
@@ -228,6 +257,9 @@ final class SpeedLimitService {
                     // рейтинг и голос о камере в режиме по умолчанию.
                     let assumed = fallbackClass.assumedLimitKmh(inSettlement: inSettlement)
                     if assumed != currentLimit { currentLimit = assumed }
+                    // Догадка по классу — не «сомнительный тег»: она и так по
+                    // ПДД, и вменять её можно (цена ошибки — лишний совет).
+                    if isCurrentLimitDoubtful { isCurrentLimitDoubtful = false }
                     if isCurrentLimitAssumed != (assumed != nil) {
                         isCurrentLimitAssumed = assumed != nil
                     }
@@ -239,7 +271,11 @@ final class SpeedLimitService {
             clearOverspeed()
             return
         }
-        let over = speedKmh > Double(limit) + settings.overspeedTolerance
+        // Сомнительный лимит показываем, но не вменяем: ни сирены у камеры, ни
+        // минуса в рейтинге, ни суммы штрафа, ни отмены тишины у своей камеры.
+        // Показать и обвинить — разные вещи (plan_drive_complaints.md, Ж2).
+        let over = !isCurrentLimitDoubtful
+            && speedKmh > Double(limit) + settings.overspeedTolerance
         if over != isOverspeeding { isOverspeeding = over }
         overspeedSince = over ? (overspeedSince ?? Date()) : nil
 
@@ -270,6 +306,8 @@ final class SpeedLimitService {
 struct LimitIndex: Sendable, RoadNetworkSource {
     struct Segment: Sendable {
         let limit: Int
+        /// Класс дороги. `.unknown` у файла формата 1 — там его просто нет.
+        let cls: RoadClass
         let pts: [MKMapPoint]
         /// Рамка сегмента в единицах MKMapPoint.
         ///
@@ -280,8 +318,9 @@ struct LimitIndex: Sendable, RoadNetworkSource {
         /// сегмент четырьмя сравнениями, до того как начнётся геометрия.
         let minX, minY, maxX, maxY: Double
 
-        init(limit: Int, pts: [MKMapPoint]) {
+        init(limit: Int, cls: RoadClass = .unknown, pts: [MKMapPoint]) {
             self.limit = limit
+            self.cls = cls
             self.pts = pts
             var minX = Double.greatestFiniteMagnitude, minY = Double.greatestFiniteMagnitude
             var maxX = -Double.greatestFiniteMagnitude, maxY = -Double.greatestFiniteMagnitude
@@ -385,10 +424,17 @@ struct LimitIndex: Sendable, RoadNetworkSource {
             // 110–130, и «5» с «300» означают испорченные данные, а не дорогу.
             // Отвергаем СЕГМЕНТ, а не файл: один битый лимит не должен
             // выключить двадцать тысяч честных.
-            guard entry.count == 2,
-                  let limit = (entry[0] as? NSNumber)?.intValue,
+            // Форматов ДВА. Первый — [limit, geometry], он остаётся на бою для
+            // уже установленных приложений. Второй — [limit, cls, geometry]:
+            // без класса дороги лимит это половина ответа, потому что отличить
+            // проспект от идущего вдоль него дублёра больше нечем.
+            guard let limit = (entry.first as? NSNumber)?.intValue,
                   AppConfig.plausibleSpeedLimits.contains(limit),
-                  let flat = entry[1] as? [NSNumber], flat.count >= 4 else { continue }
+                  let flat = entry.last as? [NSNumber], flat.count >= 4,
+                  entry.count == 2 || entry.count == 3 else { continue }
+            let cls: RoadClass = entry.count == 3
+                ? RoadClass(code: (entry[1] as? NSNumber)?.intValue ?? 0)
+                : .unknown
 
             var pts: [MKMapPoint] = []
             pts.reserveCapacity(flat.count / 2)
@@ -413,7 +459,7 @@ struct LimitIndex: Sendable, RoadNetworkSource {
                 }
                 previous = (lat, lon)
             }
-            segments.append(Segment(limit: limit, pts: pts))
+            segments.append(Segment(limit: limit, cls: cls, pts: pts))
             for cell in cells { grid[cell, default: []].append(segmentIndex) }
         }
         return segments.isEmpty ? nil : LimitIndex(segments: segments, grid: grid)
@@ -440,6 +486,9 @@ struct LimitIndex: Sendable, RoadNetworkSource {
     /// на каждом тике стоил бы столько же, сколько сам матчинг.
     struct RoadHit: Sendable {
         let limit: Int
+        /// Класс дороги, чей лимит взят. `.unknown` — файл формата 1 (класса в
+        /// нём нет ни у кого) либо вызов, которому класс не нужен вовсе.
+        var cls: RoadClass = .unknown
         /// Ближайшая точка оси дороги.
         let coordinate: CLLocationCoordinate2D
         /// Направление сегмента в этой точке (0–360°, куда «идёт» линия;
@@ -459,16 +508,36 @@ struct LimitIndex: Sendable, RoadNetworkSource {
     /// на каждую пару точек — это корень и пересчёт масштаба по широте, а нам
     /// нужно только сравнить, что ближе. Порядок сравнений от этого не меняется
     /// (масштаб внутри кольца постоянен), а метры остаются только на границе.
+    /// `prefersMajorRoads` — победитель выбирается не по одной близости.
+    ///
+    /// Вдоль ташкентского проспекта идёт дублёр: он параллелен, значит
+    /// проходит проверку направления, и при сносе GPS на пару метров он ближе.
+    /// Лимит при этом берётся ЕГО — а у проспекта тега maxspeed может не быть
+    /// вовсе. Поэтому к расстоянию прибавляется цена класса: проспект в
+    /// двадцати метрах перебивает дублёр в пятнадцати, но служебный проезд ПОД
+    /// колесом перебивает проспект в двадцати — иначе получим зеркальную
+    /// ошибку и будем считать лимит проспекта во дворе.
+    ///
+    /// Корень берётся один раз на СЕГМЕНТ, а не на пару точек: внутренний цикл
+    /// остаётся на квадратах, как и был (бюджет тика ~0,11 мс).
     nonisolated private func nearestRoad(
         to p: MKMapPoint, within reach: Double, candidates: Set<Int32>,
+        prefersMajorRoads: Bool = false,
         accepts: (_ dx: Double, _ dy: Double) -> Bool
     ) -> RoadHit? {
-        var bestSquared = reach * reach
-        var best: (limit: Int, point: MKMapPoint, dx: Double, dy: Double)?
+        let reachSquared = reach * reach
+        let unit = Self.points(1, at: p.coordinate)
+        var bestScore = Double.greatestFiniteMagnitude
+        var best: (limit: Int, cls: RoadClass, point: MKMapPoint,
+                   dx: Double, dy: Double, distance: Double)?
         for candidate in candidates {
             let segment = segments[Int(candidate)]
             // Рамка: четыре сравнения вместо обхода всех точек сегмента.
             guard segment.mayReach(p, within: reach) else { continue }
+            // Тротуар и переход — не проезжая часть, и их maxspeed не про нас.
+            if prefersMajorRoads, segment.cls == .pedestrian { continue }
+            var localSquared = reachSquared
+            var local: (point: MKMapPoint, dx: Double, dy: Double)?
             let pts = segment.pts
             for i in 0..<(pts.count - 1) {
                 let a = pts[i], b = pts[i + 1]
@@ -480,21 +549,42 @@ struct LimitIndex: Sendable, RoadNetworkSource {
                 let closest = MKMapPoint(x: a.x + t * dx, y: a.y + t * dy)
                 let ox = closest.x - p.x, oy = closest.y - p.y
                 let squared = ox * ox + oy * oy
-                guard squared < bestSquared else { continue }
+                guard squared < localSquared else { continue }
                 guard accepts(dx, dy) else { continue }
-                bestSquared = squared
-                best = (segment.limit, closest, dx, dy)
+                localSquared = squared
+                local = (closest, dx, dy)
             }
+            guard let local else { continue }
+            let distance = localSquared.squareRoot()
+            let score = distance + (prefersMajorRoads ? Self.classPenalty(segment.cls) * unit : 0)
+            guard score < bestScore else { continue }
+            bestScore = score
+            best = (segment.limit, segment.cls, local.point, local.dx, local.dy, distance)
         }
         guard let best else { return nil }
         let coordinate = best.point.coordinate
         // Меркатор конформен: азимут корректен прямо из map-точек (y растёт на юг).
         let bearing = (atan2(best.dx, -best.dy) * 180 / .pi + 360)
             .truncatingRemainder(dividingBy: 360)
-        return RoadHit(limit: best.limit, coordinate: coordinate,
+        return RoadHit(limit: best.limit, cls: best.cls, coordinate: coordinate,
                        bearingDegrees: bearing,
-                       distanceMeters: bestSquared.squareRoot()
+                       distanceMeters: best.distance
                            * MKMetersPerMapPointAtLatitude(coordinate.latitude))
+    }
+
+    /// Цена класса в метрах: насколько дальше может лежать дорога, чтобы всё
+    /// равно победить. Ноль у магистральных — они и есть предпочтительный
+    /// ответ; дороже всего служебный проезд, который чаще всего и оказывался
+    /// ближайшим вдоль проспекта.
+    nonisolated private static func classPenalty(_ cls: RoadClass) -> Double {
+        switch cls {
+        case .motorway, .trunk, .primary, .secondary: return 0
+        case .tertiary, .residential:                 return AppConfig.limitMinorRoadPenaltyMeters
+        case .service, .pedestrian:                   return AppConfig.limitServiceRoadPenaltyMeters
+        // Формат 1: класса нет ни у кого, значит штраф одинаковый и порядок
+        // прежний — правка не меняет поведение, пока сервер не выложит формат 2.
+        case .unknown:                                return 0
+        }
     }
 
     /// Метры в единицы MKMapPoint на этой широте.
@@ -513,7 +603,8 @@ struct LimitIndex: Sendable, RoadNetworkSource {
                               courseDegrees: Double) -> RoadHit? {
         nearestRoad(to: MKMapPoint(coordinate),
                     within: Self.points(35, at: coordinate),
-                    candidates: candidates(around: coordinate)) { dx, dy in
+                    candidates: candidates(around: coordinate),
+                    prefersMajorRoads: true) { dx, dy in
             // Совпадение направления (дорогу считаем двусторонней).
             // Меркатор конформен: азимут корректно берётся прямо из map-точек (y растёт на юг).
             let segmentBearing = (atan2(dx, -dy) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)

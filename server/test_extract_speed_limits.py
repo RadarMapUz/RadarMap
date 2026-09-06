@@ -90,5 +90,24 @@ class PreviousCountTest(unittest.TestCase):
             os.unlink(path)
 
 
+class RoadClassTests(unittest.TestCase):
+    """Класс дороги в выгрузке: без него лимит — половина ответа."""
+
+    def test_known_types_map_to_client_codes(self):
+        # Контракт с RoadClass в RadarMap/Models/RoadShape.swift.
+        self.assertEqual(sl.road_class_code("primary"), 3)
+        self.assertEqual(sl.road_class_code("primary_link"), 3)
+        self.assertEqual(sl.road_class_code("service"), 7)
+        self.assertEqual(sl.road_class_code("living_street"), 6)
+
+    def test_unknown_type_is_zero_not_a_crash(self):
+        # Чужой тег не должен ронять месячную сборку лимитов.
+        self.assertEqual(sl.road_class_code("raceway"), 0)
+        self.assertEqual(sl.road_class_code(None), 0)
+
+    def test_every_code_is_a_class_the_client_knows(self):
+        self.assertTrue(set(sl.ROAD_CLASS_CODES.values()) <= set(range(1, 9)))
+
+
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main(verbosity=1)

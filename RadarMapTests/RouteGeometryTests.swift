@@ -168,4 +168,58 @@ final class RouteGeometryTests: XCTestCase {
         XCTAssertFalse(ManeuverKind.slightRight.deservesEarlyCall)
         XCTAssertFalse(ManeuverKind.straight.deservesEarlyCall)
     }
+
+
+    // MARK: - Положение на маршруте (plan_algorithms.md, А1)
+
+    /// Маршрут «туда и обратно»: на восток по одной линии, назад по соседней
+    /// в двадцати метрах севернее. Городская сетка полна таких мест.
+    private var loopRoute: [MKMapPoint] {
+        var pts: [MKMapPoint] = []
+        for step in 0...10 {
+            pts.append(MKMapPoint(CLLocationCoordinate2D(
+                latitude: 41.30000, longitude: 69.20 + Double(step) * 0.005)))
+        }
+        for step in 0...10 {
+            pts.append(MKMapPoint(CLLocationCoordinate2D(
+                latitude: 41.30018, longitude: 69.25 - Double(step) * 0.005)))
+        }
+        return pts
+    }
+
+    /// Снос GPS в сторону обратной ветки больше не двигает прогресс вперёд.
+    ///
+    /// Точка в тринадцати метрах от ветки «туда» и в семи от ветки «обратно» —
+    /// по одной близости побеждала вторая, и приложение считало, что мы
+    /// проехали ещё три километра. Отсюда «говорит про поворот, который я уже
+    /// проехал». Курс различает ветки надёжно: обратная идёт нам навстречу.
+    func testCourseKeepsProgressOnOurLegOfTheLoop() {
+        let pts = loopRoute
+        let cum = RouteService.cumulative(of: pts)
+        let probe = MKMapPoint(CLLocationCoordinate2D(latitude: 41.30012, longitude: 69.23))
+
+        var hint = 0
+        let withCourse = RouteService.project(probe, onto: pts, cum: cum,
+                                              hint: &hint, course: 90)
+        XCTAssertEqual(withCourse.along, 2509, accuracy: 250,
+                       "мы на ветке «туда», примерно 2,5 км от старта")
+
+        var blindHint = 0
+        let blind = RouteService.project(probe, onto: pts, cum: cum,
+                                         hint: &blindHint, course: -1)
+        XCTAssertGreaterThan(blind.along, 5000,
+                             "без курса точка садится на обратную ветку — это и был дефект")
+    }
+
+    /// Недостоверный курс не двигает прогресс: `-1` означает «не знаем», и
+    /// молчание тут лучше догадки — ровно как в гейтах направления у камер.
+    func testUnknownCourseAddsNoPenalty() {
+        let pts = straightRoute
+        let cum = RouteService.cumulative(of: pts)
+        let probe = MKMapPoint(CLLocationCoordinate2D(latitude: 41.3005, longitude: 69.25))
+        var a = 0, b = 0
+        let blind = RouteService.project(probe, onto: pts, cum: cum, hint: &a, course: -1)
+        let aligned = RouteService.project(probe, onto: pts, cum: cum, hint: &b, course: 90)
+        XCTAssertEqual(blind.along, aligned.along, accuracy: 1)
+    }
 }

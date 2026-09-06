@@ -974,8 +974,10 @@ final class LocationService: NSObject {
             if progressMoved >= RoadSketch.standstillMeters
                 || (route?.remainingDistance ?? .greatestFiniteMagnitude) < 300 {
                 lastRouteProgressCoordinate = coordinate
+                // Курс — чтобы положение не прыгнуло на встречную ветку
+                // маршрута там, где он возвращается сам к себе.
                 route?.updateProgress(coordinate: coordinate, cameras: repository.cameras,
-                                      announce: isTripActive)
+                                      announce: isTripActive, course: course)
             }
             tuneAdaptiveAccuracy()
             // Долгая стоянка (стояночное затемнение приборки): пишем только

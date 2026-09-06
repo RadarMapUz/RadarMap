@@ -302,7 +302,10 @@ final class RouteService {
     // MARK: - Прогресс: прибытие, следующая камера, манёвры, перестроение
 
     /// Вызывается на каждой GPS-точке. `announce` — озвучивать ли манёвры (в поездке).
-    func updateProgress(coordinate: CLLocationCoordinate2D, cameras: [Camera], announce: Bool) {
+    /// `course` — курс, которому МОЖНО верить (его выдаёт LocationFilter);
+    /// `-1` означает «курса нет», и тогда он в выборе положения не участвует.
+    func updateProgress(coordinate: CLLocationCoordinate2D, cameras: [Camera], announce: Bool,
+                        course: CLLocationDirection = -1) {
         guard let variant = selected, !isBuilding, !isRebuilding,
               let destination = destinationCoordinate else { return }
         let point = MKMapPoint(coordinate)
@@ -316,7 +319,8 @@ final class RouteService {
         let (along, deviation) = Self.project(point, onto: variant.points,
                                               cum: selectedCumulative,
                                               hint: &segmentHint,
-                                              allowFullScan: offRouteTicks % 3 == 0)
+                                              allowFullScan: offRouteTicks % 3 == 0,
+                                              course: course)
         progressAlong = along
 
         // Прибытие: у самой цели ИЛИ проехали финиш по маршруту (парковка чуть в стороне,
@@ -742,25 +746,44 @@ final class RouteService {
     nonisolated static func project(_ p: MKMapPoint, onto pts: [MKMapPoint],
                                     cum: [CLLocationDistance],
                                     hint: inout Int,
-                                    allowFullScan: Bool = true) -> (along: CLLocationDistance, deviation: CLLocationDistance) {
+                                    allowFullScan: Bool = true,
+                                    course: CLLocationDirection = -1)
+    -> (along: CLLocationDistance, deviation: CLLocationDistance) {
         let n = pts.count
         guard n >= 2, cum.count == n else { return (0, .greatestFiniteMagnitude) }
 
+        // Выбираем не просто ближайший сегмент, а согласованный с курсом:
+        // встречный получает надбавку к расстоянию. Возвращаем при этом
+        // ИСТИННОЕ отклонение, а не оценку с надбавкой, — на нём стоит решение
+        // о перестроении маршрута.
         func scan(_ range: Range<Int>) -> (Int, Double, CLLocationDistance) {
             var bestIndex = range.lowerBound
             var bestT = 0.0
+            var bestScore = Double.greatestFiniteMagnitude
             var bestDist = Double.greatestFiniteMagnitude
             for i in range {
                 let (closest, t) = closestPoint(p, pts[i], pts[i + 1])
                 let d = p.distance(to: closest)
-                if d < bestDist { bestDist = d; bestIndex = i; bestT = t }
+                let score = d + wrongWayPenalty(from: pts[i], to: pts[i + 1], course: course)
+                if score < bestScore {
+                    bestScore = score; bestDist = d; bestIndex = i; bestT = t
+                }
             }
             return (bestIndex, bestT, bestDist)
         }
 
-        // Окно вокруг прошлой позиции; если далеко (>200 м) — полный перебор (петли, перестроение).
-        let lo = max(0, hint - 8), hi = min(n - 1, hint + 40)
+        // Окно вокруг прошлой позиции — в МЕТРАХ по кумулятиву, а не в
+        // вершинах: у полилинии OSRM их плотность на прямой и в повороте
+        // отличается на порядок, и «сорок вершин» означало то сто метров, то
+        // три километра (docs/plan_algorithms.md, А1).
+        let anchor = cum[min(max(hint, 0), n - 1)]
+        let lo = max(0, lowerBound(cum, anchor - AppConfig.routeProjectBackMeters) - 1)
+        let hi = min(n - 1, max(lo + 1,
+                                lowerBound(cum, anchor + AppConfig.routeProjectAheadMeters)))
         var (index, t, deviation) = scan(lo..<hi)
+        // Далеко от окна — полный перебор: так маршрут ловится заново после
+        // объезда. Курс участвует и здесь, иначе перебор сам и притягивал бы
+        // точку на обратную ветку.
         if deviation > 200, allowFullScan {
             (index, t, deviation) = scan(0..<(n - 1))
         }
@@ -768,6 +791,33 @@ final class RouteService {
 
         let along = cum[index] + t * pts[index].distance(to: pts[index + 1])
         return (along, deviation)
+    }
+
+    /// Первый индекс, у которого `cum[i] >= value`. Кумулятив отсортирован,
+    /// поэтому двоичный поиск: линейный проход по нему на каждом тике — это то
+    /// самое, от чего кумулятив когда-то и завели.
+    nonisolated private static func lowerBound(_ cum: [CLLocationDistance],
+                                               _ value: CLLocationDistance) -> Int {
+        var lo = 0, hi = cum.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if cum[mid] < value { lo = mid + 1 } else { hi = mid }
+        }
+        return lo
+    }
+
+    /// Надбавка сегменту, идущему против нашего курса. `-1` — курса нет, и
+    /// тогда никакой надбавки: недостоверный курс не вправе двигать прогресс.
+    nonisolated private static func wrongWayPenalty(from a: MKMapPoint, to b: MKMapPoint,
+                                                    course: CLLocationDirection)
+    -> CLLocationDistance {
+        guard course >= 0 else { return 0 }
+        let dx = b.x - a.x, dy = b.y - a.y
+        guard dx != 0 || dy != 0 else { return 0 }
+        let bearing = (atan2(dx, -dy) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+        var diff = abs(bearing - course).truncatingRemainder(dividingBy: 360)
+        if diff > 180 { diff = 360 - diff }
+        return diff > 90 ? AppConfig.routeWrongWayPenaltyMeters : 0
     }
 
     /// Начальный кусок маршрута длиной `upTo` метров (пройденная часть).

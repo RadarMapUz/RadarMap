@@ -134,7 +134,7 @@ final class VoiceDirectorTests: XCTestCase {
 final class CameraFamiliarityTests: XCTestCase {
 
     private func record(passes: [(id: Int, speed: Double, limit: Int)],
-                        daysAgo: Double, now: Date) -> TripRecord {
+                        daysAgo: Double, now: Date, assumed: Bool = false) -> TripRecord {
         let date = now.addingTimeInterval(-daysAgo * 86400)
         return TripRecord(
             id: date.timeIntervalSince1970, startedAt: date, endedAt: date,
@@ -142,7 +142,8 @@ final class CameraFamiliarityTests: XCTestCase {
             passed: passes.map {
                 PassedCamera(id: UUID(), cameraID: $0.id, typeRaw: "Стационар радар",
                              location: "Тест", speedKmh: $0.speed, date: date,
-                             lat: 41.31, lon: 69.25, limitKmh: $0.limit)
+                             lat: 41.31, lon: 69.25, limitKmh: $0.limit,
+                             limitAssumed: assumed)
             })
     }
 
@@ -154,14 +155,51 @@ final class CameraFamiliarityTests: XCTestCase {
         XCTAssertEqual(CameraFamiliarity.familiarIDs(history: history, now: now), [1])
     }
 
-    func testOneViolationRevokesFamiliarity() {
+    /// Один срыв на шесть спокойных проездов тишины не отнимает.
+    ///
+    /// Прежнее правило было «ни одного превышения за тридцать дней», и на
+    /// боевых данных тишина не наступала почти никогда: в Ташкенте лимит в
+    /// OSM на десять ниже нормы ПДД, и законные 65 записывались нарушением.
+    func testRareViolationDoesNotRevokeFamiliarity() {
         let now = Date()
         var history = (1...CameraFamiliarity.minPasses).map {
             record(passes: [(1, 55, 60)], daysAgo: Double($0), now: now)
         }
         history.append(record(passes: [(1, 90, 60)], daysAgo: 0.5, now: now))
+        XCTAssertEqual(CameraFamiliarity.familiarIDs(history: history, now: now), [1],
+                       "шесть спокойных из семи — это привычка ездить спокойно")
+    }
+
+    /// А регулярные срывы — отнимают: молчать там, где человек правда гонит,
+    /// нельзя, и это главное свойство правила.
+    func testRegularViolationsRevokeFamiliarity() {
+        let now = Date()
+        var history = (1...CameraFamiliarity.minPasses).map {
+            record(passes: [(1, 55, 60)], daysAgo: Double($0), now: now)
+        }
+        history.append(record(passes: [(1, 90, 60)], daysAgo: 0.5, now: now))
+        history.append(record(passes: [(1, 95, 60)], daysAgo: 0.4, now: now))
+        history.append(record(passes: [(1, 92, 60)], daysAgo: 0.3, now: now))
         XCTAssertTrue(CameraFamiliarity.familiarIDs(history: history, now: now).isEmpty,
-                      "тишина покупается привычкой ездить спокойно, а не частотой")
+                      "шесть спокойных из девяти — 0,67, тишина не полагается")
+    }
+
+    /// Превышение, посчитанное по НЕУВЕРЕННОМУ лимиту, тишины не отнимает.
+    ///
+    /// Это и есть цепь из жалобы: сомнительный лимит на проспекте превращал
+    /// законную езду в нарушение, а нарушение — в камеру, которая никогда не
+    /// замолчит.
+    func testViolationAgainstADoubtfulLimitIsNotCounted() {
+        let now = Date()
+        var history = (1...CameraFamiliarity.minPasses).map {
+            record(passes: [(1, 55, 60)], daysAgo: Double($0), now: now)
+        }
+        for day in 1...4 {
+            history.append(record(passes: [(1, 90, 60)], daysAgo: Double(day) / 10,
+                                  now: now, assumed: true))
+        }
+        XCTAssertEqual(CameraFamiliarity.familiarIDs(history: history, now: now), [1],
+                       "догадка о лимите не вправе отнимать молчание")
     }
 
     func testTooFewPassesIsNotEnough() {

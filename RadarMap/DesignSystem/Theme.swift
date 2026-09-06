@@ -166,7 +166,48 @@ enum Theme {
 // MARK: - Типографика (rounded — «приборный» вид)
 
 extension Font {
+    // MARK: - Шкала кегля
+    //
+    // Было 18 разных кеглей на одних только экранах карты: 8, 9, 10, 11, 12,
+    // 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 26, 30. Это не иерархия, это
+    // след истории: каждый новый элемент подбирал себе размер на глаз рядом с
+    // соседом, и разница в один пункт не значила ничего.
+    //
+    // Ступеней восемь, а не семь, как предлагал план: восьмая (22) выбрана по
+    // данным. С семью ступенями кегли 22 и 23 уезжали на 2–4 пункта, с восемью
+    // почти всё движение укладывается в один пункт.
+    //
+    // Прижим делает сама `rounded`, а не 627 мест вызова. Так шкала перестаёт
+    // быть договорённостью, которую можно забыть: девятнадцатого кегля больше
+    // не существует, каким бы числом его ни попросили.
+    nonisolated static let typeSteps: [CGFloat] = [10, 12, 15, 17, 20, 22, 26, 30]
+
+    /// Ближайшая ступень шкалы; при равном расстоянии — БОЛЬШАЯ.
+    /// За рулём крупнее безопаснее мельче.
+    nonisolated static func snapType(_ size: CGFloat) -> CGFloat {
+        guard let first = typeSteps.first, let last = typeSteps.last else { return size }
+        if size <= first { return first }
+        if size >= last { return last }
+        var best = last
+        var bestGap = CGFloat.greatestFiniteMagnitude
+        for step in typeSteps {
+            let gap = abs(step - size)
+            // `<=` и порядок по возрастанию дают округление вверх на ничьей.
+            if gap <= bestGap { bestGap = gap; best = step }
+        }
+        return best
+    }
+
     static func rounded(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: snapType(size), weight: weight, design: .rounded)
+    }
+
+    /// Кегль ВНЕ шкалы — для подписей, растущих вместе с масштабом схемы.
+    ///
+    /// Единственное исключение, и оно честное: на схеме кегль вычисляется
+    /// (`11 * strokeScale`), и прижим к ступеням превратил бы плавный зум в
+    /// скачки размера. Шкала описывает интерфейс, а не рисунок карты.
+    static func roundedFree(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .rounded)
     }
 }

@@ -240,7 +240,7 @@ struct RoadSketchView: View {
                 // названия кишлака, а имя улицы тише обоих. Иерархия размером,
                 // а не цветом, — так устроена любая карта, и не из вкуса:
                 // цвет на схеме уже занят смыслом (вода, камера, маршрут).
-                .font(.rounded(11 * strokeScale * label.scale,
+                .font(.roundedFree(11 * strokeScale * label.scale,
                                label.isPlace ? .bold : .semibold))
                 .foregroundStyle(label.isPlace ? SketchPalette.placeLabel
                                                : SketchPalette.label)
@@ -343,7 +343,7 @@ struct RoadSketchView: View {
             HStack(spacing: 3 * strokeScale) {
                 ForEach(Array(state.lanes.enumerated()), id: \.offset) { _, lane in
                     Image(systemName: lane.primaryArrow(for: state.maneuverKind).symbolName)
-                        .font(.rounded(15 * strokeScale, .bold))
+                        .font(.roundedFree(15 * strokeScale, .bold))
                         .foregroundStyle(lane.isValid ? Color.white
                                                       : Color.white.opacity(0.30))
                         .frame(width: 22 * strokeScale)
@@ -372,7 +372,7 @@ struct RoadSketchView: View {
     private var streetLabel: some View {
         if let street = state.currentStreet, !street.isEmpty {
             Text(street)
-                .font(.rounded(13 * strokeScale, .semibold))
+                .font(.roundedFree(13 * strokeScale, .semibold))
                 .foregroundStyle(Theme.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -415,7 +415,7 @@ struct RoadSketchView: View {
         if state.isInspecting {
             Button { state.returnToMe() } label: {
                 Image(systemName: "location.fill")
-                    .font(.rounded(15 * strokeScale, .semibold))
+                    .font(.roundedFree(15 * strokeScale, .semibold))
                     .foregroundStyle(Theme.accent)
                     .frame(width: 40 * strokeScale, height: 40 * strokeScale)
                     .background(Color.black.opacity(0.72), in: Circle())
@@ -443,12 +443,12 @@ struct RoadSketchView: View {
                 .fill(Color.black.opacity(0.55))
                 .overlay(Circle().stroke(.white.opacity(0.14), lineWidth: 1))
             Image(systemName: "location.north.fill")
-                .font(.rounded(11 * strokeScale, .bold))
+                .font(.roundedFree(11 * strokeScale, .bold))
                 .foregroundStyle(Theme.danger.opacity(0.9))
                 .offset(y: -3 * strokeScale)
                 .rotationEffect(.degrees(-state.courseDegrees))
             Text("С")
-                .font(.rounded(8 * strokeScale, .heavy))
+                .font(.roundedFree(8 * strokeScale, .heavy))
                 .foregroundStyle(Theme.textTertiary)
                 .offset(y: 7.5 * strokeScale)
         }
@@ -644,7 +644,7 @@ private struct AlertCameraMarker: View {
                 .frame(width: 22 * scale, height: 22 * scale)
                 .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 1.5 * scale))
             Image(systemName: "camera.fill")
-                .font(.rounded(10 * scale, .bold))
+                .font(.roundedFree(10 * scale, .bold))
                 .foregroundStyle(.white)
         }
         .shadow(color: .black.opacity(0.6), radius: 3 * scale)
@@ -694,7 +694,7 @@ private struct MeAway: View {
                 .fill(Color.black.opacity(0.72))
                 .overlay(Circle().stroke(SketchPalette.meBody.opacity(0.5), lineWidth: 1))
             Image(systemName: "location.north.fill")
-                .font(.rounded(13 * scale, .bold))
+                .font(.roundedFree(13 * scale, .bold))
                 .foregroundStyle(SketchPalette.meTop)
                 .rotationEffect(.degrees(angle + 90))
         }

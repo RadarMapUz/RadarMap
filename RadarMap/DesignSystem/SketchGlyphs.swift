@@ -153,7 +153,7 @@ nonisolated struct UTurnGlyph: View {
 
     var body: some View {
         Image(systemName: "arrow.uturn.left")
-            .font(.rounded(7 * scale, .heavy))
+            .font(.roundedFree(7 * scale, .heavy))
             .foregroundStyle(SketchPalette.markEdge)
             .frame(width: 13 * scale, height: 13 * scale)
             .background {

@@ -262,7 +262,7 @@ struct SpeedHUDView: View {
         return Image(systemName: symbol)
             .font(.rounded(10, .bold))
             .foregroundStyle(Theme.accent)
-            .padding(5)
+            .padding(6)
             .background(Theme.surface.opacity(0.85), in: Circle())
             .padding(6)
             .allowsHitTesting(false)
@@ -281,7 +281,7 @@ struct SpeedHUDView: View {
             }
             .clipShape(Capsule())
             .frame(height: 3)
-            .padding(.top, 3)
+            .padding(.top, 4)
             .animation(.easeOut(duration: 0.3), value: progress)
     }
 }

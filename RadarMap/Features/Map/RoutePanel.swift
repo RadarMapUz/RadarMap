@@ -63,7 +63,7 @@ struct RoutePanel: View {
                         .font(.rounded(17, .bold))
                         .foregroundStyle(Theme.background)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
+                        .padding(.vertical, 16)
                         .background(Theme.success,
                                     in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
                     }
@@ -104,7 +104,7 @@ struct RoutePanel: View {
                 .foregroundStyle(isSelected ? Theme.background.opacity(0.75) : Theme.textSecondary)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
+            .padding(.vertical, 10)
             .background(isSelected ? AnyShapeStyle(Theme.accent.gradient)
                                    : AnyShapeStyle(.ultraThinMaterial),
                         in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
@@ -176,7 +176,7 @@ struct TripLiveBar: View {
                                 .foregroundStyle(Theme.textPrimary)
                                 .contentTransition(.numericText())
                         }
-                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .padding(.horizontal, 10).padding(.vertical, 8)
                         .background(Theme.surface, in: Capsule())
                     }
                     .buttonStyle(.plain)

@@ -157,7 +157,7 @@ struct MapLayersControl: View {
                     .font(.rounded(14))
                     .foregroundStyle(isOn.wrappedValue ? Theme.accent : Theme.textTertiary)
             }
-            .padding(.vertical, 9)
+            .padding(.vertical, 10)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

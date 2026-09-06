@@ -1066,7 +1066,7 @@ struct MapScreen: View {
             }
             .foregroundStyle(Theme.textSecondary)
             .padding(.horizontal, 14)
-            .padding(.vertical, 9)
+            .padding(.vertical, 10)
             .background(Theme.surface, in: Capsule())
         }
         .buttonStyle(PressableStyle())
@@ -1116,7 +1116,7 @@ struct MapScreen: View {
             .accessibilityLabel(Text("Ещё"))
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 7)
+        .padding(.vertical, 8)
         .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerPanel))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
             .strokeBorder(Theme.edgePanel, lineWidth: 1))

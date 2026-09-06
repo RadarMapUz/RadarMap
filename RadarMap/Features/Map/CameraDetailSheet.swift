@@ -138,7 +138,7 @@ struct CameraDetailSheet: View {
                     Circle()
                         .fill(camera.kind.tint)
                         .frame(width: 6, height: 6)
-                        .padding(.top, 7)
+                        .padding(.top, 8)
                     Text(violation.capitalizedFirst)
                         .font(.rounded(15))
                         .foregroundStyle(Theme.textPrimary)

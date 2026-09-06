@@ -198,7 +198,7 @@ struct DashboardView: View {
         Label(title, systemImage: symbol)
             .font(.rounded(12, .medium))
             .foregroundStyle(Theme.warning)
-            .padding(.horizontal, 11).padding(.vertical, 6)
+            .padding(.horizontal, 12).padding(.vertical, 6)
             .background(Theme.warning.opacity(0.12), in: Capsule())
     }
 

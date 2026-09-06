@@ -172,11 +172,11 @@ struct ReportRadarButton: View {
         .frame(minWidth: 210, alignment: .leading)
         .frame(height: Self.rowHeight)
         .background {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
                 .fill(isActive ? AnyShapeStyle(Theme.warning.gradient)
                                : AnyShapeStyle(.ultraThinMaterial))
         }
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
             .stroke(isActive ? Color.white.opacity(0.5) : Theme.stroke, lineWidth: 1))
         .scaleEffect(isActive ? 1.04 : 1)
         .shadow(color: .black.opacity(isActive ? 0.3 : 0.15), radius: isActive ? 10 : 4, y: 3)
@@ -357,7 +357,7 @@ struct ReportRefineBar: View {
             }
             .foregroundStyle(Theme.textTertiary)
             .frame(width: 56, height: 44)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text("Отменить мою отметку"))
@@ -387,7 +387,7 @@ struct ReportRefineBar: View {
             .foregroundStyle(.white)
             .frame(width: 62, height: 44)
             .background(kind.cameraType.tint.gradient,
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -458,7 +458,7 @@ struct MobileConfirmBar: View {
                 // 44 pt — минимум Apple для пальца; за рулём это не педантизм.
                 .frame(width: 62, height: 44)
                 .background(tint.gradient,
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
         .buttonStyle(.plain)
     }

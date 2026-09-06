@@ -237,7 +237,7 @@ struct ManeuverBanner: View {
                 .font(.rounded(22, .bold))
                 .foregroundStyle(Theme.background)
                 .frame(width: 46, height: 46)
-                .background(Theme.accent.gradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Theme.accent.gradient, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
                 // Моноширинные цифры — как у приборки и CarPlay: дистанция
                 // тает каждый тик, и без них баннер дрожал шириной.

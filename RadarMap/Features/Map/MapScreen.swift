@@ -1080,8 +1080,15 @@ struct MapScreen: View {
 
     /// Построить авто-маршрут от текущей позиции и показать все варианты целиком.
     private func buildRoute(to coordinate: CLLocationCoordinate2D, name: String) {
-        guard let from = env.location.currentCoordinate else { return }
         Task {
+            // Только от ЖИВОЙ точки. Раньше здесь стоял currentCoordinate без
+            // проверки isPositionCoarse — а в него пишется и грубая точка
+            // фонового режима, из-за чего маршрут «начинал считаться» за
+            // километры от машины (plan_drive_complaints.md, Ж5).
+            guard let from = await env.location.awaitPreciseCoordinate() else {
+                env.route.reportNoFix()
+                return
+            }
             await env.route.build(from: from, to: coordinate, name: name,
                                   cameras: env.cameras.cameras,
                                   alternatives: env.settings.routeAlternatives)

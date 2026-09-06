@@ -246,6 +246,30 @@ final class LocationService: NSObject {
 
     // MARK: - Режимы геолокации
 
+    /// Координата, от которой можно СТРОИТЬ: грубая не годится.
+    ///
+    /// `currentCoordinate` заполняется из двух мест. Одно — живой
+    /// отфильтрованный фикс. Другое — `seedContext`, грубая точка режима
+    /// значимых перемещений; её собственный комментарий гласит, что после неё
+    /// расстояние на панели не живое, и рядом выставляется `isPositionCoarse`.
+    ///
+    /// Маршрут этого флага не проверял и мог быть посчитан от точки за
+    /// километры — он выглядит настоящим и ведёт не туда. Здесь мы ждём именно
+    /// живой фикс, а не отдаём первый попавшийся, и честно возвращаем `nil`,
+    /// если он не пришёл: не построить лучше, чем построить от вчерашнего
+    /// места (plan_drive_complaints.md, Ж5).
+    func awaitPreciseCoordinate(timeout: TimeInterval = 6) async -> CLLocationCoordinate2D? {
+        if !isPositionCoarse, let currentCoordinate { return currentCoordinate }
+        guard isAuthorized else { return nil }
+        manager.requestLocation()
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if !isPositionCoarse, let currentCoordinate { return currentCoordinate }
+            await Task.pause(seconds: 0.2)
+        }
+        return nil
+    }
+
     /// Координата для интентов (холодный старт из Siri: bootstrap не выполнялся,
     /// currentCoordinate пуст) — просим одноразовый фикс и ждём его до `timeout`.
     func awaitCoordinate(timeout: TimeInterval = 5) async -> CLLocationCoordinate2D? {

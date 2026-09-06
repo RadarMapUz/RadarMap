@@ -211,6 +211,15 @@ final class RouteService {
 
     // MARK: - Построение
 
+    /// Живой точки нет — маршрут не строим вовсе, и говорим об этом.
+    ///
+    /// Сообщение идёт тем же каналом, что остальные отказы (`BottomHint`
+    /// показывает `errorMessage`): молчаливое «ничего не произошло» после тапа
+    /// читается как поломка кнопки.
+    func reportNoFix() {
+        errorMessage = String(localized: "Не видим вашего положения — маршрут не построен")
+    }
+
     func build(from source: CLLocationCoordinate2D,
                to destination: CLLocationCoordinate2D,
                name: String, cameras: [Camera],

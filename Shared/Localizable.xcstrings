@@ -13518,6 +13518,22 @@
           }
         }
       }
+    },
+    "Не видим вашего положения — маршрут не построен": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не видим вашего положения — маршрут не построен"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joylashuvingizni koʻrmayapmiz — marshrut tuzilmadi"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

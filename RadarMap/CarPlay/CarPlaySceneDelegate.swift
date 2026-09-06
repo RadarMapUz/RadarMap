@@ -607,14 +607,16 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     /// Строим маршрут и сразу едем: за рулём выбирать из альтернатив некогда.
     private func route(to place: SavedPlace) {
-        guard let from = env.location.currentCoordinate else {
-            showAlert(title: String(localized: "Ждём спутники"),
-                      message: String(localized: "Положение ещё не определено — попробуйте через несколько секунд."))
-            return
-        }
-        popToMap()
         Task { @MainActor [weak self] in
             guard let self else { return }
+            // Грубая точка фонового режима сюда не годится: маршрут от неё
+            // начинается за километры (plan_drive_complaints.md, Ж5).
+            guard let from = await env.location.awaitPreciseCoordinate() else {
+                showAlert(title: String(localized: "Ждём спутники"),
+                          message: String(localized: "Положение ещё не определено — попробуйте через несколько секунд."))
+                return
+            }
+            popToMap()
             await env.route.build(from: from, to: place.coordinate,
                                   name: place.title, cameras: env.cameras.cameras,
                                   alternatives: false)

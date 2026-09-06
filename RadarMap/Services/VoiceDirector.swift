@@ -95,7 +95,16 @@ nonisolated enum VoiceDirector {
     static func decide(_ s: Situation) -> Plan {
         if s.mode == .off { return .silent }
         if s.isSudden { return Plan(voice: .urgent, speaksLimit: s.limitKmh != nil) }
-        if let over = s.overKmh, over > 0 {
+        // Сирена привязана к ШТРАФУ, а не к вкусу и не к порогу предупреждения.
+        //
+        // Раньше здесь стояло `over > 0`, и это работало лишь потому, что
+        // overKmh приходил только при превышении сверх пользовательского
+        // допуска. Теперь у камеры порог предупреждения жёстче штрафного
+        // (OverspeedThreshold) — водителя надо успеть предупредить до
+        // фиксации. Но предупредить и закричать — разные вещи: на +3 в зоне 60
+        // человек ещё успевает отпустить газ, а сирена на каждом таком случае
+        // и есть та самая «много болтает».
+        if let over = s.overKmh, over > FineSchedule.toleranceKmh {
             return Plan(voice: .urgent, speaksLimit: s.limitKmh != nil)
         }
         if s.isCrawling { return Plan(voice: .none, postpone: true) }

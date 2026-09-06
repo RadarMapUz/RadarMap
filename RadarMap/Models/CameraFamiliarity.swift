@@ -23,18 +23,6 @@ nonisolated enum CameraFamiliarity {
     static let minPasses = 6
     /// За какое окно смотрим историю.
     static let windowDays = 30
-    /// Какая доля проездов должна быть спокойной, чтобы камера считалась своей.
-    ///
-    /// Было «ни одного превышения за тридцать дней». Правило выглядело
-    /// принципиальным, а на деле тишина не наступала почти никогда: в Ташкенте
-    /// 84,6 % сегментов OSM несут лимит 60 при норме ПДД 70, и законные 65
-    /// записывались превышением. Один такой день лишал водителя тишины на
-    /// месяц у камеры, мимо которой он ездит дважды в сутки.
-    ///
-    /// 0,8 при шести проездах — это «не больше одного срыва на шесть». Регулярно
-    /// превышающему тишина по-прежнему не полагается: два срыва из семи дают
-    /// 0,71 и камера снова говорит.
-    static let calmShare = 0.8
 
     /// Идентификаторы «своих» камер по истории поездок.
     ///
@@ -45,29 +33,26 @@ nonisolated enum CameraFamiliarity {
                             windowDays: Int = windowDays) -> Set<Int> {
         let since = now.addingTimeInterval(-Double(windowDays) * 86400)
         var calm: [Int: Int] = [:]
-        var total: [Int: Int] = [:]
+        var violated: Set<Int> = []
 
         for record in history where record.endedAt >= since {
             for pass in record.passed {
                 guard pass.date >= since else { continue }
-                total[pass.cameraID, default: 0] += 1
-                // Превышение считаем ТОЛЬКО по уверенному лимиту.
-                //
-                // Раньше здесь стояло «по любому, включая предположенный», и
-                // это было ошибкой ровно в том месте, где она дороже всего:
-                // сомнительный лимит (тег ниже ПДД на проспекте — весь
-                // Ташкент) лишал водителя тишины на месяц. Догадка вправе
-                // посоветовать сбросить скорость, но не вправе отнимать
-                // молчание у камеры, которую человек проезжает дважды в день.
-                let violated = pass.limitIsCertain
-                    && (pass.overLimitKmh ?? 0) > FineSchedule.toleranceKmh
-                if !violated { calm[pass.cameraID, default: 0] += 1 }
+                // Превышение считаем по ЛЮБОМУ лимиту, включая предположенный:
+                // здесь речь не о деньгах, а о том, можно ли молчать. Молчать
+                // там, где человек превышает, нельзя — камера в зоне 60
+                // фиксирует уже на 66, и цена ошибки тут не «лишний совет», а
+                // штраф, о котором мы промолчали.
+                if let over = pass.overLimitKmh, over > FineSchedule.toleranceKmh {
+                    violated.insert(pass.cameraID)
+                } else {
+                    calm[pass.cameraID, default: 0] += 1
+                }
             }
         }
 
         return Set(calm.compactMap { id, count in
-            guard count >= minPasses, let seen = total[id], seen > 0 else { return nil }
-            return Double(count) / Double(seen) >= calmShare ? id : nil
+            count >= minPasses && !violated.contains(id) ? id : nil
         })
     }
 }

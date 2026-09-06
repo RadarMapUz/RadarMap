@@ -47,15 +47,6 @@ final class SpeedLimitService {
     /// а предположение её не даёт.
     private(set) var isCurrentLimitAssumed = false
 
-    /// Лимит НАЙДЕН, но противоречит ПДД на дороге такого класса.
-    ///
-    /// Это не то же самое, что `isCurrentLimitAssumed`: там мы ничего не нашли
-    /// и вывели число по классу дороги — такому числу верить можно, оно и есть
-    /// ПДД. Здесь число есть, но оно ниже законного на магистральной дороге, а
-    /// в Ташкенте так размечен весь город: 84,6 % сегментов несут 60 при норме
-    /// 70, и законные 65 превращались в «превышение» с сиреной у камеры.
-    /// Такой лимит показываем (со знаком «≈»), но не вменяем.
-    private(set) var isCurrentLimitDoubtful = false
     /// Мгновенное превышение — только для подсветки цифры на HUD: флаг щёлкает
     /// на одном GPS-фиксе, а GPS шумит (68 → 71 → 66 при лимите 60).
     private(set) var isOverspeeding = false
@@ -224,7 +215,7 @@ final class SpeedLimitService {
     /// БЕЗ участия предположенных лимитов, иначе догадка кормила бы сама себя.
     func update(coordinate: CLLocationCoordinate2D, course: CLLocationDirection,
                 speedKmh: Double, announce: Bool, fallbackClass: RoadClass = .unknown,
-                inSettlement: Bool = true) {
+                inSettlement: Bool = true, cameraAhead: Bool = false) {
         guard settings.speedLimitsEnabled, let index else {
             currentLimit = nil; isCurrentLimitAssumed = false; clearOverspeed()
             currentRoadHit = nil
@@ -239,14 +230,7 @@ final class SpeedLimitService {
             if let hit = index.matchHit(coordinate, courseDegrees: course) {
                 currentRoadHit = hit
                 if hit.limit != currentLimit { currentLimit = hit.limit }
-                // Найденный лимит — ещё не факт. Класс берём из базы (формат 2),
-                // а пока её нет — у дороги ближайшей камеры: проезды считаются
-                // именно у камер, то есть там, где ошибка и стоит денег.
-                let onClass = hit.cls == .unknown ? fallbackClass : hit.cls
-                let doubtful = LimitConfidence.of(limitKmh: hit.limit, roadClass: onClass,
-                                                  inSettlement: inSettlement) == .doubtful
-                if isCurrentLimitDoubtful != doubtful { isCurrentLimitDoubtful = doubtful }
-                if isCurrentLimitAssumed != doubtful { isCurrentLimitAssumed = doubtful }
+                if isCurrentLimitAssumed { isCurrentLimitAssumed = false }
                 missCount = 0
             } else {
                 currentRoadHit = nil
@@ -257,9 +241,6 @@ final class SpeedLimitService {
                     // рейтинг и голос о камере в режиме по умолчанию.
                     let assumed = fallbackClass.assumedLimitKmh(inSettlement: inSettlement)
                     if assumed != currentLimit { currentLimit = assumed }
-                    // Догадка по классу — не «сомнительный тег»: она и так по
-                    // ПДД, и вменять её можно (цена ошибки — лишний совет).
-                    if isCurrentLimitDoubtful { isCurrentLimitDoubtful = false }
                     if isCurrentLimitAssumed != (assumed != nil) {
                         isCurrentLimitAssumed = assumed != nil
                     }
@@ -271,18 +252,27 @@ final class SpeedLimitService {
             clearOverspeed()
             return
         }
-        // Сомнительный лимит показываем, но не вменяем: ни сирены у камеры, ни
-        // минуса в рейтинге, ни суммы штрафа, ни отмены тишины у своей камеры.
-        // Показать и обвинить — разные вещи (plan_drive_complaints.md, Ж2).
-        let over = !isCurrentLimitDoubtful
-            && speedKmh > Double(limit) + settings.overspeedTolerance
+        // Порог зависит от того, есть ли впереди камера.
+        //
+        // Вдали от камер это совет, и дёргать человека за километр в час
+        // незачем — допуск из настроек. У камеры порог становится ЖЁСТЧЕ
+        // штрафного: камера фиксирует с +5, и предупреждение, приходящее ровно
+        // на +5, приходит ВМЕСТЕ со штрафом. Смысл предупреждения в том, чтобы
+        // успеть отпустить газ, а не узнать о случившемся.
+        let threshold = OverspeedThreshold.kmh(cameraAhead: cameraAhead,
+                                               userTolerance: settings.overspeedTolerance)
+        let over = speedKmh > Double(limit) + threshold
         if over != isOverspeeding { isOverspeeding = over }
         overspeedSince = over ? (overspeedSince ?? Date()) : nil
 
         // Устойчивость считаем один раз и здесь: и голос, и градус алерта о камере
         // должны опираться на одно и то же «превышаем по-настоящему».
+        // Подтверждение у камеры короче: 2,5 секунды на подъезде — это до ста
+        // метров пути, и совет «сбросьте» прозвучал бы уже за стойкой.
+        let needed = cameraAhead ? AppConfig.overspeedSustainSecondsNearCamera
+                                 : AppConfig.overspeedSustainSeconds
         let sustained = overspeedSince.map {
-            Date().timeIntervalSince($0) >= AppConfig.overspeedSustainSeconds
+            Date().timeIntervalSince($0) >= needed
         } ?? false
         if sustained != isOverspeedingSustained { isOverspeedingSustained = sustained }
 

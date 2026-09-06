@@ -946,7 +946,11 @@ final class LocationService: NSObject {
                 fallbackClass: nearestCamera?.roadClass ?? .unknown,
                 // ПДД различают не класс дороги, а населённый пункт: в городе
                 // 70 хоть на проспекте, хоть на жилой улице, за городом 100.
-                inSettlement: alertContext == .city)
+                inSettlement: alertContext == .city,
+                // Впереди камера — порог превышения становится жёстче
+                // штрафного, а подтверждение короче: предупреждение обязано
+                // успеть раньше фиксации.
+                cameraAhead: cameraAhead)
             // Память о треногах — строго ПОСЛЕ speedLimits.update: подсказка
             // звучит только при превышении, а знает о нём именно он.
             announceHotspotIfNeeded(from: coordinate)

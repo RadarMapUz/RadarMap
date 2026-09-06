@@ -614,7 +614,10 @@ final class LocationService: NSObject {
     /// В плотном городе, где камера почти всегда «где-то рядом», это ключевая экономия:
     /// бинарный порог 3 км там не срабатывал и точность держалась на максимуме весь путь.
     private func tuneAdaptiveAccuracy() {
-        guard isTripActive, settings.adaptiveGPS, !isLowPowerMode else { return }
+        // Энергосбережение больше не отменяет лестницу: оно запрещает верхнюю
+        // ступень, но оставляет нижние. Раньше стояла отмена целиком, и на
+        // стоянке в этом режиме чип работал ВДВОЕ точнее, чем без него.
+        guard isTripActive, settings.adaptiveGPS else { return }
         let cameraDistance = distanceToNearest ?? .greatestFiniteMagnitude
         let stepDistance = (route?.isActive == true && route?.nextStep != nil)
             ? (route?.nextStepDistance ?? .greatestFiniteMagnitude)
@@ -629,7 +632,8 @@ final class LocationService: NSObject {
             idleSeconds: Date().timeIntervalSince(lastMovementAt),
             sketchVisible: isDashboardVisible || isCarPlaySketchVisible,
             isForeground: isForeground,
-            thermalIsFull: (thermal?.mode ?? .full) == .full))
+            thermalIsFull: (thermal?.mode ?? .full) == .full),
+                                 lowPower: isLowPowerMode)
         guard tier != accuracyTier else { return }
         accuracyTier = tier
         switch tier {

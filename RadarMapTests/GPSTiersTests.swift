@@ -81,4 +81,39 @@ final class GPSTiersTests: XCTestCase {
         XCTAssertTrue(GPSTiers.isStanding(speedKmh: 0, idleSeconds: 35,
                                           idleAfter: AppConfig.dashboardDimIdleSeconds))
     }
+
+
+    // MARK: - Энергосбережение (обзор батареи)
+
+    /// Самая дорогая ступень в энергосбережении недоступна.
+    func testLowPowerForbidsTheMostExpensiveTier() {
+        let atCamera = situation(nearest: 50)
+        XCTAssertEqual(GPSTiers.tier(atCamera), 0, "без экономии у камеры — точнее некуда")
+        XCTAssertEqual(GPSTiers.tier(atCamera, lowPower: true), 1,
+                       "в экономии «Best» уступает десяти метрам")
+    }
+
+    /// А самая ДЕШЁВАЯ — доступна, и это главное.
+    ///
+    /// Прежний код выключал лестницу в энергосбережении целиком, и вместо неё
+    /// на всю поездку вставали фиксированные десять метров. На стоянке чип
+    /// работал ВДВОЕ точнее, чем без экономии: режим, включённый ради батареи,
+    /// запрещал самую большую экономию.
+    func testLowPowerKeepsTheCheapestTier() {
+        let parked = situation(nearest: 4000, speed: 0, idle: 600, foreground: false)
+        XCTAssertEqual(GPSTiers.tier(parked), 3)
+        XCTAssertEqual(GPSTiers.tier(parked, lowPower: true), 3,
+                       "стоянка обязана оставаться самой дешёвой и в экономии")
+    }
+
+    /// Без энергосбережения решение не меняется ни в одном случае.
+    func testWithoutLowPowerNothingChanges() {
+        for nearest in [30.0, 200, 900, 5000] {
+            for speed in [0.0, 40, 90] {
+                let s = situation(nearest: nearest, speed: speed,
+                                  idle: speed == 0 ? 600 : 0)
+                XCTAssertEqual(GPSTiers.tier(s, lowPower: false), GPSTiers.tier(s))
+            }
+        }
+    }
 }

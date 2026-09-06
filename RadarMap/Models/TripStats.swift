@@ -135,6 +135,9 @@ final class TripStats {
     /// нормально: следующее упрощение при финише всё равно прошло бы по ним.
     func resume(_ record: TripRecord, stoppedUntil resumedAt: Date = Date(),
                 batteryPercent: Int? = nil) {
+        // Склейка — самый частый ответ на «поездки нет»: она есть, но внутри
+        // предыдущей записи. В журнале это должно быть видно.
+        Log.trips.notice("поездка продолжена склейкой: запись от \(record.startedAt, privacy: .public), \(Int(record.distanceMeters), privacy: .public) м")
         history.removeAll { $0.id == record.id }
         // Запись возвращается в живую сессию — вычитаем её из дневного агрегата,
         // иначе после финиша склеенной поездки день посчитает её дважды.
@@ -229,7 +232,20 @@ final class TripStats {
         finishedDuration = durationSeconds
         // Поездка завершена штатно — страховочный слепок больше не нужен.
         defer { startedAt = nil; startBatteryPercent = nil; removeCheckpoint() }
-        guard let startedAt, distanceMeters >= 100 else { return }
+        // Молчаливых потерь не бывает.
+        //
+        // Порог в сто метров остаётся — иначе выезд из гаража станет записью и
+        // испортит и средние, и дневные агрегаты. Но исчезать БЕЗ СЛЕДА
+        // поездка не вправе: жалоба «одну поездку не засчитал» неразрешима,
+        // пока в журнале нет ни строки (docs/plan_drive_complaints.md, Ж4).
+        guard let startedAt else {
+            Log.trips.notice("завершение без старта — записывать нечего")
+            return
+        }
+        guard distanceMeters >= 100 else {
+            Log.trips.notice("поездка не сохранена: \(Int(distanceMeters), privacy: .public) м, короче порога 100 м")
+            return
+        }
         // Рейтинг считаем по сырому треку (упрощённый теряет пики скорости).
         let scorePasses = passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) }
         let score = DrivingScore.tripScore(passes: scorePasses,
@@ -850,7 +866,10 @@ final class TripStats {
         guard let snapshot = JSONFile.load(InflightTrip.self, from: inflightURL, log: Log.trips)
         else { return }
         defer { removeCheckpoint() }
-        guard let record = Self.record(from: snapshot) else { return }
+        guard let record = Self.record(from: snapshot) else {
+            Log.trips.notice("слепок незавершённой поездки короче 100 м — не восстановлен")
+            return
+        }
         history.insert(record, at: 0)
         history = TripHistory.pruned(history)
         days = TripDayBook.folded(record, into: days)

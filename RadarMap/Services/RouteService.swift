@@ -392,7 +392,7 @@ final class RouteService {
             announcedStage[index] = 1
             onManeuver?(String(format: String(localized: "Через %lld метров — %@"),
                                Int((distance / 50).rounded() * 50), step.text))
-        } else if distance < 850, stage > 2 {
+        } else if distance < 850, stage > 2, step.kind?.deservesEarlyCall ?? true {
             announcedStage[index] = 2
             onManeuver?(String(format: String(localized: "Через %lld метров — %@"),
                                Int((distance / 100).rounded() * 100), step.text))
@@ -557,8 +557,21 @@ final class RouteService {
         }
 
         switch m.type {
-        case "turn", "continue", "end of road":
+        case "turn", "end of road":
             if let (phrase, symbol) = turnPhrase(m.modifier) { text = phrase; icon = symbol }
+        case "continue":
+            // `continue` у OSRM значит «ОСТАВАЙТЕСЬ на своей дороге», а
+            // modifier описывает, куда эта дорога изгибается. Стоял он в одной
+            // ветке с turn — и «дорога уходит правее» произносилось как
+            // «поверните направо». Водитель едет прямо и слышит команду
+            // свернуть; каждый такой шаг объявлялся ещё и трижды.
+            //
+            // Молчим. Если изгиб настолько крут, что нужен голос, OSRM пришлёт
+            // turn, а не continue. Разворот — единственное исключение: он
+            // требует действия, как его ни назови.
+            if m.modifier == "uturn", let (phrase, symbol) = turnPhrase("uturn") {
+                text = phrase; icon = symbol
+            }
         case "fork":
             switch m.modifier {
             case "left", "slight left":

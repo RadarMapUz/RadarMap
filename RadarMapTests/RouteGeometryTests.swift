@@ -133,4 +133,39 @@ final class RouteGeometryTests: XCTestCase {
         XCTAssertTrue(named?.text.contains("Амира Темура") == true)
         XCTAssertEqual(named?.distanceAlong, 500)
     }
+
+    /// `continue` — не поворот.
+    ///
+    /// Жалоба с дороги: «еду прямо, а он говорит, как будто я направо
+    /// повернул». У OSRM continue значит «оставайтесь на своей дороге», и
+    /// modifier описывает изгиб самой дороги, а не требуемое действие.
+    func testContinueIsNotATurn() {
+        func step(_ type: String, _ modifier: String?) -> RouteStep? {
+            RouteService.maneuverStep(
+                RouteService.OSRMResponse.Step(
+                    distance: 100, name: "",
+                    maneuver: RouteService.OSRMResponse.Maneuver(type: type, modifier: modifier,
+                                                                 exit: nil)),
+                at: 500)
+        }
+
+        XCTAssertNil(step("continue", "right"), "изгиб дороги — не команда свернуть")
+        XCTAssertNil(step("continue", "left"))
+        XCTAssertNil(step("continue", "slight right"))
+        XCTAssertNil(step("continue", "straight"))
+        // Разворот требует действия, как его ни назови.
+        XCTAssertEqual(step("continue", "uturn")?.kind, .uturn)
+        // Настоящие повороты не задеты.
+        XCTAssertEqual(step("turn", "right")?.icon, "arrow.turn.up.right")
+        XCTAssertEqual(step("end of road", "left")?.icon, "arrow.turn.up.left")
+    }
+
+    /// За 850 метров объявляем поворот, но не «плавно правее».
+    func testOnlyRealManeuversDeserveTheEarlyCall() {
+        XCTAssertTrue(ManeuverKind.right.deservesEarlyCall)
+        XCTAssertTrue(ManeuverKind.uturn.deservesEarlyCall)
+        XCTAssertTrue(ManeuverKind.roundabout.deservesEarlyCall)
+        XCTAssertFalse(ManeuverKind.slightRight.deservesEarlyCall)
+        XCTAssertFalse(ManeuverKind.straight.deservesEarlyCall)
+    }
 }

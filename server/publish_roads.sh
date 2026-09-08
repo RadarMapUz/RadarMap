@@ -92,8 +92,18 @@ else
           key=\${pair%%:*}; file=\${pair#*:}
           [ -s \"\$file\" ] && args=\"\$args --\$key \$file\"
       done
-      echo \"    слои: \$args\"
-      python3 build_roads.py --in '$EXTRACT' \$args --tiles '$TILES'"
+      # --mvt — та же мина, что и со слоями, и в том же месте. Крон собирает
+      # с ним (update_roads.sh), ручная публикация — нет, и подпись индекса
+      # MVT молча пропускалась: телефон на движке продолжал читать СТАРУЮ
+      # геометрию, сколько бы раз владелец ни публиковал вручную.
+      #
+      # Поверхность дорог — тоже как в кроне: на тесной памяти её не считают,
+      # иначе сборка уходит в своп рядом с работающими api и панелью.
+      free_mb=\$(free -m | awk '/^Mem:/ {print \$7}')
+      surface=''
+      [ \"\${free_mb:-0}\" -lt 600 ] && surface='--no-surface'
+      echo \"    слои: \$args \$surface --mvt\"
+      python3 build_roads.py --in '$EXTRACT' \$args \$surface --mvt --tiles '$TILES'"
 fi
 
 echo "=== 2/4: подпись индексов локально ==="

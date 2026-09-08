@@ -143,6 +143,54 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(build_mvt.build_mvt([], self.dir), {})
         self.assertEqual(self.tiles(), [])
 
+    def test_only_confirmed_oneway_lanes_are_marked(self):
+        points = [(69.28, 41.311), (69.282, 41.311)]
+        tagged = build_mvt.FLAG_LANES_TAGGED | (3 << 4)
+        self.assertEqual(list(build_mvt.lane_markings([self.road(points, flags=tagged)])), [])
+        self.assertEqual(list(build_mvt.lane_markings([self.road(points, flags=build_mvt.FLAG_ONEWAY)])), [])
+        lines = list(build_mvt.lane_markings([self.road(points, flags=tagged | build_mvt.FLAG_ONEWAY)]))
+        self.assertEqual(len(lines), 2)
+        self.assertLess(lines[0][0][1], points[0][1])
+        self.assertGreater(lines[1][0][1], points[0][1])
+
+    def test_markings_stop_before_crossing_and_resume_after(self):
+        center = (69.28, 41.311)
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (2 << 4)
+        roads = [self.road([(69.278, 41.311), center], flags=flags),
+                 self.road([center, (69.282, 41.311)], flags=flags),
+                 self.road([(69.28, 41.309), center]),
+                 self.road([center, (69.28, 41.313)])]
+        lines = list(build_mvt.lane_markings(roads))
+        self.assertEqual(len(lines), 2)
+        self.assertLess(lines[0][-1][0], center[0] - .00005)
+        self.assertGreater(lines[1][0][0], center[0] + .00005)
+
+    def test_simple_continuation_has_no_marking_gap(self):
+        middle = (69.28, 41.311)
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (2 << 4)
+        lines = list(build_mvt.lane_markings([
+            self.road([(69.278, 41.311), middle], flags=flags),
+            self.road([middle, (69.282, 41.311)], flags=flags)]))
+        self.assertAlmostEqual(lines[0][-1][0], lines[1][0][0], places=8)
+        self.assertAlmostEqual(lines[0][-1][1], lines[1][0][1], places=8)
+
+    def test_bridge_does_not_create_a_ground_level_gap(self):
+        middle = (69.28, 41.311)
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (2 << 4)
+        roads = [self.road([(69.278, 41.311), middle], flags=flags),
+                 self.road([middle, (69.282, 41.311)], flags=flags),
+                 self.road([middle, (69.28, 41.313)], flags=build_mvt.FLAG_BRIDGE)]
+        lines = list(build_mvt.lane_markings(roads))
+        self.assertAlmostEqual(lines[0][-1][0], middle[0], places=8)
+
+    def test_markings_are_in_detail_tile_only(self):
+        road = self.road([(69.28, 41.311), (69.281, 41.311)],
+                         flags=build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (2 << 4))
+        build_mvt.build_mvt([road], self.dir, far=[road])
+        for path in self.tiles():
+            expected = f"/mvt/{build_mvt.ZOOM_DETAIL}/" in path
+            self.assertEqual(build_mvt.LAYER_MARKINGS in self.parsed(path), expected)
+
 
 if __name__ == "__main__":
     unittest.main()

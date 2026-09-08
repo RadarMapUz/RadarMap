@@ -230,31 +230,52 @@ struct TripLiveBar: View {
 struct ManeuverBanner: View {
     let step: RouteStep
     let distance: CLLocationDistance
+    private let jade = Color(red: 0.64, green: 0.88, blue: 0.71)
 
     var body: some View {
+        VStack(spacing: 0) {
         HStack(spacing: 12) {
             Image(systemName: step.icon)
                 .font(.rounded(22, .bold))
                 .foregroundStyle(Theme.background)
                 .frame(width: 46, height: 46)
-                .background(Theme.accent.gradient, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+                .background(jade, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
                 // Моноширинные цифры — как у приборки и CarPlay: дистанция
                 // тает каждый тик, и без них баннер дрожал шириной.
                 Text(Formatting.distance(distance))
-                    .font(.rounded(20, .heavy).monospacedDigit())
+                    .font(.rounded(26, .semibold).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                     .animation(.easeOut(duration: 0.3), value: Int(distance))
                 Text(step.text)
                     .font(.rounded(13, .medium))
                     .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
             Spacer(minLength: 0)
         }
-        .padding(10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .padding(14)
+        if !step.lanes.isEmpty, step.lanes.count <= 8,
+           step.lanes.contains(where: \.isValid), distance <= AppConfig.engineManeuverApproachMeters {
+            Divider().overlay(Theme.stroke)
+            HStack(spacing: 4) {
+                ForEach(Array(step.lanes.enumerated()), id: \.offset) { index, lane in
+                    Image(systemName: lane.primaryArrow(for: step.kind).symbolName)
+                        .font(.rounded(20, lane.isValid ? .bold : .regular))
+                        .foregroundStyle(lane.isValid ? jade : Theme.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(lane.isValid ? jade.opacity(0.12) : .clear,
+                                    in: RoundedRectangle(cornerRadius: 8))
+                        .accessibilityLabel(Text("Полоса \(index + 1)"))
+                        .accessibilityValue(lane.isValid ? Text("Подходит для манёвра") : Text("Не подходит для манёвра"))
+                }
+            }
+            .padding(8)
+        }
+        }
+        .background(Color(red: 0.075, green: 0.14, blue: 0.12), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
         .transition(.move(edge: .top).combined(with: .opacity))
     }

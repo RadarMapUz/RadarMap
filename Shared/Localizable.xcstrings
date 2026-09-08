@@ -13534,6 +13534,70 @@
           }
         }
       }
+    },
+    "К машине": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "К машине"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avtomobilga"
+          }
+        }
+      }
+    },
+    "Не подходит для манёвра": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не подходит для манёвра"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manevr uchun mos emas"
+          }
+        }
+      }
+    },
+    "Подходит для манёвра": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подходит для манёвра"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manevr uchun mos"
+          }
+        }
+      }
+    },
+    "Полоса %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Полоса %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld-qator"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

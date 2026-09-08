@@ -64,6 +64,8 @@ struct EngineBaseLayer: View {
     var onSelectCamera: (Camera) -> Void = { _ in }
     @Environment(AppEnvironment.self) private var env
     let state: SketchState
+    @State private var browsing = false
+    @State private var recenterToken = 0
 
     var body: some View {
         let me = env.location.displayCoordinate ?? env.location.currentCoordinate
@@ -76,10 +78,10 @@ struct EngineBaseLayer: View {
                 }) : [:]
             let distance = env.location.nearestCamera != nil
                 ? env.location.distanceToNearest : nil
-            let span = env.location.isTripActive
-                ? max(450, RoadSketch.span(forDistance: distance,
-                                          speedKmh: env.location.speedKmh, insets: insets))
-                : 1_400
+            let maneuverDistance = env.route.nextStep.map { _ in env.route.nextStepDistance }
+            let span = EngineMapPresentation.span(speedKmh: env.location.speedKmh,
+                                                  maneuverDistance: maneuverDistance,
+                                                  active: env.location.isTripActive)
             let inRange = distance.map {
                 RoadSketch.isInRange(distance: $0, span: span, insets: insets)
             } ?? false
@@ -96,15 +98,36 @@ struct EngineBaseLayer: View {
                         courseDegrees: env.location.displayCourse,
                         spanMeters: span,
                         anchorY: insets.meY,
-                        pitchDegrees: !env.location.isTripActive || inRange ? 0 : AppConfig.engineMapPitchDegrees,
+                        pitchDegrees: !env.location.isTripActive ? 0 : AppConfig.engineMapPitchDegrees
+                            * min(1, max(0, (maneuverDistance ?? AppConfig.engineManeuverApproachMeters)
+                                         / AppConfig.engineManeuverApproachMeters)),
                         daylight: env.settings.mapAppearance.isDaylight(at: me, now: Date()),
                         houses: env.settings.mapHouses,
                         cameras: cameras,
                         alertCameraID: inRange ? env.location.nearestCamera?.id : nil,
                         cameraLimits: limits,
                         route: env.route.routeCoordinates,
+                        routeProgress: env.route.progressAlong,
+                        maneuverAlong: env.route.nextStep?.kind?.isDrawable == true ? env.route.nextStep?.distanceAlong : nil,
+                        recenterToken: recenterToken,
+                        onBrowse: { browsing = true },
                         onSelectCamera: onSelectCamera)
-
+                    if browsing {
+                        VStack {
+                            Spacer()
+                            Button {
+                                browsing = false
+                                recenterToken += 1
+                            } label: {
+                                Label("К машине", systemImage: "location.fill")
+                                    .font(.rounded(14, .semibold))
+                                    .padding(.horizontal, 14).padding(.vertical, 10)
+                                    .background(.regularMaterial, in: Capsule())
+                            }
+                            .tapTarget()
+                            .padding(.bottom, geo.size.height * (1 - insets.meY) + 32)
+                        }
+                    }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
             }

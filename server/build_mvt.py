@@ -13,7 +13,7 @@ import json
 import math
 import os
 import shutil
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 
 import mvt
 from build_roads import (AREA_HOUSE, AREA_JUNCTION, AREA_MEDIAN, AREA_ROAD,
@@ -37,6 +37,75 @@ LAYER_SURFACE = "surface"
 LAYER_LAND = "land"
 LAYER_HOUSES = "houses"
 LAYER_POINTS = "points"
+LAYER_MARKINGS = "markings"
+
+# Разметка готовится один раз при сборке. Ограничение защищает от испорченного
+# тега lanes; двусторонние дороги без lanes:forward/backward не угадываем.
+MAX_MARKED_LANES = 8
+JUNCTION_MARKING_MARGIN = 4.0
+
+
+def lane_markings(roads):
+    """Разделители подтверждённых односторонних полос вне перекрёстков.
+
+    Вход — сеть ПОСЛЕ generalise: общие узлы уже стали концами сегментов.
+    Считаем только концы, не заводим второй индекс всех вершин страны.
+    Мосты и тоннели не смешиваются с наземными перекрёстками.
+    """
+    def key(point, flags):
+        return (round(point[0], 6), round(point[1], 6),
+                flags & (FLAG_BRIDGE | FLAG_TUNNEL))
+
+    nodes = defaultdict(lambda: [0, 0.0])
+    for code, flags, points, _ in roads:
+        if len(points) < 2 or code > 7:
+            continue
+        width = road_width_meters(code, lanes_of(flags))
+        for p in (points[0], points[-1]):
+            node = nodes[key(p, flags)]
+            node[0] += 1
+            node[1] = max(node[1], width)
+
+    def trim(points, distance):
+        result = list(points)
+        while len(result) > 1 and distance > 0:
+            a, b = result[:2]
+            length = math.dist(a, b)
+            if length > distance:
+                t = distance / length
+                result[0] = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+                break
+            distance -= length
+            result.pop(0)
+        return result
+
+    for code, flags, points, _ in roads:
+        lanes = lanes_of(flags)
+        if (not flags & FLAG_LANES_TAGGED or not flags & FLAG_ONEWAY
+                or not 2 <= lanes <= MAX_MARKED_LANES or code > 7 or len(points) < 2):
+            continue
+        origin = points[0]
+        sx, sy = 111_320 * math.cos(math.radians(origin[1])), 111_320
+        metric = [((p[0] - origin[0]) * sx, (p[1] - origin[1]) * sy) for p in points]
+        for endpoint in (points[0], points[-1]):
+            degree, width = nodes[key(endpoint, flags)]
+            metric = trim(metric, width / 2 + JUNCTION_MARKING_MARGIN if degree >= 3 else 0)
+            metric.reverse()
+        if len(metric) < 2:
+            continue
+        width = road_width_meters(code, lanes)
+        for lane in range(1, lanes):
+            offset = width * (lane / lanes - .5)
+            line = []
+            for i, p in enumerate(metric):
+                a, b = metric[max(0, i - 1)], metric[min(len(metric) - 1, i + 1)]
+                length = math.dist(a, b)
+                if length == 0:
+                    continue
+                x, y = p[0] - (b[1] - a[1]) / length * offset, p[1] + (b[0] - a[0]) / length * offset
+                line.append((origin[0] + x / sx, origin[1] + y / sy))
+            if len(line) > 1:
+                yield line
 
 # Кому какой зум. Слой, невидимый на обзоре, туда и не едет — тот же закон,
 # по которому телефон не качает дворовые проезды на охвате района.
@@ -211,6 +280,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         for road in roads:
             _put(buckets, zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
                  _road_props(road))
+        for line in lane_markings(roads):
+            _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, {"verified": True})
         for road in far:
             _put(buckets, far_zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
                  _road_props(road))

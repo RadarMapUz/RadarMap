@@ -811,4 +811,17 @@ nonisolated enum AppConfig {
     /// Сколько места движку под кэш тайлов. Это офлайн, а не ускорение:
     /// в поездке по стране связи нет часами.
     static let engineMapCacheBytes = 200 * 1024 * 1024
+
+    /// Городской обзор и приближение перед манёвром, в метрах видимой высоты.
+    static let engineOverviewSpan = 1_400.0
+    static let engineCloseSpan = 420.0
+    static let engineManeuverApproachMeters = 600.0
+    static let engineManeuverHighlightMeters = 35.0
+    /// Частота обновления геометрии маршрута; курсор обновляется на каждом фиксе.
+    static let engineRouteProgressStep = 15.0
+    /// Подавление дрожания стоящей машины и повторных анимаций от обновления UI.
+    static let engineCameraMoveThreshold = 2.0
+    static let engineCameraHeadingThreshold = 2.0
+    static let engineCameraSpanThreshold = 30.0
+    static let engineCameraDuration = 0.8
 }

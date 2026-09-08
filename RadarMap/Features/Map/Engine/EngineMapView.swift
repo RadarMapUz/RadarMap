@@ -57,6 +57,10 @@ struct EngineMapView: UIViewRepresentable {
     var alertCameraID: Int?
     var cameraLimits: [Int: Int] = [:]
     var route: [CLLocationCoordinate2D]
+    var routeProgress: Double = 0
+    var maneuverAlong: Double?
+    var recenterToken: Int = 0
+    var onBrowse: () -> Void = {}
     var onSelectCamera: (Camera) -> Void = { _ in }
 
     func makeUIView(context: Context) -> MLNMapView {
@@ -71,12 +75,10 @@ struct EngineMapView: UIViewRepresentable {
         MLNOfflineStorage.shared.setMaximumAmbientCacheSize(
             UInt(AppConfig.engineMapCacheBytes)) { _ in }
         let view = EngineNativeMapView(frame: .zero)
-        // Жесты карты выключены целиком: за рулём вид ведёт машина, а не
-        // палец. Осмотр и щипок вернутся отдельной работой, вместе с
-        // автовозвратом, как в схеме.
-        view.isScrollEnabled = false
-        view.isZoomEnabled = false
-        view.isRotateEnabled = false
+        // Осмотр не меняет GPS и маршрут; вернуться к слежению можно кнопкой.
+        view.isScrollEnabled = true
+        view.isZoomEnabled = true
+        view.isRotateEnabled = true
         view.isPitchEnabled = false
         view.compassView.isHidden = true
         view.logoView.isHidden = true
@@ -86,6 +88,9 @@ struct EngineMapView: UIViewRepresentable {
         view.addGestureRecognizer(UITapGestureRecognizer(target: context.coordinator,
                                                           action: #selector(Coordinator.selectCamera(_:))))
         context.coordinator.view = view
+        for gesture in view.gestureRecognizers ?? [] where !(gesture is UITapGestureRecognizer) {
+            gesture.addTarget(context.coordinator, action: #selector(Coordinator.inspectMap(_:)))
+        }
         view.onLayout = { [weak coordinator = context.coordinator] view in
             guard let coordinator, let model = coordinator.current else { return }
             coordinator.apply(model, to: view)
@@ -125,6 +130,17 @@ struct EngineMapView: UIViewRepresentable {
         private var lastLimits: [Int: Int] = [:]
         private var lastAlertID: Int?
         private var lastRoute: [CLLocationCoordinate2D]?
+        private var lastProgress = -Double.infinity
+        private var lastManeuverAlong: Double?
+        private var lastCameraModel: EngineMapView?
+        private var browsing = false
+        private var lastRecenterToken = 0
+
+        @objc func inspectMap(_ gesture: UIGestureRecognizer) {
+            guard gesture.state == .began else { return }
+            browsing = true
+            current?.onBrowse()
+        }
 
         private func installCameraIcons(in style: MLNStyle) {
             let renderer = ImageRenderer(content: MeCursor(scale: 1)
@@ -138,13 +154,30 @@ struct EngineMapView: UIViewRepresentable {
                 if let image = UIImage(systemName: kind.symbolName, withConfiguration: configuration) {
                     // Bake SF Symbol tint into pixels: Native does not apply
                     // UIKit's template rendering mode to a style image.
-                    let bitmap = UIGraphicsImageRenderer(size: image.size).image { _ in
-                        image.withTintColor(.white, renderingMode: .alwaysOriginal)
-                            .draw(at: .zero)
+                    for alert in [false, true] {
+                        let bitmap = UIGraphicsImageRenderer(size: CGSize(width: 30, height: 30)).image { _ in
+                            (alert ? UIColor(red: 0.50, green: 0.33, blue: 0.11, alpha: 1)
+                             : UIColor(red: 0.10, green: 0.22, blue: 0.18, alpha: 1)).setFill()
+                            UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 28, height: 28), cornerRadius: 10).fill()
+                            image.withTintColor(.white, renderingMode: .alwaysOriginal)
+                                .draw(at: CGPoint(x: (30 - image.size.width) / 2, y: (30 - image.size.height) / 2))
+                        }
+                        style.setImage(bitmap, forName: kind.symbolName + (alert ? "-alert" : ""))
                     }
-                    style.setImage(bitmap, forName: kind.symbolName)
                 }
             }
+            // Все линзы нейтральны: тайл знает положение, но не текущую фазу.
+            let signal = UIGraphicsImageRenderer(size: CGSize(width: 16, height: 32)).image { _ in
+                UIColor(red: 0.07, green: 0.13, blue: 0.11, alpha: 1).setFill()
+                let shell = UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 14, height: 30), cornerRadius: 5)
+                shell.fill()
+                UIColor(red: 0.65, green: 0.73, blue: 0.67, alpha: 1).setStroke()
+                shell.lineWidth = 1
+                shell.stroke()
+                UIColor(red: 0.65, green: 0.73, blue: 0.67, alpha: 1).setFill()
+                for y in [6, 14, 22] { UIBezierPath(ovalIn: CGRect(x: 5, y: y, width: 6, height: 6)).fill() }
+            }
+            style.setImage(signal, forName: "radar-signal")
         }
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
@@ -167,7 +200,7 @@ struct EngineMapView: UIViewRepresentable {
             guard gesture.state == .ended, let view, let current else { return }
             let point = gesture.location(in: view)
             let rect = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
-            let features = view.visibleFeatures(in: rect, styleLayerIdentifiers: ["camera-dot"])
+            let features = view.visibleFeatures(in: rect, styleLayerIdentifiers: ["camera-dot", "camera-icons"])
             let ids = Set(features.compactMap { ($0.attribute(forKey: "id") as? NSNumber)?.intValue })
             let nearest = current.cameras.filter { ids.contains($0.id) }.min { a, b in
                 let pa = view.convert(a.coordinate, toPointTo: view)
@@ -198,6 +231,11 @@ struct EngineMapView: UIViewRepresentable {
                 return
             }
             pending = nil
+            if lastRecenterToken != model.recenterToken {
+                lastRecenterToken = model.recenterToken
+                browsing = false
+                lastCameraModel = nil
+            }
 
             if lastDaylight != model.daylight || lastHouses != model.houses {
                 loadStyle(model, in: view)
@@ -210,9 +248,10 @@ struct EngineMapView: UIViewRepresentable {
             // contentInset» — известная беда движка (issue #3029, до 400 %
             // процессора и перегрев). Смещаем саму точку взгляда вперёд по
             // курсу: та же картинка, обычной арифметикой.
+            let heading = EngineMapPresentation.heading(model.courseDegrees, near: view.direction)
             let ahead = model.spanMeters * (model.anchorY - 0.5)
             let centre = GeoMath.destination(from: model.coordinate,
-                                              bearing: max(0, model.courseDegrees),
+                                              bearing: heading,
                                               distanceMeters: ahead)
             let zoom = Self.zoom(spanMeters: model.spanMeters, height: view.bounds.height,
                                  latitude: centre.latitude)
@@ -220,15 +259,25 @@ struct EngineMapView: UIViewRepresentable {
                                                   centre.latitude, view.bounds.size)
             let camera = MLNMapCamera(lookingAtCenter: centre, altitude: altitude,
                                       pitch: model.pitchDegrees,
-                                      heading: max(0, model.courseDegrees))
-            view.setCamera(camera, withDuration: cameraPlaced ? 0.9 : 0,
+                                      heading: heading)
+            let changed = lastCameraModel.map { previous in
+                GeoMath.fastDistance(previous.coordinate.latitude, previous.coordinate.longitude,
+                                     model.coordinate.latitude, model.coordinate.longitude) >= AppConfig.engineCameraMoveThreshold
+                || GeoMath.angleDifference(previous.courseDegrees, model.courseDegrees) >= AppConfig.engineCameraHeadingThreshold
+                || abs(previous.spanMeters - model.spanMeters) >= AppConfig.engineCameraSpanThreshold
+                || previous.pitchDegrees != model.pitchDegrees || previous.anchorY != model.anchorY
+            } ?? true
+            if !browsing && changed {
+                view.setCamera(camera, withDuration: cameraPlaced && !UIAccessibility.isReduceMotionEnabled ? AppConfig.engineCameraDuration : 0,
                            animationTimingFunction: CAMediaTimingFunction(name: .linear))
+                lastCameraModel = model
+            }
             if !cameraPlaced {
                 Log.network.info("MapLibre: камера установлена, zoom \(view.zoomLevel, privacy: .public)")
             }
             cameraPlaced = true
             update(source: "position", in: view, geoJSON: [
-                "type": "Feature", "properties": [:],
+                "type": "Feature", "properties": ["rotation": max(0, model.courseDegrees)],
                 "geometry": ["type": "Point", "coordinates":
                     [model.coordinate.longitude, model.coordinate.latitude]],
             ])
@@ -240,11 +289,17 @@ struct EngineMapView: UIViewRepresentable {
                 update(source: "cameras", in: view, geoJSON: Self.cameraFeatures(
                     model.cameras, alert: model.alertCameraID, limits: model.cameraLimits))
             }
-            if lastRoute == nil || !model.route.elementsEqual(lastRoute!, by: {
+            if lastRoute == nil || lastManeuverAlong != model.maneuverAlong || abs(model.routeProgress - lastProgress) >= AppConfig.engineRouteProgressStep || !model.route.elementsEqual(lastRoute!, by: {
                 $0.latitude == $1.latitude && $0.longitude == $1.longitude
             }) {
                 lastRoute = model.route
-                update(source: "route", in: view, geoJSON: Self.lineFeature(model.route))
+                lastProgress = model.routeProgress
+                lastManeuverAlong = model.maneuverAlong
+                let split = EngineMapPresentation.split(model.route, at: model.routeProgress)
+                update(source: "traveled", in: view, geoJSON: Self.lineFeature(split.traveled))
+                update(source: "route", in: view, geoJSON: Self.lineFeature(split.remaining))
+                update(source: "maneuver", in: view, geoJSON: Self.lineFeature(
+                    EngineMapPresentation.maneuver(model.route, at: model.maneuverAlong, progress: model.routeProgress)))
             }
         }
 
@@ -270,7 +325,7 @@ struct EngineMapView: UIViewRepresentable {
                     [
                         "type": "Feature",
                         "properties": ["id": camera.id, "alert": camera.id == alert,
-                                       "icon": camera.kind.symbolName,
+                                       "icon": camera.kind.symbolName + (camera.id == alert ? "-alert" : ""),
                                        "limit": limits[camera.id].map { String($0) } ?? "",
                                        "unconfirmed": camera.isUnconfirmedMobile],
                         "geometry": ["type": "Point",

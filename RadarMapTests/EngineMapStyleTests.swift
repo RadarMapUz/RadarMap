@@ -14,6 +14,7 @@
 
 import Foundation
 import Testing
+import MapKit
 
 @testable import RadarMap
 
@@ -117,7 +118,7 @@ struct EngineMapStyleTests {
         let json = EngineMapStyle.json(daylight: true, base: base, tilesReady: false)
         let object = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
         let sources = try #require(object["sources"] as? [String: Any])
-        #expect(Set(sources.keys) == Set(["cameras", "route", "position"]))
+        #expect(Set(sources.keys) == Set(["cameras", "route", "position", "traveled", "maneuver"]))
         for layer in layers(object) {
             if let source = layer["source"] as? String { #expect(sources[source] != nil) }
         }
@@ -167,5 +168,63 @@ struct EngineMapStyleTests {
             .first { $0["id"] as? String == "ground" }?["paint"] as? [String: Any]
         #expect(background?["background-color"] as? String == ground,
                 "фон карты разошёлся с палитрой схемы")
+    }
+
+    @Test("Приближение к манёвру плавное, скорость расширяет обзор")
+    func maneuverZoom() {
+        let cruise = EngineMapPresentation.span(speedKmh: 100, maneuverDistance: nil, active: true)
+        let far = EngineMapPresentation.span(speedKmh: 100, maneuverDistance: 600, active: true)
+        let near = EngineMapPresentation.span(speedKmh: 100, maneuverDistance: 100, active: true)
+        #expect(cruise == far)
+        #expect(near < far)
+        #expect(near > AppConfig.engineCloseSpan)
+        #expect(EngineMapPresentation.span(speedKmh: 0, maneuverDistance: 0, active: false) == 1_400)
+    }
+
+    @Test("Курс проходит север кратчайшим путём и держится без GPS-курса")
+    func shortHeading() {
+        #expect(EngineMapPresentation.heading(1, near: 359) == 361)
+        #expect(EngineMapPresentation.heading(359, near: 1) == -1)
+        #expect(EngineMapPresentation.heading(-1, near: 65) == 65)
+    }
+
+    @Test("Маршрут разрезается без щели, в том числе на повторном участке петли")
+    func routeSplit() throws {
+        let a = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.28)
+        let b = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.29)
+        let length = MKMapPoint(a).distance(to: MKMapPoint(b))
+        let split = EngineMapPresentation.split([a, b, a], at: length * 1.5)
+        #expect(split.traveled.count == 3)
+        #expect(split.remaining.count == 2)
+        let end = try #require(split.traveled.last), start = try #require(split.remaining.first)
+        #expect(abs(end.longitude - start.longitude) < 0.0000001)
+        #expect(abs(end.longitude - 69.285) < 0.000001)
+        #expect(EngineMapPresentation.split([a, b], at: 0).traveled.isEmpty)
+        #expect(EngineMapPresentation.split([a, b], at: length * 2).remaining.isEmpty)
+    }
+
+    @Test("Выделение манёвра ограничено подходом и реальной линией маршрута")
+    func maneuverSegment() {
+        let road = [CLLocationCoordinate2D(latitude: 41.31, longitude: 69.28),
+                    CLLocationCoordinate2D(latitude: 41.31, longitude: 69.30)]
+        #expect(EngineMapPresentation.maneuver(road, at: 900, progress: 0).isEmpty)
+        #expect(EngineMapPresentation.maneuver(road, at: nil, progress: 0).isEmpty)
+        let turn = EngineMapPresentation.maneuver(road, at: 300, progress: 250)
+        #expect(turn.count == 2)
+        if turn.count == 2 {
+            #expect(abs(MKMapPoint(turn[0]).distance(to: MKMapPoint(turn[1])) - 70) < 0.1)
+        }
+    }
+
+    @Test("Разметка берётся из готового слоя, светофоры без онлайн-фаз")
+    func roadFurniture() {
+        let all = layers(style())
+        let markings = all.first { $0["id"] as? String == "lane-markings" }
+        #expect(markings?["source-layer"] as? String == "markings")
+        let signal = all.first { $0["id"] as? String == "traffic-signals" }
+        let layout = signal?["layout"] as? [String: Any]
+        #expect(layout?["icon-image"] as? String == "radar-signal")
+        #expect(layout?["icon-allow-overlap"] as? Bool == false)
+        #expect(all.contains { $0["id"] as? String == "route-traveled" })
     }
 }

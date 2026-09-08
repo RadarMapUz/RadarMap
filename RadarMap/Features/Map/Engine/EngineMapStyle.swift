@@ -97,12 +97,14 @@ nonisolated enum EngineMapStyle {
                 // наполняются на тике, как и в самописной схеме.
                 "cameras": ["type": "geojson", "data": emptyCollection],
                 "route": ["type": "geojson", "data": emptyCollection],
+                "traveled": ["type": "geojson", "data": emptyCollection],
+                "maneuver": ["type": "geojson", "data": emptyCollection],
                 "position": ["type": "geojson", "data": emptyCollection],
             ],
             "layers": layers(ground: ground, casing: casing, label: label,
                              halo: halo,
                              land: landColour, asphalt: asphaltColour,
-                             houses: houses),
+                             houses: houses, daylight: daylight),
         ]
         // Do not let Native cache authentication failures while the signed
         // index is still loading. Local overlays work without vector sources.
@@ -110,6 +112,8 @@ nonisolated enum EngineMapStyle {
             style["sources"] = [
                 "cameras": ["type": "geojson", "data": emptyCollection],
                 "route": ["type": "geojson", "data": emptyCollection],
+                "traveled": ["type": "geojson", "data": emptyCollection],
+                "maneuver": ["type": "geojson", "data": emptyCollection],
                 "position": ["type": "geojson", "data": emptyCollection],
             ]
             let all = style["layers"] as? [[String: Any]] ?? []
@@ -146,13 +150,13 @@ nonisolated enum EngineMapStyle {
 
     private static func routeWidth(extra: Double) -> [Any] {
         ["interpolate", ["linear"], ["zoom"],
-         11, 3 + extra, 14, 4 + extra, 16, 6 + extra, 19, 9 + extra]
+         11, 2.5 + extra, 14, 3 + extra, 16, 4.5 + extra, 19, 7 + extra]
     }
 
     private static func layers(ground: String, casing: String, label: String,
                                halo: String,
                                land: [Any], asphalt: [Any],
-                               houses: Bool) -> [[String: Any]] {
+                               houses: Bool, daylight: Bool) -> [[String: Any]] {
         var out: [[String: Any]] = [
             ["id": "ground", "type": "background",
              "paint": ["background-color": ground]],
@@ -200,18 +204,44 @@ nonisolated enum EngineMapStyle {
             if near { layer["minzoom"] = detailFromZoom } else { layer["maxzoom"] = detailFromZoom }
             out.append(layer)
         }
-        // Synthetic centre dashes used to run through intersections and look
-        // like broken road edges. Lane markings require junction-aware data.
+        // Геометрия полос подготовлена сборщиком: обрезана по границам узлов.
+        // Старые тайлы без этого слоя остаются читаемыми, догадок о полосах нет.
+        out.append([
+            "id": "lane-markings", "type": "line", "source": "near", "source-layer": "markings",
+            "minzoom": 17,
+            "layout": ["line-cap": "butt", "line-join": "round"],
+            "paint": ["line-color": daylight ? "#99a99c" : "#b5c5b5",
+                      "line-width": ["interpolate", ["exponential", 2], ["zoom"], 17, 0.65, 20, 2.5],
+                      "line-dasharray": [5, 7], "line-opacity": 0.7],
+        ])
+        out.append([
+            "id": "route-traveled", "type": "line", "source": "traveled",
+            "layout": ["line-cap": "round", "line-join": "round"],
+            "paint": ["line-color": daylight ? "#8a9f94" : "#52685f",
+                      "line-width": routeWidth(extra: 0), "line-opacity": 0.75],
+        ])
         // Маршрут — под подписями и над дорогой.
         out.append([
             "id": "route-case", "type": "line", "source": "route",
             "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": "#04160c", "line-width": routeWidth(extra: 3)],
+            "paint": ["line-color": daylight ? "#d1eadb" : "#163e32", "line-width": routeWidth(extra: 2)],
         ])
         out.append([
             "id": "route", "type": "line", "source": "route",
             "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": "#22b879", "line-width": routeWidth(extra: 0)],
+            "paint": ["line-color": daylight ? "#278660" : "#a2dfb5", "line-width": routeWidth(extra: 0)],
+        ])
+        out.append([
+            "id": "route-maneuver", "type": "line", "source": "maneuver",
+            "layout": ["line-cap": "round", "line-join": "round"],
+            "paint": ["line-color": daylight ? "#145c42" : "#e2f6b9", "line-width": routeWidth(extra: 1)],
+        ])
+        out.append([
+            "id": "traffic-signals", "type": "symbol", "source": "near", "source-layer": "points",
+            "minzoom": 16.2, "filter": ["==", ["get", "kind"], 1],
+            "layout": ["icon-image": "radar-signal", "icon-allow-overlap": false,
+                       "icon-padding": 10, "icon-anchor": "bottom-left",
+                       "icon-offset": [5, -5], "icon-pitch-alignment": "viewport"],
         ])
         out.append([
             "id": "labels", "type": "symbol", "source": "near", "source-layer": "roads",
@@ -237,6 +267,7 @@ nonisolated enum EngineMapStyle {
         ])
         out.append([
             "id": "camera-dot", "type": "circle", "source": "cameras",
+            "maxzoom": 14.5,
             "paint": ["circle-radius": ["interpolate", ["linear"], ["zoom"],
                                         12, 4, 15, 12, 17, 15],
                       "circle-color": ["case", ["get", "alert"], "#80551c", "#243d49"],
@@ -248,7 +279,8 @@ nonisolated enum EngineMapStyle {
             "id": "camera-icons", "type": "symbol", "source": "cameras",
             "minzoom": 14.5,
             "layout": ["icon-image": ["get", "icon"],
-                       "icon-allow-overlap": true, "icon-ignore-placement": true],
+                       "icon-allow-overlap": false, "icon-padding": 7,
+                       "symbol-sort-key": ["case", ["get", "alert"], 0, 1]],
             "paint": ["icon-opacity": ["case", ["get", "unconfirmed"], 0.55, 1]],
         ])
         out.append([
@@ -265,8 +297,9 @@ nonisolated enum EngineMapStyle {
         out.append([
             "id": "user-location", "type": "symbol", "source": "position",
             "layout": ["icon-image": "radar-user", "icon-allow-overlap": true,
+                       "icon-rotate": ["get", "rotation"],
                        "icon-ignore-placement": true, "icon-pitch-alignment": "viewport",
-                       "icon-rotation-alignment": "viewport"],
+                       "icon-rotation-alignment": "map"],
         ])
         return out
     }

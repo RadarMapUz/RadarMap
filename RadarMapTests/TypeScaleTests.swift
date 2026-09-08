@@ -6,6 +6,7 @@
 //  след истории: каждый элемент подбирал себе размер на глаз рядом с соседом.
 //
 
+import SwiftUI
 import XCTest
 @testable import RadarMap
 

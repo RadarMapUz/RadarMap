@@ -67,12 +67,16 @@ struct MapLayersControl: View {
 
             Rectangle().fill(Theme.stroke).frame(height: 1).padding(.vertical, 4)
 
-            toggle("Пробки", "car.2.fill", isOn: $traffic)
-            toggle("Места", "fuelpump.fill", isOn: $places)
+            if base == .apple {
+                toggle("Пробки", "car.2.fill", isOn: $traffic)
+                toggle("Места", "fuelpump.fill", isOn: $places)
+            }
 
             if showsBuildingLayers {
                 toggle("Дома", "building.2.fill", isOn: $houses)
-                toggle("Тротуары", "figure.walk", isOn: $sidewalks)
+                if base == .sketch {
+                    toggle("Тротуары", "figure.walk", isOn: $sidewalks)
+                }
             }
 
             if showsLegend {

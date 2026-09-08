@@ -281,7 +281,7 @@ nonisolated enum MapBase: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .apple:  return String(localized: "Apple")
         case .sketch: return String(localized: "Своя схема")
-        case .engine: return String(localized: "Движок")
+        case .engine: return String(localized: "Карта RadarMap")
         }
     }
 

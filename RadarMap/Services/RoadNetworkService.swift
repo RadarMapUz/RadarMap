@@ -126,7 +126,7 @@ final class RoadNetworkService {
     /// публикует оба, пока в проде есть сборки, знающие только его.
     /// Монитор сети — слабо, как у отметок: тайлы обязаны отдаваться с диска и
     /// когда монитора нет вовсе.
-    @ObservationIgnored weak var network: NetworkMonitor?
+    @ObservationIgnored weak var connectivity: NetworkMonitor?
 
     @ObservationIgnored private var indexVersion = RoadTiles.formatVersionV2
 
@@ -412,7 +412,7 @@ final class RoadNetworkService {
         // каждом тике приборки, по шесть соединений разом, час за часом. Это
         // ровно та дорога между городами, ради которой заведён NetworkMonitor.
         // Диск при этом читается как читался — кэш работает и без сети.
-        guard network?.isOnline ?? true else { return }
+        guard connectivity?.isOnline ?? true else { return }
         guard let data = try? await api.getData(
             "roads/" + RoadTiles.fileName(key: key, version: indexVersion)) else {
             // Одиночная ошибка — не приговор: попробуем при следующем ensureCoverage.
@@ -470,7 +470,7 @@ final class RoadNetworkService {
             return fromDisk
         }
 
-        guard network?.isOnline ?? true,
+        guard connectivity?.isOnline ?? true,
               let data = try? await api.getData(
                 "roads/" + RoadTiles.fileName(key: key, version: indexVersion))
         else { return nil }

@@ -44,7 +44,7 @@ nonisolated enum EngineMapStyle {
     /// прозрачностью, а НЕ ПОПАДАЕТ в стиль вовсе: движок не качает того, чего
     /// нет в стиле, и выключенные дома перестают стоить трафика, а не только
     /// внимания.
-    static func json(daylight: Bool, base: URL, houses: Bool = false) -> String {
+    static func json(daylight: Bool, base: URL, houses: Bool = false, tilesReady: Bool = true) -> String {
         // Адреса собираются СТРОКОЙ, а не appendingPathComponent.
         //
         // Тот кодирует фигурные скобки в %7B и %7D, и движок уходит за
@@ -66,7 +66,6 @@ nonisolated enum EngineMapStyle {
         let casing = SketchPalette.casingTone.hex
         let label = SketchPalette.labelTone.hex
         let halo = SketchPalette.groundTone.hex
-        let paint = SketchPalette.centerlineTone.hex
 
         let landColour: [Any] = ["match", ["get", "kind"],
                                  1, SketchPalette.waterTone.hex,
@@ -86,7 +85,7 @@ nonisolated enum EngineMapStyle {
                                     7, SketchPalette.asphaltTone(.service).hex,
                                     SketchPalette.asphaltUnknownTone.hex]
 
-        let style: [String: Any] = [
+        var style: [String: Any] = [
             "version": 8,
             "glyphs": glyphs,
             "sources": [
@@ -98,12 +97,27 @@ nonisolated enum EngineMapStyle {
                 // наполняются на тике, как и в самописной схеме.
                 "cameras": ["type": "geojson", "data": emptyCollection],
                 "route": ["type": "geojson", "data": emptyCollection],
+                "position": ["type": "geojson", "data": emptyCollection],
             ],
             "layers": layers(ground: ground, casing: casing, label: label,
-                             halo: halo, paint: paint,
+                             halo: halo,
                              land: landColour, asphalt: asphaltColour,
                              houses: houses),
         ]
+        // Do not let Native cache authentication failures while the signed
+        // index is still loading. Local overlays work without vector sources.
+        if !tilesReady {
+            style["sources"] = [
+                "cameras": ["type": "geojson", "data": emptyCollection],
+                "route": ["type": "geojson", "data": emptyCollection],
+                "position": ["type": "geojson", "data": emptyCollection],
+            ]
+            let all = style["layers"] as? [[String: Any]] ?? []
+            style["layers"] = all.filter {
+                let source = $0["source"] as? String
+                return source != "near" && source != "far"
+            }
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: style),
               let text = String(data: data, encoding: .utf8) else { return "" }
         return text
@@ -130,8 +144,13 @@ nonisolated enum EngineMapStyle {
                 12, stop(12), 15, stop(15), 18, stop(18), 20, stop(20)]
     }
 
+    private static func routeWidth(extra: Double) -> [Any] {
+        ["interpolate", ["linear"], ["zoom"],
+         11, 3 + extra, 14, 4 + extra, 16, 6 + extra, 19, 9 + extra]
+    }
+
     private static func layers(ground: String, casing: String, label: String,
-                               halo: String, paint: String,
+                               halo: String,
                                land: [Any], asphalt: [Any],
                                houses: Bool) -> [[String: Any]] {
         var out: [[String: Any]] = [
@@ -152,7 +171,7 @@ nonisolated enum EngineMapStyle {
         if houses {
             out.append([
                 "id": "houses", "type": "fill", "source": "near", "source-layer": "houses",
-                "minzoom": 15.2,
+                "minzoom": detailFromZoom,
                 "paint": ["fill-color": SketchPalette.houseTone.hex,
                           "fill-outline-color": SketchPalette.houseEdgeTone.hex],
             ])
@@ -166,7 +185,7 @@ nonisolated enum EngineMapStyle {
                 "id": id, "type": "line", "source": source, "source-layer": "roads",
                 "layout": ["line-cap": "round", "line-join": "round",
                            "line-sort-key": ["-", 0, ["get", "cls"]]],
-                "paint": ["line-color": casing, "line-width": roadWidth(extra: 2.5)],
+                "paint": ["line-color": casing, "line-width": roadWidth(extra: 1.4)],
             ]
             if near { layer["minzoom"] = detailFromZoom } else { layer["maxzoom"] = detailFromZoom }
             out.append(layer)
@@ -181,25 +200,18 @@ nonisolated enum EngineMapStyle {
             if near { layer["minzoom"] = detailFromZoom } else { layer["maxzoom"] = detailFromZoom }
             out.append(layer)
         }
-        // Осевая — только на крупных и только вблизи: на дворовом проезде её
-        // нет и в жизни, а нарисованная — выдуманная деталь.
-        out.append([
-            "id": "centreline", "type": "line", "source": "near", "source-layer": "roads",
-            "minzoom": 16.2,
-            "filter": ["all", ["<=", ["get", "cls"], 4], ["!=", ["get", "oneway"], true]],
-            "paint": ["line-color": paint, "line-width": 1.4,
-                      "line-dasharray": [5, 5]],
-        ])
+        // Synthetic centre dashes used to run through intersections and look
+        // like broken road edges. Lane markings require junction-aware data.
         // Маршрут — под подписями и над дорогой.
         out.append([
             "id": "route-case", "type": "line", "source": "route",
             "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": "#04160c", "line-width": 13],
+            "paint": ["line-color": "#04160c", "line-width": routeWidth(extra: 3)],
         ])
         out.append([
             "id": "route", "type": "line", "source": "route",
             "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": "#2fbf6b", "line-width": 9],
+            "paint": ["line-color": "#22b879", "line-width": routeWidth(extra: 0)],
         ])
         out.append([
             "id": "labels", "type": "symbol", "source": "near", "source-layer": "roads",
@@ -210,23 +222,51 @@ nonisolated enum EngineMapStyle {
                        "text-font": ["Noto Sans Regular"],
                        "text-size": ["interpolate", ["linear"], ["zoom"], 15, 11, 18, 14],
                        "text-max-angle": 35, "text-padding": 4,
-                       "symbol-spacing": 300],
+                       "symbol-spacing": 360,
+                       "symbol-sort-key": ["get", "cls"],
+                       "text-allow-overlap": false],
             "paint": ["text-color": label, "text-halo-color": halo,
                       "text-halo-width": 1.6],
         ])
-        // Камеры — поверх всего, кроме курсора: они и есть смысл экрана.
+        // Only the current alert has a halo; ordinary cameras stay quiet.
         out.append([
             "id": "camera-halo", "type": "circle", "source": "cameras",
-            "paint": ["circle-radius": ["case", ["get", "alert"], 17, 11],
-                      "circle-color": ["case", ["get", "alert"], "#ff3b52", "#e04a5c"],
-                      "circle-opacity": 0.20],
+            "filter": ["==", ["get", "alert"], true],
+            "paint": ["circle-radius": 23, "circle-color": "#f4ae43",
+                      "circle-opacity": 0.18],
         ])
         out.append([
             "id": "camera-dot", "type": "circle", "source": "cameras",
-            "paint": ["circle-radius": ["case", ["get", "alert"], 9, 6],
-                      "circle-color": "#1b0d10",
-                      "circle-stroke-width": ["case", ["get", "alert"], 4.0, 2.5],
-                      "circle-stroke-color": ["case", ["get", "alert"], "#ff3b52", "#e04a5c"]],
+            "paint": ["circle-radius": ["interpolate", ["linear"], ["zoom"],
+                                        12, 4, 15, 12, 17, 15],
+                      "circle-color": ["case", ["get", "alert"], "#80551c", "#243d49"],
+                      "circle-opacity": ["case", ["get", "unconfirmed"], 0.55, 1],
+                      "circle-stroke-width": ["case", ["get", "alert"], 3, 1.5],
+                      "circle-stroke-color": ["case", ["get", "alert"], "#f4ae43", "#a8c8d2"]],
+        ])
+        out.append([
+            "id": "camera-icons", "type": "symbol", "source": "cameras",
+            "minzoom": 14.5,
+            "layout": ["icon-image": ["get", "icon"],
+                       "icon-allow-overlap": true, "icon-ignore-placement": true],
+            "paint": ["icon-opacity": ["case", ["get", "unconfirmed"], 0.55, 1]],
+        ])
+        out.append([
+            "id": "camera-limits", "type": "symbol", "source": "cameras",
+            "minzoom": 15.5,
+            "filter": ["!=", ["get", "limit"], ""],
+            "layout": ["text-field": ["get", "limit"],
+                       "text-font": ["Noto Sans Regular"], "text-size": 12,
+                       "text-offset": [0, 1.8], "text-padding": 5,
+                       "symbol-sort-key": ["case", ["get", "alert"], 0, 1]],
+            "paint": ["text-color": label, "text-halo-color": halo,
+                      "text-halo-width": 2],
+        ])
+        out.append([
+            "id": "user-location", "type": "symbol", "source": "position",
+            "layout": ["icon-image": "radar-user", "icon-allow-overlap": true,
+                       "icon-ignore-placement": true, "icon-pitch-alignment": "viewport",
+                       "icon-rotation-alignment": "viewport"],
         ])
         return out
     }

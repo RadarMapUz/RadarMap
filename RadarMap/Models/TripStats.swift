@@ -253,7 +253,7 @@ final class TripStats {
             return
         }
         guard distanceMeters >= 100 else {
-            Log.trips.notice("поездка не сохранена: \(Int(distanceMeters), privacy: .public) м, короче порога 100 м")
+            Log.trips.notice("поездка не сохранена: \(Int(self.distanceMeters), privacy: .public) м, короче порога 100 м")
             noteDropped("short")
             return
         }

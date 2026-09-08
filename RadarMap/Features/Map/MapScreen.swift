@@ -341,7 +341,6 @@ struct MapScreen: View {
         MapBase.allCases.filter { $0 != .engine || engineAvailable }
     }
 
-    @ViewBuilder
     /// Подложка. Сам этот кусок body НЕ читает ничего, что пишется на тике:
     /// обе свои карты вынесены отдельными вью (MapBaseLayers), и чтение
     /// скорости, дистанции и координаты заперто внутри них. Пока они лежали
@@ -353,7 +352,7 @@ struct MapScreen: View {
             #if canImport(MapLibre)
             // Карту рисует движок. Панели поверх — те же: они про скорость и
             // камеры, а не про подложку.
-            EngineBaseLayer(state: sketch).ignoresSafeArea()
+            EngineBaseLayer(onSelectCamera: { map.select($0) }, state: sketch).ignoresSafeArea()
             #else
             mapLayer.ignoresSafeArea().environment(\.colorScheme, scheme)
             #endif
@@ -609,6 +608,8 @@ struct MapScreen: View {
     @ViewBuilder
     private var topPanels: some View {
         VStack(spacing: 10) {
+            // The next turn stays at a fixed top position as statuses appear.
+            ManeuverBannerGate()
             // Почему приложение работает не в полную силу: объявление сервера,
             // серая карта без сети, урезанная карта в жару, отсутствие лимитов.
             // Выше всего, потому что человек должен узнать причину раньше, чем
@@ -648,9 +649,6 @@ struct MapScreen: View {
             if env.location.isPassengerSession {
                 passengerChip
             }
-            // Turn-by-turn: ближайший манёвр — в поездке по маршруту.
-            // Отдельная вью: дистанция до манёвра меняется каждый тик GPS.
-            ManeuverBannerGate()
             // Быстрые тумблеры — ПОСЛЕДНИМИ в стопке, и это не про красоту.
             //
             // Раскрывались они между HUD и манёвром, то есть сдвигали баннер

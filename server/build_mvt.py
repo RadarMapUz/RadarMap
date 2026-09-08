@@ -10,6 +10,7 @@
 """
 import hashlib
 import json
+import math
 import os
 import shutil
 from collections import OrderedDict
@@ -114,9 +115,44 @@ def _put(buckets, zoom, layer, geom_kind, points, props):
     смыслу: обрезанная улица теряет имя и направление на стыке, а координаты
     за пределами тайла спецификация разрешает, и клиент режет их сам.
     """
+    if not points:
+        return
+    # Work in projected tile coordinates. Vertex-only assignment drops every
+    # intermediate tile of a long segment and the interior of large polygons.
+    projected = [mvt.project(lat, lon, zoom, 0, 0) for lon, lat in points]
     seen = set()
-    for lon, lat in points:
-        seen.add(mvt.tile_of(lat, lon, zoom))
+
+    def cover(a, b, buffer=0):
+        low_x = max(0, math.floor((min(a[0], b[0]) - buffer) / mvt.EXTENT))
+        high_x = min((1 << zoom) - 1,
+                     math.floor((max(a[0], b[0]) + buffer) / mvt.EXTENT))
+        low_y = max(0, math.floor((min(a[1], b[1]) - buffer) / mvt.EXTENT))
+        high_y = min((1 << zoom) - 1,
+                     math.floor((max(a[1], b[1]) + buffer) / mvt.EXTENT))
+        seen.update((x, y) for x in range(low_x, high_x + 1)
+                    for y in range(low_y, high_y + 1))
+
+    if geom_kind == mvt.POLYGON:
+        # Include interior tiles even when no polygon vertex lies inside them.
+        cover((min(x for x, y in projected), min(y for x, y in projected)),
+              (max(x for x, y in projected), max(y for x, y in projected)))
+    elif geom_kind == mvt.LINESTRING:
+        # A small buffer carries road edges over a tile boundary too. Splitting
+        # long diagonals bounds duplication to a corridor, not a huge rectangle.
+        buffer = 128
+        for a, b in zip(projected, projected[1:]):
+            steps = max(1, math.ceil(max(abs(b[0] - a[0]), abs(b[1] - a[1]))
+                                     / (mvt.EXTENT / 2)))
+            previous = a
+            for step in range(1, steps + 1):
+                t = step / steps
+                current = (a[0] + (b[0] - a[0]) * t,
+                           a[1] + (b[1] - a[1]) * t)
+                cover(previous, current, buffer)
+                previous = current
+    else:
+        for point in projected:
+            cover(point, point)
     for tile_x, tile_y in sorted(seen):
         shape = [mvt.project(lat, lon, zoom, tile_x, tile_y)
                  for lon, lat in points]

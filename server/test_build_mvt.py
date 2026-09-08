@@ -91,6 +91,27 @@ class BuildTests(unittest.TestCase):
         made = build_mvt.build_mvt([self.road(far_apart)], self.dir)
         self.assertGreater(len(made), 1, "дорога легла в один тайл")
 
+    def test_long_segment_reaches_every_intermediate_tile(self):
+        points = [(69.20, 41.30), (69.35, 41.30)]
+        build_mvt.build_mvt([self.road(points)], self.dir)
+        x0, y = mvt.tile_of(41.30, 69.20, build_mvt.ZOOM_DETAIL)
+        x1, _ = mvt.tile_of(41.30, 69.35, build_mvt.ZOOM_DETAIL)
+        for x in range(x0, x1 + 1):
+            path = os.path.join(self.dir, "mvt", str(build_mvt.ZOOM_DETAIL),
+                                str(x), f"{y}.mvt")
+            self.assertTrue(os.path.exists(path), f"missing intermediate tile {x}/{y}")
+            self.assertIn(build_mvt.LAYER_ROADS, self.parsed(path))
+
+    def test_polygon_interior_reaches_tiles_without_vertices(self):
+        polygon = [(69.20, 41.30), (69.35, 41.30),
+                   (69.35, 41.40), (69.20, 41.40)]
+        build_mvt.build_mvt([], self.dir, areas=[(1, 1, polygon)])
+        x, y = mvt.tile_of(41.35, 69.27, build_mvt.ZOOM_DETAIL)
+        path = os.path.join(self.dir, "mvt", str(build_mvt.ZOOM_DETAIL),
+                            str(x), f"{y}.mvt")
+        self.assertTrue(os.path.exists(path), "polygon interior is missing")
+        self.assertIn(build_mvt.LAYER_LAND, self.parsed(path))
+
     def test_bytes_do_not_change_between_runs(self):
         # Недетерминированная сборка меняет байты каждую неделю, и всё, что
         # кэшируется по хэшу, качается заново.

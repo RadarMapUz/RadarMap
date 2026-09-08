@@ -98,6 +98,42 @@ struct EngineMapStyleTests {
                 "ширина считается не по измеренным метрам")
     }
 
+    @Test("Маршрут масштабируется, разметка не перечёркивает перекрёстки")
+    func routeAndJunctionReadability() {
+        let all = layers(style())
+        #expect(!all.contains { $0["id"] as? String == "centreline" })
+        for id in ["route", "route-case"] {
+            let paint = all.first { $0["id"] as? String == id }?["paint"] as? [String: Any]
+            let width = paint?["line-width"] as? [Any]
+            #expect(width?.first as? String == "interpolate")
+        }
+        let halo = all.first { $0["id"] as? String == "camera-halo" }
+        #expect(halo?["filter"] != nil, "фоновые камеры не должны светиться как предупреждение")
+        #expect(all.contains { $0["id"] as? String == "camera-icons" })
+    }
+
+    @Test("До проверки индекса нет сетевых источников, локальные маркеры остаются")
+    func preparingIndexHasNoTileRequests() throws {
+        let json = EngineMapStyle.json(daylight: true, base: base, tilesReady: false)
+        let object = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        let sources = try #require(object["sources"] as? [String: Any])
+        #expect(Set(sources.keys) == Set(["cameras", "route", "position"]))
+        for layer in layers(object) {
+            if let source = layer["source"] as? String { #expect(sources[source] != nil) }
+        }
+    }
+
+    #if canImport(MapLibre)
+    @Test("Охват карты — метры видимой высоты, а не расстояние до камеры")
+    @MainActor func viewportScale() {
+        let latitude = 41.311
+        let zoom = EngineMapView.Coordinator.zoom(spanMeters: 1400, height: 874, latitude: latitude)
+        let visible = 40_075_016.686 * cos(latitude * .pi / 180) / (512 * pow(2, zoom)) * 874
+        #expect(abs(visible - 1400) < 0.01)
+        #expect(zoom > 15 && zoom < 16)
+    }
+    #endif
+
     @Test("Каждый слой ссылается на существующий источник")
     func everyLayerHasItsSource() {
         let sources = style()["sources"] as? [String: Any] ?? [:]

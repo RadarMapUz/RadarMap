@@ -67,7 +67,11 @@ if [ "$AUTO" = "1" ]; then
     }
 else
     echo "=== 1/4: сборка тайлов на VPS (экстракт лежит там) ==="
-    scp -q "$(dirname "$0")/build_roads.py" "$HOST:/opt/radarmap/work/build_roads.py"
+    # Ship the MVT encoder with the road builder; otherwise a rebuild keeps
+    # using the old tile coverage logic on the server.
+    scp -q "$(dirname "$0")/build_roads.py" \
+        "$(dirname "$0")/build_mvt.py" "$(dirname "$0")/mvt.py" \
+        "$HOST:/opt/radarmap/work/"
     # ТЕ ЖЕ слои, что собирает крон.
     #
     # Здесь стояла одна строка «--in roads --tiles», и это была мина: ручная

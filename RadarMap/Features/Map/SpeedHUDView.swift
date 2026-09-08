@@ -44,14 +44,14 @@ struct SpeedHUDView: View {
 
                 Rectangle()
                     .fill(Theme.stroke)
-                    .frame(width: 1, height: 44)
+                    .frame(width: 1, height: secondary ? 30 : 44)
                     .padding(.horizontal, 4)
 
                 nearestBlock(camera: location.nearestCamera,
                              distance: location.distanceToNearest)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
+            .padding(.horizontal, secondary ? 12 : 18)
+            .padding(.vertical, secondary ? 8 : 12)
         }
         // День или ночь спрашиваем у НАСТРОЙКИ, а не у флага палитры схемы.
         //

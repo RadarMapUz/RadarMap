@@ -61,6 +61,7 @@ struct SketchBaseLayer: View {
 /// когда камера в охвате. Один закон на два рендера, иначе переключатель
 /// сравнивал бы не рендеры, а две разные логики.
 struct EngineBaseLayer: View {
+    var onSelectCamera: (Camera) -> Void = { _ in }
     @Environment(AppEnvironment.self) private var env
     let state: SketchState
 
@@ -68,11 +69,17 @@ struct EngineBaseLayer: View {
         let me = env.location.displayCoordinate ?? env.location.currentCoordinate
         if let me {
             let insets = state.insets
+            let cameras = env.cameras.nearest(to: me, limit: 40)
+            let limits: [Int: Int] = env.settings.speedLimitsEnabled
+                ? Dictionary(uniqueKeysWithValues: cameras.compactMap { camera in
+                    env.speedLimits.limit(near: camera.coordinate).map { (camera.id, $0) }
+                }) : [:]
             let distance = env.location.nearestCamera != nil
                 ? env.location.distanceToNearest : nil
-            let span = RoadSketch.span(forDistance: distance,
-                                       speedKmh: env.location.speedKmh,
-                                       insets: insets)
+            let span = env.location.isTripActive
+                ? max(450, RoadSketch.span(forDistance: distance,
+                                          speedKmh: env.location.speedKmh, insets: insets))
+                : 1_400
             let inRange = distance.map {
                 RoadSketch.isInRange(distance: $0, span: span, insets: insets)
             } ?? false
@@ -88,19 +95,16 @@ struct EngineBaseLayer: View {
                         coordinate: me,
                         courseDegrees: env.location.displayCourse,
                         spanMeters: span,
-                        pitchDegrees: inRange ? 0 : AppConfig.engineMapPitchDegrees,
+                        anchorY: insets.meY,
+                        pitchDegrees: !env.location.isTripActive || inRange ? 0 : AppConfig.engineMapPitchDegrees,
                         daylight: env.settings.mapAppearance.isDaylight(at: me, now: Date()),
                         houses: env.settings.mapHouses,
-                        cameras: env.cameras.nearest(to: me, limit: 40),
+                        cameras: cameras,
                         alertCameraID: inRange ? env.location.nearestCamera?.id : nil,
-                        route: env.route.routeCoordinates)
-                    // Курсор машины — своим слоем поверх карты, как и в схеме:
-                    // движку он не нужен, а нам нужен ровно тот же.
-                    MeCursor(scale: 1)
-                        .frame(width: 34, height: 40)
-                        .position(x: geo.size.width / 2,
-                                  y: geo.size.height * insets.meY)
-                        .allowsHitTesting(false)
+                        cameraLimits: limits,
+                        route: env.route.routeCoordinates,
+                        onSelectCamera: onSelectCamera)
+
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
             }

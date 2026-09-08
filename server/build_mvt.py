@@ -8,6 +8,7 @@
 дважды была убита ядром по памяти, и оба слоя, которые её убивали, теперь
 пишут файл сразу. Здесь тот же приём с самого начала.
 """
+import gzip
 import hashlib
 import json
 import math
@@ -147,7 +148,20 @@ def _layer_of(kind):
 
 
 class _Buckets:
-    """Черновики тайлов на диске. В памяти — один объект и до `handles` файлов."""
+    """Черновики тайлов на диске. В памяти — один объект и до `handles` файлов.
+
+    Черновики СЖАТЫ, и это не микрооптимизация. Компромисс здесь изначально
+    верный — платить диском вместо памяти, на сервере её два гигабайта, — но
+    расплата вышла несоразмерной: JSON-текст черновиков занял 17 ГБ против
+    1,7 ГБ готового protobuf, забил диск до нуля и едва не уронил живой api,
+    который пишет свою базу на тот же том.
+
+    Gzip уровня 1 возвращает соразмерность: тот же текст ужимается примерно
+    вдесятеро, пик диска падает с 17 ГБ до двух, а цена — доли процента
+    времени сборки, потому что уровень 1 быстрый, а черновик всё равно
+    выбрасывается. Дописывание в gzip создаёт несколько членов в файле, и
+    читатель разбирает их прозрачно — поведение не меняется.
+    """
 
     def __init__(self, work, handles=64):
         self.work = work
@@ -164,8 +178,8 @@ class _Buckets:
             return handle
         while len(self.open) >= self.handles:
             self.open.popitem(last=False)[1].close()
-        handle = open(os.path.join(self.work, key + ".jsonl"), "a",
-                      encoding="utf-8")
+        handle = gzip.open(os.path.join(self.work, key + ".jsonl.gz"), "at",
+                           encoding="utf-8", compresslevel=1)
         self.open[key] = handle
         self.keys.add(key)
         return handle
@@ -308,8 +322,13 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
     for key in sorted(buckets.keys):
         zoom_at, tile_x, tile_y = key.split("_")
         layers = OrderedDict()
-        with open(os.path.join(work, key + ".jsonl"), encoding="utf-8") as handle:
+        draft = os.path.join(work, key + ".jsonl.gz")
+        with gzip.open(draft, "rt", encoding="utf-8") as handle:
             rows = [json.loads(line) for line in handle if line.strip()]
+        # Черновик больше не нужен — сносим сразу, не дожидаясь конца обхода.
+        # Иначе весь набор черновиков доживал бы до последнего тайла, и пик
+        # диска складывался бы из них ПЛЮС растущего готового набора.
+        os.remove(draft)
         # Порядок внутри тайла УСТОЙЧИВЫЙ: иначе те же данные дают разные
         # байты каждую неделю, и всё, что кэшируется по хэшу, качается заново.
         rows.sort(key=lambda row: (row[0], row[1], row[2][0], len(row[2])))

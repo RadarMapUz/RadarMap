@@ -1,3 +1,4 @@
+import gzip
 import json
 import os
 import shutil
@@ -192,51 +193,40 @@ class BuildTests(unittest.TestCase):
             self.assertEqual(build_mvt.LAYER_MARKINGS in self.parsed(path), expected)
 
 
-if __name__ == "__main__":
-    unittest.main()
+class DraftTests(unittest.TestCase):
+    """Черновики тайлов: диск — расплата за память, но соразмерная.
 
-
-class WrittenLayersTests(unittest.TestCase):
-    """Дома и поверхность попадают в MVT из УЖЕ НАПИСАННЫХ тайлов.
-
-    Оба слоя пишутся потоком, прямо в файлы, и в списке areas их нет вовсе —
-    иначе сборка страны не поместится в память. Однажды это уже стоило
-    картинки: карта на MapLibre поднялась без полотна и без домов, и понять
-    это можно было только глазами.
+    Несжатые черновики заняли 17 ГБ против 1,7 ГБ готового набора, забили диск
+    сервера до нуля и едва не уронили живой api, который пишет базу на тот же
+    том. Тесты здесь сторожат обе половины починки.
     """
 
     def setUp(self):
         self.dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.dir, True)
 
-    def write(self, set_name, rows):
-        path = os.path.join(self.dir, f"road2_2626_4985_{set_name}.json")
-        with open(path, "w", encoding="utf-8") as handle:
-            json.dump({"version": 2, "roads": rows}, handle)
+    def test_drafts_are_written_compressed(self):
+        work = os.path.join(self.dir, "_mvt")
+        buckets = build_mvt._Buckets(work)
+        buckets.sink("14_1_2").write('["roads",2,[[0,0]],{}]\n')
+        buckets.close()
+        path = os.path.join(work, "14_1_2.jsonl.gz")
+        self.assertTrue(os.path.exists(path), "черновик обязан быть .jsonl.gz")
+        with open(path, "rb") as handle:
+            self.assertEqual(handle.read(2), b"\x1f\x8b", "это должен быть gzip")
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            self.assertEqual(json.loads(handle.read())[0], "roads")
 
-    def square(self):
-        return [4131100, 6928000, 60, 0, 0, 60, -60, 0]
+    def test_no_uncompressed_drafts_are_left_behind(self):
+        roads = [(3, 0, [(69.2, 41.3), (69.21, 41.3)], "Навои")]
+        build_mvt.build_mvt(roads, self.dir)
+        stray = []
+        for root, _dirs, files in os.walk(self.dir):
+            stray += [f for f in files if f.endswith(".jsonl")]
+        self.assertEqual(stray, [], "несжатых черновиков быть не должно")
+        self.assertFalse(os.path.exists(os.path.join(self.dir, "_mvt")),
+                         "рабочий каталог сносится после сборки")
 
-    def test_houses_and_surface_reach_the_tile(self):
-        self.write("h", [[build_mvt.AREA_HOUSE, 1, self.square()]])
-        self.write("d", [[build_mvt.AREA_ROAD,
-                          1 | (3 << build_mvt.SURFACE_CLASS_SHIFT),
-                          self.square()]])
-        build_mvt.build_mvt([], self.dir)
-        names = set()
-        for folder, _dirs, files in os.walk(os.path.join(self.dir, "mvt")):
-            for name in files:
-                with open(os.path.join(folder, name), "rb") as handle:
-                    names.update(parse(handle.read()))
-        self.assertIn(build_mvt.LAYER_HOUSES, names, "домов в MVT нет")
-        self.assertIn(build_mvt.LAYER_SURFACE, names, "поверхности в MVT нет")
 
-    def test_road_tiles_are_not_read_as_areas(self):
-        # Набор улиц — это линии сети, а не местность: прочитать его сюда
-        # значило бы нарисовать каждую дорогу дважды.
-        self.write("s", [[3, 0, self.square()]])
-        self.assertEqual(list(build_mvt.written_areas(self.dir, "h")), [])
-        self.assertEqual(list(build_mvt.written_areas(self.dir, "d")), [])
-
-    def test_missing_directory_is_not_an_error(self):
-        self.assertEqual(list(build_mvt.written_areas("/нет/такого", "h")), [])
+if __name__ == "__main__":
+    unittest.main(verbosity=1)

@@ -228,5 +228,44 @@ class DraftTests(unittest.TestCase):
                          "рабочий каталог сносится после сборки")
 
 
+class ClipTests(unittest.TestCase):
+    """Полигон режется по своему тайлу, линия — нет.
+
+    Покрытие внутренними тайлами заставило каждое озеро копироваться ЦЕЛИКОМ в
+    каждый накрытый тайл: на боевой стране это дало 349 919 тайлов и 9,8 ГБ
+    против 118 439 и 1,7. Ровно это уже проходили в дорожных тайлах — там же
+    и лекарство, clip_ring.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def big_square(self):
+        """Квадрат примерно 0,2° — заведомо шире одного тайла детального зума."""
+        return [(69.10, 41.20), (69.30, 41.20), (69.30, 41.40),
+                (69.10, 41.40), (69.10, 41.20)]
+
+    def test_big_polygon_is_not_copied_whole_into_every_tile(self):
+        written = build_mvt.build_mvt([], self.dir, areas=[(1, 1, self.big_square())])
+        self.assertGreater(len(written), 4, "покрытие внутренними тайлами обязано остаться")
+        # Целая копия — это пять вершин исходника В КАЖДОМ тайле; после
+        # отсечения внутренний тайл несёт только свой кусок рамки.
+        biggest = max(meta["bytes"] for meta in written.values())
+        self.assertLess(biggest, 400, "тайл везёт кусок, а не весь полигон")
+
+    def test_polygon_inside_one_tile_survives_intact(self):
+        small = [(69.2000, 41.3000), (69.2005, 41.3000),
+                 (69.2005, 41.3005), (69.2000, 41.3005), (69.2000, 41.3000)]
+        written = build_mvt.build_mvt([], self.dir, areas=[(1, 1, small)])
+        self.assertTrue(written, "маленькая площадь обязана попасть в тайл")
+
+    def test_line_is_still_not_clipped(self):
+        # Довод про имя и направление улицы на стыке остаётся в силе.
+        road = (3, 0, [(69.10, 41.30), (69.30, 41.30)], "Навои")
+        written = build_mvt.build_mvt([road], self.dir)
+        self.assertGreater(len(written), 1, "длинная улица покрывает несколько тайлов")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

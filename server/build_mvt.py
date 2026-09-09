@@ -18,6 +18,7 @@ from collections import OrderedDict, defaultdict
 
 import mvt
 from build_roads import (AREA_HOUSE, AREA_JUNCTION, AREA_MEDIAN, AREA_ROAD,
+                         clip_ring,
                          FLAG_BRIDGE,
                          FLAG_LANES_TAGGED, FLAG_ONEWAY, FLAG_TUNNEL,
                          SURFACE_CLASS_MASK, SURFACE_CLASS_SHIFT, lanes_of,
@@ -239,11 +240,38 @@ def _put(buckets, zoom, layer, geom_kind, points, props):
     for tile_x, tile_y in sorted(seen):
         shape = [mvt.project(lat, lon, zoom, tile_x, tile_y)
                  for lon, lat in points]
+        if geom_kind == mvt.POLYGON:
+            # Полигон режется по своему тайлу, а линия — нет, и это не
+            # непоследовательность.
+            #
+            # Довод «резать опаснее по смыслу» написан про УЛИЦУ: обрезанная,
+            # она теряет имя и направление на стыке, а вершин у неё десяток.
+            # У площади такого довода нет, зато есть цена: покрытие
+            # внутренними тайлами заставило каждое озеро и каждый квартал
+            # копироваться ЦЕЛИКОМ в каждый накрытый тайл. Замер на боевой
+            # стране: 349 919 тайлов и 9,8 ГБ против 118 439 и 1,7 ГБ — втрое
+            # больше тайлов и вшестеро байт.
+            #
+            # Ровно это уже проходили в дорожных тайлах, и там же лежит
+            # лекарство: clip_ring с комментарием про «1,3 миллиона копий
+            # вершин ради одного озера». Переиспользуем его — в координатах
+            # тайла прямоугольник отсечения тривиален.
+            shape = clip_ring(shape, (0, 0, mvt.EXTENT, mvt.EXTENT), CLIP_MARGIN)
+            if len(shape) < 3:
+                continue
+            # Срез даёт дробную точку пересечения, а геометрия MVT
+            # целочисленная по спецификации — округляем обратно.
+            shape = [(int(round(x)), int(round(y))) for x, y in shape]
         row = json.dumps([layer, geom_kind, shape, props], separators=(",", ":"))
         buckets.sink(f"{zoom}_{tile_x}_{tile_y}").write(row + "\n")
 
 
 SCALE = 1e5   # шаг координат в тайле, тот же что в build_roads
+
+# Запас вокруг тайла при отсечении полигонов, в координатах тайла.
+# Нужен, чтобы обводка фигуры не обрывалась ровно по шву: клиент рисует
+# толстую линию, и срез впритык виден глазом.
+CLIP_MARGIN = 128
 
 
 def written_areas(target_dir, set_name):

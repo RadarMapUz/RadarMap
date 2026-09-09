@@ -270,9 +270,7 @@ enum MapAppearance: String, CaseIterable, Identifiable {
 nonisolated enum MapBase: String, CaseIterable, Identifiable, Sendable {
     /// Карта Apple: где ищут адрес, смотрят город и ставят камеру.
     case apple
-    /// Своя схема: то, что мы собрали, нарисованное нами.
-    case sketch
-    /// Наши же данные, нарисованные настоящим картографическим движком.
+    /// Наши данные, нарисованные настоящим картографическим движком.
     case engine
 
     var id: String { rawValue }
@@ -280,7 +278,6 @@ nonisolated enum MapBase: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .apple:  return String(localized: "Apple")
-        case .sketch: return String(localized: "Своя схема")
         case .engine: return String(localized: "Карта RadarMap")
         }
     }
@@ -289,7 +286,6 @@ nonisolated enum MapBase: String, CaseIterable, Identifiable, Sendable {
     var symbol: String {
         switch self {
         case .apple:  return "map"
-        case .sketch: return "scribble.variable"
         case .engine: return "square.3.layers.3d"
         }
     }
@@ -302,16 +298,18 @@ nonisolated enum MapBase: String, CaseIterable, Identifiable, Sendable {
     ///
     /// Apple возвращается ровно в двух случаях, и оба не вкусовые: операция,
     /// которой без неё нет (постановка камеры, точка по долгому тапу), и
-    /// отсутствие того, что выбрано (схема без сцены, движок без пакета).
-    /// Второе — отказ, а не подмена: пустой экран вместо карты оставил бы
-    /// водителя вообще без карты.
+    /// отсутствие того, что выбрано (движок без пакета). Второе — отказ, а не
+    /// подмена: пустой экран вместо карты оставил бы водителя без карты вовсе.
+    ///
+    /// Подложек две. Самодельная схема была третьей и убрана: держать ДВА
+    /// своих рендерера одних и тех же данных — это два разных ответа на один
+    /// вопрос и вдвое больше мест, где карта может соврать.
     static func resolved(chosen: MapBase, isAddingCamera: Bool,
-                         hasPressedPoint: Bool, sketchReady: Bool,
+                         hasPressedPoint: Bool,
                          engineAvailable: Bool) -> MapBase {
         if isAddingCamera || hasPressedPoint { return .apple }
         switch chosen {
         case .apple:  return .apple
-        case .sketch: return sketchReady ? .sketch : .apple
         case .engine: return engineAvailable ? .engine : .apple
         }
     }
@@ -543,21 +541,6 @@ final class AppSettings {
         didSet { store.set(mapAppearance.rawValue, forKey: Keys.mapAppearance) }
     }
 
-    /// Своя схема вместо карты Apple — ТОЛЬКО В ДВИЖЕНИИ.
-    ///
-    /// Схему рисуем сами по своим тайлам: полотно, перекрёстки, разметка,
-    /// дома. Она отвечает на вопрос «что впереди», и за рулём это ровно тот
-    /// вопрос, который есть. Карта Apple отвечает на «где это вообще» — и
-    /// нужна там, где ищут адрес и ставят камеру, то есть на стоянке.
-    ///
-    /// По умолчанию ВЫКЛЮЧЕНО, и это не осторожность из вежливости: своя
-    /// карта знает только то, что мы собрали, и день за рулём с ней —
-    /// единственный способ выяснить, чего в ней не хватает. Менять умолчание
-    /// до этого дня значило бы решать за водителя вслепую.
-    var sketchWhileDriving: Bool {
-        didSet { store.set(sketchWhileDriving, forKey: Keys.sketchWhileDriving) }
-    }
-
     /// Чем рисуется карта. Меняется кнопкой слоёв НА КАРТЕ и действует сразу.
     var mapBase: MapBase {
         didSet { store.set(mapBase.rawValue, forKey: Keys.mapBase) }
@@ -707,7 +690,6 @@ final class AppSettings {
         // ровно тот ответ, который нужен. Кто их включит — включит осознанно.
         mapHouses = store.bool(forKey: Keys.mapHouses)
         mapSidewalks = store.bool(forKey: Keys.mapSidewalks)
-        sketchWhileDriving = store.bool(forKey: Keys.sketchWhileDriving)
         engineMap = store.bool(forKey: Keys.engineMap)
         // Перенос со старых тумблеров: выбор человека не теряется при
         // обновлении — кто включил схему, с ней и останется.
@@ -717,7 +699,9 @@ final class AppSettings {
         } else if store.bool(forKey: Keys.engineMap) {
             mapBase = .engine
         } else if store.bool(forKey: Keys.sketchWhileDriving) {
-            mapBase = .sketch
+            // Схемы больше нет; выбравший СВОЮ карту получает ту, что осталась
+            // своей, а не карту Apple. Ключ читается только ради этой миграции.
+            mapBase = .engine
         } else {
             mapBase = .apple
         }

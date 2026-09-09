@@ -20,6 +20,9 @@ struct MapScreen: View {
     @State private var showDashboard = false
     /// Экранная модель своей схемы. Живёт всегда, а считается только когда
     /// схема действительно на экране: пустая модель не стоит ничего.
+    /// Поля вида (отступы панелей и якорь машины) — их читает наша карта.
+    /// Имя историческое: модель заводилась под самодельную схему, а осталась
+    /// от неё только геометрия вида, которой пользуется движок.
     @State private var sketch = SketchState()
     /// Нижняя кромка верхних панелей и верхняя кромка нижних, в пунктах окна.
     /// Меряют сами панели; схема переводит их в доли своей высоты.
@@ -104,11 +107,6 @@ struct MapScreen: View {
 
             // Следование за GPS: единственный подписчик locationTick.
             LocationFollowDriver(map: map, isCovered: showDashboard)
-            // Схема считается ТОЛЬКО когда она на экране: тумблер выключен или
-            // стоим — модель пуста и не стоит ни одного тика.
-            if env.settings.mapBase == .sketch && !showDashboard {
-                SketchRefreshDriver(sketch: sketch)
-            }
             MobilePassDriver()
         }
         .mapScope(mapScope)
@@ -323,7 +321,6 @@ struct MapScreen: View {
         MapBase.resolved(chosen: env.settings.mapBase,
                          isAddingCamera: map.isAddingCamera,
                          hasPressedPoint: map.pressedPoint != nil,
-                         sketchReady: !showDashboard && sketch.scene?.isEmpty == false,
                          engineAvailable: !showDashboard && Self.engineAvailable)
     }
 
@@ -342,9 +339,9 @@ struct MapScreen: View {
     }
 
     /// Подложка. Сам этот кусок body НЕ читает ничего, что пишется на тике:
-    /// обе свои карты вынесены отдельными вью (MapBaseLayers), и чтение
-    /// скорости, дистанции и координаты заперто внутри них. Пока они лежали
-    /// здесь, включённая своя схема пересобирала весь экран раз в секунду.
+    /// наша карта вынесена отдельной вью (MapBaseLayers), и чтение скорости,
+    /// дистанции и координаты заперто внутри неё. Пока это лежало здесь,
+    /// включённая своя карта пересобирала весь экран раз в секунду.
     @ViewBuilder
     private func baseLayer(scheme: ColorScheme) -> some View {
         switch shownBase {
@@ -356,12 +353,6 @@ struct MapScreen: View {
             #else
             mapLayer.ignoresSafeArea().environment(\.colorScheme, scheme)
             #endif
-        case .sketch:
-            if let scene = sketch.scene {
-                SketchBaseLayer(scene: scene, state: sketch)
-            } else {
-                mapLayer.ignoresSafeArea().environment(\.colorScheme, scheme)
-            }
         case .apple:
             mapLayer
                 .ignoresSafeArea()

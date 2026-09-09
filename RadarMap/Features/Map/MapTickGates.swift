@@ -168,55 +168,6 @@ struct MobilePassDriver: View {
     }
 }
 
-/// Следование карты за GPS: единственный подписчик locationTick.
-/// Тик GPS → своя схема на главном экране.
-///
-/// Отдельной вью по той же причине, по какой отдельной сделан
-/// `LocationFollowDriver`: чтение `locationTick` в теле MapScreen пересобирало
-/// бы весь экран с картой каждую секунду. Здесь тик читает пустой прямоугольник
-/// без единого пикселя.
-///
-/// Монтируется только когда схема ДЕЙСТВИТЕЛЬНО на экране: тумблер включён и
-/// мы в движении. Выключен тумблер — эта вью не существует, и схема не стоит
-/// ни одного тика.
-struct SketchRefreshDriver: View {
-    @Environment(AppEnvironment.self) private var env
-    let sketch: SketchState
-
-    var body: some View {
-        Color.clear
-            .allowsHitTesting(false)
-            .onChange(of: env.location.locationTick) { _, _ in
-                // Телефон в кармане — считать схему некому и не для чего. Тот
-                // же гейт, что у приборки.
-                guard env.isPhoneSceneActive else { return }
-                sketch.refresh(env)
-            }
-            // СТОЯ фиксов нет, и тик не растёт: фильтр GPS — десять метров.
-            //
-            // Пока сцена строилась только по тику, человек, включивший свою
-            // схему на стоянке, видел карту Apple: сцены нет — значит рисовать
-            // нечем, и подложка честно откатывалась. Выглядело это ровно как
-            // «переключил, а ничего не изменилось».
-            //
-            // Поэтому пересборка ещё на трёх событиях: пришёл первый фикс,
-            // приехали дорожные тайлы, обновился индекс лимитов. Все три
-            // случаются считанные разы за поездку — это не тик.
-            .onChange(of: env.location.currentCoordinate?.latitude) { _, _ in
-                guard env.isPhoneSceneActive else { return }
-                sketch.refresh(env)
-            }
-            .onChange(of: env.roads.revision) { _, _ in
-                guard env.isPhoneSceneActive else { return }
-                sketch.refresh(env)
-            }
-            .onChange(of: env.speedLimits.indexRevision) { _, _ in
-                guard env.isPhoneSceneActive else { return }
-                sketch.refresh(env)
-            }
-            .onAppear { sketch.refresh(env) }
-    }
-}
 
 
 struct LocationFollowDriver: View {

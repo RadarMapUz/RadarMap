@@ -13339,23 +13339,6 @@
         }
       }
     },
-    "Своя схема": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Своя схема"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O‘z sxemamiz"
-          }
-        }
-      }
-    },
     "Движок": {
       "extractionState": "manual",
       "localizations": {

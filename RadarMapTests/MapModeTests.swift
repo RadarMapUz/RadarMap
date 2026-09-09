@@ -21,48 +21,51 @@ final class MapModeTests: XCTestCase {
 
     /// Подложку выбирает ЧЕЛОВЕК, а не режим.
     ///
-    /// Раньше здесь стоял обратный тест: `idle` запрещал свою схему. Правило
+    /// Раньше здесь стоял обратный тест: `idle` запрещал свою карту. Правило
     /// выглядело разумным («на стоянке ищут адрес»), но на деле перебивало
-    /// выбор человека: включивший схему видел карту Apple и делал
-    /// единственный возможный вывод — не работает. Теперь режим про подложку
-    /// не знает вовсе, а правило живёт в MapBase.resolved.
+    /// выбор человека: включивший её видел карту Apple и делал единственный
+    /// возможный вывод — не работает. Теперь режим про подложку не знает
+    /// вовсе, а правило живёт в MapBase.resolved.
     func testModeDoesNotDecideTheBaseMap() {
         for mode in [MapMode.idle, .driving, .navigating] {
-            XCTAssertEqual(MapBase.resolved(chosen: .sketch, isAddingCamera: false,
-                                            hasPressedPoint: false, sketchReady: true,
+            XCTAssertEqual(MapBase.resolved(chosen: .engine, isAddingCamera: false,
+                                            hasPressedPoint: false,
                                             engineAvailable: true),
-                           .sketch, "режим \(mode) не вправе отменять выбор")
+                           .engine, "режим \(mode) не вправе отменять выбор")
         }
+    }
+
+    /// Подложек ровно две. Самодельная схема была третьей и убрана: два своих
+    /// рендерера одних и тех же данных — это два разных ответа на один вопрос.
+    func testOnlyTwoBasesRemain() {
+        XCTAssertEqual(MapBase.allCases, [.apple, .engine])
     }
 
     func testAppleComesBackOnlyForWhatNeedsIt() {
         // Постановка камеры и точка по долгому тапу без карты Apple
         // невозможны — на это время она возвращается, и только на это.
-        XCTAssertEqual(MapBase.resolved(chosen: .sketch, isAddingCamera: true,
-                                        hasPressedPoint: false, sketchReady: true,
+        XCTAssertEqual(MapBase.resolved(chosen: .engine, isAddingCamera: true,
+                                        hasPressedPoint: false,
                                         engineAvailable: true), .apple)
         XCTAssertEqual(MapBase.resolved(chosen: .engine, isAddingCamera: false,
-                                        hasPressedPoint: true, sketchReady: true,
+                                        hasPressedPoint: true,
                                         engineAvailable: true), .apple)
     }
 
     func testMissingThingsFallBackInsteadOfShowingNothing() {
-        // Схема без сцены и движок без пакета — это отказ, а не пустой экран:
-        // без карты за рулём хуже, чем с чужой.
-        XCTAssertEqual(MapBase.resolved(chosen: .sketch, isAddingCamera: false,
-                                        hasPressedPoint: false, sketchReady: false,
-                                        engineAvailable: true), .apple)
+        // Движок без пакета — это отказ, а не пустой экран: без карты за рулём
+        // хуже, чем с чужой.
         XCTAssertEqual(MapBase.resolved(chosen: .engine, isAddingCamera: false,
-                                        hasPressedPoint: false, sketchReady: true,
+                                        hasPressedPoint: false,
                                         engineAvailable: false), .apple)
     }
 
     func testChosenBaseSurvivesEverythingElse() {
         XCTAssertEqual(MapBase.resolved(chosen: .apple, isAddingCamera: false,
-                                        hasPressedPoint: false, sketchReady: true,
+                                        hasPressedPoint: false,
                                         engineAvailable: true), .apple)
         XCTAssertEqual(MapBase.resolved(chosen: .engine, isAddingCamera: false,
-                                        hasPressedPoint: false, sketchReady: true,
+                                        hasPressedPoint: false,
                                         engineAvailable: true), .engine)
     }
 

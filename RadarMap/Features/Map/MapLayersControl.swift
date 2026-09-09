@@ -74,9 +74,9 @@ struct MapLayersControl: View {
 
             if showsBuildingLayers {
                 toggle("Дома", "building.2.fill", isOn: $houses)
-                if base == .sketch {
-                    toggle("Тротуары", "figure.walk", isOn: $sidewalks)
-                }
+                // Тротуары рисует и движок (SketchPalette.sidewalkTone в стиле),
+                // так что тумблер больше не привязан к снятой подложке.
+                toggle("Тротуары", "figure.walk", isOn: $sidewalks)
             }
 
             if showsLegend {

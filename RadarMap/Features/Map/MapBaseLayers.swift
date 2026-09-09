@@ -2,16 +2,16 @@
 //  MapBaseLayers.swift
 //  RadarMap
 //
-//  Свои подложки главного экрана отдельными вью — и это не декомпозиция ради
+//  Наша подложка главного экрана отдельной вью — и это не декомпозиция ради
 //  декомпозиции.
 //
-//  Обе читают то, что пишется КАЖДЫМ GPS-тиком: дистанцию до камеры, скорость,
+//  Она читает то, что пишется КАЖДЫМ GPS-тиком: дистанцию до камеры, скорость,
 //  координату, курс. Пока они лежали кусками `body` в MapScreen, включённая
 //  «Своя схема» или «Движок» пересобирали весь экран вместе с картой,
 //  панелями и презентациями раз в секунду.
 //
 //  Защита от этого на экране была — изоляторы `OverspeedVignetteGate`,
-//  `LocationFollowDriver`, `SketchRefreshDriver`, и рядом с каждым написано,
+//  `LocationFollowDriver` и другие, и рядом с каждым написано,
 //  почему он существует. Но прикрывали они только подложку Apple: тот, кто
 //  включал НАШУ карту, получал ровно ту болезнь, от которой их заводили.
 //
@@ -20,40 +20,6 @@
 //
 
 import SwiftUI
-
-/// Своя схема во весь экран.
-struct SketchBaseLayer: View {
-    @Environment(AppEnvironment.self) private var env
-    let scene: RoadSketch.Scene
-    let state: SketchState
-
-    var body: some View {
-        ZStack {
-            // Подложка — ЗЕМЛЯ схемы, а не чёрное. Днём чёрная подложка
-            // проступала по краям и в переходах и выглядела дырой.
-            SketchPalette.ground
-            RoadSketchView(scene: scene, state: state, tint: tint,
-                           trim: env.thermal.mode.sketchTrim,
-                           loading: env.roads.pending)
-        }
-        .ignoresSafeArea()
-    }
-
-    /// Тон схемы по близости камеры — те же три ступени, что на приборке.
-    /// Ближе трети радиуса — опасность, ближе двух третей — внимание, иначе
-    /// нейтральный акцент. Второй такой лестницы в приложении заводить нельзя:
-    /// водитель читает цвет, а не число, и две разные лестницы — это два
-    /// разных смысла у одного красного.
-    private var tint: Color {
-        guard let distance = env.location.distanceToNearest else { return Theme.accent }
-        let radius = AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
-                                                 baseRadius: env.settings.alertRadius,
-                                                 context: env.location.alertContext)
-        if distance <= radius * 0.3 { return Theme.danger }
-        if distance <= radius * 0.6 { return Theme.warning }
-        return Theme.accent
-    }
-}
 
 #if canImport(MapLibre)
 /// Карта на движке. Правила точки зрения — ТЕ ЖЕ, что у схемы: охват по

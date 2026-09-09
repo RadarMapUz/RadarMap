@@ -137,7 +137,10 @@ final class DriveReplayTests: XCTestCase {
     /// одной функции. Кэшированная точка со старого места когда-то
     /// регистрировалась настоящим проездом камеры на выдуманной скорости.
     func testGarbageFixNeverReachesTheAlerts() {
-        var fixes = driveEast(fromLon: 69.200, steps: 40)
+        // Шагов столько, чтобы камеру ПРОЕХАТЬ: сорока не хватало, машина
+        // не доезжала до неё шестидесяти метров, и тест падал на своей же
+        // фикстуре, а не на поведении конвейера.
+        var fixes = driveEast(fromLon: 69.200, steps: 70)
         // Фикс с отрицательной погрешностью — система сама говорит «не верь».
         fixes.insert(LocationFilter.Fix(lat: 41.50, lon: 69.60,
                                         horizontalAccuracy: -1,

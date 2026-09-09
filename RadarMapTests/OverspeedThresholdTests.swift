@@ -29,8 +29,12 @@ final class OverspeedThresholdTests: XCTestCase {
     func testTheSixtyZone() {
         let limit = 60.0
         let near = OverspeedThreshold.kmh(cameraAhead: true, userTolerance: 5)
-        // 63 — уже предупреждаем, газ ещё можно отпустить.
-        XCTAssertGreaterThan(63 - limit, near)
+        // Порог РОВНО 3, а сравнение строгое: на 63 предупреждения ещё нет,
+        // оно начинается чуть выше. Прежняя редакция теста утверждала обратное
+        // и падала — прав оказался продукт, а не тест.
+        XCTAssertEqual(63 - limit, near, accuracy: 0.001)
+        // 64 — уже предупреждаем, газ ещё можно отпустить: до штрафа два.
+        XCTAssertGreaterThan(64 - limit, near)
         // 66 — штраф уже заработан.
         XCTAssertTrue(OverspeedThreshold.isFineEarned(speedKmh: 66, limitKmh: 60))
         // 65 — ровно на границе допуска, штрафа ещё нет.

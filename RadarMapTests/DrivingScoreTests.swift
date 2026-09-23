@@ -442,7 +442,8 @@ final class AlertEngineTests: XCTestCase {
         // водитель получал предупреждение, уже видя знак камеры глазами.
         XCTAssertEqual(AlertEngine.effectiveRadius(speedKmh: 110, baseRadius: 500), 886, accuracy: 1)
         // Потолок динамического радиуса.
-        XCTAssertEqual(AlertEngine.effectiveRadius(speedKmh: 250, baseRadius: 500), 1100)
+        XCTAssertEqual(AlertEngine.effectiveRadius(speedKmh: 250, baseRadius: 500),
+                       AppConfig.maxDynamicRadius)
     }
 
     func testLeadTimeRampsFromCityToHighway() {
@@ -482,6 +483,55 @@ final class AlertEngineTests: XCTestCase {
             XCTAssertEqual(radius / (speed / 3.6), 29, accuracy: 0.2,
                            "\(Int(speed)) км/ч: запас должен быть 29 секунд")
         }
+    }
+
+    /// Чем быстрее едешь — тем раньше надо сказать. Потолок радиуса делал
+    /// ровно наоборот.
+    ///
+    /// Прежний потолок 1100 м держал обещанные 29 секунд только до 137 км/ч.
+    /// Дальше запас таял вместе с ростом скорости: 160 — 24.7 с, 180 — 22 с,
+    /// 200 — 19.8 с. Нигде об этом не говорилось, и увидеть это можно было
+    /// только посчитав метры на скорость руками. Теперь считает тест.
+    func testTheLeadDoesNotMeltAwayAtHighSpeed() {
+        for speed in [140.0, 160, 180] {
+            let seconds = AlertEngine.leadSeconds(speedKmh: speed, baseRadius: 400,
+                                                  context: .highway)
+            XCTAssertEqual(seconds, AppConfig.alertLeadTimeHighwaySeconds, accuracy: 0.3,
+                           "\(Int(speed)) км/ч: обещали 29 секунд, дали \(seconds)")
+        }
+    }
+
+    /// До какой скорости обещание держится целиком — и что происходит выше.
+    ///
+    /// Потолок радиуса обязан сработать где-то: бесконечно расширять окно
+    /// нельзя, это камеры, геозоны и батарея. Вопрос не в том, срабатывает ли
+    /// он, а в том, ЗНАЕМ ли мы, где именно, и остаётся ли запас разумным за
+    /// этой границей. Раньше не знали ни того, ни другого.
+    func testThePromiseHoldsToAKnownSpeedAndDegradesGently() {
+        // Полные 29 секунд — на всём диапазоне, на котором вообще ездят.
+        for speed in stride(from: 60.0, through: 185, by: 5) {
+            let seconds = AlertEngine.leadSeconds(speedKmh: speed, baseRadius: 400,
+                                                  context: .highway)
+            XCTAssertGreaterThanOrEqual(seconds, AppConfig.alertLeadTimeHighwaySeconds - 0.3,
+                                        "на \(Int(speed)) км/ч запас просел до \(seconds) с")
+        }
+        // Выше — потолок начинает срезать, но не обрывает: даже на 250 км/ч
+        // остаётся больше двадцати секунд. Прежний потолок давал там 15.8.
+        XCTAssertGreaterThan(AlertEngine.leadSeconds(speedKmh: 250, baseRadius: 400,
+                                                     context: .highway), 20)
+    }
+
+    /// Окно кандидатов обязано покрывать максимальный радиус оповещения плюс
+    /// гистерезис выхода. Иначе камера впереди просто не попадёт в кандидаты,
+    /// и приложение промолчит — без единой ошибки в журнале.
+    ///
+    /// Два числа задавались руками и уже разошлись: покрытие было равно
+    /// радиусу, то есть на гистерезис не оставалось ничего. Теперь одно
+    /// выводится из другого, и тест это фиксирует.
+    func testTrackingWindowCoversTheWidestAlertRadius() {
+        XCTAssertGreaterThanOrEqual(AppConfig.trackedCoverageMeters,
+                                    AppConfig.maxDynamicRadius
+                                        + AppConfig.alertExitHysteresisMeters)
     }
 }
 

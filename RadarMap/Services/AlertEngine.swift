@@ -54,6 +54,19 @@ nonisolated struct AlertEngine {
         return min(AppConfig.maxDynamicRadius, max(baseRadius, bySpeed))
     }
 
+    /// Сколько секунд дороги мы НА САМОМ ДЕЛЕ даём водителю на этой скорости.
+    ///
+    /// `leadTime` — это намерение, а не факт: между ними стоит потолок радиуса,
+    /// и упёршись в него, запас начинает таять ровно там, где он нужнее всего —
+    /// на большой скорости. Пока это число считалось в уме, недобор было видно
+    /// только тому, кто взял калькулятор. Теперь оно есть, и его сторожит тест.
+    static func leadSeconds(speedKmh: Double, baseRadius: CLLocationDistance,
+                            context: AlertPolicy.Context = .city) -> Double {
+        guard speedKmh > 0 else { return .infinity }
+        return effectiveRadius(speedKmh: speedKmh, baseRadius: baseRadius,
+                               context: context) / (speedKmh / 3.6)
+    }
+
     /// Оценить приближение: вернёт решение, если уровень вырос; nil — молчим.
     /// Выход за радиус с гистерезисом сбрасывает серию — при возврате сигналим заново.
     mutating func evaluate(cameraID: Int, distance: CLLocationDistance,

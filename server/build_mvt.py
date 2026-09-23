@@ -21,6 +21,7 @@ from build_roads import (AREA_HOUSE, AREA_JUNCTION, AREA_MEDIAN, AREA_ROAD,
                          clip_ring,
                          FLAG_BRIDGE,
                          FLAG_LANES_TAGGED, FLAG_ONEWAY, FLAG_TUNNEL,
+                         PFLAG_PAINTED, PFLAG_ONEWAY, point_azimuth, point_width,
                          SURFACE_CLASS_MASK, SURFACE_CLASS_SHIFT, lanes_of,
                          road_width_meters)
 
@@ -40,6 +41,39 @@ LAYER_LAND = "land"
 LAYER_HOUSES = "houses"
 LAYER_POINTS = "points"
 LAYER_MARKINGS = "markings"
+LAYER_PAINT = "paint"
+
+
+def point_properties(code, flags):
+    """Знак обязательной остановки не доказывает наличие нарисованной линии."""
+    return {"kind": 7 if code == 3 and not flags & PFLAG_PAINTED else code,
+            "flags": flags, "bearing": point_azimuth(flags), "width": point_width(flags),
+            "painted": bool(flags & PFLAG_PAINTED)}
+
+
+def road_paint(code, flags, point):
+    """Краска в географических координатах, только при подтверждённой разметке.
+
+    Стоп-линию поперёк двух направлений не рисуем: в данных нет её длины.
+    """
+    width = point_width(flags)
+    if code not in (3, 5) or not flags & PFLAG_PAINTED or width <= 0:
+        return
+    if code == 3 and not flags & PFLAG_ONEWAY:
+        return
+    lon, lat = point
+    angle = math.radians(point_azimuth(flags))
+    def at(across, along):
+        return (lon + (math.cos(angle) * across + math.sin(angle) * along)
+                / (111_320 * math.cos(math.radians(lat))),
+                lat + (-math.sin(angle) * across + math.cos(angle) * along) / 111_320)
+    if code == 3:
+        yield [at(-width / 2, 0), at(width / 2, 0)]
+    else:
+        # Полосы зебры идут вдоль движения, а ряд — поперёк проезжей части.
+        for index in range(max(1, int(width))):
+            offset = -width / 2 + index + .5
+            yield [at(offset, -1.5), at(offset, 1.5)]
 
 # Разметка готовится один раз при сборке. Ограничение защищает от испорченного
 # тега lanes; двусторонние дороги без lanes:forward/backward не угадываем.
@@ -341,7 +375,9 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         for point in points:
             code, flags, spot = point[0], point[1], point[2]
             _put(buckets, zoom, LAYER_POINTS, mvt.POINT, list(spot),
-                 {"kind": code, "flags": flags})
+                 point_properties(code, flags))
+            for line in road_paint(code, flags, spot[0]):
+                _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": code})
     finally:
         buckets.close()
 

@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 import build_mvt
+import build_roads
 import mvt
 from test_mvt import parse, shapes_of
 
@@ -143,6 +144,59 @@ class BuildTests(unittest.TestCase):
     def test_empty_input_writes_nothing(self):
         self.assertEqual(build_mvt.build_mvt([], self.dir), {})
         self.assertEqual(self.tiles(), [])
+
+    def test_stop_control_is_not_a_painted_line(self):
+        flags = build_roads.point_flags(0, 12)
+        self.assertEqual(build_mvt.point_properties(3, flags)["kind"], 7)
+        self.assertFalse(build_mvt.point_properties(3, flags)["painted"])
+        self.assertEqual(list(build_mvt.road_paint(3, flags, (69.28, 41.31))), [])
+
+    def test_stop_paint_never_spans_unproven_two_way_road(self):
+        flags = build_roads.point_flags(0, 12) | build_roads.PFLAG_PAINTED
+        self.assertEqual(list(build_mvt.road_paint(3, flags, (69.28, 41.31))), [])
+        line = list(build_mvt.road_paint(3, flags | build_roads.PFLAG_ONEWAY, (69.28, 41.31)))
+        self.assertEqual(len(line), 1)
+        self.assertAlmostEqual(line[0][0][1], line[0][1][1])
+        self.assertAlmostEqual(build_roads.meters_between(*line[0]), 12, delta=.1)
+
+    def test_crossing_paint_needs_explicit_markings(self):
+        flags = build_roads.point_flags(90, 8)
+        self.assertEqual(list(build_mvt.road_paint(5, flags, (69.28, 41.31))), [])
+        stripes = list(build_mvt.road_paint(5, flags | build_roads.PFLAG_PAINTED, (69.28, 41.31)))
+        self.assertEqual(len(stripes), 8)
+        for a, b in stripes:
+            self.assertAlmostEqual(a[1], b[1])
+            self.assertAlmostEqual(build_roads.meters_between(a, b), 3, delta=.1)
+
+    def test_detail_signals_keep_separate_approaches(self):
+        road = self.road([(69.28, 41.30), (69.28, 41.32)])
+        raw = [(1, 0, [(69.28, 41.3099)]), (1, 0, [(69.28, 41.3101)])]
+        snapped, dropped = build_roads.snap_points(raw, [road])
+        self.assertEqual(dropped, 0)
+        self.assertEqual(len(snapped), 2)
+        self.assertNotEqual(snapped[0][2], snapped[1][2])
+        build_mvt.build_mvt([road], self.dir, points=snapped)
+        features = [f for path in self.tiles()
+                    for f in self.parsed(path).get(build_mvt.LAYER_POINTS, {}).get("features", [])]
+        self.assertEqual(len(features), 2)
+
+    def test_stop_line_tag_wins_regardless_of_property_order(self):
+        self.assertEqual(build_roads.point_kind({"highway": "stop", "road_marking": "stop_line"}), 3)
+        self.assertEqual(build_roads.point_kind({"road_marking": "stop_line", "highway": "stop"}), 3)
+
+    def test_explicit_paint_survives_collection_and_snapping(self):
+        path = os.path.join(self.dir, "points.geojsonl")
+        with open(path, "w") as file:
+            for props in [{"highway": "stop"}, {"road_marking": "stop_line"},
+                          {"highway": "crossing", "crossing:markings": "zebra"}]:
+                file.write(json.dumps({"type": "Feature", "properties": props,
+                                       "geometry": {"type": "Point", "coordinates": [69.28, 41.31]}}) + "\n")
+        raw = build_roads.collect_points(path)
+        road = self.road([(69.28, 41.30), (69.28, 41.32)], flags=build_mvt.FLAG_ONEWAY)
+        snapped, _ = build_roads.snap_points(raw, [road])
+        self.assertEqual([build_mvt.point_properties(k, f)["kind"] for k, f, _ in snapped], [7, 3, 5])
+        self.assertEqual([bool(f & build_roads.PFLAG_PAINTED) for _, f, _ in snapped], [False, True, True])
+        self.assertTrue(all(f & build_roads.PFLAG_ONEWAY for _, f, _ in snapped))
 
     def test_only_confirmed_oneway_lanes_are_marked(self):
         points = [(69.28, 41.311), (69.282, 41.311)]

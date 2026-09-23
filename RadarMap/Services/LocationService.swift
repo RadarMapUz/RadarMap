@@ -150,6 +150,14 @@ final class LocationService: NSObject {
                                                "LocationService.onPassRecorded") }
     }
 
+    /// Поездка кончилась — вот чего стоила работа предупреждений: сколько
+    /// камер проехали и о скольких успели сказать (`AlertRecall`). Единственная
+    /// цифра, по которой вообще можно судить, работает конвейер или нет.
+    @ObservationIgnored var onAlertRecall: ((AlertRecall.Tally) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onAlertRecall,
+                                               "LocationService.onAlertRecall") }
+    }
+
     /// Точка последнего пере-тайлинга. Координата, а не `CLLocation`: расстояние
     /// до неё меряется тем же `GeoMath.fastDistance`, что и всё остальное в
     /// пайплайне, и не создаёт двух объектов на каждый тик ради одного числа.
@@ -178,6 +186,10 @@ final class LocationService: NSObject {
     @ObservationIgnored private var alertEngine = AlertEngine()
     /// Учёт прохождения камер (траверз + зона измерения): чистый модуль, покрыт тестами.
     @ObservationIgnored private var passTracking = PassTracking()
+    /// Охват предупреждений за поездку: камеры, мимо которых проехали, против
+    /// камер, о которых сказали. Считается НЕЗАВИСИМО от записи проезда — у
+    /// той свои, намеренно более строгие гейты, и мерить ими себя нельзя.
+    @ObservationIgnored private var alertRecall = AlertRecall()
     /// Детектор «город/трасса» для умного режима оповещений (чистый, покрыт тестами).
     @ObservationIgnored private var contextDetector = AlertPolicy.Detector()
     /// Камер в радиусе 3 км — сигнал плотности для детектора (пересчёт на ретайле).
@@ -380,6 +392,7 @@ final class LocationService: NSObject {
         UIApplication.shared.isIdleTimerDisabled = settings.keepScreenOn && !isCarPlayConnected
         alertEngine.reset()
         passTracking.reset()
+        alertRecall.reset()
         locationFilter.reset()
         speedSmoother.reset()
         roadSnapper.reset()
@@ -476,6 +489,12 @@ final class LocationService: NSObject {
         // их вокруг места парковки, а не города въезда.
         if let coordinate = currentCoordinate { retile(around: coordinate) }
         alertEngine.reset()
+        // Итог работы предупреждений за поездку — до сброса счётчиков.
+        // Пассажирская поездка тоже считается: камеры мимо ехали настоящие,
+        // и промах конвейера от того, кто за рулём, не зависит.
+        let recall = alertRecall.tally()
+        if !recall.isEmpty { onAlertRecall?(recall) }
+        alertRecall.reset()
         voicedInGroup.removeAll()
         postponedVoice = nil
         notifier.clearDriverCheck()   // вопрос «вы за рулём?» больше не актуален
@@ -513,7 +532,10 @@ final class LocationService: NSObject {
     private func register(passes: [PassTracking.Pass]) {
         for pass in passes {
             trip.registerPass(camera: pass.camera, speedKmh: pass.speedKmh,
-                              limitKmh: pass.limitKmh, limitAssumed: pass.limitAssumed)
+                              limitKmh: pass.limitKmh, roadLimitKmh: pass.roadLimitKmh,
+                              limitAssumed: pass.limitAssumed,
+                              courseDegrees: pass.courseDegrees,
+                              speedAfterKmh: pass.speedAfterKmh)
             onPassRecorded?(pass.limitKmh == nil ? "none"
                             : (pass.limitAssumed ? "assumed" : "tag"))
         }
@@ -957,6 +979,10 @@ final class LocationService: NSObject {
                 roadLimit: speedLimits?.currentLimit,
                 roadLimitAssumed: speedLimits?.isCurrentLimitAssumed ?? false,
                 radius: effectiveAlertRadius,
+                // Курс — тот же, которому верит весь конвейер: LocationFilter
+                // отдаёт -1 там, где точность курса не доказана, и тогда
+                // направление проезда честно остаётся неизвестным.
+                course: course,
                 offRoad: PassGeometry.isProvenOffRoad(camera:at:)))
             runAlertEngine()
             speakPostponedVoice()
@@ -1211,10 +1237,24 @@ final class LocationService: NSObject {
         // траверз тем же способом — цифры на HUD и в проездах сходятся.
         var candidates: [(camera: Camera, distance: CLLocationDistance)] = []
         candidates.reserveCapacity(trackedCameras.count)
+        // Охват предупреждений меряется по ГЕОГРАФИИ: проехали ближе порога
+        // траверса — камера была наша, и молчание о ней обязано попасть в счёт.
+        // Ни маршрут, ни гейты, ни правила записи проезда здесь не участвуют:
+        // мерить работу конвейера его же решениями значит всегда получать сто
+        // процентов. Только в поездке — открытое приложение в кармане пассажира
+        // камеры не «проезжает», — и только по ГОДНОМУ фиксу: seedContext
+        // зовёт нас же по грубой точке, где ни алертов, ни зачёта проездов нет
+        // (см. его комментарий). Кэшированный фикс у камеры иначе записался бы
+        // проездом без предупреждения, то есть выдуманным промахом.
+        let countsPasses = isTripActive && !isPositionCoarse
         for camera in trackedCameras {
+            let straight = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
+                                                camera.lat, camera.lon)
+            if countsPasses, straight <= PassGeometry.traverseLimit(for: camera) {
+                alertRecall.notePassed(cameraID: camera.id)
+            }
             guard let remaining = routeRemaining(to: camera) else {
-                candidates.append((camera, GeoMath.fastDistance(
-                    coordinate.latitude, coordinate.longitude, camera.lat, camera.lon)))
+                candidates.append((camera, straight))
                 continue
             }
             // Камера уехала назад по маршруту — уже проехали, не пугаем.
@@ -1365,6 +1405,11 @@ final class LocationService: NSObject {
         // втором-третьем уровне, и приложение молчало о ней совсем.
         guard decision.isFirst else { return }
         onAlertFired?()
+        // Дистанция ПЕРВОГО предупреждения: по ней потом видно, успели мы
+        // сказать заранее или уже на самой камере. Только в поездке — иначе
+        // открытое в кармане приложение копило бы «предупреждения впустую»
+        // о камерах, мимо которых никто не ехал, и охват выглядел бы провальным.
+        if isTripActive { alertRecall.noteAlert(cameraID: camera.id, distance: distance) }
         // В свёрнутом виде (поездка в фоне) — уведомление зажигает экран и вибрирует.
         // Пользователь управляет: все камеры / только радары / выключено.
         if !isForeground, settings.backgroundAlerts.allows(camera) {

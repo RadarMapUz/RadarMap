@@ -49,6 +49,8 @@ struct TripStatsSheet: View {
     @State private var shareSubject: ShareSubjectBox?
     @State private var showRatingInfo = false
     @State private var showFinesInfo = false
+    /// Расшифровка охвата предупреждений: что именно считается промахом.
+    @State private var showRecallInfo = false
     /// Экран «Возможные штрафы» со строками проездов и пометкой «не пришёл».
     @State private var showFines = false
     @State private var selectedBadge: Achievement?
@@ -151,6 +153,10 @@ struct TripStatsSheet: View {
                         LabeledDivider(title: String(localized: "За всё время"))
                             .entrance(5, appeared)
                         lifetimeStrip(trip: trip)
+                            .entrance(5, appeared)
+                        // Охват — цифра пожизненная, а не за период: на неделе
+                        // это три камеры, и доля от трёх ничего не доказывает.
+                        AlertRecallCard(tally: trip.alertRecall) { showRecallInfo = true }
                             .entrance(5, appeared)
                         achievementsSection(trip: trip)
                             .entrance(5, appeared)
@@ -305,6 +311,9 @@ struct TripStatsSheet: View {
             FinesSheet(period: period, anchor: anchor)
         }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
+        .sheet(isPresented: $showRecallInfo) {
+            AlertRecallInfoSheet(tally: env.trip.alertRecall)
+        }
         // Деталка открывается из onDismiss, а не в один тик с закрытием списка:
         // sheet поверх ещё анимирующегося sheet молча не показывается (см.
         // комментарий к скриншот-хукам) — тап по поездке закрывал список, а

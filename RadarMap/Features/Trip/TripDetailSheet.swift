@@ -57,7 +57,10 @@ struct PassRow: View {
                 SpeedLimitSign(limit: limit, diameter: 26)
             }
             VStack(alignment: .trailing, spacing: 2) {
-                Text("\(Int(pass.speedKmh)) км/ч")
+                // Округление, а не усечение: тот же проезд открывается на
+                // экране «Проезд камеры», и две разные цифры об одной скорости
+                // выглядят как ошибка приложения.
+                Text("\(Int(pass.speedKmh.rounded())) км/ч")
                     .font(.rounded(15, .bold))
                     .foregroundStyle(PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh))
                 // Превышение попало в штрафную ступень — показываем цену
@@ -352,7 +355,7 @@ struct TripDetailContent: View {
                                 Circle()
                                     .fill(PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh))
                                     .frame(width: 22, height: 22)
-                                Text("\(Int(pass.speedKmh))")
+                                Text("\(Int(pass.speedKmh.rounded()))")
                                     .font(.system(size: 8.5, weight: .heavy, design: .rounded))
                                     .foregroundStyle(.white)
                             }

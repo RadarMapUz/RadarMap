@@ -2467,6 +2467,9 @@ PFLAG_AZIMUTH_STEP = 3
 PFLAG_AZIMUTH_MASK = 0x7F
 PFLAG_WIDTH_SHIFT = 7
 PFLAG_WIDTH_MASK = 0x3F
+# Выше восьми стрелок полос: совместимо со старым JSON и точностью double.
+PFLAG_PAINTED = 1 << 45
+PFLAG_ONEWAY = 1 << 46
 
 
 def point_flags(azimuth_degrees, width_meters):
@@ -2617,6 +2620,8 @@ POINT_MAX_CLASS = 6
 
 def point_kind(properties):
     """Вид точечного объекта по тегам. None — не наш слой."""
+    if properties.get("road_marking") == "stop_line":
+        return POINT_STOP_LINE
     for key, value in properties.items():
         code = POINT_TAGS.get((key, value))
         if code is not None:
@@ -2651,7 +2656,8 @@ def drawn_points(edits):
             spot = (float(geom[0]), float(geom[1]))
         except (TypeError, ValueError):
             continue
-        flags = 0
+        # В ручном редакторе эти виды означают именно нарисованную разметку.
+        flags = PFLAG_PAINTED if kind in (POINT_STOP_LINE, POINT_CROSSING) else 0
         turns = props.get("turns")
         if kind == POINT_LANE_ARROWS and isinstance(turns, list):
             flags = pack_turns(0, [t for t in turns if isinstance(t, int)])
@@ -2744,7 +2750,12 @@ def collect_points(source_path):
             coordinates = geometry.get("coordinates") or []
             if len(coordinates) < 2:
                 continue
-            points.append((kind, 0, [(float(coordinates[0]), float(coordinates[1]))]))
+            properties = feature.get("properties") or {}
+            painted = properties.get("road_marking") == "stop_line" or (
+                kind == POINT_CROSSING and (properties.get("crossing:markings") in ("yes", "zebra")
+                                           or properties.get("crossing") == "zebra"))
+            points.append((kind, PFLAG_PAINTED if painted else 0,
+                           [(float(coordinates[0]), float(coordinates[1]))]))
     return points
 
 
@@ -2849,7 +2860,7 @@ def snap_points(points, roads, meters=POINT_SNAP_METERS):
     for kind, flags, geometry in points:
         origin = geometry[0]
         best, best_distance, seen = None, meters, set()
-        best_bearing, best_width = 0.0, 0.0
+        best_bearing, best_width, best_oneway = 0.0, 0.0, False
         for key in _neighbourhood(origin, POINT_GRID_DEGREES):
             for road in cells.get(key, ()):
                 if id(road) in seen:
@@ -2861,6 +2872,7 @@ def snap_points(points, roads, meters=POINT_SNAP_METERS):
                     best, best_distance = candidate, distance
                     best_bearing = bearing
                     best_width = road_width_meters(road[0], lanes_of(road[1]))
+                    best_oneway = bool(road[1] & FLAG_ONEWAY)
         if best is None:
             dropped += 1
             continue
@@ -2871,6 +2883,7 @@ def snap_points(points, roads, meters=POINT_SNAP_METERS):
         # как приехало: у стрелок полос там направления, и пересчёт посадки не
         # имеет права их стереть.
         above = flags & ~((1 << PFLAG_TURNS_SHIFT) - 1)
+        above = (above & ~PFLAG_ONEWAY) | (PFLAG_ONEWAY if best_oneway else 0)
         snapped.append((kind, point_flags(best_bearing, best_width) | above, [best]))
     return snapped, dropped
 
@@ -3926,6 +3939,9 @@ def main():
     clustered = cluster_points(at_junctions)
     points, dropped = snap_points(clustered, roads)
     raw_points_count = len(raw_points)
+    # Детальная карта сохраняет каждый подъезд; обзорная схема по-прежнему
+    # получает один ориентир на перекрёсток. Не теряем данные до кодирования.
+    mvt_points, _ = snap_points(raw_points, roads) if args.mvt else ([], 0)
     junction_count, clustered_count = len(at_junctions), len(clustered)
     del at_junctions, clustered
     # Дальний набор: только светофоры. Стоп-знак и лежачий на охвате района —
@@ -3966,7 +3982,7 @@ def main():
 
     if args.mvt:
         made = build_mvt.build_mvt(roads, args.tiles_dir, areas=areas,
-                                   points=points, far=far)
+                                   points=mvt_points, far=far)
         weight = sum(meta["bytes"] for meta in made.values())
         print(f"MVT: {len(made)} тайлов, {weight / 1e6:.1f} МБ "
               f"(зумы {build_mvt.ZOOM_DETAIL} и {build_mvt.ZOOM_FAR})")

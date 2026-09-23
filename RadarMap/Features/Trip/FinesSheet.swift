@@ -160,7 +160,8 @@ struct FinesSheet: View {
                     if let limit = item.pass.limitKmh {
                         SpeedLimitSign(limit: limit, diameter: 26)
                     }
-                    Text("\(Int(item.pass.speedKmh)) км/ч")
+                    // Округление, а не усечение — как на экране проезда.
+                    Text("\(Int(item.pass.speedKmh.rounded())) км/ч")
                         .font(.rounded(15, .bold))
                         .foregroundStyle(PassStyle.color(speed: item.pass.speedKmh,
                                                          limit: item.pass.limitKmh))

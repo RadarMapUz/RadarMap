@@ -25,6 +25,11 @@ final class UsageStatsTests: XCTestCase {
         stats.limitSource = ["tag": 7, "assumed": 2]
         stats.maneuvers = ["right": 4, "roundabout": 1]
         stats.tripsDropped = ["short": 1, "merged": 2]
+        // Охват предупреждений — счётчик о КАМЕРАХ, то есть о местах, куда
+        // человек ездит. Именно поэтому наружу уходят только суммы: ни одного
+        // идентификатора камеры, ни одной дистанции, ни одного времени.
+        stats.alertRecall = ["passed": 49, "warned": 47, "late": 1,
+                             "silent": 1, "unused": 4]
         let json = try XCTUnwrap(String(data: JSONEncoder().encode(stats), encoding: .utf8))
         for forbidden in ["lat", "lon", "coordinate", "route", "track",
                           "startedAt", "endedAt", "timestamp", "address"] {

@@ -128,7 +128,7 @@ echo "    местности в экстракте: $(wc -l < areas.geojsonl)"
 # Азимут всё равно считается по дороге, а не по линии перехода, — линия не
 # добавляет ничего, кроме работы. В центре Ташкента это 809 узлов.
 osmium tags-filter uzbekistan.osm.pbf \
-    n/highway=traffic_signals,stop,crossing n/traffic_calming \
+    n/highway=traffic_signals,stop,crossing n/traffic_calming n/road_marking=stop_line \
     -o points.osm.pbf --overwrite
 osmium export points.osm.pbf -f geojsonseq --geometry-types=point \
     -o points.geojsonl --overwrite

@@ -275,6 +275,52 @@ nonisolated enum TripHistory {
         return (cleaned, changed)
     }
 
+    /// Ретро-подъём лимитов до пола фиксации (EnforcedLimit).
+    ///
+    /// Записи, сделанные до появления пола, судились по тегу OSM: проезд на
+    /// 66 км/ч по улице с тегом 50 стоил 440 000 сум возможного штрафа и −8 к
+    /// баллу, хотя камера на 50 в городе не стоит ни одна. Чистка снимает это
+    /// обвинение задним числом.
+    ///
+    /// Проезды НЕ удаляются — у них меняется только лимит, и сырой уезжает в
+    /// `roadLimitKmh`, чтобы экран проезда по-прежнему мог назвать знак.
+    /// Балл поездки пересчитывается тем же `DrivingScore`, что и живой.
+    /// Возвращает (история, менялось ли).
+    static func limitFloored(_ history: [TripRecord]) -> ([TripRecord], Bool) {
+        var changed = false
+        let cleaned = history.map { record -> TripRecord in
+            guard record.passed.contains(where: { EnforcedLimit.isFloored(road: $0.limitKmh) })
+            else { return record }
+            changed = true
+            let raised = record.passed.map { pass -> PassedCamera in
+                guard EnforcedLimit.isFloored(road: pass.limitKmh) else { return pass }
+                var out = pass
+                out.roadLimitKmh = pass.limitKmh
+                out.limitKmh = EnforcedLimit.applied(to: pass.limitKmh)
+                return out
+            }
+            return TripRecord(id: record.id, startedAt: record.startedAt,
+                              endedAt: record.endedAt,
+                              distanceMeters: record.distanceMeters,
+                              maxSpeedKmh: record.maxSpeedKmh, passed: raised,
+                              endLat: record.endLat, endLon: record.endLon,
+                              track: record.track,
+                              // Балла может не быть вовсе (старая запись без
+                              // трека) — тогда его и не появляется: выдумывать
+                              // рейтинг там, где его не считали, нельзя.
+                              score: record.score == nil ? nil : DrivingScore.tripScore(
+                                  passes: raised.map {
+                                      DrivingScore.Pass(speedKmh: $0.speedKmh,
+                                                        limitKmh: $0.limitKmh)
+                                  },
+                                  trackSpeeds: record.trackPoints.map(\.speedKmh)),
+                              stops: record.stops,
+                              endedManually: record.endedManually,
+                              batteryDropPercent: record.batteryDropPercent)
+        }
+        return (cleaned, changed)
+    }
+
     /// Ретро-чистка истории: убирает «проезды» камер, до которых трек ближе
     /// 120 м не подходил (раньше засчитывались камеры с параллельных улиц),
     /// и пересчитывает балл затронутых поездок. Возвращает (история, менялось ли).

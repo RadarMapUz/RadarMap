@@ -20,9 +20,9 @@ import Foundation
 
 nonisolated enum CameraFamiliarity {
     /// Сколько спокойных проездов делают камеру своей.
-    static let minPasses = 6
+    static var minPasses: Int { AppConfig.familiarMinPasses }
     /// За какое окно смотрим историю.
-    static let windowDays = 30
+    static var windowDays: Int { AppConfig.familiarWindowDays }
 
     /// Идентификаторы «своих» камер по истории поездок.
     ///
@@ -43,6 +43,13 @@ nonisolated enum CameraFamiliarity {
                 // там, где человек превышает, нельзя — камера в зоне 60
                 // фиксирует уже на 66, и цена ошибки тут не «лишний совет», а
                 // штраф, о котором мы промолчали.
+                //
+                // Лимит здесь — уже поднятый до пола фиксации (EnforcedLimit),
+                // и это ровно та же логика, а не её послабление: вопрос был и
+                // остаётся «возможен ли тут штраф». По тегу 50 на городской
+                // улице штраф невозможен, и проезд на 55 больше не отнимает у
+                // камеры право замолчать. Именно этот случай держал дорогу
+                // дом→работа вечно говорящей.
                 if let over = pass.overLimitKmh, over > FineSchedule.toleranceKmh {
                     violated.insert(pass.cameraID)
                 } else {

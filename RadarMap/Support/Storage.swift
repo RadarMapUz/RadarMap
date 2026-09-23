@@ -20,6 +20,11 @@ enum Storage {
         // уже отработал и сам себя больше не запустит.
         case passGeoCleanup2
         case passAxisCleanup1       // флаг одноразовой чистки «мостовых» проездов (ось дороги)
+        // Флаг одноразового подъёма лимитов до пола фиксации (EnforcedLimit):
+        // записи старше пола судились по тегу OSM ниже 60 и носили штрафы,
+        // которых камера не выписывает.
+        case passLimitFloor1
+        case alertRecallTotal       // охват предупреждений за всё время (JSON)
         case metricsDeviceID        // анонимный ID для MetricKit-отчётов
         case mobileDeviceID         // анонимный ID для голосований по камерам
         case feedbackDeviceID       // анонимный ID для обратной связи

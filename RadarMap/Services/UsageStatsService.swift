@@ -94,6 +94,19 @@ final class UsageStatsService {
         }
     }
 
+    /// Охват предупреждений за завершённую поездку. Идентификаторы камер сюда
+    /// не попадают и попасть не могут: на входе уже суммы (`AlertRecall.Tally`),
+    /// а не список.
+    func noteAlertRecall(_ tally: AlertRecall.Tally) {
+        note {
+            $0.alertRecall["passed", default: 0] += tally.passed
+            $0.alertRecall["warned", default: 0] += tally.warned
+            $0.alertRecall["late", default: 0] += tally.late
+            $0.alertRecall["silent", default: 0] += tally.silent
+            $0.alertRecall["unused", default: 0] += tally.unused
+        }
+    }
+
     func noteManeuver(_ kind: String) { note { $0.maneuvers[kind, default: 0] += 1 } }
 
     func noteTripDropped(_ reason: String) { note { $0.tripsDropped[reason, default: 0] += 1 } }

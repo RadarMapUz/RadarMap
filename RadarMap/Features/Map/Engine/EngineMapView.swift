@@ -22,6 +22,7 @@
 #if canImport(MapLibre)
 import CoreLocation
 import MapLibre
+import MapKit
 import SwiftUI
 import os
 
@@ -49,14 +50,18 @@ struct EngineMapView: UIViewRepresentable {
     /// Наклон, градусы.
     var pitchDegrees: Double
     var daylight: Bool
-    /// Дома. Тот же тумблер, что у своей схемы: подложка меняется, а правило
-    /// «за что мы платим трафиком» остаётся одно на оба рендера.
+    /// Видимость домов. Геометрия уже входит в общий векторный тайл.
     var houses: Bool = false
     /// Камеры окрестности; `alert` — та, о которой сейчас предупреждаем.
     var cameras: [Camera]
+    var cameraRevision: Int = 0
+    var limitRevision: Int = 0
+    var cameraProvider: ((MKCoordinateRegion) -> [Camera])?
+    var limitProvider: ((Camera) -> Int?)?
     var alertCameraID: Int?
     var cameraLimits: [Int: Int] = [:]
     var route: [CLLocationCoordinate2D]
+    var routeObject: MKPolyline?
     var routeProgress: Double = 0
     var maneuverAlong: Double?
     var recenterToken: Int = 0
@@ -85,14 +90,17 @@ struct EngineMapView: UIViewRepresentable {
         // Ссылка на источник данных обязана остаться: тайлы построены по OSM.
         view.attributionButtonPosition = .bottomLeft
         view.delegate = context.coordinator
-        view.addGestureRecognizer(UITapGestureRecognizer(target: context.coordinator,
-                                                          action: #selector(Coordinator.selectCamera(_:))))
-        context.coordinator.view = view
-        for gesture in view.gestureRecognizers ?? [] where !(gesture is UITapGestureRecognizer) {
-            gesture.addTarget(context.coordinator, action: #selector(Coordinator.inspectMap(_:)))
+        let selection = UITapGestureRecognizer(target: context.coordinator,
+                                                action: #selector(Coordinator.selectCamera(_:)))
+        for tap in (view.gestureRecognizers ?? []).compactMap({ $0 as? UITapGestureRecognizer })
+            where tap.numberOfTapsRequired > 1 {
+            selection.require(toFail: tap)
         }
+        view.addGestureRecognizer(selection)
+        context.coordinator.view = view
         view.onLayout = { [weak coordinator = context.coordinator] view in
             guard let coordinator, let model = coordinator.current else { return }
+            coordinator.lastCameraModel = nil
             coordinator.apply(model, to: view)
         }
         context.coordinator.loadStyle(self, in: view)
@@ -111,6 +119,13 @@ struct EngineMapView: UIViewRepresentable {
         context.coordinator.apply(self, to: view)
     }
 
+    static func dismantleUIView(_ view: MLNMapView, coordinator: Coordinator) {
+        coordinator.routeTask?.cancel()
+        coordinator.routeGeneration += 1
+        view.delegate = nil
+        (view as? EngineNativeMapView)?.onLayout = nil
+    }
+
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     @MainActor
@@ -126,23 +141,75 @@ struct EngineMapView: UIViewRepresentable {
         private var styleReady = false
         private var lastDaylight: Bool?
         private var lastHouses: Bool?
+        private var themeLayers: [[String: Any]] = []
         private var lastCameras: [Camera]?
         private var lastLimits: [Int: Int] = [:]
         private var lastAlertID: Int?
-        private var lastRoute: [CLLocationCoordinate2D]?
+        private var lastRouteObject: MKPolyline?
+        private var routeInitialized = false
+        private var routeIndex: EngineMapPresentation.RouteIndex?
+        fileprivate var routeTask: Task<Void, Never>?
+        fileprivate var routeGeneration = 0
+        private var lastPosition: CLLocationCoordinate2D?
+        private var positionHeading = 0.0
+        private var cameraRegion: MKCoordinateRegion?
+        private var cachedCameras: [Camera] = []
+        private var cachedLimits: [Int: Int] = [:]
+        private var cameraRevision = -1
+        private var limitRevision = -1
+        private var lastFollowTime: CFTimeInterval?
+        private static var iconCache: [String: UIImage] = [:]
+        private let performanceLog = OSLog(subsystem: "uz.radarmap", category: "MapPerformance")
         private var lastProgress = -Double.infinity
         private var lastManeuverAlong: Double?
-        private var lastCameraModel: EngineMapView?
+        fileprivate var lastCameraModel: EngineMapView?
         private var browsing = false
         private var lastRecenterToken = 0
 
-        @objc func inspectMap(_ gesture: UIGestureRecognizer) {
-            guard gesture.state == .began else { return }
-            browsing = true
-            current?.onBrowse()
+        // MapLibre invokes this for every native camera gesture, including tap zoom.
+        func mapView(_ mapView: MLNMapView, shouldChangeFrom oldCamera: MLNMapCamera,
+                     to newCamera: MLNMapCamera) -> Bool {
+            if !browsing {
+                browsing = true
+                current?.onBrowse()
+            }
+            return true
         }
 
+        func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
+            if let current, styleReady { updateCameras(current, in: mapView) }
+        }
+
+        #if DEBUG
+        private var encodingSamples: [Double] = []
+        private var renderingSamples: [Double] = []
+
+        func mapViewDidFinishRenderingFrame(_ mapView: MLNMapView, fullyRendered: Bool,
+                                           frameEncodingTime: Double, frameRenderingTime: Double) {
+            guard frameEncodingTime.isFinite, frameRenderingTime.isFinite else { return }
+            encodingSamples.append(frameEncodingTime)
+            renderingSamples.append(frameRenderingTime)
+            if encodingSamples.count >= AppConfig.engineMetricsSampleCount { reportRendering() }
+        }
+
+        func mapViewDidBecomeIdle(_ mapView: MLNMapView) { reportRendering() }
+
+        private func reportRendering() {
+            guard !encodingSamples.isEmpty else { return }
+            let encode = encodingSamples.sorted(), render = renderingSamples.sorted()
+            let p95 = min(encode.count - 1, Int(Double(encode.count) * 0.95))
+            os_log("Map frames=%d encoding_p95_ms=%.2f rendering_p95_ms=%.2f",
+                   log: performanceLog, type: .info, encode.count, encode[p95], render[p95])
+            encodingSamples.removeAll(keepingCapacity: true)
+            renderingSamples.removeAll(keepingCapacity: true)
+        }
+        #endif
+
         private func installCameraIcons(in style: MLNStyle) {
+            if !Self.iconCache.isEmpty {
+                for (name, image) in Self.iconCache { style.setImage(image, forName: name) }
+                return
+            }
             let renderer = ImageRenderer(content: MeCursor(scale: 1)
                 .frame(width: 30, height: 36).padding(8))
             renderer.scale = 3
@@ -167,24 +234,47 @@ struct EngineMapView: UIViewRepresentable {
                 }
             }
             // Все линзы нейтральны: тайл знает положение, но не текущую фазу.
-            let signal = UIGraphicsImageRenderer(size: CGSize(width: 16, height: 32)).image { _ in
+            let signal = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 38)).image { _ in
+                UIColor(red: 0.36, green: 0.43, blue: 0.39, alpha: 1).setFill()
+                UIBezierPath(roundedRect: CGRect(x: 9, y: 29, width: 2, height: 8), cornerRadius: 1).fill()
                 UIColor(red: 0.07, green: 0.13, blue: 0.11, alpha: 1).setFill()
-                let shell = UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 14, height: 30), cornerRadius: 5)
+                let shell = UIBezierPath(roundedRect: CGRect(x: 3, y: 1, width: 14, height: 30), cornerRadius: 5)
                 shell.fill()
                 UIColor(red: 0.65, green: 0.73, blue: 0.67, alpha: 1).setStroke()
                 shell.lineWidth = 1
                 shell.stroke()
-                UIColor(red: 0.65, green: 0.73, blue: 0.67, alpha: 1).setFill()
-                for y in [6, 14, 22] { UIBezierPath(ovalIn: CGRect(x: 5, y: y, width: 6, height: 6)).fill() }
+                for y in [6, 14, 22] {
+                    UIColor.black.withAlphaComponent(0.75).setFill()
+                    UIBezierPath(ovalIn: CGRect(x: 5, y: y - 2, width: 10, height: 10)).fill()
+                    UIColor(red: 0.54, green: 0.62, blue: 0.56, alpha: 1).setFill()
+                    UIBezierPath(ovalIn: CGRect(x: 7, y: y, width: 6, height: 6)).fill()
+                    UIColor.white.withAlphaComponent(0.22).setFill()
+                    UIBezierPath(ovalIn: CGRect(x: 8, y: y, width: 3, height: 2)).fill()
+                }
             }
             style.setImage(signal, forName: "radar-signal")
+            let stop = UIGraphicsImageRenderer(size: CGSize(width: 26, height: 26)).image { _ in
+                UIImage(systemName: "octagon.fill")?.withTintColor(
+                    UIColor(red: 0.64, green: 0.23, blue: 0.22, alpha: 1), renderingMode: .alwaysOriginal)
+                    .draw(in: CGRect(x: 1, y: 1, width: 24, height: 24))
+                ("STOP" as NSString).draw(at: CGPoint(x: 3, y: 9), withAttributes: [
+                    .font: UIFont.systemFont(ofSize: 8, weight: .bold), .foregroundColor: UIColor.white])
+            }
+            style.setImage(stop, forName: "radar-stop")
+            let names = ["radar-user", "radar-signal", "radar-stop"] + kinds.flatMap {
+                [$0.symbolName, $0.symbolName + "-alert"]
+            }
+            for name in names { Self.iconCache[name] = style.image(forName: name) }
         }
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             Log.network.info("MapLibre: стиль загружен")
             installCameraIcons(in: style)
             lastCameras = nil
-            lastRoute = nil
+            routeInitialized = false
+            lastPosition = nil
+            cameraRegion = nil
+            style.layer(withIdentifier: "houses")?.isVisible = current?.houses ?? false
             styleReady = true
             pending.map { apply($0, to: mapView) }
         }
@@ -202,7 +292,7 @@ struct EngineMapView: UIViewRepresentable {
             let rect = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
             let features = view.visibleFeatures(in: rect, styleLayerIdentifiers: ["camera-dot", "camera-icons"])
             let ids = Set(features.compactMap { ($0.attribute(forKey: "id") as? NSNumber)?.intValue })
-            let nearest = current.cameras.filter { ids.contains($0.id) }.min { a, b in
+            let nearest = cachedCameras.filter { ids.contains($0.id) }.min { a, b in
                 let pa = view.convert(a.coordinate, toPointTo: view)
                 let pb = view.convert(b.coordinate, toPointTo: view)
                 return hypot(pa.x - point.x, pa.y - point.y) < hypot(pb.x - point.x, pb.y - point.y)
@@ -216,15 +306,76 @@ struct EngineMapView: UIViewRepresentable {
             current = model
             pending = model
             styleReady = false
+            routeTask?.cancel()
+            routeGeneration += 1
             lastDaylight = model.daylight
             lastHouses = model.houses
+            os_signpost(.event, log: performanceLog, name: "Style replacement")
             view.styleJSON = EngineMapStyle.json(daylight: model.daylight,
                                                  base: AppConfig.syncBaseURL,
-                                                 houses: model.houses,
+                                                 houses: true,
                                                  tilesReady: EngineTileGuard.isReady)
+            themeLayers = Self.layers(daylight: model.daylight)
+        }
+
+        private static func layers(daylight: Bool) -> [[String: Any]] {
+            let json = EngineMapStyle.json(daylight: daylight, base: AppConfig.syncBaseURL, houses: true)
+            guard let data = json.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+            return object["layers"] as? [[String: Any]] ?? []
+        }
+
+        /// UIColor constants avoid Foundation's unsupported CAST(hex, UIColor).
+        static func colorExpression(_ value: Any) -> NSExpression? {
+            if let hex = value as? String, hex.hasPrefix("#"), hex.count == 7,
+               let rgb = UInt32(hex.dropFirst(), radix: 16) {
+                return NSExpression(forConstantValue: UIColor(red: CGFloat((rgb >> 16) & 255) / 255,
+                    green: CGFloat((rgb >> 8) & 255) / 255, blue: CGFloat(rgb & 255) / 255, alpha: 1))
+            }
+            guard let match = value as? [Any], match.count >= 5, match.count % 2 == 1,
+                  match[0] as? String == "match", let get = match[1] as? [String],
+                  get.count == 2, get[0] == "get", var expression = colorExpression(match.last!) else { return nil }
+            for i in stride(from: match.count - 3, through: 2, by: -2) {
+                guard let color = colorExpression(match[i + 1]) else { return nil }
+                let predicate = NSComparisonPredicate(leftExpression: NSExpression(forKeyPath: get[1]),
+                    rightExpression: NSExpression(forConstantValue: match[i]), modifier: .direct,
+                    type: .equalTo, options: [])
+                expression = NSExpression(forConditional: predicate, trueExpression: color, falseExpression: expression)
+            }
+            return expression
+        }
+
+        private func updateAppearance(_ model: EngineMapView, in style: MLNStyle) {
+            if lastDaylight != model.daylight {
+                let layers = Self.layers(daylight: model.daylight)
+                for item in layers {
+                    guard let id = item["id"] as? String, let layer = style.layer(withIdentifier: id),
+                          let paint = item["paint"] as? [String: Any] else { continue }
+                    let old = themeLayers.first { $0["id"] as? String == id }?["paint"] as? [String: Any] ?? [:]
+                    for (key, value) in paint where key.hasSuffix("color") {
+                        if let previous = old[key], NSDictionary(dictionary: [key: previous]).isEqual(to: [key: value]) { continue }
+                        guard let expression = Self.colorExpression(value) else { continue }
+                        switch (layer, key) {
+                        case (let layer as MLNBackgroundStyleLayer, "background-color"): layer.backgroundColor = expression
+                        case (let layer as MLNFillStyleLayer, "fill-color"): layer.fillColor = expression
+                        case (let layer as MLNFillStyleLayer, "fill-outline-color"): layer.fillOutlineColor = expression
+                        case (let layer as MLNLineStyleLayer, "line-color"): layer.lineColor = expression
+                        case (let layer as MLNSymbolStyleLayer, "text-color"): layer.textColor = expression
+                        case (let layer as MLNSymbolStyleLayer, "text-halo-color"): layer.textHaloColor = expression
+                        default: break
+                        }
+                    }
+                }
+                themeLayers = layers
+                lastDaylight = model.daylight
+            }
+            style.layer(withIdentifier: "houses")?.isVisible = model.houses
+            lastHouses = model.houses
         }
 
         func apply(_ model: EngineMapView, to view: MLNMapView) {
+            os_signpost(.begin, log: performanceLog, name: "Map apply")
+            defer { os_signpost(.end, log: performanceLog, name: "Map apply") }
             current = model
             guard styleReady, view.bounds.width > 0, view.bounds.height > 0 else {
                 pending = model
@@ -238,8 +389,7 @@ struct EngineMapView: UIViewRepresentable {
             }
 
             if lastDaylight != model.daylight || lastHouses != model.houses {
-                loadStyle(model, in: view)
-                return
+                if let style = view.style { updateAppearance(model, in: style) }
             }
 
             // Точка зрения. «Я» стоит не в центре, а ниже — впереди должно
@@ -268,7 +418,12 @@ struct EngineMapView: UIViewRepresentable {
                 || previous.pitchDegrees != model.pitchDegrees || previous.anchorY != model.anchorY
             } ?? true
             if !browsing && changed {
-                view.setCamera(camera, withDuration: cameraPlaced && !UIAccessibility.isReduceMotionEnabled ? AppConfig.engineCameraDuration : 0,
+                let now = CACurrentMediaTime()
+                let interval = lastFollowTime.map { min(AppConfig.engineCameraDuration, max(0, now - $0)) }
+                    ?? AppConfig.engineCameraDuration
+                lastFollowTime = now
+                os_signpost(.event, log: performanceLog, name: "Follow camera")
+                view.setCamera(camera, withDuration: cameraPlaced && !UIAccessibility.isReduceMotionEnabled ? interval : 0,
                            animationTimingFunction: CAMediaTimingFunction(name: .linear))
                 lastCameraModel = model
             }
@@ -276,46 +431,90 @@ struct EngineMapView: UIViewRepresentable {
                 Log.network.info("MapLibre: камера установлена, zoom \(view.zoomLevel, privacy: .public)")
             }
             cameraPlaced = true
-            update(source: "position", in: view, geoJSON: [
-                "type": "Feature", "properties": ["rotation": max(0, model.courseDegrees)],
-                "geometry": ["type": "Point", "coordinates":
-                    [model.coordinate.longitude, model.coordinate.latitude]],
-            ])
-
-            if model.cameras != lastCameras || model.alertCameraID != lastAlertID || model.cameraLimits != lastLimits {
-                lastCameras = model.cameras
-                lastAlertID = model.alertCameraID
-                lastLimits = model.cameraLimits
-                update(source: "cameras", in: view, geoJSON: Self.cameraFeatures(
-                    model.cameras, alert: model.alertCameraID, limits: model.cameraLimits))
+            let rotation = EngineMapPresentation.heading(model.courseDegrees, near: positionHeading)
+            if lastPosition?.latitude != model.coordinate.latitude
+                || lastPosition?.longitude != model.coordinate.longitude || rotation != positionHeading {
+                let feature = MLNPointFeature()
+                feature.coordinate = model.coordinate
+                feature.attributes = ["rotation": rotation]
+                (view.style?.source(withIdentifier: "position") as? MLNShapeSource)?.shape = feature
+                lastPosition = model.coordinate
+                positionHeading = rotation
             }
-            if lastRoute == nil || lastManeuverAlong != model.maneuverAlong || abs(model.routeProgress - lastProgress) >= AppConfig.engineRouteProgressStep || !model.route.elementsEqual(lastRoute!, by: {
-                $0.latitude == $1.latitude && $0.longitude == $1.longitude
-            }) {
-                lastRoute = model.route
+            updateCameras(model, in: view)
+            let newRoute = !routeInitialized || lastRouteObject !== model.routeObject
+            if newRoute || lastManeuverAlong != model.maneuverAlong
+                || abs(model.routeProgress - lastProgress) >= AppConfig.engineRouteProgressStep {
+                if newRoute { routeIndex = nil }
+                routeInitialized = true
+                lastRouteObject = model.routeObject
                 lastProgress = model.routeProgress
                 lastManeuverAlong = model.maneuverAlong
-                let split = EngineMapPresentation.split(model.route, at: model.routeProgress)
-                update(source: "traveled", in: view, geoJSON: Self.lineFeature(split.traveled))
-                update(source: "route", in: view, geoJSON: Self.lineFeature(split.remaining))
-                update(source: "maneuver", in: view, geoJSON: Self.lineFeature(
-                    EngineMapPresentation.maneuver(model.route, at: model.maneuverAlong, progress: model.routeProgress)))
+                routeTask?.cancel()
+                routeGeneration += 1
+                let generation = routeGeneration, index = routeIndex
+                routeTask = Task { [weak self, weak view] in
+                    let frame = await EngineMapPresentation.prepareRoute(model.route, index: index,
+                        progress: model.routeProgress, maneuver: model.maneuverAlong)
+                    guard !Task.isCancelled, let self, let view,
+                          self.routeGeneration == generation, self.styleReady else { return }
+                    self.routeIndex = frame.index
+                    self.setLine(frame.traveled, source: "traveled", in: view)
+                    self.setLine(frame.remaining, source: "route", in: view)
+                    self.setLine(frame.maneuver, source: "maneuver", in: view)
+                }
             }
+        }
+
+        private func setLine(_ coordinates: [CLLocationCoordinate2D], source: String, in view: MLNMapView) {
+            guard let source = view.style?.source(withIdentifier: source) as? MLNShapeSource else { return }
+            os_signpost(.begin, log: performanceLog, name: "Route source")
+            defer { os_signpost(.end, log: performanceLog, name: "Route source") }
+            if coordinates.count < 2 { source.shape = nil; return }
+            source.shape = coordinates.withUnsafeBufferPointer {
+                MLNPolylineFeature(coordinates: $0.baseAddress!, count: UInt($0.count))
+            }
+        }
+
+        private func updateCameras(_ model: EngineMapView, in view: MLNMapView) {
+            let bounds = view.visibleCoordinateBounds
+            let region = MKCoordinateRegion(center: CLLocationCoordinate2D(
+                latitude: (bounds.ne.latitude + bounds.sw.latitude) / 2,
+                longitude: (bounds.ne.longitude + bounds.sw.longitude) / 2), span: MKCoordinateSpan(
+                latitudeDelta: abs(bounds.ne.latitude - bounds.sw.latitude),
+                longitudeDelta: abs(bounds.ne.longitude - bounds.sw.longitude)))
+            let refresh = cameraRegion.map { !EngineMapPresentation.contains($0, region) } ?? true
+            if refresh || cameraRevision != model.cameraRevision || limitRevision != model.limitRevision {
+                os_signpost(.event, log: performanceLog, name: "Camera viewport query")
+                let padded = EngineMapPresentation.padded(region)
+                cachedCameras = model.cameraProvider?(padded) ?? model.cameras
+                cachedLimits = Dictionary(uniqueKeysWithValues: cachedCameras.compactMap { camera in
+                    (model.limitProvider?(camera) ?? model.cameraLimits[camera.id]).map { (camera.id, $0) }
+                })
+                cameraRegion = padded
+                cameraRevision = model.cameraRevision
+                limitRevision = model.limitRevision
+            }
+            guard cachedCameras != lastCameras || model.alertCameraID != lastAlertID || cachedLimits != lastLimits else { return }
+            lastCameras = cachedCameras
+            lastAlertID = model.alertCameraID
+            lastLimits = cachedLimits
+            let points = cachedCameras.map { camera in
+                let point = MLNPointFeature()
+                point.coordinate = camera.coordinate
+                point.attributes = ["id": camera.id, "alert": camera.id == model.alertCameraID,
+                    "icon": camera.kind.symbolName + (camera.id == model.alertCameraID ? "-alert" : ""),
+                    "limit": cachedLimits[camera.id].map(String.init) ?? "",
+                    "unconfirmed": camera.isUnconfirmedMobile]
+                return point
+            }
+            (view.style?.source(withIdentifier: "cameras") as? MLNShapeSource)?.shape = MLNShapeCollectionFeature(shapes: points)
         }
 
         static func zoom(spanMeters: Double, height: Double, latitude: Double) -> Double {
             let circumference = 40_075_016.686 * cos(latitude * .pi / 180)
             return min(19, max(11, log2(circumference * max(1, height)
                                        / (512 * max(1, spanMeters)))))
-        }
-
-        private func update(source: String, in view: MLNMapView, geoJSON: [String: Any]) {
-            guard let style = view.style,
-                  let shape = style.source(withIdentifier: source) as? MLNShapeSource,
-                  let data = try? JSONSerialization.data(withJSONObject: geoJSON),
-                  let feature = try? MLNShape(data: data, encoding: String.Encoding.utf8.rawValue)
-            else { return }
-            shape.shape = feature
         }
 
         static func cameraFeatures(_ cameras: [Camera], alert: Int?, limits: [Int: Int] = [:]) -> [String: Any] {

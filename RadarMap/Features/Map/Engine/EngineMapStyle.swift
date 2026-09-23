@@ -214,6 +214,36 @@ nonisolated enum EngineMapStyle {
                       "line-width": ["interpolate", ["exponential", 2], ["zoom"], 17, 0.65, 20, 2.5],
                       "line-dasharray": [5, 7], "line-opacity": 0.7],
         ])
+        // Полигон узла закрывает внутренние швы и пунктир, который иначе
+        // пересекал бы косой или широкий перекрёсток. Островки лежат сверху.
+        out.append([
+            "id": "junction-surface", "type": "fill", "source": "near", "source-layer": "surface",
+            "minzoom": 16, "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 8]],
+            "paint": ["fill-color": SketchPalette.asphaltTone(.primary).hex,
+                      "fill-antialias": false],
+        ])
+        out.append([
+            "id": "median-surface", "type": "fill", "source": "near", "source-layer": "surface",
+            "minzoom": 16, "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9]],
+            "paint": ["fill-color": SketchPalette.sidewalkTone.hex,
+                      "fill-outline-color": casing],
+        ])
+        // Мост не должен исчезать под заливкой нижнего перекрёстка.
+        for edge in [true, false] {
+            out.append([
+                "id": edge ? "bridge-case" : "bridge-deck", "type": "line", "source": "near", "source-layer": "roads",
+                "minzoom": 16, "filter": ["==", ["get", "bridge"], true],
+                "layout": ["line-cap": "round", "line-join": "round"],
+                "paint": ["line-color": edge ? casing : SketchPalette.asphaltTone(.primary).hex,
+                          "line-width": roadWidth(extra: edge ? 1.4 : 0)],
+            ])
+        }
+        out.append([
+            "id": "crossing-paint", "type": "line", "source": "near", "source-layer": "paint",
+            "minzoom": 18, "layout": ["line-cap": "butt"],
+            "paint": ["line-color": daylight ? "#d0c8aa" : "#e2e7db",
+                      "line-width": ["interpolate", ["exponential", 2], ["zoom"], 18, 2.2, 20, 8.8]],
+        ])
         out.append([
             "id": "route-traveled", "type": "line", "source": "traveled",
             "layout": ["line-cap": "round", "line-join": "round"],
@@ -240,8 +270,16 @@ nonisolated enum EngineMapStyle {
             "id": "traffic-signals", "type": "symbol", "source": "near", "source-layer": "points",
             "minzoom": 16.2, "filter": ["==", ["get", "kind"], 1],
             "layout": ["icon-image": "radar-signal", "icon-allow-overlap": false,
-                       "icon-padding": 10, "icon-anchor": "bottom-left",
-                       "icon-offset": [5, -5], "icon-pitch-alignment": "viewport"],
+                       "icon-padding": 6, "icon-anchor": "bottom",
+                       "icon-size": ["interpolate", ["linear"], ["zoom"], 16.2, 0.65, 18, 1],
+                       "icon-pitch-alignment": "viewport", "icon-rotation-alignment": "viewport"],
+        ])
+        out.append([
+            "id": "stop-controls", "type": "symbol", "source": "near", "source-layer": "points",
+            "minzoom": 17, "filter": ["==", ["get", "kind"], 7],
+            "layout": ["icon-image": "radar-stop", "icon-allow-overlap": false,
+                       "icon-padding": 8, "icon-anchor": "bottom",
+                       "icon-pitch-alignment": "viewport"],
         ])
         out.append([
             "id": "labels", "type": "symbol", "source": "near", "source-layer": "roads",

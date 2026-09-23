@@ -284,3 +284,94 @@ private func infoCard(title: String, @ViewBuilder content: () -> some View) -> s
     .frame(maxWidth: .infinity, alignment: .leading)
     .statCard()
 }
+
+// MARK: - Как считаем охват предупреждений
+
+/// Расшифровка карточки «Предупреждения».
+///
+/// Цифра, которой приложение оценивает само себя, обязана объяснять свой
+/// метод — иначе это не измерение, а самореклама. Здесь честно сказано и про
+/// знаменатель, и про то, чего метрика НЕ умеет.
+struct AlertRecallInfoSheet: View {
+    let tally: AlertRecall.Tally
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    numbers
+                    method
+                    limits
+                }
+                .padding(20)
+            }
+            .background(Theme.background)
+            .navigationTitle("Предупреждения")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var numbers: some View {
+        VStack(spacing: 10) {
+            row(String(localized: "камер проехали"), "\(tally.passed)", Theme.textPrimary)
+            row(String(localized: "названо заранее"), "\(tally.warned)", Theme.success)
+            row(String(localized: "названо вплотную"), "\(tally.late)", Theme.warning)
+            row(String(localized: "без предупреждения"), "\(tally.silent)", Theme.danger)
+            row(String(localized: "предупреждений впустую"), "\(tally.unused)", Theme.textTertiary)
+        }
+        .statCard()
+    }
+
+    private func row(_ title: String, _ value: String, _ tint: Color) -> some View {
+        HStack {
+            Text(title)
+                .font(.rounded(13, .medium))
+                .foregroundStyle(Theme.textSecondary)
+            Spacer(minLength: 8)
+            Text(value)
+                .font(.rounded(17, .heavy).monospacedDigit())
+                .foregroundStyle(tint)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var method: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(String(localized: "Как считаем"))
+            Text("«Проехали» — камера, мимо которой вы прошли вплотную: ближе 40 метров от неё. Это география, а не наше решение — поэтому цифру нельзя подкрутить, ослабив собственные фильтры.")
+                .font(.rounded(13))
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("«Названо заранее» — предупреждение прозвучало дальше 80 метров, то есть ещё было время отпустить газ. Если оно прозвучало ближе, мы считаем это отдельно: формально сказали, а по делу — нет.")
+                .font(.rounded(13))
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("«Впустую» — сказали о камере, мимо которой вы так и не проехали. Само по себе это не ошибка: вы могли свернуть. Но если таких много, значит приложение пугает зря.")
+                .font(.rounded(13))
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .statCard()
+    }
+
+    private var limits: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(String(localized: "Чего эта цифра не знает"))
+            Text("Почему именно приложение промолчало, счётчик не разбирает: причину пришлось бы спрашивать у самой ответственной части кода, и ради счётчика её переписывать нельзя. «Свои» камеры, о которых мы молчим намеренно, тоже попадают в молчание — вы разрешили эту тишину сами.")
+                .font(.rounded(12))
+                .foregroundStyle(Theme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Наружу уходят только эти суммы. Ни координат камер, ни времени проездов в отчёт не попадает.")
+                .font(.rounded(11))
+                .foregroundStyle(Theme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .statCard()
+    }
+}

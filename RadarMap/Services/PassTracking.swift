@@ -18,6 +18,15 @@ nonisolated struct PassTracking {
         var limitAtMin: Int?
         /// Лимит был предположен по классу дороги, а не взят из OSM.
         var limitAssumedAtMin = false
+        /// Курс в точке максимального сближения; -1 — курсу верить нельзя
+        /// (см. LocationFilter: там, где точность курса не доказана, он не
+        /// приходит вовсе). Нужен, чтобы отличить проезд «туда» от «обратно»:
+        /// на этом стоит CameraAim.
+        var courseAtMin: Double = -1
+        /// Максимум скорости на отходе от камеры (зона passAfter…). Вместе с
+        /// минимумом на подходе это и есть «провал скорости у камеры» —
+        /// сигнал, по которому CameraAim догадывается о её направлении.
+        var afterMaxSpeed: Double?
         /// (дистанция, скорость) на подходе в пределах зоны измерения.
         var zone: [(dist: Double, speed: Double)] = []
         /// В точке максимального сближения было ДОКАЗАНО, что мы на другой
@@ -32,10 +41,20 @@ nonisolated struct PassTracking {
     struct Pass {
         let camera: Camera
         let speedKmh: Double
+        /// Лимит, по которому судят деньги и балл: лимит дороги, поднятый до
+        /// пола фиксации (EnforcedLimit). Ниже 60 камера не штрафует, и счёт
+        /// за тег 50 из OSM выставлять не за что.
         let limitKmh: Int?
+        /// Лимит дороги как он есть — сырой матч. Хранится рядом, чтобы экран
+        /// проезда мог честно сказать «на дороге знак 50».
+        let roadLimitKmh: Int?
         /// Лимит предположен по классу дороги: годится для рейтинга и голоса,
         /// но не для конкретной суммы штрафа (см. PassedCamera.limitIsCertain).
         let limitAssumed: Bool
+        /// Курс в точке траверса; nil — курсу верить было нельзя.
+        let courseDegrees: Double?
+        /// Скорость на отходе от камеры; nil — фиксов в зоне отхода не было.
+        let speedAfterKmh: Double?
     }
 
     private(set) var tracked: [Int: Tracker] = [:]
@@ -59,6 +78,7 @@ nonisolated struct PassTracking {
                          coordinate: CLLocationCoordinate2D, speedKmh: Double,
                          roadLimit: Int?, roadLimitAssumed: Bool = false,
                          radius: CLLocationDistance,
+                         course: CLLocationDirection = -1,
                          offRoad: (Camera, CLLocationCoordinate2D) -> Bool = { _, _ in false })
         -> [Pass] {
         // Вошли в радиус камеры впереди — начинаем следить.
@@ -66,7 +86,8 @@ nonisolated struct PassTracking {
            distance <= radius, tracked[nearest.id] == nil {
             var tracker = Tracker(camera: nearest, minDist: distance,
                                   speedAtMin: speedKmh, limitAtMin: roadLimit,
-                                  limitAssumedAtMin: roadLimitAssumed)
+                                  limitAssumedAtMin: roadLimitAssumed,
+                                  courseAtMin: course)
             if distance <= AppConfig.passZoneMeters {
                 tracker.zone.append((distance, speedKmh))
                 tracker.offRoadAtMin = offRoad(nearest, coordinate)
@@ -84,6 +105,7 @@ nonisolated struct PassTracking {
             if distance < tracker.minDist {
                 tracker.minDist = distance
                 tracker.speedAtMin = speedKmh
+                tracker.courseAtMin = course
                 if roadLimit != nil {
                     tracker.limitAtMin = roadLimit
                     tracker.limitAssumedAtMin = roadLimitAssumed
@@ -99,6 +121,14 @@ nonisolated struct PassTracking {
             } else if distance > radius + AppConfig.passReleaseHysteresisMeters {
                 if let pass = Self.pass(from: tracker) { completed.append(pass) }
                 tracked.removeValue(forKey: id)
+            } else if distance >= AppConfig.passAfterFromMeters,
+                      distance <= AppConfig.passAfterToMeters {
+                // Камера позади и уже не приближается — здесь копится разгон
+                // ПОСЛЕ неё. Ближе 60 м не берём: там ещё идёт сам проезд, и
+                // «после» слилось бы с «во время». Дальше 200 м тоже не берём:
+                // разгон через квартал — это уже не про эту камеру.
+                tracker.afterMaxSpeed = max(tracker.afterMaxSpeed ?? 0, speedKmh)
+                tracked[id] = tracker
             }
         }
         return completed
@@ -126,7 +156,12 @@ nonisolated struct PassTracking {
               !tracker.offRoadAtMin else { return nil }
         return Pass(camera: tracker.camera,
                     speedKmh: measuredSpeed(zone: tracker.zone, fallback: tracker.speedAtMin),
-                    limitKmh: tracker.limitAtMin,
-                    limitAssumed: tracker.limitAssumedAtMin)
+                    // Деньги и балл считаются по лимиту не ниже пола фиксации;
+                    // сырой матч едет рядом, чтобы экран проезда не врал про знак.
+                    limitKmh: EnforcedLimit.applied(to: tracker.limitAtMin),
+                    roadLimitKmh: tracker.limitAtMin,
+                    limitAssumed: tracker.limitAssumedAtMin,
+                    courseDegrees: tracker.courseAtMin >= 0 ? tracker.courseAtMin : nil,
+                    speedAfterKmh: tracker.afterMaxSpeed)
     }
 }

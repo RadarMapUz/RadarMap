@@ -37,11 +37,6 @@ struct EngineBaseLayer: View {
         let me = env.location.displayCoordinate ?? env.location.currentCoordinate
         if let me {
             let insets = state.insets
-            let cameras = env.cameras.nearest(to: me, limit: 40)
-            let limits: [Int: Int] = env.settings.speedLimitsEnabled
-                ? Dictionary(uniqueKeysWithValues: cameras.compactMap { camera in
-                    env.speedLimits.limit(near: camera.coordinate).map { (camera.id, $0) }
-                }) : [:]
             let distance = env.location.nearestCamera != nil
                 ? env.location.distanceToNearest : nil
             let maneuverDistance = env.route.nextStep.map { _ in env.route.nextStepDistance }
@@ -69,10 +64,14 @@ struct EngineBaseLayer: View {
                                          / AppConfig.engineManeuverApproachMeters)),
                         daylight: env.settings.mapAppearance.isDaylight(at: me, now: Date()),
                         houses: env.settings.mapHouses,
-                        cameras: cameras,
+                        cameras: [],
+                        cameraRevision: env.cameras.revision,
+                        limitRevision: env.speedLimits.indexRevision * 2 + (env.settings.speedLimitsEnabled ? 1 : 0),
+                        cameraProvider: { env.cameras.cameras(in: $0, limit: AppConfig.engineCameraViewportLimit) },
+                        limitProvider: { env.settings.speedLimitsEnabled ? env.speedLimits.limit(near: $0.coordinate) : nil },
                         alertCameraID: inRange ? env.location.nearestCamera?.id : nil,
-                        cameraLimits: limits,
                         route: env.route.routeCoordinates,
+                        routeObject: env.route.polyline,
                         routeProgress: env.route.progressAlong,
                         maneuverAlong: env.route.nextStep?.kind?.isDrawable == true ? env.route.nextStep?.distanceAlong : nil,
                         recenterToken: recenterToken,

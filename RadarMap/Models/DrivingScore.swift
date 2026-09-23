@@ -136,8 +136,10 @@ enum DrivingScore {
             let place = pass.location.isEmpty ? pass.kind.displayName : pass.location
             items.append(Penalty(
                 id: pass.id.uuidString, icon: pass.kind.symbolName, title: place,
+                // Округление, а не усечение: та же скорость печатается на
+                // экране проезда, и расхождение в километр читается как ошибка.
                 detail: String(format: String(localized: "%1$lld км/ч при лимите %2$lld"),
-                               Int(pass.speedKmh), limit),
+                               Int(pass.speedKmh.rounded()), limit),
                 points: Int(points), passID: pass.id))
         }
         // Штраф за камеры ограничен потолком: одна ужасная поездка не должна
@@ -259,6 +261,39 @@ nonisolated struct LifetimeStats: Codable, Equatable {
             } else {
                 s.camerasInLimit = max(0, s.camerasInLimit - 1)
                 s.savedFinesSum = max(0, s.savedFinesSum - FineSchedule.minimumFine)
+            }
+        }
+        return s
+    }
+
+    /// Хирургическая правка счётчиков, когда у проезда сменился ЛИМИТ, а сам
+    /// проезд остался.
+    ///
+    /// Это случай ретро-подъёма лимита до пола фиксации: проезд был и остаётся,
+    /// поэтому `camerasPassed`, `trips` и километры не трогаются вовсе — меняется
+    /// только вердикт «штраф или в лимите» и деньги. Серии не трогаем по той же
+    /// причине, что и в `subtractingPasses`: ложное нарушение могло серию лишь
+    /// оборвать, и оставить её как есть — консервативно в пользу пользователя.
+    nonisolated static func replacingPass(_ old: DrivingScore.Pass,
+                                          with new: DrivingScore.Pass,
+                                          in stats: LifetimeStats) -> LifetimeStats {
+        var s = stats
+        if let limit = old.limitKmh {
+            let fine = FineSchedule.fine(overKmh: old.speedKmh - Double(limit))
+            if fine > 0 {
+                s.riskFinesSum = max(0, s.riskFinesSum - fine)
+            } else {
+                s.camerasInLimit = max(0, s.camerasInLimit - 1)
+                s.savedFinesSum = max(0, s.savedFinesSum - FineSchedule.minimumFine)
+            }
+        }
+        if let limit = new.limitKmh {
+            let fine = FineSchedule.fine(overKmh: new.speedKmh - Double(limit))
+            if fine > 0 {
+                s.riskFinesSum += fine
+            } else {
+                s.camerasInLimit += 1
+                s.savedFinesSum += FineSchedule.minimumFine
             }
         }
         return s

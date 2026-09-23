@@ -17,6 +17,10 @@ struct CameraDetailSheet: View {
 
     private enum ReportState: Equatable { case idle, sending, sent, queued }
     @State private var reportState: ReportState = .idle
+    /// Догадка о направлении камеры по своим проездам. Считается в .task,
+    /// а не в body: разбор истории — не работа для каждого кадра.
+    @State private var aim: CameraAim.Verdict = .unknown
+    @State private var aimPasses = 0
 
     var body: some View {
         NavigationStack {
@@ -25,6 +29,7 @@ struct CameraDetailSheet: View {
                     header
                     if camera.isApproximate { approximateBanner }
                     addressBlock
+                    aimBlock
                     violationsBlock
                     routeButton
                     openInMapsButton
@@ -45,6 +50,39 @@ struct CameraDetailSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .task {
+            let passes = env.trip.history.flatMap(\.passed)
+            aimPasses = passes.count { $0.cameraID == camera.id }
+            aim = CameraAim.verdict(passes: passes, cameraID: camera.id, now: Date())
+        }
+    }
+
+    /// Наблюдение о направлении — тем же тоном, что хотспоты треног: догадка
+    /// говорит только тогда, когда уверена, и не притворяется фактом.
+    ///
+    /// На оповещения это не влияет НИКАК и влиять не будет: заглушить камеру
+    /// можно лишь по доказательству, что она не наша, а поведение водителей —
+    /// не доказательство (см. CameraAim).
+    @ViewBuilder private var aimBlock: some View {
+        if case .oneWay(let bearing) = aim {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(String(format: String(localized: "Похоже, снимает едущих %@"),
+                             CameraAim.cardinal(bearing)),
+                      systemImage: "arrow.up.forward.circle.fill")
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(Theme.accent)
+                Text(String(format: String(localized:
+                    "Вывод по вашим %lld проездам: в эту сторону вы каждый раз сбрасываете скорость, во встречную — нет. Это наблюдение, а не данные реестра: предупреждать о камере мы продолжаем в обе стороны."),
+                    aimPasses))
+                    .font(.rounded(11))
+                    .foregroundStyle(Theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.accent.opacity(0.1),
+                        in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+        }
     }
 
     // MARK: - Секции

@@ -193,6 +193,13 @@ final class AppEnvironment {
         // notePass существовал и не звался ниоткуда. Теперь он подключён и
         // заодно приносит источник лимита, которым проезд судили.
         location.onPassRecorded = { [weak usage] source in usage?.notePass(limitSource: source) }
+        // Охват предупреждений: цифра уходит и в суточный отчёт, и в Итоги —
+        // человек вправе видеть, как работает то, за чем он это приложение
+        // держит, не хуже, чем это видим мы.
+        location.onAlertRecall = { [weak usage, weak trip] tally in
+            usage?.noteAlertRecall(tally)
+            trip?.addAlertRecall(tally)
+        }
         route.onManeuverSpoken = { [weak usage] kind in usage?.noteManeuver(kind) }
         trip.onTripDropped = { [weak usage] reason in usage?.noteTripDropped(reason) }
         // Снап отметки на ось дороги и очередь без сети — обе зависимости

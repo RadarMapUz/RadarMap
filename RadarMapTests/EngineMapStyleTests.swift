@@ -15,6 +15,7 @@
 import Foundation
 import Testing
 import MapKit
+import MapLibre
 
 @testable import RadarMap
 
@@ -227,4 +228,88 @@ struct EngineMapStyleTests {
         #expect(layout?["icon-allow-overlap"] as? Bool == false)
         #expect(all.contains { $0["id"] as? String == "route-traveled" })
     }
+
+    @Test("Полотно узла скрывает внутренние штрихи, мост остаётся сверху")
+    func junctionLayerOrder() throws {
+        let ids = layers(style()).compactMap { $0["id"] as? String }
+        let markings = try #require(ids.firstIndex(of: "lane-markings"))
+        let junction = try #require(ids.firstIndex(of: "junction-surface"))
+        let median = try #require(ids.firstIndex(of: "median-surface"))
+        let bridge = try #require(ids.firstIndex(of: "bridge-deck"))
+        let paint = try #require(ids.firstIndex(of: "crossing-paint"))
+        let route = try #require(ids.firstIndex(of: "route"))
+        #expect(markings < junction && junction < median && median < bridge)
+        #expect(bridge < paint && paint < route)
+        let signal = layers(style()).first { $0["id"] as? String == "traffic-signals" }
+        let layout = signal?["layout"] as? [String: Any]
+        #expect(layout?["icon-offset"] == nil)
+        #expect(layout?["icon-anchor"] as? String == "bottom")
+    }
+    @Test("Индекс маршрута режет петлю по пройденному расстоянию")
+    func indexedLoop() {
+        let a = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.28)
+        let b = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.29)
+        let c = CLLocationCoordinate2D(latitude: 41.32, longitude: 69.29)
+        let points = [a, b, c, a, b]
+        let index = EngineMapPresentation.RouteIndex(points)
+        for fraction in [0.1, 0.4, 0.7, 0.95] {
+            let distance = index.length * fraction
+            let expected = EngineMapPresentation.split(points, at: distance)
+            let traveled = index.slice(from: 0, to: distance)
+            let remaining = index.slice(from: distance, to: index.length)
+            #expect(traveled.count == expected.traveled.count)
+            #expect(remaining.count == expected.remaining.count)
+            #expect(abs(traveled.last!.longitude - remaining.first!.longitude) < 1e-9)
+            #expect(abs(traveled.last!.latitude - expected.traveled.last!.latitude) < 1e-9)
+        }
+        #expect(index.slice(from: index.length, to: index.length + 10).isEmpty)
+        #expect(index.slice(from: .nan, to: 10).isEmpty)
+        #expect(EngineMapPresentation.RouteIndex([a, a]).slice(from: 0, to: 10).isEmpty)
+    }
+
+    @Test("Фоновая геометрия сохраняет границы маршрута и манёвра")
+    func preparedRoute() async {
+        let points = [CLLocationCoordinate2D(latitude: 41.31, longitude: 69.28),
+                      CLLocationCoordinate2D(latitude: 41.31, longitude: 69.30)]
+        let initial = await EngineMapPresentation.prepareRoute(points, index: nil, progress: 0, maneuver: nil)
+        #expect(initial.traveled.isEmpty)
+        #expect(initial.remaining.count == 2)
+        let moving = await EngineMapPresentation.prepareRoute(points, index: initial.index, progress: 250, maneuver: 300)
+        #expect(moving.maneuver.count == 2)
+        #expect(abs(MKMapPoint(moving.maneuver[0]).distance(to: MKMapPoint(moving.maneuver[1])) - 70) < 0.1)
+        let finished = await EngineMapPresentation.prepareRoute(points, index: initial.index, progress: 100_000, maneuver: nil)
+        #expect(finished.remaining.isEmpty)
+        #expect(finished.traveled.count == 2)
+    }
+
+    @Test("Кэш области выдерживает небольшой сдвиг, обновляется при выходе и zoom out")
+    func viewportCache() {
+        let region = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 41.31, longitude: 69.28),
+                                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01))
+        let padded = EngineMapPresentation.padded(region)
+        #expect(EngineMapPresentation.contains(padded, region))
+        var nearby = region
+        nearby.center.latitude += 0.001
+        #expect(EngineMapPresentation.contains(padded, nearby))
+        nearby.center.latitude += 0.01
+        #expect(!EngineMapPresentation.contains(padded, nearby))
+        nearby = region
+        nearby.span.latitudeDelta *= 2
+        #expect(!EngineMapPresentation.contains(padded, nearby))
+    }
+
+    @Test("Цвета темы передаются как UIColor, включая классы дорог")
+    @MainActor func nativeThemeColors() throws {
+        let constant = try #require(EngineMapView.Coordinator.colorExpression("#123456"))
+        #expect(constant.constantValue is UIColor)
+        let match: [Any] = ["match", ["get", "cls"], 1, "#112233", 2, "#334455", "#667788"]
+        let expression = try #require(EngineMapView.Coordinator.colorExpression(match))
+        let chosen = expression.expressionValue(with: ["cls": 2], context: nil) as? UIColor
+        let expected = EngineMapView.Coordinator.colorExpression("#334455")?.constantValue as? UIColor
+        #expect(chosen == expected)
+        let fallback = expression.expressionValue(with: ["cls": 9], context: nil) as? UIColor
+        #expect(fallback == EngineMapView.Coordinator.colorExpression("#667788")?.constantValue as? UIColor)
+        #expect(EngineMapView.Coordinator.colorExpression("broken") == nil)
+    }
+
 }

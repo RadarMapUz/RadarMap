@@ -39,6 +39,8 @@ struct PassDetailView: View {
     /// «А если бы» — из .task, не из body: пересчёт рейтинга периода попадал в
     /// кадры анимации подлёта (Map пишет position обратно на каждом кадре).
     @State private var whatIf: (tripScore: Int, periodRating: Int?, currentRating: Int?)?
+    /// Развёрнутая карта проезда.
+    @State private var showsFullMap = false
 
     init(pass: PassedCamera, track: [TrackPoint] = [], record: TripRecord? = nil,
          days: [TripDay] = [], interval: DateInterval? = nil, period: StatsPeriod? = nil) {
@@ -63,6 +65,17 @@ struct PassDetailView: View {
     /// о нарушении мы не вправе.
     private var overKmh: Double? { pass.overLimitKmh }
 
+    /// Скорость, как её ВИДИТ человек. Одно округление на весь экран: раньше
+    /// скорость печаталась усечением (66,6 → 66), а превышение округлением
+    /// (6,6 → 7), и карточка сообщала «66 км/ч» и «превышение на 7 км/ч» при
+    /// лимите 60. Арифметика на экране обязана сходиться сама с собой.
+    private var shownSpeedKmh: Int { Int(pass.speedKmh.rounded()) }
+
+    /// Превышение от ПОКАЗАННОЙ скорости — не от сырой.
+    private var shownOverKmh: Int? {
+        pass.limitKmh.map { shownSpeedKmh - $0 }
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -79,6 +92,12 @@ struct PassDetailView: View {
         .background(Theme.background)
         .navigationTitle("Проезд камеры")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showsFullMap) {
+            // Своего экрана карты не заводим: PeriodMapSheet уже интерактивен,
+            // умеет фокус на камере и карточку места. Здесь он получает ровно
+            // один трек и один маркер — этого проезда.
+            PeriodMapSheet(data: fullMapData, focus: fullMapMarker)
+        }
         .task {
             guard let record, pass.limitKmh != nil,
                   let tripScore = RatingBreakdown.tripScoreIfClean(pass: pass, record: record)
@@ -106,7 +125,38 @@ struct PassDetailView: View {
 
     // MARK: Карта
 
+    /// Мини-карта — витрина, но не тупик: тап разворачивает её в настоящую
+    /// карту проездов (ту же, что открывает зона риска в Итогах). Жесты у
+    /// самой Map по-прежнему отключены — иначе она крадёт прокрутку листа, —
+    /// поэтому тап ловит кнопка поверх неё.
     private var map: some View {
+        mapCanvas
+            // Кнопка — ОТДЕЛЬНЫМ слоем поверх, а не обёрткой вокруг карты:
+            // у Map жесты выключены, и обёртка унаследовала бы это выключение
+            // на собственную область нажатия. Тап снова не делал бы ничего —
+            // ровно тот баг, который здесь и чинится.
+            .overlay {
+                Button { showsFullMap = true } label: {
+                    Color.clear.contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "Открыть карту проезда"))
+                .accessibilityAddTraits(.isButton)
+            }
+            // Значок «развернуть» рисуется последним, чтобы лежать сверху, и
+            // нажатий не перехватывает: работает вся площадь карты.
+            .overlay(alignment: .topTrailing) {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.rounded(12, .bold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .padding(7)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .padding(10)
+                    .allowsHitTesting(false)
+            }
+    }
+
+    private var mapCanvas: some View {
         Map(position: $position) {
             if track.count >= 2 {
                 MapPolyline(coordinates: track.map {
@@ -131,6 +181,25 @@ struct PassDetailView: View {
             .stroke(Theme.stroke, lineWidth: 1))
         // Статичная витрина: жесты карты не крадём у прокрутки.
         .allowsHitTesting(false)
+    }
+
+    /// Маркер этого проезда для развёрнутой карты. Один проезд — значит
+    /// `times` = 1, а «с превышением» решаем той же штрафной ступенью, что и
+    /// чип статуса: два разных ответа об одном проезде на двух экранах — это
+    /// баг, а не оформление.
+    private var fullMapMarker: PassMarker? {
+        guard let coordinate = pass.coordinate else { return nil }
+        let over = overKmh.map { FineSchedule.fine(overKmh: $0) > 0 } ?? false
+        return PassMarker(cameraID: pass.cameraID, lat: coordinate.latitude,
+                          lon: coordinate.longitude,
+                          location: pass.location.isEmpty ? pass.kind.displayName : pass.location,
+                          times: 1, overTimes: over ? 1 : 0,
+                          maxSpeedKmh: pass.speedKmh, limitKmh: pass.limitKmh)
+    }
+
+    private var fullMapData: PeriodMapData {
+        PeriodMapData(tracks: track.count >= 2 ? [track] : [],
+                      markers: fullMapMarker.map { [$0] } ?? [])
     }
 
     // MARK: Скорость против лимита
@@ -165,13 +234,26 @@ struct PassDetailView: View {
                     Text("ваша скорость")
                         .font(.rounded(11))
                         .foregroundStyle(Theme.textTertiary)
-                    Text("\(Int(pass.speedKmh)) км/ч")
+                    Text("\(shownSpeedKmh) км/ч")
                         .font(.rounded(22, .heavy).monospacedDigit())
                         .foregroundStyle(honestyColor)
                         .contentTransition(.numericText())
                 }
                 Spacer(minLength: 8)
                 statusChip
+            }
+
+            // Пол фиксации сработал — говорим об этом вслух. Молча поднятый
+            // лимит выглядит как «приложение перепутало знак», а мы не про
+            // знак: мы про то, с какой скорости камера штрафует.
+            if pass.limitWasFloored, let road = pass.roadLimitKmh, let limit = pass.limitKmh {
+                Text(String(format: String(localized:
+                    "На дороге знак %lld, но камеры в городе фиксируют от %lld — считаем по %lld."),
+                    road, limit, limit))
+                    .font(.rounded(11))
+                    .foregroundStyle(Theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .statCard()
@@ -186,8 +268,8 @@ struct PassDetailView: View {
                 Label("превышение", systemImage: "exclamationmark.triangle.fill")
                     .font(.rounded(12, .bold))
                     .foregroundStyle(Theme.danger)
-                if let over = overKmh {
-                    Text(String(format: String(localized: "на %lld км/ч"), Int(over.rounded())))
+                if let over = shownOverKmh, over > 0 {
+                    Text(String(format: String(localized: "на %lld км/ч"), over))
                         .font(.rounded(11, .semibold))
                         .foregroundStyle(Theme.danger)
                 }
@@ -364,7 +446,7 @@ struct PassDetailView: View {
                 .font(.rounded(13))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Лимит дороги — из OpenStreetMap. Штраф — оценка первой фиксации: повторность нарушений и допуски конкретной камеры нам неизвестны.")
+            Text("Лимит дороги — из OpenStreetMap, но ниже 60 км/ч мы по нему не судим: камеры в городе с меньшей скорости не фиксируют. Штраф — оценка первой фиксации: повторность нарушений и допуски конкретной камеры нам неизвестны.")
                 .font(.rounded(11))
                 .foregroundStyle(Theme.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)

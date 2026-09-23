@@ -51,6 +51,11 @@ final class TripStats {
     private(set) var days: [TripDay] = []
     /// Пожизненные счётчики — живут отдельно от истории (она обрезается до 50 поездок).
     private(set) var lifetime = LifetimeStats()
+    /// Охват предупреждений за всё время: сколько камер проехали и о скольких
+    /// приложение успело сказать. Живёт рядом с lifetime и по той же причине —
+    /// это цифра о работе конвейера, а не о конкретной поездке, и обрезка
+    /// истории не должна её стирать.
+    private(set) var alertRecall = AlertRecall.Tally()
     /// Вызывается после сохранения поездки (AppEnvironment вешает сюда счётчики
     /// использования и недельный дайджест — одним замыканием, см. Wiring).
     @ObservationIgnored var onTripFinished: (() -> Void)? {
@@ -204,12 +209,17 @@ final class TripStats {
 
     /// Зафиксировать прохождение камеры (скорость — в точке максимального сближения).
     func registerPass(camera: Camera, speedKmh: Double, limitKmh: Int?,
-                      limitAssumed: Bool = false) {
+                      roadLimitKmh: Int? = nil, limitAssumed: Bool = false,
+                      courseDegrees: Double? = nil, speedAfterKmh: Double? = nil) {
         passed.append(PassedCamera(
             id: UUID(), cameraID: camera.id, typeRaw: camera.type,
             location: camera.displayTitle, speedKmh: speedKmh, date: Date(),
             lat: camera.lat, lon: camera.lon, limitKmh: limitKmh,
-            limitAssumed: limitAssumed ? true : nil
+            // Сырой лимит храним, только если он отличается от итогового:
+            // повторять одно и то же число в каждой записи истории незачем.
+            roadLimitKmh: roadLimitKmh == limitKmh ? nil : roadLimitKmh,
+            limitAssumed: limitAssumed ? true : nil,
+            courseDegrees: courseDegrees, speedAfterKmh: speedAfterKmh
         ))
     }
 
@@ -700,6 +710,8 @@ final class TripStats {
             .appendingPathComponent("trips.json")
     }
     private func loadLifetime() {
+        alertRecall = Storage.decoded(AlertRecall.Tally.self, for: .alertRecallTotal)
+            ?? AlertRecall.Tally()
         guard let data = Storage.data(.lifetimeStats) else { return }
         do {
             lifetime = try JSONDecoder().decode(LifetimeStats.self, from: data)
@@ -707,6 +719,13 @@ final class TripStats {
             // Не читается — ниже восстановим из истории (backfill).
             Log.trips.error("lifetimeStats не декодировались: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Итог охвата за поездку. Копится, а не заменяется: одна поездка мимо
+    /// трёх камер ничего не доказывает, вопрос «умно ли» решается на сотнях.
+    func addAlertRecall(_ tally: AlertRecall.Tally) {
+        alertRecall = alertRecall + tally
+        Storage.encode(alertRecall, for: .alertRecallTotal)
     }
 
     /// Разбор двух файлов вне main.
@@ -789,6 +808,46 @@ final class TripStats {
             }
             Storage.set(true, for: .passGeoCleanup1)
             Storage.set(true, for: .passGeoCleanup2)
+        }
+        // Подъём лимитов до пола фиксации. Старые записи судились по тегу OSM
+        // ниже 60 — в городе таких камер нет, и выставленные по ним штрафы и
+        // снятые баллы были обвинением на пустом месте.
+        if !Storage.bool(.passLimitFloor1) {
+            let before = history
+            let (raised, changed) = TripHistory.limitFloored(history)
+            if changed {
+                // Всё хирургически, как в гео- и осевой чистках: агрегаты
+                // переживают обрезку истории и хранят месяцы, для которых
+                // поездок уже нет, — пересборка из истории их обнулила бы.
+                for (old, new) in zip(before, raised) {
+                    var lifetimeChanged = false
+                    for (oldPass, newPass) in zip(old.passed, new.passed)
+                    where oldPass.limitKmh != newPass.limitKmh {
+                        lifetime = LifetimeStats.replacingPass(
+                            DrivingScore.Pass(speedKmh: oldPass.speedKmh,
+                                              limitKmh: oldPass.limitKmh),
+                            with: DrivingScore.Pass(speedKmh: newPass.speedKmh,
+                                                    limitKmh: newPass.limitKmh),
+                            in: lifetime)
+                        lifetimeChanged = true
+                    }
+                    guard lifetimeChanged else { continue }
+                    // Строка дня могла уехать на другой ключ при смене
+                    // часового пояса: unfolded тогда промахнётся, а folded
+                    // добавит день заново и задвоит поездку.
+                    let key = Calendar.current.startOfDay(for: old.startedAt)
+                    if days.contains(where: { $0.day == key }) {
+                        days = TripDayBook.unfolded(old, from: days)
+                        days = TripDayBook.folded(new, into: days)
+                    }
+                }
+                history = raised
+                persist()
+                persistLifetime()
+                persistDays()
+                Log.trips.info("подъём лимитов до пола фиксации: история пересчитана")
+            }
+            Storage.set(true, for: .passLimitFloor1)
         }
         // Обновились с версии без счётчиков, а поездки уже есть — восстанавливаем
         // из истории, чтобы экономия и достижения не начинались с нуля.

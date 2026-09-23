@@ -61,7 +61,7 @@ struct DashboardView: View {
                         .padding(.horizontal, 28)
                         .padding(.top, 6)
                         .opacity(min(sketchIsStale ? 0.45 : 1, isParkedDim ? 0.4 : 1))
-                        .animation(.easeOut(duration: 0.4), value: sketchIsStale)
+                        .motionAnimation(.easeOut(duration: 0.4), value: sketchIsStale)
                 }
 
                 Spacer(minLength: 14)
@@ -116,7 +116,7 @@ struct DashboardView: View {
             // Стояночное затемнение (как у Waze): стоим >30 с без тревоги —
             // белые пиксели гаснут до 40%, на OLED это настоящие ватты.
             // Тронулись — мгновенно ярко (isStandingStill пишется на смене).
-            .animation(.easeInOut(duration: 0.8), value: isParkedDim)
+            .motionAnimation(.easeInOut(duration: 0.8), value: isParkedDim)
         }
         .contentShape(Rectangle())
         .onTapGesture { dismiss() }
@@ -237,7 +237,7 @@ struct DashboardView: View {
                     .monospacedDigit()
                     .foregroundStyle(speedColor)
                     .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.3), value: Int(env.location.speedKmh))
+                    .motionAnimation(.snappy(duration: 0.3), value: Int(env.location.speedKmh))
                 if let limit = env.speedLimits.currentLimit {
                     SpeedLimitSign(limit: limit, diameter: 84)
                         .scaleEffect(env.speedLimits.isOverspeeding ? 1.08 : 1)
@@ -245,7 +245,7 @@ struct DashboardView: View {
                         // это десятки минут, а вечная анимация на экране
                         // экономии — GPU-композитинг часами (та же причина,
                         // по которой кромка приборки без пульса).
-                        .animation(env.speedLimits.isOverspeeding
+                        .motionAnimation(env.speedLimits.isOverspeeding
                                    ? .easeInOut(duration: 0.55).repeatCount(6, autoreverses: true)
                                    : .easeOut(duration: 0.25),
                                    value: env.speedLimits.isOverspeeding)
@@ -348,7 +348,7 @@ struct DashboardView: View {
                             .offset(y: -37)
                             .rotationEffect(.degrees(angle))
                             // Шаг в 10° — стрелка не дрожит от шума курса.
-                            .animation(.easeOut(duration: 0.3), value: Int(angle / 10))
+                            .motionAnimation(.easeOut(duration: 0.3), value: Int(angle / 10))
                     }
                 }
                 Text(Formatting.distance(distance))
@@ -356,7 +356,7 @@ struct DashboardView: View {
                     .monospacedDigit()
                     .foregroundStyle(alertColor)
                     .contentTransition(.numericText())
-                    .animation(.easeOut(duration: 0.3), value: Int(distance))
+                    .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
                 if let side = env.location.nearestSideWord {
                     Text(side)
                         .font(.rounded(20, .semibold))
@@ -426,7 +426,7 @@ struct DashboardView: View {
         .frame(height: 6)
         .padding(.horizontal, 24)
         .padding(.top, 2)
-        .animation(.easeOut(duration: 0.3), value: Int(progress * 50))
+        .motionAnimation(.easeOut(duration: 0.3), value: Int(progress * 50))
         .accessibilityHidden(true)   // цифру рядом VoiceOver уже читает
     }
 

@@ -200,6 +200,7 @@ struct SearchView: View {
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textSecondary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
                 Spacer(minLength: 0)
                 if place != nil, onRoute != nil {

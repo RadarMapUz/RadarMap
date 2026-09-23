@@ -47,7 +47,7 @@ struct RootView: View {
                     env.startDrivingServices()
                     env.location.setForeground(true)
                     env.setPhoneSceneActive(true)
-                    withAnimation(.easeInOut) { hasCompletedOnboarding = true }
+                    withMotion(.easeInOut) { hasCompletedOnboarding = true }
                 }
                 .transition(.opacity)
             }
@@ -57,7 +57,7 @@ struct RootView: View {
         // и конец поездки (единственный триггер) никто не видел — просьба об
         // оценке была недостижима ровно для самого лояльного сегмента.
         .modifier(ReviewPromptModifier())
-        .animation(.easeInOut(duration: 0.3), value: env.isCarPlayConnected)
+        .motionAnimation(.easeInOut(duration: 0.3), value: env.isCarPlayConnected)
         // Вышли из машины — следующее подключение снова начнёт с экрана передачи.
         .onChange(of: env.isCarPlayConnected) { _, connected in
             if !connected { phoneMapOverride = false }

@@ -48,6 +48,7 @@ struct StopTripButton: View {
                     Text("Точно?")
                         .font(.rounded(15, .heavy))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
             }
             .foregroundStyle(.white)
@@ -58,7 +59,7 @@ struct StopTripButton: View {
                         in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
         }
         .buttonStyle(.plain)
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isArmed)
+        .motionAnimation(.spring(response: 0.3, dampingFraction: 0.8), value: isArmed)
         .accessibilityLabel(Text(isArmed ? "Подтвердить завершение поездки"
                                          : "Завершить поездку"))
         .accessibilityHint(Text("Нажмите дважды: первое касание спрашивает подтверждение"))

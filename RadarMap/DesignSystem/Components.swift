@@ -188,7 +188,7 @@ struct PressableStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(.spring(duration: 0.25), value: configuration.isPressed)
+            .motionAnimation(.spring(duration: 0.25), value: configuration.isPressed)
     }
 }
 
@@ -233,7 +233,7 @@ struct OverspeedVignette: View {
             .allowsHitTesting(false)
             .onAppear {
                 guard pulses else { return }
-                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+                withMotion(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
                     pulse = true
                 }
             }
@@ -272,7 +272,7 @@ struct EntranceModifier: ViewModifier {
         content
             .opacity(appeared ? 1 : 0)
             .offset(y: appeared ? 0 : 16)
-            .animation(.spring(duration: 0.5, bounce: 0.18).delay(Double(index) * 0.07),
+            .motionAnimation(.spring(duration: 0.5, bounce: 0.18).delay(Double(index) * 0.07),
                        value: appeared)
     }
 }
@@ -322,7 +322,7 @@ struct RatingRing: View {
         }
         .onAppear {
             guard animated else { return }
-            withAnimation(.spring(duration: 0.9, bounce: 0.15).delay(0.25)) { shown = true }
+            withMotion(.spring(duration: 0.9, bounce: 0.15).delay(0.25)) { shown = true }
         }
     }
 }

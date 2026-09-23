@@ -55,8 +55,8 @@ struct CarPlayOverlay: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .safeAreaPadding()
-        .animation(.spring(duration: 0.35), value: env.location.isApproachingCamera)
-        .animation(.spring(duration: 0.35), value: env.route.isActive)
+        .motionAnimation(.spring(duration: 0.35), value: env.location.isApproachingCamera)
+        .motionAnimation(.spring(duration: 0.35), value: env.route.isActive)
         // HUD — только показывает: жесты карты (тап, панорама, щипок) должны
         // проходить сквозь него в MKMapView.
         .allowsHitTesting(false)
@@ -100,7 +100,7 @@ struct CarPlayOverlay: View {
         // Капим ширину и центрируем: на обычных экранах ничего не меняется.
         .frame(maxWidth: AppConfig.carPlayDockMaxWidth)
         .frame(maxWidth: .infinity)
-        .animation(.easeOut(duration: 0.3), value: env.location.alertLevel)
+        .motionAnimation(.easeOut(duration: 0.3), value: env.location.alertLevel)
     }
 
     /// Три зоны: скорость — камера — прибытие.
@@ -154,7 +154,7 @@ struct CarPlayOverlay: View {
                     .font(.rounded(38, .heavy).monospacedDigit())
                     .foregroundStyle(speedColor)
                     .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.25), value: Int(env.location.speedKmh.rounded()))
+                    .motionAnimation(.snappy(duration: 0.25), value: Int(env.location.speedKmh.rounded()))
                 Text("км/ч")
                     .font(.rounded(13, .semibold))
                     .foregroundStyle(Theme.textTertiary)
@@ -169,7 +169,7 @@ struct CarPlayOverlay: View {
                     .transition(.scale.combined(with: .opacity))
             }
         }
-        .animation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
+        .motionAnimation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
     }
 
     /// Ближайшая камера — честные состояния: нет сигнала, уточняем положение,
@@ -222,7 +222,7 @@ struct CarPlayOverlay: View {
                         .shadow(color: .black.opacity(0.8), radius: 2)
                         .offset(y: -28)
                         .rotationEffect(.degrees(angle))
-                        .animation(.easeOut(duration: 0.3), value: Int(angle / 10))
+                        .motionAnimation(.easeOut(duration: 0.3), value: Int(angle / 10))
                 }
             }
 
@@ -234,7 +234,7 @@ struct CarPlayOverlay: View {
                                      : (env.location.isApproachingCamera ? Theme.danger
                                                                          : Theme.textPrimary))
                     .contentTransition(.numericText())
-                    .animation(.easeOut(duration: 0.3), value: Int(distance))
+                    .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
                 Text(env.location.isPositionCoarse
                      ? String(localized: "уточняем положение")
                      : camera.kind.genitivePhrase)
@@ -242,6 +242,7 @@ struct CarPlayOverlay: View {
                     .foregroundStyle(env.location.isPositionCoarse ? Theme.warning
                                                                    : Theme.textSecondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 // Полоса приближения считается от живой точки: по грубой она
                 // рисовала бы уверенный прогресс там, где его никто не мерил.
                 if !env.location.isPositionCoarse, let progress = env.location.approachProgress {
@@ -261,7 +262,7 @@ struct CarPlayOverlay: View {
                         .stroke(Theme.danger.opacity(0.45), lineWidth: 1))
             }
         }
-        .animation(.easeOut(duration: 0.25), value: env.location.isApproachingCamera)
+        .motionAnimation(.easeOut(duration: 0.25), value: env.location.isApproachingCamera)
     }
 
     private func statusCell(symbol: String, tint: Color,
@@ -369,7 +370,7 @@ struct CarPlayOverlay: View {
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .contentTransition(.numericText())
-                    .animation(.easeOut(duration: 0.3), value: Int(distance))
+                    .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
                 // shortName, а не displayName: тип нужен одним словом. Без
                 // fixedSize: длинное слово честно обрезается многоточием внутри
                 // плашки, а не вылезает из неё под системные кнопки.
@@ -377,6 +378,7 @@ struct CarPlayOverlay: View {
                     .font(.rounded(15, .semibold))
                     .foregroundStyle(foreground.opacity(0.92))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                     .truncationMode(.tail)
             }
 
@@ -414,7 +416,7 @@ struct CarPlayOverlay: View {
                     .font(.rounded(22, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
-                    .animation(.easeOut(duration: 0.3), value: Int(distance))
+                    .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
                 Text(step.text)
                     .font(.rounded(16, .semibold))
                     .foregroundStyle(Theme.textPrimary)
@@ -486,6 +488,6 @@ struct CarPlayOverlay: View {
             .clipShape(Capsule())
             .frame(width: 120, height: 3)
             .padding(.top, 2)
-            .animation(.easeOut(duration: 0.3), value: progress)
+            .motionAnimation(.easeOut(duration: 0.3), value: progress)
     }
 }

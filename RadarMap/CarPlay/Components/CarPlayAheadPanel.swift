@@ -74,7 +74,7 @@ struct CarPlayAheadPanel: View {
                 // в «Ждём движения» на каждой остановке и разворачивалась
                 // обратно — мигание на ровном месте.
                 .opacity(model.isStale ? 0.45 : 1)
-                .animation(.easeOut(duration: 0.4), value: model.isStale)
+                .motionAnimation(.easeOut(duration: 0.4), value: model.isStale)
         }
     }
 
@@ -181,11 +181,12 @@ struct CarPlayAheadPanel: View {
                     .font(.rounded(13, .medium))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
         }
         .padding(.leading, 1)
         .frame(height: 40, alignment: .center)
-        .animation(.easeOut(duration: 0.3), value: item.distance)
+        .motionAnimation(.easeOut(duration: 0.3), value: item.distance)
     }
 
     /// Пусто — это тоже ответ, и хороший. Но сказать его надо так, чтобы он не

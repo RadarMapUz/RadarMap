@@ -73,9 +73,9 @@ struct ReportRadarButton: View {
         .gesture(fanGesture)
         .overlay(alignment: .bottom) { fanOverlay }
         .allowsHitTesting(!isSending)
-        .animation(.easeOut(duration: 0.25), value: flash)
-        .animation(.easeOut(duration: 0.2), value: isSending)
-        .animation(.spring(response: 0.28, dampingFraction: 0.82), value: fan)
+        .motionAnimation(.easeOut(duration: 0.25), value: flash)
+        .motionAnimation(.easeOut(duration: 0.2), value: isSending)
+        .motionAnimation(.spring(response: 0.28, dampingFraction: 0.82), value: fan)
         .accessibilityLabel(Text("Отметить радар"))
         .accessibilityHint(Text("Отправляет отметку другим водителям. Удержание — выбор типа"))
         // VoiceOver пальцем по экрану не ведёт: для него типы — обычные действия.
@@ -166,6 +166,7 @@ struct ReportRadarButton: View {
             Text(kind.title)
                 .font(.rounded(17, .semibold))
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .foregroundStyle(isActive ? .white : Theme.textSecondary)
         .padding(.horizontal, 18)
@@ -324,7 +325,7 @@ struct ReportRefineBar: View {
                     try? await Task.sleep(for: .seconds(AppConfig.reportRefineSeconds))
                     guard !Task.isCancelled else { return }
                     // Время вышло — молчание оставляет «радар».
-                    withAnimation { env.mobile.dismissRefine() }
+                    withMotion { env.mobile.dismissRefine() }
                 }
             }
             .onDisappear { task?.cancel() }
@@ -337,7 +338,7 @@ struct ReportRefineBar: View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             guard let id = env.mobile.cancellableReportID() else { return }
-            withAnimation { env.mobile.dismissRefine() }
+            withMotion { env.mobile.dismissRefine() }
             Task {
                 if await env.mobile.cancelReport(id: id) {
                     env.alerts.speak(String(localized: "Отметка убрана"))
@@ -365,7 +366,7 @@ struct ReportRefineBar: View {
     private func option(_ kind: ReportKind, offer: ReportGuard.Sent) -> some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            withAnimation { env.mobile.dismissRefine() }
+            withMotion { env.mobile.dismissRefine() }
             Task {
                 // Итог звучит: молчаливый тап за рулём читается как несработавший.
                 if await env.mobile.refine(to: kind, offer: offer) {
@@ -436,7 +437,7 @@ struct MobileConfirmBar: View {
                     try? await Task.sleep(for: .seconds(20))
                     guard !Task.isCancelled else { return }
                     // Время вышло — снимаем вопрос, ничего не отправляя.
-                    withAnimation { env.mobile.answerConfirm(stillThere: nil) }
+                    withMotion { env.mobile.answerConfirm(stillThere: nil) }
                 }
             }
             .onDisappear { task?.cancel() }
@@ -446,7 +447,7 @@ struct MobileConfirmBar: View {
     private func answer(title: String, tint: Color, value: Bool) -> some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            withAnimation { env.mobile.answerConfirm(stillThere: value) }
+            withMotion { env.mobile.answerConfirm(stillThere: value) }
             // Ответ должен ощущаться работой, а не тапом в пустоту: короткое
             // спасибо голосом — за рулём на экран не смотрят.
             env.alerts.speak(String(localized: "Спасибо!"))

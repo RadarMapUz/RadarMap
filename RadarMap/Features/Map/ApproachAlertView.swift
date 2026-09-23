@@ -38,7 +38,7 @@ struct ApproachAlertView: View {
                     ZStack {
                         Circle().fill(tint.opacity(0.18)).frame(width: 130, height: 130)
                             .scaleEffect(pulse ? 1.12 : 0.92)
-                            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+                            .motionAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
                         Circle()
                             .trim(from: 0, to: proximity)
                             .stroke(tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
@@ -59,7 +59,7 @@ struct ApproachAlertView: View {
                         .font(.system(size: 88, weight: .heavy, design: .rounded))
                         .foregroundStyle(tint)
                         .contentTransition(.numericText(value: distance))
-                        .animation(.easeOut(duration: 0.3), value: Int(distance))
+                        .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
                     Text("м").font(.rounded(30, .bold)).foregroundStyle(Theme.textSecondary)
                 }
 

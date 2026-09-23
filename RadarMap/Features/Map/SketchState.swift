@@ -7,7 +7,7 @@
 //  GPS-тиками. Сами решения — чистые функции RoadSketch (тестируются),
 //  здесь только их привязка к сервисам и к анимации.
 //
-//  Анимация нарочно императивная (withAnimation при записи значений), а не
+//  Анимация нарочно императивная (withMotion при записи значений), а не
 //  декларативная (.animation во вью): при пересборке растра опора «переезжает»
 //  в текущую точку, и смещение с растром обязаны смениться В ОДНОМ кадре БЕЗ
 //  анимации — они взаимно компенсируются, и картинка не дёргается. Анимировать
@@ -224,7 +224,7 @@ final class SketchState {
         guard isInspecting else { return }
         isInspecting = false
         inspectSpan = nil
-        withAnimation(.easeOut(duration: 0.45)) {
+        withMotion(.easeOut(duration: 0.45)) {
             viewOffset = meOffset
             cursorOffset = .zero
         }
@@ -479,14 +479,14 @@ final class SketchState {
                               height: offsetMeters(of: me).y)
             viewOffset = .zero
             cursorOffset = isInspecting ? meOffset : .zero
-            withAnimation(.linear(duration: duration)) {
+            withMotion(.linear(duration: duration)) {
                 courseDegrees = course
                 spanMeters = span
             }
         } else if isInspecting {
             // Вид замер, машина едет: двигается только курсор.
             meOffset = CGSize(width: offset.x, height: offset.y)
-            withAnimation(.linear(duration: duration)) {
+            withMotion(.linear(duration: duration)) {
                 cursorOffset = CGSize(width: offset.x - viewOffset.width,
                                       height: offset.y - viewOffset.height)
                 courseDegrees = course
@@ -500,7 +500,7 @@ final class SketchState {
             if RoadSketch.viewpointMoved(offsetDeltaMeters: offsetDelta,
                                          courseDeltaDegrees: abs(course - courseDegrees),
                                          spanChanged: span != spanMeters) {
-                withAnimation(.linear(duration: duration)) {
+                withMotion(.linear(duration: duration)) {
                     meOffset = CGSize(width: offset.x, height: offset.y)
                     viewOffset = CGSize(width: offset.x, height: offset.y)
                     courseDegrees = course

@@ -134,7 +134,7 @@ struct TripStatsSheet: View {
                         // столбиках, а месяц по клеткам читается одним взглядом.
                         if period == .month {
                             MonthCalendarCard(days: trip.days, anchor: anchor) { day in
-                                withAnimation(.snappy(duration: 0.3)) {
+                                withMotion(.snappy(duration: 0.3)) {
                                     period = .day
                                     anchor = day
                                 }
@@ -191,12 +191,12 @@ struct TripStatsSheet: View {
                     let args = ProcessInfo.processInfo.arguments
                     if args.contains("-scrollHistory") {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            withAnimation { proxy.scrollTo("history", anchor: .top) }
+                            withMotion { proxy.scrollTo("history", anchor: .top) }
                         }
                     }
                     if args.contains("-scrollCalendar") {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            withAnimation { proxy.scrollTo("calendar", anchor: .center) }
+                            withMotion { proxy.scrollTo("calendar", anchor: .center) }
                         }
                     }
                 }
@@ -240,13 +240,13 @@ struct TripStatsSheet: View {
             .onChange(of: period) {
                 // Выбранная поездка могла не попасть в новый период; раскрытый
                 // список — тоже атрибут конкретного окна.
-                withAnimation(.snappy(duration: 0.3)) {
+                withMotion(.snappy(duration: 0.3)) {
                     clearMapSelection()
                     tripsExpanded = false
                 }
             }
             .onChange(of: anchor) {
-                withAnimation(.snappy(duration: 0.3)) {
+                withMotion(.snappy(duration: 0.3)) {
                     clearMapSelection()
                     tripsExpanded = false
                 }
@@ -344,7 +344,7 @@ struct TripStatsSheet: View {
             ForEach(StatsPeriod.allCases) { item in
                 let selected = period == item
                 Button {
-                    withAnimation(.snappy(duration: 0.3)) { period = item }
+                    withMotion(.snappy(duration: 0.3)) { period = item }
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 } label: {
                     Text(item.title)
@@ -378,7 +378,7 @@ struct TripStatsSheet: View {
                 .foregroundStyle(Theme.textPrimary)
                 .frame(maxWidth: .infinity)
                 .contentTransition(.numericText())
-                .animation(.snappy(duration: 0.25), value: anchor)
+                .motionAnimation(.snappy(duration: 0.25), value: anchor)
             // Вперёд из текущего периода некуда: будущего в статистике нет.
             navArrow("chevron.right", enabled: period.canGoForward(from: anchor)) { step(1) }
         }
@@ -407,7 +407,7 @@ struct TripStatsSheet: View {
 
     private func step(_ direction: Int) {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        withAnimation(.snappy(duration: 0.3)) {
+        withMotion(.snappy(duration: 0.3)) {
             anchor = period.shifted(anchor, by: direction)
         }
     }
@@ -614,6 +614,7 @@ struct TripStatsSheet: View {
                                     .font(.rounded(11, .medium))
                                     .foregroundStyle(Theme.warning)
                                     .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
                             }
                         }
                         Spacer(minLength: 0)
@@ -655,7 +656,7 @@ struct TripStatsSheet: View {
         if let nudge = TripHistory.pendingFineNudge(env.trip.history) {
             Button {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                withAnimation(.snappy(duration: 0.3)) {
+                withMotion(.snappy(duration: 0.3)) {
                     period = .month
                     anchor = nudge.oldest
                 }
@@ -873,7 +874,7 @@ struct TripStatsSheet: View {
         if let selected = mapSelection {
             HStack(spacing: 10) {
                 Button {
-                    withAnimation(.snappy(duration: 0.3)) { clearMapSelection() }
+                    withMotion(.snappy(duration: 0.3)) { clearMapSelection() }
                 } label: {
                     Label("Все поездки", systemImage: "xmark.circle.fill")
                         .font(.rounded(11, .semibold))
@@ -937,7 +938,7 @@ struct TripStatsSheet: View {
     private func showOnMap(_ record: TripRecord, proxy: ScrollViewProxy) {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         let same = mapSelection?.id == record.id
-        withAnimation(.snappy(duration: 0.35)) {
+        withMotion(.snappy(duration: 0.35)) {
             if same {
                 clearMapSelection()
             } else {
@@ -1044,14 +1045,14 @@ struct TripStatsSheet: View {
     private func lifetimeSection(trip: TripStats) -> some View {
         VStack(spacing: 16) {
             Button {
-                withAnimation(.snappy(duration: 0.3)) { lifetimeExpanded.toggle() }
+                withMotion(.snappy(duration: 0.3)) { lifetimeExpanded.toggle() }
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "infinity")
                         .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.textSecondary)
                         .frame(width: 30, height: 30)
-                        .background(Theme.accent.opacity(0.12), in: Circle())
+                        .background(Theme.stroke, in: Circle())
                     VStack(alignment: .leading, spacing: 2) {
                         Text("За всё время")
                             .font(.rounded(15, .semibold))
@@ -1085,14 +1086,14 @@ struct TripStatsSheet: View {
     private func periodDetails(summary: PeriodSummary) -> some View {
         VStack(spacing: 16) {
             Button {
-                withAnimation(.snappy(duration: 0.3)) { detailsExpanded.toggle() }
+                withMotion(.snappy(duration: 0.3)) { detailsExpanded.toggle() }
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "chart.bar.xaxis")
                         .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.textSecondary)
                         .frame(width: 30, height: 30)
-                        .background(Theme.accent.opacity(0.12), in: Circle())
+                        .background(Theme.stroke, in: Circle())
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Детали периода")
                             .font(.rounded(14, .semibold))
@@ -1148,7 +1149,7 @@ struct TripStatsSheet: View {
                     { coord, name in dismiss(); route(coord, name) }
                 },
                 onDelete: { record in
-                    withAnimation {
+                    withMotion {
                         if mapSelection?.id == record.id { clearMapSelection() }
                         trip.deleteRecord(id: record.id)
                     }
@@ -1157,7 +1158,7 @@ struct TripStatsSheet: View {
                 onMerge: { merge(next: $0) })
             if !tripsExpanded, all.count > AppConfig.statsTripsPreview {
                 Button {
-                    withAnimation(.snappy(duration: 0.3)) { tripsExpanded = true }
+                    withMotion(.snappy(duration: 0.3)) { tripsExpanded = true }
                 } label: {
                     HStack(spacing: 6) {
                         Text(String(format: String(localized: "Показать все поездки (%lld)"),
@@ -1204,9 +1205,9 @@ struct TripStatsSheet: View {
             HStack(spacing: 12) {
                 Image(systemName: "arrow.triangle.merge")
                     .font(.rounded(14, .bold))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.textSecondary)
                     .frame(width: 34, height: 34)
-                    .background(Theme.accent.opacity(0.14), in: Circle())
+                    .background(Theme.stroke, in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Похоже, это одна поездка")
                         .font(.rounded(14, .bold))
@@ -1235,7 +1236,7 @@ struct TripStatsSheet: View {
                 .buttonStyle(PressableStyle())
                 Button {
                     Storage.set(pair.next.id, for: .mergeSuggestDismissedID)
-                    withAnimation(.snappy(duration: 0.3)) { mergeSuggestionHidden = true }
+                    withMotion(.snappy(duration: 0.3)) { mergeSuggestionHidden = true }
                 } label: {
                     Text("Это разные")
                         .font(.rounded(15, .semibold))
@@ -1254,7 +1255,7 @@ struct TripStatsSheet: View {
     /// Объединение из карточки и из контекстного меню — одним путём.
     private func merge(next record: TripRecord) {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        withAnimation(.snappy(duration: 0.35)) {
+        withMotion(.snappy(duration: 0.35)) {
             // Любая из двух записей могла быть «применена» к карте — слепок
             // после склейки не существует, выбор снимаем.
             clearMapSelection()
@@ -1325,9 +1326,9 @@ struct TripStatsSheet: View {
             HStack(spacing: 12) {
                 Image(systemName: "person.2.wave.2.fill")
                     .font(.rounded(15, .semibold))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.textSecondary)
                     .frame(width: 34, height: 34)
-                    .background(Theme.accent.opacity(0.12), in: Circle())
+                    .background(Theme.stroke, in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Ваши отметки за 30 дней")
                         .font(.rounded(15))
@@ -1391,9 +1392,9 @@ struct TripStatsSheet: View {
             HStack(spacing: 12) {
                 Image(systemName: badge.icon)
                     .font(.rounded(15, .semibold))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.textSecondary)
                     .frame(width: 38, height: 38)
-                    .background(Theme.accent.opacity(0.12), in: Circle())
+                    .background(Theme.stroke, in: Circle())
                 VStack(alignment: .leading, spacing: 5) {
                     // Подпись и название — в столбик: на узбекском «Eng yaqin
                     // maqsad» и «Ketma-ket 5 toza» вставали вплотную и читались
@@ -1403,6 +1404,7 @@ struct TripStatsSheet: View {
                             .font(.rounded(11, .medium))
                             .foregroundStyle(Theme.textTertiary)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                         Text(badge.title)
                             .font(.rounded(15, .bold))
                             .foregroundStyle(Theme.textPrimary)
@@ -1425,6 +1427,7 @@ struct TripStatsSheet: View {
                     .font(.rounded(15, .semibold).monospacedDigit())
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
             .statCard(padding: 14, radius: Theme.cornerMedium)
             .contentShape(Rectangle())
@@ -1490,7 +1493,7 @@ struct TripStatsSheet: View {
                 .foregroundStyle(Theme.textPrimary)
             if let nearest = nearestNonEmptyAnchor() {
                 Button {
-                    withAnimation(.snappy(duration: 0.3)) { anchor = nearest }
+                    withMotion(.snappy(duration: 0.3)) { anchor = nearest }
                 } label: {
                     Text(String(format: String(localized: "Показать: %@"),
                                 period.rangeTitle(containing: nearest)))
@@ -1567,7 +1570,7 @@ private struct LiveTripCard: View {
                         .font(.rounded(26, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                         .contentTransition(.numericText())
-                        .animation(.snappy(duration: 0.35), value: Int(env.location.speedKmh))
+                        .motionAnimation(.snappy(duration: 0.35), value: Int(env.location.speedKmh))
                     Text("км/ч")
                         .font(.rounded(10, .medium))
                         .foregroundStyle(Theme.textTertiary)
@@ -1591,7 +1594,7 @@ private struct LiveTripCard: View {
                 .font(.rounded(18, .heavy).monospacedDigit())
                 .foregroundStyle(color)
                 .contentTransition(.numericText())
-                .animation(.snappy(duration: 0.4), value: value)
+                .motionAnimation(.snappy(duration: 0.4), value: value)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(label)

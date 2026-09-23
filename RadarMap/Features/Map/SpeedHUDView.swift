@@ -69,7 +69,7 @@ struct SpeedHUDView: View {
         .overlay(alignment: .topTrailing) {
             if env.location.isTripActive { modeChip }
         }
-        .animation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
+        .motionAnimation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
         // VoiceOver: весь HUD — одна связная фраза, а не россыпь цифр.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilitySummary)
@@ -107,7 +107,7 @@ struct SpeedHUDView: View {
             // Шесть качков и стоп: «пока превышаешь» длится десятки минут, а
             // вечный пульс с тенью поверх живой карты — офскрин-проход GPU
             // каждый кадр. Красная тень остаётся — сигнал не исчезает.
-            .animation(over ? .easeInOut(duration: 0.55).repeatCount(6, autoreverses: true)
+            .motionAnimation(over ? .easeInOut(duration: 0.55).repeatCount(6, autoreverses: true)
                             : .easeOut(duration: 0.25),
                        value: over)
     }
@@ -121,7 +121,7 @@ struct SpeedHUDView: View {
                 .monospacedDigit()
                 .foregroundStyle(env.speedLimits.isOverspeeding ? Theme.danger : Theme.textPrimary)
                 .contentTransition(.numericText(value: speed))
-                .animation(.easeOut(duration: 0.3), value: Int(speed.rounded()))
+                .motionAnimation(.easeOut(duration: 0.3), value: Int(speed.rounded()))
             HStack(spacing: 3) {
                 Text("км/ч")
                     .font(.rounded(11, .medium))
@@ -181,7 +181,7 @@ struct SpeedHUDView: View {
                             .foregroundStyle(camera.kind.tint)
                             .offset(y: -27)
                             .rotationEffect(.degrees(angle))
-                            .animation(.easeOut(duration: 0.3), value: Int(angle / 10))
+                            .motionAnimation(.easeOut(duration: 0.3), value: Int(angle / 10))
                     }
                 }
 
@@ -194,7 +194,7 @@ struct SpeedHUDView: View {
                         .foregroundStyle(near && !env.location.isPositionCoarse
                                          ? Theme.danger : Theme.textPrimary)
                         .contentTransition(.numericText(value: distance))
-                        .animation(.easeOut(duration: 0.3), value: Int(distance))
+                        .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
                     Text(caption(for: camera))
                         .font(.rounded(11, .medium))
                         .foregroundStyle(env.location.isPositionCoarse
@@ -282,6 +282,6 @@ struct SpeedHUDView: View {
             .clipShape(Capsule())
             .frame(height: 3)
             .padding(.top, 4)
-            .animation(.easeOut(duration: 0.3), value: progress)
+            .motionAnimation(.easeOut(duration: 0.3), value: progress)
     }
 }

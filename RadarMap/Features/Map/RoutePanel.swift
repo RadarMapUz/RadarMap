@@ -71,8 +71,8 @@ struct RoutePanel: View {
                 .padding(14)
             }
         }
-        .animation(.spring(duration: 0.3), value: route.selectedID)
-        .animation(.spring(duration: 0.3), value: env.location.isTripActive)
+        .motionAnimation(.spring(duration: 0.3), value: route.selectedID)
+        .motionAnimation(.spring(duration: 0.3), value: env.location.isTripActive)
     }
 
     // MARK: - Варианты маршрута
@@ -247,7 +247,7 @@ struct ManeuverBanner: View {
                     .font(.rounded(26, .semibold).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
-                    .animation(.easeOut(duration: 0.3), value: Int(distance))
+                    .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
                 Text(step.text)
                     .font(.rounded(13, .medium))
                     .foregroundStyle(Theme.textSecondary)

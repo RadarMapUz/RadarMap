@@ -194,9 +194,9 @@ struct RatingDetailSheet: View {
             } else {
                 Image(systemName: "gauge.with.needle")
                     .font(.rounded(30))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.textSecondary)
                     .frame(width: 92, height: 92)
-                    .background(Theme.accent.opacity(0.10), in: Circle())
+                    .background(Theme.stroke, in: Circle())
             }
             VStack(alignment: .leading, spacing: 5) {
                 Text(period.caption)
@@ -262,7 +262,7 @@ struct RatingDetailSheet: View {
                 ContributionBar(rating: rating, items: data.contributions,
                                 highlighted: highlighted) { id in
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    withAnimation(.snappy(duration: 0.3)) {
+                    withMotion(.snappy(duration: 0.3)) {
                         highlighted = highlighted == id ? nil : id
                         if highlighted != nil { proxy.scrollTo(id, anchor: .center) }
                     }
@@ -880,7 +880,7 @@ private struct AllContributionsView: View {
                 ForEach(Sort.allCases) { item in
                     let selected = sort == item
                     Button {
-                        withAnimation(.snappy(duration: 0.25)) { sort = item }
+                        withMotion(.snappy(duration: 0.25)) { sort = item }
                     } label: {
                         Text(item.title)
                             .font(.rounded(15, .semibold))
@@ -903,7 +903,7 @@ private struct AllContributionsView: View {
             .background(Theme.surface, in: Capsule())
 
             Button {
-                withAnimation(.snappy(duration: 0.25)) { onlyViolations.toggle() }
+                withMotion(.snappy(duration: 0.25)) { onlyViolations.toggle() }
             } label: {
                 Label("Только с превышениями",
                       systemImage: onlyViolations ? "checkmark.circle.fill" : "circle")
@@ -936,7 +936,7 @@ private struct AllContributionsView: View {
         if item.isTrip {
             onOpenTrip(item.id)
         } else {
-            withAnimation(.snappy(duration: 0.25)) {
+            withMotion(.snappy(duration: 0.25)) {
                 expandedDay = expandedDay == item.id ? nil : item.id
             }
         }

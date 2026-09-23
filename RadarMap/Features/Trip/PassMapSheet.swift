@@ -112,11 +112,11 @@ struct PassDetailView: View {
             fineOutcome = pass.fineOutcome
             guard let coordinate = pass.coordinate else { return }
             // Подлёт: с высоты — к камере, с лёгким наклоном для объёма.
-            withAnimation(.spring(duration: 1.6, bounce: 0.12).delay(0.25)) {
+            withMotion(.spring(duration: 1.6, bounce: 0.12).delay(0.25)) {
                 position = .camera(MapCamera(centerCoordinate: coordinate,
                                              distance: 1300, pitch: 48))
             }
-            withAnimation(.spring(duration: 0.6, bounce: 0.2).delay(0.5)) {
+            withMotion(.spring(duration: 0.6, bounce: 0.2).delay(0.5)) {
                 appeared = true
             }
         }
@@ -256,6 +256,7 @@ struct PassDetailView: View {
                         .foregroundStyle(honestyColor)
                         .contentTransition(.numericText())
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
                 Spacer(minLength: 8)
                 statusChip
@@ -395,7 +396,7 @@ struct PassDetailView: View {
         Button {
             guard let record else { return }
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            withAnimation(.snappy(duration: 0.3)) {
+            withMotion(.snappy(duration: 0.3)) {
                 env.trip.setFineOutcome(outcome, passID: pass.id, tripID: record.id)
                 fineOutcome = outcome
             }
@@ -595,7 +596,7 @@ private struct PassPulseMarker: View {
         }
         .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 2).frame(width: 38, height: 38))
         .onAppear {
-            withAnimation(.easeOut(duration: 1.7).repeatForever(autoreverses: false)) {
+            withMotion(.easeOut(duration: 1.7).repeatForever(autoreverses: false)) {
                 pulse = true
             }
         }

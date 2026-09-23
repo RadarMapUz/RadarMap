@@ -348,7 +348,7 @@ struct CameraDetailSheet: View {
                 }
             }
         }
-        .animation(.spring(duration: 0.35), value: reportState)
+        .motionAnimation(.spring(duration: 0.35), value: reportState)
     }
 
     /// Плитка репорта: фиксированная высота и две строки текста — три плитки в ряду

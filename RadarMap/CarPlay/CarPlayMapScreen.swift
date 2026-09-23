@@ -149,7 +149,7 @@ struct CarPlayMapScreen: View {
         // на подключении тоже — в машину можно сесть с уже горячим телефоном.
         .onAppear { model.autoSwitch(for: env.thermal.mode) }
         .onChange(of: env.thermal.mode) { _, mode in
-            withAnimation(.easeInOut(duration: 0.3)) { model.autoSwitch(for: mode) }
+            withMotion(.easeInOut(duration: 0.3)) { model.autoSwitch(for: mode) }
         }
         // База камер докодировалась/обновилась — пересчитать «что рядом» СРАЗУ.
         // Раньше эта подписка жила только в телефонном MapScreen: при холодном

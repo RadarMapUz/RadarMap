@@ -270,7 +270,7 @@ struct TripDetailContent: View {
                 // Скриншот-автоматизация: прокрутить к графику скорости.
                 guard ProcessInfo.processInfo.arguments.contains("-scrollChart") else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    withAnimation { proxy.scrollTo("chart", anchor: .top) }
+                    withMotion { proxy.scrollTo("chart", anchor: .top) }
                 }
             }
             #endif

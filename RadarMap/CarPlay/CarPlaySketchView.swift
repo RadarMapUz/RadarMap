@@ -88,7 +88,7 @@ struct CarPlaySketchView: View {
                 // Стоим и курса нет: рисуем «последнее, что знали»,
                 // приглушённо — как на приборке телефона.
                 .opacity(env.location.currentCourse < 0 ? 0.45 : 1)
-                .animation(.easeOut(duration: 0.4),
+                .motionAnimation(.easeOut(duration: 0.4),
                            value: env.location.currentCourse < 0)
         } else {
             sketchWaiting

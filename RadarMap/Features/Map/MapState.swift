@@ -171,7 +171,7 @@ final class MapState {
         didInitialSnap = true
         initialSnapCoordinate = coordinate
         initialSnapAt = Date()
-        withAnimation(.easeOut(duration: 0.6)) {
+        withMotion(.easeOut(duration: 0.6)) {
             position = .region(MKCoordinateRegion(
                 center: coordinate,
                 latitudinalMeters: 2500,
@@ -287,7 +287,7 @@ final class MapState {
         visibleLimits = layer.limits
         let animates = layer.cameras.count + layer.clusters.count <= 80
         if animates {
-            withAnimation(.easeInOut(duration: 0.25)) {
+            withMotion(.easeInOut(duration: 0.25)) {
                 visibleCameras = layer.cameras
                 clusters = layer.clusters
             }
@@ -306,7 +306,7 @@ final class MapState {
                 longitudeDelta: max(0.05, span.longitudeDelta / 4)
             )
         )
-        withAnimation(.easeInOut(duration: 0.4)) {
+        withMotion(.easeInOut(duration: 0.4)) {
             position = .region(region)
         }
         updateVisible(for: region)
@@ -321,7 +321,7 @@ final class MapState {
 
     func focus(on camera: Camera) {
         highlightedID = camera.id
-        withAnimation(.easeInOut(duration: 0.4)) {
+        withMotion(.easeInOut(duration: 0.4)) {
             position = .region(MKCoordinateRegion(
                 center: camera.coordinate,
                 latitudinalMeters: AppConfig.focusDistance,
@@ -377,7 +377,7 @@ final class MapState {
         case .following:
             followsDeviceHeading = false
             setMapHeading(0)   // .userLocation ставит карту на север
-            withAnimation(.easeInOut(duration: 0.35)) {
+            withMotion(.easeInOut(duration: 0.35)) {
                 position = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
             }
         case .heading:
@@ -390,7 +390,7 @@ final class MapState {
             } else {
                 followsDeviceHeading = true
                 setMapHeading(nil)   // карту крутит компас телефона — угла мы не знаем
-                withAnimation(.easeInOut(duration: 0.35)) {
+                withMotion(.easeInOut(duration: 0.35)) {
                     position = .userLocation(followsHeading: true,
                                              fallback: .region(AppConfig.uzbekistanRegion))
                 }
@@ -451,7 +451,7 @@ final class MapState {
                                   distanceMeters: Self.lookAheadMeters(forSpeedKmh: speedKmh))
             : coordinate
         setMapHeading(course >= 0 ? course : 0)   // мы сами задаём поворот карты
-        withAnimation(force ? .easeOut(duration: duration) : .linear(duration: duration)) {
+        withMotion(force ? .easeOut(duration: duration) : .linear(duration: duration)) {
             position = .camera(MapCamera(
                 centerCoordinate: center,
                 distance: followDistance,
@@ -465,7 +465,7 @@ final class MapState {
     }
 
     func move(to coordinate: CLLocationCoordinate2D) {
-        withAnimation(.easeInOut(duration: 0.4)) {
+        withMotion(.easeInOut(duration: 0.4)) {
             position = .region(MKCoordinateRegion(
                 center: coordinate,
                 latitudinalMeters: 4000,
@@ -482,7 +482,7 @@ final class MapState {
             longitudeDelta: min(80, max(0.002, region.span.longitudeDelta * factor))
         )
         let zoomed = MKCoordinateRegion(center: region.center, span: span)
-        withAnimation(.easeInOut(duration: 0.3)) {
+        withMotion(.easeInOut(duration: 0.3)) {
             position = .region(zoomed)
         }
         updateVisible(for: zoomed)

@@ -35,7 +35,7 @@ struct ArrivalCardView: View {
         .accessibilityHint(Text("Закрывает карточку прибытия"))
         .accessibilityAction { onDismiss() }
         .onAppear {
-            withAnimation(.spring(duration: 0.45, bounce: 0.35)) { appeared = true }
+            withMotion(.spring(duration: 0.45, bounce: 0.35)) { appeared = true }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
         .task {

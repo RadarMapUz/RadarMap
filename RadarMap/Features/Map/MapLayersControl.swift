@@ -51,7 +51,7 @@ struct MapLayersControl: View {
                 postpone()
             }
         }
-        .animation(.spring(duration: 0.32, bounce: 0.16), value: isExpanded)
+        .motionAnimation(.spring(duration: 0.32, bounce: 0.16), value: isExpanded)
         .onDisappear { collapseTask?.cancel() }
     }
 

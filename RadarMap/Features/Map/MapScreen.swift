@@ -217,7 +217,7 @@ struct MapScreen: View {
                           course: env.location.currentCourse, inTrip: active)
             }
             if active {
-                withAnimation { tripEndRecord = nil }   // поехали снова — старый итог не актуален
+                withMotion { tripEndRecord = nil }   // поехали снова — старый итог не актуален
                 // Поездка = спидометр: он строился ради батареи (чёрный OLED и
                 // растр вместо тайлов с двумя сотнями маркеров), но был
                 // секретным экраном за тапом по HUD. Открываем сами — если
@@ -511,7 +511,7 @@ struct MapScreen: View {
         // и закрывает бар точки долгого тапа.
         .simultaneousGesture(TapGesture().onEnded {
             if map.pressedPoint != nil {
-                withAnimation(.spring(duration: 0.3)) { map.pressedPoint = nil }
+                withMotion(.spring(duration: 0.3)) { map.pressedPoint = nil }
             }
         })
         // Потянул карту рукой — слежение снимается. Именно жест, а не
@@ -545,10 +545,10 @@ struct MapScreen: View {
         case .radar:     Storage.set(true, for: .hintRadarShown)
         case .smartSilence: Storage.set(true, for: .hintSilenceShown)
         }
-        withAnimation(.spring(duration: 0.3)) { activeHint = hint }
+        withMotion(.spring(duration: 0.3)) { activeHint = hint }
         Task {
             await Task.pause(seconds: 7)
-            withAnimation(.easeOut(duration: 0.3)) { activeHint = nil }
+            withMotion(.easeOut(duration: 0.3)) { activeHint = nil }
         }
     }
 
@@ -559,10 +559,10 @@ struct MapScreen: View {
     private func maybeSuggestDashboardForBattery() {
         let battery = BatteryProbe.snapshot()
         guard let percent = battery.percent, percent < 30, !battery.isCharging else { return }
-        withAnimation(.spring(duration: 0.3)) { showBatterySaverHint = true }
+        withMotion(.spring(duration: 0.3)) { showBatterySaverHint = true }
         Task {
             await Task.pause(seconds: 8)
-            withAnimation(.easeOut(duration: 0.3)) { showBatterySaverHint = false }
+            withMotion(.easeOut(duration: 0.3)) { showBatterySaverHint = false }
         }
     }
 
@@ -618,14 +618,14 @@ struct MapScreen: View {
                 .onTapGesture { showDashboard = true }
                 .onLongPressGesture(minimumDuration: 0.4) {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    withAnimation(.spring(duration: 0.3)) { showQuickToggles.toggle() }
+                    withMotion(.spring(duration: 0.3)) { showQuickToggles.toggle() }
                 }
                 // Жесты для VoiceOver не существуют — даём оба входа действиями.
                 .accessibilityAddTraits(.isButton)
                 .accessibilityHint(Text("Открывает спидометр"))
                 .accessibilityAction(named: Text("Спидометр")) { showDashboard = true }
                 .accessibilityAction(named: Text("Быстрые тумблеры")) {
-                    withAnimation(.spring(duration: 0.3)) { showQuickToggles.toggle() }
+                    withMotion(.spring(duration: 0.3)) { showQuickToggles.toggle() }
                 }
             // Разовые подсказки по жестам и экономии — по одной, не простынёй.
             if let hint = activeHint {
@@ -652,7 +652,7 @@ struct MapScreen: View {
             // (plan_app_ui.md, У11).
             if showQuickToggles {
                 QuickTogglesBar {
-                    withAnimation(.spring(duration: 0.3)) { showQuickToggles = false }
+                    withMotion(.spring(duration: 0.3)) { showQuickToggles = false }
                 }
             }
         }
@@ -795,7 +795,7 @@ struct MapScreen: View {
             }
             // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
-        .animation(.spring(duration: 0.3), value: mode.showsTripBar)
+        .motionAnimation(.spring(duration: 0.3), value: mode.showsTripBar)
     }
 
     // MARK: - Низ: панель действий / режим добавления
@@ -818,10 +818,10 @@ struct MapScreen: View {
                 MapPointBar(
                     onRoute: env.location.currentCoordinate == nil ? nil : {
                         buildRoute(to: point.coordinate, name: String(localized: "Точка на карте"))
-                        withAnimation { map.pressedPoint = nil }
+                        withMotion { map.pressedPoint = nil }
                     },
                     onRadar: {
-                        withAnimation {
+                        withMotion {
                             map.pressedPoint = nil
                             reportPoint = point   // дальше — выбор типа отметки
                         }
@@ -829,7 +829,7 @@ struct MapScreen: View {
                     onOwnCamera: {
                         // Крестик режима добавления встаёт на выбранную точку —
                         // пользователь при желании доводит позицию вручную.
-                        withAnimation {
+                        withMotion {
                             map.pressedPoint = nil
                             map.position = .region(MKCoordinateRegion(
                                 center: point.coordinate,
@@ -838,7 +838,7 @@ struct MapScreen: View {
                         }
                     },
                     onCancel: {
-                        withAnimation { map.pressedPoint = nil }
+                        withMotion { map.pressedPoint = nil }
                     }
                 )
             } else if let report = reportPoint {
@@ -860,9 +860,9 @@ struct MapScreen: View {
                             UINotificationFeedbackGenerator()
                                 .notificationOccurred(outcome.isSuccess ? .success : .warning)
                         }
-                        withAnimation { reportPoint = nil }
+                        withMotion { reportPoint = nil }
                     },
-                    onCancel: { withAnimation { reportPoint = nil } }
+                    onCancel: { withMotion { reportPoint = nil } }
                 )
             } else {
                 // «Радар ещё стоял?» — над панелью поездки: вопрос живёт
@@ -883,12 +883,12 @@ struct MapScreen: View {
                     TripEndCard(
                         record: record,
                         onDetail: { chosen in
-                            withAnimation(.spring(duration: 0.3)) { tripEndRecord = nil }
+                            withMotion(.spring(duration: 0.3)) { tripEndRecord = nil }
                             tripEndDetail = chosen
                         },
                         onMerged: { tripEndRecord = env.trip.history.first },
                         onDismiss: {
-                            withAnimation(.spring(duration: 0.3)) { tripEndRecord = nil }
+                            withMotion(.spring(duration: 0.3)) { tripEndRecord = nil }
                         })
                 }
                 if mode.showsTripBar {
@@ -967,16 +967,16 @@ struct MapScreen: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .animation(.spring(duration: 0.3), value: map.isAddingCamera)
-        .animation(.spring(duration: 0.3), value: map.pressedPoint)
-        .animation(.spring(duration: 0.3), value: reportPoint)
+        .motionAnimation(.spring(duration: 0.3), value: map.isAddingCamera)
+        .motionAnimation(.spring(duration: 0.3), value: map.pressedPoint)
+        .motionAnimation(.spring(duration: 0.3), value: reportPoint)
     }
 
     /// Долгий тап: маркер + бар действий (кроме режима прицела добавления камеры).
     private func selectPoint(at coordinate: CLLocationCoordinate2D) {
         guard !map.isAddingCamera else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        withAnimation(.spring(duration: 0.3)) {
+        withMotion(.spring(duration: 0.3)) {
             map.pressedPoint = MapPoint(coordinate: coordinate)
         }
     }
@@ -999,7 +999,7 @@ struct MapScreen: View {
         guard scenePhase == .active, !map.showStats,
               let record = env.trip.history.first,
               Date().timeIntervalSince(record.endedAt) < 60 else { return }
-        withAnimation(.spring(duration: 0.4)) { tripEndRecord = record }
+        withMotion(.spring(duration: 0.4)) { tripEndRecord = record }
     }
 
     /// Построить авто-маршрут от текущей позиции и показать все варианты целиком.
@@ -1025,7 +1025,7 @@ struct MapScreen: View {
                 // Показываем маршрут целиком — это уже не слежение за точкой.
                 map.releaseOrientation()
                 let padded = rect.insetBy(dx: -rect.width * 0.18, dy: -rect.height * 0.18)
-                withAnimation(.easeInOut(duration: 0.5)) {
+                withMotion(.easeInOut(duration: 0.5)) {
                     map.position = .rect(padded)
                 }
                 map.updateVisible(for: MKCoordinateRegion(padded))
@@ -1133,7 +1133,7 @@ struct MapScreen: View {
     /// Редкое: в баре место занимало бы всегда, а нужно раз в месяц.
     @ViewBuilder private var moreActionItems: some View {
         Button {
-            withAnimation { map.isAddingCamera = true }
+            withMotion { map.isAddingCamera = true }
         } label: {
             Label("Добавить камеру", systemImage: "plus.circle.fill")
         }
@@ -1194,7 +1194,7 @@ struct MapScreen: View {
 
     private func addCamera(kind: AddKind, name: String) {
         guard let center = map.mapCenter else {
-            withAnimation { map.isAddingCamera = false }
+            withMotion { map.isAddingCamera = false }
             return
         }
         switch kind {
@@ -1213,7 +1213,7 @@ struct MapScreen: View {
                     .notificationOccurred(outcome.isSuccess ? .success : .error)
             }
         }
-        withAnimation { map.isAddingCamera = false }
+        withMotion { map.isAddingCamera = false }
     }
 
     private var bannerInfo: (message: String, button: String, action: () -> Void)? {
@@ -1281,7 +1281,7 @@ struct MapScreen: View {
                 // После snapToUserOnce (тот перебил бы позицию своим регионом).
                 await Task.pause(seconds: 6)
                 guard let center = env.location.currentCoordinate else { return }
-                withAnimation(.easeInOut(duration: 0.6)) {
+                withMotion(.easeInOut(duration: 0.6)) {
                     map.position = .camera(MapCamera(centerCoordinate: center,
                                                      distance: 1200, heading: 45))
                 }
@@ -1339,14 +1339,14 @@ struct MapScreen: View {
             Task {
                 await Task.pause(seconds: 3)
                 if let coordinate = env.location.currentCoordinate ?? map.mapCenter {
-                    withAnimation { reportPoint = MapPoint(coordinate: coordinate) }
+                    withMotion { reportPoint = MapPoint(coordinate: coordinate) }
                 }
             }
         }
         if args.contains("-quickToggles") {
             Task {
                 await Task.pause(seconds: 2)
-                withAnimation { showQuickToggles = true }
+                withMotion { showQuickToggles = true }
             }
         }
         if args.contains("-askDriver") {
@@ -1377,7 +1377,7 @@ struct MapScreen: View {
                 await Task.pause(seconds: 2)
                 env.trip.seedDemoHistory()
                 if let record = env.trip.history.first {
-                    withAnimation(.spring(duration: 0.4)) { tripEndRecord = record }
+                    withMotion(.spring(duration: 0.4)) { tripEndRecord = record }
                 }
             }
         }
@@ -1387,7 +1387,7 @@ struct MapScreen: View {
             Task {
                 await Task.pause(seconds: 2)
                 if let center = map.mapCenter ?? env.location.currentCoordinate {
-                    withAnimation { env.mobile.seedTrustDemo(near: center) }
+                    withMotion { env.mobile.seedTrustDemo(near: center) }
                 }
             }
         }
@@ -1398,7 +1398,7 @@ struct MapScreen: View {
                 await Task.pause(seconds: 2)
                 if let center = map.mapCenter ?? env.location.currentCoordinate {
                     env.hotspots.seedDemo(near: center)
-                    withAnimation { map.invalidateVisible() }
+                    withMotion { map.invalidateVisible() }
                 }
             }
         }

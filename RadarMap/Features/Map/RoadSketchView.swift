@@ -199,7 +199,7 @@ struct RoadSketchView: View {
         // месте, а дорога впереди уходит к горизонту.
         .rotation3DEffect(.degrees(tiltDegrees), axis: (x: 1, y: 0, z: 0),
                           anchor: .center, perspective: 0.62)
-        .animation(.easeInOut(duration: 0.55), value: tiltDegrees)
+        .motionAnimation(.easeInOut(duration: 0.55), value: tiltDegrees)
     }
 
     /// Светофоры и прочие точечные объекты.
@@ -384,7 +384,7 @@ struct RoadSketchView: View {
                 .padding(.bottom, 14 * strokeScale + bottomCover)
                 .allowsHitTesting(false)
                 .transition(.opacity)
-                .animation(.easeInOut(duration: 0.35), value: street)
+                .motionAnimation(.easeInOut(duration: 0.35), value: street)
         }
     }
 
@@ -426,7 +426,7 @@ struct RoadSketchView: View {
             .padding(.trailing, 12 * strokeScale)
             .padding(.bottom, 12 * strokeScale)
             .transition(.opacity.combined(with: .scale))
-            .animation(.easeOut(duration: 0.25), value: state.isInspecting)
+            .motionAnimation(.easeOut(duration: 0.25), value: state.isInspecting)
         }
     }
 
@@ -493,7 +493,7 @@ struct RoadSketchView: View {
             .padding(.bottom, 34 * strokeScale + bottomCover)
             .allowsHitTesting(false)
             .transition(.opacity)
-            .animation(.easeOut(duration: 0.2), value: loading > 0)
+            .motionAnimation(.easeOut(duration: 0.2), value: loading > 0)
         }
     }
 
@@ -649,7 +649,7 @@ private struct AlertCameraMarker: View {
         }
         .shadow(color: .black.opacity(0.6), radius: 3 * scale)
         .onAppear {
-            withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) {
+            withMotion(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) {
                 pulsing = true
             }
         }

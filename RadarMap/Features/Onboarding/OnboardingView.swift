@@ -31,14 +31,14 @@ struct OnboardingView: View {
                     permissionsPage.tag(6)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .animation(.easeInOut(duration: 0.3), value: page)
+                .motionAnimation(.easeInOut(duration: 0.3), value: page)
 
                 pageDots
                     .padding(.bottom, 18)
 
                 if page < lastPage {
                     PrimaryButton(title: "Далее", systemImage: "chevron.right") {
-                        withAnimation { page += 1 }
+                        withMotion { page += 1 }
                     }
                     .padding(.horizontal, 20)
                     .padding(.bottom, 8)
@@ -253,7 +253,7 @@ struct OnboardingView: View {
                     .frame(width: index == page ? 22 : 7, height: 7)
             }
         }
-        .animation(.spring(duration: 0.3), value: page)
+        .motionAnimation(.spring(duration: 0.3), value: page)
     }
 
     // MARK: - Состояния разрешений
@@ -340,7 +340,7 @@ private struct RadarHero: View {
             )
             .mask(Circle())
             .rotationEffect(.degrees(sweep ? 360 : 0))
-            .animation(sweep ? .linear(duration: 3).repeatForever(autoreverses: false)
+            .motionAnimation(sweep ? .linear(duration: 3).repeatForever(autoreverses: false)
                              : .default, value: sweep)
 
             Image(systemName: "camera.metering.center.weighted")

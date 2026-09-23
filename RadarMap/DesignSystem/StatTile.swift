@@ -45,7 +45,7 @@ private struct NumericTransition: ViewModifier {
     func body(content: Content) -> some View {
         if active {
             content.contentTransition(.numericText())
-                .animation(.snappy(duration: 0.4), value: value)
+                .motionAnimation(.snappy(duration: 0.4), value: value)
         } else {
             content
         }

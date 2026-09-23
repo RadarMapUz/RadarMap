@@ -29,7 +29,7 @@ struct OverspeedVignetteGate: View {
                 OverspeedVignette()
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)
+        .motionAnimation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)
         .allowsHitTesting(false)
     }
 }
@@ -60,7 +60,7 @@ struct ApproachOverlayGate: View {
                 )
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)
+        .motionAnimation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)
     }
 }
 
@@ -76,7 +76,7 @@ struct ManeuverBannerGate: View {
                 ManeuverBanner(step: step, distance: env.route.nextStepDistance)
             }
         }
-        .animation(.spring(duration: 0.3), value: env.route.nextStep?.distanceAlong)
+        .motionAnimation(.spring(duration: 0.3), value: env.route.nextStep?.distanceAlong)
     }
 }
 
@@ -163,7 +163,7 @@ struct MobilePassDriver: View {
             .allowsHitTesting(false)
             .onChange(of: env.location.locationTick) {
                 guard let coordinate = env.location.currentCoordinate else { return }
-                withAnimation { env.mobile.trackPasses(from: coordinate) }
+                withMotion { env.mobile.trackPasses(from: coordinate) }
             }
     }
 }

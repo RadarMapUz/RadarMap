@@ -33,7 +33,7 @@ struct CarPlayStatusChips: View {
             }
             .padding(.top, 8)
             .transition(.move(edge: .top).combined(with: .opacity))
-            .animation(.easeOut(duration: 0.3), value: shown.map(\.id))
+            .motionAnimation(.easeOut(duration: 0.3), value: shown.map(\.id))
         }
     }
 
@@ -104,6 +104,7 @@ struct CarPlayStatusChip: View {
         }
         .foregroundStyle(chip.tint)
         .lineLimit(1)
+        .minimumScaleFactor(0.8)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Theme.background.opacity(0.88), in: Capsule())

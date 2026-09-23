@@ -188,7 +188,7 @@ struct TripEndCard: View {
     private func mergeRow(previous: TripRecord) -> some View {
         Button {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            withAnimation(.snappy(duration: 0.35)) {
+            withMotion(.snappy(duration: 0.35)) {
                 env.trip.mergeWithPrevious(id: record.id)
                 onMerged()
             }

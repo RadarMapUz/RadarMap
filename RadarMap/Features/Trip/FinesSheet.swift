@@ -126,7 +126,7 @@ struct FinesSheet: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .statCard()
-        .animation(.snappy(duration: 0.3), value: sum)
+        .motionAnimation(.snappy(duration: 0.3), value: sum)
     }
 
     // MARK: - Строка проезда
@@ -225,7 +225,7 @@ struct FinesSheet: View {
                                hint: String) -> some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            withAnimation(.snappy(duration: 0.3)) {
+            withMotion(.snappy(duration: 0.3)) {
                 env.trip.setFineOutcome(outcome, passID: item.pass.id,
                                         tripID: item.record.id)
             }
@@ -237,6 +237,7 @@ struct FinesSheet: View {
                 .background(tint.opacity(0.12), in: Capsule())
                 .contentShape(Capsule())
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .buttonStyle(PressableStyle())
         .accessibilityLabel(Text(hint))

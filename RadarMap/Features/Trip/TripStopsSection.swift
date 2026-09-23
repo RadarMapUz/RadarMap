@@ -75,7 +75,7 @@ struct TripStopsSection: View {
                 .foregroundStyle(Theme.textSecondary)
             Spacer()
             Text("\(stops.count)")
-                .font(.rounded(13, .bold))
+                .font(.rounded(15, .bold))
                 .foregroundStyle(Theme.accent)
         }
     }
@@ -88,12 +88,12 @@ struct TripStopsSection: View {
                     .foregroundStyle(Theme.textPrimary)
                 Spacer()
                 Button("Разделить здесь") { splitCandidate = stop }
-                    .font(.rounded(12, .semibold))
+                    .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.accent)
                     .buttonStyle(PressableStyle())
             }
             Text(subtitle(for: stop))
-                .font(.rounded(12))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textTertiary)
                 .lineLimit(2)
         }

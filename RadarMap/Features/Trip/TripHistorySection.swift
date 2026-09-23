@@ -38,13 +38,13 @@ struct TripHistorySection: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: title) {
                 Text(String(format: String(localized: "Всего: %lld"), total))
-                    .font(.rounded(12, .medium))
+                    .font(.rounded(15, .medium))
                     .foregroundStyle(Theme.textTertiary)
             }
 
             ForEach(TripHistory.dayGroups(records), id: \.day) { group in
                 Text(Formatting.dayTitle(group.day))
-                    .font(.rounded(12, .semibold))
+                    .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.textTertiary)
                     .textCase(.uppercase)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -76,7 +76,7 @@ struct TripHistorySection: View {
                     // только балл и шеврон — раньше там теснились три элемента.
                     HStack(spacing: 6) {
                         Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration))")
-                            .font(.rounded(12))
+                            .font(.rounded(15))
                             .foregroundStyle(Theme.textSecondary)
                         if record.camerasPassed > 0 {
                             Label("\(record.camerasPassed)", systemImage: "camera.fill")

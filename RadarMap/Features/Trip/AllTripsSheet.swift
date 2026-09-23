@@ -35,7 +35,7 @@ struct AllTripsSheet: View {
                                 .font(.rounded(17, .semibold))
                                 .foregroundStyle(Theme.textPrimary)
                             Text("Первая появится здесь сразу после того, как вы доедете.")
-                                .font(.rounded(13))
+                                .font(.rounded(15))
                                 .foregroundStyle(Theme.textSecondary)
                                 .multilineTextAlignment(.center)
                         }
@@ -46,7 +46,7 @@ struct AllTripsSheet: View {
                     }
                     ForEach(months, id: \.title) { month in
                         Text(month.title)
-                            .font(.rounded(12, .semibold))
+                            .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.textTertiary)
                             .textCase(.uppercase)
                             .padding(.top, 8)
@@ -111,7 +111,7 @@ struct AllTripsSheet: View {
                         .font(.rounded(14, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration))")
-                        .font(.rounded(12))
+                        .font(.rounded(15))
                         .foregroundStyle(Theme.textSecondary)
                 }
                 Spacer(minLength: 8)
@@ -124,7 +124,7 @@ struct AllTripsSheet: View {
                                     in: Capsule())
                 }
                 Image(systemName: "chevron.right")
-                    .font(.rounded(12, .semibold))
+                    .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.textTertiary)
             }
             .statCard(padding: 14, radius: Theme.cornerMedium)

@@ -27,27 +27,67 @@ final class TypeScaleTests: XCTestCase {
         }
     }
 
-    /// Соседние ступени — те, что были в коде чаще всего; движение на пункт.
+    /// Рабочие кегли карточек — движение на пункт, как и было.
     func testCommonSizesMoveByAtMostOnePoint() {
         XCTAssertEqual(Font.snapType(11), 12)
         XCTAssertEqual(Font.snapType(13), 12)
         XCTAssertEqual(Font.snapType(14), 15)
-        XCTAssertEqual(Font.snapType(18), 17)
-        XCTAssertEqual(Font.snapType(19), 20)
-        XCTAssertEqual(Font.snapType(23), 22)
+        XCTAssertEqual(Font.snapType(16), 15)
+        XCTAssertEqual(Font.snapType(18), 19)
+        XCTAssertEqual(Font.snapType(19), 19)
     }
 
     /// На равном расстоянии — вверх. За рулём крупнее безопаснее мельче.
     func testTiesRoundUp() {
-        XCTAssertEqual(Font.snapType(16), 17)   // до 15 и до 17 по пункту
-        XCTAssertEqual(Font.snapType(21), 22)   // до 20 и до 22 по пункту
+        XCTAssertEqual(Font.snapType(17), 19)   // до 15 и до 19 по два
+        XCTAssertEqual(Font.snapType(34), 38)   // до 30 и до 38 по четыре
+    }
+
+    /// Мельче двенадцати интерфейса НЕТ.
+    ///
+    /// Прежняя шкала начиналась с десяти, и на десятке жили 46 подписей. Это
+    /// не экономия места: подпись, которую не прочесть на ходу, занимает место
+    /// и не отдаёт ничего. Нижняя ступень поднята, и ниже неё не попасть
+    /// никаким числом.
+    func testNothingIsSmallerThanTwelve() {
+        for size in stride(from: CGFloat(1), through: 12, by: 0.5) {
+            XCTAssertEqual(Font.snapType(size), 12, "кегль \(size) ушёл ниже двенадцати")
+        }
+        XCTAssertFalse(Font.typeSteps.contains(10))
+    }
+
+    /// У героя есть куда вырасти.
+    ///
+    /// Прежний потолок 30 схлопывал всё выше себя: заголовок онбординга (44) и
+    /// число в плитке метрики (28) выходили одного размера, хотя разницу
+    /// закладывали трижды. Тест сторожит именно это — крупное обязано
+    /// отличаться от просто большого.
+    func testHeroSizesStayApartFromLargeOnes() {
+        XCTAssertEqual(Font.snapType(44), 46)
+        XCTAssertEqual(Font.snapType(28), 30)
+        XCTAssertNotEqual(Font.snapType(44), Font.snapType(28))
+        // Отношение «самое крупное / обычное» — не меньше трёх с половиной.
+        let ratio = (Font.typeSteps.last ?? 1) / (Font.typeSteps.first ?? 1)
+        XCTAssertGreaterThan(ratio, 3.5)
+    }
+
+    /// Ступеней стало меньше, а не больше: минимализм здесь измерим.
+    func testTheScaleStaysShort() {
+        XCTAssertLessThanOrEqual(Font.typeSteps.count, 7)
+        // И каждая ступень отличается от соседней ЗАМЕТНО — не на пункт.
+        // Прежние 15 и 17 давали 1,13: такую разницу глаз читает не как
+        // замысел, а как небрежность.
+        for (small, large) in zip(Font.typeSteps, Font.typeSteps.dropFirst()) {
+            XCTAssertGreaterThanOrEqual(large / small, 1.2,
+                                        "ступени \(small) и \(large) неразличимы на глаз")
+        }
     }
 
     /// За краями шкалы — её края, а не экстраполяция.
     func testOutOfRangeClampsToTheEnds() {
-        XCTAssertEqual(Font.snapType(4), 10)
-        XCTAssertEqual(Font.snapType(9), 10)
-        XCTAssertEqual(Font.snapType(48), 30)
+        XCTAssertEqual(Font.snapType(4), 12)
+        XCTAssertEqual(Font.snapType(9), 12)
+        XCTAssertEqual(Font.snapType(60), 46)
     }
 
     // MARK: - Системное «Размер текста» (Д2)

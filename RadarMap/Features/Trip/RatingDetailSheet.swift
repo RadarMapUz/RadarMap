@@ -139,7 +139,7 @@ struct RatingDetailSheet: View {
                        let previous = filled.dropLast().last?.rating,
                        last != previous {
                         Text(last > previous ? "+\(last - previous)" : "\(last - previous)")
-                            .font(.rounded(12, .bold).monospacedDigit())
+                            .font(.rounded(15, .bold).monospacedDigit())
                             .foregroundStyle(last > previous ? Theme.success : Theme.danger)
                     }
                 }
@@ -214,7 +214,7 @@ struct RatingDetailSheet: View {
                 }
                 Text(String(format: String(localized: "Поездок: %1$lld · %2$@"),
                             summary.trips, Formatting.distance(summary.distance)))
-                    .font(.rounded(12))
+                    .font(.rounded(15))
                     .foregroundStyle(Theme.textSecondary)
             }
             Spacer(minLength: 0)
@@ -312,7 +312,7 @@ struct RatingDetailSheet: View {
                 }
                 if let verdict = baselineVerdict {
                     Text(verdict)
-                        .font(.rounded(13, .medium))
+                        .font(.rounded(15, .medium))
                         .foregroundStyle(Theme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -443,7 +443,7 @@ struct RatingDetailSheet: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: "camera.metering.center.weighted")
-                    .font(.rounded(13, .bold))
+                    .font(.rounded(15, .bold))
                     .foregroundStyle(Theme.danger)
                     .frame(width: 32, height: 32)
                     .background(Theme.danger.opacity(0.12), in: Circle())
@@ -494,7 +494,7 @@ struct RatingDetailSheet: View {
     private func smoothnessRow(_ points: Double) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "waveform.path.ecg")
-                .font(.rounded(13, .bold))
+                .font(.rounded(15, .bold))
                 .foregroundStyle(Theme.warning)
                 .frame(width: 32, height: 32)
                 .background(Theme.warning.opacity(0.12), in: Circle())
@@ -517,11 +517,11 @@ struct RatingDetailSheet: View {
     private func restRow(title: String, points: Double) -> some View {
         HStack {
             Text(title)
-                .font(.rounded(12))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textTertiary)
             Spacer(minLength: 0)
             Text(Formatting.points(points))
-                .font(.rounded(13, .semibold).monospacedDigit())
+                .font(.rounded(15, .semibold).monospacedDigit())
                 .foregroundStyle(Theme.textTertiary)
         }
     }
@@ -573,7 +573,7 @@ struct RatingDetailSheet: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text(String(format: String(localized: "Все вклады (%lld)"), items.count))
-                            .font(.rounded(13, .semibold))
+                            .font(.rounded(15, .semibold))
                         Image(systemName: "chevron.right")
                             .font(.rounded(10, .bold))
                     }
@@ -671,7 +671,7 @@ struct RatingDetailSheet: View {
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.rounded(14, .semibold)).foregroundStyle(Theme.textPrimary)
-                Text(text).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
+                Text(text).font(.rounded(15)).foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -681,11 +681,11 @@ struct RatingDetailSheet: View {
     private func tipRow(_ text: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.rounded(13))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.success)
                 .padding(.top, 2)
             Text(text)
-                .font(.rounded(13))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
@@ -773,7 +773,7 @@ private struct ContributionRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.date.formatted(date: .abbreviated,
                                              time: item.isTrip ? .shortened : .omitted))
-                        .font(.rounded(13, .semibold))
+                        .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     Text("\(Formatting.distance(item.distanceMeters)) · "
                          + String(format: String(localized: "балл %lld"), item.score))
@@ -849,7 +849,7 @@ private struct AllContributionsView: View {
                 controls
                 if shown.isEmpty {
                     Text("В этом периоде нет поездок с превышениями — это хорошая новость.")
-                        .font(.rounded(13))
+                        .font(.rounded(15))
                         .foregroundStyle(Theme.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.top, 24)
@@ -883,7 +883,7 @@ private struct AllContributionsView: View {
                         withAnimation(.snappy(duration: 0.25)) { sort = item }
                     } label: {
                         Text(item.title)
-                            .font(.rounded(12, .semibold))
+                            .font(.rounded(15, .semibold))
                             .foregroundStyle(selected ? Theme.background : Theme.textSecondary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 7)
@@ -907,7 +907,7 @@ private struct AllContributionsView: View {
             } label: {
                 Label("Только с превышениями",
                       systemImage: onlyViolations ? "checkmark.circle.fill" : "circle")
-                    .font(.rounded(12, .medium))
+                    .font(.rounded(15, .medium))
                     .foregroundStyle(onlyViolations ? Theme.accent : Theme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
@@ -922,7 +922,7 @@ private struct AllContributionsView: View {
     private func total(_ shown: [RatingContribution]) -> some View {
         HStack {
             Text(String(format: String(localized: "Показано вкладов: %lld"), shown.count))
-                .font(.rounded(12))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textTertiary)
             Spacer(minLength: 0)
             Text(Formatting.points(shown.reduce(0) { $0 + $1.points }))

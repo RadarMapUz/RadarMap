@@ -36,7 +36,7 @@ struct TripEndCard: View {
                         .font(.rounded(17, .bold))
                         .foregroundStyle(Theme.textPrimary)
                     Text(moneyLine)
-                        .font(.rounded(12, .semibold))
+                        .font(.rounded(15, .semibold))
                         .foregroundStyle(moneyTint)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -44,7 +44,7 @@ struct TripEndCard: View {
                 Spacer(minLength: 0)
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
-                        .font(.rounded(12, .bold))
+                        .font(.rounded(15, .bold))
                         .foregroundStyle(Theme.textTertiary)
                         .frame(width: 32, height: 32)
                         .background(Theme.surface, in: Circle())
@@ -195,13 +195,13 @@ struct TripEndCard: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "arrow.triangle.merge")
-                    .font(.rounded(13, .bold))
+                    .font(.rounded(15, .bold))
                     .foregroundStyle(Theme.accent)
                     .frame(width: 30, height: 30)
                     .background(Theme.accent.opacity(0.14), in: Circle())
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Похоже, это продолжение прошлой")
-                        .font(.rounded(13, .semibold))
+                        .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     Text(String(format: String(localized: "Объединить с поездкой в %@"),
                                 previous.startedAt.formatted(date: .omitted, time: .shortened)))

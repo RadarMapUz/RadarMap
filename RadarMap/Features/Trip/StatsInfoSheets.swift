@@ -104,13 +104,13 @@ struct SavingsInfoSheet: View {
                 ForEach(sources.prefix(AppConfig.fineSourcesVisibleRows)) { source in
                     HStack(spacing: 10) {
                         Image(systemName: "camera.metering.center.weighted")
-                            .font(.rounded(12, .bold))
+                            .font(.rounded(15, .bold))
                             .foregroundStyle(Theme.danger)
                             .frame(width: 28, height: 28)
                             .background(Theme.danger.opacity(0.12), in: Circle())
                         VStack(alignment: .leading, spacing: 1) {
                             Text(source.location)
-                                .font(.rounded(13, .semibold))
+                                .font(.rounded(15, .semibold))
                                 .foregroundStyle(Theme.textPrimary)
                                 .lineLimit(1)
                             Text(String(format: String(localized: "штрафуемых проездов: %lld"),
@@ -129,11 +129,11 @@ struct SavingsInfoSheet: View {
                 if !rest.isEmpty {
                     HStack {
                         Text(String(format: String(localized: "Остальные камеры: %lld"), rest.count))
-                            .font(.rounded(12))
+                            .font(.rounded(15))
                             .foregroundStyle(Theme.textTertiary)
                         Spacer(minLength: 0)
                         Text(Formatting.money(rest.reduce(0) { $0 + $1.sum }))
-                            .font(.rounded(13, .semibold).monospacedDigit())
+                            .font(.rounded(15, .semibold).monospacedDigit())
                             .foregroundStyle(Theme.textTertiary)
                     }
                 }
@@ -161,7 +161,7 @@ struct SavingsInfoSheet: View {
                 .foregroundStyle(Theme.textPrimary)
             Spacer()
             Text(brv == 1 ? String(localized: "1 БРВ") : String(format: String(localized: "%lld БРВ"), Int(brv)))
-                .font(.rounded(12, .medium))
+                .font(.rounded(15, .medium))
                 .foregroundStyle(Theme.textTertiary)
             Text(Formatting.money(brv * FineSchedule.brv))
                 .font(.rounded(14, .bold).monospacedDigit())
@@ -173,7 +173,7 @@ struct SavingsInfoSheet: View {
     private var method: some View {
         infoCard(title: String(localized: "Как считаем")) {
             Text("Берём каждый проезд камеры, у которой известен лимит дороги, и сравниваем с ним скорость в точке фиксации. Попал в штрафную ступень — прибавляем её сумму к риску. Проезды камер без известного лимита не считаем нарушением: выдумывать превышение мы не вправе.")
-                .font(.rounded(13))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             Text("Это оценка, а не выписанные штрафы: повторность нарушений и допуски конкретных камер нам неизвестны.")
@@ -219,7 +219,7 @@ struct AchievementInfoSheet: View {
                 .foregroundStyle(Theme.textPrimary)
 
             Text(badge.detail)
-                .font(.rounded(13))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 28)
@@ -251,7 +251,7 @@ struct AchievementInfoSheet: View {
                         .padding(.horizontal, 40)
                     Text(String(format: String(localized: "%@ из %@"),
                                 Self.count(badge.progress), Self.count(badge.target)))
-                        .font(.rounded(12, .semibold).monospacedDigit())
+                        .font(.rounded(15, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textTertiary)
                 }
                 .padding(.top, 2)
@@ -331,7 +331,7 @@ struct AlertRecallInfoSheet: View {
     private func row(_ title: String, _ value: String, _ tint: Color) -> some View {
         HStack {
             Text(title)
-                .font(.rounded(13, .medium))
+                .font(.rounded(15, .medium))
                 .foregroundStyle(Theme.textSecondary)
             Spacer(minLength: 8)
             Text(value)
@@ -345,15 +345,15 @@ struct AlertRecallInfoSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(String(localized: "Как считаем"))
             Text("«Проехали» — камера, мимо которой вы прошли вплотную: ближе 40 метров от неё. Это география, а не наше решение — поэтому цифру нельзя подкрутить, ослабив собственные фильтры.")
-                .font(.rounded(13))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             Text("«Названо заранее» — предупреждение прозвучало дальше 80 метров, то есть ещё было время отпустить газ. Если оно прозвучало ближе, мы считаем это отдельно: формально сказали, а по делу — нет.")
-                .font(.rounded(13))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             Text("«Впустую» — сказали о камере, мимо которой вы так и не проехали. Само по себе это не ошибка: вы могли свернуть. Но если таких много, значит приложение пугает зря.")
-                .font(.rounded(13))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -364,7 +364,7 @@ struct AlertRecallInfoSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(String(localized: "Чего эта цифра не знает"))
             Text("Почему именно приложение промолчало, счётчик не разбирает: причину пришлось бы спрашивать у самой ответственной части кода, и ради счётчика её переписывать нельзя. «Свои» камеры, о которых мы молчим намеренно, тоже попадают в молчание — вы разрешили эту тишину сами.")
-                .font(.rounded(12))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             Text("Наружу уходят только эти суммы. Ни координат камер, ни времени проездов в отчёт не попадает.")

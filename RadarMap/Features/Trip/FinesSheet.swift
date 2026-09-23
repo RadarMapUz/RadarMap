@@ -142,7 +142,7 @@ struct FinesSheet: View {
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: item.pass.kind.symbolName)
-                        .font(.rounded(13, .bold))
+                        .font(.rounded(15, .bold))
                         .foregroundStyle(.white)
                         .frame(width: 34, height: 34)
                         .background(item.pass.kind.tint.gradient, in: Circle())
@@ -184,7 +184,7 @@ struct FinesSheet: View {
                                   Formatting.money(item.fine))
                          : String(format: String(localized: "риск ≈ %@"),
                                   Formatting.money(item.fine)))
-                        .font(.rounded(13, .bold))
+                        .font(.rounded(15, .bold))
                         .strikethrough(outcome == .dismissed)
                         .foregroundStyle(outcome == .pending ? Theme.danger
                                        : outcome == .paid ? Theme.warning
@@ -231,7 +231,7 @@ struct FinesSheet: View {
             }
         } label: {
             Label(title, systemImage: symbol)
-                .font(.rounded(12, .semibold))
+                .font(.rounded(15, .semibold))
                 .foregroundStyle(tint)
                 .padding(.horizontal, 11).padding(.vertical, 7)
                 .background(tint.opacity(0.12), in: Capsule())
@@ -256,7 +256,7 @@ struct FinesSheet: View {
                 .foregroundStyle(Theme.textPrimary)
                 .multilineTextAlignment(.center)
             Text("Отмечать «не пришёл» можно только по сохранённым поездкам — история хранит последние 50.")
-                .font(.rounded(12))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
         }

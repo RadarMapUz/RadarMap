@@ -140,7 +140,7 @@ struct PeriodMapSheet: View {
                             .foregroundStyle(Theme.textPrimary)
                             .lineLimit(2)
                         Text(passCount(marker))
-                            .font(.rounded(12))
+                            .font(.rounded(15))
                             .foregroundStyle(Theme.textSecondary)
                     }
                     Spacer(minLength: 8)
@@ -160,11 +160,11 @@ struct PeriodMapSheet: View {
                         Label(String(format: String(localized: "превышений: %lld"),
                                      marker.overTimes),
                               systemImage: "exclamationmark.triangle.fill")
-                            .font(.rounded(12, .semibold))
+                            .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.danger)
                     } else {
                         Label("все проезды в лимите", systemImage: "checkmark.seal.fill")
-                            .font(.rounded(12, .semibold))
+                            .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.success)
                     }
                     Spacer(minLength: 0)
@@ -184,7 +184,7 @@ struct PeriodMapSheet: View {
                 .foregroundStyle(marker.hasViolation ? Theme.danger : Theme.success)
             if let limit = marker.limitKmh {
                 Text("/ \(limit)")
-                    .font(.rounded(13, .semibold).monospacedDigit())
+                    .font(.rounded(15, .semibold).monospacedDigit())
                     .foregroundStyle(Theme.textTertiary)
             }
             Text("км/ч")

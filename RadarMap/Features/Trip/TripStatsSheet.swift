@@ -64,6 +64,9 @@ struct TripStatsSheet: View {
     @State private var tripsExpanded = false
     /// Раскрыты ли «Детали периода» (KPI, график по дням, часы риска).
     @State private var detailsExpanded = false
+    /// «За всё время» свёрнут по умолчанию: экран открывают ради текущего
+    /// периода, а пожизненные цифры смотрят раз в месяц.
+    @State private var lifetimeExpanded = false
     /// «Это разные» по карточке склейки — прячем её сразу (Storage не observable).
     @State private var mergeSuggestionHidden = false
     /// Полноэкранная карта проездов (item — чтобы передать фокус зоны риска).
@@ -149,16 +152,12 @@ struct TripStatsSheet: View {
                     contributionRow
                         .entrance(5, appeared)
 
+                    // «За всё время» — три блока в одном сворачивающемся, тем
+                    // же приёмом, что «Детали периода». Экран Итогов открывают
+                    // ради ТЕКУЩЕГО периода; пожизненные цифры, охват и
+                    // достижения читают раз в месяц, а место занимали всегда.
                     if !trip.lifetime.isEmpty {
-                        LabeledDivider(title: String(localized: "За всё время"))
-                            .entrance(5, appeared)
-                        lifetimeStrip(trip: trip)
-                            .entrance(5, appeared)
-                        // Охват — цифра пожизненная, а не за период: на неделе
-                        // это три камеры, и доля от трёх ничего не доказывает.
-                        AlertRecallCard(tally: trip.alertRecall) { showRecallInfo = true }
-                            .entrance(5, appeared)
-                        achievementsSection(trip: trip)
+                        lifetimeSection(trip: trip)
                             .entrance(5, appeared)
                     }
                     } header: {
@@ -349,7 +348,7 @@ struct TripStatsSheet: View {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 } label: {
                     Text(item.title)
-                        .font(.rounded(13, .semibold))
+                        .font(.rounded(15, .semibold))
                         .foregroundStyle(selected ? Theme.background : Theme.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
@@ -390,7 +389,7 @@ struct TripStatsSheet: View {
                           action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.rounded(13, .bold))
+                .font(.rounded(15, .bold))
                 .foregroundStyle(enabled ? Theme.accent : Theme.textTertiary.opacity(0.4))
                 // Голая стрелка, мишень прежняя: капсулы-подложки делали из
                 // строки периода третий ряд «кнопочной» мебели подряд.
@@ -483,7 +482,7 @@ struct TripStatsSheet: View {
                     }
                 }
                 Text(heroSubtitle(summary))
-                    .font(.rounded(12))
+                    .font(.rounded(15))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)               // «за рулём» уезжало на вторую
                     .minimumScaleFactor(0.75)   // строку и рвало ритм карточки
@@ -497,7 +496,7 @@ struct TripStatsSheet: View {
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
-                .font(.rounded(13, .semibold))
+                .font(.rounded(15, .semibold))
                 .foregroundStyle(Theme.textTertiary)
         }
     }
@@ -528,12 +527,12 @@ struct TripStatsSheet: View {
         let tint = Self.insightTint(insight.kind)
         return HStack(alignment: .top, spacing: 12) {
             Image(systemName: insight.icon)
-                .font(.rounded(13, .bold))
+                .font(.rounded(15, .bold))
                 .foregroundStyle(tint)
                 .frame(width: 30, height: 30)
                 .background(tint.opacity(0.14), in: Circle())
             Text(insight.text)
-                .font(.rounded(13, .medium))
+                .font(.rounded(15, .medium))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -597,7 +596,7 @@ struct TripStatsSheet: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(ok ? String(localized: "Зона риска")
                                     : String(localized: "Возможные штрафы"))
-                                .font(.rounded(13, .medium))
+                                .font(.rounded(15, .medium))
                                 .foregroundStyle(Theme.textSecondary)
                             Text(ok ? String(localized: "0 штрафов")
                                     : Formatting.money(summary.fineRisk))
@@ -620,7 +619,7 @@ struct TripStatsSheet: View {
                         Spacer(minLength: 0)
                         if ok {
                             Image(systemName: "chevron.right")
-                                .font(.rounded(13, .semibold))
+                                .font(.rounded(15, .semibold))
                                 .foregroundStyle(Theme.textTertiary)
                         }
                     }
@@ -664,7 +663,7 @@ struct TripStatsSheet: View {
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "envelope.badge.clock")
-                        .font(.rounded(13, .bold))
+                        .font(.rounded(15, .bold))
                         .foregroundStyle(Theme.warning)
                         .frame(width: 30, height: 30)
                         .background(Theme.warning.opacity(0.12), in: Circle())
@@ -679,7 +678,7 @@ struct TripStatsSheet: View {
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right")
-                        .font(.rounded(12, .bold))
+                        .font(.rounded(15, .bold))
                         .foregroundStyle(Theme.textTertiary)
                 }
                 .statCard(padding: 12, radius: Theme.cornerMedium)
@@ -850,14 +849,14 @@ struct TripStatsSheet: View {
     private func tripChip(_ record: TripRecord) -> some View {
         HStack(spacing: 8) {
             Text(record.startedAt.formatted(date: .omitted, time: .shortened))
-                .font(.rounded(12, .bold))
+                .font(.rounded(15, .bold))
                 .foregroundStyle(Theme.textPrimary)
             Text(Formatting.distance(record.distanceMeters))
-                .font(.rounded(12, .medium))
+                .font(.rounded(15, .medium))
                 .foregroundStyle(Theme.textSecondary)
             if let score = record.score {
                 Text("\(Int(score))")
-                    .font(.rounded(12, .heavy).monospacedDigit())
+                    .font(.rounded(15, .heavy).monospacedDigit())
                     .foregroundStyle(TripHistorySection.scoreColor(Int(score)))
             }
         }
@@ -996,7 +995,7 @@ struct TripStatsSheet: View {
                 if let busiest = summary.busiestDay, summary.busiestDayKm > 0 {
                     Text(String(format: String(localized: "Больше всего — %@"),
                                 Formatting.dayTitle(busiest)))
-                        .font(.rounded(12, .semibold))
+                        .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.accent)
                 }
             }
@@ -1041,6 +1040,48 @@ struct TripStatsSheet: View {
     /// карта); эти три блока — справка для любопытных, и развёрнутые всегда они
     /// уводили список поездок за два экрана прокрутки. Свёрнутые они ещё и
     /// бесплатны: dailyKm не считается, пока раскрывашку не открыли.
+    /// Пожизненный хвост Итогов одним сворачиваемым блоком.
+    private func lifetimeSection(trip: TripStats) -> some View {
+        VStack(spacing: 16) {
+            Button {
+                withAnimation(.snappy(duration: 0.3)) { lifetimeExpanded.toggle() }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "infinity")
+                        .font(.rounded(15, .bold))
+                        .foregroundStyle(Theme.accent)
+                        .frame(width: 30, height: 30)
+                        .background(Theme.accent.opacity(0.12), in: Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("За всё время")
+                            .font(.rounded(15, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                        Text("Пожизненные цифры, охват предупреждений, достижения")
+                            .font(.rounded(12))
+                            .foregroundStyle(Theme.textTertiary)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .font(.rounded(15, .bold))
+                        .foregroundStyle(Theme.textTertiary)
+                        .rotationEffect(.degrees(lifetimeExpanded ? 180 : 0))
+                }
+                .statCard(padding: 14, radius: Theme.cornerMedium)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(lifetimeExpanded
+                                     ? String(localized: "Скрыть цифры за всё время")
+                                     : String(localized: "Показать цифры за всё время")))
+            if lifetimeExpanded {
+                lifetimeStrip(trip: trip)
+                AlertRecallCard(tally: trip.alertRecall) { showRecallInfo = true }
+                achievementsSection(trip: trip)
+            }
+        }
+    }
+
     private func periodDetails(summary: PeriodSummary) -> some View {
         VStack(spacing: 16) {
             Button {
@@ -1048,7 +1089,7 @@ struct TripStatsSheet: View {
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "chart.bar.xaxis")
-                        .font(.rounded(13, .bold))
+                        .font(.rounded(15, .bold))
                         .foregroundStyle(Theme.accent)
                         .frame(width: 30, height: 30)
                         .background(Theme.accent.opacity(0.12), in: Circle())
@@ -1062,7 +1103,7 @@ struct TripStatsSheet: View {
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.down")
-                        .font(.rounded(12, .bold))
+                        .font(.rounded(15, .bold))
                         .foregroundStyle(Theme.textTertiary)
                         .rotationEffect(.degrees(detailsExpanded ? 180 : 0))
                 }
@@ -1121,7 +1162,7 @@ struct TripStatsSheet: View {
                     HStack(spacing: 6) {
                         Text(String(format: String(localized: "Показать все поездки (%lld)"),
                                     all.count))
-                            .font(.rounded(13, .semibold))
+                            .font(.rounded(15, .semibold))
                         Image(systemName: "chevron.down")
                             .font(.rounded(10, .bold))
                     }
@@ -1174,7 +1215,7 @@ struct TripStatsSheet: View {
                                 pair.previous.startedAt.formatted(date: .omitted, time: .shortened),
                                 pair.next.startedAt.formatted(date: .omitted, time: .shortened),
                                 Formatting.duration(gap)))
-                        .font(.rounded(12))
+                        .font(.rounded(15))
                         .foregroundStyle(Theme.textSecondary)
                 }
                 Spacer(minLength: 0)
@@ -1184,7 +1225,7 @@ struct TripStatsSheet: View {
                     merge(next: pair.next)
                 } label: {
                     Text("Объединить")
-                        .font(.rounded(13, .semibold))
+                        .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.background)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
@@ -1197,7 +1238,7 @@ struct TripStatsSheet: View {
                     withAnimation(.snappy(duration: 0.3)) { mergeSuggestionHidden = true }
                 } label: {
                     Text("Это разные")
-                        .font(.rounded(13, .semibold))
+                        .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
@@ -1256,7 +1297,7 @@ struct TripStatsSheet: View {
             } label: {
                 HStack(spacing: 6) {
                     Text("Все поездки")
-                        .font(.rounded(13, .semibold))
+                        .font(.rounded(15, .semibold))
                     Image(systemName: "chevron.right")
                         .font(.rounded(10, .bold))
                 }
@@ -1289,7 +1330,7 @@ struct TripStatsSheet: View {
                     .background(Theme.accent.opacity(0.12), in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Ваши отметки за 30 дней")
-                        .font(.rounded(12))
+                        .font(.rounded(15))
                         .foregroundStyle(Theme.textSecondary)
                     Text(mine.confirmed > 0
                          ? String(format: String(localized: "%lld · подтвердили другие: %lld"),
@@ -1363,7 +1404,7 @@ struct TripStatsSheet: View {
                             .foregroundStyle(Theme.textTertiary)
                             .lineLimit(1)
                         Text(badge.title)
-                            .font(.rounded(13, .bold))
+                            .font(.rounded(15, .bold))
                             .foregroundStyle(Theme.textPrimary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
@@ -1381,7 +1422,7 @@ struct TripStatsSheet: View {
                         .clipShape(Capsule())
                 }
                 Text(badge.progressText)
-                    .font(.rounded(12, .semibold).monospacedDigit())
+                    .font(.rounded(15, .semibold).monospacedDigit())
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
             }
@@ -1426,7 +1467,7 @@ struct TripStatsSheet: View {
                 .font(.rounded(16, .bold))
                 .foregroundStyle(Theme.textPrimary)
             Text("Нажмите «Начать поездку» на карте — соберём трек, скорость у каждой камеры и статистику.")
-                .font(.rounded(13))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
@@ -1453,7 +1494,7 @@ struct TripStatsSheet: View {
                 } label: {
                     Text(String(format: String(localized: "Показать: %@"),
                                 period.rangeTitle(containing: nearest)))
-                        .font(.rounded(13, .semibold))
+                        .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.accent)
                         .padding(.horizontal, 14).padding(.vertical, 8)
                         .background(Theme.accent.opacity(0.12), in: Capsule())

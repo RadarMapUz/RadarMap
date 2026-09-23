@@ -38,7 +38,7 @@ struct PassRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: pass.kind.symbolName)
-                .font(.rounded(13, .bold))
+                .font(.rounded(15, .bold))
                 .foregroundStyle(.white)
                 .frame(width: 34, height: 34)
                 .background(pass.kind.tint.gradient, in: Circle())
@@ -308,13 +308,13 @@ struct TripDetailContent: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
                     Image(systemName: "chart.pie.fill")
-                        .font(.rounded(13, .bold))
+                        .font(.rounded(15, .bold))
                         .foregroundStyle(Theme.danger)
                         .frame(width: 32, height: 32)
                         .background(Theme.danger.opacity(0.12), in: Circle())
                     Text(String(format: String(localized: "Вклад в рейтинг %@"),
                                 rating.periodCaption))
-                        .font(.rounded(13, .medium))
+                        .font(.rounded(15, .medium))
                         .foregroundStyle(Theme.textSecondary)
                     Spacer(minLength: 8)
                     Text(Formatting.points(item.points))
@@ -376,7 +376,7 @@ struct TripDetailContent: View {
                 Image(systemName: "point.bottomleft.forward.to.point.topright.scurvepath")
                     .foregroundStyle(Theme.textTertiary)
                 Text("Трек не записан — появится у новых поездок")
-                    .font(.rounded(13))
+                    .font(.rounded(15))
                     .foregroundStyle(Theme.textSecondary)
             }
             .frame(maxWidth: .infinity)
@@ -412,11 +412,11 @@ struct TripDetailContent: View {
                     if risk > 0 {
                         Label("возможные штрафы ≈ \(Formatting.money(risk))",
                               systemImage: "exclamationmark.triangle.fill")
-                            .font(.rounded(12, .semibold))
+                            .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.danger)
                     } else {
                         Label("Без риска штрафов", systemImage: "checkmark.shield.fill")
-                            .font(.rounded(12, .semibold))
+                            .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.success)
                     }
                 }
@@ -457,14 +457,14 @@ struct TripDetailContent: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: item.icon)
-                    .font(.rounded(12, .bold))
+                    .font(.rounded(15, .bold))
                     .foregroundStyle(returned ? Theme.success : Theme.danger)
                     .frame(width: 30, height: 30)
                     .background((returned ? Theme.success : Theme.danger).opacity(0.12),
                                 in: Circle())
                 VStack(alignment: .leading, spacing: 1) {
                     Text(item.title)
-                        .font(.rounded(13, .semibold))
+                        .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
                     if let detail = item.detail {

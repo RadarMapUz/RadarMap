@@ -41,6 +41,8 @@ struct PassDetailView: View {
     @State private var whatIf: (tripScore: Int, periodRating: Int?, currentRating: Int?)?
     /// Развёрнутая карта проезда.
     @State private var showsFullMap = false
+    /// Объяснения раскрыты. По умолчанию нет — экран начинается с ответа.
+    @State private var showsDetails = false
 
     init(pass: PassedCamera, track: [TrackPoint] = [], record: TripRecord? = nil,
          days: [TripDay] = [], interval: DateInterval? = nil, period: StatsPeriod? = nil) {
@@ -80,11 +82,8 @@ struct PassDetailView: View {
         ScrollView {
             VStack(spacing: 16) {
                 map
-                speedCard
-                costCard
-                whatIfCard
-                methodCard
-                missedAlertCard
+                answerCard
+                details
             }
             .padding(20)
         }
@@ -147,7 +146,7 @@ struct PassDetailView: View {
             // нажатий не перехватывает: работает вся площадь карты.
             .overlay(alignment: .topTrailing) {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.rounded(12, .bold))
+                    .font(.rounded(15, .bold))
                     .foregroundStyle(Theme.textPrimary)
                     .padding(7)
                     .background(.ultraThinMaterial, in: Circle())
@@ -202,9 +201,24 @@ struct PassDetailView: View {
                       markers: fullMapMarker.map { [$0] } ?? [])
     }
 
-    // MARK: Скорость против лимита
+    // MARK: Ответ экрана — одна карточка
 
-    private var speedCard: some View {
+    /// Экран отвечает на один вопрос: «что было у этой камеры и во сколько это
+    /// обошлось». Раньше ответ был размазан по шести блокам — карта, скорость,
+    /// цена, «а если бы», «как считаем», «что-то не так», — и из них только
+    /// первые два отвечали, а остальные объясняли. Объяснения уехали под
+    /// «Подробнее»: они нужны один раз, а не при каждом открытии.
+    private var answerCard: some View {
+        VStack(spacing: 14) {
+            speedSection
+            costSection
+        }
+        .statCard()
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 18)
+    }
+
+    private var speedSection: some View {
         VStack(spacing: 14) {
             HStack(spacing: 12) {
                 Image(systemName: pass.kind.symbolName)
@@ -214,7 +228,7 @@ struct PassDetailView: View {
                     .background(pass.kind.tint.gradient, in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text(pass.location.isEmpty ? pass.kind.displayName : pass.location)
-                        .font(.rounded(16, .bold))
+                        .font(.rounded(19, .bold))
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(2)
                     Text("\(pass.kind.displayName) · \(pass.date.formatted(date: .abbreviated, time: .shortened))")
@@ -232,12 +246,16 @@ struct PassDetailView: View {
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text("ваша скорость")
-                        .font(.rounded(11))
+                        .font(.rounded(12))
                         .foregroundStyle(Theme.textTertiary)
+                    // Герой карточки: ради этого числа экран и открывают.
+                    // Кегль 30 против 12 у подписи — иерархия видна с одного
+                    // взгляда, а не вычитывается.
                     Text("\(shownSpeedKmh) км/ч")
-                        .font(.rounded(22, .heavy).monospacedDigit())
+                        .font(.rounded(30, .heavy).monospacedDigit())
                         .foregroundStyle(honestyColor)
                         .contentTransition(.numericText())
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 statusChip
@@ -256,9 +274,6 @@ struct PassDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .statCard()
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 18)
     }
 
     @ViewBuilder private var statusChip: some View {
@@ -266,7 +281,7 @@ struct PassDetailView: View {
         if fine > 0 {
             VStack(alignment: .trailing, spacing: 2) {
                 Label("превышение", systemImage: "exclamationmark.triangle.fill")
-                    .font(.rounded(12, .bold))
+                    .font(.rounded(15, .bold))
                     .foregroundStyle(Theme.danger)
                 if let over = shownOverKmh, over > 0 {
                     Text(String(format: String(localized: "на %lld км/ч"), over))
@@ -279,14 +294,14 @@ struct PassDetailView: View {
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else if pass.limitKmh != nil {
             Label("в лимите", systemImage: "checkmark.shield.fill")
-                .font(.rounded(12, .bold))
+                .font(.rounded(15, .bold))
                 .foregroundStyle(Theme.success)
                 .padding(.horizontal, 10).padding(.vertical, 8)
                 .background(Theme.success.opacity(0.12),
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else {
             Label("лимит неизвестен", systemImage: "questionmark.circle")
-                .font(.rounded(12, .bold))
+                .font(.rounded(15, .bold))
                 .foregroundStyle(Theme.textTertiary)
                 .padding(.horizontal, 10).padding(.vertical, 8)
                 .background(Theme.stroke, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -295,14 +310,16 @@ struct PassDetailView: View {
 
     // MARK: Во сколько обошёлся
 
-    /// Две цены одного проезда: баллы рейтинга и деньги. Раньше их приходилось
-    /// собирать по двум разным экранам.
-    @ViewBuilder private var costCard: some View {
+    /// Две цены одного проезда: баллы рейтинга и деньги. Живут В ТОЙ ЖЕ
+    /// карточке, что и скорость: это не отдельная тема, это вторая половина
+    /// одного ответа. Отдельной карточкой они добавляли на экран границу,
+    /// заголовок и тень — три предмета ради двух строк.
+    @ViewBuilder private var costSection: some View {
         let penalty = overKmh.map { DrivingScore.penaltyPoints(overKmh: $0) } ?? 0
         let fine = overKmh.map { FineSchedule.fine(overKmh: $0) } ?? 0
         if penalty > 0 || fine > 0 {
+            Rectangle().fill(Theme.stroke).frame(height: 1)
             VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(String(localized: "Во сколько обошёлся"))
                 if penalty > 0 {
                     costRow(icon: "gauge.with.needle", tint: Theme.danger,
                             title: String(localized: "Снято с балла поездки"),
@@ -322,8 +339,29 @@ struct PassDetailView: View {
                     }
                 }
             }
-            .statCard()
         }
+    }
+
+    // MARK: Подробнее — то, что объясняет, а не отвечает
+
+    /// «А если бы в лимите», метод расчёта и жалоба «не предупредила» нужны
+    /// один раз: разобраться. Держать их раскрытыми при каждом открытии —
+    /// значит каждый раз прятать ответ под объяснениями.
+    private var details: some View {
+        DisclosureGroup(isExpanded: $showsDetails) {
+            VStack(spacing: 16) {
+                whatIfCard
+                methodCard
+                missedAlertCard
+            }
+            .padding(.top, 12)
+        } label: {
+            Text("Подробнее")
+                .font(.rounded(15, .semibold))
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .tint(Theme.textSecondary)
+        .padding(.horizontal, 4)
     }
 
     private var fineTitle: String {
@@ -363,7 +401,7 @@ struct PassDetailView: View {
             }
         } label: {
             Label(title, systemImage: symbol)
-                .font(.rounded(12, .semibold))
+                .font(.rounded(15, .semibold))
                 .foregroundStyle(tint)
                 .padding(.horizontal, 11).padding(.vertical, 7)
                 .background(tint.opacity(0.12), in: Capsule())
@@ -375,12 +413,12 @@ struct PassDetailView: View {
     private func costRow(icon: String, tint: Color, title: String, value: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.rounded(13, .bold))
+                .font(.rounded(15, .bold))
                 .foregroundStyle(tint)
                 .frame(width: 32, height: 32)
                 .background(tint.opacity(0.12), in: Circle())
             Text(title)
-                .font(.rounded(13, .medium))
+                .font(.rounded(15, .medium))
                 .foregroundStyle(Theme.textSecondary)
             Spacer(minLength: 8)
             Text(value)
@@ -402,7 +440,7 @@ struct PassDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 SectionHeader(String(localized: "А если бы в лимите"))
                 Text(String(format: String(localized: "Пройди вы эту камеру на %lld км/ч:"), limit))
-                    .font(.rounded(12))
+                    .font(.rounded(15))
                     .foregroundStyle(Theme.textSecondary)
                 if let score = record.score {
                     whatIfRow(title: String(localized: "балл поездки"),
@@ -421,7 +459,7 @@ struct PassDetailView: View {
     private func whatIfRow(title: String, from: Int, to: Int) -> some View {
         HStack(spacing: 10) {
             Text(title)
-                .font(.rounded(13, .medium))
+                .font(.rounded(15, .medium))
                 .foregroundStyle(Theme.textSecondary)
             Spacer(minLength: 8)
             Text("\(from)")
@@ -443,7 +481,7 @@ struct PassDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(String(localized: "Как мы считаем скорость"))
             Text("Берём минимальную скорость в зоне 80 м перед камерой — так же, как измеряет она сама. Разгон сразу после проезда в расчёт не идёт.")
-                .font(.rounded(13))
+                .font(.rounded(15))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             Text("Лимит дороги — из OpenStreetMap, но ниже 60 км/ч мы по нему не судим: камеры в городе с меньшей скорости не фиксируют. Штраф — оценка первой фиксации: повторность нарушений и допуски конкретной камеры нам неизвестны.")
@@ -466,11 +504,11 @@ struct PassDetailView: View {
             SectionHeader(String(localized: "Что-то не так с этим проездом?"))
             if missedSent {
                 Label(String(localized: "Спасибо — разберёмся"), systemImage: "checkmark.circle.fill")
-                    .font(.rounded(13, .semibold))
+                    .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.success)
             } else {
                 Text("Если приложение промолчало об этой камере — скажите. Мы приложим место, скорость и лимит: без них найти причину невозможно.")
-                    .font(.rounded(12))
+                    .font(.rounded(15))
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button {

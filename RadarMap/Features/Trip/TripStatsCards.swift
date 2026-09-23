@@ -144,7 +144,7 @@ struct RiskHoursCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(title: String(localized: "Когда рискуете")) {
                     Text(peak.title)
-                        .font(.rounded(12, .semibold))
+                        .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.danger)
                 }
                 HStack(alignment: .bottom, spacing: 8) {
@@ -198,7 +198,7 @@ struct AlertRecallCard: View {
                 SectionHeader(title: String(localized: "Предупреждения")) {
                     Button(action: onExplain) {
                         Image(systemName: "info.circle")
-                            .font(.rounded(13, .semibold))
+                            .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.textTertiary)
                     }
                     .buttonStyle(.plain)
@@ -211,7 +211,7 @@ struct AlertRecallCard: View {
                                          ? Theme.success : Theme.warning)
                     Text(String(format: String(localized: "камер названо заранее — %1$lld из %2$lld"),
                                 tally.warned, tally.passed))
-                        .font(.rounded(12))
+                        .font(.rounded(15))
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

@@ -37,7 +37,6 @@ enum Storage {
         case hotspotsLastCheck      // дата последней проверки горячих точек треног
         case hasCompletedOnboarding // онбординг пройден (@AppStorage)
         case reviewAskedVersion     // версия, в которой уже просили оценку App Store
-        case hintDashboardShown     // разовая подсказка «тап — спидометр» показана
         case hintTogglesShown       // разовая подсказка «долгий тап — переключатели» показана
         case hintRadarShown         // разовая подсказка «жёлтая кнопка — радар» показана
         case hintSilenceShown       // разовая подсказка «знакомые камеры не называю вслух» показана

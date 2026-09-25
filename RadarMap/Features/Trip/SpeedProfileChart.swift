@@ -26,6 +26,10 @@ struct SpeedProfileChart: View {
         let km: Double
         let speedKmh: Double
         let color: Color
+        /// Превышение. Второй носитель состояния: на точке 11 pt глиф не
+        /// читается, поэтому различает ФОРМА — залитая точка против кольца.
+        /// Цвет остаётся, но перестаёт быть единственным (см. Theme.symbol).
+        let isOver: Bool
     }
 
     /// Профиль скорости: дистанция вдоль трека → скорость (точки трека уже прорежены,
@@ -61,7 +65,9 @@ struct SpeedProfileChart: View {
             return PassMark(id: pass.id,
                             km: samples[bestIndex].km,
                             speedKmh: samples[bestIndex].speedKmh,
-                            color: PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh))
+                            color: PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh),
+                            isOver: PassStyle.symbol(speed: pass.speedKmh,
+                                                     limit: pass.limitKmh) != nil)
         }
     }
 
@@ -103,7 +109,12 @@ struct SpeedProfileChart: View {
                         PointMark(x: .value("км", mark.km), y: .value("км/ч", mark.speedKmh))
                             .symbol {
                                 ZStack {
-                                    Circle().fill(mark.color)
+                                    if mark.isOver {
+                                        Circle().fill(mark.color)
+                                    } else {
+                                        Circle().fill(Theme.background)
+                                        Circle().strokeBorder(mark.color, lineWidth: 3)
+                                    }
                                     Circle().strokeBorder(.white.opacity(0.9), lineWidth: 1.5)
                                 }
                                 .frame(width: 11, height: 11)

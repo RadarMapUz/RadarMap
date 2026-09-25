@@ -160,11 +160,18 @@ struct FinesSheet: View {
                     if let limit = item.pass.limitKmh {
                         SpeedLimitSign(limit: limit, diameter: 26)
                     }
-                    // Округление, а не усечение — как на экране проезда.
-                    Text("\(Int(item.pass.speedKmh.rounded())) км/ч")
-                        .font(.rounded(15, .bold))
-                        .foregroundStyle(PassStyle.color(speed: item.pass.speedKmh,
-                                                         limit: item.pass.limitKmh))
+                    HStack(spacing: 4) {
+                        // Глиф состояния — второй носитель рядом с цветом.
+                        if let symbol = PassStyle.symbol(speed: item.pass.speedKmh,
+                                                         limit: item.pass.limitKmh) {
+                            Image(systemName: symbol).font(.rounded(12, .bold))
+                        }
+                        // Округление, а не усечение — как на экране проезда.
+                        Text("\(Int(item.pass.speedKmh.rounded())) км/ч")
+                            .font(.rounded(15, .bold))
+                    }
+                    .foregroundStyle(PassStyle.color(speed: item.pass.speedKmh,
+                                                     limit: item.pass.limitKmh))
                     Image(systemName: "chevron.right")
                         .font(.rounded(11, .semibold))
                         .foregroundStyle(Theme.textTertiary)

@@ -530,7 +530,6 @@ struct MapScreen: View {
         guard Storage.bool(.hasCompletedOnboarding), !hintConsumedThisLaunch,
               activeHint == nil, !map.isAddingCamera, !showDashboard else { return }
         var shown: Set<OneTimeHints.Hint> = []
-        if Storage.bool(.hintDashboardShown) { shown.insert(.dashboard) }
         if Storage.bool(.hintTogglesShown) { shown.insert(.toggles) }
         if Storage.bool(.hintRadarShown) { shown.insert(.radar) }
         if Storage.bool(.hintSilenceShown) { shown.insert(.smartSilence) }
@@ -540,7 +539,6 @@ struct MapScreen: View {
             hasFamiliarCameras: !env.location.familiarCameraIDs.isEmpty) else { return }
         hintConsumedThisLaunch = true
         switch hint {
-        case .dashboard: Storage.set(true, for: .hintDashboardShown)
         case .toggles:   Storage.set(true, for: .hintTogglesShown)
         case .radar:     Storage.set(true, for: .hintRadarShown)
         case .smartSilence: Storage.set(true, for: .hintSilenceShown)
@@ -1095,7 +1093,21 @@ struct MapScreen: View {
     private var actionBar: some View {
         HStack(spacing: 4) {
             actionButton("Поиск", "magnifyingglass") { map.showSearch = true }
-            actionButton("Рядом", "list.bullet") { map.showNearbySheet = true }
+            // «Спидометр» вместо «Рядом», и это замена дубликата на спрятанное.
+            //
+            // «Рядом» — список камер поблизости, открытый с экрана, который
+            // ЭТИ ЖЕ камеры уже показывает на карте, с расстоянием до
+            // ближайшей в HUD и карточкой по тапу. Один и тот же ответ на один
+            // и тот же вопрос, только текстом и без географии.
+            //
+            // Спидометр, наоборот, до сих пор открывался единственным способом
+            // — тапом по цифре скорости, — и о нём приходилось РАССКАЗЫВАТЬ:
+            // ради него заведена разовая подсказка (OneTimeHints.dashboard).
+            // Контрол, которому нужен всплывающий ярлык, стоит не на том
+            // месте. Жест остаётся, подсказка становится не нужна.
+            actionButton("Спидометр", "gauge.open.with.lines.needle.33percent") {
+                showDashboard = true
+            }
             actionButton("Итоги", "chart.bar.fill") { map.showStats = true }
             Menu {
                 moreActionItems
@@ -1121,8 +1133,8 @@ struct MapScreen: View {
         Button { map.showSearch = true } label: {
             Label("Поиск", systemImage: "magnifyingglass")
         }
-        Button { map.showNearbySheet = true } label: {
-            Label("Рядом", systemImage: "list.bullet")
+        Button { showDashboard = true } label: {
+            Label("Спидометр", systemImage: "gauge.open.with.lines.needle.33percent")
         }
         Button { map.showStats = true } label: {
             Label("Итоги", systemImage: "chart.bar.fill")
@@ -1132,6 +1144,13 @@ struct MapScreen: View {
 
     /// Редкое: в баре место занимало бы всегда, а нужно раз в месяц.
     @ViewBuilder private var moreActionItems: some View {
+        // «Рядом» переехал сюда из бара. Не удалён: список с расстояниями
+        // иногда удобнее карты — например, пассажиру или когда карта ещё
+        // грузится. Но постоянного места он не заслуживает, потому что
+        // отвечает на тот же вопрос, что и карта под ним.
+        Button { map.showNearbySheet = true } label: {
+            Label("Рядом", systemImage: "list.bullet")
+        }
         Button {
             withMotion { map.isAddingCamera = true }
         } label: {

@@ -14,18 +14,31 @@ import Charts
 // MARK: - Общие помощники стиля проездов
 
 enum PassStyle {
-    /// Цвет скорости проезда. Лимит известен — состояние считает Theme.speedLevel
-    /// (одно правило на HUD телефона, панель CarPlay, Итоги и эти строки);
-    /// лимита нет — падаем на универсальные пороги города/трассы.
-    static func color(speed: Double, limit: Int?) -> Color {
+    /// Состояние проезда. Лимит известен — считает Theme.speedLevel (одно
+    /// правило на HUD телефона, панель CarPlay, Итоги и эти строки); лимита
+    /// нет — падаем на универсальные пороги города/трассы.
+    ///
+    /// Цвет и глиф берутся ОТСЮДА оба, а не считаются каждый по-своему:
+    /// второй носитель состояния имеет смысл, только пока он говорит то же
+    /// самое, что первый.
+    static func level(speed: Double, limit: Int?) -> Theme.Level {
         if limit != nil {
-            return Theme.role(Theme.speedLevel(speedKmh: speed, limitKmh: limit))
+            return Theme.speedLevel(speedKmh: speed, limitKmh: limit)
         }
         switch speed {
-        case ..<90:    return Theme.role(.normal)
-        case 90..<110: return Theme.role(.attention)
-        default:       return Theme.role(.alarm)
+        case ..<90:    return .normal
+        case 90..<110: return .attention
+        default:       return .alarm
         }
+    }
+
+    static func color(speed: Double, limit: Int?) -> Color {
+        Theme.role(level(speed: speed, limit: limit))
+    }
+
+    /// Глиф состояния; nil — норма, значок не нужен (см. Theme.symbol).
+    static func symbol(speed: Double, limit: Int?) -> String? {
+        Theme.symbol(level(speed: speed, limit: limit))
     }
 }
 
@@ -60,9 +73,16 @@ struct PassRow: View {
                 // Округление, а не усечение: тот же проезд открывается на
                 // экране «Проезд камеры», и две разные цифры об одной скорости
                 // выглядят как ошибка приложения.
-                Text("\(Int(pass.speedKmh.rounded())) км/ч")
-                    .font(.rounded(15, .bold))
-                    .foregroundStyle(PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh))
+                HStack(spacing: 4) {
+                    // Глиф состояния — второй носитель рядом с цветом: красный
+                    // и зелёный при дейтеранопии сливаются (см. Theme.symbol).
+                    if let symbol = PassStyle.symbol(speed: pass.speedKmh, limit: pass.limitKmh) {
+                        Image(systemName: symbol).font(.rounded(12, .bold))
+                    }
+                    Text("\(Int(pass.speedKmh.rounded())) км/ч")
+                        .font(.rounded(15, .bold))
+                }
+                .foregroundStyle(PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh))
                 // Превышение попало в штрафную ступень — показываем цену
                 // вопроса; судьбу штрафа (пришёл / не пришёл) — как отметили
                 // на экране возможных штрафов.
@@ -351,13 +371,25 @@ struct TripDetailContent: View {
                 ForEach(record.passed) { pass in
                     if let coordinate = pass.coordinate {
                         Annotation("", coordinate: coordinate, anchor: .center) {
+                            // Второй носитель на карте — ФОРМА, а не значок:
+                            // точка 22 pt мала для глифа, но кольцо от
+                            // залитого круга отличается и в оттенках серого.
+                            // Залито — превышение, кольцо — чистый проезд.
                             ZStack {
+                                let over = PassStyle.symbol(speed: pass.speedKmh,
+                                                            limit: pass.limitKmh) != nil
+                                let tint = PassStyle.color(speed: pass.speedKmh,
+                                                           limit: pass.limitKmh)
                                 Circle()
-                                    .fill(PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh))
+                                    .fill(over ? AnyShapeStyle(tint)
+                                               : AnyShapeStyle(Theme.background.opacity(0.85)))
+                                    .frame(width: 22, height: 22)
+                                Circle()
+                                    .stroke(tint, lineWidth: over ? 0 : 3)
                                     .frame(width: 22, height: 22)
                                 Text("\(Int(pass.speedKmh.rounded()))")
                                     .font(.system(size: 8.5, weight: .heavy, design: .rounded))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(over ? .white : tint)
                             }
                             .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 1.5))
                         }

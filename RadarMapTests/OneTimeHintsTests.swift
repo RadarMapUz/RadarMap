@@ -12,16 +12,16 @@ import XCTest
 final class OneTimeHintsTests: XCTestCase {
 
     func testHintsComeInOrder() {
-        XCTAssertEqual(OneTimeHints.next(shown: [], radarVisible: false), .dashboard)
-        XCTAssertEqual(OneTimeHints.next(shown: [.dashboard], radarVisible: false), .toggles)
-        XCTAssertEqual(OneTimeHints.next(shown: [.dashboard, .toggles], radarVisible: true), .radar)
+        XCTAssertEqual(OneTimeHints.next(shown: [], radarVisible: false), .toggles)
+        XCTAssertNil(OneTimeHints.next(shown: [.toggles], radarVisible: false))
+        XCTAssertEqual(OneTimeHints.next(shown: [.toggles], radarVisible: true), .radar)
     }
 
     /// Подсказывать про жёлтую кнопку, когда её нет на экране (вне поездки), —
     /// значит путать, а не помогать: ждём поездки.
     func testRadarHintWaitsForVisibleButton() {
-        XCTAssertNil(OneTimeHints.next(shown: [.dashboard, .toggles], radarVisible: false))
-        XCTAssertEqual(OneTimeHints.next(shown: [.dashboard, .toggles], radarVisible: true), .radar)
+        XCTAssertNil(OneTimeHints.next(shown: [.toggles], radarVisible: false))
+        XCTAssertEqual(OneTimeHints.next(shown: [.toggles], radarVisible: true), .radar)
     }
 
     func testNothingLeftMeansSilence() {
@@ -39,7 +39,7 @@ final class OneTimeHintsTests: XCTestCase {
     /// Умная тишина объясняется только когда она уже случилась: пока своих
     /// камер нет, объяснять нечего — как и с невидимой жёлтой кнопкой.
     func testSilenceHintWaitsForFirstFamiliarCamera() {
-        let seen: Set<OneTimeHints.Hint> = [.dashboard, .toggles, .radar]
+        let seen: Set<OneTimeHints.Hint> = [.toggles, .radar]
         XCTAssertNil(OneTimeHints.next(shown: seen, radarVisible: true,
                                        hasFamiliarCameras: false))
         XCTAssertEqual(OneTimeHints.next(shown: seen, radarVisible: true,

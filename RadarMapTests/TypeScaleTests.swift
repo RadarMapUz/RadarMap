@@ -101,8 +101,38 @@ final class TypeScaleTests: XCTestCase {
     /// Крупный — почти нет: цифра скорости и так видна, а карточка вокруг
     /// тесная, и рост на треть выбьет её за пределы.
     func testLargeTextIsHeldBack() {
-        XCTAssertEqual(Font.typeFactor(raw: 1.6, size: 30), 1.10, accuracy: 0.001)
-        XCTAssertEqual(Font.typeFactor(raw: 1.6, size: 20), 1.10, accuracy: 0.001)
+        for step in Font.typeSteps where step >= 30 {
+            XCTAssertEqual(Font.typeFactor(raw: 1.6, size: step), 1.10, accuracy: 0.001)
+        }
+    }
+
+    /// Шкала остаётся шкалой при ЛЮБОМ системном кегле.
+    ///
+    /// Регрессия, ради которой тест написан: потолок роста переключался
+    /// порогом (`size >= 20 ? 1.10 : 1.30`), и на новой шкале эта ступенька
+    /// легла ровно между 19 и 24. При максимальном системном кегле они
+    /// давали 25 и 26 pt — отношение 1,04, то есть соседние ступени
+    /// становились неразличимы. И проявлялось это только у тех, кто увеличил
+    /// текст в настройках, — то есть у тех, кому размер важнее всех.
+    func testTheScaleSurvivesTheLargestSystemTextSize() {
+        let scaled = Font.typeSteps.map { step in
+            (step * CGFloat(Font.typeFactor(raw: 1.6, size: step))).rounded()
+        }
+        for (small, large) in zip(scaled, scaled.dropFirst()) {
+            XCTAssertGreaterThanOrEqual(large / small, 1.15,
+                "при максимальном кегле ступени \(small) и \(large) сливаются")
+        }
+    }
+
+    /// И при уменьшенном тоже: там потолка нет, но есть пол 0.9.
+    func testTheScaleSurvivesTheSmallestSystemTextSize() {
+        let scaled = Font.typeSteps.map { step in
+            (step * CGFloat(Font.typeFactor(raw: 0.5, size: step))).rounded()
+        }
+        for (small, large) in zip(scaled, scaled.dropFirst()) {
+            XCTAssertGreaterThanOrEqual(large / small, 1.15,
+                "при минимальном кегле ступени \(small) и \(large) сливаются")
+        }
     }
 
     /// Кто уменьшил текст в системе — тоже человек, но не до нечитаемости.

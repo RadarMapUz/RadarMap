@@ -237,7 +237,13 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
             // Сравниваем БАЙТЫ. Прежде здесь на каждый тайл строилось
             // тридцать две строки через String(format:) и склеивалось в hex
             // только ради сравнения — а тайлов на экране сотни.
-            guard Self.matches(url, digest: SHA256.hash(data: data)) else {
+            // `SHA256Digest` — Sequence, а не Collection. `withUnsafeBytes`
+            // даёт Collection<UInt8> поверх тех же тридцати двух байт и не
+            // копирует их — ровно то, ради чего здесь ушли от hex-строк.
+            let signed = SHA256.hash(data: data).withUnsafeBytes {
+                Self.matches(url, digest: $0)
+            }
+            guard signed else {
                 Self.log.error("sha256 тайла не сошёлся: \(url.path, privacy: .public)")
                 return self.finish(with: URLError(.userAuthenticationRequired))
             }

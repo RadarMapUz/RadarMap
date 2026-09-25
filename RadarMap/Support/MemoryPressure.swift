@@ -27,6 +27,7 @@
 //  списка «кого чистить» в одном месте нет намеренно: он бы устарел первым.
 //
 
+import os
 import Foundation
 #if canImport(UIKit)
 import UIKit

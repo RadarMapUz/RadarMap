@@ -200,6 +200,9 @@ final class AppEnvironment {
             usage?.noteAlertRecall(tally)
             trip?.addAlertRecall(tally)
         }
+        // Голос о камерах — отдельно от срабатываний: жалоба «он говорит»
+        // была про фразы, а счётчик до сих пор считал баннеры.
+        location.onCameraSpoken = { [weak usage] grade in usage?.noteCameraSpoken(grade) }
         route.onManeuverSpoken = { [weak usage] kind in usage?.noteManeuver(kind) }
         trip.onTripDropped = { [weak usage] reason in usage?.noteTripDropped(reason) }
         // Снап отметки на ось дороги и очередь без сети — обе зависимости

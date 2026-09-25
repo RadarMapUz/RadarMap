@@ -638,7 +638,7 @@ class Handler(BaseHTTPRequestHandler):
         # кроме счётчика.
         quality = {}
         for field in ("limitSource", "maneuvers", "tripsDropped", "alertRecall",
-                      "memoryWarnings"):
+                      "memoryWarnings", "voiced"):
             value = data.get(field)
             if not isinstance(value, dict):
                 continue

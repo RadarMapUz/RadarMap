@@ -116,6 +116,9 @@ final class UsageStatsService {
         note { $0.memoryWarnings = max($0.memoryWarnings, count) }
     }
 
+    /// Фраза о камере прозвучала вслух.
+    func noteCameraSpoken(_ grade: String) { note { $0.voiced[grade, default: 0] += 1 } }
+
     func noteManeuver(_ kind: String) { note { $0.maneuvers[kind, default: 0] += 1 } }
 
     func noteTripDropped(_ reason: String) { note { $0.tripsDropped[reason, default: 0] += 1 } }
@@ -227,6 +230,7 @@ final class UsageStatsService {
             "tripsDropped": stats.tripsDropped,
             "alertRecall": stats.alertRecall,
             "memoryWarnings": ["count": stats.memoryWarnings],
+            "voiced": stats.voiced,
         ]
         return await api.postAccepted("api/stat", json: payload)
     }

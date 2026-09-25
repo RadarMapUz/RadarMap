@@ -60,6 +60,18 @@ nonisolated enum VoiceDirector {
         case calm
         /// Полная фраза со скоростью и лимитом плюс сирена и эскалация.
         case urgent
+
+        /// Имя для суточного счётчика. Отдельное свойство, а не `String(describing:)`:
+        /// имя поля телеметрии — часть формата отчёта, и переименование случая
+        /// в коде не должно молча разрывать ряд данных на сервере.
+        var counterName: String {
+            switch self {
+            case .none:   return "silent"
+            case .brief:  return "brief"
+            case .calm:   return "calm"
+            case .urgent: return "urgent"
+            }
+        }
     }
 
     struct Plan: Equatable {

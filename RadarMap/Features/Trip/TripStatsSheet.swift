@@ -1064,9 +1064,9 @@ struct TripStatsSheet: View {
                 HStack(spacing: 12) {
                     Image(systemName: "infinity")
                         .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.textSecondary)
+                        .foregroundStyle(Theme.accent)
                         .frame(width: 30, height: 30)
-                        .background(Theme.stroke, in: Circle())
+                        .background(Theme.accent.opacity(0.12), in: Circle())
                     VStack(alignment: .leading, spacing: 2) {
                         Text("За всё время")
                             .font(.rounded(15, .semibold))
@@ -1105,9 +1105,9 @@ struct TripStatsSheet: View {
                 HStack(spacing: 12) {
                     Image(systemName: "chart.bar.xaxis")
                         .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.textSecondary)
+                        .foregroundStyle(Theme.accent)
                         .frame(width: 30, height: 30)
-                        .background(Theme.stroke, in: Circle())
+                        .background(Theme.accent.opacity(0.12), in: Circle())
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Детали периода")
                             .font(.rounded(14, .semibold))
@@ -1219,9 +1219,9 @@ struct TripStatsSheet: View {
             HStack(spacing: 12) {
                 Image(systemName: "arrow.triangle.merge")
                     .font(.rounded(14, .bold))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Theme.accent)
                     .frame(width: 34, height: 34)
-                    .background(Theme.stroke, in: Circle())
+                    .background(Theme.accent.opacity(0.12), in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Похоже, это одна поездка")
                         .font(.rounded(14, .bold))
@@ -1340,9 +1340,9 @@ struct TripStatsSheet: View {
             HStack(spacing: 12) {
                 Image(systemName: "person.2.wave.2.fill")
                     .font(.rounded(15, .semibold))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Theme.accent)
                     .frame(width: 34, height: 34)
-                    .background(Theme.stroke, in: Circle())
+                    .background(Theme.accent.opacity(0.12), in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Ваши отметки за 30 дней")
                         .font(.rounded(15))
@@ -1406,9 +1406,9 @@ struct TripStatsSheet: View {
             HStack(spacing: 12) {
                 Image(systemName: badge.icon)
                     .font(.rounded(15, .semibold))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Theme.accent)
                     .frame(width: 38, height: 38)
-                    .background(Theme.stroke, in: Circle())
+                    .background(Theme.accent.opacity(0.12), in: Circle())
                 VStack(alignment: .leading, spacing: 5) {
                     // Подпись и название — в столбик: на узбекском «Eng yaqin
                     // maqsad» и «Ketma-ket 5 toza» вставали вплотную и читались

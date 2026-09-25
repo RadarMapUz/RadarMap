@@ -196,9 +196,9 @@ struct RatingDetailSheet: View {
             } else {
                 Image(systemName: "gauge.with.needle")
                     .font(.rounded(30))
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Theme.accent)
                     .frame(width: 92, height: 92)
-                    .background(Theme.stroke, in: Circle())
+                    .background(Theme.accent.opacity(0.12), in: Circle())
             }
             VStack(alignment: .leading, spacing: 5) {
                 Text(period.caption)

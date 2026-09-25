@@ -637,7 +637,8 @@ class Handler(BaseHTTPRequestHandler):
         # значение проходит через clamp_int, то есть перестаёт быть чем угодно,
         # кроме счётчика.
         quality = {}
-        for field in ("limitSource", "maneuvers", "tripsDropped", "alertRecall"):
+        for field in ("limitSource", "maneuvers", "tripsDropped", "alertRecall",
+                      "memoryWarnings"):
             value = data.get(field)
             if not isinstance(value, dict):
                 continue

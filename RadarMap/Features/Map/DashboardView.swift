@@ -134,6 +134,7 @@ struct DashboardView: View {
         // автопереход молча перебивал выключенное «не гасить экран», отменяя
         // единственный рычаг против главного потребителя.
         .onAppear {
+            env.usage.noteScreen("dashboard")
             UIApplication.shared.isIdleTimerDisabled = env.settings.keepScreenOn
             // Пока водитель смотрит на схему, фиксы нужны чаще: крейсерские
             // 25 м — это рывок раз в 2–3 секунды. Буст снимается сам при

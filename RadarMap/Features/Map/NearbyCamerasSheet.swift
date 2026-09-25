@@ -32,6 +32,7 @@ struct NearbyCamerasSheet: View {
                 }
             }
             .background(Theme.screenBackground)
+            .onAppear { env.usage.noteScreen("nearby") }
             .navigationTitle("Ближайшие камеры")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

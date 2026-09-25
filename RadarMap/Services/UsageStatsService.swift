@@ -107,6 +107,15 @@ final class UsageStatsService {
         }
     }
 
+    /// Синхронизировать счётчик давления памяти с отчётом за сутки.
+    /// Зовётся при отправке, а не на каждое предупреждение: `MemoryPressure`
+    /// считает их у себя, и дёргать запись на диск под нехватку памяти —
+    /// последнее, что стоит делать.
+    func noteMemoryWarnings(_ count: Int) {
+        guard count > 0 else { return }
+        note { $0.memoryWarnings = max($0.memoryWarnings, count) }
+    }
+
     func noteManeuver(_ kind: String) { note { $0.maneuvers[kind, default: 0] += 1 } }
 
     func noteTripDropped(_ reason: String) { note { $0.tripsDropped[reason, default: 0] += 1 } }
@@ -142,6 +151,10 @@ final class UsageStatsService {
         isSending = true
         defer { isSending = false }
 
+        // Давление памяти — перед отправкой, одним числом: считает его
+        // MemoryPressure, а дёргать запись на диск в момент нехватки памяти
+        // было бы ровно тем, чего делать нельзя.
+        noteMemoryWarnings(MemoryPressure.warnings)
         let context = snapshotContext()
         while let stats = file.pending.first {
             guard await send(stats, context: context) else { return }  // сервер молчит — не долбим
@@ -213,6 +226,7 @@ final class UsageStatsService {
             "maneuvers": stats.maneuvers,
             "tripsDropped": stats.tripsDropped,
             "alertRecall": stats.alertRecall,
+            "memoryWarnings": ["count": stats.memoryWarnings],
         ]
         return await api.postAccepted("api/stat", json: payload)
     }

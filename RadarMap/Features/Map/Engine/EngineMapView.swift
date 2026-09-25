@@ -103,6 +103,9 @@ struct EngineMapView: UIViewRepresentable {
             coordinator.lastCameraModel = nil
             coordinator.apply(model, to: view)
         }
+        // Система предупреждает о памяти ПЕРЕД тем, как убить приложение;
+        // до сих пор это предупреждение не слушал никто (см. MemoryPressure).
+        MemoryPressure.onWarning(context.coordinator) { $0.releaseMemory() }
         context.coordinator.loadStyle(self, in: view)
         Task { @MainActor [weak view, weak coordinator = context.coordinator] in
             await EngineTileGuard.prepare()
@@ -265,6 +268,18 @@ struct EngineMapView: UIViewRepresentable {
                 [$0.symbolName, $0.symbolName + "-alert"]
             }
             for name in names { Self.iconCache[name] = style.image(forName: name) }
+        }
+
+        /// Уборка по просьбе системы. Освобождается только то, что строится
+        /// заново из живых данных: выборка камер видимой области и разобранные
+        /// слои темы. Ни стиль, ни подписанный индекс, ни окно слежения за
+        /// камерами не трогаются — от них зависит предупреждение.
+        func releaseMemory() {
+            cachedCameras = []
+            cachedLimits = [:]
+            cameraRegion = nil          // следующий кадр соберёт выборку заново
+            themeLayers = []            // перечитается из EngineMapStyle при смене темы
+            routeIndex = nil            // соберётся из маршрута на следующем тике
         }
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {

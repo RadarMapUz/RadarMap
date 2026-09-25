@@ -91,6 +91,7 @@ struct PassDetailView: View {
         .background(Theme.screenBackground)
         .navigationTitle("Проезд камеры")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { env.usage.noteScreen("pass") }
         .sheet(isPresented: $showsFullMap) {
             // Своего экрана карты не заводим: PeriodMapSheet уже интерактивен,
             // умеет фокус на камере и карточку места. Здесь он получает ровно

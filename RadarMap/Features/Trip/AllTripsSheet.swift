@@ -59,6 +59,7 @@ struct AllTripsSheet: View {
             }
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
             .background(Theme.screenBackground)
+            .onAppear { env.usage.noteScreen("allTrips") }
             .navigationTitle("Все поездки")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

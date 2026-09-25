@@ -76,6 +76,7 @@ struct RatingDetailSheet: View {
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
             .background(Theme.screenBackground)
             .navigationTitle("Рейтинг вождения")
+            .onAppear { env.usage.noteScreen("rating") }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }

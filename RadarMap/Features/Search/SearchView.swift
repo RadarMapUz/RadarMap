@@ -132,6 +132,7 @@ struct SearchView: View {
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
             .background(Theme.screenBackground)
+            .onAppear { env.usage.noteScreen("search") }
             .searchable(text: $model.query, prompt: "Город, улица, место")
             .navigationTitle(assigning == nil ? Text("Поиск") : Text("Выбор адреса"))
             .navigationBarTitleDisplayMode(.inline)

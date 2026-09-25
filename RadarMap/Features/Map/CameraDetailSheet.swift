@@ -49,6 +49,7 @@ struct CameraDetailSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+            .onAppear { env.usage.noteScreen("camera") }
         .presentationDragIndicator(.visible)
         .task {
             let passes = env.trip.history.flatMap(\.passed)

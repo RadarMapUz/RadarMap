@@ -65,6 +65,7 @@ struct FinesSheet: View {
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
             .background(Theme.screenBackground)
             .navigationTitle("Возможные штрафы")
+            .onAppear { env.usage.noteScreen("fines") }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }

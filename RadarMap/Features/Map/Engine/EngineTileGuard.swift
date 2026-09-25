@@ -37,6 +37,24 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
 
     private static let log = Log.network
 
+    /// Своя сессия сторожа — БЕЗ URLCache, и это не микрооптимизация.
+    ///
+    /// Тайлы кэшировались ДВАЖДЫ: у движка своя база на 200 МБ
+    /// (`engineMapCacheBytes`, она же офлайн в поездке по стране), а сторож
+    /// вдобавок ходил через `URLSession.shared` и складывал каждый тайл в
+    /// общий `URLCache` — та же геометрия второй раз, и на диске, и в памяти.
+    /// Второй экземпляр не давал ничего: офлайн держит движок, а сторож
+    /// каждый тайл всё равно проверяет по подписи заново.
+    ///
+    /// Индекс сюда же: 23,5 МБ ответа в общем кэше — чистая трата, он и так
+    /// лежит разобранным своим файлом.
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }()
+
     // MARK: - Индекс
 
     /// Подписанный индекс, как он лежит в JSON. Разбирается ОДИН раз за жизнь
@@ -94,7 +112,7 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
             request.setValue(knownTag, forHTTPHeaderField: "If-None-Match")
         }
 
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
+        guard let (data, response) = try? await session.data(for: request),
               let http = response as? HTTPURLResponse else {
             // Сети нет. Разобранный индекс с прошлого раза — законный запас:
             // он получен из проверенной подписи и лежит в песочнице приложения,
@@ -204,7 +222,7 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
         }
         var own = request
         own.setValue("1", forHTTPHeaderField: Self.ownRequest)
-        loader = URLSession.shared.dataTask(with: own) { [weak self] data, response, error in
+        loader = Self.session.dataTask(with: own) { [weak self] data, response, error in
             guard let self else { return }
             if let error { return self.finish(with: error) }
             guard let data, let response else {
@@ -238,7 +256,8 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
     private var loader: URLSessionDataTask?
 
     private func deliver(data: Data, response: URLResponse) {
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .allowed)
+        // .notAllowed: кэш тайлов — работа движка, а не URLCache.
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         if !data.isEmpty { client?.urlProtocol(self, didLoad: data) }
         client?.urlProtocolDidFinishLoading(self)
     }

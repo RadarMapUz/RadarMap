@@ -39,10 +39,14 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
 
     // MARK: - Индекс
 
+    /// Подписанный индекс, как он лежит в JSON. Разбирается ОДИН раз за жизнь
+    /// установленной версии и тут же сворачивается в `TileDigestIndex`:
+    /// держать эту форму в памяти — тридцать с лишним мегабайт строк.
+    ///
+    /// Поле `bytes` из формата убрано: оно декодировалось и не читалось нигде.
     nonisolated struct Index: Decodable, Sendable {
         struct Meta: Decodable, Sendable {
             let sha256: String
-            let bytes: Int
         }
         let version: Int
         let tiles: [String: Meta]
@@ -50,28 +54,100 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
 
     /// Индекс живёт в одном экземпляре и читается из многих потоков сессии
     /// движка, поэтому — под замком, а не «просто переменная».
-    private static let lock = OSAllocatedUnfairLock(initialState: Index?.none)
+    private static let lock = OSAllocatedUnfairLock(initialState: TileDigestIndex?.none)
 
     static var isReady: Bool { lock.withLock { $0 != nil } }
 
+    /// Где лежит разобранный индекс между запусками.
+    private static var cacheURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent("mvt_index.bin")
+    }
+    private static var etagURL: URL { cacheURL.appendingPathExtension("etag") }
+
     /// Забрать и проверить индекс. Без него сторож не пропускает ни одного
     /// тайла — сознательно.
+    ///
+    /// Порядок такой, и он про память. `mvt_index.json` — 23,5 МБ и 165 054
+    /// записи; полный разбор стоит около сотни мегабайт транзиентно (ответ,
+    /// base64-строка из него, данные из неё, потом словарь). Раньше это
+    /// повторялось НА КАЖДОМ запуске, включая тот, который делает подключение
+    /// CarPlay, — и телеметрия показала 73 отстрела по памяти за сорок суток.
+    ///
+    /// Теперь: сперва условный запрос с прошлым ETag. Сервер отвечает 304 —
+    /// берём разобранный индекс с диска и ни одного мегабайта не трогаем.
+    /// Ответил 200 — значит индекс правда сменился, и только тогда платим
+    /// полным разбором, один раз, с записью результата на диск.
     static func prepare() async {
         if isReady { return }
         let url = AppConfig.syncBaseURL.appendingPathComponent("mvt_index.json")
         var request = URLRequest(url: url)
         request.setValue("1", forHTTPHeaderField: ownRequest)
-        request.cachePolicy = .reloadRevalidatingCacheData
+        // Кэш URLSession здесь НЕ помощник: на 304 он молча отдаёт тело из
+        // своего хранилища, и мы снова получаем 23,5 МБ. Условие ставим сами,
+        // чтобы увидеть именно код ответа.
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        let knownTag = try? String(contentsOf: etagURL, encoding: .utf8)
+        if let knownTag, !knownTag.isEmpty {
+            request.setValue(knownTag, forHTTPHeaderField: "If-None-Match")
+        }
+
         guard let (data, response) = try? await URLSession.shared.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200,
+              let http = response as? HTTPURLResponse else {
+            // Сети нет. Разобранный индекс с прошлого раза — законный запас:
+            // он получен из проверенной подписи и лежит в песочнице приложения,
+            // там же, где скачанная база камер.
+            if loadCached() { return }
+            log.error("индекс MVT не пришёл — карта на движке останется пустой")
+            return
+        }
+
+        if http.statusCode == 304 {
+            if loadCached() { return }
+            // 304 есть, а разобранного индекса нет: метка пережила файл
+            // (диск очистили, запись не удалась). Без этой ветки метка навсегда
+            // запирала бы карту пустой — сервер отвечает «не менялось», брать
+            // нечего, и следующий запуск повторял бы то же самое.
+            try? FileManager.default.removeItem(at: etagURL)
+            log.error("метка индекса MVT есть, разобранного файла нет — качаем заново")
+            lock.withLock { $0 = nil }
+            return await prepare()
+        }
+
+        guard http.statusCode == 200,
               let envelope = try? JSONDecoder().decode(SignedPayload<Index>.self, from: data),
-              let index = envelope.verified()
+              let parsed = envelope.verified()
         else {
-            log.error("индекс MVT не пришёл или не проверился — карта на движке останется пустой")
+            if loadCached() { return }
+            log.error("индекс MVT не проверился — карта на движке останется пустой")
+            return
+        }
+
+        let index = TileDigestIndex(version: parsed.version,
+                                    tiles: parsed.tiles.mapValues(\.sha256))
+        guard !index.isEmpty else {
+            log.error("индекс MVT пуст после разбора — карта на движке останется пустой")
             return
         }
         lock.withLock { $0 = index }
-        log.info("индекс MVT принят: \(index.tiles.count) тайлов")
+        // Запись — уже после того, как индекс принят: даже если диск откажет,
+        // текущий сеанс работает.
+        try? index.serialized().write(to: cacheURL, options: .atomic)
+        if let tag = http.value(forHTTPHeaderField: "ETag") {
+            try? tag.write(to: etagURL, atomically: true, encoding: .utf8)
+        }
+        log.info("индекс MVT принят: \(index.count, privacy: .public) тайлов, разобран заново")
+    }
+
+    /// Поднять разобранный индекс с диска. false — файла нет либо он негоден.
+    private static func loadCached() -> Bool {
+        guard let data = try? Data(contentsOf: cacheURL, options: .mappedIfSafe),
+              let index = TileDigestIndex(serialized: data), !index.isEmpty else { return false }
+        lock.withLock { $0 = index }
+        log.info("индекс MVT взят с диска: \(index.count, privacy: .public) тайлов, разбор не понадобился")
+        return true
     }
 
     /// Ключ тайла из адреса: .../mvt/15/22686/12246.mvt → «15/22686/12246».
@@ -83,9 +159,17 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
         return String(tail.dropLast(4))
     }
 
-    static func expected(for url: URL) -> Index.Meta? {
-        guard let key = tileKey(for: url) else { return nil }
-        return lock.withLock { $0?.tiles[key] }
+    /// Есть ли тайл в подписанном индексе. Сам дайджест наружу не отдаётся —
+    /// сравнение делает индекс, по байтам (см. `matches`).
+    static func isSigned(_ url: URL) -> Bool {
+        guard let key = tileKey(for: url) else { return false }
+        return lock.withLock { $0?.contains(tileKey: key) ?? false }
+    }
+
+    /// Совпал ли sha256 скачанного тайла с подписанным.
+    static func matches(_ url: URL, digest: some Collection<UInt8>) -> Bool {
+        guard let key = tileKey(for: url) else { return false }
+        return lock.withLock { $0?.matches(tileKey: key, digest: digest) ?? false }
     }
 
     /// Поставить сторожа на сессию движка. Зовётся один раз, до первой карты.
@@ -112,7 +196,7 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
 
     override func startLoading() {
         guard let url = request.url else { return finish(with: URLError(.badURL)) }
-        guard let meta = Self.expected(for: url) else {
+        guard Self.isSigned(url) else {
             // Тайла нет в индексе — либо индекс не пришёл, либо сервер отдаёт
             // то, чего владелец не подписывал. Оба случая — отказ.
             Self.log.error("тайл вне подписанного индекса: \(url.path, privacy: .public)")
@@ -132,8 +216,10 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
             if code == 204 || code == 404 {
                 return self.deliver(data: Data(), response: response)
             }
-            let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            guard digest == meta.sha256 else {
+            // Сравниваем БАЙТЫ. Прежде здесь на каждый тайл строилось
+            // тридцать две строки через String(format:) и склеивалось в hex
+            // только ради сравнения — а тайлов на экране сотни.
+            guard Self.matches(url, digest: SHA256.hash(data: data)) else {
                 Self.log.error("sha256 тайла не сошёлся: \(url.path, privacy: .public)")
                 return self.finish(with: URLError(.userAuthenticationRequired))
             }

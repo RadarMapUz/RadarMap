@@ -122,23 +122,20 @@ struct CarPlayOverlay: View {
         return HStack(spacing: 0) {
             speedCell
                 .frame(maxWidth: .infinity)
-            cellDivider
             cameraCell
                 .frame(maxWidth: .infinity)
             if withRoute {
-                cellDivider
                 etaCell
                     .frame(maxWidth: .infinity)
             }
         }
     }
 
-    private var cellDivider: some View {
-        Rectangle()
-            .fill(Theme.stroke)
-            .frame(width: 1, height: 46)
-            .padding(.horizontal, 14)
-    }
+    // Разделителей-ниток между зонами больше нет.
+    //
+    // Линия в один пункт с торпеды не видна — ровно та же причина, по которой
+    // кромка панели здесь 3,5, а не 2. Зоны разделяет заливка: у камеры на
+    // подходе своя панель состояния, у остальных — воздух.
 
     /// Скорость крупно + знак лимита рядом: сравнение «еду / можно» одним взглядом.
     ///
@@ -150,20 +147,21 @@ struct CarPlayOverlay: View {
     private var speedCell: some View {
         HStack(spacing: 12) {
             VStack(spacing: -1) {
-                // Кегль 30, а НЕ 38, и это возврат к тому, что было на экране.
+                // Кегль 46 — решение, принятое по макету, а не по инерции.
                 //
-                // Здесь стояло 38 — но прежняя шкала обрезалась потолком 30, и
-                // цифра все эти месяцы рисовалась тридцатой. Раскладка панели
-                // подгонялась в живой машине именно под неё. Новая шкала
-                // (потолок 46) вернула запрошенные 38, то есть молча увеличила
-                // спидометр на 27 % на экране, ширина которого не тянется.
+                // История числа поучительна. В коде стояло 38, но прежняя
+                // шкала обрезалась потолком 30, и все эти месяцы цифра
+                // рисовалась ТРИДЦАТОЙ — раскладку панели подгоняли в машине
+                // именно под неё. Новая шкала молча вернула 38; я откатил к
+                // 30 как к тому, что реально видел водитель.
                 //
-                // Число в коде приведено к тому, что реально видел водитель.
-                // Менять размер спидометра на экране машины можно только с
-                // машиной перед глазами — тем более что комментарий выше прямо
-                // говорит: Waze и Google его не трогают никогда.
+                // На макете стало видно, что 30 было мало с самого начала.
+                // Экран машины смотрят с семидесяти сантиметров: тридцать
+                // пунктов оттуда — это примерно двенадцать с вытянутой руки.
+                // Скорость здесь главная цифра, её сравнивают со знаком в
+                // момент решения тормозить.
                 Text("\(Int(env.location.speedKmh.rounded()))")
-                    .font(.rounded(30, .heavy).monospacedDigit())
+                    .font(.rounded(46, .heavy).monospacedDigit())
                     .foregroundStyle(speedColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -270,10 +268,15 @@ struct CarPlayOverlay: View {
         .padding(.vertical, env.location.isApproachingCamera ? 6 : 0)
         .background {
             if env.location.isApproachingCamera {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Theme.danger.opacity(0.14))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Theme.danger.opacity(0.45), lineWidth: 1))
+                // Градиент, а не плоская краска: тот же язык, что у карточек
+                // телефона (`statePanel`). С семидесяти сантиметров перепад
+                // светлоты читается, а ровная подложка сливается с панелью.
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(LinearGradient(colors: [Theme.danger.opacity(0.24),
+                                                  Theme.danger.opacity(0.07)],
+                                         startPoint: .top, endPoint: .bottom))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Theme.danger.opacity(0.40), lineWidth: 1))
             }
         }
         .motionAnimation(.easeOut(duration: 0.25), value: env.location.isApproachingCamera)

@@ -48,8 +48,20 @@ struct GlassCard<Content: View>: View {
 extension View {
     func statCard(padding: CGFloat = 16, radius: CGFloat = Theme.cornerLarge) -> some View {
         self.padding(padding)
-            .background(Theme.surface,
+            // Заливка градиентом, а не краской: на почти чёрном фоне объём
+            // даёт перепад светлоты, а не тень — тени там попросту не видно.
+            .background(Theme.surfaceRaised,
                         in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            // Кромка — та же, что у панелей над картой (`Theme.edgePanel`).
+            // Она в проекте была с самого начала и до карточек контента не
+            // доехала: отсюда и ощущение, что Итоги нарисованы другим
+            // приложением, чем карта.
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .strokeBorder(Theme.edgePanel, lineWidth: 1))
+            // Тень мягче, чем у плавающих панелей, и это не экономия на
+            // красоте, а на прокрутке: в Итогах карточек до одиннадцати,
+            // и каждая тень — отдельный проход отрисовки.
+            .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
     }
 }
 
@@ -180,6 +192,29 @@ extension View {
     /// в паре с цветным свечением, поэтому названа отдельно от него.
     func liftAccent() -> some View {
         shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+    }
+
+    /// Свечение героя — цифры, ради которой экран открывают.
+    ///
+    /// Тень чёрным на почти чёрном фоне не даёт ничего; цветное свечение в
+    /// цвет СОСТОЯНИЯ даёт и объём, и второй намёк на состояние. Радиус
+    /// большой и мягкий: это ореол вокруг цифры, а не обводка под ней.
+    func glow(_ color: Color, radius: CGFloat = 26) -> some View {
+        shadow(color: color.opacity(0.55), radius: radius)
+    }
+
+    /// Панель состояния: блок, покрашенный целиком, а не подпись внутри него.
+    ///
+    /// «Плоско» начиналось именно здесь — состояние жило цветом одной строки
+    /// среди одинаково серых соседей. Покрашенный блок с цветной кромкой
+    /// виден боковым зрением, и его не надо вычитывать.
+    func statePanel(_ color: Color, radius: CGFloat = 20, padding: CGFloat = 16) -> some View {
+        self.padding(padding)
+            .background(LinearGradient(colors: [color.opacity(0.20), color.opacity(0.05)],
+                                       startPoint: .top, endPoint: .bottom),
+                        in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .strokeBorder(color.opacity(0.30), lineWidth: 1))
     }
 }
 

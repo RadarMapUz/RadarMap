@@ -38,7 +38,7 @@ struct CameraDetailSheet: View {
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(Theme.background)
+            .background(Theme.screenBackground)
             // String(id), не интерполяция Int: та форматирует с группировкой («№2,331»).
             .navigationTitle(String(format: String(localized: "Камера №%@"), String(camera.id)))
             .navigationBarTitleDisplayMode(.inline)

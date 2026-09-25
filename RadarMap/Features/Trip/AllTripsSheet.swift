@@ -58,7 +58,7 @@ struct AllTripsSheet: View {
                 .padding(20)
             }
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
-            .background(Theme.background)
+            .background(Theme.screenBackground)
             .navigationTitle("Все поездки")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

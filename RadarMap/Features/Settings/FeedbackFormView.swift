@@ -30,7 +30,7 @@ struct FeedbackFormView: View {
                 }
                 .padding(20)
             }
-            .background(Theme.background)
+            .background(Theme.screenBackground)
             .navigationTitle("Написать разработчику")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -31,7 +31,7 @@ struct NearbyCamerasSheet: View {
                     .scrollContentBackground(.hidden)
                 }
             }
-            .background(Theme.background)
+            .background(Theme.screenBackground)
             .navigationTitle("Ближайшие камеры")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

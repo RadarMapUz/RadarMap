@@ -40,7 +40,7 @@ struct SavingsInfoSheet: View {
                 }
                 .padding(20)
             }
-            .background(Theme.background)
+            .background(Theme.screenBackground)
             .navigationTitle("Возможные штрафы")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -259,7 +259,7 @@ struct AchievementInfoSheet: View {
             Spacer(minLength: 12)
         }
         .frame(maxWidth: .infinity)
-        .background(Theme.background)
+        .background(Theme.screenBackground)
         .sheet(item: $shareSubject) { box in
             SharePreviewSheet(subject: box.subject)
         }
@@ -306,7 +306,7 @@ struct AlertRecallInfoSheet: View {
                 }
                 .padding(20)
             }
-            .background(Theme.background)
+            .background(Theme.screenBackground)
             .navigationTitle("Предупреждения")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

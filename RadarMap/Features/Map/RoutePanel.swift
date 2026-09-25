@@ -321,7 +321,7 @@ struct RouteCamerasSheet: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .background(Theme.background)
+            .background(Theme.screenBackground)
             .navigationTitle("Камеры на маршруте")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

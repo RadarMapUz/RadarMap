@@ -343,7 +343,7 @@ struct SettingsView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Theme.background)
+            .background(Theme.screenBackground)
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
             .onAppear { env.usage.noteScreen("settings") }
             .navigationTitle("Настройки")

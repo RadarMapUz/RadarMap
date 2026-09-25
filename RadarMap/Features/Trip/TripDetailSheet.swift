@@ -306,7 +306,7 @@ struct TripDetailContent: View {
         // Тот же жёсткий край прокрутки, что и в Итогах: карта поездки
         // не должна просвечивать сквозь панель с заголовком.
         .backport.scrollEdgeEffectStyle(.hard, for: .top)
-        .background(Theme.background)
+        .background(Theme.screenBackground)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { share() } label: { Image(systemName: "square.and.arrow.up") }

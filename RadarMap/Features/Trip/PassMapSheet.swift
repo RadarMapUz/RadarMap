@@ -88,7 +88,7 @@ struct PassDetailView: View {
             .padding(20)
         }
         .backport.scrollEdgeEffectStyle(.hard, for: .top)
-        .background(Theme.background)
+        .background(Theme.screenBackground)
         .navigationTitle("Проезд камеры")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showsFullMap) {
@@ -238,22 +238,24 @@ struct PassDetailView: View {
                 Spacer(minLength: 0)
             }
 
-            Rectangle().fill(Theme.stroke).frame(height: 1)
-
+            // Скорость живёт в ПАНЕЛИ СОСТОЯНИЯ, а не строкой среди серых
+            // соседей: покрашен целый блок, и ответ виден боковым зрением.
+            // Разделителя перед ней больше нет — панель отделяет себя сама.
             HStack(spacing: 14) {
                 if let limit = pass.limitKmh {
-                    SpeedLimitSign(limit: limit, diameter: 44)
+                    SpeedLimitSign(limit: limit, diameter: 50)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text("ваша скорость")
                         .font(.rounded(12))
-                        .foregroundStyle(Theme.textTertiary)
+                        .foregroundStyle(Theme.textSecondary)
                     // Герой карточки: ради этого числа экран и открывают.
-                    // Кегль 30 против 12 у подписи — иерархия видна с одного
-                    // взгляда, а не вычитывается.
+                    // Свечение в цвет состояния — объём и второй намёк разом;
+                    // чёрная тень на почти чёрном фоне не дала бы ничего.
                     Text("\(shownSpeedKmh) км/ч")
                         .font(.rounded(30, .heavy).monospacedDigit())
                         .foregroundStyle(honestyColor)
+                        .glow(honestyColor)
                         .contentTransition(.numericText())
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -261,6 +263,7 @@ struct PassDetailView: View {
                 Spacer(minLength: 8)
                 statusChip
             }
+            .statePanel(honestyColor)
 
             // Пол фиксации сработал — говорим об этом вслух. Молча поднятый
             // лимит выглядит как «приложение перепутало знак», а мы не про
@@ -404,8 +407,14 @@ struct PassDetailView: View {
             Label(title, systemImage: symbol)
                 .font(.rounded(15, .semibold))
                 .foregroundStyle(tint)
-                .padding(.horizontal, 11).padding(.vertical, 7)
-                .background(tint.opacity(0.12), in: Capsule())
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                // Градиент и цветная кромка вместо плоской заливки: кнопка
+                // перестаёт быть подкрашенным прямоугольником и становится
+                // предметом, который можно нажать.
+                .background(LinearGradient(colors: [tint.opacity(0.22), tint.opacity(0.08)],
+                                           startPoint: .top, endPoint: .bottom),
+                            in: Capsule())
+                .overlay(Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1))
                 .contentShape(Capsule())
         }
         .buttonStyle(PressableStyle())

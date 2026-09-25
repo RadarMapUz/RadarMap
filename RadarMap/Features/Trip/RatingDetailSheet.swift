@@ -74,7 +74,7 @@ struct RatingDetailSheet: View {
                 }
             }
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
-            .background(Theme.background)
+            .background(Theme.screenBackground)
             .navigationTitle("Рейтинг вождения")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -889,7 +889,7 @@ private struct AllContributionsView: View {
             .padding(20)
         }
         .backport.scrollEdgeEffectStyle(.hard, for: .top)
-        .background(Theme.background)
+        .background(Theme.screenBackground)
         .navigationTitle("Все вклады")
         .navigationBarTitleDisplayMode(.inline)
     }

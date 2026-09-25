@@ -63,7 +63,7 @@ struct FinesSheet: View {
                 .padding(20)
             }
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
-            .background(Theme.background)
+            .background(Theme.screenBackground)
             .navigationTitle("Возможные штрафы")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

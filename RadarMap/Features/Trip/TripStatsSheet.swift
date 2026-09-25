@@ -207,7 +207,7 @@ struct TripStatsSheet: View {
             // «85 рейтинг» читался поверх кнопок. Жёсткий край прокрутки
             // отделяет содержимое от панели.
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
-            .background(Theme.background)
+            .background(Theme.screenBackground)
             .navigationTitle("Итоги")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -150,8 +150,10 @@ struct RatingDetailSheet: View {
                             // ratio растягивал колонки в плиты на полэкрана.
                             width: .fixed(20))
                         // Цвет колонки = цвет балла в списках: одна шкала на всё.
-                        .foregroundStyle(TripHistorySection
-                            .scoreColor(week.rating ?? 0).gradient)
+                        // Заливка плоская: градиент по высоте столбика красил бы
+                        // одну и ту же оценку по-разному в зависимости от того,
+                        // насколько она велика, — величину уже кодирует высота.
+                        .foregroundStyle(TripHistorySection.scoreColor(week.rating ?? 0))
                         .opacity(week.id == filled.last?.id ? 1 : 0.65)
                         .cornerRadius(4)
                         .annotation(position: .top, spacing: 3) {
@@ -348,9 +350,27 @@ struct RatingDetailSheet: View {
                          y: .value("Рейтинг", point.rating))
                     .interpolationMethod(.monotone)
                     .foregroundStyle(Theme.accent)
+                // Точки — того же цвета, что линия, и это исправление.
+                //
+                // Раньше они красились по баллу (`scoreColor`), и на одном
+                // графике сходились ДВЕ разные работы цвета: линия говорила
+                // «это рейтинг» (принадлежность), а точки — «хорошо/плохо»
+                // (состояние). Хуже того, состояние тут уже закодировано
+                // высотой точки: балл и есть ось Y. Цвет повторял ось и при
+                // этом отнимал у линии её собственную опознаваемость.
+                //
+                // Кольцо цветом фона — чтобы точки не слипались на плотном
+                // участке; размер поднят до различимого пальцем.
                 PointMark(x: .value("День", point.day, unit: .day),
                           y: .value("Рейтинг", point.rating))
-                    .foregroundStyle(TripHistorySection.scoreColor(point.rating))
+                    .foregroundStyle(Theme.accent)
+                    .symbolSize(60)
+                    .symbol {
+                        Circle()
+                            .fill(Theme.accent)
+                            .frame(width: 8, height: 8)
+                            .overlay(Circle().strokeBorder(Theme.surface, lineWidth: 2))
+                    }
             }
         }
         .chartYScale(domain: 0...100)

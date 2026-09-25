@@ -1006,13 +1006,27 @@ struct TripStatsSheet: View {
                         width: .ratio(dense ? 0.7 : 0.55))
                 // Красный столбик = день с превышением: график продолжает
                 // историю «где и когда я нарушал», а не просто про километры.
-                .foregroundStyle(item.hasOverspeed
-                                 ? LinearGradient(colors: [Theme.danger, Theme.warning],
-                                                  startPoint: .bottom, endPoint: .top)
-                                 : LinearGradient(colors: [Theme.accent, Theme.Types.intelligent],
-                                                  startPoint: .bottom, endPoint: .top))
+                //
+                // Заливка ПЛОСКАЯ, а не градиентом. Градиент снизу вверх на
+                // столбике означает, что один и тот же день окрашен по-разному
+                // в зависимости от своей высоты: цвет начинает кодировать
+                // величину, которую уже кодирует сама высота. Это двойное
+                // кодирование, и оно мешает сравнивать столбики между собой.
+                .foregroundStyle(item.hasOverspeed ? Theme.danger : Theme.accent)
                 .opacity(Calendar.current.isDateInToday(item.day) ? 1 : 0.6)
-                .cornerRadius(3)
+                .cornerRadius(4)
+                // Подпись ТОЛЬКО у пика. Ось Y здесь скрыта намеренно — на
+                // полосе в 96 pt она съела бы треть ширины, — но график без
+                // единого числа сообщает лишь «какой-то день был длиннее
+                // другого». Одна подпись у максимума задаёт масштаб всему
+                // остальному: подписывать каждый столбик не нужно.
+                .annotation(position: .top, spacing: 2) {
+                    if item.km >= peak, item.km > 0 {
+                        Text(Formatting.distance(item.km * 1000))
+                            .font(.rounded(9, .bold).monospacedDigit())
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
             }
             .chartYScale(domain: 0...peak * 1.15)
             .chartXAxis {

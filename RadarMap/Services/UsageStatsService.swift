@@ -196,6 +196,23 @@ final class UsageStatsService {
             "passes": stats.passes,
             "reports": stats.reports,
             "screens": stats.screens,
+            // Счётчики КАЧЕСТВА решений. Их не было в этом словаре, и это
+            // главный дефект всей затеи с телеметрией.
+            //
+            // `limitSource`, `maneuvers` и `tripsDropped` заведены 6 сентября и
+            // записаны в plan_algorithms.md как «А3 сделано». `alertRecall`
+            // добавлен 23 сентября. Все четыре исправно считались на телефоне,
+            // попадали в UsageStats, проходили тест приватности — и ни разу не
+            // покидали устройство: этот payload собирается руками, и новые поля
+            // в него просто не дописали.
+            //
+            // Цена ошибки — не «нет графика». В том же плане §10 сказано:
+            // А4 (своя правда о лимитах) отложен до «недели данных из А3».
+            // Данных не было ни одного дня, и ждать их можно было вечно.
+            "limitSource": stats.limitSource,
+            "maneuvers": stats.maneuvers,
+            "tripsDropped": stats.tripsDropped,
+            "alertRecall": stats.alertRecall,
         ]
         return await api.postAccepted("api/stat", json: payload)
     }

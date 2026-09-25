@@ -272,6 +272,15 @@ def init_db():
     # "merge" — повторная отметка тем же местом. Вес не меняет — проезд сервер
     # проверить не может, — но модератор в админке видит, какому сигналу верить.
     migrate(conn, "votes", "kind TEXT DEFAULT ''")
+    # Счётчики КАЧЕСТВА решений приложения (limitSource, maneuvers,
+    # tripsDropped, alertRecall) — одной JSON-колонкой, а не четырьмя.
+    # Набор счётчиков меняется чаще, чем схема должна мигрировать, а запросов
+    # «сгруппируй по источнику лимита» здесь не будет: читают их сводкой.
+    #
+    # Заведена 25 сентября: клиент считал эти счётчики с 6 сентября, но не
+    # клал их в payload, а сервер — не имел куда положить. Три недели данных,
+    # на которые был заложен план А4, не собирались вовсе.
+    migrate(conn, "usage_stats", "quality TEXT DEFAULT ''")
     # Почему отметка перестала быть живой. Без этого «доля дошедших до
     # подтверждения» и «доля снесённых» неотличимы друг от друга: в таблице
     # видно только active = 0, а причин у него пять.
@@ -622,6 +631,20 @@ class Handler(BaseHTTPRequestHandler):
             screens = {}
         screens = {as_str(k)[:24]: clamp_int(v) for k, v in list(screens.items())[:20]}
 
+        # Счётчики качества решений — та же дисциплина, что у screens: только
+        # словари «короткая строка → число», ключи и размер обрезаются здесь, а
+        # не на доверии к клиенту. Координате или времени тут не во что попасть:
+        # значение проходит через clamp_int, то есть перестаёт быть чем угодно,
+        # кроме счётчика.
+        quality = {}
+        for field in ("limitSource", "maneuvers", "tripsDropped", "alertRecall"):
+            value = data.get(field)
+            if not isinstance(value, dict):
+                continue
+            cleaned = {as_str(k)[:24]: clamp_int(v) for k, v in list(value.items())[:20]}
+            if cleaned:
+                quality[field] = cleaned
+
         if ip_quota_exceeded("stat", self._ip(), IP_DAILY_CAPS["stat"]):
             return self._json(429, {"error": "too many"})
 
@@ -639,9 +662,10 @@ class Handler(BaseHTTPRequestHandler):
             conn.execute(
                 "INSERT OR REPLACE INTO usage_stats(device, day, app, ios, model, "
                 "location_auth, onboarded, trips, km, alerts, passes, reports, "
-                "screens, received) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "screens, quality, received) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (device, day, app, ios, model, auth, onboarded, trips, km,
-                 alerts, passes, reports, json.dumps(screens), now))
+                 alerts, passes, reports, json.dumps(screens),
+                 json.dumps(quality), now))
             conn.commit()
         finally:
             conn.close()

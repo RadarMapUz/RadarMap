@@ -747,6 +747,44 @@ class APITest(unittest.TestCase):
         self.assertAlmostEqual(row[2], 42.5)
         self.assertEqual(json.loads(row[3]), {"map": 5, "stats": 2})
 
+    def test_stat_stores_decision_quality_counters(self):
+        """Счётчики качества решений обязаны ДОХОДИТЬ до базы.
+
+        Три недели они считались на телефоне и не доезжали: клиент собирал
+        payload руками и новые поля в него не дописал, а у сервера не было
+        куда их положить. На эти данные был заложен план А4 — и ждал их
+        впустую."""
+        status, _ = _call(self.port, "POST", "/api/stat", {
+            "device": "d1", "day": "2026-08-06", "trips": 1,
+            "limitSource": {"tag": 7, "assumed": 2, "none": 1},
+            "maneuvers": {"right": 4, "roundabout": 1},
+            "tripsDropped": {"short": 1},
+            "alertRecall": {"passed": 49, "warned": 47, "silent": 2}})
+        self.assertEqual(status, 200)
+        conn = sqlite3.connect(api.DB_PATH)
+        row = conn.execute("SELECT quality FROM usage_stats").fetchone()
+        conn.close()
+        quality = json.loads(row[0])
+        self.assertEqual(quality["limitSource"], {"tag": 7, "assumed": 2, "none": 1})
+        self.assertEqual(quality["alertRecall"]["warned"], 47)
+        self.assertEqual(quality["maneuvers"]["right"], 4)
+
+    def test_stat_quality_is_counters_and_nothing_else(self):
+        """Та же дисциплина, что у screens: значение проходит через clamp_int,
+        ключ обрезается. Координате или времени тут не во что попасть."""
+        _call(self.port, "POST", "/api/stat", {
+            "device": "d2", "day": "2026-08-06",
+            "limitSource": {"x" * 80: "41.311,69.279", "ok": 5},
+            "alertRecall": "не словарь"})
+        conn = sqlite3.connect(api.DB_PATH)
+        row = conn.execute("SELECT quality FROM usage_stats WHERE device='d2'").fetchone()
+        conn.close()
+        quality = json.loads(row[0])
+        # Строка с координатами превратилась в ноль, длинный ключ обрезан.
+        self.assertEqual(quality["limitSource"]["ok"], 5)
+        self.assertEqual(quality["limitSource"]["x" * 24], 0)
+        self.assertNotIn("alertRecall", quality)
+
     def test_stat_is_one_row_per_device_per_day(self):
         """Сеть могла оборвать подтверждение — повтор не должен раздувать
         «сколько у нас пользователей»."""

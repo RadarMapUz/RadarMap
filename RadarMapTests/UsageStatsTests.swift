@@ -30,14 +30,78 @@ final class UsageStatsTests: XCTestCase {
         // идентификатора камеры, ни одной дистанции, ни одного времени.
         stats.alertRecall = ["passed": 49, "warned": 47, "late": 1,
                              "silent": 1, "unused": 4]
-        let json = try XCTUnwrap(String(data: JSONEncoder().encode(stats), encoding: .utf8))
-        for forbidden in ["lat", "lon", "coordinate", "route", "track",
-                          "startedAt", "endedAt", "timestamp", "address"] {
-            XCTAssertFalse(json.lowercased().contains(forbidden.lowercased()),
-                           "в отчёте не должно быть «\(forbidden)»")
+        let data = try JSONEncoder().encode(stats)
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+        // Проверяем ИМЕНА полей, а не буквы в документе. Прежде здесь искалась
+        // подстрока, и «lat» находилась в ключе «late» — охват предупреждений,
+        // никакой не широты. Поиск по подстроке ловил бы и «platform», и
+        // «translate», а настоящую утечку с именем «где» — ровно так же, как
+        // ловит проверка ниже. То есть шумел, не добавляя строгости.
+        let tree = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        for key in Self.allKeys(of: tree) {
+            XCTAssertFalse(Self.forbiddenKeys.contains(key.lowercased()),
+                           "в отчёте не должно быть поля «\(key)»")
         }
+
+        // Вторая сеть, и она надёжнее списка запретов: утечку принесёт НОВОЕ
+        // поле, а не поле с заранее известным дурным именем. Поэтому набор
+        // полей верхнего уровня закреплён — добавили своё, тест упал, и о
+        // приватности пришлось подумать до отправки, а не после.
+        XCTAssertEqual(Set(tree.keys), Self.expectedTopLevelKeys,
+                       "состав отчёта изменился — проверьте, что новое поле "
+                       + "не рассказывает, где человек был и когда")
+
+        // Ни одна строка в отчёте не должна выглядеть числом с точкой:
+        // координату иначе как строкой или дробью не передать.
+        for value in Self.allStringValues(of: tree) where value != "2026-08-06" {
+            XCTAssertNil(Double(value), "строка «\(value)» похожа на число")
+        }
+
         // Единственная временная метка — календарный день, без часов и минут.
         XCTAssertTrue(json.contains("2026-08-06"))
+    }
+
+    /// Имена, которых в обезличенном отчёте быть не может ни на каком уровне.
+    private static let forbiddenKeys: Set<String> = [
+        "lat", "latitude", "lon", "lng", "long", "longitude",
+        "coord", "coords", "coordinate", "coordinates", "location",
+        "position", "place", "address", "geo", "point", "points",
+        "route", "track", "path", "trace", "polyline",
+        "startedat", "endedat", "timestamp", "time", "at", "when",
+        "cameraid", "cameraids", "tripid", "deviceid", "id",
+    ]
+
+    /// Состав отчёта на сегодня. Список ведётся руками намеренно.
+    private static let expectedTopLevelKeys: Set<String> = [
+        "day", "onboarded", "locationAuth", "notificationsAllowed",
+        "trips", "kilometres", "alerts", "passes", "reports", "screens",
+        "limitSource", "maneuvers", "tripsDropped", "alertRecall", "voiced",
+        "memoryWarnings",
+    ]
+
+    private static func allKeys(of value: Any) -> [String] {
+        switch value {
+        case let map as [String: Any]:
+            return Array(map.keys) + map.values.flatMap(allKeys(of:))
+        case let list as [Any]:
+            return list.flatMap(allKeys(of:))
+        default:
+            return []
+        }
+    }
+
+    private static func allStringValues(of value: Any) -> [String] {
+        switch value {
+        case let map as [String: Any]:
+            return map.values.flatMap(allStringValues(of:))
+        case let list as [Any]:
+            return list.flatMap(allStringValues(of:))
+        case let text as String:
+            return [text]
+        default:
+            return []
+        }
     }
 
     func testEmptyReportIsRecognised() {

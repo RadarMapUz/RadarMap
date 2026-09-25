@@ -150,9 +150,23 @@ struct CarPlayOverlay: View {
     private var speedCell: some View {
         HStack(spacing: 12) {
             VStack(spacing: -1) {
+                // Кегль 30, а НЕ 38, и это возврат к тому, что было на экране.
+                //
+                // Здесь стояло 38 — но прежняя шкала обрезалась потолком 30, и
+                // цифра все эти месяцы рисовалась тридцатой. Раскладка панели
+                // подгонялась в живой машине именно под неё. Новая шкала
+                // (потолок 46) вернула запрошенные 38, то есть молча увеличила
+                // спидометр на 27 % на экране, ширина которого не тянется.
+                //
+                // Число в коде приведено к тому, что реально видел водитель.
+                // Менять размер спидометра на экране машины можно только с
+                // машиной перед глазами — тем более что комментарий выше прямо
+                // говорит: Waze и Google его не трогают никогда.
                 Text("\(Int(env.location.speedKmh.rounded()))")
-                    .font(.rounded(38, .heavy).monospacedDigit())
+                    .font(.rounded(30, .heavy).monospacedDigit())
                     .foregroundStyle(speedColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .contentTransition(.numericText())
                     .motionAnimation(.snappy(duration: 0.25), value: Int(env.location.speedKmh.rounded()))
                 Text("км/ч")

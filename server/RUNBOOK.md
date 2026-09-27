@@ -19,14 +19,17 @@ postgres (и в Docker `medicalnode_db_1`), minio, wg-easy, xray, openvpn. Outli
 | БД | `/opt/radarmap/api/reports.db` (WAL) |
 | Раздача | `/opt/radarmap/www` — **только** файлы приложения, 5.5 МБ |
 | Рабочие файлы снапа | `/opt/radarmap/work` — 225 МБ, наружу не отдаются |
-| Бэкапы | `/opt/radarmap/backups`, 7 последних, cron 03:17 |
-| Сторож | `/opt/radarmap/healthcheck.sh`, cron каждые 5 мин |
+| Бэкапы | `/opt/radarmap/backups`, 7 последних, cron 03:17; копия на мак владельца — `pull_backup.sh`, launchd 11:00 → `~/RadarMapBackups` |
+| Пульт состояния | `/opt/radarmap/api/status.py`, cron каждые 5 мин (заменил `healthcheck.sh`); страница `/status` в панели, цвета наружу — `/radarmap/status.json` |
+| Сверка с репо | `bash server/drift.sh` — md5 всего, что лежит на VPS; `deploy_api.sh` зовёт её сам |
+| Реестр МВД | `update_cameras.py`, cron пн 05:00 — только замечает изменение, базу сливает владелец |
+| Защита | SSH только по ключу (`sshd-00-hardening.conf`); `docker-user-firewall.service` закрывает :51821; песочница API/панели — `systemd-radarmap-sandbox.conf` |
 | Дороги, кандидат | `/opt/radarmap/update_roads.sh`, cron вс 04:17 — свежий OSM, сборка, отчёт; НЕ публикует |
 | Установка конвейера | `bash server/install_roads_pipeline.sh [--run] [--swap] [--status]` — сборщик, недельный скрипт, крон, подкачка |
 | Кандидаты нейросети | `bash server/fetch_candidates.sh` — руками и редко; в панели клавиша `C`. В индекс НЕ входят |
 | Дороги, публикация | `publish_roads.sh --auto` на маке владельца, launchd вс 10:00 — ворота, подпись, выкладка |
 | Дороги, откат | `bash server/rollback_roads.sh` — вернуть прошлый набор из `roads_prev` |
-| Логи | `/var/log/radarmap-{backup,health}.log`, `journalctl -u radarmap-api` |
+| Логи | `/var/log/radarmap-{backup,status,roads}.log` (ротация еженедельно), `journalctl -u radarmap-api` |
 
 ## Панель модератора
 
@@ -131,19 +134,22 @@ systemctl restart radarmap-api`.
 
 ## Проверить, что всё живо
 
+Панель → вкладка **«Пульт»** (`/status`). Одна строка на функцию, у
+несработавшей — что это значит для водителя. Руками:
+
 ```bash
-ssh root@45.130.148.94 /opt/radarmap/healthcheck.sh
+ssh radarmap-vps 'python3 /opt/radarmap/api/status.py; echo $?'   # 0 — нет красного
 ```
 
-Код 0 — всё хорошо. Сторож молчит, пока состояние не изменилось, поэтому
-тишина в логе — это норма, а не «он не работает».
-
-Уведомления в телеграм включаются двумя переменными в cron-строке:
-`RADARMAP_TG_TOKEN=… RADARMAP_TG_CHAT=… /opt/radarmap/healthcheck.sh`.
+Проверки идут путём телефона (gzip, подпись, sha тайлов), не по диску.
+Тревога в Telegram (`notify.py`, токен в `admin.conf`) — только на смену
+цвета, поэтому тишина — норма. Пульт «не обновляется» больше 15 минут —
+смотреть крон и `/var/log/radarmap-status.log`.
 
 ## Долги
 
 - **HTTPS с доменом** — блокер App Store и предусловие панели наружу
   (`HTTPS.md`).
-- **Пароль root ходит по рукам.** Ставится SSH-ключ, пароль отключается
-  (`PasswordAuthentication no`) — до публичного запуска обязательно.
+- ~~Пароль root ходит по рукам~~ — 27.09.2026 вход только по ключу. Сам
+  пароль ещё сменить (`passwd`): он побывал в переписке.
+- Остальное — `docs/plan_vps.md`.

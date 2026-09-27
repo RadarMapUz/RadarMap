@@ -4,6 +4,7 @@
 Тестов у этого файла не было вовсе — он и в репозитории-то не лежал. Здесь
 проверяется то, что попадает водителю на экран цифрой лимита и суммой штрафа.
 """
+import gzip
 import json
 import os
 import tempfile
@@ -107,6 +108,62 @@ class RoadClassTests(unittest.TestCase):
 
     def test_every_code_is_a_class_the_client_knows(self):
         self.assertTrue(set(sl.ROAD_CLASS_CODES.values()) <= set(range(1, 9)))
+
+
+class PublishedFilesTests(unittest.TestCase):
+    """Что раздаёт nginx с gzip_static: .gz обязан совпадать с файлом.
+
+    С 01.09 по 27.09.2026 телефоны получали лимиты от 15 июля: скрипт обновлял
+    .json, а nginx отдавал оставшийся рядом старый .gz.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.out = os.path.join(self.dir, "speed_limits.json")
+
+    def tearDown(self):
+        for name in os.listdir(self.dir):
+            os.unlink(os.path.join(self.dir, name))
+        os.rmdir(self.dir)
+
+    def write_both(self):
+        sl.write_published(self.out, '{"v":1}')
+        sl.write_published(self.out.replace(".json", "_v2.json"), '{"v":2}')
+
+    def test_gz_is_written_with_the_file_and_matches_it(self):
+        sl.write_published(self.out, '{"segments":[]}')
+        with open(self.out, "rb") as f, open(self.out + ".gz", "rb") as g:
+            self.assertEqual(gzip.decompress(g.read()), f.read())
+        self.assertFalse(os.path.exists(self.out + ".tmp"))
+        self.assertFalse(os.path.exists(self.out + ".gz.tmp"))
+
+    def test_rewrite_replaces_a_stale_gz(self):
+        with open(self.out + ".gz", "wb") as g:
+            g.write(gzip.compress(b'{"july":true}'))
+        sl.write_published(self.out, '{"september":true}')
+        with open(self.out + ".gz", "rb") as g:
+            self.assertEqual(gzip.decompress(g.read()), b'{"september":true}')
+
+    def test_fresh_when_everything_matches(self):
+        self.write_both()
+        self.assertTrue(sl.companions_fresh(self.out))
+
+    def test_stale_gz_is_not_fresh(self):
+        # Ровно боевой случай: сегменты те же, хэш тот же, а .gz — июльский.
+        self.write_both()
+        with open(self.out + ".gz", "wb") as g:
+            g.write(gzip.compress(b'{"july":true}'))
+        self.assertFalse(sl.companions_fresh(self.out))
+
+    def test_missing_v2_is_not_fresh(self):
+        # Второй боевой случай: v2 на проде не выкладывался ни разу (404).
+        sl.write_published(self.out, '{"v":1}')
+        self.assertFalse(sl.companions_fresh(self.out))
+
+    def test_missing_gz_is_not_fresh(self):
+        self.write_both()
+        os.unlink(self.out + ".gz")
+        self.assertFalse(sl.companions_fresh(self.out))
 
 
 if __name__ == "__main__":

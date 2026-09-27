@@ -23,6 +23,7 @@ RoadClass.assumedLimitKmh(inSettlement:). То есть этот файл пок
 
 Стоимость прогона: 21 секунда, 567 МБ пика (замерено на бою 2026-09-01).
 """
+import gzip
 import hashlib
 import json
 import os
@@ -141,6 +142,41 @@ def collect(pbf):
     return h.segments, h.skipped
 
 
+def write_published(path, body):
+    """Файл и его .gz — одной операцией, и .gz ВСЕГДА вместе с файлом.
+
+    nginx раздаёт каталог с `gzip_static on`: на запрос с Accept-Encoding: gzip
+    (а URLSession шлёт его всегда) он отдаёт готовый path.gz, не глядя на сам
+    файл. Этот скрипт годами обновлял только .json, и с 01.09 по 27.09.2026
+    телефоны получали лимиты от 15 июля — из .gz, оставшегося от прежнего
+    конвейера. Поэтому оба файла пишутся здесь, а не «где-то при выкладке».
+    """
+    data = body.encode()
+    for target, payload in ((path + ".gz", gzip.compress(data, 9, mtime=0)),
+                            (path, data)):
+        tmp = target + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(payload)
+        os.replace(tmp, target)
+
+
+def companions_fresh(out):
+    """Всё ли, что раздаётся рядом с out, на месте и не старше него.
+
+    Хэш содержимого не видит отставших спутников: v2 мог не выкладываться
+    никогда, .gz — остаться от прошлого конвейера. Тогда «unchanged» —
+    неправда, и файлы надо переписать, даже если сегменты те же.
+    """
+    out_v2 = out.replace(".json", "_v2.json")
+    for main_file in (out, out_v2):
+        gz = main_file + ".gz"
+        if not (os.path.exists(main_file) and os.path.exists(gz)):
+            return False
+        if gzip.decompress(open(gz, "rb").read()) != open(main_file, "rb").read():
+            return False
+    return True
+
+
 def main():
     segments, skipped = collect(PBF)
     allowed, why = decide(previous_count(OUT), len(segments))
@@ -158,7 +194,7 @@ def main():
     if os.path.exists(hash_file):
         with open(hash_file) as f:
             old_hash = f.read().strip()
-    if new_hash == old_hash:
+    if new_hash == old_hash and companions_fresh(OUT):
         print("unchanged: %d segments" % len(segments))
         return 0
 
@@ -173,18 +209,12 @@ def main():
     legacy = [[limit, flat] for limit, _cls, flat in segments]
     body = json.dumps({"version": version, "segments": legacy},
                       separators=(",", ":"))
-    tmp = OUT + ".tmp"
-    with open(tmp, "w") as f:
-        f.write(body)
-    os.replace(tmp, OUT)
+    write_published(OUT, body)
 
     body_v2 = json.dumps({"version": version, "format": 2, "segments": segments},
                          separators=(",", ":"))
     out_v2 = OUT.replace(".json", "_v2.json")
-    tmp_v2 = out_v2 + ".tmp"
-    with open(tmp_v2, "w") as f:
-        f.write(body_v2)
-    os.replace(tmp_v2, out_v2)
+    write_published(out_v2, body_v2)
 
     with open(hash_file, "w") as f:
         f.write(new_hash)

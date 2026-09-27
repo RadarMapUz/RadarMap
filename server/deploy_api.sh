@@ -29,6 +29,8 @@ NOTIFY=/opt/radarmap/api/notify.py
 # Панель импортирует оба на старте и без них не поднимется.
 EDITS=/opt/radarmap/api/map_edits.py
 QUEUE=/opt/radarmap/api/osm_queue.py
+# Пульт состояния: крон зовёт его раз в 5 минут, панель читает его отчёт.
+STATUS=/opt/radarmap/api/status.py
 STATIC=/opt/radarmap/api/static
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -45,6 +47,7 @@ fi
 "${SCP[@]}" "$DIR/notify.py" "$HOST:$NOTIFY.new"
 "${SCP[@]}" "$DIR/map_edits.py" "$HOST:$EDITS.new"
 "${SCP[@]}" "$DIR/osm_queue.py" "$HOST:$QUEUE.new"
+"${SCP[@]}" "$DIR/status.py" "$HOST:$STATUS.new"
 "${SSH[@]}" "$HOST" "mkdir -p $STATIC"
 "${SCP[@]}" "$DIR/static/moderate.js" "$HOST:$STATIC/moderate.js"
 "${SCP[@]}" "$DIR/static/editor.js" "$HOST:$STATIC/editor.js"
@@ -70,7 +73,7 @@ echo "→ Проверка синтаксиса, подмена, рестарт�
 # панели и уронил её в цикл перезапуска.
 "${SSH[@]}" "$HOST" "
   set -e
-  files=\"$ADMIN.new $AUTH.new $NOTIFY.new $EDITS.new $QUEUE.new\"
+  files=\"$ADMIN.new $AUTH.new $NOTIFY.new $EDITS.new $QUEUE.new $STATUS.new\"
   [ '$ONLY' = 'panel' ] || files=\"$API.new \$files\"
   for f in \$files; do
     if python3 -c \"import ast, sys; ast.parse(open(sys.argv[1]).read())\" \"\$f\"; then
@@ -88,6 +91,7 @@ echo "→ Проверка синтаксиса, подмена, рестарт�
   mv $NOTIFY.new $NOTIFY
   mv $EDITS.new $EDITS
   mv $QUEUE.new $QUEUE
+  mv $STATUS.new $STATUS
   # Где лежат опубликованные тайлы. Без этого конструктор открывается, но
   # магнит не находит ни одной дороги — путь по умолчанию указывает в каталог,
   # которого на сервере нет. Врезкой, а не правкой юнита: юнит на сервере уже

@@ -2,7 +2,7 @@
 # ОТКЛЮЧЕНО 19.07.2026: 40 4 1 * * /opt/radarmap/api/update_osrm.sh >> /opt/radarmap/osrm/update.log 2>&1
 # ОТКЛЮЧЕНО 19.07.2026: 17 3 * * * /opt/radarmap/api/backup_db.sh >/dev/null 2>&1
 17 3 * * * /opt/radarmap/api/backup_db.sh >> /var/log/radarmap-backup.log 2>&1
-*/5 * * * * RADARMAP_BASE=https://soulmed.uz/radarmap /opt/radarmap/healthcheck.sh >> /var/log/radarmap-health.log 2>&1
+*/5 * * * * /usr/bin/python3 /opt/radarmap/api/status.py >> /var/log/radarmap-status.log 2>&1
 17 4 * * 0 /opt/radarmap/update_roads.sh >> /var/log/radarmap-roads.log 2>&1
 # Лимиты скорости: раз в месяц, БЕЗ пересборки графа OSRM (тот не влезает в память).
 40 4 2 * * /opt/radarmap/api/update_speed_limits.sh >> /opt/radarmap/osrm/limits.log 2>&1

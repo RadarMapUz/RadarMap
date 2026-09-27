@@ -329,7 +329,8 @@ button.ghost { background:transparent; color:var(--text-2);
 TABS = (("/", "Сводка"), ("/map", "Карта"), ("/editor", "Конструктор"),
         ("/changes", "Что изменилось"), ("/cameras", "Камеры"),
         ("/mobile", "Передвижные"), ("/feedback", "Обращения"),
-        ("/usage", "Люди"), ("/journal", "Журнал"), ("/health", "Здоровье"))
+        ("/usage", "Люди"), ("/journal", "Журнал"), ("/status", "Пульт"),
+        ("/health", "Здоровье"))
 
 # Префикс, под которым панель видна снаружи: "/radarmap/admin" на общем домене
 # или пусто при доступе через SSH-туннель. Внутрь запросы приходят уже без
@@ -1548,6 +1549,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, self.usage_page(conn))
             if path == "/health":
                 return self._send(200, self.health_page(conn))
+            if path == "/status":
+                return self._send(200, status_page())
             if path == "/map":
                 return self.moderation_map(conn)
             if path == "/api/cameras":
@@ -3169,6 +3172,92 @@ class Handler(BaseHTTPRequestHandler):
              "SELECT at, camera_id, action, detail FROM moderation_log "
              "ORDER BY id DESC LIMIT 20"))
  or '<div class="empty">Решений ещё не принимали</div>'}""")
+
+
+# --- Пульт состояния ------------------------------------------------------
+#
+# Проверки делает server/status.py по крону; страница только читает его
+# отчёт и историю. Сама она в сеть не ходит: пульт, который тормозит или
+# падает, когда тормозит сеть, бесполезен ровно тогда, когда нужен.
+STATUS_JSON = os.environ.get("RADARMAP_STATUS", "/opt/radarmap/api/status.json")
+STATUS_DB = os.environ.get("RADARMAP_STATUS_DB", "/opt/radarmap/api/status.db")
+STATUS_RANK = {"ok": 0, "idle": 0, "warn": 1, "bad": 2}
+STATUS_WORD = {"ok": "работает", "idle": "нет данных", "warn": "внимание", "bad": "сломано"}
+
+
+def status_history(now, days=7, buckets_per_day=4):
+    """check_id → список худших состояний по корзинам (старые слева)."""
+    span = DAY // buckets_per_day
+    count = days * buckets_per_day
+    start = now - count * span
+    strips = {}
+    if not os.path.exists(STATUS_DB):
+        return strips
+    conn = sqlite3.connect("file:%s?mode=ro" % STATUS_DB, uri=True, timeout=5)
+    try:
+        rows = conn.execute("SELECT at, check_id, state FROM history WHERE at >= ?",
+                            (start,)).fetchall()
+    except sqlite3.Error:
+        rows = []
+    finally:
+        conn.close()
+    for at, check_id, state in rows:
+        cells = strips.setdefault(check_id, [None] * count)
+        slot = min(count - 1, int((at - start) // span))
+        if cells[slot] is None or STATUS_RANK.get(state, 0) > STATUS_RANK.get(cells[slot], 0):
+            cells[slot] = state
+    return strips
+
+
+def status_page(now=None):
+    now = now or time.time()
+    try:
+        with open(STATUS_JSON) as f:
+            report = json.load(f)
+    except (OSError, ValueError):
+        return page("/status", "Пульт", '''<h1>Пульт состояния</h1>
+<div class="empty">Отчёта ещё нет. На сервере:
+<code>python3 /opt/radarmap/api/status.py</code> и строка в crontab
+(см. docstring status.py).</div>''')
+    strips = status_history(now)
+    age_min = (now - report.get("at", 0)) / 60
+    stale = age_min > 15
+    overall = "bad" if stale else report.get("overall", "bad")
+    head = (f'<h1>Пульт состояния</h1><div class="card"><div class="row">'
+            f'<span class="tag {esc(overall)}">{esc(STATUS_WORD.get(overall, overall))}</span>'
+            f'<span class="muted">проверено {int(age_min)} мин назад'
+            f'{" — ПУЛЬТ НЕ ОБНОВЛЯЕТСЯ, проверьте крон status.py" if stale else ""}'
+            f' · проверки идут путём телефона: gzip, подпись, sha тайлов</span></div></div>')
+
+    def strip(check_id):
+        cells = strips.get(check_id) or []
+        if not cells:
+            return ""
+        seen = [c for c in cells if c]
+        share = 100 * sum(1 for c in seen if STATUS_RANK.get(c, 0) == 0) // max(1, len(seen))
+        colour = {"ok": "var(--ok)", "idle": "var(--muted, #6b7280)",
+                  "warn": "var(--warn)", "bad": "var(--bad)"}
+        bars = "".join(
+            f'<span style="display:inline-block;width:5px;height:14px;margin-right:1px;'
+            f'border-radius:1px;background:{colour.get(c, "var(--stroke)")};'
+            f'opacity:{1 if c else .35}"></span>' for c in cells)
+        return f'<div class="muted" title="неделя, по 6 часов">{bars} {share}%</div>'
+
+    rows = []
+    for check in sorted(report.get("checks", []),
+                        key=lambda c: -STATUS_RANK.get(c.get("state"), 0)):
+        state = check.get("state", "bad")
+        details = "".join(f'<div class="t-{esc(state)}">{esc(d)}</div>'
+                          for d in check.get("details") or [])
+        meaning = (f'<div class="muted">Для водителя: {esc(check.get("meaning", ""))}</div>'
+                   if state != "ok" else "")
+        rows.append(
+            f'<div class="card"><div class="row">'
+            f'<span class="tag {esc(state)}">{esc(STATUS_WORD.get(state, state))}</span>'
+            f'<b>{esc(check.get("title", check.get("id", "")))}</b>'
+            f'<span class="muted">{esc(check.get("summary", ""))}</span></div>'
+            f'{details}{meaning}{strip(check.get("id", ""))}</div>')
+    return page("/status", "Пульт", head + "".join(rows))
 
 
 def main():

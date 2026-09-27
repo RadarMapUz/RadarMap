@@ -80,7 +80,7 @@ class Base(unittest.TestCase):
         conn = sqlite3.connect(self.db)
         conn.executescript("""
             CREATE TABLE reports(created REAL);
-            CREATE TABLE camera_reports(received REAL);
+            CREATE TABLE camera_reports(received REAL, camera_id INTEGER, reason TEXT, resolved INTEGER DEFAULT 0);
             CREATE TABLE feedback(received REAL);
             CREATE TABLE metrics(received REAL, device TEXT);
             CREATE TABLE overrides(camera_id INTEGER, decided_at REAL, published_at REAL);
@@ -266,6 +266,62 @@ class LocalTests(Base):
             st.CHECKS = saved
         self.assertEqual(report["overall"], st.BAD)
         self.assertIn("сломалось", report["checks"][0]["summary"])
+
+
+class CameraPipelineTests(Base):
+    def test_quality_counts_follow_the_app_rules(self):
+        cams = [
+            {"road": [1], "dir": 90, "cls": "trunk", "twin": True},        # стороны доказаны
+            {"road": [1], "dir": 90, "cls": "primary", "split": False},    # доказаны
+            {"road": [1], "dir": 90, "cls": "primary", "split": True},     # не доказаны
+            {"road": [1], "dir": 90, "cls": "footway", "twin": True},      # тротуар — не верим
+            {"needsReview": True},
+        ]
+        line = st.camera_quality(cams)
+        self.assertIn("профиль дороги 80%", line)
+        self.assertIn("стороны доказаны 2", line)
+        self.assertIn("приблизительная 1", line)
+        self.assertIn("тротуаре/остановке 1", line)
+
+    def test_unanswered_wrong_location_is_yellow(self):
+        self.assertEqual(st.check_cameras(self.ctx())["state"], st.OK)
+        self.sql("INSERT INTO camera_reports VALUES (?, 7, 'wrong_location', 0)", (NOW,))
+        self.sql("INSERT INTO camera_reports VALUES (?, 7, 'wrong_location', 0)", (NOW,))
+        self.sql("INSERT INTO camera_reports VALUES (?, 8, 'gone', 0)", (NOW,))
+        result = st.check_cameras(self.ctx())
+        self.assertEqual(result["state"], st.WARN)
+        self.assertIn("без ответа: 1", " ".join(result["details"]))
+        self.sql("UPDATE camera_reports SET resolved = 1")
+        self.assertEqual(st.check_cameras(self.ctx())["state"], st.OK)
+
+    def write_log(self, *lines):
+        os.makedirs(os.path.join(self.dir, "api"), exist_ok=True)
+        with open(os.path.join(self.dir, "api", "update.log"), "w") as f:
+            f.write("\n".join(lines) + "\n")
+
+    def stamp(self, days_ago):
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(NOW - days_ago * DAY))
+
+    def test_registry_polled_recently_is_green(self):
+        self.write_log(self.stamp(2) + " UNCHANGED: 3480 cameras, hash a582")
+        self.assertEqual(st.check_registry(self.ctx())["state"], st.OK)
+
+    def test_registry_not_polled_is_yellow(self):
+        # Ровно боевой случай: последний опрос — 3 августа.
+        self.write_log(self.stamp(55) + " UNCHANGED: 3480 cameras, hash a582")
+        self.assertEqual(st.check_registry(self.ctx())["state"], st.WARN)
+        os.unlink(os.path.join(self.dir, "api", "update.log"))
+        self.assertEqual(st.check_registry(self.ctx())["state"], st.WARN)
+
+    def test_failed_poll_is_yellow(self):
+        self.write_log(self.stamp(1) + " FETCH FAILED: timeout")
+        self.assertEqual(st.check_registry(self.ctx())["state"], st.WARN)
+
+    def test_registry_change_is_reported(self):
+        self.write_log(self.stamp(9) + " CANDIDATE UPDATED: 3520 cameras, hash b1",
+                       self.stamp(2) + " UNCHANGED: 3520 cameras, hash b1")
+        result = st.check_registry(self.ctx())
+        self.assertIn("CANDIDATE UPDATED", " ".join(result["details"]))
 
 
 class AlertTests(unittest.TestCase):

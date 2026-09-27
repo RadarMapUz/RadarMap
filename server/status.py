@@ -81,6 +81,8 @@ LIMITS = {
     # только напоминание, что его пора собрать на маке.
     "osrm_warn_days": 120,
     "backup_bad_days": 2,
+    # Реестр МВД опрашивается раз в неделю.
+    "registry_warn_days": 10,
     # Копия на мак владельца — раз в сутки; мак бывает выключен на выходные.
     "offsite_warn_days": 4,
     "disk_warn_mb": 2000, "disk_bad_mb": 500,
@@ -314,7 +316,91 @@ def check_cameras(ctx):
                                            manifest.get("updatedAt", "?"))
     if problems:
         summary += " · " + "; ".join(problems)
-    return result("cameras", "База камер", BAD if problems else OK, summary, meaning)
+    details = []
+    try:
+        details.append(camera_quality(json.loads(db.body)))
+    except (ValueError, TypeError):
+        details.append("база не разбирается как список камер")
+    complaints = pending_wrong_location(ctx)
+    state = BAD if problems else OK
+    if complaints:
+        details.append("жалоб «не там стоит» без ответа: %d → «Положение» в панели" % complaints)
+        state = worst(state, WARN)
+    return result("cameras", "База камер", state, summary, meaning, details)
+
+
+# Те же классы, что RoadClass(.pedestrian) в RadarMap/Models/RoadShape.swift:
+# снап, приземливший камеру сюда, ничего не знает о проезжей части.
+PEDESTRIAN = {"footway", "path", "cycleway", "steps", "pedestrian", "platform", "bus_stop"}
+
+
+def camera_quality(cameras):
+    """Покрытие дорожным профилем — то, на чём работает конвейер предупреждений.
+
+    Падение «с профилем» между выпусками = снап сломался; рост «на тротуаре» =
+    камеры, которые приложение не может ни проверить по дороге, ни заглушить.
+    Стороны доказаны — тот же расчёт, что Camera.allowsDirectionGate.
+    """
+    total = len(cameras) or 1
+    road = sum(1 for c in cameras if c.get("road"))
+    proven = sum(1 for c in cameras
+                 if c.get("dir") is not None and c.get("cls") not in PEDESTRIAN
+                 and c.get("cls") is not None and (c.get("twin") or c.get("split") is False))
+    review = sum(1 for c in cameras if c.get("needsReview"))
+    foot = sum(1 for c in cameras if c.get("cls") in PEDESTRIAN)
+    return ("профиль дороги %d%% · стороны доказаны %d · координата приблизительная %d · "
+            "на тротуаре/остановке %d" % (100 * road // total, proven, review, foot))
+
+
+def pending_wrong_location(ctx):
+    conn = ctx.db()
+    if conn is None:
+        return 0
+    try:
+        with conn:
+            return conn.execute("SELECT COUNT(DISTINCT camera_id) FROM camera_reports "
+                                "WHERE reason = 'wrong_location' AND resolved = 0").fetchone()[0]
+    except sqlite3.Error:
+        return 0
+    finally:
+        conn.close()
+
+
+def check_registry(ctx):
+    """Реестр МВД: опрашивается ли и не ждёт ли нас изменение.
+
+    update_cameras.py по крону только ЗАМЕЧАЕТ, что открытый реестр
+    изменился (пишет строку в update.log). Сливает новые адреса в базу
+    владелец — merge_cameras.py → snap → deploy_db.sh, — потому что слияние
+    сохраняет id и геометрию, а сборка с нуля их переклеивает.
+    """
+    meaning = ("МВД поставило новые камеры, а в нашей базе их нет: на этих местах "
+               "приложение молчит.")
+    path = os.path.join(ctx.root, "api", "update.log")
+    try:
+        with open(path, errors="replace") as f:
+            lines = [line.strip() for line in f if line.strip()]
+    except OSError:
+        return result("registry", "Реестр МВД", WARN, "update.log нет — опрос не запускался", meaning)
+    polls = [line for line in lines if any(w in line for w in
+                                           ("UNCHANGED", "CANDIDATE UPDATED", "FETCH FAILED", "REFUSING"))]
+    if not polls:
+        return result("registry", "Реестр МВД", WARN, "опросов в логе нет", meaning)
+    last = polls[-1]
+    try:
+        stamp = time.mktime(time.strptime(last[:19], "%Y-%m-%d %H:%M:%S"))
+        age = (ctx.now - stamp) / DAY
+    except ValueError:
+        age = None
+    state = grade_age(age, LIMITS["registry_warn_days"], None)
+    if "FETCH FAILED" in last or "REFUSING" in last:
+        state = worst(state, WARN)
+    changed = [line for line in polls if "CANDIDATE UPDATED" in line]
+    details = []
+    if changed:
+        details.append("последнее изменение реестра: %s" % changed[-1][:80])
+    summary = "последний опрос %s назад: %s" % (days(age), last[20:90])
+    return result("registry", "Реестр МВД", state, summary, meaning, details)
 
 
 def check_config(ctx):
@@ -532,7 +618,7 @@ def check_cert(ctx, days_left=cert_days_left):
                   "Истёк сертификат — телефоны не достучатся ни до чего.")
 
 
-CHECKS = (check_api, check_cameras, check_limits, check_roads, check_mvt, check_overrides,
+CHECKS = (check_api, check_cameras, check_registry, check_limits, check_roads, check_mvt, check_overrides,
           check_hotspots, check_config, check_osrm, check_crowd, check_backup, check_disk,
           check_cert)
 

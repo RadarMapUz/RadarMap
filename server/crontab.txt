@@ -6,3 +6,5 @@
 17 4 * * 0 /opt/radarmap/update_roads.sh >> /var/log/radarmap-roads.log 2>&1
 # Лимиты скорости: раз в месяц, БЕЗ пересборки графа OSRM (тот не влезает в память).
 40 4 2 * * /opt/radarmap/api/update_speed_limits.sh >> /opt/radarmap/osrm/limits.log 2>&1
+# Реестр МВД: только ЗАМЕЧАЕТ изменение (кандидат + update.log), базу сливает владелец — merge_cameras.py. Включено 27.09.2026.
+0 5 * * 1 /usr/bin/python3 /opt/radarmap/api/update_cameras.py >/dev/null 2>&1

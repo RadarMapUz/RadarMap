@@ -83,6 +83,7 @@ class Base(unittest.TestCase):
             CREATE TABLE camera_reports(received REAL, camera_id INTEGER, reason TEXT, resolved INTEGER DEFAULT 0);
             CREATE TABLE feedback(received REAL);
             CREATE TABLE metrics(received REAL, device TEXT);
+            CREATE TABLE usage_stats(device TEXT, day TEXT, quality TEXT, received REAL);
             CREATE TABLE overrides(camera_id INTEGER, decided_at REAL, published_at REAL);
         """)
         conn.commit()
@@ -322,6 +323,43 @@ class CameraPipelineTests(Base):
                        self.stamp(2) + " UNCHANGED: 3520 cameras, hash b1")
         result = st.check_registry(self.ctx())
         self.assertIn("CANDIDATE UPDATED", " ".join(result["details"]))
+
+
+class DeliveryTests(Base):
+    def phone(self, device, **versions):
+        self.sql("INSERT INTO usage_stats VALUES (?, '2026-09-27', ?, ?)",
+                 (device, json.dumps({"dataVersions": versions}), NOW - DAY))
+
+    def run_delivery(self, **ages):
+        ctx = self.ctx()
+        st.check_cameras(ctx)
+        st.check_roads(ctx)
+        ctx.published_age.update(ages)
+        return st.check_delivery(ctx)
+
+    def test_no_reports_yet_is_grey(self):
+        self.assertEqual(self.run_delivery()["state"], st.IDLE)
+
+    def test_phones_on_old_data_warn_once_publication_settled(self):
+        ctx = self.ctx()
+        st.check_roads(ctx)
+        current = ctx.published["roads"]
+        self.phone("a", cameras=12, roads=current)
+        self.phone("b", cameras=11, roads=current + 1)
+        self.phone("c", cameras=11, roads=current + 1)
+        fresh = self.run_delivery(cameras=1, roads=1)
+        self.assertEqual(fresh["state"], st.OK, "сразу после публикации низкая доля — норма")
+        self.assertIn("база камер 33%", fresh["summary"])
+        self.assertIn("дороги 33%", fresh["summary"])
+        self.assertEqual(self.run_delivery(cameras=10, roads=10)["state"], st.WARN)
+
+    def test_phone_newer_than_server_counts_as_fresh(self):
+        self.phone("a", cameras=13)
+        self.assertIn("база камер 100%", self.run_delivery(cameras=30)["summary"])
+
+    def test_fingerprint_is_stable(self):
+        self.assertEqual(st.index_fingerprint(b"abc"),
+                         int(hashlib.sha256(b"abc").hexdigest()[:7], 16))
 
 
 class AlertTests(unittest.TestCase):

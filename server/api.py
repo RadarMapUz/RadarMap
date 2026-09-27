@@ -338,6 +338,12 @@ def clean_text(s):
 DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
+# Версии данных в суточной сводке (dataVersions): что именно телефон держит.
+# roads и mvt — первые 7 hex sha256 подписанного индекса, как число; так же
+# их считает status.py по опубликованному файлу.
+DATA_VERSION_KEYS = ("cameras", "limits", "roads", "mvt", "overrides", "hotspots")
+
+
 def clamp_int(value, limit=100000):
     """Счётчик из отчёта. Не число, отрицательное или неправдоподобно большое —
     ноль: испорченное поле не должно ни падать, ни искажать сводку."""
@@ -645,6 +651,19 @@ class Handler(BaseHTTPRequestHandler):
             cleaned = {as_str(k)[:24]: clamp_int(v) for k, v in list(value.items())[:20]}
             if cleaned:
                 quality[field] = cleaned
+
+        # Какие версии данных у телефона сейчас в памяти. Без этого сервер знает,
+        # что он ОТДАЁТ, но не знает, что ДОШЛО: июльские лимиты, отданные
+        # вместо сентябрьских, отсюда были бы видны в первый же день. Ключи —
+        # закрытый список, значения — номера публикаций, одинаковые у всех
+        # телефонов (номер базы, версия файла лимитов, отпечаток подписанного
+        # индекса). О человеке они не говорят ничего.
+        versions = data.get("dataVersions")
+        if isinstance(versions, dict):
+            cleaned = {key: clamp_int(versions.get(key), limit=2 ** 31)
+                       for key in DATA_VERSION_KEYS if key in versions}
+            if cleaned:
+                quality["dataVersions"] = cleaned
 
         if ip_quota_exceeded("stat", self._ip(), IP_DAILY_CAPS["stat"]):
             return self._json(429, {"error": "too many"})

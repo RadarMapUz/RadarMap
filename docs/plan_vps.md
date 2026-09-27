@@ -209,6 +209,24 @@
 
 ---
 
+### 4.4. Задача для приложения (сервер готов 27.09.2026)
+
+`POST /api/stat` принимает `dataVersions` — словарь из закрытого списка
+ключей (`api.DATA_VERSION_KEYS`), всё остальное сервер выбрасывает:
+
+| Ключ | Что слать | Откуда в приложении |
+|---|---|---|
+| `cameras` | номер базы в памяти | `CameraStore.dbVersion` |
+| `limits` | поле `version` загруженного файла лимитов | `SpeedLimitService` (индекс) |
+| `roads` | `Int(sha256(payload индекса).hex.prefix(7), radix: 16)` | `RoadNetworkService`, подписанный payload |
+| `mvt` | то же по `mvt_index.json` | `EngineTileGuard` |
+| `overrides`, `hotspots` | `version` из payload | `CameraOverride…`, `HotspotService` |
+
+В `UsageStats` — поле `dataVersions: [String: Int]`, заполняется при сборке
+отчёта. Тест в `UsageStatsTests`: имена ключей закреплены, координат нет.
+Пульт («Доставка до телефонов») сейчас серый и оживёт с первой сборкой.
+Не сделано в сессии 27.09: не было инструментов Xcode для сборки и тестов.
+
 ## 5. Инфраструктура и безопасность
 
 ### P0 — сломано, бьёт по водителю (разобрано выше)

@@ -81,6 +81,11 @@ LIMITS = {
     # только напоминание, что его пора собрать на маке.
     "osrm_warn_days": 120,
     "backup_bad_days": 2,
+    # Доля телефонов на свежих данных. Телефон тянет базу раз в сутки, лимиты и
+    # дороги — раз в неделю, так что сразу после публикации доля честно низкая;
+    # тревожно, когда она и через неделю ниже половины.
+    "delivery_warn_share": 50,
+    "delivery_settle_days": 7,
     # Реестр МВД опрашивается раз в неделю.
     "registry_warn_days": 10,
     # Копия на мак владельца — раз в сутки; мак бывает выключен на выходные.
@@ -223,6 +228,10 @@ class Context:
         self.reports_db = reports_db
         self.root = root
         self.roads_log = roads_log
+        # Опубликованные версии, как их считает телефон (api.DATA_VERSION_KEYS).
+        # Заполняют проверки по ходу; check_delivery сравнивает с телефонами.
+        self.published = {}
+        self.published_age = {}   # ключ → дней с публикации
 
     def db(self):
         if not os.path.exists(self.reports_db):
@@ -312,6 +321,12 @@ def check_cameras(ctx):
         problems.append("подпись не сходится")
     if not same_both_ways(ctx, "cameras.json", db):
         problems.append("gzip и обычная отдача различаются")
+    ctx.published["cameras"] = manifest.get("version")
+    try:
+        ctx.published_age["cameras"] = (ctx.now - time.mktime(
+            time.strptime(manifest.get("updatedAt", ""), "%Y-%m-%d"))) / DAY
+    except ValueError:
+        pass
     summary = "v%s · %s точек · от %s" % (manifest.get("version"), manifest.get("count"),
                                            manifest.get("updatedAt", "?"))
     if problems:
@@ -482,11 +497,23 @@ def check_limits(ctx):
         except (ValueError, KeyError):
             problems.append("%s не читается" % path)
     age = (ctx.now - min(versions)) / DAY if versions else None
+    if versions:
+        ctx.published["limits"] = int(max(versions))
+        ctx.published_age["limits"] = (ctx.now - max(versions)) / DAY
     state = BAD if problems else grade_age(age, LIMITS["limits_warn_days"], LIMITS["limits_bad_days"])
     summary = "v1 и v2 · собраны %s назад" % days(age)
     if problems:
         summary += " · " + "; ".join(problems)
     return result("limits", "Лимиты скорости", state, summary, meaning)
+
+
+def index_fingerprint(payload):
+    """Номер публикации индекса: первые 7 hex sha256 подписанного payload.
+
+    Тот же расчёт делает приложение для dataVersions — у индексов дорог и MVT
+    нет своего номера версии, кроме номера формата.
+    """
+    return int(hashlib.sha256(payload).hexdigest()[:7], 16)
 
 
 def last_roads_run(log_path):
@@ -525,7 +552,9 @@ def check_roads(ctx):
     if payload is None:
         return result("roads", "Дороги (набросок)", BAD, why, meaning)
     tiles = json.loads(payload).get("tiles", {})
+    ctx.published["roads"] = index_fingerprint(payload)
     age = got.age_days(ctx.now)
+    ctx.published_age["roads"] = age
     state = grade_age(age, LIMITS["roads_warn_days"], LIMITS["roads_bad_days"])
     details = []
     checked, broken = sample_tiles(ctx, tiles, lambda k: "roads/road2_%s.json" % k,
@@ -557,7 +586,9 @@ def check_mvt(ctx):
     if payload is None:
         return result("mvt", "Своя карта (MVT)", BAD, why, meaning)
     tiles = json.loads(payload).get("tiles", {})
+    ctx.published["mvt"] = index_fingerprint(payload)
     age = got.age_days(ctx.now)
+    ctx.published_age["mvt"] = age
     state = grade_age(age, LIMITS["roads_warn_days"], LIMITS["roads_bad_days"])
     checked, broken = sample_tiles(ctx, tiles, lambda k: "mvt/%s.mvt" % k, LIMITS["tile_sample"])
     details = []
@@ -618,9 +649,65 @@ def check_cert(ctx, days_left=cert_days_left):
                   "Истёк сертификат — телефоны не достучатся ни до чего.")
 
 
+DELIVERY_NAMES = {"cameras": "база камер", "limits": "лимиты", "roads": "дороги",
+                  "mvt": "своя карта"}
+
+
+def check_delivery(ctx):
+    """Дошло ли опубликованное до телефонов — по суточным сводкам за 7 дней.
+
+    Проверки выше отвечают «что сервер ОТДАЁТ»; эта — «что телефоны ИМЕЮТ».
+    Разница между ними и есть те поломки, которые до 27.09.2026 никто не видел.
+    """
+    meaning = ("Опубликованное не доходит до телефонов: водители ездят на старых "
+               "данных, хотя сервер отдаёт новые.")
+    conn = ctx.db()
+    if conn is None:
+        return result("delivery", "Доставка до телефонов", IDLE, "нет reports.db", meaning)
+    latest = {}
+    try:
+        with conn:
+            rows = conn.execute("SELECT device, day, quality FROM usage_stats "
+                                "WHERE received > ? ORDER BY day", (ctx.now - 7 * DAY,)).fetchall()
+    except sqlite3.Error:
+        rows = []
+    finally:
+        conn.close()
+    for device, _day, quality in rows:
+        try:
+            versions = (json.loads(quality or "{}") or {}).get("dataVersions")
+        except ValueError:
+            versions = None
+        if versions:
+            latest[device] = versions
+    if not latest:
+        return result("delivery", "Доставка до телефонов", IDLE,
+                      "телефоны ещё не присылают версии данных (нужна сборка с dataVersions)",
+                      meaning)
+    parts, state = [], OK
+    for key, name in DELIVERY_NAMES.items():
+        current = ctx.published.get(key)
+        having = [v[key] for v in latest.values() if key in v]
+        if current is None or not having:
+            continue
+        # Телефон может быть и НОВЕЕ (лимиты — по версии файла, база — по номеру):
+        # отставанием считается только «меньше опубликованного» или «другой индекс».
+        if key in ("roads", "mvt"):
+            fresh = sum(1 for v in having if v == current)
+        else:
+            fresh = sum(1 for v in having if v >= current)
+        share = 100 * fresh // len(having)
+        parts.append("%s %d%%" % (name, share))
+        settled = (ctx.published_age.get(key) or 0) >= LIMITS["delivery_settle_days"]
+        if settled and share < LIMITS["delivery_warn_share"]:
+            state = worst(state, WARN)
+    summary = "устройств за неделю: %d · на свежем: %s" % (len(latest), ", ".join(parts) or "—")
+    return result("delivery", "Доставка до телефонов", state, summary, meaning)
+
+
 CHECKS = (check_api, check_cameras, check_registry, check_limits, check_roads, check_mvt, check_overrides,
           check_hotspots, check_config, check_osrm, check_crowd, check_backup, check_disk,
-          check_cert)
+          check_cert, check_delivery)
 
 
 def run_all(ctx):

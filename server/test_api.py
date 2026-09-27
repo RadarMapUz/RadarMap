@@ -785,6 +785,19 @@ class APITest(unittest.TestCase):
         self.assertEqual(quality["limitSource"]["x" * 24], 0)
         self.assertNotIn("alertRecall", quality)
 
+    def test_stat_stores_data_versions_from_a_closed_list(self):
+        """Что дошло до телефона: номера публикаций и ничего больше."""
+        _call(self.port, "POST", "/api/stat", {
+            "device": "d3", "day": "2026-09-27",
+            "dataVersions": {"cameras": 12, "limits": 1790513640, "roads": 0x834f04a,
+                             "lat": 41311, "home": "41.311,69.279"}})
+        conn = sqlite3.connect(api.DB_PATH)
+        row = conn.execute("SELECT quality FROM usage_stats WHERE device='d3'").fetchone()
+        conn.close()
+        versions = json.loads(row[0])["dataVersions"]
+        self.assertEqual(versions, {"cameras": 12, "limits": 1790513640, "roads": 0x834f04a})
+        self.assertNotIn("lat", versions, "ключ вне списка не должен доезжать")
+
     def test_stat_is_one_row_per_device_per_day(self):
         """Сеть могла оборвать подтверждение — повтор не должен раздувать
         «сколько у нас пользователей»."""

@@ -42,6 +42,7 @@ build_mvt.py                  /opt/radarmap/work/build_mvt.py
 mvt.py                        /opt/radarmap/work/mvt.py
 ml_candidates.py              /opt/radarmap/work/ml_candidates.py
 snap_cameras.py               /opt/radarmap/work/snap_cameras.py
+surface_check.py              /opt/radarmap/work/surface_check.py
 nginx-radarmap.conf           /etc/nginx/conf.d/radarmap.conf
 nginx-radarmap-location.conf  /etc/nginx/snippets/radarmap-location.conf
 radarmap-api.service          /etc/systemd/system/radarmap-api.service

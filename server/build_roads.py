@@ -1655,7 +1655,70 @@ def street_chains(roads):
                              round(width, 1),
                              any(p[1] & FLAG_LANES_TAGGED for p in chain)),
                             chain))
-    return streets
+    return fit_carriageways(streets)
+
+
+# Встречные ленты проспекта обязаны оставлять между кромками разделительную.
+#
+# Ширину ленты мы чаще всего УГАДЫВАЕМ по классу (полосы тегом — у 1,4 %
+# дорог страны), и у проспекта две угаданные ленты по 10–14 м накрывали
+# расстояние между своими осями: вместо двух проезжих с разделительной на
+# карте была одна сплошная серая лента (Навои × Рашидов, 27.09.2026). Оси в
+# OSM рисуют по середине проезжих, и расстояние между ними — измерение, а
+# ширина по классу — догадка; при споре правее измерение.
+CARRIAGEWAY_MIN_GAP_METERS = 1.5
+CARRIAGEWAY_MIN_WIDTH_METERS = 3.5
+CARRIAGEWAY_MIN_SAMPLES = 3
+
+
+def carriageway_gap(one, other):
+    """Типичное расстояние между осями встречных лент (медиана по шагам), или None."""
+    gaps = []
+    for spot, _segment in _walk(one, MEDIAN_STEP_METERS):
+        near, gap, _along = _nearest_along(spot, other)
+        if near is not None and 2.0 <= gap <= MEDIAN_MAX_METERS:
+            gaps.append(gap)
+    if len(gaps) < CARRIAGEWAY_MIN_SAMPLES:
+        return None
+    gaps.sort()
+    return gaps[len(gaps) // 2]
+
+
+def fit_carriageways(streets):
+    """Сузить встречные ленты одной улицы так, чтобы разделительная была видна."""
+    groups = {}
+    for index, (street, _chain) in enumerate(streets):
+        if street[3] and street[1] & FLAG_ONEWAY and len(street[2]) >= 2:
+            groups.setdefault((street[0], street[3]), []).append(index)
+    caps = {}
+    for key in sorted(groups):
+        members = groups[key]
+        for i in range(len(members)):
+            for j in range(i + 1, len(members)):
+                a, b = streets[members[i]][0], streets[members[j]][0]
+                if not _near_boxes(a[2], b[2], MEDIAN_MAX_METERS):
+                    continue
+                if not _opposite(a[2], b[2]):
+                    continue
+                gap = carriageway_gap(a[2], b[2])
+                if gap is None:
+                    continue
+                room = gap - CARRIAGEWAY_MIN_GAP_METERS
+                need = (a[4] + b[4]) / 2.0
+                if need <= room or need <= 0:
+                    continue
+                factor = max(room, 0.0) / need
+                for member, street in ((members[i], a), (members[j], b)):
+                    fitted = max(CARRIAGEWAY_MIN_WIDTH_METERS, street[4] * factor)
+                    caps[member] = min(caps.get(member, street[4]), fitted)
+    if not caps:
+        return streets
+    out = []
+    for index, (street, chain) in enumerate(streets):
+        if index in caps:
+            street = street[:4] + (round(caps[index], 1),) + street[5:]
+        out.append((street, chain))
+    return out
 
 
 # Почему ширина считается ПО ЛЕНТЕ, а не по улице целиком.
@@ -2494,20 +2557,37 @@ ISLAND_MAX_AREA = 1200.0
 ISLAND_CLASSES = frozenset({1, 2, 3, 4, 5})
 
 
+# Доля обвода островка, которую обязан дать съезд (безымянная лента).
+# У настоящего островка на съезде съезд — одна из трёх сторон; у середины
+# перекрёстка безымянным бывает только коротенький кусок-связка в пару метров.
+ISLAND_MIN_UNNAMED_SHARE = 0.2
+
+
+def _length_of(points):
+    return sum(meters_between(a, b) for a, b in zip(points, points[1:]))
+
+
 def is_island_face(face_roads):
     """Грань — островок, а не середина перекрёстка.
 
     Где пересекаются два проспекта с раздельными направлениями, четыре ленты
     замыкают между собой квадрат асфальта в пару сотен метров — по площади
     ровно островок. Закрашенный тёмным, он давал «шахматку» посреди
-    перекрёстка (Навои у Анхора, 27.09.2026). Отличает его состав: такую грань
-    обходят ТОЛЬКО именованные ленты двух и более разных улиц. У настоящего
-    островка на съезде есть безымянный съезд или разворот.
+    перекрёстка (Навои у Анхора, Навои × Рашидов; 27.09.2026). Отличает его
+    состав: такую грань обходят именованные ленты двух и более улиц, а
+    безымянного в обводе — от силы короткая связка. У настоящего островка
+    безымянный съезд — заметная часть обвода.
     """
-    names = {road[3] for road in face_roads if len(road) > 3}
-    if "" in names or None in names:
+    names = {road[3] for road in face_roads if len(road) > 3 and road[3]}
+    if len(names) < 2:
         return True
-    return len(names) < 2
+    total = unnamed = 0.0
+    for road in face_roads:
+        length = _length_of(road[2]) if len(road) > 2 else 0.0
+        total += length
+        if len(road) <= 3 or not road[3]:
+            unnamed += length
+    return total > 0 and unnamed / total >= ISLAND_MIN_UNNAMED_SHARE
 
 
 def build_islands(roads):
@@ -3393,6 +3473,28 @@ JUNCTION_REACH = 1.5
 # кластер разбираем обратно на отдельные узлы — лучше шов, чем двор под
 # асфальтом.
 JUNCTION_MAX_AREA = 12.0
+# Площадь сама по себе клин не ловит: у правильного креста 25 м оболочка по
+# замыслу заходит на подходы и тянет на семь квадратов ширины, а клин Навои ×
+# Лабзак (27.09.2026, 5 309 м², улица входит под острым углом) — на восемь с
+# половиной. Отличает их ДОЛЯ оболочки, которую не покрывают сами дороги: у
+# креста это скруглённые углы, у клина — земля между улицами.
+JUNCTION_MAX_UNCOVERED = 0.35
+# Дальше этого от центра перекрёстка (в ширинах самой широкой дороги, плюс
+# разброс сведённых узлов) асфальт — уже подход, и его рисует линия дороги.
+# Оболочка обрезается кругом: клин земли между сходящимися улицами (Навои ×
+# Лабзак) остаётся землёй, а подходы — по-прежнему заходят в узел.
+JUNCTION_REACH_WIDTHS = 1.2
+JUNCTION_DISC_SIDES = 32
+# Шаг сетки, по которой меряется непокрытая доля, и запас к полуширине дороги.
+JUNCTION_COVER_STEP_METERS = 3.0
+JUNCTION_COVER_SLACK_METERS = 1.0
+#
+# Узел пишется только там, где сходится хоть одна дорога шире этого. Стиль
+# телефона красит площадь узла цветом проспекта, и на перекрёстке дворовых
+# проездов она читалась серым ромбом поверх тёмных улиц. Там стык закрывает
+# сама линия со скруглённым концом — MapLibre рисует каймы и полотна в два
+# прохода, шва не бывает.
+JUNCTION_MIN_WIDEST_METERS = 9.0
 
 
 def _hull_of(legs):
@@ -3505,7 +3607,112 @@ def kerb_radius(legs):
 
 def _hull_fits(legs, ring):
     want = max(leg[2] for leg in legs) ** 2
-    return want <= 0 or abs(signed_area_meters(ring)) <= want * JUNCTION_MAX_AREA
+    if want > 0 and abs(signed_area_meters(ring)) > want * JUNCTION_MAX_AREA:
+        return False
+    return uncovered_share(legs, ring) <= JUNCTION_MAX_UNCOVERED
+
+
+def clip_to_reach(legs, ring):
+    """Оболочка узла ∩ круг досягаемости перекрёстка (Сазерленд — Ходжмен:
+    круг выпуклый, а для выпуклого отсекателя форма субъекта не важна)."""
+    if len(ring) < 3 or not legs:
+        return ring
+    nodes = [leg[0] for leg in legs]
+    centre = (sum(p[0] for p in nodes) / len(nodes), sum(p[1] for p in nodes) / len(nodes))
+    kx = LAT_METERS * math.cos(math.radians(centre[1]))
+    spread = max(math.hypot((p[0] - centre[0]) * kx, (p[1] - centre[1]) * LAT_METERS)
+                 for p in nodes)
+    radius = JUNCTION_REACH_WIDTHS * max(leg[2] for leg in legs) + spread
+    clipper = [(centre[0] + radius * math.cos(2 * math.pi * i / JUNCTION_DISC_SIDES) / kx,
+                centre[1] + radius * math.sin(2 * math.pi * i / JUNCTION_DISC_SIDES) / LAT_METERS)
+               for i in range(JUNCTION_DISC_SIDES)]
+    subject = list(ring)
+    if len(subject) > 1 and subject[0] == subject[-1]:
+        subject.pop()
+    # Обход отсекателя — против часовой (как построен круг); «внутри» — слева.
+    for i in range(len(clipper)):
+        a, b = clipper[i], clipper[(i + 1) % len(clipper)]
+
+        def left(p):
+            return (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]) >= 0
+
+        def cut(p, q):
+            crossing = _line_cross(p, q, a, b)
+            return crossing[0] if crossing else q
+
+        out = []
+        for j in range(len(subject)):
+            here, ahead = subject[j], subject[(j + 1) % len(subject)]
+            if left(ahead):
+                if not left(here):
+                    out.append(cut(here, ahead))
+                out.append(ahead)
+            elif left(here):
+                out.append(cut(here, ahead))
+        subject = out
+        if len(subject) < 3:
+            return []
+    return subject
+
+
+def uncovered_share(legs, ring):
+    """Какая доля оболочки узла лежит вне полотна его дорог.
+
+    Сетка с шагом JUNCTION_COVER_STEP_METERS по рамке оболочки; точка внутри
+    оболочки считается покрытой, если она не дальше полуширины (плюс запас) от
+    оси хоть одной ноги. Нога — отрезок от узла к соседней вершине.
+    """
+    if len(ring) < 3 or not legs:
+        return 0.0
+    lat0 = legs[0][0][1]
+    kx = LAT_METERS * math.cos(math.radians(lat0))
+    origin = legs[0][0]
+
+    def local(point):
+        return ((point[0] - origin[0]) * kx, (point[1] - origin[1]) * LAT_METERS)
+
+    shape = [local(p) for p in ring]
+    segments = [(local(node), local(neighbour), width / 2.0 + JUNCTION_COVER_SLACK_METERS)
+                for node, neighbour, width in legs]
+    xs = [p[0] for p in shape]
+    ys = [p[1] for p in shape]
+    inside = covered = 0
+    step = JUNCTION_COVER_STEP_METERS
+    y = min(ys) + step / 2
+    while y < max(ys):
+        x = min(xs) + step / 2
+        while x < max(xs):
+            if _point_in_ring((x, y), shape):
+                inside += 1
+                for a, b, reach in segments:
+                    if _distance_to_segment((x, y), a, b) <= reach:
+                        covered += 1
+                        break
+            x += step
+        y += step
+    return 0.0 if inside == 0 else 1.0 - covered / inside
+
+
+def _point_in_ring(point, ring):
+    x, y = point
+    inside = False
+    j = len(ring) - 1
+    for i in range(len(ring)):
+        xi, yi = ring[i]
+        xj, yj = ring[j]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
+def _distance_to_segment(p, a, b):
+    ax, ay = b[0] - a[0], b[1] - a[1]
+    length = ax * ax + ay * ay
+    if length == 0:
+        return math.hypot(p[0] - a[0], p[1] - a[1])
+    t = max(0.0, min(1.0, ((p[0] - a[0]) * ax + (p[1] - a[1]) * ay) / length))
+    return math.hypot(p[0] - a[0] - ax * t, p[1] - a[1] - ay * t)
 
 
 def iter_junctions(arms):
@@ -3513,13 +3720,16 @@ def iter_junctions(arms):
     for legs in cluster_junctions(arms):
         if len(legs) < MIN_JUNCTION_ARMS and not _seam_needs_patch(legs):
             continue
+        if max(leg[2] for leg in legs) < JUNCTION_MIN_WIDEST_METERS:
+            continue
         ring = _hull_of(legs)
         if not ring:
             continue
         if _hull_fits(legs, ring):
             scale = _lon_scale([legs[0][0]]) or 1.0
-            yield (AREA_JUNCTION, AREA_FLAG_CLOSED,
-                   round_corners(ring, kerb_radius(legs), scale))
+            shaped = clip_to_reach(legs, round_corners(ring, kerb_radius(legs), scale))
+            if len(shaped) >= 3:
+                yield (AREA_JUNCTION, AREA_FLAG_CLOSED, shaped)
             continue
         # Кластер растянулся — разбираем обратно по узлам. Лучше шов, чем
         # двор, залитый асфальтом.
@@ -3531,8 +3741,12 @@ def iter_junctions(arms):
             if len(alone) < MIN_JUNCTION_ARMS and not _seam_needs_patch(alone):
                 continue
             small = _hull_of(alone)
-            if small:
-                yield (AREA_JUNCTION, AREA_FLAG_CLOSED, small)
+            # Оболочка одного узла тоже бывает клином: острый угол входа даёт
+            # её и без сведения узлов. Не влезла — стык закроет линия.
+            if small and _hull_fits(alone, small):
+                small = clip_to_reach(alone, small)
+                if len(small) >= 3:
+                    yield (AREA_JUNCTION, AREA_FLAG_CLOSED, small)
 
 
 def build_junctions(arms):

@@ -87,16 +87,22 @@ class MedianTests(unittest.TestCase):
 
 
 class IslandTests(unittest.TestCase):
-    def road(self, name):
-        return (3, 0, [], name)
+    def road(self, name, length=30.0):
+        return (3, 0, ring((0, 0), (length, 0)), name)
 
     def test_junction_interior_is_not_an_island(self):
         # Середина перекрёстка двух проспектов: только именованные ленты двух улиц.
         face = [self.road("Navoiy"), self.road("Anhor"), self.road("Navoiy"), self.road("Anhor")]
         self.assertFalse(build_roads.is_island_face(face))
 
+    def test_short_unnamed_connector_does_not_make_an_island(self):
+        # Навои × Рашидов: середину перекрёстка обходит связка в пару метров.
+        face = [self.road("Navoiy"), self.road("Rashidov"), self.road("Navoiy"),
+                self.road("Rashidov"), self.road("", 3.0)]
+        self.assertFalse(build_roads.is_island_face(face))
+
     def test_slip_lane_island_is_kept(self):
-        face = [self.road("Navoiy"), self.road(""), self.road("Anhor")]
+        face = [self.road("Navoiy"), self.road("", 35.0), self.road("Anhor")]
         self.assertTrue(build_roads.is_island_face(face))
 
     def test_face_of_one_street_is_kept(self):
@@ -114,6 +120,44 @@ class GateTests(unittest.TestCase):
         good = (build_roads.AREA_JUNCTION, build_roads.AREA_FLAG_CLOSED,
                 ring((0, 0), (20, 0), (20, 20), (0, 20)))
         self.assertTrue(build_roads.surface_gate(good))
+
+
+class JunctionTests(unittest.TestCase):
+    def test_minor_junction_is_left_to_the_line(self):
+        # Серый ромб цветом проспекта на перекрёстке дворовых проездов.
+        node = metres(0, 0)
+        arms = {build_roads._node_key(node): [
+            (node, metres(40, 0), 6.0), (node, metres(-40, 0), 6.0), (node, metres(0, 40), 5.0)]}
+        self.assertEqual(build_roads.build_junctions(arms), [])
+
+    def test_wedge_of_land_is_not_asphalt(self):
+        # Оболочка, где больше трети площади — не полотно, а земля между улицами.
+        node = metres(0, 0)
+        legs = [(node, metres(12, 0), 25.0), (node, metres(-12, 0), 25.0),
+                (node, metres(3, 12), 14.0)]
+        wedge = [metres(-12, -12), metres(60, -12), metres(60, 60), metres(-12, 12)]
+        self.assertGreater(build_roads.uncovered_share(legs, wedge),
+                           build_roads.JUNCTION_MAX_UNCOVERED)
+        self.assertFalse(build_roads._hull_fits(legs, wedge))
+
+
+class CarriagewayTests(unittest.TestCase):
+    def street(self, points, width):
+        return ((3, build_roads.FLAG_ONEWAY, points, "Navoiy ko'chasi", width, False), [])
+
+    def test_guessed_widths_leave_room_for_the_median(self):
+        # Оси в 16 м друг от друга, ширина по классу 14 м у каждой: без
+        # подгонки ленты перекрываются и разделительной нет.
+        streets = [self.street(ring((0, 0), (300, 0)), 14.0),
+                   self.street(ring((300, 16), (0, 16)), 14.0)]
+        fitted = build_roads.fit_carriageways(streets)
+        widths = [s[0][4] for s in fitted]
+        self.assertLessEqual(sum(widths) / 2, 16 - build_roads.CARRIAGEWAY_MIN_GAP_METERS + 0.05)
+
+    def test_well_separated_carriageways_are_untouched(self):
+        streets = [self.street(ring((0, 0), (300, 0)), 10.0),
+                   self.street(ring((300, 30), (0, 30)), 10.0)]
+        self.assertEqual([s[0][4] for s in build_roads.fit_carriageways(streets)], [10.0, 10.0])
 
 
 class LineWidthTests(unittest.TestCase):

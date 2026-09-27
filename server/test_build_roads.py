@@ -2743,14 +2743,14 @@ class JunctionShapeTests(unittest.TestCase):
         for step in range(4):
             node = (69.25 + step * 0.0003, 41.30)
             far[build_roads._node_key(node)] = [
-                (node, (node[0] + 0.02, node[1]), 4.0),
-                (node, (node[0] - 0.02, node[1]), 4.0),
-                (node, (node[0], node[1] + 0.02), 4.0)]
+                (node, (node[0] + 0.02, node[1]), 10.0),
+                (node, (node[0] - 0.02, node[1]), 10.0),
+                (node, (node[0], node[1] + 0.02), 10.0)]
         made = build_roads.build_junctions(far)
         self.assertTrue(made)
         for _kind, _flags, ring in made:
             area = abs(build_roads.signed_area_meters(ring))
-            self.assertLessEqual(area, 4.0 ** 2 * build_roads.JUNCTION_MAX_AREA,
+            self.assertLessEqual(area, 10.0 ** 2 * build_roads.JUNCTION_MAX_AREA,
                                  "оболочка залила больше, чем перекрёсток")
 
     def test_straight_joint_needs_no_patch(self):

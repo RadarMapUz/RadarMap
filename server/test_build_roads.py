@@ -2198,6 +2198,44 @@ class EditBakingTests(unittest.TestCase):
         self.assertEqual(build_roads.apply_edits([], []), ([], 0, 0))
 
 
+class FarAreasTests(unittest.TestCase):
+    """Местность для обзорного зума: крупная вода и зелень, огрублённая."""
+
+    def square(self, lon, lat, metres):
+        dlat = metres / build_roads.LAT_METERS
+        dlon = metres / (build_roads.LAT_METERS * math.cos(math.radians(lat)))
+        return [(lon, lat), (lon + dlon, lat), (lon + dlon, lat + dlat),
+                (lon, lat + dlat), (lon, lat)]
+
+    def test_area_of_a_square_kilometre(self):
+        self.assertAlmostEqual(build_roads.ring_area_m2(self.square(69.28, 41.31, 1000)) / 1e6, 1.0, places=2)
+        # Незамкнутое кольцо считается так же — замыкание подразумевается.
+        self.assertAlmostEqual(build_roads.ring_area_m2(self.square(69.28, 41.31, 1000)[:-1]) / 1e6, 1.0, places=2)
+
+    def test_only_big_water_and_green_polygons_survive(self):
+        closed = build_roads.AREA_FLAG_CLOSED
+        big = self.square(69.28, 41.31, 500)        # 25 га
+        small = self.square(69.29, 41.31, 200)      # 4 га — меньше порога
+        areas = [
+            (build_roads.AREA_WATER, closed, big),
+            (build_roads.AREA_GREEN, closed, big),
+            (build_roads.AREA_WATER, closed, small),
+            (build_roads.AREA_BLOCK, closed, big),            # квартал — не ориентир обзора
+            (build_roads.AREA_HOUSE, closed, big),
+            (build_roads.AREA_WATER, 0, big),                 # канал линией: land-far его не нарисует
+        ]
+        kept = build_roads.build_far_areas(areas)
+        self.assertEqual(sorted(k for k, _f, _p in kept), [build_roads.AREA_WATER, build_roads.AREA_GREEN])
+
+    def test_far_areas_are_coarser(self):
+        lat, lon = 41.31, 69.28
+        wiggly = [(lon + 0.01 * i / 200, lat + (0.00005 if i % 2 else 0)) for i in range(200)]
+        ring = wiggly + [(lon + 0.01, lat + 0.01), (lon, lat + 0.01), wiggly[0]]
+        kept = build_roads.build_far_areas([(build_roads.AREA_GREEN, build_roads.AREA_FLAG_CLOSED, ring)])
+        self.assertEqual(len(kept), 1)
+        self.assertLess(len(kept[0][2]), 20, "зубцы в 5 м на обзоре не нужны")
+
+
 if __name__ == "__main__":
     unittest.main()
 

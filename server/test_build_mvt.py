@@ -247,6 +247,76 @@ class BuildTests(unittest.TestCase):
             self.assertEqual(build_mvt.LAYER_MARKINGS in self.parsed(path), expected)
 
 
+class FarOverviewTests(unittest.TestCase):
+    """Обзорный зум: до 27.09.2026 в нём были одни дороги — сеть линий на
+    чёрном без единого ориентира. Теперь туда едут вода, крупная зелень и
+    названия мест; мелочь и подробности — нет."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def tiles_at(self, zoom):
+        root = os.path.join(self.dir, "mvt", str(zoom))
+        out = {}
+        for folder, _dirs, names in os.walk(root):
+            for name in names:
+                with open(os.path.join(folder, name), "rb") as handle:
+                    out[os.path.join(folder, name)] = parse(handle.read())
+        return out
+
+    def square(self, lon, lat, size):
+        return [(lon, lat), (lon + size, lat), (lon + size, lat + size),
+                (lon, lat + size), (lon, lat)]
+
+    def test_far_land_goes_to_the_far_zoom_only(self):
+        lake = (build_roads.AREA_WATER, build_roads.AREA_FLAG_CLOSED,
+                self.square(69.28, 41.31, 0.01))
+        build_mvt.build_mvt([], self.dir, far_areas=[lake])
+        far = self.tiles_at(build_mvt.ZOOM_FAR)
+        self.assertTrue(far)
+        for layers in far.values():
+            self.assertIn(build_mvt.LAYER_LAND, layers)
+            land = layers[build_mvt.LAYER_LAND]
+            self.assertTrue(land["features"])
+            self.assertIn("kind", land["keys"])
+            self.assertIn(build_roads.AREA_WATER, land["values"])
+        self.assertFalse(self.tiles_at(build_mvt.ZOOM_DETAIL),
+                         "обзорная местность не должна дублироваться в детальный зум")
+
+    def test_place_is_named_and_ranked(self):
+        city = (1, 0, [(69.2797, 41.3111)], "Toshkent")
+        build_mvt.build_mvt([], self.dir, places=[city])
+        for zoom in (build_mvt.ZOOM_DETAIL, build_mvt.ZOOM_FAR):
+            tiles = self.tiles_at(zoom)
+            self.assertEqual(len(tiles), 1, zoom)
+            layer = next(iter(tiles.values()))[build_mvt.LAYER_PLACES]
+            self.assertEqual(len(layer["features"]), 1)
+            self.assertIn("Toshkent", layer["values"])
+            self.assertIn("name", layer["keys"])
+            self.assertIn("rank", layer["keys"])
+
+    def test_small_places_stay_off_the_overview(self):
+        hamlet = (4, 0, [(69.10, 41.20)], "Qoʻrgʻoncha")
+        quarter = (6, 0, [(69.28, 41.31)], "Mavze 5")
+        build_mvt.build_mvt([], self.dir, places=[hamlet, quarter])
+        self.assertFalse(self.tiles_at(build_mvt.ZOOM_FAR))
+        self.assertEqual(len(self.tiles_at(build_mvt.ZOOM_DETAIL)), 2)
+
+    def test_nameless_place_is_dropped(self):
+        self.assertIsNone(build_mvt.place_properties((1, 0, [(69.2, 41.3)], "  ")))
+        self.assertIsNone(build_mvt.place_properties((1, 0, [], "Toshkent")))
+        self.assertIsNone(build_mvt.place_properties((9, 0, [(69.2, 41.3)], "X")))
+
+    def test_overview_bytes_do_not_change_between_runs(self):
+        lake = (build_roads.AREA_WATER, build_roads.AREA_FLAG_CLOSED,
+                self.square(69.28, 41.31, 0.01))
+        places = [(1, 0, [(69.2797, 41.3111)], "Toshkent"), (5, 0, [(69.24, 41.33)], "Olmazor")]
+        first = build_mvt.build_mvt([], self.dir, far_areas=[lake], places=places)
+        second = build_mvt.build_mvt([], self.dir, far_areas=[lake], places=places)
+        self.assertEqual(first, second)
+
+
 class DraftTests(unittest.TestCase):
     """Черновики тайлов: диск — расплата за память, но соразмерная.
 

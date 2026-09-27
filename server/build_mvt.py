@@ -42,6 +42,10 @@ LAYER_HOUSES = "houses"
 LAYER_POINTS = "points"
 LAYER_MARKINGS = "markings"
 LAYER_PAINT = "paint"
+# Населённые пункты и районы: точка с именем и рангом (build_roads.PLACE_RANKS).
+# Контракт с клиентом: слой «places», свойства name (строка) и rank (1 город,
+# 2 посёлок, 3 кишлак, 4 хутор, 5 район, 6 квартал).
+LAYER_PLACES = "places"
 
 
 def point_properties(code, flags):
@@ -145,14 +149,32 @@ def lane_markings(roads):
 
 # Кому какой зум. Слой, невидимый на обзоре, туда и не едет — тот же закон,
 # по которому телефон не качает дворовые проезды на охвате района.
-FAR_LAYERS = {LAYER_ROADS}
+#
+# Местность и места на обзоре появились 27.09.2026: до того ниже 14.6 карта
+# была сетью линий без единого ориентира. Местность туда идёт отдельным,
+# огрублённым списком (build_roads.build_far_areas), а не подробными полигонами.
+FAR_LAYERS = {LAYER_ROADS, LAYER_LAND, LAYER_PLACES}
+
+# Какие места подписывать на обзоре: города, посёлки, кишлаки и районы
+# города. Хутор и квартал на охвате в двадцать километров — шум поверх
+# названий, ради которых обзор и смотрят.
+FAR_PLACE_RANKS = {1, 2, 3, 5}
 
 
-def _road_props(road):
+def _road_props(road, width=None):
+    """`width` — ширина всей непрерывной ленты (build_roads.street_chains).
+
+    Своя ширина куска давала на карте ступеньки: соседние куски одной улицы
+    бывают с полосами из тега и без, и линия скачет на пару метров ровно на
+    стыке. Полотно (набор d) давно считается «одна ширина на ленту» — линии
+    теперь по тому же правилу, и край проспекта ровный.
+    """
     code, flags = road[0], road[1]
     name = road[3] if len(road) > 3 else ""
     lanes = lanes_of(flags)
-    props = {"cls": code, "width": round(road_width_meters(code, lanes), 1)}
+    if width is None:
+        width = road_width_meters(code, lanes)
+    props = {"cls": code, "width": round(width, 1)}
     if name:
         props["name"] = name
     if flags & FLAG_ONEWAY:
@@ -165,6 +187,18 @@ def _road_props(road):
         props["lanes"] = lanes
         props["measured"] = True
     return props
+
+
+def place_properties(place):
+    """(ранг, биты, [(lon, lat)], имя) из build_roads.collect_places → свойства.
+
+    None — записи не место: без имени подписывать нечем, без точки — негде.
+    """
+    rank, _flags, spots, name = place[0], place[1], place[2], place[3]
+    name = (name or "").strip()
+    if not name or not spots or rank not in range(1, 7):
+        return None
+    return {"name": name, "rank": rank}
 
 
 def _area_props(kind, flags):
@@ -348,19 +382,31 @@ def written_areas(target_dir, set_name):
 
 def build_mvt(roads, target_dir, areas=(), points=(), far=(),
               zoom=ZOOM_DETAIL, far_zoom=ZOOM_FAR, handles=64,
-              written_sets=("h", "d")):
+              written_sets=("h", "d"), far_areas=(), places=(), widths=None):
     """Написать .mvt под target_dir/mvt/<z>/<x>/<y>.mvt. Возвращает {путь: байты}."""
     work = os.path.join(target_dir, "_mvt")
     buckets = _Buckets(work, handles)
     try:
+        widths = widths or {}
         for road in roads:
             _put(buckets, zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
-                 _road_props(road))
+                 _road_props(road, widths.get(id(road))))
         for line in lane_markings(roads):
             _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, {"verified": True})
         for road in far:
             _put(buckets, far_zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
                  _road_props(road))
+        for kind, flags, shape in far_areas:
+            _put(buckets, far_zoom, LAYER_LAND, mvt.POLYGON, shape,
+                 _area_props(kind, flags))
+        for place in places:
+            props = place_properties(place)
+            if props is None:
+                continue
+            spot = list(place[2][:1])
+            _put(buckets, zoom, LAYER_PLACES, mvt.POINT, spot, props)
+            if props["rank"] in FAR_PLACE_RANKS:
+                _put(buckets, far_zoom, LAYER_PLACES, mvt.POINT, spot, props)
         def lay(kind, flags, shape):
             _put(buckets, zoom, _layer_of(kind),
                  mvt.POLYGON if flags & 1 else mvt.LINESTRING,

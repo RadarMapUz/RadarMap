@@ -49,6 +49,8 @@ import shutil
 import sys
 from collections import Counter, OrderedDict, defaultdict
 
+import surface_check
+
 # Что рисуем. Пешеходное, тропы и велодорожки не берём: схема про то, где
 # едет машина, а лишние линии превращают её в паутину.
 CLASS_CODES = {
@@ -2111,6 +2113,59 @@ AREA_JUNCTION = 8
 # Полоса между их внутренними кромками и есть разделительная.
 AREA_MEDIAN = 9
 AREA_FLAG_CLOSED = 1
+
+
+# Местность обзора: вода и крупная зелень, только площади.
+#
+# До 27.09.2026 обзорный зум MVT нёс одни дороги: ниже 14.6 карта была сетью
+# линий на чёрном — ни реки, ни парка, ни водохранилища, то есть ничего, по
+# чему глаз узнаёт место. Стиль телефона слой land-far уже рисует (заливка
+# полигонов по kind), ему просто нечего было дать.
+#
+# Порог площади — от пикселя: на z11 у широты Ташкента пиксель около 57 м, и
+# 10 га — это пятно примерно 5×5 пикселей. Мельче — точка шума, которая стоит
+# байтов и не узнаётся. Упрощение 30 м — полпикселя того же зума.
+FAR_AREA_KINDS = (AREA_WATER, AREA_GREEN)
+FAR_AREA_MIN_M2 = 100_000.0
+FAR_AREA_SIMPLIFY_METERS = 30.0
+
+
+def ring_area_m2(points):
+    """Площадь кольца [(lon, lat)] в квадратных метрах (равновеликая аппроксимация
+    по широте середины — для отбора по порогу точнее не нужно)."""
+    if len(points) < 3:
+        return 0.0
+    mid_lat = sum(lat for _lon, lat in points) / len(points)
+    kx = LAT_METERS * math.cos(math.radians(mid_lat))
+    ring = list(points)
+    if ring[0] != ring[-1]:
+        ring.append(ring[0])
+    twice = 0.0
+    for (lon1, lat1), (lon2, lat2) in zip(ring, ring[1:]):
+        twice += (lon1 * kx) * (lat2 * LAT_METERS) - (lon2 * kx) * (lat1 * LAT_METERS)
+    return abs(twice) / 2.0
+
+
+def build_far_areas(areas):
+    """Местность для обзорного зума: крупная вода и зелень, огрублённая.
+
+    Линии (каналы, ручьи) сюда не идут: слой land-far в стиле телефона — это
+    заливка полигонов, линию он не нарисует, а байты она стоила бы.
+    """
+    out = []
+    tolerance = FAR_AREA_SIMPLIFY_METERS / LAT_METERS
+    for kind, flags, points in areas:
+        if kind not in FAR_AREA_KINDS or not flags & AREA_FLAG_CLOSED:
+            continue
+        if ring_area_m2(points) < FAR_AREA_MIN_M2:
+            continue
+        coarse = simplify(list(points), tolerance)
+        if len(coarse) < 3:
+            continue
+        out.append((kind, flags, coarse))
+    return out
+
+
 # Класс дороги — В БИТАХ записи, как этажность у дома. Клиент красит полотно по
 # классу, а не гадает по ширине. Пятый элемент записи невозможен:
 # RoadTiles.decodeEntries принимает длину 3 или 4 и на пятом возвращает nil на
@@ -2329,7 +2384,7 @@ def signed_area_meters(points):
 
 
 def build_blocks(roads, min_area=BLOCK_MIN_AREA, max_area=BLOCK_MAX_AREA,
-                 kind=AREA_BLOCK, classes=None):
+                 kind=AREA_BLOCK, classes=None, accept=None):
     """Кварталы как замкнутые грани дорожного графа.
 
     Контур квартала СЛЕДУЕТ из измеренных дорог — он не берётся ниоткуда и не
@@ -2346,9 +2401,13 @@ def build_blocks(roads, min_area=BLOCK_MIN_AREA, max_area=BLOCK_MAX_AREA,
     обход всё время сворачивает в «следующее по часовой» — так замыкается
     ровно одна грань. Внешняя грань отличается знаком площади, вырожденные
     заезды по тупику дают почти нулевую площадь и отсеиваются порогом.
+
+    `accept(дороги грани)` — последнее слово о грани по её составу: площадь
+    не отличает островок от середины перекрёстка, состав — отличает.
     """
     # Полурёбра: каждая линия даёт два направленных ребра.
     half = []            # (from_node, to_node, points)
+    half_road = []       # дорога, из которой полуребро
     for road in roads:
         points = road[2]
         if len(points) < 2:
@@ -2357,6 +2416,7 @@ def build_blocks(roads, min_area=BLOCK_MIN_AREA, max_area=BLOCK_MAX_AREA,
             continue
         half.append((_node(points[0]), _node(points[-1]), points))
         half.append((_node(points[-1]), _node(points[0]), list(reversed(points))))
+        half_road.extend((road, road))
 
     outgoing = defaultdict(list)
     for index, (start, _, points) in enumerate(half):
@@ -2414,6 +2474,8 @@ def build_blocks(roads, min_area=BLOCK_MIN_AREA, max_area=BLOCK_MAX_AREA,
             continue
         if not (min_area <= -area <= max_area):
             continue
+        if accept is not None and not accept([half_road[edge] for edge in cycle]):
+            continue
         blocks.append((kind, AREA_FLAG_CLOSED, ring))
     return blocks
 
@@ -2432,11 +2494,33 @@ ISLAND_MAX_AREA = 1200.0
 ISLAND_CLASSES = frozenset({1, 2, 3, 4, 5})
 
 
+def is_island_face(face_roads):
+    """Грань — островок, а не середина перекрёстка.
+
+    Где пересекаются два проспекта с раздельными направлениями, четыре ленты
+    замыкают между собой квадрат асфальта в пару сотен метров — по площади
+    ровно островок. Закрашенный тёмным, он давал «шахматку» посреди
+    перекрёстка (Навои у Анхора, 27.09.2026). Отличает его состав: такую грань
+    обходят ТОЛЬКО именованные ленты двух и более разных улиц. У настоящего
+    островка на съезде есть безымянный съезд или разворот.
+    """
+    names = {road[3] for road in face_roads if len(road) > 3}
+    if "" in names or None in names:
+        return True
+    return len(names) < 2
+
+
 def build_islands(roads):
-    """Островки на съездах. Тот же обход граней, другое окно площади."""
-    return build_blocks(roads, min_area=ISLAND_MIN_AREA,
-                        max_area=ISLAND_MAX_AREA, kind=AREA_MEDIAN,
-                        classes=ISLAND_CLASSES)
+    """Островки на съездах. Тот же обход граней, другое окно площади.
+
+    Грань между почти параллельными линиями проходит порог площади, будучи
+    шириной в метр, — на карте это игла поперёк асфальта. Такие отсекает
+    surface_check (лезвие, игла, самопересечение): островок не выдумываем.
+    """
+    return [island for island in build_blocks(
+                roads, min_area=ISLAND_MIN_AREA, max_area=ISLAND_MAX_AREA,
+                kind=AREA_MEDIAN, classes=ISLAND_CLASSES, accept=is_island_face)
+            if surface_check.defect(island[2]) is None]
 
 
 # --- Точки: светофоры, лежачие полицейские, стоп-линии ----------------------
@@ -2983,22 +3067,62 @@ def _arc(point, first, second, half, scale, turn):
     return out
 
 
+def _line_cross(a, b, c, d):
+    """Точка пересечения отрезков ab и cd и доли вдоль каждого, или None.
+    Координаты — (lon, lat); для пересечения масштаб не важен: он одинаков
+    по обеим осям для обеих прямых и на долю вдоль отрезка не влияет."""
+    rx, ry = b[0] - a[0], b[1] - a[1]
+    sx, sy = d[0] - c[0], d[1] - c[1]
+    denominator = rx * sy - ry * sx
+    if denominator == 0:
+        return None
+    qx, qy = c[0] - a[0], c[1] - a[1]
+    t = (qx * sy - qy * sx) / denominator
+    u = (qx * ry - qy * rx) / denominator
+    return (a[0] + rx * t, a[1] + ry * t), t, u
+
+
 def _side(points, half, scale):
-    """Одна кромка полотна: осевая, отодвинутая влево на половину ширины."""
-    edge = []
-    previous = None
+    """Одна кромка полотна: осевая, отодвинутая влево на половину ширины.
+
+    Внешний угол поворота скругляется дугой. Внутренний — СРЕЗАЕТСЯ в точке,
+    где сходятся две сдвинутые кромки: иначе конец одной заходит за начало
+    другой, кромка петляет, и заливка выедает из асфальта дыру. Так было у
+    26 % контуров полотна Ташкента (замер 27.09.2026). Если кромки на коротких
+    отрезках так и не сходятся в пределах своих отрезков, угол остаётся как
+    был — такой контур потом режет surface_pieces.
+    """
+    segments = []
     for index in range(len(points) - 1):
         here, ahead = points[index], points[index + 1]
         along = _unit((ahead[0] - here[0]) * scale, ahead[1] - here[1])
         if along == (0.0, 0.0):
             continue
         normal = (-along[1], along[0])
-        if previous is not None:
-            turn = previous[0] * normal[1] - previous[1] * normal[0]
-            edge.extend(_arc(here, previous, normal, half, scale, turn))
-        edge.append(_shift(here, normal, half, scale))
-        edge.append(_shift(ahead, normal, half, scale))
-        previous = normal
+        segments.append((here, normal, _shift(here, normal, half, scale),
+                         _shift(ahead, normal, half, scale)))
+    edge = []
+    for position, (here, normal, start, end) in enumerate(segments):
+        if position == 0:
+            edge.append(start)
+        else:
+            previous_normal = segments[position - 1][1]
+            turn = previous_normal[0] * normal[1] - previous_normal[1] * normal[0]
+            # Левая кромка снаружи поворота, когда путь сворачивает ВПРАВО
+            # (turn < 0). Прежнее условие в _arc — «turn * span <= 0» — не
+            # отличало одно от другого: turn и span меряют один и тот же
+            # поворот и всегда одного знака, так что дуга вставала и на
+            # внутренний угол, где она и давала петлю.
+            if turn < 0:
+                edge.extend(_arc(here, previous_normal, normal, half, scale, turn))
+                edge.append(start)
+            else:
+                crossing = _line_cross(segments[position - 1][2], edge[-1], start, end)
+                if crossing and 0.0 <= crossing[1] <= 1.0 and 0.0 <= crossing[2] <= 1.0:
+                    edge[-1] = crossing[0]
+                else:
+                    edge.append(start)
+        edge.append(end)
     return edge
 
 
@@ -3019,6 +3143,59 @@ def road_contour(points, width):
     return left + right
 
 
+# Круг, которым закрывается стык двух кусков полотна: столько сторон, чтобы
+# на ближнем зуме граней не было видно, и не больше — это вершины в тайле.
+JOIN_DISC_SIDES = 16
+
+
+def join_disc(point, width):
+    """Круг радиусом в полширины вокруг вершины осевой — скругление стыка,
+    ровно то, что делает line-join: round у линии той же ширины."""
+    scale = _lon_scale([point]) or 1.0
+    half = width / 2.0 / LAT_METERS
+    return [_shift(point, (math.cos(2 * math.pi * i / JOIN_DISC_SIDES),
+                           math.sin(2 * math.pi * i / JOIN_DISC_SIDES)), half, scale)
+            for i in range(JOIN_DISC_SIDES)]
+
+
+def surface_pieces(points, width):
+    """Полотно улицы кусками, каждый из которых — честный многоугольник.
+
+    Контур «осевая, раздутая на ширину» на внутренней стороне крутого изгиба
+    перехлёстывает сам себя: сдвинутые отрезки пересекаются, и заливка такой
+    фигуры выедает из асфальта дыру. Замерено 27.09.2026 по Ташкенту: так
+    было у 26 % контуров полотна — это и были «пропуски» на снимке владельца.
+
+    Поэтому: целиком, если контур чистый; иначе — самые длинные куски с
+    чистым контуром (граница ищется делением пополам: удлинение куска
+    перехлёст не убирает), а стык закрывается кругом в полширины.
+    """
+    if len(points) < 2 or width <= 0:
+        return
+    whole = road_contour(points, width)
+    if len(whole) >= 3 and surface_check.defect(whole, shape_checks=False) is None:
+        yield whole
+        return
+    last = len(points) - 1
+    start = 0
+    while start < last:
+        lo, hi = start + 1, last
+        best_end, best = start + 1, road_contour(points[start:start + 2], width)
+        while lo <= hi:
+            middle = (lo + hi) // 2
+            trial = road_contour(points[start:middle + 1], width)
+            if len(trial) >= 3 and surface_check.defect(trial, shape_checks=False) is None:
+                best_end, best = middle, trial
+                lo = middle + 1
+            else:
+                hi = middle - 1
+        if len(best) >= 3 and surface_check.defect(best, shape_checks=False) is None:
+            yield best
+        if best_end < last:
+            yield join_disc(points[best_end], width)
+        start = best_end
+
+
 def iter_surface(streets):
     """Полотно для каждой улицы. Вход — склеенные улицы merge_streets.
 
@@ -3028,12 +3205,10 @@ def iter_surface(streets):
     for code, _flags, points, _name, width, _measured in streets:
         if code > SURFACE_MAX_CLASS:
             continue
-        ring = road_contour(points, width)
-        if len(ring) < 3:
-            continue
         flags = AREA_FLAG_CLOSED | (min(code, SURFACE_CLASS_MASK)
                                     << SURFACE_CLASS_SHIFT)
-        yield (AREA_ROAD, flags, ring)
+        for ring in surface_pieces(points, width):
+            yield (AREA_ROAD, flags, ring)
 
 
 def build_surface(streets):
@@ -3394,6 +3569,37 @@ def iter_flares(arms):
 def build_flares(arms):
     return list(iter_flares(arms))
 
+# Что ворота поверхности не пустили в тайл: (вид, причина) → число. Печатается
+# в отчёте сборки: рост этих чисел между прогонами — регрессия генерации.
+SURFACE_REJECTED = Counter()
+
+
+def quantized(ring):
+    """Кольцо таким, каким оно ляжет в тайл: шаг 1e-5°, без повторов подряд.
+
+    Проверять надо ЭТО, а не исходник: узкая фигура после округления до метра
+    бывает иглой, которой до округления не было.
+    """
+    out = []
+    for lon, lat in ring:
+        point = (round(lon * SCALE) / SCALE, round(lat * SCALE) / SCALE)
+        if not out or out[-1] != point:
+            out.append(point)
+    if len(out) > 1 and out[0] == out[-1]:
+        out.pop()
+    return out
+
+
+def surface_gate(figure):
+    """Пропустить фигуру поверхности в тайл или отказать (и сосчитать отказ)."""
+    kind, _flags, ring = figure
+    reason = surface_check.defect_of_kind(kind, quantized(ring))
+    if reason:
+        SURFACE_REJECTED[(kind, reason)] += 1
+        return False
+    return True
+
+
 def stream_surface(roads, target_dir, degrees, handles=64):
     """Поверхность — на диск потоком, по тому же закону, что дома.
 
@@ -3425,6 +3631,8 @@ def stream_surface(roads, target_dir, degrees, handles=64):
         arms = junction_arms(chains)
 
         def put(figure):
+            if not surface_gate(figure):
+                return
             kind, flags, ring = figure
             row = json.dumps([kind, flags, encode(ring)], separators=(",", ":"))
             for key in tile_keys_of(ring, degrees):
@@ -3460,6 +3668,14 @@ MEDIAN_MAX_METERS = 40.0
 MEDIAN_MAX_TURN = 30.0
 # Реже этого шага полосу не разбиваем: она обязана повторять изгиб проспекта.
 MEDIAN_STEP_METERS = 25.0
+# Проекция на встречную ленту идёт в одну сторону. Шаг назад больше этого —
+# встречная свернула (мост, съезд, слияние), и ближайшая точка прыгнула на
+# другой её участок: дальше кромка пошла бы вспять и вывернула полосу
+# «бабочкой». Ровно это было на мосту Навои через Анхор (снимок 27.09.2026).
+MEDIAN_BACKTRACK_METERS = 3.0
+# Ширина полосы между соседними шагами меняется плавно. Скачок больше этого
+# на шаге в 25 м — не расхождение проспекта, а прыжок ближайшей точки.
+MEDIAN_MAX_GAP_JUMP_METERS = 6.0
 
 
 def _box_of(points):
@@ -3545,13 +3761,55 @@ def build_medians(chains, junctions=()):
     return out
 
 
+def _nearest_along(point, line):
+    """Ближайшая точка ломаной, расстояние до неё и путь вдоль ломаной до неё
+    (в метрах от начала) — по пути проверяется, что проекция не пятится."""
+    best, gap, along = None, float("inf"), 0.0
+    travelled = 0.0
+    for index in range(1, len(line)):
+        before, after = line[index - 1], line[index]
+        piece = meters_between(before, after)
+        scale = math.cos(math.radians(point[1]))
+        ax = (after[0] - before[0]) * scale
+        ay = after[1] - before[1]
+        length = ax * ax + ay * ay
+        if length == 0:
+            continue
+        share = (((point[0] - before[0]) * scale) * ax
+                 + (point[1] - before[1]) * ay) / length
+        share = max(0.0, min(1.0, share))
+        spot = (before[0] + (after[0] - before[0]) * share,
+                before[1] + (after[1] - before[1]) * share)
+        here = meters_between(point, spot)
+        if here < gap:
+            best, gap, along = spot, here, travelled + piece * share
+        travelled += piece
+    return best, gap, along
+
+
 def _median_strip(one, other, junctions=()):
-    """Многоугольник между внутренними кромками двух встречных проезжих."""
+    """Многоугольник между внутренними кромками двух встречных проезжих.
+
+    Три условия продолжения, кроме расстояния: не перекрёсток; проекция на
+    встречную идёт в ту же сторону, что и шла; ширина не прыгает. Нарушение
+    любого — конец полосы (если она уже набралась) или сброс. Итог проходит
+    surface_check: кривая полоса на карту не едет вовсе.
+    """
     left, right = [], []
+    direction = 0
+    previous_along = previous_gap = None
     for spot, _segment in _walk(one[2], MEDIAN_STEP_METERS):
-        near, gap = _nearest_with_gap(spot, other[2])
+        near, gap, along = _nearest_along(spot, other[2])
         if _at_junction(spot, junctions):
             near = None
+        if near is not None and previous_along is not None:
+            step = along - previous_along
+            if direction == 0 and abs(step) > MEDIAN_BACKTRACK_METERS:
+                direction = 1 if step > 0 else -1
+            if direction and step * direction < -MEDIAN_BACKTRACK_METERS:
+                near = None
+            elif abs(gap - previous_gap) > MEDIAN_MAX_GAP_JUMP_METERS:
+                near = None
         if near is None or not (MEDIAN_MIN_METERS <= gap <= MEDIAN_MAX_METERS):
             # Разрыв — конец полосы: проспект расходится или кончается.
             # Продолжать через разрыв значило бы нарисовать островок поперёк
@@ -3559,7 +3817,10 @@ def _median_strip(one, other, junctions=()):
             if len(left) >= 2:
                 break
             left, right = [], []
+            direction = 0
+            previous_along = previous_gap = None
             continue
+        previous_along, previous_gap = along, gap
         scale = _lon_scale([spot]) or 1.0
         half_one = one[4] / 2.0 / LAT_METERS
         half_two = other[4] / 2.0 / LAT_METERS
@@ -3570,7 +3831,8 @@ def _median_strip(one, other, junctions=()):
         right.append(_shift(near, (-toward[0], -toward[1]), half_two, scale))
     if len(left) < 2:
         return []
-    return left + list(reversed(right))
+    ring = left + list(reversed(right))
+    return ring if surface_check.defect(ring) is None else []
 
 
 # Клетка поиска перекрёстка. Больше любого радиуса узла: половина самой
@@ -3976,13 +4238,28 @@ def main():
                           if ranks.get(rank))
         print(f"места: {len(places)} — {named}")
 
+    if SURFACE_REJECTED:
+        names = {AREA_ROAD: "полотно", AREA_JUNCTION: "узел", AREA_MEDIAN: "разделительная"}
+        print("поверхность, не пущено воротами: " + ", ".join(
+            f"{names.get(kind, kind)} — {reason} {count}"
+            for (kind, reason), count in sorted(SURFACE_REJECTED.items())))
+
     if houses:
         weight = sum(meta["bytes"] for meta in houses.values())
         print(f"дома: {len(houses)} тайлов, {weight / 1e6:.1f} МБ (потоком)")
 
     if args.mvt:
+        far_areas = build_far_areas(areas)
+        # Ширина линии — по ленте, как у полотна: без этого край улицы
+        # ступенчатый на стыках кусков с полосами из тега и без.
+        widths = {id(piece): street[4]
+                  for street, chain in street_chains(roads) for piece in chain}
         made = build_mvt.build_mvt(roads, args.tiles_dir, areas=areas,
-                                   points=mvt_points, far=far)
+                                   points=mvt_points, far=far,
+                                   far_areas=far_areas, places=places,
+                                   widths=widths)
+        del widths
+        print(f"MVT обзор: местности {len(far_areas)} площадей, мест {len(places)}")
         weight = sum(meta["bytes"] for meta in made.values())
         print(f"MVT: {len(made)} тайлов, {weight / 1e6:.1f} МБ "
               f"(зумы {build_mvt.ZOOM_DETAIL} и {build_mvt.ZOOM_FAR})")

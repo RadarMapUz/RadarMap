@@ -238,7 +238,16 @@ class LocalTests(Base):
         path = os.path.join(self.dir, "backups", "reports-20260927.db.gz")
         open(path, "w").close()
         os.utime(path, (NOW - 3600, NOW - 3600))
-        self.assertEqual(st.check_backup(self.ctx())["state"], st.OK)
+        # Копии только на том же диске — жёлтый: переживут всё, кроме сервера.
+        self.assertEqual(st.check_backup(self.ctx())["state"], st.WARN)
+        marker = os.path.join(self.dir, "backups", ".offsite")
+        open(marker, "w").close()
+        os.utime(marker, (NOW - 7200, NOW - 7200))
+        result = st.check_backup(self.ctx())
+        self.assertEqual(result["state"], st.OK)
+        self.assertIn("вне VPS: 2 ч назад", result["summary"])
+        os.utime(marker, (NOW - 5 * DAY, NOW - 5 * DAY))
+        self.assertEqual(st.check_backup(self.ctx())["state"], st.WARN)
         os.utime(path, (NOW - 3 * DAY, NOW - 3 * DAY))
         self.assertEqual(st.check_backup(self.ctx())["state"], st.BAD)
 

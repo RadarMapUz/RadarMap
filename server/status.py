@@ -81,6 +81,8 @@ LIMITS = {
     # только напоминание, что его пора собрать на маке.
     "osrm_warn_days": 120,
     "backup_bad_days": 2,
+    # Копия на мак владельца — раз в сутки; мак бывает выключен на выходные.
+    "offsite_warn_days": 4,
     "disk_warn_mb": 2000, "disk_bad_mb": 500,
     "cert_warn_days": 21, "cert_bad_days": 7,
     # Выборка тайлов на прогон. 20 × 12 прогонов в час покрывают индекс
@@ -490,9 +492,16 @@ def check_backup(ctx):
     newest = max((os.path.getmtime(os.path.join(folder, n)) for n in names), default=None)
     age = (ctx.now - newest) / DAY if newest else None
     state = BAD if age is None or age >= LIMITS["backup_bad_days"] else OK
+    # Метку ставит pull_backup.sh на маке владельца после удачной копии.
+    marker = os.path.join(folder, ".offsite")
+    offsite = (ctx.now - os.path.getmtime(marker)) / DAY if os.path.exists(marker) else None
+    if offsite is None or offsite >= LIMITS["offsite_warn_days"]:
+        state = worst(state, WARN)
+    where = "нет" if offsite is None else "%d ч назад" % int(offsite * 24)
     return result("backup", "Бэкап данных", state,
-                  "последний %s назад · копий %d · копии вне VPS: нет" % (days(age), len(names)),
-                  "Умрёт диск — пропадут отметки, жалобы, решения модератора и пароль панели.")
+                  "последний %s назад · копий %d · копия вне VPS: %s" % (days(age), len(names), where),
+                  "Умрёт диск — пропадут отметки, жалобы и решения модератора; "
+                  "копия вне VPS — единственное, что переживёт сам сервер.")
 
 
 def check_disk(ctx):

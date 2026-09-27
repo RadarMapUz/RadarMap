@@ -1,0 +1,18 @@
+[Unit]
+# 27.09.2026: Docker публикует порты своими правилами iptables мимо ufw, и
+# админка wg-easy (:51821) была открыта в интернет, хотя в ufw правила нет.
+# DOCKER-USER — единственная цепочка, которую Docker не переписывает.
+# Через ssh-туннель (127.0.0.1:51821) админка доступна: он не идёт через FORWARD.
+# Откат: systemctl disable --now docker-user-firewall && iptables -D DOCKER-USER -p tcp --dport 51821 -j DROP
+Description=Закрыть админки Docker-контейнеров от интернета (DOCKER-USER)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c "iptables -C DOCKER-USER -p tcp --dport 51821 -j DROP 2>/dev/null || iptables -I DOCKER-USER -p tcp --dport 51821 -j DROP"
+ExecStop=/bin/sh -c "iptables -D DOCKER-USER -p tcp --dport 51821 -j DROP 2>/dev/null || true"
+
+[Install]
+WantedBy=multi-user.target

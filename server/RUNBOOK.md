@@ -6,7 +6,7 @@
 ## Карта сервера (45.130.148.94)
 
 VPS **общий** — рядом живут Dentalor (pm2: `MedicalNode`, `dentalor-bot`),
-postgres, minio, prometheus, outline. Всё, что мы делаем, должно их не касаться:
+postgres (и в Docker `medicalnode_db_1`), minio, wg-easy, xray, openvpn. Outline снесён 27.09.2026. Всё, что мы делаем, должно их не касаться:
 конфиг только `/etc/nginx/conf.d/radarmap.conf`, юниты только `radarmap-*`.
 
 | Что | Где |

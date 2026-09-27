@@ -50,6 +50,8 @@ docker-user-firewall.service  /etc/systemd/system/docker-user-firewall.service
 sshd-00-hardening.conf        /etc/ssh/sshd_config.d/00-hardening.conf
 logrotate-radarmap            /etc/logrotate.d/radarmap
 journald-00-size.conf         /etc/systemd/journald.conf.d/00-size.conf
+systemd-radarmap-sandbox.conf /etc/systemd/system/radarmap-api.service.d/sandbox.conf
+systemd-radarmap-sandbox.conf /etc/systemd/system/radarmap-admin.service.d/sandbox.conf
 "
 
 # Файлы, которые в репо хранят не байт в байт: боевой nginx-конфиг снят с

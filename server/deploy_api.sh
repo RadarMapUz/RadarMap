@@ -34,6 +34,15 @@ STATUS=/opt/radarmap/api/status.py
 STATIC=/opt/radarmap/api/static
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Сверка с репо после выкатки: всё, что осталось «РАЗНЫЕ», — либо правка
+# руками на сервере, либо файл, который этот скрипт не везёт (конвейер дорог,
+# nginx, юниты). Не блокирует: выкатка уже прошла, но молча это не остаётся.
+report_drift() {
+    echo "→ Сверка сервера с репо (drift.sh)…"
+    RADARMAP_HOST="$HOST" bash "$DIR/drift.sh" --quiet || \
+        echo "  ⚠ сервер разошёлся с репо — см. строки выше"
+}
+
 echo "→ Бэкап текущей версии и заливка новой…"
 if [ "$ONLY" = "panel" ]; then
     echo "  только панель: api.py не трогаем"
@@ -121,6 +130,7 @@ echo "→ Смоук-тест панели: конструктор поднял�
 
 if [ "$ONLY" = "panel" ]; then
     echo "✓ Панель выкачена. api.py не тронут."
+    report_drift
     exit 0
 fi
 
@@ -135,5 +145,6 @@ curl -sf -X POST https://soulmed.uz/radarmap/api/feedback \
 echo
 curl -sf https://soulmed.uz/radarmap/api/health
 echo
+report_drift
 echo "✓ Готово. Смоук-записи можно почистить:"
 echo "  ssh $HOST \"sqlite3 /opt/radarmap/api/reports.db \\\"DELETE FROM camera_reports WHERE device='deploy-smoke-test'; DELETE FROM feedback WHERE device='deploy-smoke-test';\\\"\""

@@ -1,0 +1,10 @@
+# RadarMap, 27.09.2026: логи крона росли без ротации.
+/var/log/radarmap-*.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

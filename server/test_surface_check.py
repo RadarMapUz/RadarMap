@@ -160,6 +160,17 @@ class CarriagewayTests(unittest.TestCase):
         self.assertEqual([s[0][4] for s in build_roads.fit_carriageways(streets)], [10.0, 10.0])
 
 
+class CrossingTests(unittest.TestCase):
+    def test_marked_crossings_by_osm_meaning(self):
+        marked = build_roads.crossing_is_marked
+        for tags in ({"crossing": "zebra"}, {"crossing": "marked"}, {"crossing": "uncontrolled"},
+                     {"crossing": "traffic_signals"}, {"crossing": "traffic_signals;marked"},
+                     {"crossing:markings": "zebra"}, {"crossing:markings": "yes"}):
+            self.assertTrue(marked(tags), tags)
+        for tags in ({"crossing": "unmarked"}, {}, {"crossing": "traffic_signals", "crossing:markings": "no"}):
+            self.assertFalse(marked(tags), tags)
+
+
 class LineWidthTests(unittest.TestCase):
     def test_chain_width_overrides_piece_width(self):
         piece = (3, 0, ring((0, 0), (50, 0)), "Navoiy ko'chasi")

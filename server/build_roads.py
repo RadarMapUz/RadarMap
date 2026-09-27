@@ -2782,6 +2782,27 @@ POINT_GRID_DEGREES = 0.01
 POINT_MAX_CLASS = 6
 
 
+# Какие переходы размечены зеброй — по смыслу тегов OSM, а не по одному тегу.
+#
+# До 28.09.2026 зебра рисовалась только при crossing=zebra или
+# crossing:markings=yes|zebra — это ~350 переходов Ташкента из 4 600, и карта
+# рядом с Яндексом выглядела голой. По вики OSM размечены и marked (нынешний
+# стандарт), и uncontrolled (старое «зебра без светофора»), и traffic_signals —
+# регулируемый переход размечен, если явно не сказано crossing:markings=no.
+# Не рисуем unmarked/no и переходы вовсе без тега crossing: о них мы не знаем.
+MARKED_CROSSINGS = {"zebra", "marked", "uncontrolled", "traffic_signals"}
+
+
+def crossing_is_marked(properties):
+    markings = properties.get("crossing:markings")
+    if markings == "no":
+        return False
+    if markings and markings != "no":
+        return True
+    kinds = set(str(properties.get("crossing") or "").split(";"))
+    return bool(kinds & MARKED_CROSSINGS)
+
+
 def point_kind(properties):
     """Вид точечного объекта по тегам. None — не наш слой."""
     if properties.get("road_marking") == "stop_line":
@@ -2916,8 +2937,7 @@ def collect_points(source_path):
                 continue
             properties = feature.get("properties") or {}
             painted = properties.get("road_marking") == "stop_line" or (
-                kind == POINT_CROSSING and (properties.get("crossing:markings") in ("yes", "zebra")
-                                           or properties.get("crossing") == "zebra"))
+                kind == POINT_CROSSING and crossing_is_marked(properties))
             points.append((kind, PFLAG_PAINTED if painted else 0,
                            [(float(coordinates[0]), float(coordinates[1]))]))
     return points
@@ -3858,10 +3878,19 @@ def stream_surface(roads, target_dir, degrees, handles=64):
             put(figure)
         for figure in iter_flares(arms):
             put(figure)
-        for figure in build_medians(chains, junction_index(junction_spots(arms))):
+        spots = junction_spots(arms)
+        for figure in build_medians(chains, junction_index(spots)):
             put(figure)
         del chains
+        # Середина перекрёстка — не островок и не разделительная: у Навои ×
+        # Рашидов (28.09.2026) квадрат асфальта между четырьмя лентами проходил
+        # и порог площади, и правило состава. Отличает его место: центр такой
+        # фигуры лежит в пределах досягаемости узлов перекрёстка.
+        inner = junction_index([(node, radius * JUNCTION_CORE_REACH) for node, radius in spots])
         for figure in build_islands(roads):
+            if _at_junction(_centroid(figure[2]), inner):
+                SURFACE_REJECTED[(AREA_MEDIAN, "середина перекрёстка")] += 1
+                continue
             put(figure)
     finally:
         for handle in open_files.values():
@@ -4092,6 +4121,15 @@ def _at_junction(point, junctions):
         if meters_between(point, node) <= radius:
             return True
     return False
+
+
+# Во сколько радиусов узла (половина самой широкой дороги + 4 м) лежит
+# «середина перекрёстка»: островок с центром ближе — это асфальт между лентами.
+JUNCTION_CORE_REACH = 1.5
+
+
+def _centroid(ring):
+    return (sum(p[0] for p in ring) / len(ring), sum(p[1] for p in ring) / len(ring))
 
 
 def junction_spots(arms):

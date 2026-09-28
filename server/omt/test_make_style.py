@@ -70,6 +70,10 @@ class StyleTests(unittest.TestCase):
         self.assertGreater(ids.index("radar-fillet"), ids.index("radar-roads"))
         self.assertLess(ids.index("radar-fillet"), ids.index("radar-markings"))
 
+    def test_medians_and_islands_lie_under_the_roads(self):
+        ids = [layer["id"] for layer in self.style["layers"]]
+        self.assertLess(ids.index("radar-median"), ids.index("radar-roads-case"))
+
     def test_ids_are_unique(self):
         ids = [layer["id"] for layer in self.style["layers"]]
         self.assertEqual(len(ids), len(set(ids)))

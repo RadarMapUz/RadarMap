@@ -164,6 +164,13 @@ def _our_layers(p):
     """Наши слои, снизу вверх: каймы, полотна, площади узлов, разделительные,
     разметка, зебры, стрелки, светофоры."""
     return [
+        # Разделительные и островки — ПОД полотном. Они построены по осям и не
+        # знают ширины лент: поверх полотна островок ложился бледным
+        # треугольником на полосы (Навои × Абая, 28.09.2026). Под полотном он
+        # остаётся землёй ровно в зазоре между лентами — как у Яндекса.
+        {"id": "radar-median", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 15.5,
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9]],
+         "paint": {"fill-color": p["median"], "fill-outline-color": p["minor_edge"]}},
         {"id": "radar-roads-case", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
@@ -194,10 +201,6 @@ def _our_layers(p):
          "minzoom": OUR_ROADS_FROM,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["in", ["get", "kind"], ["literal", [8, 10]]]],
          "paint": {"fill-color": p["road"], "fill-antialias": False}},
-        # Разделительная — полоса между внутренними кромками встречных лент.
-        {"id": "radar-median", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 15.5,
-         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9]],
-         "paint": {"fill-color": p["median"], "fill-outline-color": p["minor_edge"]}},
         # «Вафля» регулируемого перекрёстка (вид 11): зона между стоп-линиями,
         # очерченная светофорами подходов (build_mvt.waffle_zone). Как у Яндекса.
         {"id": "radar-waffle", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 17,

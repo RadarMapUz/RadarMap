@@ -52,7 +52,7 @@ LAYER_PLACES = "places"
 LAYER_ARROWS = "arrows"
 # Стрелку рисуют перед стоп-линией, а не на ней: на сколько метров отступить
 # от точки подхода против движения.
-ARROW_SETBACK_METERS = 8.0
+ARROW_SETBACK_METERS = 15.0
 
 
 def point_properties(code, flags):

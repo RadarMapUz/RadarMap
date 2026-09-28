@@ -42,6 +42,9 @@ PALETTES = {
         "road": "#b9c0cc", "road_far": "#fdf3cf", "edge": "#efcb4a",
         "minor": "#ffffff", "minor_edge": "#c9ced6", "minor_edge_far": "#e6e6e3", "path": "#ffffff",
         "median": "#dfe5d6", "paint": "#ffffff", "building": "#e7e2de", "landuse": None,
+        # Кайма НАШИХ лент — нейтральная: жёлтая у каждой ленты давала «нитки»
+        # внутри асфальта там, где две ленты лежат рядом (Фурката, 28.09.2026).
+        "casing": "#aab2bf",
         "label": "#4a4a4a", "halo": "#ffffff", "signal": "#3b3b3b", "signal_ring": "#f5d547",
     },
     "dark": {
@@ -49,6 +52,7 @@ PALETTES = {
         "road": "#3b414b", "road_far": "#4b4536", "edge": "#b8923a",
         "minor": "#262b33", "minor_edge": "#1a1e24", "minor_edge_far": "#1a1e24", "path": "#20252c",
         "median": "#1c2a22", "paint": "#d9dee6", "building": "#1c2027", "landuse": "#151a21",
+        "casing": "#2b3039",
         "label": "#c9ced6", "halo": "#0f1216", "signal": "#101318", "signal_ring": "#f0c64a",
     },
 }
@@ -163,7 +167,7 @@ def _our_layers(p):
         {"id": "radar-roads-case", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["<=", ["get", "cls"], 7],
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
-         "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["edge"], p["minor_edge"]],
+         "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["casing"], p["minor_edge"]],
                    "line-width": measured(2.0)}},
         {"id": "radar-roads", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["<=", ["get", "cls"], 7],
@@ -181,10 +185,6 @@ def _our_layers(p):
         {"id": "radar-median", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 15.5,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9]],
          "paint": {"fill-color": p["median"], "fill-outline-color": p["minor_edge"]}},
-        {"id": "radar-markings", "type": "line", "source": "radar", "source-layer": "markings", "minzoom": 16,
-         "layout": {"line-cap": "butt"},
-         "paint": {"line-color": p["paint"], "line-dasharray": [4, 5],
-                   "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3]}},
         # «Вафля» регулируемого перекрёстка (вид 11): зона между стоп-линиями,
         # очерченная светофорами подходов (build_mvt.waffle_zone). Как у Яндекса.
         {"id": "radar-waffle", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 17,
@@ -198,6 +198,29 @@ def _our_layers(p):
          "filter": ["==", ["get", "kind"], 5],
          "paint": {"line-color": p["paint"],
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16.5, 2, 20, 10]}},
+        # Мосты и эстакады — поверх всего полотна: иначе эстакада Фурката лежала
+        # под перекрёстком Навои, будто её там нет.
+        {"id": "radar-bridge-case", "type": "line", "source": "radar", "source-layer": "roads",
+         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["==", ["get", "bridge"], True]],
+         "layout": {"line-cap": "butt", "line-join": "round"},
+         "paint": {"line-color": p["casing"], "line-width": measured(3.0)}},
+        {"id": "radar-bridge", "type": "line", "source": "radar", "source-layer": "roads",
+         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["==", ["get", "bridge"], True]],
+         "layout": {"line-cap": "butt", "line-join": "round"},
+         "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["road"], p["minor"]],
+                   "line-width": measured()}},
+        {"id": "radar-markings", "type": "line", "source": "radar", "source-layer": "markings", "minzoom": 16,
+         "layout": {"line-cap": "butt"},
+         "paint": {"line-color": p["paint"], "line-dasharray": [4, 5],
+                   "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3]}},
+        # Зебра линией перехода (вид 12): ширина линии — длина штриха зебры
+        # (3 м), пунктир — сами штрихи поперёк; одним куском от кромки до кромки.
+        {"id": "radar-zebra", "type": "line", "source": "radar", "source-layer": "paint", "minzoom": 16.5,
+         "filter": ["==", ["get", "kind"], 12],
+         "layout": {"line-cap": "butt"},
+         "paint": {"line-color": p["paint"], "line-dasharray": [0.18, 0.18],
+                   "line-width": ["interpolate", ["exponential", 2], ["zoom"],
+                                  16.5, 3 * 2 ** 16.5 * M, 20, 3 * 2 ** 20 * M]}},
         # Стоп-линии (тег и у светофоров): сплошная, ~0,45 м.
         {"id": "radar-stop-line", "type": "line", "source": "radar", "source-layer": "paint", "minzoom": 16.5,
          "filter": ["in", ["get", "kind"], ["literal", [1, 3]]],
@@ -213,10 +236,12 @@ def _our_layers(p):
                     "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map",
                     "icon-pitch-alignment": "map", "icon-allow-overlap": True, "icon-ignore-placement": True,
                     "icon-size": ["interpolate", ["exponential", 2], ["zoom"], 17, 0.55, 20, 2.2]}},
-        {"id": "radar-signals", "type": "circle", "source": "radar", "source-layer": "points", "minzoom": 16,
-         "filter": ["==", ["get", "kind"], 1],
-         "paint": {"circle-radius": ["interpolate", ["linear"], ["zoom"], 16, 3, 19, 6],
-                   "circle-color": p["signal"], "circle-stroke-color": p["signal_ring"], "circle-stroke-width": 1.5}},
+        # Светофор — один значок в центре регулируемого перекрёстка, как у
+        # Яндекса; точки у каждого подъезда читались мусором посреди полос.
+        {"id": "radar-signal-icon", "type": "symbol", "source": "radar", "source-layer": "surface", "minzoom": 16,
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 11]],
+         "layout": {"icon-image": "traffic-light", "icon-allow-overlap": True,
+                    "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.6, 19, 1.1]}},
     ]
 
 

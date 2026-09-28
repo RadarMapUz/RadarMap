@@ -57,6 +57,13 @@ class StyleTests(unittest.TestCase):
         sprite = _json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprite", "sprite.json")))
         layer = next(l for l in self.style["layers"] if l["id"] == "radar-waffle")
         self.assertIn(layer["paint"]["fill-pattern"], sprite)
+        icon = next(l for l in self.style["layers"] if l["id"] == "radar-signal-icon")
+        self.assertIn(icon["layout"]["icon-image"], sprite)
+
+    def test_bridges_cover_the_waffle(self):
+        # Эстакада Фурката над перекрёстком Навои: «вафля» нижнего уровня — под мостом.
+        ids = [layer["id"] for layer in self.style["layers"]]
+        self.assertLess(ids.index("radar-waffle"), ids.index("radar-bridge"))
 
     def test_ids_are_unique(self):
         ids = [layer["id"] for layer in self.style["layers"]]
@@ -67,7 +74,7 @@ class StyleTests(unittest.TestCase):
         # Подписи ПОДЛОЖКИ: наши стрелки — тоже символы, но лежат вместе с краской.
         first_label = next(i for i, l in enumerate(self.style["layers"])
                            if l["type"] == "symbol" and l.get("source") == "openmaptiles")
-        wanted = ["radar-median", "radar-markings", "radar-crossing", "radar-signals"]
+        wanted = ["radar-median", "radar-markings", "radar-crossing", "radar-signal-icon"]
         if self.mode == "full":
             wanted.append("building-3d")       # в режиме «только дорога» домов нет
         for ours in wanted:

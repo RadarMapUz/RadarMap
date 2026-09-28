@@ -211,13 +211,27 @@ class SignalPaintTests(unittest.TestCase):
 
     def test_waffle_is_the_zone_between_the_signals(self):
         box = ring((-6, -6), (6, -6), (6, 6), (-6, 6))
-        # Светофоры у стоп-линий четырёх подходов, в ~45 м от центра.
-        signals = [(1, 0, [metres(x, y)]) for x, y in ((45, 8), (-45, -8), (8, -45), (-8, 45))]
+        # Светофоры у стоп-линий четырёх подходов, в ~38 м от центра.
+        signals = [(1, 0, [metres(x, y)]) for x, y in ((38, 8), (-38, -8), (8, -38), (-8, 38))]
         zone = build_mvt.waffle_zone(box, build_mvt._signal_grid(signals))
         self.assertIsNotNone(zone)
         area, _ = sc.area_and_perimeter(sc.to_meters(zone))
         self.assertGreater(area, 1500, "зона — весь перекрёсток между стоп-линиями, а не центр осей")
         self.assertIsNone(sc.defect(zone))
+
+    def test_elongated_signal_set_is_not_a_junction(self):
+        # Навои × Фурката: светофоры эстакады и съездов дали вытянутый треугольник.
+        box = ring((-6, -6), (6, -6), (6, 6), (-6, 6))
+        thin = [(1, 0, [metres(x, y)]) for x, y in ((-40, 2), (40, -2), (10, 6))]
+        self.assertIsNone(build_mvt.waffle_zone(box, build_mvt._signal_grid(thin)))
+
+    def test_node_zebra_near_a_crossing_way_is_a_duplicate(self):
+        grid = {}
+        way = [metres(-10, 0), metres(10, 0)]
+        for lon, lat in way:
+            grid.setdefault((int(lon / build_mvt._SIGNAL_CELL), int(lat / build_mvt._SIGNAL_CELL)), []).append((lon, lat))
+        self.assertTrue(build_mvt._near_crossing_way(metres(-9, 1), grid))
+        self.assertFalse(build_mvt._near_crossing_way(metres(0, 60), grid))
 
     def test_no_waffle_without_enough_signals(self):
         box = ring((-6, -6), (6, -6), (6, 6), (-6, 6))

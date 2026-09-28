@@ -68,6 +68,20 @@ def waffle(ratio):
     return image
 
 
+def traffic_light(ratio):
+    """Значок светофора для центра регулируемого перекрёстка (как у Яндекса)."""
+    w, h = 12 * ratio, 26 * ratio
+    image = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    pen = ImageDraw.Draw(image)
+    pen.rounded_rectangle((0, 0, w - 1, h - 1), radius=3 * ratio, fill=(52, 56, 64, 255),
+                          outline=(255, 255, 255, 230), width=max(1, ratio))
+    r = 3 * ratio
+    for index, colour in enumerate(((229, 72, 60), (244, 190, 40), (56, 190, 96))):
+        cy = (5 + index * 8) * ratio
+        pen.ellipse((w / 2 - r, cy - r, w / 2 + r, cy + r), fill=colour + (255,))
+    return image
+
+
 def build(ratio):
     suffix = "" if ratio == 1 else f"@{ratio}x"
     base_png = os.path.join(HERE, "sprite", f"base{suffix}.png")
@@ -76,6 +90,7 @@ def build(ratio):
     index = json.load(open(base_json))
     icons = [(f"lane-{NAMES[code]}", draw(code, ratio)) for code in sorted(NAMES)]
     icons.append(("waffle", waffle(ratio)))
+    icons.append(("traffic-light", traffic_light(ratio)))
     row = max(icon.height for _n, icon in icons)
     out = Image.new("RGBA", (max(sheet.width, sum(i.width + 2 for _n, i in icons)),
                              sheet.height + row + 2), (0, 0, 0, 0))

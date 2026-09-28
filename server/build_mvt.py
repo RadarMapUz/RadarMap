@@ -257,14 +257,39 @@ def place_properties(place):
     return {"name": name, "rank": rank}
 
 
+# Зебра линией перехода (OSM footway=crossing) — в слое paint, вид 12. Узловую
+# зебру (вид 5) ближе этого к линии перехода не рисуем: это тот же переход.
+KIND_ZEBRA_WAY = 12
+ZEBRA_WAY_NEAR_METERS = 10.0
+# Узел перехода «лежит на линии», если совпадает с её вершиной с точностью до
+# посадки на ось (точки садятся на нарисованную ось — сдвиг до пары метров).
+NODE_ON_WAY_METERS = 4.0
+
+
+def _near_crossing_way(point, grid, reach=ZEBRA_WAY_NEAR_METERS):
+    lon, lat = point
+    kx = 111_320 * math.cos(math.radians(lat))
+    cell = (int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            for x, y in grid.get((cell[0] + dx, cell[1] + dy), ()):
+                if math.hypot((x - lon) * kx, (y - lat) * 111_320) <= reach:
+                    return True
+    return False
+
+
 # «Вафля» регулируемого перекрёстка — как у Яндекса: зона пересечения между
 # стоп-линиями. Её очерчивают сами светофоры подходов (в OSM они стоят у
 # стоп-линий), поэтому зона — выпуклая оболочка светофоров вокруг центра
 # перекрёстка (вид 10), стянутая к центру, чтобы не наезжать на зебры.
 KIND_WAFFLE = 11
-WAFFLE_SIGNAL_REACH_METERS = 60.0
+WAFFLE_SIGNAL_REACH_METERS = 45.0
 WAFFLE_MIN_SIGNALS = 3
-WAFFLE_SHRINK = 0.8
+WAFFLE_SHRINK = 0.75
+# Зона перекрёстка — почти квадрат или ромб. Вытянутый треугольник (Навои ×
+# Фурката, 28.09.2026: светофоры эстакады и съездов) — не перекрёсток, а
+# случайная выборка светофоров; такую «вафлю» не рисуем.
+WAFFLE_MIN_COMPACTNESS = 0.6
 _SIGNAL_CELL = 0.002   # ~200 м
 
 
@@ -316,6 +341,11 @@ def waffle_zone(box, grid):
         return None
     hull = _convex_hull(near)
     if len(hull) < 3:
+        return None
+    metres = [((x - cx) * kx, (y - cy) * 111_320) for x, y in hull]
+    area = abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(metres, metres[1:] + metres[:1]))) / 2
+    perimeter = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(metres, metres[1:] + metres[:1]))
+    if perimeter <= 0 or 4 * math.pi * area / perimeter ** 2 < WAFFLE_MIN_COMPACTNESS:
         return None
     hx = sum(p[0] for p in hull) / len(hull)
     hy = sum(p[1] for p in hull) / len(hull)
@@ -513,7 +543,8 @@ def written_areas(target_dir, set_name):
 
 def build_mvt(roads, target_dir, areas=(), points=(), far=(),
               zoom=ZOOM_DETAIL, far_zoom=ZOOM_FAR, handles=64,
-              written_sets=("h", "d"), far_areas=(), places=(), widths=None):
+              written_sets=("h", "d"), far_areas=(), places=(), widths=None,
+              crossings=()):
     """Написать .mvt под target_dir/mvt/<z>/<x>/<y>.mvt. Возвращает {путь: байты}."""
     work = os.path.join(target_dir, "_mvt")
     buckets = _Buckets(work, handles)
@@ -556,8 +587,28 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                         waffles.add(_waffle_key(waffle))
                         _put(buckets, zoom, LAYER_SURFACE, mvt.POLYGON, waffle, {"kind": KIND_WAFFLE})
                 lay(kind, flags, shape)
+        # Зебры линиями переходов. Линия размечена тегом — или на ней лежит
+        # размеченный узел перехода (у Пахтакора линия без тега, а узлы — zebra).
+        # Узловая зебра рядом с нарисованной линией — тот же переход, дубль.
+        painted_nodes = defaultdict(list)
+        for point in points:
+            if point[0] == 5 and point[1] & PFLAG_PAINTED:
+                lon, lat = point[2][0]
+                painted_nodes[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
+        crossing_grid = defaultdict(list)
+        for line, marked in crossings:
+            if not marked and not any(_near_crossing_way(spot, painted_nodes, NODE_ON_WAY_METERS)
+                                      for spot in line):
+                continue
+            _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": KIND_ZEBRA_WAY})
+            for lon, lat in line:
+                crossing_grid[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
         for point in points:
             code, flags, spot = point[0], point[1], point[2]
+            if code == 5 and _near_crossing_way(spot[0], crossing_grid):
+                _put(buckets, zoom, LAYER_POINTS, mvt.POINT, list(spot),
+                     point_properties(code, flags))
+                continue
             _put(buckets, zoom, LAYER_POINTS, mvt.POINT, list(spot),
                  point_properties(code, flags))
             for line in road_paint(code, flags, spot[0]):

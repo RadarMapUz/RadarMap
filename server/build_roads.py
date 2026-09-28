@@ -2808,6 +2808,48 @@ def crossing_is_marked(properties):
     return bool(kinds & MARKED_CROSSINGS)
 
 
+CROSSING_WAY_HIGHWAYS = {"footway", "path", "cycleway"}
+
+
+def collect_crossings(source_path):
+    """Линии пешеходных переходов → [([(lon, lat), …], размечен_ли_тегом)].
+
+    Зебра по УЗЛУ перехода рисовалась на каждую ленту отдельно, каждая со своим
+    азимутом, — поперёк проспекта выходила «ступенька» из трёх кусков
+    (Пахтакор, снимок 28.09.2026). В OSM переход — это линия footway=crossing
+    от кромки до кромки: по ней зебра ложится одним куском и под правильным
+    углом. Разметку берём по тому же смыслу тегов, что и у узлов; линия без
+    тега тоже едет — её разметку может подтвердить размеченный узел перехода
+    на ней (build_mvt решает, у него есть точки).
+    """
+    out = []
+    if not source_path or not os.path.exists(source_path):
+        return out
+    with open(source_path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.lstrip("\x1e").strip()
+            if not line or '"crossing' not in line:
+                continue
+            try:
+                feature = json.loads(line)
+            except ValueError:
+                continue
+            properties = feature.get("properties") or {}
+            if properties.get("highway") not in CROSSING_WAY_HIGHWAYS:
+                continue
+            if properties.get("footway") != "crossing" and not properties.get("crossing"):
+                continue
+            if properties.get("crossing:markings") == "no" or \
+                    properties.get("crossing") in ("unmarked", "no", "informal"):
+                continue
+            geometry = feature.get("geometry") or {}
+            points = geometry.get("coordinates") or []
+            if geometry.get("type") == "LineString" and len(points) >= 2:
+                out.append(([(float(x), float(y)) for x, y in points],
+                            crossing_is_marked(properties)))
+    return out
+
+
 def point_kind(properties):
     """Вид точечного объекта по тегам. None — не наш слой."""
     if properties.get("road_marking") == "stop_line":
@@ -4507,6 +4549,7 @@ def main():
 
     if args.mvt:
         far_areas = build_far_areas(areas)
+        crossings = collect_crossings(args.source)
         # Ширина линии — по ленте, как у полотна: без этого край улицы
         # ступенчатый на стыках кусков с полосами из тега и без.
         widths = {id(piece): street[4]
@@ -4514,9 +4557,10 @@ def main():
         made = build_mvt.build_mvt(roads, args.tiles_dir, areas=areas,
                                    points=mvt_points, far=far,
                                    far_areas=far_areas, places=places,
-                                   widths=widths)
+                                   widths=widths, crossings=crossings)
         del widths
-        print(f"MVT обзор: местности {len(far_areas)} площадей, мест {len(places)}")
+        print(f"MVT обзор: местности {len(far_areas)} площадей, мест {len(places)}; "
+              f"переходов линиями {len(crossings)}")
         weight = sum(meta["bytes"] for meta in made.values())
         print(f"MVT: {len(made)} тайлов, {weight / 1e6:.1f} МБ "
               f"(зумы {build_mvt.ZOOM_DETAIL} и {build_mvt.ZOOM_FAR})")

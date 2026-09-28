@@ -79,6 +79,16 @@ class StyleTests(unittest.TestCase):
         self.assertIn("line-dasharray", layers["radar-centre-dashed"]["paint"])
         self.assertNotIn("line-dasharray", layers["radar-centre-solid"]["paint"])
 
+    def test_minor_streets_are_asphalt_not_footpaths(self):
+        # Двор цветом дорожки читался тропинкой; улица — асфальт, светлее магистрали.
+        def lightness(colour):
+            colour = colour.lstrip("#")
+            return sum(int(colour[i:i + 2], 16) for i in (0, 2, 4)) / 3
+        for theme in make_style.PALETTES.values():
+            self.assertNotEqual(theme["minor"], theme["path"])
+            low, high = sorted((lightness(theme["road"]), lightness(theme["bg"])))
+            self.assertTrue(low < lightness(theme["minor"]) < high or theme is make_style.PALETTES["dark"])
+
     def test_bridges_cover_the_waffle(self):
         # Эстакада Фурката над перекрёстком Навои: «вафля» нижнего уровня — под мостом.
         ids = [layer["id"] for layer in self.style["layers"]]

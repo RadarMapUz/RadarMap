@@ -217,6 +217,17 @@ FAR_LAYERS = {LAYER_ROADS, LAYER_LAND, LAYER_PLACES}
 FAR_PLACE_RANKS = {1, 2, 3, 5}
 
 
+STUB_WIDTHS = 1.5
+
+
+def _length_m(points):
+    total = 0.0
+    for (lon1, lat1), (lon2, lat2) in zip(points, points[1:]):
+        kx = 111_320 * math.cos(math.radians((lat1 + lat2) / 2))
+        total += math.hypot((lon2 - lon1) * kx, (lat2 - lat1) * 111_320)
+    return total
+
+
 def _road_props(road, width=None):
     """`width` — ширина всей непрерывной ленты (build_roads.street_chains).
 
@@ -231,6 +242,11 @@ def _road_props(road, width=None):
     if width is None:
         width = road_width_meters(code, lanes)
     props = {"cls": code, "width": round(width, 1)}
+    # Кусок короче полутора своих ширин — скруглённый конец превращает его в
+    # «шар» шире соседей (Олмазор у Пахтакора: 17 м между двумя развилками).
+    # Такой кусок стиль рисует с прямыми концами.
+    if _length_m(road[2]) < STUB_WIDTHS * width:
+        props["stub"] = True
     if name:
         props["name"] = name
     if flags & FLAG_ONEWAY:

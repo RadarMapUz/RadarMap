@@ -242,6 +242,12 @@ class SignalPaintTests(unittest.TestCase):
 
 
 class LineWidthTests(unittest.TestCase):
+    def test_short_wide_piece_is_a_stub(self):
+        short = (3, 0, ring((0, 0), (20, 0)), "Olmazor")
+        long = (3, 0, ring((0, 0), (200, 0)), "Olmazor")
+        self.assertTrue(build_mvt._road_props(short, 17.0).get("stub"))
+        self.assertNotIn("stub", build_mvt._road_props(long, 17.0))
+
     def test_chain_width_overrides_piece_width(self):
         piece = (3, 0, ring((0, 0), (50, 0)), "Navoiy ko'chasi")
         self.assertEqual(build_mvt._road_props(piece, 14.04)["width"], 14.0)

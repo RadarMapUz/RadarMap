@@ -165,13 +165,20 @@ def _our_layers(p):
     разметка, зебры, стрелки, светофоры."""
     return [
         {"id": "radar-roads-case", "type": "line", "source": "radar", "source-layer": "roads",
-         "minzoom": OUR_ROADS_FROM, "filter": ["<=", ["get", "cls"], 7],
+         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
          "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["casing"], p["minor_edge"]],
                    "line-width": measured(2.0)}},
         {"id": "radar-roads", "type": "line", "source": "radar", "source-layer": "roads",
-         "minzoom": OUR_ROADS_FROM, "filter": ["<=", ["get", "cls"], 7],
+         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
+         "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["road"], p["minor"]],
+                   "line-width": measured()}},
+        # Короткие широкие куски (stub) — с прямыми концами: скругление делало
+        # из них «шар» шире соседних лент. Стык закрывают концы соседей.
+        {"id": "radar-roads-stub", "type": "line", "source": "radar", "source-layer": "roads",
+         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["has", "stub"]],
+         "layout": {"line-cap": "butt", "line-join": "round"},
          "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["road"], p["minor"]],
                    "line-width": measured()}},
         # Площадь перекрёстка: скругляет углы между подходами. Узлы строятся

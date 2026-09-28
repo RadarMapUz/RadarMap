@@ -171,6 +171,33 @@ class CrossingTests(unittest.TestCase):
             self.assertFalse(marked(tags), tags)
 
 
+class LaneArrowTests(unittest.TestCase):
+    def point(self, turns, width=12, azimuth=90):
+        flags = build_roads.point_flags(azimuth, width)
+        return build_roads.pack_turns(flags, turns)
+
+    def test_one_arrow_per_lane_left_to_right(self):
+        # Дорога на восток (азимут 90°): левая по ходу полоса — севернее.
+        turns = [build_roads.TURN_LEFT, build_roads.TURN_THROUGH, build_roads.TURN_RIGHT]
+        arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS,
+                                            self.point(turns), (LON, LAT)))
+        self.assertEqual([p["turn"] for _spot, p in arrows], turns)
+        lats = [spot[1] for spot, _p in arrows]
+        self.assertGreater(lats[0], lats[1])
+        self.assertGreater(lats[1], lats[2])
+        # Перед стоп-линией: западнее точки подхода.
+        self.assertTrue(all(spot[0] < LON for spot, _p in arrows))
+        self.assertTrue(all(p["bearing"] == 90 for _spot, p in arrows))
+
+    def test_empty_lane_draws_nothing(self):
+        turns = [build_roads.TURN_NONE, build_roads.TURN_THROUGH]
+        arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns), (LON, LAT)))
+        self.assertEqual(len(arrows), 1)
+
+    def test_other_points_have_no_arrows(self):
+        self.assertEqual(list(build_mvt.lane_arrows(1, self.point([1]), (LON, LAT))), [])
+
+
 class LineWidthTests(unittest.TestCase):
     def test_chain_width_overrides_piece_width(self):
         piece = (3, 0, ring((0, 0), (50, 0)), "Navoiy ko'chasi")

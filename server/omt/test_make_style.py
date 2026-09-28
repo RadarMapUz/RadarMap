@@ -40,6 +40,15 @@ class StyleTests(unittest.TestCase):
             if isinstance(fonts, list) and all(isinstance(f, str) for f in fonts):
                 self.assertTrue(set(fonts) <= SHIPPED_FONTS, f"{layer['id']}: {fonts}")
 
+    def test_every_lane_arrow_has_an_icon_in_the_sprite(self):
+        import json as _json
+        sprite = _json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprite", "sprite.json")))
+        layer = next(l for l in self.style["layers"] if l["id"] == "radar-arrows")
+        names = [v for v in layer["layout"]["icon-image"][2:-1] if isinstance(v, str)]
+        self.assertEqual(len(names), 9)
+        for name in names:
+            self.assertIn(name, sprite)
+
     def test_ids_are_unique(self):
         ids = [layer["id"] for layer in self.style["layers"]]
         self.assertEqual(len(ids), len(set(ids)))

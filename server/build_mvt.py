@@ -23,7 +23,8 @@ from build_roads import (AREA_HOUSE, AREA_JUNCTION, AREA_MEDIAN, AREA_ROAD,
                          FLAG_LANES_TAGGED, FLAG_ONEWAY, FLAG_TUNNEL,
                          PFLAG_PAINTED, PFLAG_ONEWAY, point_azimuth, point_width,
                          SURFACE_CLASS_MASK, SURFACE_CLASS_SHIFT, lanes_of,
-                         road_width_meters)
+                         road_width_meters, POINT_LANE_ARROWS, MAX_ARROW_LANES,
+                         unpack_turns)
 
 # Зумы. Два, а не десять.
 #
@@ -46,6 +47,12 @@ LAYER_PAINT = "paint"
 # Контракт с клиентом: слой «places», свойства name (строка) и rank (1 город,
 # 2 посёлок, 3 кишлак, 4 хутор, 5 район, 6 квартал).
 LAYER_PLACES = "places"
+# Стрелки полос: одна точка на ПОЛОСУ, свойства turn (код build_roads.TURN_*)
+# и bearing (куда смотрит стрелка, градусы по часовой от севера).
+LAYER_ARROWS = "arrows"
+# Стрелку рисуют перед стоп-линией, а не на ней: на сколько метров отступить
+# от точки подхода против движения.
+ARROW_SETBACK_METERS = 8.0
 
 
 def point_properties(code, flags):
@@ -53,6 +60,35 @@ def point_properties(code, flags):
     return {"kind": 7 if code == 3 and not flags & PFLAG_PAINTED else code,
             "flags": flags, "bearing": point_azimuth(flags), "width": point_width(flags),
             "painted": bool(flags & PFLAG_PAINTED)}
+
+
+def lane_arrows(code, flags, point):
+    """Стрелки полос по одной на полосу, поперёк проезжей части.
+
+    turn:lanes в OSM перечисляет полосы слева направо по ходу движения, поэтому
+    первая стрелка — у левой кромки. Полос столько, сколько записано до
+    последней непустой: хвост «без стрелки» справа ничего не рисует.
+    """
+    if code != POINT_LANE_ARROWS:
+        return
+    width = point_width(flags)
+    turns = unpack_turns(flags, MAX_ARROW_LANES)
+    used = max((i + 1 for i, turn in enumerate(turns) if turn), default=0)
+    if width <= 0 or used == 0:
+        return
+    bearing = point_azimuth(flags)
+    angle = math.radians(bearing)
+    lon, lat = point
+    lane = width / used
+    for index, turn in enumerate(turns[:used]):
+        if not turn:
+            continue
+        across = -width / 2 + lane * (index + 0.5)
+        along = -ARROW_SETBACK_METERS
+        yield ((lon + (math.cos(angle) * across + math.sin(angle) * along)
+                / (111_320 * math.cos(math.radians(lat))),
+                lat + (-math.sin(angle) * across + math.cos(angle) * along) / 111_320),
+               {"turn": turn, "bearing": round(bearing)})
 
 
 def road_paint(code, flags, point):
@@ -424,6 +460,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                  point_properties(code, flags))
             for line in road_paint(code, flags, spot[0]):
                 _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": code})
+            for arrow, props in lane_arrows(code, flags, spot[0]):
+                _put(buckets, zoom, LAYER_ARROWS, mvt.POINT, [arrow], props)
     finally:
         buckets.close()
 

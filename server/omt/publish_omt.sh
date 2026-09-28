@@ -18,7 +18,7 @@ printf '{"payload": "%s", "sig": "%s"}\n' "$payload" "$sig" > "$OUT/omt_index.js
 
 echo "→ выкладка (тайлы, шрифты, иконки, стиль)"
 ssh -o BatchMode=yes "$HOST" "mkdir -p $WEBROOT/omt.new && rm -rf $WEBROOT/omt.new/*"
-tar -C "$OUT" -cf - omt glyphs sprite style.json | gzip -1 | \
+COPYFILE_DISABLE=1 tar --no-xattrs -C "$OUT" -cf - omt glyphs sprite style.json | gzip -1 | \
     ssh -o BatchMode=yes "$HOST" "tar -xzf - -C $WEBROOT/omt.new"
 ssh -o BatchMode=yes "$HOST" "
   set -e

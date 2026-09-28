@@ -259,7 +259,7 @@ if [ -d "$GLYPHS_SRC" ]; then
     # Regular» — так его просит движок в {fontstack}), и scp с таким путём
     # ломается на удалённом mkdir, обрывая всю публикацию на полпути. Один
     # обрыв это уже стоило: тайлы уехали, а индекс — нет.
-    tar c -C "$GLYPHS_SRC" . | ssh "$HOST" "mkdir -p '$WEBROOT/glyphs/Noto Sans Regular' && tar x -C '$WEBROOT/glyphs/Noto Sans Regular'"
+    COPYFILE_DISABLE=1 tar --no-xattrs -c -C "$GLYPHS_SRC" . | ssh "$HOST" "mkdir -p '$WEBROOT/glyphs/Noto Sans Regular' && tar x -C '$WEBROOT/glyphs/Noto Sans Regular'"
     ssh "$HOST" "echo \"    диапазонов: \$(ls '$WEBROOT/glyphs/Noto Sans Regular' | wc -l)\""
 else
     echo "глифов нет в $GLYPHS_SRC — пропускаем"

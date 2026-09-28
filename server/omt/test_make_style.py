@@ -52,6 +52,12 @@ class StyleTests(unittest.TestCase):
         for name in names:
             self.assertIn(name, sprite)
 
+    def test_waffle_pattern_is_in_the_sprite(self):
+        import json as _json
+        sprite = _json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprite", "sprite.json")))
+        layer = next(l for l in self.style["layers"] if l["id"] == "radar-waffle")
+        self.assertIn(layer["paint"]["fill-pattern"], sprite)
+
     def test_ids_are_unique(self):
         ids = [layer["id"] for layer in self.style["layers"]]
         self.assertEqual(len(ids), len(set(ids)))

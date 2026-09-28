@@ -2175,6 +2175,11 @@ AREA_JUNCTION = 8
 # ленты одной улицы, идущие навстречу в нескольких метрах друг от друга.
 # Полоса между их внутренними кромками и есть разделительная.
 AREA_MEDIAN = 9
+# Центр перекрёстка: грань между лентами двух проспектов (квадрат асфальта,
+# который раньше выдавал себя за островок и давал «шахматку»). Это асфальт, а
+# у регулируемого перекрёстка — место жёлтой «вафли», как у Яндекса.
+# Приложение незнакомый вид пропускает (RoadTiles: guard … else continue).
+AREA_JUNCTION_BOX = 10
 AREA_FLAG_CLOSED = 1
 
 
@@ -3889,7 +3894,7 @@ def stream_surface(roads, target_dir, degrees, handles=64):
         inner = junction_index([(node, radius * JUNCTION_CORE_REACH) for node, radius in spots])
         for figure in build_islands(roads):
             if _at_junction(_centroid(figure[2]), inner):
-                SURFACE_REJECTED[(AREA_MEDIAN, "середина перекрёстка")] += 1
+                put((AREA_JUNCTION_BOX, figure[1], figure[2]))
                 continue
             put(figure)
     finally:

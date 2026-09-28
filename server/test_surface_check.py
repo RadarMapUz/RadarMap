@@ -198,6 +198,35 @@ class LaneArrowTests(unittest.TestCase):
         self.assertEqual(list(build_mvt.lane_arrows(1, self.point([1]), (LON, LAT))), [])
 
 
+class SignalPaintTests(unittest.TestCase):
+    def test_stop_line_only_across_a_oneway_carriageway(self):
+        flags = build_roads.point_flags(90, 10)
+        self.assertEqual(list(build_mvt.road_paint(1, flags, (LON, LAT))), [],
+                         "у двусторонней дороги длины стоп-линии мы не знаем")
+        lines = list(build_mvt.road_paint(1, flags | build_mvt.PFLAG_ONEWAY, (LON, LAT)))
+        self.assertEqual(len(lines), 1)
+        (a, b), = lines
+        self.assertAlmostEqual(sc.LAT_METERS * abs(a[1] - b[1]), 10, delta=0.2)   # поперёк, на всю ширину
+        self.assertLess(a[0], LON, "стоп-линия — ДО светофора по ходу движения")
+
+    def test_waffle_is_the_zone_between_the_signals(self):
+        box = ring((-6, -6), (6, -6), (6, 6), (-6, 6))
+        # Светофоры у стоп-линий четырёх подходов, в ~45 м от центра.
+        signals = [(1, 0, [metres(x, y)]) for x, y in ((45, 8), (-45, -8), (8, -45), (-8, 45))]
+        zone = build_mvt.waffle_zone(box, build_mvt._signal_grid(signals))
+        self.assertIsNotNone(zone)
+        area, _ = sc.area_and_perimeter(sc.to_meters(zone))
+        self.assertGreater(area, 1500, "зона — весь перекрёсток между стоп-линиями, а не центр осей")
+        self.assertIsNone(sc.defect(zone))
+
+    def test_no_waffle_without_enough_signals(self):
+        box = ring((-6, -6), (6, -6), (6, 6), (-6, 6))
+        two = [(1, 0, [metres(45, 8)]), (1, 0, [metres(-45, -8)])]
+        far = [(1, 0, [metres(x, y)]) for x, y in ((145, 8), (-145, -8), (8, -145))]
+        self.assertIsNone(build_mvt.waffle_zone(box, build_mvt._signal_grid(two)))
+        self.assertIsNone(build_mvt.waffle_zone(box, build_mvt._signal_grid(far)))
+
+
 class LineWidthTests(unittest.TestCase):
     def test_chain_width_overrides_piece_width(self):
         piece = (3, 0, ring((0, 0), (50, 0)), "Navoiy ko'chasi")

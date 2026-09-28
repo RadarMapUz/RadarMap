@@ -17,7 +17,7 @@ import shutil
 from collections import OrderedDict, defaultdict
 
 import mvt
-from build_roads import (AREA_HOUSE, AREA_JUNCTION, AREA_MEDIAN, AREA_ROAD,
+from build_roads import (AREA_HOUSE, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_MEDIAN, AREA_ROAD,
                          clip_ring,
                          FLAG_BRIDGE,
                          FLAG_LANES_TAGGED, FLAG_ONEWAY, FLAG_TUNNEL,
@@ -97,7 +97,24 @@ def road_paint(code, flags, point):
     Стоп-линию поперёк двух направлений не рисуем: в данных нет её длины.
     """
     width = point_width(flags)
-    if code not in (3, 5) or not flags & PFLAG_PAINTED or width <= 0:
+    if width <= 0:
+        return
+    # Стоп-линия у светофора: регулируемый подъезд размечен всегда, но длину
+    # линии мы знаем только у односторонней ленты — у проспекта с раздельными
+    # направлениями. Там и рисуем, за SIGNAL_STOP_SETBACK до светофора.
+    if code == 1:
+        if flags & PFLAG_ONEWAY:
+            lon, lat = point
+            angle = math.radians(point_azimuth(flags))
+            back = -SIGNAL_STOP_SETBACK
+
+            def at_signal(across):
+                return (lon + (math.cos(angle) * across + math.sin(angle) * back)
+                        / (111_320 * math.cos(math.radians(lat))),
+                        lat + (-math.sin(angle) * across + math.cos(angle) * back) / 111_320)
+            yield [at_signal(-width / 2), at_signal(width / 2)]
+        return
+    if code not in (3, 5) or not flags & PFLAG_PAINTED:
         return
     if code == 3 and not flags & PFLAG_ONEWAY:
         return
@@ -114,6 +131,9 @@ def road_paint(code, flags, point):
         for index in range(max(1, int(width))):
             offset = -width / 2 + index + .5
             yield [at(offset, -1.5), at(offset, 1.5)]
+
+# Стоп-линия у светофора — на столько метров раньше точки светофора.
+SIGNAL_STOP_SETBACK = 2.0
 
 # Разметка готовится один раз при сборке. Ограничение защищает от испорченного
 # тега lanes; двусторонние дороги без lanes:forward/backward не угадываем.
@@ -237,6 +257,81 @@ def place_properties(place):
     return {"name": name, "rank": rank}
 
 
+# «Вафля» регулируемого перекрёстка — как у Яндекса: зона пересечения между
+# стоп-линиями. Её очерчивают сами светофоры подходов (в OSM они стоят у
+# стоп-линий), поэтому зона — выпуклая оболочка светофоров вокруг центра
+# перекрёстка (вид 10), стянутая к центру, чтобы не наезжать на зебры.
+KIND_WAFFLE = 11
+WAFFLE_SIGNAL_REACH_METERS = 60.0
+WAFFLE_MIN_SIGNALS = 3
+WAFFLE_SHRINK = 0.8
+_SIGNAL_CELL = 0.002   # ~200 м
+
+
+def _signal_grid(points):
+    grid = defaultdict(list)
+    for point in points:
+        if point[0] == 1:
+            lon, lat = point[2][0]
+            grid[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
+    return grid
+
+
+def _convex_hull(points):
+    """Выпуклая оболочка (монотонная цепь Эндрю)."""
+    pts = sorted(set(points))
+    if len(pts) < 3:
+        return pts
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    lower, upper = [], []
+    for p in pts:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+    for p in reversed(pts):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+    return lower[:-1] + upper[:-1]
+
+
+def waffle_zone(box, grid):
+    """Зона «вафли» для центра перекрёстка или None, если перекрёсток не регулируемый."""
+    if not grid:
+        return None
+    cx = sum(p[0] for p in box) / len(box)
+    cy = sum(p[1] for p in box) / len(box)
+    kx = 111_320 * math.cos(math.radians(cy))
+    reach_lat = WAFFLE_SIGNAL_REACH_METERS / 111_320
+    reach_lon = WAFFLE_SIGNAL_REACH_METERS / kx
+    near = []
+    for gx in range(int((cx - reach_lon) / _SIGNAL_CELL), int((cx + reach_lon) / _SIGNAL_CELL) + 1):
+        for gy in range(int((cy - reach_lat) / _SIGNAL_CELL), int((cy + reach_lat) / _SIGNAL_CELL) + 1):
+            for lon, lat in grid.get((gx, gy), ()):
+                if math.hypot((lon - cx) * kx, (lat - cy) * 111_320) <= WAFFLE_SIGNAL_REACH_METERS:
+                    near.append((lon, lat))
+    if len(near) < WAFFLE_MIN_SIGNALS:
+        return None
+    hull = _convex_hull(near)
+    if len(hull) < 3:
+        return None
+    hx = sum(p[0] for p in hull) / len(hull)
+    hy = sum(p[1] for p in hull) / len(hull)
+    return [(hx + (x - hx) * WAFFLE_SHRINK, hy + (y - hy) * WAFFLE_SHRINK) for x, y in hull]
+
+
+def _waffle_key(ring):
+    """Одна зона на перекрёсток: центр перекрёстка бывает в двух соседних тайлах."""
+    return tuple(sorted((round(x, 5), round(y, 5)) for x, y in ring))
+
+
+def _has_signal(shape, grid):
+    """Совместимость: есть ли у центра перекрёстка своя «вафля»."""
+    return waffle_zone(shape, grid) is not None
+
+
 def _area_props(kind, flags):
     props = {"kind": kind}
     if kind == AREA_ROAD:
@@ -245,7 +340,7 @@ def _area_props(kind, flags):
 
 
 def _layer_of(kind):
-    if kind in (AREA_ROAD, AREA_JUNCTION, AREA_MEDIAN):
+    if kind in (AREA_ROAD, AREA_JUNCTION, AREA_MEDIAN, AREA_JUNCTION_BOX):
         return LAYER_SURFACE
     if kind == AREA_HOUSE:
         return LAYER_HOUSES
@@ -451,8 +546,15 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         for kind, flags, shape in areas:
             lay(kind, flags, shape)
         # Дома и поверхность — из уже написанных тайлов: в памяти их нет.
+        signals = _signal_grid(points)
+        waffles = set()
         for set_name in written_sets:
             for kind, flags, shape in written_areas(target_dir, set_name):
+                if kind == AREA_JUNCTION_BOX:
+                    waffle = waffle_zone(shape, signals)
+                    if waffle and _waffle_key(waffle) not in waffles:
+                        waffles.add(_waffle_key(waffle))
+                        _put(buckets, zoom, LAYER_SURFACE, mvt.POLYGON, waffle, {"kind": KIND_WAFFLE})
                 lay(kind, flags, shape)
         for point in points:
             code, flags, spot = point[0], point[1], point[2]

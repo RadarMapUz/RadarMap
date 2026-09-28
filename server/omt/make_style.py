@@ -175,7 +175,7 @@ def _our_layers(p):
         # досягаемости — цвет магистрального асфальта им честен.
         {"id": "radar-junction", "type": "fill", "source": "radar", "source-layer": "surface",
          "minzoom": OUR_ROADS_FROM,
-         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 8]],
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["in", ["get", "kind"], ["literal", [8, 10]]]],
          "paint": {"fill-color": p["road"], "fill-antialias": False}},
         # Разделительная — полоса между внутренними кромками встречных лент.
         {"id": "radar-median", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 15.5,
@@ -185,9 +185,26 @@ def _our_layers(p):
          "layout": {"line-cap": "butt"},
          "paint": {"line-color": p["paint"], "line-dasharray": [4, 5],
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3]}},
+        # «Вафля» регулируемого перекрёстка (вид 11): зона между стоп-линиями,
+        # очерченная светофорами подходов (build_mvt.waffle_zone). Как у Яндекса.
+        {"id": "radar-waffle", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 17,
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 11]],
+         "paint": {"fill-pattern": "waffle", "fill-opacity": 0.8}},
+        {"id": "radar-waffle-edge", "type": "line", "source": "radar", "source-layer": "surface", "minzoom": 17,
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 11]],
+         "paint": {"line-color": "#f2c230", "line-width": 1.2, "line-opacity": 0.85}},
+        # Зебры: штрихи вдоль движения, толщина — ширина полосы зебры.
         {"id": "radar-crossing", "type": "line", "source": "radar", "source-layer": "paint", "minzoom": 16.5,
+         "filter": ["==", ["get", "kind"], 5],
          "paint": {"line-color": p["paint"],
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16.5, 2, 20, 10]}},
+        # Стоп-линии (тег и у светофоров): сплошная, ~0,45 м.
+        {"id": "radar-stop-line", "type": "line", "source": "radar", "source-layer": "paint", "minzoom": 16.5,
+         "filter": ["in", ["get", "kind"], ["literal", [1, 3]]],
+         "layout": {"line-cap": "butt"},
+         "paint": {"line-color": p["paint"],
+                   "line-width": ["interpolate", ["exponential", 2], ["zoom"],
+                                  16.5, max(0.8, 0.45 * 2 ** 16.5 * M), 20, 0.45 * 2 ** 20 * M]}},
         # Стрелки полос перед стоп-линией: одна на полосу (build_mvt.lane_arrows).
         {"id": "radar-arrows", "type": "symbol", "source": "radar", "source-layer": "arrows", "minzoom": 17,
          "layout": {"icon-image": ["match", ["get", "turn"], 1, "lane-through", 2, "lane-left", 3, "lane-right",

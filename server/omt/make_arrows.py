@@ -52,6 +52,22 @@ def draw(code, ratio):
     return image
 
 
+WAFFLE = 12   # шаг сетки «вафли» при pixelRatio 1
+
+
+def waffle(ratio):
+    """Узор «вафли» регулируемого перекрёстка: жёлтая сетка, как у Яндекса.
+    Плитка замыкается сама: линия по левому и верхнему краю."""
+    size = WAFFLE * ratio
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    pen = ImageDraw.Draw(image)
+    line = max(1, ratio)
+    colour = (242, 194, 48, 235)
+    pen.rectangle((0, 0, size - 1, line - 1), fill=colour)
+    pen.rectangle((0, 0, line - 1, size - 1), fill=colour)
+    return image
+
+
 def build(ratio):
     suffix = "" if ratio == 1 else f"@{ratio}x"
     base_png = os.path.join(HERE, "sprite", f"base{suffix}.png")
@@ -59,6 +75,7 @@ def build(ratio):
     sheet = Image.open(base_png).convert("RGBA")
     index = json.load(open(base_json))
     icons = [(f"lane-{NAMES[code]}", draw(code, ratio)) for code in sorted(NAMES)]
+    icons.append(("waffle", waffle(ratio)))
     row = max(icon.height for _n, icon in icons)
     out = Image.new("RGBA", (max(sheet.width, sum(i.width + 2 for _n, i in icons)),
                              sheet.height + row + 2), (0, 0, 0, 0))
@@ -77,4 +94,4 @@ def build(ratio):
 if __name__ == "__main__":
     for ratio in (1, 2):
         build(ratio)
-    print("стрелок:", len(NAMES))
+    print("стрелок:", len(NAMES), "+ узор «вафли»")

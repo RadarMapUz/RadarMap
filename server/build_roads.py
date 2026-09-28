@@ -3364,8 +3364,27 @@ def iter_surface(streets):
             continue
         flags = AREA_FLAG_CLOSED | (min(code, SURFACE_CLASS_MASK)
                                     << SURFACE_CLASS_SHIFT)
-        for ring in surface_pieces(points, width):
+        for ring in _surface_rings(points, width):
             yield (AREA_ROAD, flags, ring)
+
+
+# Кольцо и петля съезда — замкнутая или почти замкнутая лента: её контур
+# пересекает сам себя, ворота выбрасывают кусок, и на карте дыра на месте
+# кольца (41.3584, 69.2145 — снимок 28.09.2026; 29 кусков в Ташкенте, 460 по
+# стране). Брак не выбрасывается сразу: лента делится пополам по оси, и
+# половины строятся заново — у половины кольца самопересечения нет.
+SURFACE_SPLIT_DEPTH = 3
+
+
+def _surface_rings(points, width, depth=0):
+    rings = list(surface_pieces(points, width))
+    if depth >= SURFACE_SPLIT_DEPTH or len(points) < 3:
+        return rings
+    if all(surface_check.defect(quantized(ring), shape_checks=False) is None for ring in rings):
+        return rings
+    middle = len(points) // 2
+    return (_surface_rings(points[:middle + 1], width, depth + 1)
+            + _surface_rings(points[middle:], width, depth + 1))
 
 
 def build_surface(streets):

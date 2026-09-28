@@ -91,6 +91,97 @@ def lane_arrows(code, flags, point):
                {"turn": turn, "bearing": round(bearing)})
 
 
+# Ряды стрелок на одном подходе. turn:lanes стоит на каждом куске ленты перед
+# перекрёстком, и каждый кусок давал свой ряд: на Навои × Рашидов (снимок
+# 28.09.2026) — по 2–3 ряда подряд. Рядом стоящие ряды одного направления на
+# одной ленте — один подход; остаётся ближний к перекрёстку (самый передний).
+ARROW_GROUP_METERS = 40.0
+ARROW_SAME_BEARING_DEGREES = 20.0
+
+
+def arrow_leaders(points):
+    """Индексы точек стрелок, которые рисуются: по одной на подход."""
+    arrows = [(i, p) for i, p in enumerate(points) if p[0] == POINT_LANE_ARROWS]
+    grid = defaultdict(list)
+    for i, p in arrows:
+        lon, lat = p[2][0]
+        grid[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((i, p))
+    keep = set()
+    for i, p in arrows:
+        lon, lat = p[2][0]
+        bearing = point_azimuth(p[1])
+        half = point_width(p[1]) / 2.0
+        kx = 111_320 * math.cos(math.radians(lat))
+        forward = (math.sin(math.radians(bearing)), math.cos(math.radians(bearing)))
+        behind = False
+        cell = (int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))
+        for gx in range(cell[0] - 1, cell[0] + 2):
+            for gy in range(cell[1] - 1, cell[1] + 2):
+                for j, q in grid.get((gx, gy), ()):
+                    if j == i:
+                        continue
+                    turn = abs((point_azimuth(q[1]) - bearing + 180) % 360 - 180)
+                    if turn > ARROW_SAME_BEARING_DEGREES:
+                        continue
+                    dx = (q[2][0][0] - lon) * kx
+                    dy = (q[2][0][1] - lat) * 111_320
+                    along = dx * forward[0] + dy * forward[1]
+                    lateral = abs(dx * forward[1] - dy * forward[0])
+                    if (1.0 < along <= ARROW_GROUP_METERS
+                            and lateral <= max(half, point_width(q[1]) / 2.0)):
+                        behind = True
+                        break
+                if behind:
+                    break
+            if behind:
+                break
+        if not behind:
+            keep.add(i)
+    return keep
+
+
+# Стоп-линия у светофора на ДВУСТОРОННЕЙ дороге: только на своей, правой
+# половине — с какой стороны подъезд, говорит ближайший перекрёсток впереди
+# по оси (правостороннее движение). Без перекрёстка в пределах досягаемости
+# направление неизвестно — не рисуем.
+TWO_WAY_STOP_REACH_METERS = 50.0
+TWO_WAY_STOP_AXIS_DEGREES = 35.0
+
+
+def two_way_stop_line(flags, point, centres):
+    """Стоп-линия поперёк правой половины двусторонней дороги или None."""
+    width = point_width(flags)
+    if width <= 0 or flags & PFLAG_ONEWAY or not centres:
+        return None
+    lon, lat = point
+    kx = 111_320 * math.cos(math.radians(lat))
+    bearing = point_azimuth(flags)
+    best = None
+    cell = (int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))
+    for gx in range(cell[0] - 1, cell[0] + 2):
+        for gy in range(cell[1] - 1, cell[1] + 2):
+            for cx, cy in centres.get((gx, gy), ()):
+                dx, dy = (cx - lon) * kx, (cy - lat) * 111_320
+                distance = math.hypot(dx, dy)
+                if distance < 3.0 or distance > TWO_WAY_STOP_REACH_METERS:
+                    continue
+                to_centre = math.degrees(math.atan2(dx, dy)) % 360
+                for heading in (bearing, (bearing + 180) % 360):
+                    off = abs((to_centre - heading + 180) % 360 - 180)
+                    if off <= TWO_WAY_STOP_AXIS_DEGREES and (best is None or distance < best[0]):
+                        best = (distance, heading)
+    if best is None:
+        return None
+    angle = math.radians(best[1])
+    back = -SIGNAL_STOP_SETBACK
+
+    def at(across):
+        return (lon + (math.cos(angle) * across + math.sin(angle) * back) / kx,
+                lat + (-math.sin(angle) * across + math.cos(angle) * back) / 111_320)
+    # От оси (с зазором под осевую) до правой кромки.
+    return [at(0.3), at(width / 2)]
+
+
 def road_paint(code, flags, point):
     """Краска в географических координатах, только при подтверждённой разметке.
 
@@ -284,8 +375,21 @@ def _simplify_straight(run):
     return out
 
 
-def lane_markings(roads, widths=None, mask=None):
-    """Разделители подтверждённых односторонних полос вне перекрёстков.
+# Осевая двусторонней дороги. Двусторонняя улица по определению делится на два
+# направления, поэтому осевая — не догадка о полосах, а сама суть дороги; у
+# Яндекса она есть везде, у нас её не было нигде: пунктир рисовался только на
+# односторонних лентах с тегом lanes, а двусторонних — 72 % километров tertiary
+# и 95 % жилых улиц Ташкента (замер 28.09.2026). Жилые не размечаем: узкий двор
+# с осевой читается проспектом. Сплошная — на дороге с подтверждёнными четырьмя
+# полосами и больше: там по ПДД разделяет сплошная; иначе — прерывистая.
+CENTRE_MAX_CLASS = 5
+CENTRE_MIN_WIDTH_METERS = 6.0
+CENTRE_SOLID_WIDTH_METERS = 13.0
+CENTRE_DASHED, CENTRE_SOLID = 1, 2
+
+
+def _markings(roads, widths=None, mask=None):
+    """(линия, осевая: 0 / CENTRE_DASHED / CENTRE_SOLID) вне перекрёстков.
 
     Вход — сеть ПОСЛЕ generalise: общие узлы уже стали концами сегментов.
     Считаем только концы, не заводим второй индекс всех вершин страны.
@@ -296,7 +400,8 @@ def lane_markings(roads, widths=None, mask=None):
                 flags & (FLAG_BRIDGE | FLAG_TUNNEL))
 
     nodes = defaultdict(lambda: [0, 0.0])
-    for code, flags, points, _ in roads:
+    for road in roads:
+        code, flags, points = road[0], road[1], road[2]
         if len(points) < 2 or code > 7:
             continue
         width = road_width_meters(code, lanes_of(flags))
@@ -320,26 +425,43 @@ def lane_markings(roads, widths=None, mask=None):
 
     for road in roads:
         code, flags, points = road[0], road[1], road[2]
+        if code > 7 or len(points) < 2:
+            continue
         lanes = lanes_of(flags)
-        if (not flags & FLAG_LANES_TAGGED or not flags & FLAG_ONEWAY
-                or not 2 <= lanes <= MAX_MARKED_LANES or code > 7 or len(points) < 2):
-            continue
-        origin = points[0]
-        sx, sy = 111_320 * math.cos(math.radians(origin[1])), 111_320
-        metric = [((p[0] - origin[0]) * sx, (p[1] - origin[1]) * sy) for p in points]
-        for endpoint in (points[0], points[-1]):
-            degree, width = nodes[key(endpoint, flags)]
-            metric = trim(metric, width / 2 + JUNCTION_MARKING_MARGIN if degree >= 3 else 0)
-            metric.reverse()
-        if len(metric) < 2:
-            continue
+        tagged = flags & FLAG_LANES_TAGGED and 2 <= lanes <= MAX_MARKED_LANES
         # Ширина — та же, по которой нарисовано полотно: сужение под
         # разделительную (fit_carriageways) иначе уводило пунктир на неё.
         width = road_width_meters(code, lanes)
         if widths:
             width = min(width, widths.get(id(road)) or width)
-        for lane in range(1, lanes):
-            offset = width * (lane / lanes - .5)
+        offsets = []
+        if flags & FLAG_ONEWAY:
+            if tagged:
+                offsets = [(width * (lane / lanes - .5), 0) for lane in range(1, lanes)]
+        elif code <= CENTRE_MAX_CLASS and width >= CENTRE_MIN_WIDTH_METERS:
+            # Сплошная — только по ПОДТВЕРЖДЁННЫМ полосам: ширина без тега
+            # lanes — догадка по классу (у tertiary 14 м), и сплошная по
+            # догадке запрещала бы на карте поворот, разрешённый в жизни.
+            wide = tagged and lanes >= 4 and width >= CENTRE_SOLID_WIDTH_METERS
+            centre = CENTRE_SOLID if wide else CENTRE_DASHED
+            offsets = [(0.0, centre)]
+            # Полосы по сторонам — только при чётном lanes: делим поровну, а
+            # нечётное число (средняя реверсивная?) не угадываем.
+            if tagged and lanes >= 4 and lanes % 2 == 0:
+                offsets += [(width * (lane / lanes - .5), 0)
+                            for lane in range(1, lanes) if lane * 2 != lanes]
+        if not offsets:
+            continue
+        origin = points[0]
+        sx, sy = 111_320 * math.cos(math.radians(origin[1])), 111_320
+        metric = [((p[0] - origin[0]) * sx, (p[1] - origin[1]) * sy) for p in points]
+        for endpoint in (points[0], points[-1]):
+            degree, node_width = nodes[key(endpoint, flags)]
+            metric = trim(metric, node_width / 2 + JUNCTION_MARKING_MARGIN if degree >= 3 else 0)
+            metric.reverse()
+        if len(metric) < 2:
+            continue
+        for offset, centre in offsets:
             line = []
             for i, p in enumerate(metric):
                 a, b = metric[max(0, i - 1)], metric[min(len(metric) - 1, i + 1)]
@@ -352,9 +474,24 @@ def lane_markings(roads, widths=None, mask=None):
                 continue
             # Мост и тоннель идут над/под узлом земли — его площадь им не указ.
             if mask is not None and not flags & (FLAG_BRIDGE | FLAG_TUNNEL):
-                yield from mask.clip(line)
+                for piece in mask.clip(line):
+                    yield piece, centre
             else:
-                yield line
+                yield line, centre
+
+
+def lane_markings(roads, widths=None, mask=None):
+    """Разделители полос (без осевых) вне перекрёстков."""
+    for line, centre in _markings(roads, widths, mask):
+        if not centre:
+            yield line
+
+
+def centre_lines(roads, widths=None, mask=None):
+    """Осевые двусторонних дорог: (линия, CENTRE_DASHED | CENTRE_SOLID)."""
+    for line, centre in _markings(roads, widths, mask):
+        if centre:
+            yield line, centre
 
 # Кому какой зум. Слой, невидимый на обзоре, туда и не едет — тот же закон,
 # по которому телефон не качает дворовые проезды на охвате района.
@@ -919,8 +1056,9 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         for kind, flags, shape in strips:
             if strip_outside_junction(shape, mask):
                 lay(kind, flags, shape)
-        for line in lane_markings(roads, widths, mask):
-            _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, {"verified": True})
+        for line, centre in _markings(roads, widths, mask):
+            props = {"centre": centre} if centre else {"verified": True}
+            _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, props)
         # «Вафли» — после всех центров: светофор отдаётся ближайшему узлу.
         centres = box_centres(boxes)
         waffles = WaffleSet()
@@ -947,8 +1085,17 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                 _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, piece, {"kind": KIND_ZEBRA_WAY})
             for lon, lat in line:
                 crossing_grid[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
-        for point in points:
+        leaders = arrow_leaders(points)
+        junction_centres = defaultdict(list)
+        for ring in junction_areas:
+            cx, cy = _box_centre(ring)
+            junction_centres[(int(cx / _SIGNAL_CELL), int(cy / _SIGNAL_CELL))].append((cx, cy))
+        for index, point in enumerate(points):
             code, flags, spot = point[0], point[1], point[2]
+            if code == 1 and not flags & PFLAG_ONEWAY:
+                line = two_way_stop_line(flags, spot[0], junction_centres)
+                if line:
+                    _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": 1})
             if code == 5 and _near_crossing_way(spot[0], crossing_grid):
                 _put(buckets, zoom, LAYER_POINTS, mvt.POINT, list(spot),
                      point_properties(code, flags))
@@ -957,6 +1104,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                  point_properties(code, flags))
             for line in road_paint(code, flags, spot[0]):
                 _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": code})
+            if code == POINT_LANE_ARROWS and index not in leaders:
+                continue          # тот же подход, ряд ближе к перекрёстку уже есть
             for arrow, props in lane_arrows(code, flags, spot[0]):
                 _put(buckets, zoom, LAYER_ARROWS, mvt.POINT, [arrow], props)
     finally:

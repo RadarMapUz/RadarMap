@@ -67,6 +67,17 @@ class RoadSurfaceTests(unittest.TestCase):
         self.assertEqual(len(list(build_roads.surface_pieces(axis, 14.0))), 1)
 
 
+class LoopTests(unittest.TestCase):
+    def test_roundabout_ring_is_built_not_dropped(self):
+        # Кольцо — замкнутая лента: целиком её контур пересекает сам себя.
+        ring_axis = [metres(25 * math.cos(math.radians(a)), 25 * math.sin(math.radians(a)))
+                     for a in range(0, 361, 20)]
+        rings = build_roads._surface_rings(ring_axis, 8.0)
+        self.assertTrue(rings)
+        for piece in rings:
+            self.assertIsNone(sc.defect(build_roads.quantized(piece), shape_checks=False))
+
+
 class MedianTests(unittest.TestCase):
     def test_backtracking_partner_does_not_make_a_bowtie(self):
         # Встречная лента у моста сворачивает и идёт назад: ближайшая точка
@@ -296,6 +307,25 @@ class LaneArrowTests(unittest.TestCase):
         self.assertEqual(list(build_mvt.lane_arrows(1, self.point([1]), (LON, LAT))), [])
 
 
+class ArrowLeaderTests(unittest.TestCase):
+    def arrow(self, x, y, bearing=90, width=10):
+        turns = [1, 2]
+        flags = build_roads.point_flags(bearing, width)
+        for index, turn in enumerate(turns):
+            flags |= turn << (13 + index * 4)
+        return (build_mvt.POINT_LANE_ARROWS, flags, [metres(x, y)])
+
+    def test_rows_on_one_approach_keep_the_front_one(self):
+        # Навои × Рашидов: 2–3 ряда стрелок подряд на одном подходе.
+        points = [self.arrow(0, 0), self.arrow(15, 0), self.arrow(30, 0)]
+        self.assertEqual(build_mvt.arrow_leaders(points), {2}, "остаётся ближний к перекрёстку")
+
+    def test_other_approaches_stay(self):
+        points = [self.arrow(0, 0), self.arrow(15, 20),                # соседняя лента
+                  self.arrow(10, 0, bearing=270), self.arrow(100, 0)]  # встречная и далёкая
+        self.assertEqual(build_mvt.arrow_leaders(points), {0, 1, 2, 3})
+
+
 class SignalPaintTests(unittest.TestCase):
     def test_stop_line_only_across_a_oneway_carriageway(self):
         flags = build_roads.point_flags(90, 10)
@@ -306,6 +336,20 @@ class SignalPaintTests(unittest.TestCase):
         (a, b), = lines
         self.assertAlmostEqual(sc.LAT_METERS * abs(a[1] - b[1]), 10, delta=0.2)   # поперёк, на всю ширину
         self.assertLess(a[0], LON, "стоп-линия — ДО светофора по ходу движения")
+
+    def test_two_way_stop_line_lies_on_the_right_half(self):
+        # Подъезд на север к узлу в 30 м: линия — справа от оси (восточная половина).
+        flags = build_roads.point_flags(0, 12)
+        centres = {}
+        cx, cy = metres(0, 30)
+        centres.setdefault((int(cx / build_mvt._SIGNAL_CELL), int(cy / build_mvt._SIGNAL_CELL)), []).append((cx, cy))
+        line = build_mvt.two_way_stop_line(flags, (LON, LAT), centres)
+        self.assertIsNotNone(line)
+        east = [(p[0] - LON) * sc.LAT_METERS * math.cos(math.radians(LAT)) for p in line]
+        self.assertTrue(all(x > 0 for x in east), "правая половина")
+        self.assertAlmostEqual(max(east), 6.0, delta=0.1)
+        self.assertLess(line[0][1], LAT, "до светофора по ходу")
+        self.assertIsNone(build_mvt.two_way_stop_line(flags, (LON, LAT), {}), "без узла — не угадываем")
 
     def test_waffle_is_the_zone_between_the_signals(self):
         box = ring((-6, -6), (6, -6), (6, 6), (-6, 6))

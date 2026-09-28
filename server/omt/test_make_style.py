@@ -73,6 +73,12 @@ class StyleTests(unittest.TestCase):
         # Нос у перехода лежит на асфальте узла, а не под ним.
         self.assertLess(ids.index("radar-junction"), ids.index("radar-median-strip"))
 
+    def test_centre_lines_have_their_own_layers(self):
+        layers = {l["id"]: l for l in self.style["layers"]}
+        self.assertEqual(layers["radar-markings"]["filter"], ["!", ["has", "centre"]])
+        self.assertIn("line-dasharray", layers["radar-centre-dashed"]["paint"])
+        self.assertNotIn("line-dasharray", layers["radar-centre-solid"]["paint"])
+
     def test_bridges_cover_the_waffle(self):
         # Эстакада Фурката над перекрёстком Навои: «вафля» нижнего уровня — под мостом.
         ids = [layer["id"] for layer in self.style["layers"]]

@@ -244,9 +244,23 @@ def _our_layers(p):
          "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["road"], p["minor"]],
                    "line-width": measured()}},
         {"id": "radar-markings", "type": "line", "source": "radar", "source-layer": "markings", "minzoom": 16,
+         "filter": ["!", ["has", "centre"]],
          "layout": {"line-cap": "butt"},
          "paint": {"line-color": p["paint"], "line-dasharray": [4, 5],
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3]}},
+        # Осевая двусторонней дороги (build_mvt.centre_lines): прерывистая с
+        # длинным штрихом (1.5 ПДД) или сплошная при подтверждённых 4+ полосах
+        # (1.1). Штрих длиннее, чем у разделителя полос, — осевая читается осевой.
+        {"id": "radar-centre-dashed", "type": "line", "source": "radar", "source-layer": "markings",
+         "minzoom": 16, "filter": ["==", ["get", "centre"], 1],
+         "layout": {"line-cap": "butt"},
+         "paint": {"line-color": p["paint"], "line-dasharray": [6, 4],
+                   "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3]}},
+        {"id": "radar-centre-solid", "type": "line", "source": "radar", "source-layer": "markings",
+         "minzoom": 15.5, "filter": ["==", ["get", "centre"], 2],
+         "layout": {"line-cap": "butt"},
+         "paint": {"line-color": p["paint"],
+                   "line-width": ["interpolate", ["exponential", 2], ["zoom"], 15.5, 0.7, 20, 3.5]}},
         # Зебра линией перехода (вид 12): ширина линии — длина штриха зебры
         # (3 м), пунктир — сами штрихи поперёк; одним куском от кромки до кромки.
         {"id": "radar-zebra", "type": "line", "source": "radar", "source-layer": "paint", "minzoom": 16.5,

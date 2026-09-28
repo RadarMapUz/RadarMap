@@ -64,8 +64,10 @@ class BuildTests(unittest.TestCase):
         names = set()
         for path in self.tiles():
             names.update(self.parsed(path))
+        # Разметка — осевая: дорога в фикстуре двусторонняя primary.
         self.assertEqual(names, {build_mvt.LAYER_ROADS, build_mvt.LAYER_HOUSES,
-                                 build_mvt.LAYER_LAND, build_mvt.LAYER_POINTS})
+                                 build_mvt.LAYER_LAND, build_mvt.LAYER_POINTS,
+                                 build_mvt.LAYER_MARKINGS})
 
     def test_surface_carries_its_class(self):
         flags = 1 | (4 << build_mvt.SURFACE_CLASS_SHIFT)
@@ -279,6 +281,29 @@ class BuildTests(unittest.TestCase):
                  (3, 1, [m(-100, 10), m(0, 10)], a), (3, 1, [m(0, 10), m(100, 10)], a),
                  (3, 1, [m(0, -10), m(0, 10)], "")]
         self.assertEqual(build_mvt.crossing_cores(roads), [])
+
+    def test_two_way_road_gets_a_centre_line(self):
+        # Двусторонних — 72 % километров tertiary: без осевой они были пустыми.
+        points = [(69.278, 41.311), (69.282, 41.311)]
+        narrow = self.road(points, code=5)
+        lines = list(build_mvt.centre_lines([narrow]))
+        self.assertEqual(len(lines), 1)
+        line, centre = lines[0]
+        self.assertEqual(centre, build_mvt.CENTRE_DASHED)
+        self.assertAlmostEqual(line[0][1], points[0][1], places=7, msg="осевая — по оси")
+        self.assertEqual(list(build_mvt.lane_markings([narrow])), [], "осевая — не разделитель полос")
+
+    def test_wide_two_way_road_gets_a_solid_centre_and_side_lanes(self):
+        flags = build_mvt.FLAG_LANES_TAGGED | (4 << 4)
+        road = self.road([(69.278, 41.311), (69.282, 41.311)], flags=flags, code=3)
+        (_line, centre), = build_mvt.centre_lines([road])
+        self.assertEqual(centre, build_mvt.CENTRE_SOLID)
+        self.assertEqual(len(list(build_mvt.lane_markings([road]))), 2, "по разделителю с каждой стороны")
+
+    def test_no_centre_line_on_residential_or_oneway(self):
+        points = [(69.278, 41.311), (69.282, 41.311)]
+        self.assertEqual(list(build_mvt.centre_lines([self.road(points, code=6)])), [])
+        self.assertEqual(list(build_mvt.centre_lines([self.road(points, flags=build_mvt.FLAG_ONEWAY)])), [])
 
     def test_markings_follow_the_fitted_width(self):
         # Три полосы: разделитель в width/6 от оси — сдвиг прямо зависит от ширины.

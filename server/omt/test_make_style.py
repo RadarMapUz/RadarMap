@@ -55,7 +55,9 @@ class StyleTests(unittest.TestCase):
 
     def test_our_layers_sit_under_the_labels(self):
         ids = [layer["id"] for layer in self.style["layers"]]
-        first_label = next(i for i, l in enumerate(self.style["layers"]) if l["type"] == "symbol")
+        # Подписи ПОДЛОЖКИ: наши стрелки — тоже символы, но лежат вместе с краской.
+        first_label = next(i for i, l in enumerate(self.style["layers"])
+                           if l["type"] == "symbol" and l.get("source") == "openmaptiles")
         for ours in ("radar-median", "radar-markings", "radar-crossing", "radar-signals", "building-3d"):
             self.assertLess(ids.index(ours), first_label, ours)
 

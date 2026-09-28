@@ -148,7 +148,15 @@ def _base_layer(layer, p, mode):
                     if major else p["minor"]
             paint["line-width"] = class_width(metres, (2.0 if major else 1.4) if casing else 0.0)
             paint["line-opacity"] = 1 if major else ["interpolate", ["linear"], ["zoom"], 12.5, 0, 13.5, 1]
-            l["maxzoom"] = OUR_ROADS_FROM
+            # С OUR_ROADS_FROM полотно рисуем мы, но сама линия основы остаётся
+            # ПОД нашими слоями как запасная: где нашего тайла нет (офлайн,
+            # не докачан, отброшен проверкой sha, район вне сборки), дорога
+            # иначе исчезала целиком при приближении (жалоба владельца
+            # 28.09.2026). Наше полотно её накрывает. Кайма основы — жёлтая
+            # у магистрали — выключается: из-под нашей ленты она торчала бы
+            # нитками по краю.
+            if casing:
+                l["maxzoom"] = OUR_ROADS_FROM
         l.setdefault("layout", {}).update({"line-cap": "round", "line-join": "round"})
     elif l["type"] == "symbol" and src == "transportation_name":
         lay = l.setdefault("layout", {})

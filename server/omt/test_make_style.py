@@ -89,6 +89,23 @@ class StyleTests(unittest.TestCase):
             low, high = sorted((lightness(theme["road"]), lightness(theme["bg"])))
             self.assertTrue(low < lightness(theme["minor"]) < high or theme is make_style.PALETTES["dark"])
 
+    def test_base_roads_stay_under_ours_as_fallback(self):
+        # Нет нашего тайла (офлайн, район вне сборки) — дорога не исчезает.
+        ids = [l["id"] for l in self.style["layers"]]
+        first_ours = ids.index("radar-roads-case")
+        roads = [l for l in self.style["layers"]
+                 if l.get("source-layer") == "transportation" and l["type"] == "line"
+                 and l["id"].startswith("highway-") and "path" not in l["id"]]
+        self.assertTrue(roads)
+        fills = [l for l in roads if not l["id"].endswith("-casing")]
+        self.assertTrue(fills)
+        for layer in fills:
+            self.assertNotIn("maxzoom", layer, layer["id"])
+            self.assertLess(ids.index(layer["id"]), first_ours, "под нашими слоями")
+        for layer in roads:
+            if layer["id"].endswith("-casing"):
+                self.assertEqual(layer.get("maxzoom"), make_style.OUR_ROADS_FROM, layer["id"])
+
     def test_bridges_cover_the_waffle(self):
         # Эстакада Фурката над перекрёстком Навои: «вафля» нижнего уровня — под мостом.
         ids = [layer["id"] for layer in self.style["layers"]]

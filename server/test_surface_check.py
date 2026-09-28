@@ -241,6 +241,38 @@ class SignalPaintTests(unittest.TestCase):
         self.assertIsNone(build_mvt.waffle_zone(box, build_mvt._signal_grid(far)))
 
 
+class FilletTests(unittest.TestCase):
+    def cross(self, width=20.0):
+        node = metres(0, 0)
+        return node, [(node, metres(80, 0), width), (node, metres(0, 80), width),
+                      (node, metres(-80, 0), width), (node, metres(0, -80), width)]
+
+    def test_four_corners_of_a_cross_are_rounded(self):
+        node, legs = self.cross()
+        fillets = list(build_roads.iter_fillets({build_roads._node_key(node): legs}))
+        self.assertEqual(len(fillets), 4)
+        for kind, flags, ring_ in fillets:
+            self.assertEqual(kind, build_roads.AREA_FILLET)
+            self.assertTrue(flags & build_roads.FILLET_MAJOR)
+            self.assertIsNone(sc.defect_of_kind(kind, ring_))
+
+    def test_fillet_sits_in_the_block_corner_and_is_sized_by_width(self):
+        node, legs = self.cross(20.0)
+        kind, flags, ring_ = build_roads.fillet_between(node, legs[0], legs[1])
+        kx = sc.LAT_METERS * math.cos(math.radians(node[1]))
+        rel = [((lon - node[0]) * kx, (lat - node[1]) * sc.LAT_METERS) for lon, lat in ring_]
+        # Угол квартала между востоком и севером: кромки в 10 м от осей.
+        self.assertAlmostEqual(rel[0][0], 10, delta=0.3)
+        self.assertAlmostEqual(rel[0][1], 10, delta=0.3)
+        area, _ = sc.area_and_perimeter(rel)
+        radius = build_roads.FILLET_RADIUS_MAX
+        self.assertAlmostEqual(area, radius ** 2 * (1 - math.pi / 4), delta=4)
+
+    def test_straight_continuation_gets_no_fillet(self):
+        node = metres(0, 0)
+        self.assertIsNone(build_roads.fillet_between(node, (node, metres(80, 0), 12), (node, metres(-80, 1), 12)))
+
+
 class LineWidthTests(unittest.TestCase):
     def test_short_wide_piece_is_a_stub(self):
         short = (3, 0, ring((0, 0), (20, 0)), "Olmazor")

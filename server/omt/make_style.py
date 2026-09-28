@@ -181,6 +181,12 @@ def _our_layers(p):
          "layout": {"line-cap": "butt", "line-join": "round"},
          "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["road"], p["minor"]],
                    "line-width": measured()}},
+        # Галтели (вид 13): скруглённый бордюр на углах перекрёстка — асфальт
+        # между точкой встречи кромок и дугой, как у Яндекса.
+        {"id": "radar-fillet", "type": "fill", "source": "radar", "source-layer": "surface",
+         "minzoom": OUR_ROADS_FROM,
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 13]],
+         "paint": {"fill-color": ["case", ["get", "major"], p["road"], p["minor"]], "fill-antialias": True}},
         # Площадь перекрёстка: скругляет углы между подходами. Узлы строятся
         # только там, где сходится дорога шире 9 м, и обрезаны кругом
         # досягаемости — цвет магистрального асфальта им честен.

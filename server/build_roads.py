@@ -2180,6 +2180,11 @@ AREA_MEDIAN = 9
 # у регулируемого перекрёстка — место жёлтой «вафли», как у Яндекса.
 # Приложение незнакомый вид пропускает (RoadTiles: guard … else continue).
 AREA_JUNCTION_BOX = 10
+# Галтель: скруглённый угол квартала между двумя подходами к перекрёстку —
+# асфальт между точкой встречи кромок и дугой бордюра. Бит FLAG_FILLET_MAJOR —
+# обе дороги магистральные (красится цветом проспекта, иначе — проезда).
+AREA_FILLET = 13
+FILLET_MAJOR = 2
 AREA_FLAG_CLOSED = 1
 
 
@@ -3816,6 +3821,109 @@ def iter_junctions(arms):
                     yield (AREA_JUNCTION, AREA_FLAG_CLOSED, small)
 
 
+# Галтели: радиус бордюра — доля ширины узкой из двух дорог, в пределах.
+# Замер по Яндексу у проспектов Ташкента: скругление 8–12 м, у дворов 3–4.
+FILLET_WIDTH_SHARE = 0.6
+# Меньше 5 м скругление после квантования тайла (1e-5° ≈ 1,1 м) вырождается
+# или перекручивается — замер по Ташкенту: из 44 тыс. галтелей с минимумом
+# 3 м половина не прошла ворота.
+FILLET_RADIUS_MIN = 5.0
+FILLET_RADIUS_MAX = 12.0
+# Угол между подходами: уже этого — съезд вдоль дороги, шире — почти прямая.
+FILLET_MIN_ANGLE = 25.0
+FILLET_MAX_ANGLE = 165.0
+# Дальше этого от узла точка касания — дуга ушла бы за соседний перекрёсток.
+FILLET_MAX_TANGENT = 25.0
+FILLET_ARC_SPACING = 3.0   # метров между точками дуги
+FILLET_MAJOR_WIDTH = 9.0
+
+
+def fillet_between(node, leg_a, leg_b):
+    """Галтель между подходами a и b (b — следующий против часовой) или None.
+
+    Кромка a, обращённая к b, — левая (по ходу от узла), кромка b — правая.
+    Они сходятся в P; дуга радиуса R касается обеих в T1 и T2; галтель —
+    P, T1, дуга, T2. Всё в метрах вокруг узла.
+    """
+    lat0 = node[1]
+    kx = LAT_METERS * math.cos(math.radians(lat0))
+
+    def local(p):
+        return ((p[0] - node[0]) * kx, (p[1] - node[1]) * LAT_METERS)
+
+    def world(p):
+        return (node[0] + p[0] / kx, node[1] + p[1] / LAT_METERS)
+
+    (ax, ay), (bx, by) = local(leg_a[1]), local(leg_b[1])
+    la, lb = math.hypot(ax, ay), math.hypot(bx, by)
+    if la == 0 or lb == 0:
+        return None
+    ua, ub = (ax / la, ay / la), (bx / lb, by / lb)
+    between = math.degrees((math.atan2(ub[1], ub[0]) - math.atan2(ua[1], ua[0])) % (2 * math.pi))
+    if not FILLET_MIN_ANGLE <= between <= FILLET_MAX_ANGLE:
+        return None
+    na = (-ua[1], ua[0])            # левая нормаль a — к b
+    nb = (ub[1], -ub[0])            # правая нормаль b — к a
+    pa = (na[0] * leg_a[2] / 2, na[1] * leg_a[2] / 2)
+    pb = (nb[0] * leg_b[2] / 2, nb[1] * leg_b[2] / 2)
+    # pa + t·ua = pb + s·ub
+    det = ua[0] * (-ub[1]) - ua[1] * (-ub[0])
+    if abs(det) < 1e-9:
+        return None
+    rx, ry = pb[0] - pa[0], pb[1] - pa[1]
+    t = (rx * (-ub[1]) - ry * (-ub[0])) / det
+    s = (ua[0] * ry - ua[1] * rx) / det
+    if t < -1.0 or s < -1.0:
+        return None
+    corner = (pa[0] + ua[0] * t, pa[1] + ua[1] * t)
+    radius = max(FILLET_RADIUS_MIN, min(FILLET_RADIUS_MAX,
+                                        FILLET_WIDTH_SHARE * min(leg_a[2], leg_b[2])))
+    half = math.radians(between) / 2
+    tangent = radius / math.tan(half)
+    if tangent > FILLET_MAX_TANGENT or t + tangent > la + 30 or s + tangent > lb + 30:
+        return None
+    t1 = (corner[0] + ua[0] * tangent, corner[1] + ua[1] * tangent)
+    t2 = (corner[0] + ub[0] * tangent, corner[1] + ub[1] * tangent)
+    bis = (ua[0] + ub[0], ua[1] + ub[1])
+    norm = math.hypot(*bis)
+    if norm == 0:
+        return None
+    centre_dist = radius / math.sin(half)
+    centre = (corner[0] + bis[0] / norm * centre_dist, corner[1] + bis[1] / norm * centre_dist)
+    start = math.atan2(t1[1] - centre[1], t1[0] - centre[0])
+    end = math.atan2(t2[1] - centre[1], t2[0] - centre[0])
+    sweep = (end - start + math.pi) % (2 * math.pi) - math.pi     # короткая дуга, к углу
+    # Точки дуги — по длине, а не по углу: при шаге 1,5 м квантование тайла
+    # (≈1,1 м) превращало маленькую дугу в пилу, задевающую саму себя.
+    steps = max(3, int(radius * abs(sweep) / FILLET_ARC_SPACING))
+    arc = [(centre[0] + radius * math.cos(start + sweep * k / steps),
+            centre[1] + radius * math.sin(start + sweep * k / steps)) for k in range(steps + 1)]
+    # Без точек касания: у них «носик» нулевого угла, и квантование тайла
+    # перекручивало его сам с собой. Хорда от угла к соседней точке дуги
+    # срезает носик на доли метра — глазом не видно.
+    ring = [corner] + arc[1:-1]
+    if len(ring) < 3:
+        return None
+    flags = AREA_FLAG_CLOSED | (FILLET_MAJOR if min(leg_a[2], leg_b[2]) >= FILLET_MAJOR_WIDTH else 0)
+    return (AREA_FILLET, flags, [world(p) for p in ring])
+
+
+def iter_fillets(arms):
+    """Галтели на углах каждого перекрёстка: между соседними по углу подходами."""
+    for key in sorted(arms):
+        legs = arms[key]
+        if len(legs) < MIN_JUNCTION_ARMS:
+            continue
+        node = legs[0][0]
+        kx = LAT_METERS * math.cos(math.radians(node[1]))
+        ordered = sorted(legs, key=lambda leg: math.atan2((leg[1][1] - node[1]) * LAT_METERS,
+                                                          (leg[1][0] - node[0]) * kx))
+        for index, leg in enumerate(ordered):
+            fillet = fillet_between(node, leg, ordered[(index + 1) % len(ordered)])
+            if fillet:
+                yield fillet
+
+
 def build_junctions(arms):
     return list(iter_junctions(arms))
 
@@ -3924,6 +4032,8 @@ def stream_surface(roads, target_dir, degrees, handles=64):
         for figure in iter_junctions(arms):
             put(figure)
         for figure in iter_flares(arms):
+            put(figure)
+        for figure in iter_fillets(arms):
             put(figure)
         spots = junction_spots(arms)
         for figure in build_medians(chains, junction_index(spots)):
@@ -4231,6 +4341,7 @@ def build_road_surface(roads):
     arms = junction_arms(chains)
     return (list(iter_surface(street for street, _chain in chains))
             + list(iter_junctions(arms)) + list(iter_flares(arms))
+            + list(iter_fillets(arms))
             + build_medians(chains, junction_spots(arms))
             + build_islands(roads))
 

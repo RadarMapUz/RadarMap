@@ -17,7 +17,7 @@ import shutil
 from collections import OrderedDict, defaultdict
 
 import mvt
-from build_roads import (AREA_HOUSE, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_MEDIAN, AREA_ROAD,
+from build_roads import (AREA_FILLET, AREA_HOUSE, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_MEDIAN, AREA_ROAD,
                          clip_ring,
                          FLAG_BRIDGE,
                          FLAG_LANES_TAGGED, FLAG_ONEWAY, FLAG_TUNNEL,
@@ -380,13 +380,15 @@ def _has_signal(shape, grid):
 
 def _area_props(kind, flags):
     props = {"kind": kind}
+    if kind == AREA_FILLET:
+        props["major"] = bool(flags & 2)
     if kind == AREA_ROAD:
         props["cls"] = (flags >> SURFACE_CLASS_SHIFT) & SURFACE_CLASS_MASK
     return props
 
 
 def _layer_of(kind):
-    if kind in (AREA_ROAD, AREA_JUNCTION, AREA_MEDIAN, AREA_JUNCTION_BOX):
+    if kind in (AREA_ROAD, AREA_JUNCTION, AREA_MEDIAN, AREA_JUNCTION_BOX, AREA_FILLET):
         return LAYER_SURFACE
     if kind == AREA_HOUSE:
         return LAYER_HOUSES

@@ -89,8 +89,10 @@ def main():
         for s in shapes:
             if len(s) < 3:
                 continue
-            if kind == 8:
+            if kind in (8, 10):
                 draw.polygon(s, fill=ASPHALT[3])
+            elif kind == 13:
+                draw.polygon(s, fill=ASPHALT[3] if p.get("major") else ASPHALT[6])
             elif kind == 9:
                 draw.polygon(s, fill=C["median"], outline=C["kerb"])
             elif kind == 7 and kind7:

@@ -258,6 +258,18 @@ class BuildTests(unittest.TestCase):
         for line in build_mvt.lane_markings(roads, mask=mask):
             self.assertFalse(any(mask.covers(p) for p in line))
 
+    def test_strip_inside_a_junction_is_dropped(self):
+        # Обрывок полосы между лентами поворотов внутри узла — не разделительная.
+        def m(dx, dy):
+            return (69.28 + dx / (111_320 * math.cos(math.radians(41.311))), 41.311 + dy / 111_320)
+        mask = build_mvt.JunctionMask([[m(-30, -30), m(30, -30), m(30, 30), m(-30, 30)]])
+        inside = [m(-10, -2), m(10, -2), m(10, 2), m(-10, 2)]
+        outside = [m(100, -2), m(200, -2), m(200, 2), m(100, 2)]
+        touching = [m(25, -2), m(200, -2), m(200, 2), m(25, 2)]   # нос заходит в узел
+        self.assertFalse(build_mvt.strip_outside_junction(inside, mask))
+        self.assertTrue(build_mvt.strip_outside_junction(outside, mask))
+        self.assertTrue(build_mvt.strip_outside_junction(touching, mask))
+
     def test_crossover_of_one_street_is_not_a_core(self):
         # Разворот через разделительную — безымянная связка той же улицы.
         def m(dx, dy):

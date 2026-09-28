@@ -264,6 +264,13 @@ def crossing_cores(roads):
     return cores
 
 
+def strip_outside_junction(ring, mask):
+    """Разделительная проспекта, а не обрывок внутри перекрёстка: центр полосы
+    вне площади узла. Центр тяжести у изогнутой полосы может выйти наружу,
+    поэтому выбрасываем, только если внутри и он, и середина вершин."""
+    return not (mask.covers(_box_centre(ring)) and mask.covers(waffle_centre(ring)))
+
+
 def _simplify_straight(run):
     """Выбросить промежуточные точки уплотнения, лежащие на прямой."""
     if len(run) <= 2:
@@ -892,16 +899,26 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             lay(kind, flags, shape)
         # Дома и поверхность — из уже написанных тайлов: в памяти их нет.
         signals = _signal_grid(points)
-        boxes, junction_areas = [], []
+        boxes, junction_areas, strips = [], [], []
         for set_name in written_sets:
             for kind, flags, shape in written_areas(target_dir, set_name):
                 if kind == AREA_JUNCTION_BOX:
                     boxes.append(shape)
                 if kind in (AREA_JUNCTION, AREA_JUNCTION_BOX) and flags & 1:
                     junction_areas.append(shape)
+                if kind == AREA_MEDIAN and flags & 2:
+                    strips.append((kind, flags, shape))
+                    continue
                 lay(kind, flags, shape)
         # Разметка — после узлов: режется их площадью.
         mask = JunctionMask(junction_areas + crossing_cores(roads))
+        # Разделительная полоса лежит ПОВЕРХ площади узла (ради носа у
+        # перехода), и обрывок полосы между лентами поворотов внутри
+        # перекрёстка вылез зелёной кляксой в его середине (28.09.2026).
+        # Полоса, чей центр внутри узла, — не разделительная проспекта.
+        for kind, flags, shape in strips:
+            if strip_outside_junction(shape, mask):
+                lay(kind, flags, shape)
         for line in lane_markings(roads, widths, mask):
             _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, {"verified": True})
         # «Вафли» — после всех центров: светофор отдаётся ближайшему узлу.

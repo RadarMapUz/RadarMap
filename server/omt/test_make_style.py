@@ -70,6 +70,8 @@ class StyleTests(unittest.TestCase):
         self.assertLess(ids.index("radar-median-strip"), ids.index("radar-median-kerb"))
         self.assertLess(ids.index("radar-median"), ids.index("radar-roads-case"))
         self.assertLess(ids.index("radar-median-kerb"), ids.index("radar-markings"))
+        # Нос у перехода лежит на асфальте узла, а не под ним.
+        self.assertLess(ids.index("radar-junction"), ids.index("radar-median-strip"))
 
     def test_bridges_cover_the_waffle(self):
         # Эстакада Фурката над перекрёстком Навои: «вафля» нижнего уровня — под мостом.

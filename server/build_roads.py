@@ -4041,7 +4041,7 @@ def stream_surface(roads, target_dir, degrees, handles=64):
         for figure in iter_fillets(arms):
             put(figure)
         spots = junction_spots(arms)
-        for figure in build_medians(chains, junction_index(spots)):
+        for figure in build_medians(chains, junction_index(median_stops(arms, chains))):
             put(figure)
         del chains
         # Середина перекрёстка — не островок и не разделительная: у Навои ×
@@ -4254,14 +4254,21 @@ def _median_strips(one, other, junctions=(), fills=None):
                 bad = middle
         return found
 
-    def emit(rows, sink, check):
-        """rows — [(левая, правая, уточнённая?)]; сначала с уточнёнными концами,
-        а если такая фигура бракуется — без них, как было до уточнения."""
-        for keep_refined in (True, False):
+    def emit(rows, sink, check, noses=False):
+        """rows — [(левая, правая, уточнённая?)]; сначала с уточнёнными концами
+        и скруглёнными носами, а если такая фигура бракуется — проще, вплоть
+        до той, что была до уточнения."""
+        for keep_refined, with_noses in ((True, noses), (True, False), (False, False)):
             kept = [r for r in rows if keep_refined or not r[2]]
             if len(kept) < 2:
                 continue
-            ring = [r[0] for r in kept] + [r[1] for r in reversed(kept)]
+            left = [r[0] for r in kept]
+            right = [r[1] for r in kept]
+            if with_noses:
+                ring = (left + _nose(left[-1], right[-1], left[-2], right[-2])
+                        + list(reversed(right)) + _nose(right[0], left[0], right[1], left[1]))
+            else:
+                ring = left + list(reversed(right))
             if check(ring) is None:
                 sink.append(ring)
                 return
@@ -4301,7 +4308,7 @@ def _median_strips(one, other, junctions=(), fills=None):
                     rows.append((refined[0], refined[1], True))
                     if at_node:
                         fill_rows.append((refined[0], refined[1], True))
-            emit(rows, strips, _strip_defect)
+            emit(rows, strips, _strip_defect, noses=True)
             rows = []
             direction = 0
             previous_along = previous_gap = None
@@ -4328,8 +4335,43 @@ def _median_strips(one, other, junctions=(), fills=None):
         fill_rows = []
         rows.append((edges[0], edges[1], False))
         previous_distance, previous_good = distance, True
-    emit(rows, strips, _strip_defect)
+    emit(rows, strips, _strip_defect, noses=True)
     return strips
+
+
+# Нос разделительной — полукруг наружу от торца, как у Яндекса: плоский торец
+# у перехода читался обрубком. Глубина — половина ширины полосы, но не больше
+# MEDIAN_NOSE_MAX_METERS: у широкого газона нос — пологая дуга, а не купол.
+MEDIAN_NOSE_MAX_METERS = 3.0
+MEDIAN_NOSE_STEPS = 6
+
+
+def _nose(a, b, a_prev, b_prev):
+    """Точки дуги между торцевыми вершинами a → b, выпуклой наружу.
+
+    Направление «наружу» — от предыдущего поперечника к торцу. Концы дуги
+    (сами a и b) не возвращаются: они уже есть в кольце.
+    """
+    scale = _lon_scale([a]) or 1.0
+    to_m = lambda p, o: ((p[0] - o[0]) * scale * LAT_METERS, (p[1] - o[1]) * LAT_METERS)
+    centre = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0)
+    before = ((a_prev[0] + b_prev[0]) / 2.0, (a_prev[1] + b_prev[1]) / 2.0)
+    ox, oy = to_m(centre, before)
+    length = math.hypot(ox, oy)
+    ax, ay = to_m(a, centre)
+    half = math.hypot(ax, ay)
+    if length == 0 or half == 0:
+        return []
+    ox, oy = ox / length, oy / length
+    depth = min(half, MEDIAN_NOSE_MAX_METERS)
+    ux, uy = ax / half, ay / half
+    points = []
+    for step in range(1, MEDIAN_NOSE_STEPS):
+        angle = math.pi * step / MEDIAN_NOSE_STEPS
+        x = ux * half * math.cos(angle) + ox * depth * math.sin(angle)
+        y = uy * half * math.cos(angle) + oy * depth * math.sin(angle)
+        points.append((centre[0] + x / (scale * LAT_METERS), centre[1] + y / LAT_METERS))
+    return points
 
 
 def _strip_defect(ring):
@@ -4422,6 +4464,55 @@ def junction_spots(arms):
     return out
 
 
+# Разрыв разделительной у РАЗВОРОТА — по ширине самой связки, а не по самой
+# широкой из сходящихся дорог. Узел разворота на Мукими (28.09.2026): сходятся
+# две ленты проспекта по 17,5 м и связка в 7 м, и радиус «по самой широкой»
+# рвал разделительную на 12,75 м в каждую сторону — проём в 25 м там, где в
+# жизни метров десять.
+#
+# Разворот распознаётся строго, а не по числу плеч: первая попытка («узел из
+# трёх плеч — узкий радиус») задела узлы на подходах к большому перекрёстку,
+# где лента расходится на повороты, и пустила полосу в середину узла
+# (зелёная клякса). Связка — короткая лента, оба конца которой лежат на лентах
+# ОДНОЙ улицы (имя одно и то же, у связки оно пустое или то же), по три плеча
+# в каждом конце. Всем остальным узлам — прежний радиус junction_spots.
+MEDIAN_CROSSOVER_MAX_METERS = 60.0
+MEDIAN_STOP_MARGIN_METERS = 3.0
+
+
+def median_stops(arms, chains=()):
+    """Узлы с радиусом, в котором разделительная обязана прерваться."""
+    spots = {_node_key(node): (node, radius) for node, radius in junction_spots(arms)}
+    names = defaultdict(set)
+    for street, chain in chains:
+        for piece in chain:
+            for end in (piece[2][0], piece[2][-1]):
+                names[_node_key(end)].add(street[3] or "")
+    for street, chain in chains:
+        points = street[2]
+        if len(points) < 2 or street[0] > SURFACE_MAX_CLASS:
+            continue
+        length = sum(meters_between(a, b) for a, b in zip(points, points[1:]))
+        if length > MEDIAN_CROSSOVER_MAX_METERS:
+            continue
+        ends = [_node_key(points[0]), _node_key(points[-1])]
+        if ends[0] == ends[1] or any(len(arms.get(k, ())) != 3 for k in ends):
+            continue
+        own = street[3] or ""
+        sides = [names[k] - {own, ""} for k in ends]
+        if own:
+            # Связка с именем — разворот, только если имя то же, что у улицы.
+            sides = [names[k] - {""} for k in ends]
+        if len(sides[0]) != 1 or sides[0] != sides[1] or own not in ("", *sides[0]):
+            continue
+        # Связка шире самой улицы — это не разворот, а часть перекрёстка.
+        radius = street[4] / 2.0 + MEDIAN_STOP_MARGIN_METERS
+        for key in ends:
+            if key in spots and radius < spots[key][1]:
+                spots[key] = (spots[key][0], radius)
+    return [spots[key] for key in sorted(spots)]
+
+
 def _nearest_with_gap(point, line):
     """Ближайшая точка ломаной И расстояние до неё в метрах.
 
@@ -4461,7 +4552,7 @@ def build_road_surface(roads):
     return (list(iter_surface(street for street, _chain in chains))
             + list(iter_junctions(arms)) + list(iter_flares(arms))
             + list(iter_fillets(arms))
-            + build_medians(chains, junction_spots(arms))
+            + build_medians(chains, median_stops(arms, chains))
             + build_islands(roads))
 
 

@@ -109,7 +109,8 @@ class MedianTests(unittest.TestCase):
         west_end = min((max(p[0] for p in s) - LON) * kx for s in strips)
         # Ось входит в круг узла на 310 − √(22² − 11²) ≈ 291 м.
         self.assertGreater(west_end, 289, "до края узла меньше пары метров, а не шаг в 25 м")
-        self.assertLess(west_end, 293)
+        # Плюс скруглённый нос (не глубже MEDIAN_NOSE_MAX_METERS).
+        self.assertLess(west_end, 291.5 + build_roads.MEDIAN_NOSE_MAX_METERS)
         for strip in strips:
             self.assertIsNone(sc.defect(strip))
 
@@ -122,6 +123,46 @@ class MedianTests(unittest.TestCase):
         self.assertEqual(sc.defect_of_kind(9, thread, sc.STRIP_FLAG), sc.REASON_SLIVER)
         bowtie = ring((0, 0), (20, 5), (20, 0), (0, 5))
         self.assertIsNotNone(sc.defect_of_kind(9, bowtie, sc.STRIP_FLAG))
+
+    def u_turn(self, crossover_name=""):
+        """Проспект из двух лент и связка разворота между ними."""
+        name = "Muqimiy ko'chasi"
+        west = [(3, 1, ring((-200, 0), (0, 0)), name), (3, 1, ring((0, 0), (200, 0)), name)]
+        east = [(3, 1, ring((200, 20), (0, 20)), name), (3, 1, ring((0, 20), (-200, 20)), name)]
+        link = [(3, 0, ring((0, 0), (0, 20)), crossover_name)]
+        chains = build_roads.street_chains(west + east + link)
+        return chains, build_roads.junction_arms(chains)
+
+    def test_u_turn_gap_is_as_wide_as_the_crossover(self):
+        chains, arms = self.u_turn()
+        stops = build_roads.median_stops(arms, chains)
+        old = dict((build_roads._node_key(n), r) for n, r in build_roads.junction_spots(arms))
+        self.assertEqual(len(stops), 2)
+        link_width = [s for s, _c in chains if not s[3]][0][4]
+        for node, radius in stops:
+            self.assertAlmostEqual(radius, link_width / 2 + build_roads.MEDIAN_STOP_MARGIN_METERS)
+            self.assertLess(radius, old[build_roads._node_key(node)])
+
+    def test_other_street_is_not_a_u_turn(self):
+        # Короткая улица с ДРУГИМ именем между лентами — перекрёсток, радиус прежний.
+        chains, arms = self.u_turn("Boshqa ko'cha")
+        stops = dict((build_roads._node_key(n), r) for n, r in build_roads.median_stops(arms, chains))
+        old = dict((build_roads._node_key(n), r) for n, r in build_roads.junction_spots(arms))
+        self.assertEqual(stops, old)
+
+    def test_median_ends_are_rounded_noses(self):
+        one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (300, 0)), "Navoiy ko'chasi", 10.0)
+        other = (3, build_roads.FLAG_ONEWAY, ring((300, 22), (0, 22)), "Navoiy ko'chasi", 10.0)
+        strip, = build_roads._median_strips(one, other)
+        kx = sc.LAT_METERS * math.cos(math.radians(LAT))
+        xs = [(p[0] - LON) * kx for p in strip]
+        ys = [(p[1] - LAT) * sc.LAT_METERS for p in strip]
+        # Полоса 5..17 м по y (ширина 12, половина 6 → нос глубиной 3 м).
+        tip = max(range(len(xs)), key=lambda i: xs[i])
+        self.assertAlmostEqual(ys[tip], 11.0, delta=0.6, msg="вершина носа — посередине полосы")
+        flat_end = max(x for x, y in zip(xs, ys) if abs(y - 5) < 0.3 or abs(y - 17) < 0.3)
+        self.assertAlmostEqual(xs[tip] - flat_end, build_roads.MEDIAN_NOSE_MAX_METERS, delta=0.3)
+        self.assertIsNone(sc.defect_of_kind(9, strip, sc.STRIP_FLAG))
 
     def test_side_ramp_does_not_break_the_median(self):
         # Съезд справа примыкает к одной ленте — разделительная идёт дальше.

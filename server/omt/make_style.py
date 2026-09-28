@@ -195,10 +195,18 @@ def _our_layers(p):
          "minzoom": OUR_ROADS_FROM,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 13]],
          "paint": {"fill-color": ["case", ["get", "major"], p["road"], p["minor"]], "fill-antialias": True}},
-        # Разделительная ПОЛОСА между встречными лентами — поверх асфальта: она
+        # Площадь перекрёстка: скругляет углы между подходами. Узлы строятся
+        # только там, где сходится дорога шире 9 м, и обрезаны кругом
+        # досягаемости — цвет магистрального асфальта им честен.
+        {"id": "radar-junction", "type": "fill", "source": "radar", "source-layer": "surface",
+         "minzoom": OUR_ROADS_FROM,
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["in", ["get", "kind"], ["literal", [8, 10]]]],
+         "paint": {"fill-color": p["road"], "fill-antialias": False}},
+        # Разделительная ПОЛОСА между встречными лентами — поверх асфальта и площади узла: она
         # построена по тем же ширинам, что и полотно, а под полотном узкий
         # бетонный разделитель (Мукими: 2,5 м между лентами по 5 полос) целиком
-        # тонул под каймой лент. Бордюр — линией, чтобы полоса читалась и в 2 м.
+        # тонул под каймой лент. Бордюр — линией, чтобы полоса читалась и в 2 м. Над площадью узла —
+        # чтобы скруглённый нос у перехода лежал на асфальте, а не под ним.
         {"id": "radar-median-strip", "type": "fill", "source": "radar", "source-layer": "surface",
          "minzoom": 15.5,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
@@ -211,13 +219,6 @@ def _our_layers(p):
          "layout": {"line-join": "round"},
          "paint": {"line-color": p["casing"],
                    "line-width": ["interpolate", ["linear"], ["zoom"], 16, 0.6, 19, 1.6]}},
-        # Площадь перекрёстка: скругляет углы между подходами. Узлы строятся
-        # только там, где сходится дорога шире 9 м, и обрезаны кругом
-        # досягаемости — цвет магистрального асфальта им честен.
-        {"id": "radar-junction", "type": "fill", "source": "radar", "source-layer": "surface",
-         "minzoom": OUR_ROADS_FROM,
-         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["in", ["get", "kind"], ["literal", [8, 10]]]],
-         "paint": {"fill-color": p["road"], "fill-antialias": False}},
         # «Вафля» регулируемого перекрёстка (вид 11): зона между стоп-линиями,
         # очерченная светофорами подходов (build_mvt.waffle_zone). Как у Яндекса.
         {"id": "radar-waffle", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 17,

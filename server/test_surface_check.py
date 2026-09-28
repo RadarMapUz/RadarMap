@@ -211,19 +211,25 @@ class SignalPaintTests(unittest.TestCase):
 
     def test_waffle_is_the_zone_between_the_signals(self):
         box = ring((-6, -6), (6, -6), (6, 6), (-6, 6))
-        # Светофоры у стоп-линий четырёх подходов, в ~38 м от центра.
-        signals = [(1, 0, [metres(x, y)]) for x, y in ((38, 8), (-38, -8), (8, -38), (-8, 38))]
+        # Светофоры у стоп-линий четырёх подходов, в ~48 м от центра (как у
+        # Навои × Рашидов), каждый смотрит в центр.
+        def facing(x, y):
+            bearing = math.degrees(math.atan2(-x, -y)) % 360
+            return (1, build_roads.point_flags(bearing, 12), [metres(x, y)])
+        signals = [facing(x, y) for x, y in ((48, 8), (-48, -8), (8, -48), (-8, 48))]
         zone = build_mvt.waffle_zone(box, build_mvt._signal_grid(signals))
         self.assertIsNotNone(zone)
         area, _ = sc.area_and_perimeter(sc.to_meters(zone))
         self.assertGreater(area, 1500, "зона — весь перекрёсток между стоп-линиями, а не центр осей")
         self.assertIsNone(sc.defect(zone))
 
-    def test_elongated_signal_set_is_not_a_junction(self):
-        # Навои × Фурката: светофоры эстакады и съездов дали вытянутый треугольник.
+    def test_signals_facing_away_do_not_belong_to_the_junction(self):
+        # Навои × Фурката: светофоры эстакады и съездов смотрят мимо центра.
         box = ring((-6, -6), (6, -6), (6, 6), (-6, 6))
-        thin = [(1, 0, [metres(x, y)]) for x, y in ((-40, 2), (40, -2), (10, 6))]
-        self.assertIsNone(build_mvt.waffle_zone(box, build_mvt._signal_grid(thin)))
+        # Их дороги идут ПОПЕРЁК направления на центр — ось мимо перекрёстка.
+        away = [(1, build_roads.point_flags(b, 12), [metres(x, y)])
+                for (x, y), b in (((-40, 2), 0), ((40, -2), 180), ((10, 30), 90))]
+        self.assertIsNone(build_mvt.waffle_zone(box, build_mvt._signal_grid(away)))
 
     def test_node_zebra_near_a_crossing_way_is_a_duplicate(self):
         grid = {}

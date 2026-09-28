@@ -299,23 +299,42 @@ def _near_crossing_way(point, grid, reach=ZEBRA_WAY_NEAR_METERS):
 # стоп-линий), поэтому зона — выпуклая оболочка светофоров вокруг центра
 # перекрёстка (вид 10), стянутая к центру, чтобы не наезжать на зебры.
 KIND_WAFFLE = 11
-WAFFLE_SIGNAL_REACH_METERS = 45.0
+WAFFLE_SIGNAL_REACH_METERS = 60.0
 WAFFLE_MIN_SIGNALS = 3
 WAFFLE_SHRINK = 0.75
+# Светофор принадлежит перекрёстку, если его подход ведёт В центр: направление
+# движения (азимут точки) отличается от направления на центр не больше чем на
+# столько. Светофоры эстакады и боковых съездов смотрят мимо — их отсекает
+# это, а не радиус (45 м терял настоящие светофоры Навои × Рашидов в 42–52 м).
+WAFFLE_FACING_DEGREES = 40.0
 # Зона перекрёстка — почти квадрат или ромб. Вытянутый треугольник (Навои ×
 # Фурката, 28.09.2026: светофоры эстакады и съездов) — не перекрёсток, а
 # случайная выборка светофоров; такую «вафлю» не рисуем.
-WAFFLE_MIN_COMPACTNESS = 0.6
+WAFFLE_MIN_COMPACTNESS = 0.4
 _SIGNAL_CELL = 0.002   # ~200 м
 
 
 def _signal_grid(points):
+    """Светофоры по клеткам: (lon, lat, азимут подхода или None)."""
     grid = defaultdict(list)
     for point in points:
         if point[0] == 1:
             lon, lat = point[2][0]
-            grid[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
+            bearing = point_azimuth(point[1]) if point_width(point[1]) > 0 else None
+            grid[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat, bearing))
     return grid
+
+
+def _faces(lon, lat, bearing, cx, cy):
+    """Ведёт ли подход светофора в центр перекрёстка (азимут неизвестен — да)."""
+    if bearing is None:
+        return True
+    kx = 111_320 * math.cos(math.radians(lat))
+    to_centre = math.degrees(math.atan2((cx - lon) * kx, (cy - lat) * 111_320)) % 360
+    # Ось, а не направление: у двусторонней дороги азимут точки идёт по
+    # направлению линии в OSM и может смотреть «от» центра.
+    diff = abs((bearing - to_centre + 180) % 360 - 180)
+    return min(diff, 180 - diff) <= WAFFLE_FACING_DEGREES
 
 
 def _convex_hull(points):
@@ -350,8 +369,9 @@ def waffle_zone(box, grid):
     near = []
     for gx in range(int((cx - reach_lon) / _SIGNAL_CELL), int((cx + reach_lon) / _SIGNAL_CELL) + 1):
         for gy in range(int((cy - reach_lat) / _SIGNAL_CELL), int((cy + reach_lat) / _SIGNAL_CELL) + 1):
-            for lon, lat in grid.get((gx, gy), ()):
-                if math.hypot((lon - cx) * kx, (lat - cy) * 111_320) <= WAFFLE_SIGNAL_REACH_METERS:
+            for lon, lat, bearing in grid.get((gx, gy), ()):
+                if math.hypot((lon - cx) * kx, (lat - cy) * 111_320) <= WAFFLE_SIGNAL_REACH_METERS \
+                        and _faces(lon, lat, bearing, cx, cy):
                     near.append((lon, lat))
     if len(near) < WAFFLE_MIN_SIGNALS:
         return None

@@ -243,8 +243,10 @@ def main():
             except Exception as error:     # одна сетевая ошибка не роняет отчёт
                 print(f"  {index}: проверка не удалась: {error}", file=sys.stderr)
         results.append(result)
+        found = ("не проверено" if result["defects"] is None
+                 else f"{len(result['defects'])} дефектов")
         print(f"  {index}/{len(places)} {lat:.5f},{lon:.5f} "
-              f"{'кадр' if ok else 'ПУСТО'} {len(result['defects'] or [])} дефектов")
+              f"{'кадр' if ok else 'ПУСТО'}, {found}", flush=True)
     summary = summarize(results)
     write_report(args.out, results, summary, bool(key))
     print(f"отчёт: {os.path.join(args.out, 'report.html')}")

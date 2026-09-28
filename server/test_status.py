@@ -228,6 +228,21 @@ class SignatureTests(Base):
         self.assertFalse(st.verify_ed25519(payload + b" ", sig))
 
 
+class OmtTests(Base):
+    def test_unpublished_base_map_is_grey(self):
+        self.assertEqual(st.check_omt(self.ctx())["state"], st.IDLE)
+
+    def test_published_base_map_is_checked_like_a_phone(self):
+        tile = b"omt-tile"
+        sha = hashlib.sha256(tile).hexdigest()
+        self.web.put("omt_index.json", envelope({"version": 1, "tiles": {"14/1/2": {"sha256": sha}}}), age_days=2)
+        self.web.put("omt/14/1/2.pbf", tile)
+        self.web.put("map_style.json", b"{}")
+        self.assertEqual(st.check_omt(self.ctx())["state"], st.OK)
+        self.web.put("omt/14/1/2.pbf", b"planted")
+        self.assertEqual(st.check_omt(self.ctx())["state"], st.BAD)
+
+
 class LocalTests(Base):
     def test_crowd_without_data_is_grey_not_red(self):
         self.assertEqual(st.check_crowd(self.ctx())["state"], st.IDLE)

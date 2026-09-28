@@ -96,6 +96,8 @@ LIMITS = {
     # дорог (~50 тыс.) за пару недель — подменённый тайл всплывёт раньше,
     # чем его заметит водитель, у которого он просто не нарисуется.
     "tile_sample": 20,
+    # Основа карты пересобирается раз в неделю на маке владельца.
+    "omt_warn_days": 10, "omt_bad_days": 30,
 }
 
 
@@ -600,6 +602,33 @@ def check_mvt(ctx):
     return result("mvt", "Своя карта (MVT)", state, summary, meaning, details)
 
 
+def check_omt(ctx):
+    """Основа карты (OpenMapTiles, server/omt/): подпись индекса, выборка тайлов, свежесть."""
+    meaning = ("Светлая карта «как у Яндекса» без подложки: телефон отбросит тайл, "
+               "чей sha не сошёлся с подписанным индексом, — на карте будет дыра.")
+    got = ctx.fetch("omt_index.json")
+    if got.code == 404:
+        return result("omt", "Основа карты (OMT)", IDLE, "не опубликована", meaning)
+    payload, why = open_envelope(got.body, ctx.verify) if got.ok else (None, str(got.error or got.code))
+    if payload is None:
+        return result("omt", "Основа карты (OMT)", BAD, why, meaning)
+    tiles = json.loads(payload).get("tiles", {})
+    age = got.age_days(ctx.now)
+    state = grade_age(age, LIMITS["omt_warn_days"], LIMITS["omt_bad_days"])
+    checked, broken = sample_tiles(ctx, tiles, lambda k: "omt/%s.pbf" % k, LIMITS["tile_sample"])
+    details = []
+    if broken:
+        state = BAD
+        details.append("тайлы не сходятся с индексом: %s" % ", ".join(broken[:5]))
+    style = ctx.fetch("map_style.json")
+    if not style.ok:
+        state = worst(state, WARN)
+        details.append("map_style.json: %s" % (style.error or style.code))
+    summary = "тайлов %d · опубликована %s назад · выборка %d/%d" % (
+        len(tiles), days(age), checked - len(broken), checked)
+    return result("omt", "Основа карты (OMT)", state, summary, meaning, details)
+
+
 def check_backup(ctx):
     folder = os.path.join(ctx.root, "backups")
     try:
@@ -705,7 +734,7 @@ def check_delivery(ctx):
     return result("delivery", "Доставка до телефонов", state, summary, meaning)
 
 
-CHECKS = (check_api, check_cameras, check_registry, check_limits, check_roads, check_mvt, check_overrides,
+CHECKS = (check_api, check_cameras, check_registry, check_limits, check_roads, check_mvt, check_omt, check_overrides,
           check_hotspots, check_config, check_osrm, check_crowd, check_backup, check_disk,
           check_cert, check_delivery)
 

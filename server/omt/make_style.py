@@ -169,7 +169,8 @@ def _our_layers(p):
         # треугольником на полосы (Навои × Абая, 28.09.2026). Под полотном он
         # остаётся землёй ровно в зазоре между лентами — как у Яндекса.
         {"id": "radar-median", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 15.5,
-         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9]],
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
+                    ["!", ["has", "strip"]]],
          "paint": {"fill-color": p["median"], "fill-outline-color": p["minor_edge"]}},
         {"id": "radar-roads-case", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
@@ -194,6 +195,22 @@ def _our_layers(p):
          "minzoom": OUR_ROADS_FROM,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 13]],
          "paint": {"fill-color": ["case", ["get", "major"], p["road"], p["minor"]], "fill-antialias": True}},
+        # Разделительная ПОЛОСА между встречными лентами — поверх асфальта: она
+        # построена по тем же ширинам, что и полотно, а под полотном узкий
+        # бетонный разделитель (Мукими: 2,5 м между лентами по 5 полос) целиком
+        # тонул под каймой лент. Бордюр — линией, чтобы полоса читалась и в 2 м.
+        {"id": "radar-median-strip", "type": "fill", "source": "radar", "source-layer": "surface",
+         "minzoom": 15.5,
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
+                    ["has", "strip"]],
+         "paint": {"fill-color": p["median"], "fill-antialias": True}},
+        {"id": "radar-median-kerb", "type": "line", "source": "radar", "source-layer": "surface",
+         "minzoom": 16,
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
+                    ["has", "strip"]],
+         "layout": {"line-join": "round"},
+         "paint": {"line-color": p["casing"],
+                   "line-width": ["interpolate", ["linear"], ["zoom"], 16, 0.6, 19, 1.6]}},
         # Площадь перекрёстка: скругляет углы между подходами. Узлы строятся
         # только там, где сходится дорога шире 9 м, и обрезаны кругом
         # досягаемости — цвет магистрального асфальта им честен.
@@ -255,7 +272,7 @@ def _our_layers(p):
         # Светофор — один значок в центре регулируемого перекрёстка, как у
         # Яндекса; точки у каждого подъезда читались мусором посреди полос.
         {"id": "radar-signal-icon", "type": "symbol", "source": "radar", "source-layer": "surface", "minzoom": 16,
-         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 11]],
+         "filter": ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], 11]],
          "layout": {"icon-image": "traffic-light", "icon-allow-overlap": True,
                     "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.6, 19, 1.1]}},
     ]

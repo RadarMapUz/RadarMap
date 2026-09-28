@@ -2186,6 +2186,11 @@ AREA_JUNCTION_BOX = 10
 AREA_FILLET = 13
 FILLET_MAJOR = 2
 AREA_FLAG_CLOSED = 1
+# Разделительная ПОЛОСА между встречными лентами (build_medians), в отличие от
+# островка из грани графа. Полоса построена по тем же ширинам, что и полотно,
+# и рисуется поверх асфальта; островок ширин не знает и лежит под ним.
+# Приложение у вида 9 читает только бит «замкнут» — этот бит оно не видит.
+AREA_FLAG_STRIP = 2
 
 
 # Местность обзора: вода и крупная зелень, только площади.
@@ -4155,9 +4160,8 @@ def build_medians(chains, junctions=()):
                     continue
                 if not _opposite(one[2], other[2]):
                     continue
-                strip = _median_strip(one, other, junctions)
-                if strip:
-                    out.append((AREA_MEDIAN, AREA_FLAG_CLOSED, strip))
+                for strip in _median_strips(one, other, junctions):
+                    out.append((AREA_MEDIAN, AREA_FLAG_CLOSED | AREA_FLAG_STRIP, strip))
     return out
 
 
@@ -4188,19 +4192,40 @@ def _nearest_along(point, line):
 
 
 def _median_strip(one, other, junctions=()):
-    """Многоугольник между внутренними кромками двух встречных проезжих.
+    """Первая полоса между встречными (для старых вызовов и тестов)."""
+    strips = _median_strips(one, other, junctions)
+    return strips[0] if strips else []
+
+
+def _median_strips(one, other, junctions=()):
+    """Многоугольники между внутренними кромками двух встречных проезжих.
 
     Три условия продолжения, кроме расстояния: не перекрёсток; проекция на
     встречную идёт в ту же сторону, что и шла; ширина не прыгает. Нарушение
-    любого — конец полосы (если она уже набралась) или сброс. Итог проходит
-    surface_check: кривая полоса на карту не едет вовсе.
+    любого — конец текущей полосы, и за разрывом начинается следующая: раньше
+    первый же перекрёсток обрывал разделительную на всю оставшуюся длину
+    проспекта (Мукими у «Новзы», 28.09.2026 — за узлом её не было вовсе).
+    Каждая полоса проходит surface_check: кривая на карту не едет.
     """
+    strips = []
     left, right = [], []
+
+    def close():
+        if len(left) >= 2:
+            ring = left + list(reversed(right))
+            if surface_check.defect(ring) is None:
+                strips.append(ring)
+
     direction = 0
     previous_along = previous_gap = None
     for spot, _segment in _walk(one[2], MEDIAN_STEP_METERS):
         near, gap, along = _nearest_along(spot, other[2])
-        if _at_junction(spot, junctions):
+        # Разделительную рвёт только дорога, соединяющая ОБЕ проезжие, —
+        # перекрёсток или разворот: у него узлы с обеих сторон. Съезд или
+        # выезд со двора справа даёт узел на одной ленте и полосу не пересекает;
+        # раньше каждый такой узел обрывал её (Мукими у «Новзы»: шесть кусков
+        # вместо одной полосы и белая щель между лентами).
+        if near is not None and _at_junction(spot, junctions) and _at_junction(near, junctions):
             near = None
         if near is not None and previous_along is not None:
             step = along - previous_along
@@ -4211,11 +4236,10 @@ def _median_strip(one, other, junctions=()):
             elif abs(gap - previous_gap) > MEDIAN_MAX_GAP_JUMP_METERS:
                 near = None
         if near is None or not (MEDIAN_MIN_METERS <= gap <= MEDIAN_MAX_METERS):
-            # Разрыв — конец полосы: проспект расходится или кончается.
+            # Разрыв — конец полосы: проспект расходится или идёт узел.
             # Продолжать через разрыв значило бы нарисовать островок поперёк
-            # перекрёстка.
-            if len(left) >= 2:
-                break
+            # перекрёстка; за ним начинается новая полоса.
+            close()
             left, right = [], []
             direction = 0
             previous_along = previous_gap = None
@@ -4229,10 +4253,8 @@ def _median_strip(one, other, junctions=()):
             continue
         left.append(_shift(spot, toward, half_one, scale))
         right.append(_shift(near, (-toward[0], -toward[1]), half_two, scale))
-    if len(left) < 2:
-        return []
-    ring = left + list(reversed(right))
-    return ring if surface_check.defect(ring) is None else []
+    close()
+    return strips
 
 
 # Клетка поиска перекрёстка. Больше любого радиуса узла: половина самой

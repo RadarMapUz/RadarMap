@@ -59,6 +59,17 @@ class StyleTests(unittest.TestCase):
         self.assertIn(layer["paint"]["fill-pattern"], sprite)
         icon = next(l for l in self.style["layers"] if l["id"] == "radar-signal-icon")
         self.assertIn(icon["layout"]["icon-image"], sprite)
+        # По точке центра: по полигону MapLibre ставит значок в каждом тайле.
+        self.assertIn(["==", ["geometry-type"], "Point"], icon["filter"])
+
+    def test_median_strips_over_the_roads_islands_under(self):
+        # Узкий разделитель под каймой лент исчезал (Мукими); островок из осей
+        # поверх полотна ложился треугольником на полосы (Навои × Абая).
+        ids = [layer["id"] for layer in self.style["layers"]]
+        self.assertLess(ids.index("radar-roads"), ids.index("radar-median-strip"))
+        self.assertLess(ids.index("radar-median-strip"), ids.index("radar-median-kerb"))
+        self.assertLess(ids.index("radar-median"), ids.index("radar-roads-case"))
+        self.assertLess(ids.index("radar-median-kerb"), ids.index("radar-markings"))
 
     def test_bridges_cover_the_waffle(self):
         # Эстакада Фурката над перекрёстком Навои: «вафля» нижнего уровня — под мостом.

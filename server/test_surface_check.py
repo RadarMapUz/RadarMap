@@ -85,6 +85,36 @@ class MedianTests(unittest.TestCase):
         self.assertTrue(strip)
         self.assertIsNone(sc.defect(strip))
 
+    def test_median_resumes_after_a_junction(self):
+        # Мукими у «Новзы»: первый же узел обрывал разделительную до конца проспекта.
+        one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (600, 0)), "Muqimiy ko'chasi", 10.0)
+        other = (3, build_roads.FLAG_ONEWAY, ring((600, 22), (0, 22)), "Muqimiy ko'chasi", 10.0)
+        junctions = [(metres(300, 11), 30.0)]
+        strips = build_roads._median_strips(one, other, junctions)
+        self.assertEqual(len(strips), 2, "по полосе с каждой стороны узла")
+        for strip in strips:
+            self.assertIsNone(sc.defect(strip))
+            self.assertFalse(any(build_roads._at_junction(p, junctions) for p in strip[:len(strip) // 2]))
+
+    def test_side_ramp_does_not_break_the_median(self):
+        # Съезд справа примыкает к одной ленте — разделительная идёт дальше.
+        one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (600, 0)), "Muqimiy ko'chasi", 10.0)
+        other = (3, build_roads.FLAG_ONEWAY, ring((600, 22), (0, 22)), "Muqimiy ko'chasi", 10.0)
+        ramps = [(metres(200, -2), 13.0), (metres(400, 24), 13.0)]
+        self.assertEqual(len(build_roads._median_strips(one, other, ramps)), 1)
+
+    def test_strips_are_flagged_apart_from_islands(self):
+        one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (300, 0)), "Navoiy ko'chasi", 10.0)
+        other = (3, build_roads.FLAG_ONEWAY, ring((300, 22), (0, 22)), "Navoiy ko'chasi", 10.0)
+        areas = build_roads.build_medians([(one, []), (other, [])])
+        self.assertTrue(areas)
+        for kind, flags, _ring in areas:
+            self.assertEqual(kind, build_roads.AREA_MEDIAN)
+            self.assertTrue(flags & build_roads.AREA_FLAG_STRIP)
+            self.assertEqual(build_mvt._area_props(kind, flags), {"kind": 9, "strip": True})
+        self.assertEqual(build_mvt._area_props(build_roads.AREA_MEDIAN, build_roads.AREA_FLAG_CLOSED),
+                         {"kind": 9}, "островок — без флага, лежит под полотном")
+
 
 class IslandTests(unittest.TestCase):
     def road(self, name, length=30.0):
@@ -230,6 +260,51 @@ class SignalPaintTests(unittest.TestCase):
         away = [(1, build_roads.point_flags(b, 12), [metres(x, y)])
                 for (x, y), b in (((-40, 2), 0), ((40, -2), 180), ((10, 30), 90))]
         self.assertIsNone(build_mvt.waffle_zone(box, build_mvt._signal_grid(away)))
+
+    def facing_signals(self, centre_x, spots):
+        def facing(x, y):
+            bearing = math.degrees(math.atan2(centre_x - x, -y)) % 360
+            return (1, build_roads.point_flags(bearing, 12), [metres(x, y)])
+        return [facing(x, y) for x, y in spots]
+
+    def test_signals_of_a_neighbour_junction_do_not_stretch_the_zone(self):
+        # Бунёдкор × Сеул: соседний узел в 70 м, его светофоры — в 60 м от нашего центра.
+        box = ring((-6, -6), (6, -6), (6, 6), (-6, 6))
+        other = ring((64, -6), (76, -6), (76, 6), (64, 6))
+        own = self.facing_signals(0, ((30, 5), (-30, -5), (5, -30), (-5, 30)))
+        theirs = self.facing_signals(70, ((48, 3), (48, -3)))   # на общей дороге, ближе к соседу
+        grid = build_mvt._signal_grid(own + theirs)
+        loose = build_mvt.waffle_zone(box, grid)
+        tight = build_mvt.waffle_zone(box, grid, build_mvt.box_centres([box, other]))
+        self.assertIsNotNone(tight)
+        widest = max(x for x, _ in sc.to_meters(tight))
+        self.assertLess(widest - min(x for x, _ in sc.to_meters(tight)),
+                        max(x for x, _ in sc.to_meters(loose)) - min(x for x, _ in sc.to_meters(loose)),
+                        "светофоры соседнего узла отданы ему")
+
+    def test_one_icon_point_per_waffle(self):
+        # Два центра одного перекрёстка из соседних тайлов — одна «вафля», одна точка.
+        zone = ring((-20, -20), (20, -20), (20, 20), (-20, 20))
+        shifted = ring((-19, -20), (21, -20), (21, 20), (-19, 20))
+        waffles = build_mvt.WaffleSet()
+        centre = waffles.add(zone)
+        self.assertIsNotNone(centre)
+        self.assertIsNone(waffles.add(shifted))
+        lon, lat = metres(0, 0)
+        self.assertAlmostEqual(centre[0], lon, places=6)
+        self.assertAlmostEqual(centre[1], lat, places=6)
+        self.assertIsNotNone(waffles.add(ring((80, -20), (120, -20), (120, 20), (80, 20))))
+
+    def test_bent_crossing_is_cut_into_straight_pieces(self):
+        # Излом у бордюра: одна линия шириной 3 м заливала клин белым.
+        bent = ring((0, 0), (8, 0), (14, 6))
+        pieces = build_mvt.zebra_pieces(bent)
+        self.assertEqual(len(pieces), 2)
+        self.assertTrue(all(len(piece) == 2 for piece in pieces))
+        almost = ring((0, 0), (8, 0), (16, 1))          # 7° — один кусок
+        self.assertEqual(len(build_mvt.zebra_pieces(almost)), 1)
+        stub = ring((0, 0), (10, 0), (10.5, 1))         # хвост в метр — не зебра
+        self.assertEqual(len(build_mvt.zebra_pieces(stub)), 1)
 
     def test_node_zebra_near_a_crossing_way_is_a_duplicate(self):
         grid = {}

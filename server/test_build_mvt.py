@@ -1,5 +1,6 @@
 import gzip
 import json
+import math
 import os
 import shutil
 import tempfile
@@ -219,6 +220,65 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(len(lines), 2)
         self.assertLess(lines[0][-1][0], center[0] - .00005)
         self.assertGreater(lines[1][0][0], center[0] + .00005)
+
+    def test_junction_area_cuts_the_markings(self):
+        # Мукими × Бунёдкор: концы сегментов не совпадают с узлом, пунктир шёл
+        # сеткой через перекрёсток. Режет площадь узла, а не степень конца.
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (3 << 4)
+        road = self.road([(69.278, 41.311), (69.282, 41.311)], flags=flags)
+        box = [(69.2797, 41.3108), (69.2803, 41.3108), (69.2803, 41.3112), (69.2797, 41.3112)]
+        mask = build_mvt.JunctionMask([box])
+        lines = list(build_mvt.lane_markings([road], mask=mask))
+        self.assertEqual(len(lines), 4, "по два разделителя полос с каждой стороны узла")
+        for line in lines:
+            self.assertFalse(any(mask.covers(p) for p in line))
+        bridge = self.road(road[2], flags=flags | build_mvt.FLAG_BRIDGE)
+        self.assertEqual(len(list(build_mvt.lane_markings([bridge], mask=mask))), 2,
+                         "мост над узлом земли не режется")
+
+    def test_core_between_two_divided_avenues_has_no_markings(self):
+        # Два проспекта с раздельными проезжими: четыре точки пересечения по
+        # углам квадрата. Внутри квадрата пунктира быть не должно.
+        def m(dx, dy):
+            return (69.28 + dx / (111_320 * math.cos(math.radians(41.311))), 41.311 + dy / 111_320)
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (3 << 4)
+        a, b = "Muqimiy ko'chasi", "Bunyodkor shoh ko'chasi"
+        roads = []
+        for y in (-10, 10):          # проезжие Мукими, разрезаны в точках пересечения
+            roads += [(3, flags, [m(-200, y), m(-10, y)], a), (3, flags, [m(-10, y), m(10, y)], a),
+                      (3, flags, [m(10, y), m(200, y)], a)]
+        for x in (-10, 10):          # проезжие Бунёдкора
+            roads += [(3, flags, [m(x, -200), m(x, -10)], b), (3, flags, [m(x, -10), m(x, 10)], b),
+                      (3, flags, [m(x, 10), m(x, 200)], b)]
+        cores = build_mvt.crossing_cores(roads)
+        self.assertEqual(len(cores), 1)
+        mask = build_mvt.JunctionMask(cores)
+        self.assertTrue(mask.covers(m(0, 0)))
+        self.assertFalse(mask.covers(m(0, 30)))
+        for line in build_mvt.lane_markings(roads, mask=mask):
+            self.assertFalse(any(mask.covers(p) for p in line))
+
+    def test_crossover_of_one_street_is_not_a_core(self):
+        # Разворот через разделительную — безымянная связка той же улицы.
+        def m(dx, dy):
+            return (69.28 + dx / (111_320 * math.cos(math.radians(41.311))), 41.311 + dy / 111_320)
+        a = "Muqimiy ko'chasi"
+        roads = [(3, 1, [m(-100, -10), m(0, -10)], a), (3, 1, [m(0, -10), m(100, -10)], a),
+                 (3, 1, [m(-100, 10), m(0, 10)], a), (3, 1, [m(0, 10), m(100, 10)], a),
+                 (3, 1, [m(0, -10), m(0, 10)], "")]
+        self.assertEqual(build_mvt.crossing_cores(roads), [])
+
+    def test_markings_follow_the_fitted_width(self):
+        # Три полосы: разделитель в width/6 от оси — сдвиг прямо зависит от ширины.
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (3 << 4)
+        road = self.road([(69.278, 41.311), (69.282, 41.311)], flags=flags)
+        wide = list(build_mvt.lane_markings([road]))
+        narrow = list(build_mvt.lane_markings([road], {id(road): 6.0}))
+        axis = road[2][0][1]
+        wide_off = abs(wide[0][0][1] - axis) * 111_320
+        narrow_off = abs(narrow[0][0][1] - axis) * 111_320
+        self.assertAlmostEqual(narrow_off, 1.0, delta=0.05, msg="полотно сужено до 6 м — пунктир в 1 м от оси")
+        self.assertGreater(wide_off, narrow_off)
 
     def test_simple_continuation_has_no_marking_gap(self):
         middle = (69.28, 41.311)

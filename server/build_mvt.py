@@ -141,7 +141,143 @@ MAX_MARKED_LANES = 8
 JUNCTION_MARKING_MARGIN = 4.0
 
 
-def lane_markings(roads):
+# Шаг проверки линии разметки против узлов и самый короткий кусок, который
+# ещё читается пунктиром (штрих 4 + пробел 5 ширин линии — меньше это точка).
+MARKING_CLIP_STEP_METERS = 2.0
+MARKING_MIN_METERS = 8.0
+
+
+class JunctionMask:
+    """Площади узлов (виды 8 и 10), сквозь которые разметка полос не идёт.
+
+    Обрезки по «степени» конца линии мало: у двойных проезжих, дублёров и
+    узлов из нескольких точек OSM конец сегмента не совпадает с узлом, и
+    пунктир шёл сеткой через весь перекрёсток (Мукими × Бунёдкор, 28.09.2026).
+    Площадь узла — то, что на карте и есть перекрёсток; режем по ней.
+    """
+
+    CELL = 0.001   # ~100 м
+
+    def __init__(self, polygons=()):
+        self._grid = defaultdict(list)
+        for ring in polygons:
+            if len(ring) < 3:
+                continue
+            lons = [p[0] for p in ring]
+            lats = [p[1] for p in ring]
+            box = (min(lons), min(lats), max(lons), max(lats))
+            for gx in range(int(box[0] / self.CELL), int(box[2] / self.CELL) + 1):
+                for gy in range(int(box[1] / self.CELL), int(box[3] / self.CELL) + 1):
+                    self._grid[(gx, gy)].append((box, ring))
+
+    def covers(self, point):
+        for box, ring in self._grid.get((int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
+            if box[0] <= point[0] <= box[2] and box[1] <= point[1] <= box[3] and _inside(point, ring):
+                return True
+        return False
+
+    def clip(self, line, step_meters=MARKING_CLIP_STEP_METERS):
+        """Куски линии вне узлов; короче MARKING_MIN_METERS — выбрасываются."""
+        if not self._grid or len(line) < 2:
+            return [line] if len(line) >= 2 else []
+        kx = 111_320 * math.cos(math.radians(line[0][1]))
+        dense = [line[0]]
+        for a, b in zip(line, line[1:]):
+            length = math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+            parts = max(1, int(length / step_meters))
+            dense.extend((a[0] + (b[0] - a[0]) * i / parts, a[1] + (b[1] - a[1]) * i / parts)
+                         for i in range(1, parts + 1))
+        runs, current = [], []
+        for point in dense:
+            if self.covers(point):
+                runs.append(current)
+                current = []
+            else:
+                current.append(point)
+        runs.append(current)
+        out = []
+        for run in runs:
+            if len(run) < 2:
+                continue
+            length = sum(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+                         for a, b in zip(run, run[1:]))
+            if length >= MARKING_MIN_METERS:
+                out.append(_simplify_straight(run))
+        return out
+
+
+# Точки пересечения РАЗНЫХ улиц ближе этого — один перекрёсток (у двух
+# проспектов с раздельными проезжими это четыре точки по углам квадрата 20–40 м).
+CROSSING_CORE_METERS = 45.0
+
+
+def crossing_cores(roads):
+    """Ядра перекрёстков двух проспектов: оболочка точек, где сходятся улицы
+    с разными именами.
+
+    Площадь узла строится у каждой точки отдельно, а квадрат между четырьмя
+    проезжими (Мукими × Бунёдкор, 28.09.2026) ничем не закрыт — пунктир шёл
+    через него насквозь. Развороты и съезды одной улицы (безымянная связка или
+    то же имя) в ядро не входят: иначе оно растянулось бы вдоль проспекта.
+    """
+    names = defaultdict(set)
+    for road in roads:
+        code, flags, points = road[0], road[1], road[2]
+        name = road[3] if len(road) > 3 else ""
+        if code > 7 or len(points) < 2 or flags & (FLAG_BRIDGE | FLAG_TUNNEL):
+            continue
+        for p in (points[0], points[-1]):
+            key = (round(p[0], 6), round(p[1], 6))
+            names[key].add(name or "")
+    spots = [key for key, found in names.items() if len(found - {""}) >= 2]
+    if not spots:
+        return []
+    # Объединение ближних точек (клетки ~100 м, сосед — в своей и соседних).
+    parent = list(range(len(spots)))
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    cell = 0.001
+    grid = defaultdict(list)
+    for i, (lon, lat) in enumerate(spots):
+        grid[(int(lon / cell), int(lat / cell))].append(i)
+    for i, (lon, lat) in enumerate(spots):
+        kx = 111_320 * math.cos(math.radians(lat))
+        gx, gy = int(lon / cell), int(lat / cell)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for j in grid.get((gx + dx, gy + dy), ()):
+                    if j > i and math.hypot((spots[j][0] - lon) * kx,
+                                            (spots[j][1] - lat) * 111_320) <= CROSSING_CORE_METERS:
+                        parent[root(j)] = root(i)
+    groups = defaultdict(list)
+    for i, spot in enumerate(spots):
+        groups[root(i)].append(spot)
+    cores = []
+    for members in groups.values():
+        hull = _convex_hull(members)
+        if len(hull) >= 3:
+            cores.append(hull)
+    return cores
+
+
+def _simplify_straight(run):
+    """Выбросить промежуточные точки уплотнения, лежащие на прямой."""
+    if len(run) <= 2:
+        return run
+    out = [run[0]]
+    for prev, here, nxt in zip(run, run[1:], run[2:]):
+        cross = (here[0] - prev[0]) * (nxt[1] - here[1]) - (here[1] - prev[1]) * (nxt[0] - here[0])
+        if abs(cross) > 1e-14:
+            out.append(here)
+    out.append(run[-1])
+    return out
+
+
+def lane_markings(roads, widths=None, mask=None):
     """Разделители подтверждённых односторонних полос вне перекрёстков.
 
     Вход — сеть ПОСЛЕ generalise: общие узлы уже стали концами сегментов.
@@ -175,7 +311,8 @@ def lane_markings(roads):
             result.pop(0)
         return result
 
-    for code, flags, points, _ in roads:
+    for road in roads:
+        code, flags, points = road[0], road[1], road[2]
         lanes = lanes_of(flags)
         if (not flags & FLAG_LANES_TAGGED or not flags & FLAG_ONEWAY
                 or not 2 <= lanes <= MAX_MARKED_LANES or code > 7 or len(points) < 2):
@@ -189,7 +326,11 @@ def lane_markings(roads):
             metric.reverse()
         if len(metric) < 2:
             continue
+        # Ширина — та же, по которой нарисовано полотно: сужение под
+        # разделительную (fit_carriageways) иначе уводило пунктир на неё.
         width = road_width_meters(code, lanes)
+        if widths:
+            width = min(width, widths.get(id(road)) or width)
         for lane in range(1, lanes):
             offset = width * (lane / lanes - .5)
             line = []
@@ -200,7 +341,12 @@ def lane_markings(roads):
                     continue
                 x, y = p[0] - (b[1] - a[1]) / length * offset, p[1] + (b[0] - a[0]) / length * offset
                 line.append((origin[0] + x / sx, origin[1] + y / sy))
-            if len(line) > 1:
+            if len(line) < 2:
+                continue
+            # Мост и тоннель идут над/под узлом земли — его площадь им не указ.
+            if mask is not None and not flags & (FLAG_BRIDGE | FLAG_TUNNEL):
+                yield from mask.clip(line)
+            else:
                 yield line
 
 # Кому какой зум. Слой, невидимый на обзоре, туда и не едет — тот же закон,
@@ -282,6 +428,42 @@ ZEBRA_WAY_NEAR_METERS = 10.0
 NODE_ON_WAY_METERS = 4.0
 
 
+# Зебра рисуется линией шириной 3 м. На изломе такой линии соединение
+# заливается сплошь — белый клин посреди перекрёстка (Бунёдкор × Сеул,
+# 28.09.2026: переходы OSM ломаются у бордюра). Поэтому линия перехода режется
+# на прямые куски без соединений; почти прямой излом кусок не рвёт — иначе
+# сбился бы шаг штрихов; огрызок короче метра-двух — не зебра.
+ZEBRA_STRAIGHT_DEGREES = 12.0
+ZEBRA_MIN_PIECE_METERS = 2.0
+
+
+def zebra_pieces(line):
+    """Прямые куски линии перехода (каждый — отдельная линия, без изломов)."""
+    if len(line) < 2:
+        return []
+    kx = 111_320 * math.cos(math.radians(line[0][1]))
+
+    def heading(a, b):
+        return math.degrees(math.atan2((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320))
+
+    def length(a, b):
+        return math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+
+    pieces, current = [], [line[0]]
+    for a, b in zip(line, line[1:]):
+        if length(a, b) <= 0:
+            continue
+        if len(current) >= 2:
+            turn = abs((heading(a, b) - heading(current[-2], current[-1]) + 180) % 360 - 180)
+            if turn > ZEBRA_STRAIGHT_DEGREES:
+                pieces.append(current)
+                current = [a]
+        current.append(b)
+    pieces.append(current)
+    return [[piece[0], piece[-1]] for piece in pieces
+            if len(piece) >= 2 and length(piece[0], piece[-1]) >= ZEBRA_MIN_PIECE_METERS]
+
+
 def _near_crossing_way(point, grid, reach=ZEBRA_WAY_NEAR_METERS):
     lon, lat = point
     kx = 111_320 * math.cos(math.radians(lat))
@@ -357,12 +539,50 @@ def _convex_hull(points):
     return lower[:-1] + upper[:-1]
 
 
-def waffle_zone(box, grid):
+def _box_centre(box):
+    return (sum(p[0] for p in box) / len(box), sum(p[1] for p in box) / len(box))
+
+
+def box_centres(boxes):
+    """Центры перекрёстков (вид 10) по клеткам — для «чей это светофор»."""
+    grid = defaultdict(list)
+    for box in boxes:
+        cx, cy = _box_centre(box)
+        grid[(int(cx / _SIGNAL_CELL), int(cy / _SIGNAL_CELL))].append((cx, cy))
+    return grid
+
+
+# Светофор чужой, только если другой центр ближе заметно: центры одного узла
+# из соседних тайлов стоят в метре друг от друга.
+WAFFLE_OWNER_MARGIN_METERS = 3.0
+
+
+def _owned_by(lon, lat, cx, cy, centres):
+    """Светофор принадлежит ближайшему центру перекрёстка.
+
+    Бунёдкор × Сеул (28.09.2026): в 60 м от центра стоят светофоры дублёра и
+    соседнего узла за каналом — оболочка по ним легла на воду. Каждый светофор
+    отдаётся одному, ближайшему узлу (разбиение Вороного), и чужие зону не тянут.
+    Без сетки центров — ничего не отсекаем.
+    """
+    if not centres:
+        return True
+    kx = 111_320 * math.cos(math.radians(lat))
+    own = math.hypot((cx - lon) * kx, (cy - lat) * 111_320)
+    cell = (int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))
+    for gx in range(cell[0] - 1, cell[0] + 2):
+        for gy in range(cell[1] - 1, cell[1] + 2):
+            for x, y in centres.get((gx, gy), ()):
+                if math.hypot((x - lon) * kx, (y - lat) * 111_320) < own - WAFFLE_OWNER_MARGIN_METERS:
+                    return False
+    return True
+
+
+def waffle_zone(box, grid, centres=None):
     """Зона «вафли» для центра перекрёстка или None, если перекрёсток не регулируемый."""
     if not grid:
         return None
-    cx = sum(p[0] for p in box) / len(box)
-    cy = sum(p[1] for p in box) / len(box)
+    cx, cy = _box_centre(box)
     kx = 111_320 * math.cos(math.radians(cy))
     reach_lat = WAFFLE_SIGNAL_REACH_METERS / 111_320
     reach_lon = WAFFLE_SIGNAL_REACH_METERS / kx
@@ -371,7 +591,8 @@ def waffle_zone(box, grid):
         for gy in range(int((cy - reach_lat) / _SIGNAL_CELL), int((cy + reach_lat) / _SIGNAL_CELL) + 1):
             for lon, lat, bearing in grid.get((gx, gy), ()):
                 if math.hypot((lon - cx) * kx, (lat - cy) * 111_320) <= WAFFLE_SIGNAL_REACH_METERS \
-                        and _faces(lon, lat, bearing, cx, cy):
+                        and _faces(lon, lat, bearing, cx, cy) \
+                        and _owned_by(lon, lat, cx, cy, centres):
                     near.append((lon, lat))
     if len(near) < WAFFLE_MIN_SIGNALS:
         return None
@@ -393,6 +614,61 @@ def _waffle_key(ring):
     return tuple(sorted((round(x, 5), round(y, 5)) for x, y in ring))
 
 
+def waffle_centre(ring):
+    """Центр тяжести зоны — точка для значка светофора.
+
+    Значок по самому полигону MapLibre ставит в каждом тайле, куда полигон
+    попал целиком (_put кладёт фигуру во все задетые тайлы): на стыке трёх
+    тайлов — три светофора в одной «вафле». Точка лежит в одном тайле.
+    """
+    # От первой вершины: произведения градусов порядка 69 × 41 съедают точность
+    # до пары метров.
+    ox, oy = ring[0]
+    local = [(x - ox, y - oy) for x, y in ring]
+    twice = cx = cy = 0.0
+    for (x0, y0), (x1, y1) in zip(local, local[1:] + local[:1]):
+        cross = x0 * y1 - x1 * y0
+        twice += cross
+        cx += (x0 + x1) * cross
+        cy += (y0 + y1) * cross
+    if abs(twice) < 1e-18:
+        return _box_centre(ring)
+    return (ox + cx / (3 * twice), oy + cy / (3 * twice))
+
+
+def _inside(point, ring):
+    x, y = point
+    hit = False
+    for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1]):
+        if (y0 > y) != (y1 > y) and x < x0 + (y - y0) * (x1 - x0) / (y1 - y0):
+            hit = not hit
+    return hit
+
+
+class WaffleSet:
+    """Уже поставленные «вафли».
+
+    Соседние центры одного перекрёстка дают почти ту же оболочку светофоров с
+    чуть другим набором вершин — это дубль, а не вторая зона. Новая зона
+    отбрасывается, если её центр внутри уже стоящей или центр стоящей — внутри неё.
+    """
+
+    def __init__(self):
+        self._grid = defaultdict(list)
+
+    def add(self, ring):
+        """Центр новой зоны или None, если это дубль уже поставленной."""
+        centre = waffle_centre(ring)
+        cell = (int(centre[0] / _SIGNAL_CELL), int(centre[1] / _SIGNAL_CELL))
+        for gx in range(cell[0] - 1, cell[0] + 2):
+            for gy in range(cell[1] - 1, cell[1] + 2):
+                for other, other_centre in self._grid.get((gx, gy), ()):
+                    if _inside(centre, other) or _inside(other_centre, ring):
+                        return None
+        self._grid[cell].append((ring, centre))
+        return centre
+
+
 def _has_signal(shape, grid):
     """Совместимость: есть ли у центра перекрёстка своя «вафля»."""
     return waffle_zone(shape, grid) is not None
@@ -404,6 +680,8 @@ def _area_props(kind, flags):
         props["major"] = bool(flags & 2)
     if kind == AREA_ROAD:
         props["cls"] = (flags >> SURFACE_CLASS_SHIFT) & SURFACE_CLASS_MASK
+    if kind == AREA_MEDIAN and flags & 2:
+        props["strip"] = True
     return props
 
 
@@ -591,8 +869,6 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         for road in roads:
             _put(buckets, zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
                  _road_props(road, widths.get(id(road))))
-        for line in lane_markings(roads):
-            _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, {"verified": True})
         for road in far:
             _put(buckets, far_zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
                  _road_props(road))
@@ -616,15 +892,27 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             lay(kind, flags, shape)
         # Дома и поверхность — из уже написанных тайлов: в памяти их нет.
         signals = _signal_grid(points)
-        waffles = set()
+        boxes, junction_areas = [], []
         for set_name in written_sets:
             for kind, flags, shape in written_areas(target_dir, set_name):
                 if kind == AREA_JUNCTION_BOX:
-                    waffle = waffle_zone(shape, signals)
-                    if waffle and _waffle_key(waffle) not in waffles:
-                        waffles.add(_waffle_key(waffle))
-                        _put(buckets, zoom, LAYER_SURFACE, mvt.POLYGON, waffle, {"kind": KIND_WAFFLE})
+                    boxes.append(shape)
+                if kind in (AREA_JUNCTION, AREA_JUNCTION_BOX) and flags & 1:
+                    junction_areas.append(shape)
                 lay(kind, flags, shape)
+        # Разметка — после узлов: режется их площадью.
+        mask = JunctionMask(junction_areas + crossing_cores(roads))
+        for line in lane_markings(roads, widths, mask):
+            _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, {"verified": True})
+        # «Вафли» — после всех центров: светофор отдаётся ближайшему узлу.
+        centres = box_centres(boxes)
+        waffles = WaffleSet()
+        for box in boxes:
+            waffle = waffle_zone(box, signals, centres)
+            centre = waffles.add(waffle) if waffle else None
+            if centre:
+                _put(buckets, zoom, LAYER_SURFACE, mvt.POLYGON, waffle, {"kind": KIND_WAFFLE})
+                _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [centre], {"kind": KIND_WAFFLE})
         # Зебры линиями переходов. Линия размечена тегом — или на ней лежит
         # размеченный узел перехода (у Пахтакора линия без тега, а узлы — zebra).
         # Узловая зебра рядом с нарисованной линией — тот же переход, дубль.
@@ -638,7 +926,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             if not marked and not any(_near_crossing_way(spot, painted_nodes, NODE_ON_WAY_METERS)
                                       for spot in line):
                 continue
-            _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": KIND_ZEBRA_WAY})
+            for piece in zebra_pieces(line):
+                _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, piece, {"kind": KIND_ZEBRA_WAY})
             for lon, lat in line:
                 crossing_grid[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
         for point in points:

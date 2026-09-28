@@ -148,15 +148,31 @@ def defect(ring, shape_checks=True):
     return None
 
 
-def defect_of_kind(kind, ring):
+def defect_of_kind(kind, ring, flags=0):
     """Проверка по виду поверхности.
 
     Иглы и лезвия — брак у разделительных, островков, узлов и центров
     перекрёстков. У полотна (7) и галтели (13) это форма по построению:
     короткий кусок ленты «узок» по средней ширине, а галтель сходится к
     дуге острыми носиками. Им — только целостность.
+
+    Полоса между встречными лентами (бит STRIP_FLAG у видов 8 и 9 —
+    разделительная и асфальт между лентами внутри узла) длинная и узкая по
+    построению, а её торец у перехода после округления до 1e-5° даёт острый
+    угол. Ей — целостность и средняя ширина не меньше метра: уже метра
+    разделительная на карте всё равно не видна.
     """
+    if flags & STRIP_FLAG and kind in (8, 9):
+        reason = defect(ring, shape_checks=False)
+        if reason:
+            return reason
+        area, perimeter = area_and_perimeter(to_meters(ring))
+        return REASON_SLIVER if 2.0 * area / perimeter < SLIVER_MAX_MEAN_WIDTH_METERS else None
     return defect(ring, shape_checks=(kind not in (7, 13)))
+
+
+# Бит полосы между встречными лентами (build_roads.AREA_FLAG_STRIP).
+STRIP_FLAG = 2
 
 
 # --- Отчёт по готовым тайлам ------------------------------------------------
@@ -176,11 +192,11 @@ def scan(tiles_dir, bbox=None):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import build_mvt
     total, bad, shapes = Counter(), Counter(), []
-    for kind, _flags, ring in build_mvt.written_areas(tiles_dir, "d"):
+    for kind, flags, ring in build_mvt.written_areas(tiles_dir, "d"):
         if kind not in KIND_NAMES or not _inside(ring, bbox):
             continue
         total[kind] += 1
-        reason = defect_of_kind(kind, ring)
+        reason = defect_of_kind(kind, ring, flags)
         if reason:
             bad[(kind, reason)] += 1
             shapes.append((kind, reason, ring))

@@ -3986,8 +3986,8 @@ def quantized(ring):
 
 def surface_gate(figure):
     """Пропустить фигуру поверхности в тайл или отказать (и сосчитать отказ)."""
-    kind, _flags, ring = figure
-    reason = surface_check.defect_of_kind(kind, quantized(ring))
+    kind, flags, ring = figure
+    reason = surface_check.defect_of_kind(kind, quantized(ring), flags)
     if reason:
         SURFACE_REJECTED[(kind, reason)] += 1
         return False
@@ -4160,8 +4160,12 @@ def build_medians(chains, junctions=()):
                     continue
                 if not _opposite(one[2], other[2]):
                     continue
-                for strip in _median_strips(one, other, junctions):
+                fills = []
+                for strip in _median_strips(one, other, junctions, fills):
                     out.append((AREA_MEDIAN, AREA_FLAG_CLOSED | AREA_FLAG_STRIP, strip))
+                # Промежуток между лентами внутри узла — асфальт перекрёстка.
+                for fill in fills:
+                    out.append((AREA_JUNCTION, AREA_FLAG_CLOSED | AREA_FLAG_STRIP, fill))
     return out
 
 
@@ -4197,7 +4201,7 @@ def _median_strip(one, other, junctions=()):
     return strips[0] if strips else []
 
 
-def _median_strips(one, other, junctions=()):
+def _median_strips(one, other, junctions=(), fills=None):
     """Многоугольники между внутренними кромками двух встречных проезжих.
 
     Три условия продолжения, кроме расстояния: не перекрёсток; проекция на
@@ -4206,55 +4210,148 @@ def _median_strips(one, other, junctions=()):
     первый же перекрёсток обрывал разделительную на всю оставшуюся длину
     проспекта (Мукими у «Новзы», 28.09.2026 — за узлом её не было вовсе).
     Каждая полоса проходит surface_check: кривая на карту не едет.
+
+    `fills` — если передан список, в него уходит промежуток между теми же
+    кромками ВНУТРИ узла. Там в жизни проезжая часть пересекающей улицы, а у
+    нас был белый клин фона между лентами от перехода до центра перекрёстка;
+    его заливают асфальтом (вид узла).
     """
     strips = []
-    left, right = [], []
+    half_one = one[4] / 2.0 / LAT_METERS
+    half_two = other[4] / 2.0 / LAT_METERS
 
-    def close():
-        if len(left) >= 2:
-            ring = left + list(reversed(right))
-            if surface_check.defect(ring) is None:
-                strips.append(ring)
+    def edges_for(spot, near):
+        scale = _lon_scale([spot]) or 1.0
+        toward = _unit((near[0] - spot[0]) * scale, near[1] - spot[1])
+        if toward == (0.0, 0.0):
+            return None
+        return (_shift(spot, toward, half_one, scale),
+                _shift(near, (-toward[0], -toward[1]), half_two, scale))
 
+    def probe(distance):
+        """(годна ли, кромки) в точке `distance` метров вдоль `one`."""
+        spot = _point_along(one[2], distance)
+        near, gap, _along = _nearest_along(spot, other[2])
+        if near is None or not (MEDIAN_MIN_METERS <= gap <= MEDIAN_MAX_METERS):
+            return False, None
+        edges = edges_for(spot, near)
+        inside = _at_junction(spot, junctions) and _at_junction(near, junctions)
+        return not inside, edges
+
+    def boundary(good, bad):
+        """Последние годные кромки между годной и негодной точкой (пополам).
+
+        Шаг полосы — 25 м, и без уточнения она кончалась на последнем
+        «хорошем» шаге: за 10–30 м до перехода оставался белый клин фона.
+        """
+        found = None
+        for _ in range(MEDIAN_REFINE_STEPS):
+            middle = (good + bad) / 2.0
+            ok, edges = probe(middle)
+            if ok and edges:
+                good, found = middle, edges
+            else:
+                bad = middle
+        return found
+
+    def emit(rows, sink, check):
+        """rows — [(левая, правая, уточнённая?)]; сначала с уточнёнными концами,
+        а если такая фигура бракуется — без них, как было до уточнения."""
+        for keep_refined in (True, False):
+            kept = [r for r in rows if keep_refined or not r[2]]
+            if len(kept) < 2:
+                continue
+            ring = [r[0] for r in kept] + [r[1] for r in reversed(kept)]
+            if check(ring) is None:
+                sink.append(ring)
+                return
+
+    rows, fill_rows = [], []
     direction = 0
     previous_along = previous_gap = None
-    for spot, _segment in _walk(one[2], MEDIAN_STEP_METERS):
+    previous_distance, previous_good = None, False
+    for index, (spot, _segment) in enumerate(_walk(one[2], MEDIAN_STEP_METERS)):
+        distance = index * MEDIAN_STEP_METERS
         near, gap, along = _nearest_along(spot, other[2])
+        in_range = near is not None and MEDIAN_MIN_METERS <= gap <= MEDIAN_MAX_METERS
         # Разделительную рвёт только дорога, соединяющая ОБЕ проезжие, —
         # перекрёсток или разворот: у него узлы с обеих сторон. Съезд или
         # выезд со двора справа даёт узел на одной ленте и полосу не пересекает;
         # раньше каждый такой узел обрывал её (Мукими у «Новзы»: шесть кусков
         # вместо одной полосы и белая щель между лентами).
-        if near is not None and _at_junction(spot, junctions) and _at_junction(near, junctions):
-            near = None
-        if near is not None and previous_along is not None:
+        at_node = in_range and _at_junction(spot, junctions) and _at_junction(near, junctions)
+        jumped = False
+        if in_range and not at_node and previous_along is not None:
             step = along - previous_along
             if direction == 0 and abs(step) > MEDIAN_BACKTRACK_METERS:
                 direction = 1 if step > 0 else -1
             if direction and step * direction < -MEDIAN_BACKTRACK_METERS:
-                near = None
+                jumped = True
             elif abs(gap - previous_gap) > MEDIAN_MAX_GAP_JUMP_METERS:
-                near = None
-        if near is None or not (MEDIAN_MIN_METERS <= gap <= MEDIAN_MAX_METERS):
+                jumped = True
+        good = in_range and not at_node and not jumped
+        edges = edges_for(spot, near) if in_range else None
+        if not good:
             # Разрыв — конец полосы: проспект расходится или идёт узел.
-            # Продолжать через разрыв значило бы нарисовать островок поперёк
-            # перекрёстка; за ним начинается новая полоса.
-            close()
-            left, right = [], []
+            # У узла и у расхождения конец уточняется до метра; у прыжка
+            # проекции — нет: там между шагами неизвестно, что годно.
+            if previous_good and rows and not jumped:
+                refined = boundary(previous_distance, distance)
+                if refined:
+                    rows.append((refined[0], refined[1], True))
+                    if at_node:
+                        fill_rows.append((refined[0], refined[1], True))
+            emit(rows, strips, _strip_defect)
+            rows = []
             direction = 0
             previous_along = previous_gap = None
+            if at_node and edges:
+                fill_rows.append((edges[0], edges[1], False))
+            else:
+                if fills is not None:
+                    emit(fill_rows, fills, _strip_defect)
+                fill_rows = []
+            previous_distance, previous_good = distance, False
             continue
         previous_along, previous_gap = along, gap
-        scale = _lon_scale([spot]) or 1.0
-        half_one = one[4] / 2.0 / LAT_METERS
-        half_two = other[4] / 2.0 / LAT_METERS
-        toward = _unit((near[0] - spot[0]) * scale, near[1] - spot[1])
-        if toward == (0.0, 0.0):
+        if edges is None:
             continue
-        left.append(_shift(spot, toward, half_one, scale))
-        right.append(_shift(near, (-toward[0], -toward[1]), half_two, scale))
-    close()
+        if not rows and previous_distance is not None and not previous_good:
+            # Начало после разрыва — тоже с точностью до метра.
+            refined = boundary(distance, previous_distance)
+            if refined:
+                rows.append((refined[0], refined[1], True))
+                if fill_rows:
+                    fill_rows.append((refined[0], refined[1], True))
+        if fill_rows and fills is not None:
+            emit(fill_rows, fills, _strip_defect)
+        fill_rows = []
+        rows.append((edges[0], edges[1], False))
+        previous_distance, previous_good = distance, True
+    emit(rows, strips, _strip_defect)
     return strips
+
+
+def _strip_defect(ring):
+    """Та же проверка, что у ворот тайлов для полосы между лентами."""
+    return surface_check.defect_of_kind(AREA_MEDIAN, ring, AREA_FLAG_STRIP)
+
+
+# Уточнение конца разделительной делением пополам: шаг 25 м / 2⁵ < 1 м.
+MEDIAN_REFINE_STEPS = 5
+
+
+def _point_along(points, distance):
+    """Точка ломаной в `distance` метрах от начала (за концом — конец)."""
+    travelled = 0.0
+    for before, after in zip(points, points[1:]):
+        piece = meters_between(before, after)
+        if piece > 0 and travelled + piece >= distance:
+            share = (distance - travelled) / piece
+            return (before[0] + (after[0] - before[0]) * share,
+                    before[1] + (after[1] - before[1]) * share)
+        travelled += piece
+    return points[-1]
 
 
 # Клетка поиска перекрёстка. Больше любого радиуса узла: половина самой

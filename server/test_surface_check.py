@@ -94,7 +94,34 @@ class MedianTests(unittest.TestCase):
         self.assertEqual(len(strips), 2, "по полосе с каждой стороны узла")
         for strip in strips:
             self.assertIsNone(sc.defect(strip))
-            self.assertFalse(any(build_roads._at_junction(p, junctions) for p in strip[:len(strip) // 2]))
+            deeper = [(node, radius - 5.0) for node, radius in junctions]
+            self.assertFalse(any(build_roads._at_junction(p, deeper) for p in strip),
+                             "полоса доходит до края узла, но не лезет в его середину")
+
+    def test_median_reaches_the_junction_edge(self):
+        # Шаг 25 м: без уточнения полоса кончалась за 10–30 м до перехода.
+        one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (600, 0)), "Muqimiy ko'chasi", 10.0)
+        other = (3, build_roads.FLAG_ONEWAY, ring((600, 22), (0, 22)), "Muqimiy ko'chasi", 10.0)
+        junctions = [(metres(310, 11), 22.0)]      # край узла по оси: 310 ± ~19 м
+        strips = build_roads._median_strips(one, other, junctions)
+        self.assertEqual(len(strips), 2)
+        kx = sc.LAT_METERS * math.cos(math.radians(LAT))
+        west_end = min((max(p[0] for p in s) - LON) * kx for s in strips)
+        # Ось входит в круг узла на 310 − √(22² − 11²) ≈ 291 м.
+        self.assertGreater(west_end, 289, "до края узла меньше пары метров, а не шаг в 25 м")
+        self.assertLess(west_end, 293)
+        for strip in strips:
+            self.assertIsNone(sc.defect(strip))
+
+    def test_strip_gate_checks_integrity_and_width_not_angles(self):
+        # Полоса 2,5 × 200 м с острым торцом: для полосы это форма, не брак.
+        strip = ring((0, 0), (200, 0), (203, 2.5), (0, 2.5))
+        self.assertIsNone(sc.defect_of_kind(9, strip, sc.STRIP_FLAG))
+        self.assertIsNone(sc.defect_of_kind(8, strip, sc.STRIP_FLAG))
+        thread = ring((0, 0), (200, 0), (200, 0.6), (0, 0.6))
+        self.assertEqual(sc.defect_of_kind(9, thread, sc.STRIP_FLAG), sc.REASON_SLIVER)
+        bowtie = ring((0, 0), (20, 5), (20, 0), (0, 5))
+        self.assertIsNotNone(sc.defect_of_kind(9, bowtie, sc.STRIP_FLAG))
 
     def test_side_ramp_does_not_break_the_median(self):
         # Съезд справа примыкает к одной ленте — разделительная идёт дальше.

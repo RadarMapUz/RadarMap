@@ -2644,11 +2644,17 @@ class MedianTests(unittest.TestCase):
         made = build_roads.build_medians(pair, junctions=[(middle, 25.0)])
         joined = build_roads.build_medians(pair)
         self.assertTrue(joined, "проверка ничего не ловит: полосы и так нет")
-        for _kind, _flags, ring in made:
+        for kind, _flags, ring in made:
+            if kind != build_roads.AREA_MEDIAN:
+                # Промежуток между лентами внутри узла — асфальт, не земля.
+                self.assertEqual(kind, build_roads.AREA_JUNCTION)
+                continue
             for point in ring:
                 self.assertGreater(
                     build_roads.meters_between(point, middle), 20.0,
                     "полоса зашла в перекрёсток")
+        self.assertTrue(any(kind == build_roads.AREA_JUNCTION for kind, _f, _r in made),
+                        "между лентами внутри узла — асфальт, а не белый клин фона")
 
     def test_junction_spots_take_the_widest_arm(self):
         node = (69.25, 41.30)

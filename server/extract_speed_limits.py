@@ -109,6 +109,33 @@ def previous_count(path):
         return 0
 
 
+# Пол лимита на магистралях — тот же, что EnforcedLimit.floorKmh в приложении.
+#
+# Замер 29.09.2026 по боевому файлу: в Ташкенте у 786 участков trunk, primary,
+# secondary и tertiary записано 50 (ещё ~70 — 40 и 30). Это те самые улицы,
+# где висят камеры, а камер на 50 в городе нет ни одной: фиксация начинается
+# с 60 (владелец, 30.09.2026: «в городе радары все 60»). Для денег и рейтинга
+# пол 60 в приложении уже стоял, а голос, HUD и знак продолжали говорить 50 —
+# водитель слышал ограничение, которого камера не применяет, и переставал
+# верить остальному. Пол ставится здесь, в данных, — все сборки приложения
+# получают его со следующей выгрузкой, без релиза.
+#
+# Дворы и проезды (residential, service) не трогаем: 5–40 там — настоящие
+# знаки у школ, парковок и въездов во двор, и камер там нет.
+MAIN_ROAD_FLOOR_KMH = 60
+MAIN_ROAD_CLASSES = {1, 2, 3, 4, 5}
+
+
+def floor_main_roads(segments):
+    """Поднять лимит ниже пола на магистралях. Возвращает, сколько поднято."""
+    raised = 0
+    for segment in segments:
+        if segment[1] in MAIN_ROAD_CLASSES and segment[0] < MAIN_ROAD_FLOOR_KMH:
+            segment[0] = MAIN_ROAD_FLOOR_KMH
+            raised += 1
+    return raised
+
+
 def collect(pbf):
     """Пройти выгрузку и собрать [[limit, cls, [lat,lon,...]], ...]."""
     import osmium
@@ -179,6 +206,8 @@ def companions_fresh(out):
 
 def main():
     segments, skipped = collect(PBF)
+    print("пол %d на магистралях: поднято %d сегментов" % (
+        MAIN_ROAD_FLOOR_KMH, floor_main_roads(segments)))
     allowed, why = decide(previous_count(OUT), len(segments))
     print(why)
     if not allowed:

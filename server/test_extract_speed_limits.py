@@ -165,6 +165,19 @@ class PublishedFilesTests(unittest.TestCase):
         os.unlink(self.out + ".gz")
         self.assertFalse(sl.companions_fresh(self.out))
 
+class MainRoadFloorTests(unittest.TestCase):
+    def test_main_roads_below_sixty_are_raised(self):
+        # «В городе радары все 60»: 50 на проспекте — это не знак у камеры.
+        segments = [[50, 3, []], [40, 5, []], [30, 2, []], [80, 3, []], [60, 4, []]]
+        self.assertEqual(sl.floor_main_roads(segments), 3)
+        self.assertEqual([s[0] for s in segments], [60, 60, 60, 80, 60])
+
+    def test_yards_and_service_roads_keep_their_signs(self):
+        # 20 у школы и 5 на парковке — настоящие знаки, камер там нет.
+        segments = [[20, 6, []], [40, 6, []], [5, 7, []], [30, 8, []]]
+        self.assertEqual(sl.floor_main_roads(segments), 0)
+        self.assertEqual([s[0] for s in segments], [20, 40, 5, 30])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)

@@ -1151,7 +1151,7 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                     boxes.append(shape)
                 if kind in (AREA_JUNCTION, AREA_JUNCTION_BOX) and flags & 1:
                     junction_areas.append(shape)
-                if kind == AREA_MEDIAN and flags & 2:
+                if (kind == AREA_MEDIAN and flags & 2) or kind == AREA_DIVIDER:
                     strips.append((kind, flags, shape))
                     continue
                 lay(kind, flags, shape)
@@ -1168,7 +1168,11 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # перекрёстка вылез зелёной кляксой в его середине (28.09.2026).
         # Полоса, чей центр внутри узла, — не разделительная проспекта.
         for kind, flags, shape in strips:
-            if strip_outside_junction(shape, mask):
+            if kind == AREA_DIVIDER:
+                # Двойная линия — как пунктир: режется площадью перекрёстка.
+                for piece in mask.clip(shape):
+                    lay(kind, flags, piece)
+            elif strip_outside_junction(shape, mask):
                 lay(kind, flags, shape)
         for line, centre in _markings(roads, widths, mask):
             props = {"centre": centre} if centre else {"verified": True}

@@ -52,15 +52,26 @@ class StyleTests(unittest.TestCase):
         for name in names:
             self.assertIn(name, sprite)
 
-    def test_waffle_pattern_is_in_the_sprite(self):
+    def test_trees_and_yellow_kerbs_like_yandex(self):
         import json as _json
         sprite = _json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprite", "sprite.json")))
-        layer = next(l for l in self.style["layers"] if l["id"] == "radar-waffle")
-        self.assertIn(layer["paint"]["fill-pattern"], sprite)
+        layers = {l["id"]: l for l in self.style["layers"]}
+        ids = [l["id"] for l in self.style["layers"]]
+        self.assertIn(layers["trees"]["paint"]["fill-pattern"], sprite)
+        self.assertLess(ids.index("trees"), ids.index("radar-roads-case"), "деревья под дорогой")
+        case = layers["radar-roads-case"]["paint"]["line-color"]
+        self.assertIn(make_style.PALETTES[self.theme]["kerb"], case)
+
+    def test_signal_icons_are_per_approach_points(self):
+        import json as _json
+        sprite = _json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprite", "sprite.json")))
         icon = next(l for l in self.style["layers"] if l["id"] == "radar-signal-icon")
         self.assertIn(icon["layout"]["icon-image"], sprite)
-        # По точке центра: по полигону MapLibre ставит значок в каждом тайле.
         self.assertIn(["==", ["geometry-type"], "Point"], icon["filter"])
+        self.assertIn(["==", ["get", "kind"], 14], icon["filter"])
+        # Жёлтой «вафли» нет — как у Яндекса.
+        ids = [l["id"] for l in self.style["layers"]]
+        self.assertNotIn("radar-waffle", ids)
 
     def test_median_strips_over_the_roads_islands_under(self):
         # Узкий разделитель под каймой лент исчезал (Мукими); островок из осей
@@ -95,21 +106,20 @@ class StyleTests(unittest.TestCase):
         first_ours = ids.index("radar-roads-case")
         roads = [l for l in self.style["layers"]
                  if l.get("source-layer") == "transportation" and l["type"] == "line"
-                 and l["id"].startswith("highway-") and "path" not in l["id"]]
+                 and l["id"].startswith("highway-") and "path" not in l["id"]
+                 and "construction" not in l["id"]]
         self.assertTrue(roads)
         fills = [l for l in roads if not l["id"].endswith("-casing")]
         self.assertTrue(fills)
         for layer in fills:
             self.assertNotIn("maxzoom", layer, layer["id"])
             self.assertLess(ids.index(layer["id"]), first_ours, "под нашими слоями")
+            # С 15-го — узкая, чтобы не торчать зубцами из-под нашей ленты.
+            width = layer["paint"]["line-width"]
+            self.assertIn(make_style.OUR_ROADS_FROM, width, layer["id"])
         for layer in roads:
             if layer["id"].endswith("-casing"):
                 self.assertEqual(layer.get("maxzoom"), make_style.OUR_ROADS_FROM, layer["id"])
-
-    def test_bridges_cover_the_waffle(self):
-        # Эстакада Фурката над перекрёстком Навои: «вафля» нижнего уровня — под мостом.
-        ids = [layer["id"] for layer in self.style["layers"]]
-        self.assertLess(ids.index("radar-waffle"), ids.index("radar-bridge"))
 
     def test_fillets_lie_over_the_roads_and_under_the_paint(self):
         ids = [layer["id"] for layer in self.style["layers"]]

@@ -49,6 +49,8 @@ PALETTES = {
         # Кайма НАШИХ лент — нейтральная: жёлтая у каждой ленты давала «нитки»
         # внутри асфальта там, где две ленты лежат рядом (Фурката, 28.09.2026).
         "casing": "#aab2bf",
+        # Жёлтая кромка магистрали — как у Яндекса (снимок 05.10.2026).
+        "kerb": "#f0c93f", "trees": "trees",
         "label": "#4a4a4a", "halo": "#ffffff", "signal": "#3b3b3b", "signal_ring": "#f5d547",
     },
     "dark": {
@@ -57,6 +59,7 @@ PALETTES = {
         "minor": "#262b33", "minor_edge": "#1a1e24", "minor_edge_far": "#1a1e24", "path": "#20252c",
         "median": "#1c2a22", "paint": "#d9dee6", "building": "#1c2027", "landuse": "#151a21",
         "casing": "#2b3039",
+        "kerb": "#8c7033", "trees": "trees-dark",
         "label": "#c9ced6", "halo": "#0f1216", "signal": "#101318", "signal_ring": "#f0c64a",
     },
 }
@@ -67,13 +70,28 @@ ROADS_KEEP_LAYERS = {"transportation", "transportation_name", "water", "waterway
 ROADS_KEEP_IDS = {"background", "landcover-grass", "landcover-grass-park", "landcover-wood"}
 
 
-def class_width(metres, extra=0.0, low=0.6):
-    """Ширина линии OpenMapTiles по классу; у односторонней ленты — доля ONEWAY_SHARE."""
-    def stop(z):
-        full = max(low + extra, metres * (2 ** z) * M + extra)
-        half = max(low + extra, metres * ONEWAY_SHARE * (2 ** z) * M + extra)
+# Доля ширины запасной линии основы, когда полотно рисуем мы (с
+# OUR_ROADS_FROM). Полной ширины она торчала зубцами из-под нашей ленты у
+# съездов, где геометрия OpenMapTiles и наша расходятся (Беруни, 05.10.2026);
+# узкая прячется под нашим полотном, а без нашего тайла дорога всё равно есть.
+FALLBACK_SHARE = 0.45
+
+
+def class_width(metres, extra=0.0, low=0.6, near_share=1.0):
+    """Ширина линии OpenMapTiles по классу; у односторонней ленты — доля ONEWAY_SHARE.
+
+    near_share — множитель с OUR_ROADS_FROM (запасная линия под нашей лентой).
+    """
+    def stop(z, share=1.0):
+        full = max(low + extra, metres * share * (2 ** z) * M + extra)
+        half = max(low + extra, metres * ONEWAY_SHARE * share * (2 ** z) * M + extra)
         return ["case", ["==", ["get", "oneway"], 1], half, full]
-    return ["interpolate", ["exponential", 2], ["zoom"], 10, stop(10), 13, stop(13), 16, stop(16), 20, stop(20)]
+    if near_share == 1.0:
+        return ["interpolate", ["exponential", 2], ["zoom"], 10, stop(10), 13, stop(13), 16, stop(16), 20, stop(20)]
+    edge = OUR_ROADS_FROM
+    return ["interpolate", ["exponential", 2], ["zoom"], 10, stop(10), 13, stop(13),
+            edge - 0.1, stop(edge - 0.1), edge, stop(edge, near_share),
+            16, stop(16, near_share), 20, stop(20, near_share)]
 
 
 def measured(extra=0.0, low=1.0):
@@ -146,7 +164,8 @@ def _base_layer(layer, p, mode):
                 # вблизи — асфальт, на котором видна разметка. Как у Яндекса.
                 paint["line-color"] = ["interpolate", ["linear"], ["zoom"], 13, p["road_far"], 15.5, p["road"]] \
                     if major else p["minor"]
-            paint["line-width"] = class_width(metres, (2.0 if major else 1.4) if casing else 0.0)
+            paint["line-width"] = class_width(metres, (2.0 if major else 1.4) if casing else 0.0,
+                                              near_share=1.0 if casing else FALLBACK_SHARE)
             paint["line-opacity"] = 1 if major else ["interpolate", ["linear"], ["zoom"], 12.5, 0, 13.5, 1]
             # С OUR_ROADS_FROM полотно рисуем мы, но сама линия основы остаётся
             # ПОД нашими слоями как запасная: где нашего тайла нет (офлайн,
@@ -187,8 +206,11 @@ def _our_layers(p):
         {"id": "radar-roads-case", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
-         "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["casing"], p["minor_edge"]],
-                   "line-width": measured(2.0)}},
+         # Кромка: у магистралей (trunk…secondary) — жёлтая, как у Яндекса;
+         # у tertiary — нейтральная, у мелких — цвет края мелкой улицы.
+         "paint": {"line-color": ["case", ["<=", ["get", "cls"], 4], p["kerb"],
+                                  ["<=", ["get", "cls"], 5], p["casing"], p["minor_edge"]],
+                   "line-width": measured(2.4)}},
         {"id": "radar-roads", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
@@ -207,6 +229,14 @@ def _our_layers(p):
          "minzoom": OUR_ROADS_FROM,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 13]],
          "paint": {"fill-color": ["case", ["get", "major"], p["road"], p["minor"]], "fill-antialias": True}},
+        # Двойная разделительная линия (вид 15): между встречными лентами, где
+        # места под полосу нет, — как жёлтая двойная у Яндекса на Беруни.
+        {"id": "radar-divider", "type": "line", "source": "radar", "source-layer": "surface",
+         "minzoom": 15.5, "filter": ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "kind"], 15]],
+         "layout": {"line-join": "round", "line-cap": "butt"},
+         "paint": {"line-color": p["kerb"],
+                   "line-width": ["interpolate", ["linear"], ["zoom"], 15.5, 0.7, 19, 1.8],
+                   "line-gap-width": ["interpolate", ["exponential", 2], ["zoom"], 15.5, 0.6, 19, 5]}},
         # Площадь перекрёстка: скругляет углы между подходами. Узлы строятся
         # только там, где сходится дорога шире 9 м, и обрезаны кругом
         # досягаемости — цвет магистрального асфальта им честен.
@@ -229,16 +259,8 @@ def _our_layers(p):
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
                     ["has", "strip"]],
          "layout": {"line-join": "round"},
-         "paint": {"line-color": p["casing"],
+         "paint": {"line-color": p["kerb"],
                    "line-width": ["interpolate", ["linear"], ["zoom"], 16, 0.6, 19, 1.6]}},
-        # «Вафля» регулируемого перекрёстка (вид 11): зона между стоп-линиями,
-        # очерченная светофорами подходов (build_mvt.waffle_zone). Как у Яндекса.
-        {"id": "radar-waffle", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 17,
-         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 11]],
-         "paint": {"fill-pattern": "waffle", "fill-opacity": 0.8}},
-        {"id": "radar-waffle-edge", "type": "line", "source": "radar", "source-layer": "surface", "minzoom": 17,
-         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 11]],
-         "paint": {"line-color": "#f2c230", "line-width": 1.2, "line-opacity": 0.85}},
         # Зебры: штрихи вдоль движения, толщина — ширина полосы зебры.
         {"id": "radar-crossing", "type": "line", "source": "radar", "source-layer": "paint", "minzoom": 16.5,
          "filter": ["==", ["get", "kind"], 5],
@@ -296,10 +318,11 @@ def _our_layers(p):
                     "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map",
                     "icon-pitch-alignment": "map", "icon-allow-overlap": True, "icon-ignore-placement": True,
                     "icon-size": ["interpolate", ["exponential", 2], ["zoom"], 17, 0.55, 20, 2.2]}},
-        # Светофор — один значок в центре регулируемого перекрёстка, как у
-        # Яндекса; точки у каждого подъезда читались мусором посреди полос.
+        # Светофоры как у Яндекса: по значку на каждый подход, ромбом вокруг
+        # центра регулируемого перекрёстка (build_mvt.approach_lights, вид 14).
+        # Жёлтой «вафли» больше нет — у Яндекса её нет (снимок 05.10.2026).
         {"id": "radar-signal-icon", "type": "symbol", "source": "radar", "source-layer": "surface", "minzoom": 16,
-         "filter": ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], 11]],
+         "filter": ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], 14]],
          "layout": {"icon-image": "traffic-light", "icon-allow-overlap": True,
                     "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.6, 19, 1.1]}},
     ]
@@ -331,6 +354,17 @@ def build(base, theme="light", mode="full"):
                                                                       ["coalesce", ["get", "render_height"], 8]],
                                             "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
                                             "fill-extrusion-opacity": 0.92}})
+    # Деревья поверх зелени (узор крон из спрайта), сразу над последним слоем
+    # газона/парка/леса — под дорогами и домами. С 15-го зума: дальше кроны
+    # сливаются в рябь.
+    green = [k for k, l in enumerate(out) if l.get("source-layer") in ("landcover", "park")
+             and l["type"] == "fill"]
+    if green:
+        out.insert(green[-1] + 1, {
+            "id": "trees", "type": "fill", "source": "openmaptiles", "source-layer": "landcover",
+            "minzoom": 15, "filter": ["in", ["get", "class"], ["literal", ["wood", "grass"]]],
+            "paint": {"fill-pattern": p["trees"],
+                      "fill-opacity": ["interpolate", ["linear"], ["zoom"], 15, 0, 15.6, 1]}})
     first_symbol = next((k for k, l in enumerate(out) if l["type"] == "symbol"), len(out))
     out[first_symbol:first_symbol] = _our_layers(p)
     s["layers"] = out

@@ -96,6 +96,14 @@ FLAG_LANES_TAGGED = 1 << 8
 # в очереди изменений: только у своей геометрии есть срок пересмотра и только
 # её надо снимать, когда OSM догонит.
 FLAG_HAND_DRAWN = 1 << 9
+# Полосы УГАДАНЫ по соседям той же улицы (lane_inference.py), а не из тега.
+#
+# Отдельный бит, а не FLAG_LANES_TAGGED: очередь панели — «где OSM молчит», и
+# угаданное туда должно попадать по-прежнему. Ширина полотна и разметка берут
+# угаданное (точность 97,5 % на спрятанных размеченных участках Ташкента,
+# 05.10.2026); сплошная осевая и всё, что про ПДД, — только подтверждённое.
+# Телефон бит не читает, как и TAGGED.
+FLAG_LANES_INFERRED = 1 << 10
 
 # Своя дорога короче этого — не дорога, а дрожь мыши.
 MIN_DRAWN_METERS = 20.0
@@ -1563,14 +1571,53 @@ def street_width(pieces):
     у всех восьми улиц центра в одном кадре по две-три разные ширины, и
     рисовались они пятнадцатью кусками встык.
     """
-    measured = [p for p in pieces if p[1] & FLAG_LANES_TAGGED and lanes_of(p[1])]
+    measured = [p for p in pieces
+                if p[1] & (FLAG_LANES_TAGGED | FLAG_LANES_INFERRED) and lanes_of(p[1])]
     source = measured or pieces
     return max(road_width_meters(p[0], lanes_of(p[1])) for p in source)
+
+
+def apply_lane_inference(roads):
+    """Дороги с угаданными полосами там, где тега нет. (дороги, сколько угадано).
+
+    Нарисованное руками не трогаем: у своей геометрии полосы ставит человек.
+    """
+    import lane_inference
+    guessed = lane_inference.infer_lanes(
+        roads, lanes_of,
+        lambda flags: flags & FLAG_LANES_TAGGED,
+        lambda flags: flags & FLAG_ONEWAY)
+    if not guessed:
+        return roads, 0
+    out = []
+    count = 0
+    for road in roads:
+        hit = guessed.get(id(road))
+        if hit and not road[1] & FLAG_HAND_DRAWN:
+            flags = with_lanes(road[1], clamp_lanes(road[0], hit[0])) | FLAG_LANES_INFERRED
+            road = (road[0], flags) + tuple(road[2:])
+            count += 1
+        out.append(road)
+    return out, count
 
 
 def merge_streets(roads):
     """Куски → улицы. [(код, биты, точки, имя, ширина, измерена)]"""
     return [street for street, _chain in street_chains(roads)]
+
+
+# Насколько лента может развернуться от направления своего первого куска.
+# Больше — это уже встречная проезжая или петля, а не та же лента.
+MAX_CHAIN_SWING = 100.0
+
+
+def _heading(a, b):
+    scale = math.cos(math.radians(a[1])) or 1.0
+    return math.degrees(math.atan2((b[0] - a[0]) * scale, b[1] - a[1])) % 360
+
+
+def _angle_between(a, b):
+    return abs((a - b + 180) % 360 - 180)
 
 
 def street_chains(roads):
@@ -1610,6 +1657,7 @@ def street_chains(roads):
             used[index] = True
             points = list(first[2])
             chain = [first]
+            heading = _heading(points[0], points[-1])
             grew = True
             while grew:
                 grew = False
@@ -1638,6 +1686,17 @@ def street_chains(roads):
                             continue
                         turn = _turn_between(inner, edge, forward[1])
                         if turn > MAX_MERGE_TURN:
+                            continue
+                        # Общий разворот ленты. На каждом стыке поворот мал,
+                        # но несколько коротких кусков в конце проспекта
+                        # сворачивали ленту на 180°: обе проезжие Беруни
+                        # склеились в одну петлю из 57 кусков (05.10.2026), и
+                        # пары встречных лент — разделительной, сужения —
+                        # у проспекта не стало. Направление нового куска
+                        # сверяется с направлением первого.
+                        piece_heading = (_heading(edge, forward[-1]) if at_tail
+                                         else _heading(forward[-1], edge))
+                        if _angle_between(piece_heading, heading) > MAX_CHAIN_SWING:
                             continue
                         if best_turn is None or turn < best_turn:
                             best, best_turn, best_line = other, turn, forward
@@ -2184,6 +2243,12 @@ AREA_JUNCTION_BOX = 10
 # асфальт между точкой встречи кромок и дугой бордюра. Бит FLAG_FILLET_MAJOR —
 # обе дороги магистральные (красится цветом проспекта, иначе — проезда).
 AREA_FILLET = 13
+# Двойная разделительная ЛИНИЯ между встречными лентами, когда места под
+# полосу нет (зазор между кромками уже MEDIAN_LINE_BELOW_METERS). Как у
+# Яндекса на Беруни (05.10.2026). Линия, а не многоугольник; приложение вид 15
+# не знает и пропускает.
+AREA_DIVIDER = 15
+MEDIAN_LINE_BELOW_METERS = 2.5
 FILLET_MAJOR = 2
 AREA_FLAG_CLOSED = 1
 # Разделительная ПОЛОСА между встречными лентами (build_medians), в отличие от
@@ -3854,10 +3919,17 @@ FILLET_WIDTH_SHARE = 0.6
 FILLET_RADIUS_MIN = 5.0
 FILLET_RADIUS_MAX = 12.0
 # Угол между подходами: уже этого — съезд вдоль дороги, шире — почти прямая.
-FILLET_MIN_ANGLE = 25.0
+#
+# Было 25°: на остром угле касательные уходили на 20+ м вдоль кромок, и
+# галтель становилась длинным асфальтовым клином МЕЖДУ дорогами — зубцами
+# вдоль правой кромки Беруни у вливающихся съездов (05.10.2026). На таком угле
+# в жизни не асфальт, а «нос» островка; асфальтом скругляем только
+# настоящие углы перекрёстка.
+FILLET_MIN_ANGLE = 60.0
 FILLET_MAX_ANGLE = 165.0
-# Дальше этого от узла точка касания — дуга ушла бы за соседний перекрёсток.
-FILLET_MAX_TANGENT = 25.0
+# Дальше этого от узла точка касания — дуга ушла бы за соседний перекрёсток
+# (и на остром угле давала бы клин).
+FILLET_MAX_TANGENT = 15.0
 FILLET_ARC_SPACING = 3.0   # метров между точками дуги
 FILLET_MAJOR_WIDTH = 9.0
 
@@ -4006,6 +4078,8 @@ def quantized(ring):
 def surface_gate(figure):
     """Пропустить фигуру поверхности в тайл или отказать (и сосчитать отказ)."""
     kind, flags, ring = figure
+    if not flags & AREA_FLAG_CLOSED:
+        return len(quantized(ring)) >= 2      # линия: проверять площадь нечего
     reason = surface_check.defect_of_kind(kind, quantized(ring), flags)
     if reason:
         SURFACE_REJECTED[(kind, reason)] += 1
@@ -4179,9 +4253,11 @@ def build_medians(chains, junctions=()):
                     continue
                 if not _opposite(one[2], other[2]):
                     continue
-                fills = []
-                for strip in _median_strips(one, other, junctions, fills):
+                fills, dividers = [], []
+                for strip in _median_strips(one, other, junctions, fills, dividers):
                     out.append((AREA_MEDIAN, AREA_FLAG_CLOSED | AREA_FLAG_STRIP, strip))
+                for line in dividers:
+                    out.append((AREA_DIVIDER, 0, line))
                 # Промежуток между лентами внутри узла — асфальт перекрёстка.
                 for fill in fills:
                     out.append((AREA_JUNCTION, AREA_FLAG_CLOSED | AREA_FLAG_STRIP, fill))
@@ -4220,7 +4296,7 @@ def _median_strip(one, other, junctions=()):
     return strips[0] if strips else []
 
 
-def _median_strips(one, other, junctions=(), fills=None):
+def _median_strips(one, other, junctions=(), fills=None, dividers=None):
     """Многоугольники между внутренними кромками двух встречных проезжих.
 
     Три условия продолжения, кроме расстояния: не перекрёсток; проекция на
@@ -4276,7 +4352,17 @@ def _median_strips(one, other, junctions=(), fills=None):
     def emit(rows, sink, check, noses=False):
         """rows — [(левая, правая, уточнённая?)]; сначала с уточнёнными концами
         и скруглёнными носами, а если такая фигура бракуется — проще, вплоть
-        до той, что была до уточнения."""
+        до той, что была до уточнения.
+
+        Разделительная (noses) уже MEDIAN_LINE_BELOW_METERS — не полоса, а
+        двойная линия по середине: полосу в метр-полтора на изгибе
+        выворачивало, ворота её бросали, и между встречными лентами не
+        оставалось ничего. Тем же путём уходит полоса, не прошедшая ворота."""
+        if noses and dividers is not None and len(rows) >= 2:
+            gaps = [meters_between(r[0], r[1]) for r in rows]
+            if sum(gaps) / len(gaps) < MEDIAN_LINE_BELOW_METERS:
+                dividers.append([((r[0][0] + r[1][0]) / 2, (r[0][1] + r[1][1]) / 2) for r in rows])
+                return
         for keep_refined, with_noses in ((True, noses), (True, False), (False, False)):
             kept = [r for r in rows if keep_refined or not r[2]]
             if len(kept) < 2:
@@ -4291,6 +4377,8 @@ def _median_strips(one, other, junctions=(), fills=None):
             if check(ring) is None:
                 sink.append(ring)
                 return
+        if noses and dividers is not None and len(rows) >= 2:
+            dividers.append([((r[0][0] + r[1][0]) / 2, (r[0][1] + r[1][1]) / 2) for r in rows])
 
     rows, fill_rows = [], []
     direction = 0
@@ -4799,6 +4887,10 @@ def main():
     # А правки СВОЙСТВ накладываются ПОСЛЕ: они посажены на ту геометрию,
     # которая поедет на телефон, а не на сырую.
     roads, edits_applied, edits_missed = apply_edits(roads, edits)
+    # Полосы там, где OSM молчит, — по соседям той же улицы. До ширины полотна
+    # и разметки: и то и другое должно видеть одно и то же число полос.
+    roads, inferred_count = apply_lane_inference(roads)
+    print(f"полосы угаданы по соседям: {inferred_count} кусков")
     # Сырьё дальше не нужно, и держать его — не мелочь.
     #
     # Замерено: сырые дороги стоят 1056 байт на штуку, то есть 0,64 ГБ на

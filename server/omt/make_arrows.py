@@ -82,6 +82,40 @@ def traffic_light(ratio):
     return image
 
 
+# Деревья в зелени, как у Яндекса (снимок владельца 05.10.2026): кроны
+# кружками с тенью и бликом поверх газона, а не однотонная заливка. Плитка
+# 64×64 замыкается сама — кроны у края рисуются ещё раз со сдвигом на плитку.
+# Положения фиксированы: повторный запуск даёт те же байты.
+TREE_TILE = 64
+TREES = ((12, 14, 7.5), (40, 8, 6.0), (54, 34, 8.0), (24, 42, 7.0), (6, 56, 5.5), (44, 56, 6.5))
+TREE_COLOURS = {
+    "trees": {"shadow": (96, 150, 70, 90), "crown": (158, 208, 118, 255), "light": (190, 228, 152, 255)},
+    "trees-dark": {"shadow": (0, 0, 0, 110), "crown": (32, 56, 38, 255), "light": (44, 74, 52, 255)},
+}
+
+
+def trees(ratio, palette):
+    size = TREE_TILE * ratio
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    pen = ImageDraw.Draw(image)
+    colours = TREE_COLOURS[palette]
+    for layer in ("shadow", "crown", "light"):
+        for x, y, r in TREES:
+            for ox in (-TREE_TILE, 0, TREE_TILE):
+                for oy in (-TREE_TILE, 0, TREE_TILE):
+                    cx, cy, rr = (x + ox) * ratio, (y + oy) * ratio, r * ratio
+                    if layer == "shadow":
+                        box = (cx - rr + ratio, cy - rr + 2 * ratio, cx + rr + ratio, cy + rr + 2 * ratio)
+                    elif layer == "crown":
+                        box = (cx - rr, cy - rr, cx + rr, cy + rr)
+                    else:
+                        small = rr * 0.45
+                        box = (cx - rr * 0.35 - small, cy - rr * 0.35 - small,
+                               cx - rr * 0.35 + small, cy - rr * 0.35 + small)
+                    pen.ellipse(box, fill=colours[layer])
+    return image
+
+
 def build(ratio):
     suffix = "" if ratio == 1 else f"@{ratio}x"
     base_png = os.path.join(HERE, "sprite", f"base{suffix}.png")
@@ -91,6 +125,7 @@ def build(ratio):
     icons = [(f"lane-{NAMES[code]}", draw(code, ratio)) for code in sorted(NAMES)]
     icons.append(("waffle", waffle(ratio)))
     icons.append(("traffic-light", traffic_light(ratio)))
+    icons += [(name, trees(ratio, name)) for name in sorted(TREE_COLOURS)]
     row = max(icon.height for _n, icon in icons)
     out = Image.new("RGBA", (max(sheet.width, sum(i.width + 2 for _n, i in icons)),
                              sheet.height + row + 2), (0, 0, 0, 0))
@@ -109,4 +144,4 @@ def build(ratio):
 if __name__ == "__main__":
     for ratio in (1, 2):
         build(ratio)
-    print("стрелок:", len(NAMES), "+ узор «вафли»")
+    print("стрелок:", len(NAMES), "+ узоры: «вафля», деревья")

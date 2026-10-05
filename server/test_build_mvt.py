@@ -216,8 +216,8 @@ class BuildTests(unittest.TestCase):
         flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (2 << 4)
         roads = [self.road([(69.278, 41.311), center], flags=flags),
                  self.road([center, (69.282, 41.311)], flags=flags),
-                 self.road([(69.28, 41.309), center]),
-                 self.road([center, (69.28, 41.313)])]
+                 self.road([(69.28, 41.309), center], name="Рашидов"),
+                 self.road([center, (69.28, 41.313)], name="Рашидов")]
         lines = list(build_mvt.lane_markings(roads))
         self.assertEqual(len(lines), 2)
         self.assertLess(lines[0][-1][0], center[0] - .00005)
@@ -316,6 +316,16 @@ class BuildTests(unittest.TestCase):
         narrow_off = abs(narrow[0][0][1] - axis) * 111_320
         self.assertAlmostEqual(narrow_off, 1.0, delta=0.05, msg="полотно сужено до 6 м — пунктир в 1 м от оси")
         self.assertGreater(wide_off, narrow_off)
+
+    def test_yard_entrance_does_not_break_the_dashes(self):
+        # Беруни: двор через каждые 80 м рвал пунктир проспекта в обрывки.
+        center = (69.28, 41.311)
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (3 << 4)
+        roads = [self.road([(69.278, 41.311), center], flags=flags),
+                 self.road([center, (69.282, 41.311)], flags=flags),
+                 self.road([center, (69.28, 41.312)], code=7, name="")]
+        lines = list(build_mvt.lane_markings(roads))
+        self.assertAlmostEqual(lines[0][-1][0], center[0], places=8, msg="пунктир доходит до примыкания")
 
     def test_simple_continuation_has_no_marking_gap(self):
         middle = (69.28, 41.311)

@@ -71,6 +71,7 @@ else
     # using the old tile coverage logic on the server.
     scp -q "$(dirname "$0")/build_roads.py" \
         "$(dirname "$0")/build_mvt.py" "$(dirname "$0")/mvt.py" \
+        "$(dirname "$0")/surface_check.py" "$(dirname "$0")/lane_inference.py" \
         "$HOST:/opt/radarmap/work/"
     # ТЕ ЖЕ слои, что собирает крон.
     #

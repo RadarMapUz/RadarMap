@@ -175,6 +175,28 @@ class MedianTests(unittest.TestCase):
         self.assertAlmostEqual(xs[tip] - flat_end, build_roads.MEDIAN_NOSE_MAX_METERS, delta=0.3)
         self.assertIsNone(sc.defect_of_kind(9, strip, sc.STRIP_FLAG))
 
+    def test_narrow_gap_gets_a_double_line_not_a_strip(self):
+        # Беруни: между кромками ~1,5 м — у Яндекса двойная жёлтая, не полоса.
+        one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (300, 0)), "Beruniy shoh ko'chasi", 12.0)
+        other = (3, build_roads.FLAG_ONEWAY, ring((300, 13.5), (0, 13.5)), "Beruniy shoh ko'chasi", 12.0)
+        dividers = []
+        strips = build_roads._median_strips(one, other, (), None, dividers)
+        self.assertEqual(strips, [])
+        self.assertEqual(len(dividers), 1)
+        ys = [(p[1] - LAT) * sc.LAT_METERS for p in dividers[0]]
+        self.assertTrue(all(abs(y - 6.75) < 0.2 for y in ys), "линия — посередине между лентами")
+        made = build_roads.build_medians([(one, []), (other, [])])
+        self.assertTrue(any(k == build_roads.AREA_DIVIDER and not f & 1 for k, f, _r in made))
+        self.assertTrue(build_roads.surface_gate((build_roads.AREA_DIVIDER, 0, dividers[0])),
+                        "ворота пропускают линию")
+
+    def test_wide_gap_keeps_the_strip(self):
+        one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (300, 0)), "Navoiy ko'chasi", 10.0)
+        other = (3, build_roads.FLAG_ONEWAY, ring((300, 22), (0, 22)), "Navoiy ko'chasi", 10.0)
+        dividers = []
+        self.assertTrue(build_roads._median_strips(one, other, (), None, dividers))
+        self.assertEqual(dividers, [])
+
     def test_side_ramp_does_not_break_the_median(self):
         # Съезд справа примыкает к одной ленте — разделительная идёт дальше.
         one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (600, 0)), "Muqimiy ko'chasi", 10.0)
@@ -393,6 +415,26 @@ class SignalPaintTests(unittest.TestCase):
         self.assertLess(widest - min(x for x, _ in sc.to_meters(tight)),
                         max(x for x, _ in sc.to_meters(loose)) - min(x for x, _ in sc.to_meters(loose)),
                         "светофоры соседнего узла отданы ему")
+
+    def test_one_light_per_approach_around_the_centre(self):
+        # Беруни × Сакичмон у Яндекса: четыре светофора ромбом в центре.
+        zone = ring((-20, -20), (20, -20), (20, 20), (-20, 20))
+        signals = [metres(x, y) for x, y in ((40, 3), (42, -3), (-40, 0), (2, 40), (0, -40))]
+        lights = build_mvt.approach_lights(zone, signals)
+        self.assertEqual(len(lights), 4, "два светофора одного подхода — один значок")
+        kx = sc.LAT_METERS * math.cos(math.radians(LAT))
+        for lon, lat in lights:
+            distance = math.hypot((lon - LON) * kx, (lat - LAT) * sc.LAT_METERS)
+            self.assertLessEqual(distance, build_mvt.LIGHT_MAX_METERS + 0.01)
+            self.assertGreaterEqual(distance, build_mvt.LIGHT_MIN_METERS - 0.01)
+
+    def test_centres_of_one_junction_do_not_split_its_signals(self):
+        # Середина узла и ядро пересечения в 12 м друг от друга — один перекрёсток.
+        box = ring((-6, -6), (6, -6), (6, 6), (-6, 6))
+        twin = ring((6, 6), (18, 6), (18, 18), (6, 18))
+        own = self.facing_signals(0, ((30, 5), (-30, -5), (5, -30), (-5, 30)))
+        grid = build_mvt._signal_grid(own)
+        self.assertIsNotNone(build_mvt.waffle_zone(box, grid, build_mvt.box_centres([box, twin])))
 
     def test_one_icon_point_per_waffle(self):
         # Два центра одного перекрёстка из соседних тайлов — одна «вафля», одна точка.

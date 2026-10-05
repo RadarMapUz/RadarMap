@@ -17,7 +17,7 @@ import shutil
 from collections import OrderedDict, defaultdict
 
 import mvt
-from build_roads import (AREA_FILLET, AREA_HOUSE, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_MEDIAN, AREA_ROAD,
+from build_roads import (AREA_DIVIDER, FLAG_LANES_INFERRED, AREA_FILLET, AREA_HOUSE, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_MEDIAN, AREA_ROAD,
                          clip_ring,
                          FLAG_BRIDGE,
                          FLAG_LANES_TAGGED, FLAG_ONEWAY, FLAG_TUNNEL,
@@ -297,6 +297,11 @@ class JunctionMask:
         return out
 
 
+# Пунктир прерывается в узле, где сходятся минимум две РАЗНЫЕ улицы этого
+# класса и выше (tertiary); дворы и проезды его не рвут.
+MARKING_BREAK_MAX_CLASS = 5
+
+
 # Точки пересечения РАЗНЫХ улиц ближе этого — один перекрёсток (у двух
 # проспектов с раздельными проезжими это четыре точки по углам квадрата 20–40 м).
 CROSSING_CORE_METERS = 45.0
@@ -355,6 +360,27 @@ def crossing_cores(roads):
     return cores
 
 
+CROSSING_AREA_REACH_METERS = 40.0
+
+
+def crossing_areas(areas, centres_of):
+    """Площади узлов, чей центр рядом с ядром перекрёстка или серединой узла."""
+    grid = defaultdict(list)
+    for ring in centres_of:
+        cx, cy = _box_centre(ring)
+        grid[(int(cx / _SIGNAL_CELL), int(cy / _SIGNAL_CELL))].append((cx, cy))
+    out = []
+    for ring in areas:
+        cx, cy = _box_centre(ring)
+        kx = 111_320 * math.cos(math.radians(cy))
+        cell = (int(cx / _SIGNAL_CELL), int(cy / _SIGNAL_CELL))
+        if any(math.hypot((x - cx) * kx, (y - cy) * 111_320) <= CROSSING_AREA_REACH_METERS
+               for gx in range(cell[0] - 1, cell[0] + 2) for gy in range(cell[1] - 1, cell[1] + 2)
+               for x, y in grid.get((gx, gy), ())):
+            out.append(ring)
+    return out
+
+
 def strip_outside_junction(ring, mask):
     """Разделительная проспекта, а не обрывок внутри перекрёстка: центр полосы
     вне площади узла. Центр тяжести у изогнутой полосы может выйти наружу,
@@ -399,16 +425,20 @@ def _markings(roads, widths=None, mask=None):
         return (round(point[0], 6), round(point[1], 6),
                 flags & (FLAG_BRIDGE | FLAG_TUNNEL))
 
-    nodes = defaultdict(lambda: [0, 0.0])
+    # Узел: [степень, ширина самой широкой, имена улиц tertiary+].
+    nodes = defaultdict(lambda: [0, 0.0, set()])
     for road in roads:
         code, flags, points = road[0], road[1], road[2]
         if len(points) < 2 or code > 7:
             continue
         width = road_width_meters(code, lanes_of(flags))
+        name = (road[3] if len(road) > 3 else "") or ""
         for p in (points[0], points[-1]):
             node = nodes[key(p, flags)]
             node[0] += 1
             node[1] = max(node[1], width)
+            if code <= MARKING_BREAK_MAX_CLASS:
+                node[2].add(name or id(road))
 
     def trim(points, distance):
         result = list(points)
@@ -428,7 +458,12 @@ def _markings(roads, widths=None, mask=None):
         if code > 7 or len(points) < 2:
             continue
         lanes = lanes_of(flags)
-        tagged = flags & FLAG_LANES_TAGGED and 2 <= lanes <= MAX_MARKED_LANES
+        confirmed = flags & FLAG_LANES_TAGGED and 2 <= lanes <= MAX_MARKED_LANES
+        # Угаданные полосы (lane_inference) — тоже пунктир: 97,5 % угадано на
+        # спрятанных. Но не сплошная осевая: она запрещает поворот, и по
+        # догадке её не рисуем.
+        tagged = (flags & (FLAG_LANES_TAGGED | FLAG_LANES_INFERRED)
+                  and 2 <= lanes <= MAX_MARKED_LANES)
         # Ширина — та же, по которой нарисовано полотно: сужение под
         # разделительную (fit_carriageways) иначе уводило пунктир на неё.
         width = road_width_meters(code, lanes)
@@ -442,7 +477,7 @@ def _markings(roads, widths=None, mask=None):
             # Сплошная — только по ПОДТВЕРЖДЁННЫМ полосам: ширина без тега
             # lanes — догадка по классу (у tertiary 14 м), и сплошная по
             # догадке запрещала бы на карте поворот, разрешённый в жизни.
-            wide = tagged and lanes >= 4 and width >= CENTRE_SOLID_WIDTH_METERS
+            wide = confirmed and lanes >= 4 and width >= CENTRE_SOLID_WIDTH_METERS
             centre = CENTRE_SOLID if wide else CENTRE_DASHED
             offsets = [(0.0, centre)]
             # Полосы по сторонам — только при чётном lanes: делим поровну, а
@@ -456,8 +491,12 @@ def _markings(roads, widths=None, mask=None):
         sx, sy = 111_320 * math.cos(math.radians(origin[1])), 111_320
         metric = [((p[0] - origin[0]) * sx, (p[1] - origin[1]) * sy) for p in points]
         for endpoint in (points[0], points[-1]):
-            degree, node_width = nodes[key(endpoint, flags)]
-            metric = trim(metric, node_width / 2 + JUNCTION_MARKING_MARGIN if degree >= 3 else 0)
+            degree, node_width, streets = nodes[key(endpoint, flags)]
+            # Рвём пунктир только на перекрёстке улиц: двор или проезд,
+            # примкнувший к проспекту, его не прерывает — как у Яндекса.
+            # Раньше рвал каждый, и от Беруни оставались обрывки (05.10.2026).
+            crossing = degree >= 3 and len(streets) >= 2
+            metric = trim(metric, node_width / 2 + JUNCTION_MARKING_MARGIN if crossing else 0)
             metric.reverse()
         if len(metric) < 2:
             continue
@@ -717,13 +756,82 @@ def _owned_by(lon, lat, cx, cy, centres):
     for gx in range(cell[0] - 1, cell[0] + 2):
         for gy in range(cell[1] - 1, cell[1] + 2):
             for x, y in centres.get((gx, gy), ()):
+                # Центр того же перекрёстка (середина узла и ядро пересечения
+                # лежат рядом) светофор не отбирает: иначе четыре светофора
+                # Беруни × Сакичмон расходились по трём центрам, и ни у одного
+                # не набиралось трёх (05.10.2026).
+                if math.hypot((x - cx) * kx, (y - cy) * 111_320) <= SAME_JUNCTION_METERS:
+                    continue
                 if math.hypot((x - lon) * kx, (y - lat) * 111_320) < own - WAFFLE_OWNER_MARGIN_METERS:
                     return False
     return True
 
 
+# Два центра ближе этого — один перекрёсток (как JUNCTION_CLUSTER_METERS сборки).
+SAME_JUNCTION_METERS = 35.0
+
+
+def _junction_signals(box, grid, centres=None):
+    """Светофоры подходов этого перекрёстка: [(lon, lat)]."""
+    cx, cy = _box_centre(box)
+    kx = 111_320 * math.cos(math.radians(cy))
+    reach_lat = WAFFLE_SIGNAL_REACH_METERS / 111_320
+    reach_lon = WAFFLE_SIGNAL_REACH_METERS / kx
+    near = []
+    for gx in range(int((cx - reach_lon) / _SIGNAL_CELL), int((cx + reach_lon) / _SIGNAL_CELL) + 1):
+        for gy in range(int((cy - reach_lat) / _SIGNAL_CELL), int((cy + reach_lat) / _SIGNAL_CELL) + 1):
+            for lon, lat, bearing in grid.get((gx, gy), ()):
+                if math.hypot((lon - cx) * kx, (lat - cy) * 111_320) <= WAFFLE_SIGNAL_REACH_METERS \
+                        and _faces(lon, lat, bearing, cx, cy) \
+                        and _owned_by(lon, lat, cx, cy, centres):
+                    near.append((lon, lat))
+    return near
+
+
+# Светофоры как у Яндекса (снимок владельца 05.10.2026, Беруни × Сакичмон):
+# не жёлтая сетка и не один значок, а по светофору на каждый ПОДХОД — ромбом
+# вокруг центра перекрёстка, со стороны, откуда этот подход приходит.
+# Подходы — светофоры, сгруппированные по направлению из центра; значок —
+# на доле расстояния до них, но не дальше LIGHT_MAX_METERS: иначе на широком
+# перекрёстке он уезжал бы на зебру.
+KIND_APPROACH_LIGHT = 14
+LIGHT_APPROACH_DEGREES = 35.0
+LIGHT_SHARE = 0.35
+LIGHT_MIN_METERS = 5.0
+LIGHT_MAX_METERS = 14.0
+
+
+def approach_lights(zone, signals):
+    """Точки значков светофоров, по одной на подход: [(lon, lat)]."""
+    cx, cy = waffle_centre(zone)
+    kx = 111_320 * math.cos(math.radians(cy))
+    rays = []
+    for lon, lat in signals:
+        dx, dy = (lon - cx) * kx, (lat - cy) * 111_320
+        distance = math.hypot(dx, dy)
+        if distance > 1.0:
+            rays.append((math.degrees(math.atan2(dx, dy)) % 360, dx / distance, dy / distance, distance))
+    groups = []
+    for ray in sorted(rays):
+        for group in groups:
+            mean = math.degrees(math.atan2(sum(r[1] for r in group), sum(r[2] for r in group))) % 360
+            if abs((ray[0] - mean + 180) % 360 - 180) <= LIGHT_APPROACH_DEGREES:
+                group.append(ray)
+                break
+        else:
+            groups.append([ray])
+    out = []
+    for group in groups:
+        ux, uy = sum(r[1] for r in group), sum(r[2] for r in group)
+        norm = math.hypot(ux, uy) or 1.0
+        reach = sum(r[3] for r in group) / len(group) * LIGHT_SHARE
+        reach = max(LIGHT_MIN_METERS, min(LIGHT_MAX_METERS, reach))
+        out.append((cx + ux / norm * reach / kx, cy + uy / norm * reach / 111_320))
+    return out
+
+
 def waffle_zone(box, grid, centres=None):
-    """Зона «вафли» для центра перекрёстка или None, если перекрёсток не регулируемый."""
+    """Зона регулируемого перекрёстка (между светофорами подходов) или None."""
     if not grid:
         return None
     cx, cy = _box_centre(box)
@@ -830,7 +938,7 @@ def _area_props(kind, flags):
 
 
 def _layer_of(kind):
-    if kind in (AREA_ROAD, AREA_JUNCTION, AREA_MEDIAN, AREA_JUNCTION_BOX, AREA_FILLET):
+    if kind in (AREA_ROAD, AREA_JUNCTION, AREA_MEDIAN, AREA_JUNCTION_BOX, AREA_FILLET, AREA_DIVIDER):
         return LAYER_SURFACE
     if kind == AREA_HOUSE:
         return LAYER_HOUSES
@@ -1048,7 +1156,13 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                     continue
                 lay(kind, flags, shape)
         # Разметка — после узлов: режется их площадью.
-        mask = JunctionMask(junction_areas + crossing_cores(roads))
+        # Маска разметки — только настоящие перекрёстки: ядра пересечений
+        # улиц, середины узлов и площади узлов рядом с ними. Площадь узла у
+        # примыкания двора (46–59 м поперёк проспекта) резала пунктир Беруни
+        # через каждые 80 м.
+        cores = crossing_cores(roads)
+        mask = JunctionMask(cores + boxes
+                            + crossing_areas(junction_areas, cores + boxes))
         # Разделительная полоса лежит ПОВЕРХ площади узла (ради носа у
         # перехода), и обрывок полосы между лентами поворотов внутри
         # перекрёстка вылез зелёной кляксой в его середине (28.09.2026).
@@ -1059,15 +1173,21 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         for line, centre in _markings(roads, widths, mask):
             props = {"centre": centre} if centre else {"verified": True}
             _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, props)
-        # «Вафли» — после всех центров: светофор отдаётся ближайшему узлу.
-        centres = box_centres(boxes)
+        # Регулируемые перекрёстки — после всех центров: светофор отдаётся
+        # ближайшему узлу. Центры — и «середины узла» (вид 10), и ядра
+        # перекрёстков двух улиц: середины узла у многих перекрёстков нет вовсе
+        # (Беруни × Сакичмон, 05.10.2026), и светофоры там не появлялись.
+        candidates = boxes + crossing_cores(roads)
+        centres = box_centres(candidates)
         waffles = WaffleSet()
-        for box in boxes:
+        for box in candidates:
             waffle = waffle_zone(box, signals, centres)
             centre = waffles.add(waffle) if waffle else None
             if centre:
-                _put(buckets, zoom, LAYER_SURFACE, mvt.POLYGON, waffle, {"kind": KIND_WAFFLE})
-                _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [centre], {"kind": KIND_WAFFLE})
+                # Жёлтой сетки нет (у Яндекса её нет): зона только решает,
+                # регулируемый ли перекрёсток и где его центр.
+                for light in approach_lights(waffle, _junction_signals(box, signals, centres)):
+                    _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [light], {"kind": KIND_APPROACH_LIGHT})
         # Зебры линиями переходов. Линия размечена тегом — или на ней лежит
         # размеченный узел перехода (у Пахтакора линия без тега, а узлы — zebra).
         # Узловая зебра рядом с нарисованной линией — тот же переход, дубль.

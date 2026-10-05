@@ -423,7 +423,11 @@ def measure(tiles_dir, islands_path=None, bbox=None):
                 islands.append([tuple(p[:2]) for p in polygon[0]])
 
     median_examples = []
-    in_junction, total = dashes_inside(markings, junctions.covers)
+    # Пунктир эстакады над перекрёстком законен: он на другом уровне.
+    bridges = SegmentIndex([part for g, parts, props in layers.get("roads", [])
+                            if g == 2 and props.get("bridge") for part in parts])
+    in_junction, total = dashes_inside(
+        markings, lambda p: junctions.covers(p) and not bridges.near(p, BRIDGE_DECK_METERS))
     on_zebra, _ = dashes_inside(markings, lambda p: zebras.near(p, ZEBRA_NEAR_METERS))
     through_medians, _ = dashes_inside(markings, median_index.covers)
     return {
@@ -450,6 +454,10 @@ UNITS = {
     "medians_on_asphalt": "% разделительных",
     "dashes_through_medians": "м на 1 км пунктира",
 }
+
+
+# Полуширина пролёта эстакады: пунктир ближе к её оси — на мосту, не в узле.
+BRIDGE_DECK_METERS = 9.0
 
 
 # Рамка по умолчанию для ворот — Ташкент: по стране метрики считались бы час.

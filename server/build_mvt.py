@@ -623,10 +623,24 @@ class OverlapIndex:
         # Концы лент: продолжение той же ленты и перекрёсток сходятся с нашей
         # в общей точке — это не «чужая лента поверх», у узла разметку и так
         # режет его площадь.
+        #
+        # Но только продолжение (в точке сходятся ДВА конца). Где концов три и
+        # больше, это узел, и съезд, вливающийся в проспект под малым углом,
+        # клал свой пунктир поверх его полос паутиной (41.290, 69.301;
+        # 05.10.2026). Там разметку младшей ленты режет старшая — не наоборот,
+        # иначе дырка была бы в пунктире проспекта.
         self._ends = {}
+        self._rank = {}
+        degree = defaultdict(int)
         for road in roads:
             if len(road[2]) >= 2:
-                self._ends[id(road)] = {(round(p[0], 6), round(p[1], 6)) for p in (road[2][0], road[2][-1])}
+                ends = {(round(p[0], 6), round(p[1], 6)) for p in (road[2][0], road[2][-1])}
+                self._ends[id(road)] = ends
+                for end in ends:
+                    degree[end] += 1
+                width = widths.get(id(road)) or road_width_meters(road[0], lanes_of(road[1]))
+                self._rank[id(road)] = (road[0], -width)
+        self._junction_ends = {end for end, count in degree.items() if count >= 3}
         for road in roads:
             code, flags, points = road[0], road[1], road[2]
             if code > 7 or len(points) < 2:
@@ -644,9 +658,13 @@ class OverlapIndex:
     def foreign(self, point, road):
         level = road[1] & (FLAG_BRIDGE | FLAG_TUNNEL)
         own_ends = self._ends.get(id(road), set())
+        own_rank = self._rank.get(id(road))
         kx = 111_320 * math.cos(math.radians(point[1]))
         for key, lvl, a, b, half in self._grid.get((int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
-            if key == id(road) or lvl != level or own_ends & self._ends.get(key, set()):
+            if key == id(road) or lvl != level:
+                continue
+            shared = own_ends & self._ends.get(key, set())
+            if shared and not (shared & self._junction_ends and self._rank.get(key) < own_rank):
                 continue
             ax, ay = (a[0] - point[0]) * kx, (a[1] - point[1]) * 111_320
             bx, by = (b[0] - point[0]) * kx, (b[1] - point[1]) * 111_320

@@ -32,6 +32,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -169,8 +170,14 @@ def review_image(path, key):
         API_URL, data=json.dumps(body).encode(),
         headers={"x-api-key": key, "anthropic-version": "2023-06-01",
                  "content-type": "application/json"})
-    with urllib.request.urlopen(request, timeout=120) as response:
-        answer = json.load(response)
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            answer = json.load(response)
+    except urllib.error.HTTPError as error:
+        # Текст ошибки API, а не голое «400»: «нет кредитов» и «битый запрос»
+        # лечатся по-разному.
+        detail = error.read().decode("utf-8", "replace")[:300]
+        raise RuntimeError(f"HTTP {error.code}: {detail}") from error
     text = "".join(part.get("text", "") for part in answer.get("content", []))
     return parse_review(text)
 

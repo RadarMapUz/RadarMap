@@ -18,36 +18,60 @@ NAMES = {1: "through", 2: "left", 3: "right", 4: "slight_left", 5: "slight_right
          6: "uturn", 7: "through_left", 8: "through_right", 9: "left_right"}
 
 
+def _bend(start, corner, end, steps=10):
+    """Плавный изгиб (квадратичная кривая Безье) от start через corner к end."""
+    out = []
+    for i in range(steps + 1):
+        t = i / steps
+        out.append(((1 - t) ** 2 * start[0] + 2 * (1 - t) * t * corner[0] + t * t * end[0],
+                    (1 - t) ** 2 * start[1] + 2 * (1 - t) * t * corner[1] + t * t * end[1]))
+    return out
+
+
 def strokes(code):
-    """Ломаные стрелки в долях иконки (x 0..1 слева направо, y 0..1 сверху вниз) и
-    куда смотрят наконечники: [(ломаная, (конец, направление))]."""
-    up, left, right = (0, -1), (-1, 0), (1, 0)
-    base = (0.5, 0.97)
-    through = ([base, (0.5, 0.12)], up)
-    turn_l = ([base, (0.5, 0.55), (0.14, 0.55)], left)
-    turn_r = ([base, (0.5, 0.55), (0.86, 0.55)], right)
-    slight_l = ([base, (0.5, 0.6), (0.22, 0.2)], (-0.57, -0.82))
-    slight_r = ([base, (0.5, 0.6), (0.78, 0.2)], (0.57, -0.82))
-    uturn = ([base, (0.62, 0.3), (0.62, 0.22), (0.3, 0.22), (0.3, 0.55)], (0, 1))
+    """Стрелки разметки 1.18 ПДД в долях иконки (x 0..1 слева направо, y 0..1
+    сверху вниз): [(ломаная, направление наконечника)].
+
+    Поворотная ветка ПЛАВНО отгибается от ствола, а не торчит под прямым углом:
+    в прошлом рисунке «прямо и налево» читалось буквой «Н» (снимок владельца
+    05.10.2026)."""
+    up = (0, -1)
+    base = (0.5, 0.98)
+    through = ([base, (0.5, 0.16)], up)
+    turn_l = ([base, (0.5, 0.62)] + _bend((0.5, 0.62), (0.5, 0.42), (0.16, 0.42))[1:], (-1, 0))
+    turn_r = ([base, (0.5, 0.62)] + _bend((0.5, 0.62), (0.5, 0.42), (0.84, 0.42))[1:], (1, 0))
+    branch_l = ([(0.5, 0.72)] + _bend((0.5, 0.72), (0.5, 0.5), (0.16, 0.44))[1:], (-0.98, -0.2))
+    branch_r = ([(0.5, 0.72)] + _bend((0.5, 0.72), (0.5, 0.5), (0.84, 0.44))[1:], (0.98, -0.2))
+    slight_l = ([base, (0.5, 0.62)] + _bend((0.5, 0.62), (0.5, 0.4), (0.24, 0.18))[1:], (-0.6, -0.8))
+    slight_r = ([base, (0.5, 0.62)] + _bend((0.5, 0.62), (0.5, 0.4), (0.76, 0.18))[1:], (0.6, -0.8))
+    uturn = ([base, (0.62, 0.42)] + _bend((0.62, 0.42), (0.62, 0.14), (0.4, 0.2))[1:]
+             + _bend((0.4, 0.2), (0.3, 0.24), (0.3, 0.46))[1:], (0, 1))
+    stem = ([base, (0.5, 0.72)], None)
     return {1: [through], 2: [turn_l], 3: [turn_r], 4: [slight_l], 5: [slight_r], 6: [uturn],
-            7: [through, turn_l], 8: [through, turn_r], 9: [turn_l, turn_r]}[code]
+            7: [through, branch_l], 8: [through, branch_r], 9: [stem, branch_l, branch_r]}[code]
 
 
 def draw(code, ratio):
     w, h = W * ratio, H * ratio
     image = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     pen = ImageDraw.Draw(image)
-    shaft = max(2, round(2.2 * ratio))
-    head = 5.0 * ratio
-    for colour, grow in (((40, 45, 55, 90), 2 * ratio), ((255, 255, 255, 255), 0)):
-        for line, (dx, dy) in strokes(code):
+    shaft = max(3, round(3.0 * ratio))
+    head = 6.0 * ratio
+    for colour, grow in (((40, 45, 55, 80), 2 * ratio), ((255, 255, 255, 255), 0)):
+        for line, direction in strokes(code):
             points = [(x * w, y * h) for x, y in line]
             pen.line(points, fill=colour, width=shaft + grow, joint="curve")
+            if direction is None:
+                continue
+            dx, dy = direction
+            norm = (dx * dx + dy * dy) ** 0.5
+            dx, dy = dx / norm, dy / norm
             tip = points[-1]
             nx, ny = -dy, dx
-            tri = [(tip[0] + dx * head, tip[1] + dy * head),
-                   (tip[0] + nx * (head + grow / 2), tip[1] + ny * (head + grow / 2)),
-                   (tip[0] - nx * (head + grow / 2), tip[1] - ny * (head + grow / 2))]
+            spread = head * 0.8 + grow / 2
+            tri = [(tip[0] + dx * (head + grow / 2), tip[1] + dy * (head + grow / 2)),
+                   (tip[0] + nx * spread - dx * 1.0, tip[1] + ny * spread - dy * 1.0),
+                   (tip[0] - nx * spread - dx * 1.0, tip[1] - ny * spread - dy * 1.0)]
             pen.polygon(tri, fill=colour)
     return image
 

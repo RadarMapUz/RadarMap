@@ -67,6 +67,16 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(flags & build_roads.FLAG_LANES_INFERRED)
         self.assertFalse(flags & build_roads.FLAG_LANES_TAGGED, "очередь панели видит «OSM молчит»")
 
+    def test_short_unnamed_link_gets_two_lanes(self):
+        # Перемычка у перекрёстка по классу получала 6 полос и кляксу узла.
+        link = (3, 0, line(0, 40), "")
+        out, count = build_roads.apply_lane_inference([link])
+        self.assertEqual(count, 1)
+        self.assertEqual(build_roads.lanes_of(out[0][1]), 2)
+        long_road = (3, 0, line(0, 400), "")
+        out, count = build_roads.apply_lane_inference([long_road])
+        self.assertEqual(count, 0, "длинная безымянная — не связка")
+
     def test_hand_drawn_roads_are_left_alone(self):
         hand = (3, build_roads.FLAG_ONEWAY | build_roads.FLAG_HAND_DRAWN, line(300, 500), "Navoiy ko'chasi")
         roads = [road(0, 300, 4), hand, road(500, 900, 4)]

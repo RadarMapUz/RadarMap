@@ -208,6 +208,19 @@ class MedianTests(unittest.TestCase):
         made = build_roads.build_medians([(one, []), (other, [])])
         self.assertTrue(any(k == build_roads.AREA_MEDIAN for k, _f, _r in made))
 
+    def test_short_crossover_between_steps_breaks_the_median(self):
+        # Каратош: перемычка в 15 м между шагами в 25 м — полоса шла насквозь.
+        one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (300, 0)), "Qoratosh ko'chasi", 10.0)
+        other = (3, build_roads.FLAG_ONEWAY, ring((300, 24), (0, 24)), "Qoratosh ko'chasi", 10.0)
+        link = (3, 0, ring((137, 0), (137, 24)), "", 10.0)
+        made = build_roads.build_medians([(one, []), (other, []), (link, [])])
+        strips = [r for k, _f, r in made if k == build_roads.AREA_MEDIAN]
+        self.assertEqual(len(strips), 2, "по полосе с каждой стороны проезда")
+        kx = sc.LAT_METERS * math.cos(math.radians(LAT))
+        for strip in strips:
+            xs = [(p[0] - LON) * kx for p in strip]
+            self.assertTrue(max(xs) < 137 or min(xs) > 137, "полоса не пересекает проезд")
+
     def test_bridge_and_ground_carriageways_are_not_a_pair(self):
         one = (3, build_roads.FLAG_ONEWAY | build_roads.FLAG_BRIDGE, ring((0, 0), (300, 0)), "Furqat ko'chasi", 10.0)
         other = (3, build_roads.FLAG_ONEWAY, ring((300, 22), (0, 22)), "Furqat ko'chasi", 10.0)
@@ -362,6 +375,27 @@ class ArrowLeaderTests(unittest.TestCase):
         points = [self.arrow(0, 0), self.arrow(15, 20),                # соседняя лента
                   self.arrow(10, 0, bearing=270), self.arrow(100, 0)]  # встречная и далёкая
         self.assertEqual(build_mvt.arrow_leaders(points), {0, 1, 2, 3})
+
+
+class ArrowBeforeStopLineTests(unittest.TestCase):
+    def test_arrows_stand_before_the_signal_stop_line(self):
+        # Конец участка с turn:lanes — у центра; светофор подхода на 25 м раньше.
+        flags = build_roads.point_flags(90, 12)          # едем на восток
+        signal = (1, build_roads.point_flags(90, 12), [metres(-25, 0)])
+        grid = build_mvt._signal_grid([signal])
+        setback = build_mvt.arrow_setback(flags, (LON, LAT), grid)
+        stop_line = -25 - build_mvt.SIGNAL_STOP_SETBACK
+        self.assertAlmostEqual(-setback, stop_line - build_mvt.ARROW_BEFORE_STOP_METERS, delta=0.01,
+                               msg="стрелки — перед стоп-линией, а не между ней и зеброй")
+
+    def test_no_signal_keeps_the_usual_setback(self):
+        flags = build_roads.point_flags(90, 12)
+        self.assertEqual(build_mvt.arrow_setback(flags, (LON, LAT), {}), build_mvt.ARROW_SETBACK_METERS)
+
+    def test_signal_far_ahead_does_not_pull_arrows_back(self):
+        flags = build_roads.point_flags(90, 12)
+        grid = build_mvt._signal_grid([(1, build_roads.point_flags(90, 12), [metres(5, 0)])])
+        self.assertEqual(build_mvt.arrow_setback(flags, (LON, LAT), grid), build_mvt.ARROW_SETBACK_METERS)
 
 
 class SignalPaintTests(unittest.TestCase):

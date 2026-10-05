@@ -1577,6 +1577,9 @@ def street_width(pieces):
     return max(road_width_meters(p[0], lanes_of(p[1])) for p in source)
 
 
+SHORT_LINK_METERS = 150.0
+
+
 def apply_lane_inference(roads):
     """Дороги с угаданными полосами там, где тега нет. (дороги, сколько угадано).
 
@@ -1587,6 +1590,18 @@ def apply_lane_inference(roads):
         roads, lanes_of,
         lambda flags: flags & FLAG_LANES_TAGGED,
         lambda flags: flags & FLAG_ONEWAY)
+    # Короткая безымянная двусторонняя связка без тега (перемычка у
+    # перекрёстка) по классу получала полосы проспекта — 6 полос, 22,5 м —
+    # и площадь узла расползалась кляксой (Каратош × Бешёгоч, 05.10.2026).
+    # У связки в жизни две полосы.
+    for road in roads:
+        # Главнее голосования соседей: безымянные дороги того же класса
+        # «голосовали» за полосы проспекта и для связки.
+        if (road[0] in lane_inference.INFER_CLASSES
+                and not road[1] & (FLAG_LANES_TAGGED | FLAG_ONEWAY)
+                and not (road[3] if len(road) > 3 else "")
+                and sum(meters_between(a, b) for a, b in zip(road[2], road[2][1:])) < SHORT_LINK_METERS):
+            guessed[id(road)] = (2, 1.0)
     if not guessed:
         return roads, 0
     out = []
@@ -4529,10 +4544,37 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
         if fill_rows and fills is not None:
             emit(fill_rows, fills, _strip_defect)
         fill_rows = []
+        # Проезд через разделительную (перемычка в 15 м) целиком умещается
+        # между шагами в 25 м, и его никто не видел — полоса шла через
+        # перекрёсток Каратош × Бешёгоч (05.10.2026). Между двумя годными
+        # шагами просматриваем каждые MEDIAN_SCAN_METERS; нашёлся проезд —
+        # полоса закрывается перед ним и начинается после него.
+        if rows and previous_good and blocked is not None:
+            probe_at = previous_distance + MEDIAN_SCAN_METERS
+            first_bad = last_bad = None
+            while probe_at < distance - 0.5:
+                ok, _e = probe(probe_at)
+                if not ok:
+                    first_bad = probe_at if first_bad is None else first_bad
+                    last_bad = probe_at
+                probe_at += MEDIAN_SCAN_METERS
+            if first_bad is not None:
+                refined = boundary(previous_distance, first_bad)
+                if refined:
+                    rows.append((refined[0], refined[1], True))
+                emit(rows, strips, _strip_defect, noses=True)
+                rows = []
+                refined = boundary(distance, last_bad)
+                if refined:
+                    rows.append((refined[0], refined[1], True))
         rows.append((edges[0], edges[1], False))
         previous_distance, previous_good = distance, True
     emit(rows, strips, _strip_defect, noses=True)
     return strips
+
+
+# Шаг поиска проезда между шагами разделительной.
+MEDIAN_SCAN_METERS = 5.0
 
 
 # Нос разделительной — полукруг наружу от торца, как у Яндекса: плоский торец

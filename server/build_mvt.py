@@ -64,7 +64,47 @@ def point_properties(code, flags):
             "painted": bool(flags & PFLAG_PAINTED)}
 
 
-def lane_arrows(code, flags, point):
+# Стрелки — ВСЕГДА до стоп-линии. Отступ от конца участка с turn:lanes
+# (обычно — центр перекрёстка) ставил их МЕЖДУ стоп-линией у светофора и
+# зеброй (Каратош × Бешёгоч, 05.10.2026). Если на том же подходе есть
+# светофор, стрелки встают на ARROW_BEFORE_STOP метров перед его стоп-линией.
+ARROW_SIGNAL_REACH_METERS = 60.0
+ARROW_SIGNAL_DEGREES = 30.0
+ARROW_BEFORE_STOP_METERS = 11.0
+
+
+def arrow_setback(flags, point, signals):
+    """Сколько метров назад от точки стрелок ставить их ряд (по светофору подхода)."""
+    if not signals:
+        return ARROW_SETBACK_METERS
+    lon, lat = point
+    kx = 111_320 * math.cos(math.radians(lat))
+    bearing = point_azimuth(flags)
+    forward = (math.sin(math.radians(bearing)), math.cos(math.radians(bearing)))
+    best = None
+    cell = (int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))
+    for gx in range(cell[0] - 1, cell[0] + 2):
+        for gy in range(cell[1] - 1, cell[1] + 2):
+            for slon, slat, sbearing in signals.get((gx, gy), ()):
+                if sbearing is not None:
+                    off = abs((sbearing - bearing + 180) % 360 - 180)
+                    if min(off, 180 - off) > ARROW_SIGNAL_DEGREES:
+                        continue
+                dx, dy = (slon - lon) * kx, (slat - lat) * 111_320
+                along = dx * forward[0] + dy * forward[1]
+                lateral = abs(dx * forward[1] - dy * forward[0])
+                if abs(along) > ARROW_SIGNAL_REACH_METERS or lateral > max(point_width(flags), 8.0):
+                    continue
+                if best is None or abs(along) < abs(best):
+                    best = along
+    if best is None:
+        return ARROW_SETBACK_METERS
+    stop_line = best - SIGNAL_STOP_SETBACK         # стоп-линия, м вдоль хода
+    return max(ARROW_SETBACK_METERS, -(stop_line - ARROW_BEFORE_STOP_METERS)) \
+        if stop_line - ARROW_BEFORE_STOP_METERS < -ARROW_SETBACK_METERS else ARROW_SETBACK_METERS
+
+
+def lane_arrows(code, flags, point, setback=None):
     """Стрелки полос по одной на полосу, поперёк проезжей части.
 
     turn:lanes в OSM перечисляет полосы слева направо по ходу движения, поэтому
@@ -86,7 +126,7 @@ def lane_arrows(code, flags, point):
         if not turn:
             continue
         across = -width / 2 + lane * (index + 0.5)
-        along = -ARROW_SETBACK_METERS
+        along = -(ARROW_SETBACK_METERS if setback is None else setback)
         yield ((lon + (math.cos(angle) * across + math.sin(angle) * along)
                 / (111_320 * math.cos(math.radians(lat))),
                 lat + (-math.sin(angle) * across + math.cos(angle) * along) / 111_320),
@@ -1411,7 +1451,7 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                 _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": code})
             if code == POINT_LANE_ARROWS and index not in leaders:
                 continue          # тот же подход, ряд ближе к перекрёстку уже есть
-            for arrow, props in lane_arrows(code, flags, spot[0]):
+            for arrow, props in lane_arrows(code, flags, spot[0], arrow_setback(flags, spot[0], signals)):
                 _put(buckets, zoom, LAYER_ARROWS, mvt.POINT, [arrow], props)
     finally:
         buckets.close()

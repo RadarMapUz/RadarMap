@@ -339,6 +339,18 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(list(build_mvt.centre_lines([self.road(points, code=6)])), [])
         self.assertEqual(list(build_mvt.centre_lines([self.road(points, flags=build_mvt.FLAG_ONEWAY)])), [])
 
+    def test_dashes_do_not_cross_a_merging_ramp(self):
+        # Фурката: пунктир пандуса шёл сеткой поверх проспекта.
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (2 << 4)
+        main = self.road([(69.278, 41.311), (69.284, 41.311)], flags=flags)
+        ramp = self.road([(69.279, 41.311027), (69.283, 41.311027)], flags=flags, name="")   # 3 м
+        lines = list(build_mvt.lane_markings([main, ramp]))
+        inside = [p for l in lines for p in l if 69.2792 < p[0] < 69.2828]
+        self.assertEqual(inside, [], "в зоне наложения лент пунктира нет")
+        self.assertTrue(lines, "вне наложения пунктир основной ленты остаётся")
+        apart = self.road([(69.278, 41.3113), (69.284, 41.3113)], flags=flags, name="")
+        self.assertEqual(len(list(build_mvt.lane_markings([main, apart]))), 2, "раздельные ленты — у обеих")
+
     def test_markings_follow_the_fitted_width(self):
         # Три полосы: разделитель в width/6 от оси — сдвиг прямо зависит от ширины.
         flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (3 << 4)

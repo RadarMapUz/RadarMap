@@ -54,6 +54,7 @@ PALETTES = {
         # Мост: светлый край-ограждение и тень под пролётом; тоннель —
         # полупрозрачный асфальт с пунктирной кромкой (как у Яндекса).
         "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#c9ced8",
+        "tree_crown": "#9fd078", "tree_edge": "#bfe39c", "tree_shadow": "rgba(70,110,50,0.35)",
         "label": "#4a4a4a", "halo": "#ffffff", "signal": "#3b3b3b", "signal_ring": "#f5d547",
     },
     "dark": {
@@ -64,6 +65,7 @@ PALETTES = {
         "casing": "#2b3039",
         "kerb": "#8c7033", "trees": "trees-dark",
         "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#2a2f37",
+        "tree_crown": "#22402c", "tree_edge": "#2e5238", "tree_shadow": "rgba(0,0,0,0.5)",
         "label": "#c9ced6", "halo": "#0f1216", "signal": "#101318", "signal_ring": "#f0c64a",
     },
 }
@@ -96,6 +98,16 @@ def class_width(metres, extra=0.0, low=0.6, near_share=1.0):
     return ["interpolate", ["exponential", 2], ["zoom"], 10, stop(10), 13, stop(13),
             edge - 0.1, stop(edge - 0.1), edge, stop(edge, near_share),
             16, stop(16, near_share), 20, stop(20, near_share)]
+
+
+TREE_CROWN_METERS = 3.0
+
+
+def tree_radius(scale=1.0):
+    """Радиус кроны в пикселях — по метрам, как ширина наших лент."""
+    def stop(z):
+        return max(1.5, TREE_CROWN_METERS * scale * (2 ** z) * M)
+    return ["interpolate", ["exponential", 2], ["zoom"], 15, stop(15), 18, stop(18), 20, stop(20)]
 
 
 def measured(extra=0.0, low=1.0):
@@ -203,6 +215,19 @@ def _our_layers(p):
         # знают ширины лент: поверх полотна островок ложился бледным
         # треугольником на полосы (Навои × Абая, 28.09.2026). Под полотном он
         # остаётся землёй ровно в зазоре между лентами — как у Яндекса.
+        # Деревья из OSM (вид — крона кружком настоящего размера, ~3 м
+        # радиусом) с мягкой тенью — как у Яндекса. Под дорогами: крона у
+        # бордюра не ложится на асфальт.
+        {"id": "radar-tree-shadow", "type": "circle", "source": "radar", "source-layer": "trees",
+         "minzoom": 15.5,
+         "paint": {"circle-color": p["tree_shadow"], "circle-radius": tree_radius(1.1),
+                   "circle-blur": 0.6, "circle-translate": [1.5, 2.5]}},
+        {"id": "radar-tree", "type": "circle", "source": "radar", "source-layer": "trees",
+         "minzoom": 15.5,
+         "paint": {"circle-color": p["tree_crown"], "circle-radius": tree_radius(),
+                   "circle-stroke-color": p["tree_edge"], "circle-stroke-width": 1,
+                   "circle-opacity": ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 1],
+                   "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 1]}},
         {"id": "radar-median", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 15.5,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
                     ["!", ["has", "strip"]]],

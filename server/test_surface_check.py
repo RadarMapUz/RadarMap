@@ -197,6 +197,22 @@ class MedianTests(unittest.TestCase):
         self.assertTrue(build_roads._median_strips(one, other, (), None, dividers))
         self.assertEqual(dividers, [])
 
+    def test_no_median_over_a_road_between_the_carriageways(self):
+        # Фурката: между встречными лентами — пандус эстакады; разделительная
+        # ложилась поверх его полос.
+        one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (300, 0)), "Furqat ko'chasi", 10.0)
+        other = (3, build_roads.FLAG_ONEWAY, ring((300, 30), (0, 30)), "Furqat ko'chasi", 10.0)
+        ramp = (3, build_roads.FLAG_ONEWAY, ring((0, 15), (300, 15)), "", 8.0)
+        made = build_roads.build_medians([(one, []), (other, []), (ramp, [])])
+        self.assertFalse(any(k == build_roads.AREA_MEDIAN for k, _f, _r in made))
+        made = build_roads.build_medians([(one, []), (other, [])])
+        self.assertTrue(any(k == build_roads.AREA_MEDIAN for k, _f, _r in made))
+
+    def test_bridge_and_ground_carriageways_are_not_a_pair(self):
+        one = (3, build_roads.FLAG_ONEWAY | build_roads.FLAG_BRIDGE, ring((0, 0), (300, 0)), "Furqat ko'chasi", 10.0)
+        other = (3, build_roads.FLAG_ONEWAY, ring((300, 22), (0, 22)), "Furqat ko'chasi", 10.0)
+        self.assertEqual(build_roads.build_medians([(one, []), (other, [])]), [])
+
     def test_side_ramp_does_not_break_the_median(self):
         # Съезд справа примыкает к одной ленте — разделительная идёт дальше.
         one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (600, 0)), "Muqimiy ko'chasi", 10.0)

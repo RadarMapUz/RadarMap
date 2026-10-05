@@ -3029,6 +3029,37 @@ def _middle_of(geometry):
             round((min(lats) + max(lats)) / 2, 5))
 
 
+# Деревья из OSM: отдельные (natural=tree) и ряды (natural=tree_row). Ряд
+# раскладывается на кроны через TREE_ROW_STEP_METERS — так аллея вдоль улицы
+# рисуется, как у Яндекса, кружками, а не линией. Лицензия OSM (ODbL) это
+# разрешает, в отличие от закрытых реестров. Выход — [(lon, lat)].
+TREE_ROW_STEP_METERS = 7.0
+
+
+def collect_trees(source_path):
+    trees = []
+    if not source_path or not os.path.exists(source_path):
+        return trees
+    with open(source_path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.lstrip("\x1e").strip()
+            if not line:
+                continue
+            feature = json.loads(line)
+            if feature.get("properties", {}).get("natural") not in ("tree", "tree_row"):
+                continue
+            geometry = feature.get("geometry") or {}
+            if geometry.get("type") == "Point":
+                lon, lat = geometry["coordinates"][:2]
+                trees.append((round(lon, 6), round(lat, 6)))
+            elif geometry.get("type") == "LineString":
+                for spot, _segment in _walk([tuple(p[:2]) for p in geometry["coordinates"]],
+                                            TREE_ROW_STEP_METERS):
+                    trees.append((round(spot[0], 6), round(spot[1], 6)))
+    trees.sort()
+    return trees
+
+
 def collect_points(source_path):
     """Прочитать geojsonl узлов → список (kind, flags, [(lon, lat)]).
 
@@ -4218,6 +4249,52 @@ def _walk(points, step_meters):
     return out
 
 
+class RoadIndex:
+    """Оси лент по клеткам: «лежит ли точка на какой-то дороге»."""
+
+    CELL_METERS = 60.0
+
+    def __init__(self, streets):
+        self._grid = defaultdict(list)
+        cell = self.CELL_METERS / LAT_METERS
+        for street in streets:
+            half = street[4] / 2.0
+            for a, b in zip(street[2], street[2][1:]):
+                pad = (half + 2.0) / LAT_METERS
+                scale = math.cos(math.radians(a[1])) or 1.0
+                x0, x1 = sorted((a[0], b[0]))
+                y0, y1 = sorted((a[1], b[1]))
+                for gx in range(int((x0 - pad / scale) / cell), int((x1 + pad / scale) / cell) + 1):
+                    for gy in range(int((y0 - pad) / cell), int((y1 + pad) / cell) + 1):
+                        self._grid[(gx, gy)].append((id(street), a, b, half))
+
+    def blocker(self, *exclude):
+        """Функция (кромка, кромка) → True, если поперечник пересекает чужую ленту."""
+        skip = {id(street) for street in exclude}
+        cell = self.CELL_METERS / LAT_METERS
+
+        def blocked(left, right):
+            for share in (0.25, 0.5, 0.75):
+                point = (left[0] + (right[0] - left[0]) * share, left[1] + (right[1] - left[1]) * share)
+                for key, a, b, half in self._grid.get((int(point[0] / cell), int(point[1] / cell)), ()):
+                    if key in skip:
+                        continue
+                    if _point_segment_meters(point, a, b) < half:
+                        return True
+            return False
+        return blocked
+
+
+def _point_segment_meters(p, a, b):
+    scale = math.cos(math.radians(p[1])) or 1.0
+    ax, ay = (a[0] - p[0]) * scale * LAT_METERS, (a[1] - p[1]) * LAT_METERS
+    bx, by = (b[0] - p[0]) * scale * LAT_METERS, (b[1] - p[1]) * LAT_METERS
+    dx, dy = bx - ax, by - ay
+    length = dx * dx + dy * dy
+    t = 0.0 if length == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / length))
+    return math.hypot(ax + t * dx, ay + t * dy)
+
+
 def build_medians(chains, junctions=()):
     """Полосы земли между встречными проезжими одной улицы.
 
@@ -4237,6 +4314,7 @@ def build_medians(chains, junctions=()):
     for street in named:
         by_name.setdefault((street[0], street[3]), []).append(street)
 
+    roads_index = RoadIndex(street for street, _chain in chains if street[0] <= SURFACE_MAX_CLASS)
     out = []
     for key in sorted(by_name):
         group = by_name[key]
@@ -4253,8 +4331,13 @@ def build_medians(chains, junctions=()):
                     continue
                 if not _opposite(one[2], other[2]):
                     continue
+                # Пара — только на одном уровне: лента эстакады над наземной
+                # не делит с ней разделительную (Фурката, 05.10.2026).
+                if (one[1] ^ other[1]) & (FLAG_BRIDGE | FLAG_TUNNEL):
+                    continue
                 fills, dividers = [], []
-                for strip in _median_strips(one, other, junctions, fills, dividers):
+                blocked = roads_index.blocker(one, other)
+                for strip in _median_strips(one, other, junctions, fills, dividers, blocked):
                     out.append((AREA_MEDIAN, AREA_FLAG_CLOSED | AREA_FLAG_STRIP, strip))
                 for line in dividers:
                     out.append((AREA_DIVIDER, 0, line))
@@ -4296,7 +4379,7 @@ def _median_strip(one, other, junctions=()):
     return strips[0] if strips else []
 
 
-def _median_strips(one, other, junctions=(), fills=None, dividers=None):
+def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=None):
     """Многоугольники между внутренними кромками двух встречных проезжих.
 
     Три условия продолжения, кроме расстояния: не перекрёсток; проекция на
@@ -4331,6 +4414,8 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None):
             return False, None
         edges = edges_for(spot, near)
         inside = _at_junction(spot, junctions) and _at_junction(near, junctions)
+        if edges and blocked is not None and blocked(edges[0], edges[1]):
+            return False, None
         return not inside, edges
 
     def boundary(good, bad):
@@ -4405,6 +4490,10 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None):
                 jumped = True
         good = in_range and not at_node and not jumped
         edges = edges_for(spot, near) if in_range else None
+        # Между кромками проходит ДРУГАЯ дорога (пандус эстакады, средняя
+        # лента) — здесь не разделительная: полоса легла бы на полосы движения.
+        if good and edges and blocked is not None and blocked(edges[0], edges[1]):
+            good, edges = False, None
         if not good:
             # Разрыв — конец полосы: проспект расходится или идёт узел.
             # У узла и у расхождения конец уточняется до метра; у прыжка
@@ -4845,6 +4934,8 @@ def main():
                         help="geojsonl объектов с addr:street (необязателен)")
     parser.add_argument("--places", dest="places", default=None,
                         help="geojsonl населённых пунктов (необязателен)")
+    parser.add_argument("--trees", dest="trees", default=None,
+                        help="geojsonl деревьев natural=tree/tree_row (необязателен)")
     # Поверхность считается по ВСЕЙ переданной сети, и на боевом с гигабайтом
     # памяти это не то, что включают молча. Ключом — как дома и адреса.
     parser.add_argument("--no-surface", dest="surface", action="store_false",
@@ -4989,6 +5080,7 @@ def main():
         made = build_mvt.build_mvt(roads, args.tiles_dir, areas=areas,
                                    points=mvt_points, far=far,
                                    far_areas=far_areas, places=places,
+                                   trees=collect_trees(args.trees),
                                    widths=widths, crossings=crossings)
         del widths
         print(f"MVT обзор: местности {len(far_areas)} площадей, мест {len(places)}; "

@@ -70,6 +70,11 @@ class StyleTests(unittest.TestCase):
         self.assertLess(ids.index("radar-bridge-shadow"), ids.index("radar-bridge-case"))
         self.assertLess(ids.index("radar-bridge-case"), ids.index("radar-bridge"))
 
+    def test_osm_trees_drawn_as_crowns_under_roads(self):
+        ids = [l["id"] for l in self.style["layers"]]
+        self.assertLess(ids.index("radar-tree-shadow"), ids.index("radar-tree"))
+        self.assertLess(ids.index("radar-tree"), ids.index("radar-roads-case"))
+
     def test_signal_icons_are_per_approach_points(self):
         import json as _json
         sprite = _json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprite", "sprite.json")))

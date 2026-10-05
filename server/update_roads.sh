@@ -140,6 +140,14 @@ osmium export points.osm.pbf -f geojsonseq --geometry-types=point \
     -o points.geojsonl --overwrite
 echo "    точек в экстракте: $(wc -l < points.geojsonl)"
 
+# Деревья: отдельные и ряды (аллеи вдоль улиц). Рисуются кронами, как у
+# Яндекса; лицензия OSM это разрешает.
+osmium tags-filter uzbekistan.osm.pbf n/natural=tree w/natural=tree_row \
+    -o trees.osm.pbf --overwrite
+osmium export trees.osm.pbf -f geojsonseq --geometry-types=point,linestring \
+    -o trees.geojsonl --overwrite
+echo "    деревьев в экстракте: $(wc -l < trees.geojsonl)"
+
 # Дома. Самый большой слой по числу объектов: в одном кадре центра Ташкента их
 # 54 094 против семисот дорог, и приезжают они в том же .pbf, что и всё
 # остальное, — отдельной закачки не нужно.
@@ -220,7 +228,7 @@ fi
 
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
     --points points.geojsonl --houses houses.geojsonl \
-    --places places.geojsonl \
+    --places places.geojsonl --trees trees.geojsonl \
     --addresses addresses.geojsonl --edits "$EDITS" $SURFACE --mvt \
     --tiles "$CANDIDATE"
 
@@ -246,7 +254,7 @@ rm -rf "$CANDIDATE.check" && mkdir -p "$CANDIDATE.check"
 # сборкой и не написанное другой, остановило бы конвейер на ровном месте.
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
     --points points.geojsonl --houses houses.geojsonl \
-    --places places.geojsonl \
+    --places places.geojsonl --trees trees.geojsonl \
     --addresses addresses.geojsonl --edits "$EDITS" $SURFACE --mvt \
     --tiles "$CANDIDATE.check" >/dev/null
 if ! diff -rq "$CANDIDATE" "$CANDIDATE.check" >/dev/null; then

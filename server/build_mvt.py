@@ -47,6 +47,8 @@ LAYER_PAINT = "paint"
 # Контракт с клиентом: слой «places», свойства name (строка) и rank (1 город,
 # 2 посёлок, 3 кишлак, 4 хутор, 5 район, 6 квартал).
 LAYER_PLACES = "places"
+# Деревья из OSM (build_roads.collect_trees): точка на крону, без свойств.
+LAYER_TREES = "trees"
 # Стрелки полос: одна точка на ПОЛОСУ, свойства turn (код build_roads.TURN_*)
 # и bearing (куда смотрит стрелка, градусы по часовой от севера).
 LAYER_ARROWS = "arrows"
@@ -443,6 +445,84 @@ CENTRE_SOLID_WIDTH_METERS = 13.0
 CENTRE_DASHED, CENTRE_SOLID = 1, 2
 
 
+class OverlapIndex:
+    """Оси лент по клеткам: лежит ли точка разметки на ЧУЖОЙ ленте того же уровня."""
+
+    CELL = 0.0006   # ~60 м
+    MARGIN_METERS = 0.3
+
+    def __init__(self, roads, widths=None):
+        widths = widths or {}
+        self._grid = defaultdict(list)
+        # Концы лент: продолжение той же ленты и перекрёсток сходятся с нашей
+        # в общей точке — это не «чужая лента поверх», у узла разметку и так
+        # режет его площадь.
+        self._ends = {}
+        for road in roads:
+            if len(road[2]) >= 2:
+                self._ends[id(road)] = {(round(p[0], 6), round(p[1], 6)) for p in (road[2][0], road[2][-1])}
+        for road in roads:
+            code, flags, points = road[0], road[1], road[2]
+            if code > 7 or len(points) < 2:
+                continue
+            half = (widths.get(id(road)) or road_width_meters(code, lanes_of(flags))) / 2.0
+            level = flags & (FLAG_BRIDGE | FLAG_TUNNEL)
+            pad = (half + 2.0) / 111_320
+            for a, b in zip(points, points[1:]):
+                x0, x1 = sorted((a[0], b[0]))
+                y0, y1 = sorted((a[1], b[1]))
+                for gx in range(int((x0 - pad * 1.4) / self.CELL), int((x1 + pad * 1.4) / self.CELL) + 1):
+                    for gy in range(int((y0 - pad) / self.CELL), int((y1 + pad) / self.CELL) + 1):
+                        self._grid[(gx, gy)].append((id(road), level, a, b, half))
+
+    def foreign(self, point, road):
+        level = road[1] & (FLAG_BRIDGE | FLAG_TUNNEL)
+        own_ends = self._ends.get(id(road), set())
+        kx = 111_320 * math.cos(math.radians(point[1]))
+        for key, lvl, a, b, half in self._grid.get((int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
+            if key == id(road) or lvl != level or own_ends & self._ends.get(key, set()):
+                continue
+            ax, ay = (a[0] - point[0]) * kx, (a[1] - point[1]) * 111_320
+            bx, by = (b[0] - point[0]) * kx, (b[1] - point[1]) * 111_320
+            dx, dy = bx - ax, by - ay
+            length = dx * dx + dy * dy
+            t = 0.0 if length == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / length))
+            if math.hypot(ax + t * dx, ay + t * dy) < half - self.MARGIN_METERS:
+                return True
+        return False
+
+    def clip(self, line, road, step_meters=MARKING_CLIP_STEP_METERS):
+        """Куски линии вне чужих лент; короче MARKING_MIN_METERS — выбрасываются."""
+        if len(line) < 2:
+            return []
+        kx = 111_320 * math.cos(math.radians(line[0][1]))
+        dense = [line[0]]
+        for a, b in zip(line, line[1:]):
+            length = math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+            parts = max(1, int(length / step_meters))
+            dense.extend((a[0] + (b[0] - a[0]) * i / parts, a[1] + (b[1] - a[1]) * i / parts)
+                         for i in range(1, parts + 1))
+        flags = [self.foreign(p, road) for p in dense]
+        if not any(flags):
+            return [line]
+        runs, current = [], []
+        for point, bad in zip(dense, flags):
+            if bad:
+                runs.append(current)
+                current = []
+            else:
+                current.append(point)
+        runs.append(current)
+        out = []
+        for run in runs:
+            if len(run) < 2:
+                continue
+            length = sum(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320) for a, b in zip(run, run[1:]))
+            if length >= MARKING_MIN_METERS:
+                out.append(_simplify_straight(run))
+        return out
+
+
 def _markings(roads, widths=None, mask=None):
     """(линия, осевая: 0 / CENTRE_DASHED / CENTRE_SOLID) вне перекрёстков.
 
@@ -482,6 +562,7 @@ def _markings(roads, widths=None, mask=None):
             result.pop(0)
         return result
 
+    overlap = OverlapIndex(roads, widths)
     for road in roads:
         code, flags, points = road[0], road[1], road[2]
         # В тоннеле разметку не рисуем: он под землёй и показан полупрозрачным,
@@ -555,10 +636,14 @@ def _markings(roads, widths=None, mask=None):
                 kind = (CENTRE_SOLID if solid else centre) if centre else 0
                 # Мост и тоннель идут над/под узлом земли — его площадь им не указ.
                 if mask is not None and not flags & (FLAG_BRIDGE | FLAG_TUNNEL):
-                    for piece in mask.clip(part):
-                        yield piece, kind, solid
+                    pieces = mask.clip(part)
                 else:
-                    yield part, kind, solid
+                    pieces = [part]
+                # Пунктир не ложится на чужую ленту: там, где пандус вливается
+                # в проспект, разметка двух лент шла сеткой (Фурката, 05.10.2026).
+                for piece in pieces:
+                    for clean in overlap.clip(piece, road):
+                        yield clean, kind, solid
 
 
 # Сплошная перед перекрёстком: столько метров до края узла.
@@ -1199,7 +1284,7 @@ def written_areas(target_dir, set_name):
 def build_mvt(roads, target_dir, areas=(), points=(), far=(),
               zoom=ZOOM_DETAIL, far_zoom=ZOOM_FAR, handles=64,
               written_sets=("h", "d"), far_areas=(), places=(), widths=None,
-              crossings=()):
+              crossings=(), trees=()):
     """Написать .mvt под target_dir/mvt/<z>/<x>/<y>.mvt. Возвращает {путь: байты}."""
     work = os.path.join(target_dir, "_mvt")
     buckets = _Buckets(work, handles)
@@ -1208,6 +1293,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         for road in roads:
             _put(buckets, zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
                  _road_props(road, widths.get(id(road))))
+        for tree in trees:
+            _put(buckets, zoom, LAYER_TREES, mvt.POINT, [tree], {})
         for road in far:
             _put(buckets, far_zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
                  _road_props(road))

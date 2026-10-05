@@ -198,7 +198,10 @@ def _base_layer(layer, p, mode):
         lay.update({"text-transform": "uppercase", "text-letter-spacing": 0.08,
                     # Реже и не впритык: каждая встречная лента подписана своей
                     # строкой, и при шаге по умолчанию одно имя стояло восемь раз.
-                    "symbol-spacing": 520, "text-padding": 24, "text-font": ["Noto Sans Bold"]})
+                    # Каждая лента проспекта подписана отдельно: на Зарканаре
+                    # одно имя стояло шесть раз на экран (05.10.2026). Шаг и
+                    # отступ — чтобы улица читалась один-два раза.
+                    "symbol-spacing": 1100, "text-padding": 60, "text-font": ["Noto Sans Bold"]})
         paint.update({"text-color": p["label"], "text-halo-color": p["halo"], "text-halo-width": 1.6})
     elif l["type"] == "symbol":
         paint["text-halo-color"] = p["halo"]

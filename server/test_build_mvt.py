@@ -258,6 +258,20 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(len(list(build_mvt.lane_markings([bridge], mask=mask))), 2,
                          "мост над узлом земли не режется")
 
+    def test_dashes_stop_at_a_zebra(self):
+        # Зарканар: пунктир шёл сквозь зебру.
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (3 << 4)
+        road = self.road([(69.278, 41.311), (69.282, 41.311)], flags=flags)
+        zebra = [(69.28, 41.3109), (69.28, 41.3111)]
+        mask = build_mvt.JunctionMask([])
+        mask.add_zebras([zebra])
+        lines = list(build_mvt.lane_markings([road], mask=mask))
+        kx = 111_320 * math.cos(math.radians(41.311))
+        for line in lines:
+            for p in line:
+                self.assertGreater(abs(p[0] - 69.28) * kx, 2.4, "пунктир не заходит на зебру")
+        self.assertTrue(lines)
+
     def test_core_between_two_divided_avenues_has_no_markings(self):
         # Два проспекта с раздельными проезжими: четыре точки пересечения по
         # углам квадрата. Внутри квадрата пунктира быть не должно.

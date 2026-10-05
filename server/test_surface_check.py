@@ -190,6 +190,18 @@ class MedianTests(unittest.TestCase):
         self.assertTrue(build_roads.surface_gate((build_roads.AREA_DIVIDER, 0, dividers[0])),
                         "ворота пропускают линию")
 
+    def test_converging_wedge_loses_its_thread_tail(self):
+        # Ленты сходятся: хвост клина уже 1,5 м не рисуется нитью бордюров.
+        one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (300, 0)), "Zarqaynar ko'chasi", 10.0)
+        other = (3, build_roads.FLAG_ONEWAY, ring((300, 30), (0, 10.5)), "Zarqaynar ko'chasi", 10.0)
+        strips = build_roads._median_strips(one, other)
+        self.assertTrue(strips)
+        for strip in strips:
+            kx = sc.LAT_METERS * math.cos(math.radians(LAT))
+            xs = [(p[0] - LON) * kx for p in strip]
+            # У x≈0 зазор между кромками ~0,5 м — туда полоса не доходит.
+            self.assertGreater(min(xs), 10.0)
+
     def test_wide_gap_keeps_the_strip(self):
         one = (3, build_roads.FLAG_ONEWAY, ring((0, 0), (300, 0)), "Navoiy ko'chasi", 10.0)
         other = (3, build_roads.FLAG_ONEWAY, ring((300, 22), (0, 22)), "Navoiy ko'chasi", 10.0)

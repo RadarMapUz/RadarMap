@@ -303,7 +303,38 @@ class JunctionMask:
                 for gy in range(int(box[1] / self.CELL), int(box[3] / self.CELL) + 1):
                     self._grid[(gx, gy)].append((box, ring))
 
+    ZEBRA_CLEAR_METERS = 2.5
+
+    def add_zebras(self, lines):
+        """Полоса ±ZEBRA_CLEAR_METERS вокруг линий переходов — тоже «занято»."""
+        self._zebras = defaultdict(list)
+        for line in lines:
+            for a, b in zip(line, line[1:]):
+                for gx in range(int(min(a[0], b[0]) / self.CELL) - 1, int(max(a[0], b[0]) / self.CELL) + 2):
+                    for gy in range(int(min(a[1], b[1]) / self.CELL) - 1, int(max(a[1], b[1]) / self.CELL) + 2):
+                        self._zebras[(gx, gy)].append((a, b))
+
+    def _on_zebra(self, point):
+        zebras = getattr(self, "_zebras", None)
+        if not zebras:
+            return False
+        kx = 111_320 * math.cos(math.radians(point[1]))
+        for a, b in zebras.get((int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
+            ax, ay = (a[0] - point[0]) * kx, (a[1] - point[1]) * 111_320
+            bx, by = (b[0] - point[0]) * kx, (b[1] - point[1]) * 111_320
+            dx, dy = bx - ax, by - ay
+            length = dx * dx + dy * dy
+            t = 0.0 if length == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / length))
+            if math.hypot(ax + t * dx, ay + t * dy) <= self.ZEBRA_CLEAR_METERS:
+                return True
+        return False
+
     def covers(self, point):
+        if self._on_zebra(point):
+            return True
+        return self._covers_area(point)
+
+    def _covers_area(self, point):
         for box, ring in self._grid.get((int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
             if box[0] <= point[0] <= box[2] and box[1] <= point[1] <= box[3] and _inside(point, ring):
                 return True
@@ -311,7 +342,7 @@ class JunctionMask:
 
     def clip(self, line, step_meters=MARKING_CLIP_STEP_METERS):
         """Куски линии вне узлов; короче MARKING_MIN_METERS — выбрасываются."""
-        if not self._grid or len(line) < 2:
+        if (not self._grid and not getattr(self, "_zebras", None)) or len(line) < 2:
             return [line] if len(line) >= 2 else []
         kx = 111_320 * math.cos(math.radians(line[0][1]))
         dense = [line[0]]
@@ -1377,6 +1408,17 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         cores = crossing_cores(roads)
         mask = JunctionMask(cores + boxes
                             + crossing_areas(junction_areas, cores + boxes))
+        # Зебры, которые рисуются, — до разметки: пунктир не идёт сквозь
+        # переход (Зарканар, 05.10.2026).
+        zebra_nodes = defaultdict(list)
+        for point in points:
+            if point[0] == 5 and point[1] & PFLAG_PAINTED:
+                lon, lat = point[2][0]
+                zebra_nodes[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
+        drawn_zebras = [line for line, marked in crossings
+                        if marked or any(_near_crossing_way(spot, zebra_nodes, NODE_ON_WAY_METERS)
+                                         for spot in line)]
+        mask.add_zebras(drawn_zebras)
         # Разделительная полоса лежит ПОВЕРХ площади узла (ради носа у
         # перехода), и обрывок полосы между лентами поворотов внутри
         # перекрёстка вылез зелёной кляксой в его середине (28.09.2026).

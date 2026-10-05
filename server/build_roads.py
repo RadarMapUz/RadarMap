@@ -2264,6 +2264,8 @@ AREA_FILLET = 13
 # не знает и пропускает.
 AREA_DIVIDER = 15
 MEDIAN_LINE_BELOW_METERS = 2.5
+# Уже этого между кромками — конец клина разделительной обрезается.
+MEDIAN_EDGE_MIN_METERS = 1.5
 FILLET_MAJOR = 2
 AREA_FLAG_CLOSED = 1
 # Разделительная ПОЛОСА между встречными лентами (build_medians), в отличие от
@@ -4469,6 +4471,13 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
         двойная линия по середине: полосу в метр-полтора на изгибе
         выворачивало, ворота её бросали, и между встречными лентами не
         оставалось ничего. Тем же путём уходит полоса, не прошедшая ворота."""
+        if noses:
+            # Хвост клина, где кромки сходятся почти в точку, рисовался одними
+            # бордюрами — жёлтая нить по асфальту (Зарканар, 05.10.2026).
+            while len(rows) >= 2 and meters_between(rows[0][0], rows[0][1]) < MEDIAN_EDGE_MIN_METERS:
+                rows = rows[1:]
+            while len(rows) >= 2 and meters_between(rows[-1][0], rows[-1][1]) < MEDIAN_EDGE_MIN_METERS:
+                rows = rows[:-1]
         if noses and dividers is not None and len(rows) >= 2:
             gaps = [meters_between(r[0], r[1]) for r in rows]
             if sum(gaps) / len(gaps) < MEDIAN_LINE_BELOW_METERS:

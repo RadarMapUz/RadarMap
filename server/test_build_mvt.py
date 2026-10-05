@@ -272,6 +272,20 @@ class BuildTests(unittest.TestCase):
         self.assertTrue(build_mvt.strip_outside_junction(outside, mask))
         self.assertTrue(build_mvt.strip_outside_junction(touching, mask))
 
+    def test_overlapping_strips_keep_the_larger(self):
+        # Основной ход и дублёр давали две разделительные друг на друге.
+        def m(dx, dy):
+            return (69.28 + dx / (111_320 * math.cos(math.radians(41.311))), 41.311 + dy / 111_320)
+        big = (9, 3, [m(0, 0), m(300, 0), m(300, 4), m(0, 4)])
+        inner = (9, 3, [m(50, 1), m(200, 1), m(200, 3), m(50, 3)])
+        apart = (9, 3, [m(500, 0), m(800, 0), m(800, 4), m(500, 4)])
+        line = (15, 0, [m(0, 10), m(300, 10)])
+        kept = build_mvt.drop_overlapping_strips([inner, big, apart, line])
+        self.assertIn(big, kept)
+        self.assertIn(apart, kept)
+        self.assertIn(line, kept)
+        self.assertNotIn(inner, kept)
+
     def test_crossover_of_one_street_is_not_a_core(self):
         # Разворот через разделительную — безымянная связка той же улицы.
         def m(dx, dy):

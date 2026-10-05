@@ -381,6 +381,35 @@ def crossing_areas(areas, centres_of):
     return out
 
 
+def _ring_area(ring):
+    kx = 111_320 * math.cos(math.radians(ring[0][1]))
+    xy = [(x * kx, y * 111_320) for x, y in ring]
+    return abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(xy, xy[1:] + xy[:1]))) / 2
+
+
+def drop_overlapping_strips(items):
+    """Убрать разделительные, чей центр внутри уже оставленной (бо́льшей).
+
+    items — [(вид, флаги, фигура)]; линии (не разделительные) проходят как есть.
+    """
+    strips = [it for it in items if it[0] == AREA_MEDIAN]
+    others = [it for it in items if it[0] != AREA_MEDIAN]
+    kept, grid = [], defaultdict(list)
+    for item in sorted(strips, key=lambda it: -_ring_area(it[2])):
+        ring = item[2]
+        cx, cy = _box_centre(ring)
+        cell = (int(cx / _SIGNAL_CELL), int(cy / _SIGNAL_CELL))
+        covered = any(_inside((cx, cy), other) or _inside(waffle_centre(ring), other)
+                      for gx in range(cell[0] - 1, cell[0] + 2)
+                      for gy in range(cell[1] - 1, cell[1] + 2)
+                      for other in grid.get((gx, gy), ()))
+        if covered:
+            continue
+        kept.append(item)
+        grid[cell].append(ring)
+    return kept + others
+
+
 def strip_outside_junction(ring, mask):
     """Разделительная проспекта, а не обрывок внутри перекрёстка: центр полосы
     вне площади узла. Центр тяжести у изогнутой полосы может выйти наружу,
@@ -455,7 +484,9 @@ def _markings(roads, widths=None, mask=None):
 
     for road in roads:
         code, flags, points = road[0], road[1], road[2]
-        if code > 7 or len(points) < 2:
+        # В тоннеле разметку не рисуем: он под землёй и показан полупрозрачным,
+        # пунктир поверх читался бы наземной дорогой.
+        if code > 7 or len(points) < 2 or flags & FLAG_TUNNEL:
             continue
         lanes = lanes_of(flags)
         confirmed = flags & FLAG_LANES_TAGGED and 2 <= lanes <= MAX_MARKED_LANES
@@ -1167,6 +1198,11 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # перехода), и обрывок полосы между лентами поворотов внутри
         # перекрёстка вылез зелёной кляксой в его середине (28.09.2026).
         # Полоса, чей центр внутри узла, — не разделительная проспекта.
+        # Перекрывающиеся разделительные одной улицы (основной ход и дублёр
+        # дают несколько пар встречных лент) рисовали поверх друг друга
+        # бордюры и носы — жёлтые петли на эстакаде Ахмада Дониша
+        # (05.10.2026). Из накрывающих друг друга остаётся бо́льшая.
+        strips = drop_overlapping_strips(strips)
         for kind, flags, shape in strips:
             if kind == AREA_DIVIDER:
                 # Двойная линия — как пунктир: режется площадью перекрёстка.

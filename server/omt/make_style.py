@@ -51,6 +51,9 @@ PALETTES = {
         "casing": "#aab2bf",
         # Жёлтая кромка магистрали — как у Яндекса (снимок 05.10.2026).
         "kerb": "#f0c93f", "trees": "trees",
+        # Мост: светлый край-ограждение и тень под пролётом; тоннель —
+        # полупрозрачный асфальт с пунктирной кромкой (как у Яндекса).
+        "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#c9ced8",
         "label": "#4a4a4a", "halo": "#ffffff", "signal": "#3b3b3b", "signal_ring": "#f5d547",
     },
     "dark": {
@@ -60,6 +63,7 @@ PALETTES = {
         "median": "#1c2a22", "paint": "#d9dee6", "building": "#1c2027", "landuse": "#151a21",
         "casing": "#2b3039",
         "kerb": "#8c7033", "trees": "trees-dark",
+        "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#2a2f37",
         "label": "#c9ced6", "halo": "#0f1216", "signal": "#101318", "signal_ring": "#f0c64a",
     },
 }
@@ -203,8 +207,22 @@ def _our_layers(p):
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
                     ["!", ["has", "strip"]]],
          "paint": {"fill-color": p["median"], "fill-outline-color": p["minor_edge"]}},
+        # Тоннель — ПОД наземными дорогами: полупрозрачный асфальт и
+        # пунктирная кромка. Раньше он рисовался обычной дорогой поверх всего,
+        # и на Кичик Халка йули не понять было, что дорога уходит под землю.
+        {"id": "radar-tunnel-case", "type": "line", "source": "radar", "source-layer": "roads",
+         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["has", "tunnel"]],
+         "layout": {"line-join": "round", "line-cap": "butt"},
+         # Пунктир — только тонкие края по обеим сторонам (линия с зазором
+         # шириной в полотно). Пунктир на всю ширину давал блоки-зебру.
+         "paint": {"line-color": p["casing"], "line-width": 1.4, "line-gap-width": measured(),
+                   "line-dasharray": [3, 2], "line-opacity": 0.9}},
+        {"id": "radar-tunnel", "type": "line", "source": "radar", "source-layer": "roads",
+         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["has", "tunnel"]],
+         "layout": {"line-join": "round", "line-cap": "butt"},
+         "paint": {"line-color": p["tunnel"], "line-width": measured(), "line-opacity": 0.65}},
         {"id": "radar-roads-case", "type": "line", "source": "radar", "source-layer": "roads",
-         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
+         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
          # Кромка: у магистралей (trunk…secondary) — жёлтая, как у Яндекса;
          # у tertiary — нейтральная, у мелких — цвет края мелкой улицы.
@@ -212,14 +230,14 @@ def _our_layers(p):
                                   ["<=", ["get", "cls"], 5], p["casing"], p["minor_edge"]],
                    "line-width": measured(2.4)}},
         {"id": "radar-roads", "type": "line", "source": "radar", "source-layer": "roads",
-         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
+         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
          "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["road"], p["minor"]],
                    "line-width": measured()}},
         # Короткие широкие куски (stub) — с прямыми концами: скругление делало
         # из них «шар» шире соседних лент. Стык закрывают концы соседей.
         {"id": "radar-roads-stub", "type": "line", "source": "radar", "source-layer": "roads",
-         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["has", "stub"]],
+         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7], ["has", "stub"]],
          "layout": {"line-cap": "butt", "line-join": "round"},
          "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["road"], p["minor"]],
                    "line-width": measured()}},
@@ -268,10 +286,17 @@ def _our_layers(p):
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16.5, 2, 20, 10]}},
         # Мосты и эстакады — поверх всего полотна: иначе эстакада Фурката лежала
         # под перекрёстком Навои, будто её там нет.
+        # Мост: мягкая тень под пролётом (чуть сдвинута вниз-вправо, как от
+        # солнца) и светлый край-ограждение — пролёт читается над землёй.
+        {"id": "radar-bridge-shadow", "type": "line", "source": "radar", "source-layer": "roads",
+         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["==", ["get", "bridge"], True]],
+         "layout": {"line-cap": "butt", "line-join": "round"},
+         "paint": {"line-color": p["bridge_shadow"], "line-width": measured(9.0), "line-blur": 6,
+                   "line-translate": [2, 4]}},
         {"id": "radar-bridge-case", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["==", ["get", "bridge"], True]],
          "layout": {"line-cap": "butt", "line-join": "round"},
-         "paint": {"line-color": p["casing"], "line-width": measured(3.0)}},
+         "paint": {"line-color": p["bridge_edge"], "line-width": measured(4.0)}},
         {"id": "radar-bridge", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["==", ["get", "bridge"], True]],
          "layout": {"line-cap": "butt", "line-join": "round"},

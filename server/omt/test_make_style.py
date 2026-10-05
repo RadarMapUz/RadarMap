@@ -62,6 +62,14 @@ class StyleTests(unittest.TestCase):
         case = layers["radar-roads-case"]["paint"]["line-color"]
         self.assertIn(make_style.PALETTES[self.theme]["kerb"], case)
 
+    def test_tunnels_under_ground_roads_bridges_with_shadow(self):
+        ids = [l["id"] for l in self.style["layers"]]
+        layers = {l["id"]: l for l in self.style["layers"]}
+        self.assertLess(ids.index("radar-tunnel"), ids.index("radar-roads-case"), "тоннель под землёй")
+        self.assertIn(["!", ["has", "tunnel"]], layers["radar-roads"]["filter"])
+        self.assertLess(ids.index("radar-bridge-shadow"), ids.index("radar-bridge-case"))
+        self.assertLess(ids.index("radar-bridge-case"), ids.index("radar-bridge"))
+
     def test_signal_icons_are_per_approach_points(self):
         import json as _json
         sprite = _json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprite", "sprite.json")))

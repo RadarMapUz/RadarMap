@@ -3586,6 +3586,11 @@ def _edge_points(node, neighbour, width, scale, back=0.0):
 JUNCTION_CLUSTER_METERS = 35.0
 
 
+def _is_major_node(legs):
+    """В узле сходятся хотя бы две магистральные ленты (шире JUNCTION_MIN_WIDEST)."""
+    return sum(1 for leg in legs if leg[2] >= JUNCTION_MIN_WIDEST_METERS) >= 2
+
+
 def cluster_junctions(arms):
     """Свести узлы одного перекрёстка вместе. Возвращает список списков ног."""
     # Берём и узлы с ДВУМЯ концами, а не только перекрёстки.
@@ -3629,7 +3634,13 @@ def cluster_junctions(arms):
                 if one >= other:
                     continue
                 if meters_between(spots[one][1][0][0],
-                                  spots[other][1][0][0]) <= JUNCTION_CLUSTER_METERS:
+                                  spots[other][1][0][0]) > JUNCTION_CLUSTER_METERS:
+                    continue
+                # Сводим только узлы магистралей. Дворовое примыкание в 22 м от
+                # перекрёстка затягивалось в его кластер, и площадь узла
+                # растягивалась треугольником вдоль жилой улицы (Каратош ×
+                # Бешёгоч, 05.10.2026). Двор остаётся своим маленьким узлом.
+                if _is_major_node(spots[one][1]) and _is_major_node(spots[other][1]):
                     unite(one, other)
 
     groups = {}

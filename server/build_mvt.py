@@ -133,6 +133,74 @@ def lane_arrows(code, flags, point, setback=None):
                {"turn": turn, "bearing": round(bearing)})
 
 
+# Ряд стрелок, упавший в площадь перекрёстка или на зебру, отодвигается назад
+# по подходу шагами; не нашёл места — не рисуется. Стрелка вне асфальта не
+# рисуется никогда: на Шота Руставели (05.10.2026) ширина записи шире полотна,
+# и крайние стрелки ложились на газон.
+ARROW_PULLBACK_STEP_METERS = 4.0
+ARROW_PULLBACK_MAX_METERS = 32.0
+
+
+ARROW_HALF_LENGTH_METERS = 2.5
+
+
+def _arrow_body(arrow, bearing):
+    """Центр и концы значка стрелки: зебру задевает весь значок, а не центр."""
+    lon, lat = arrow
+    kx = 111_320 * math.cos(math.radians(lat))
+    fx, fy = math.sin(math.radians(bearing)), math.cos(math.radians(bearing))
+    return [(lon + fx * d / kx, lat + fy * d / 111_320)
+            for d in (-ARROW_HALF_LENGTH_METERS, 0.0, ARROW_HALF_LENGTH_METERS)]
+
+
+def placed_arrows(code, flags, point, setback, mask=None, asphalt=None):
+    """Стрелки ряда, поставленные до перекрёстка и только на полотно.
+
+    Сначала ищется место, где ряд целиком на асфальте и не задевает узел.
+    Нет такого — ряд на своём месте без стрелок за кромкой (запись шире
+    полотна), но только если он не в узле; иначе ряда нет.
+    """
+    base = ARROW_SETBACK_METERS if setback is None else setback
+    bearing = point_azimuth(flags)
+
+    def clear(arrow):
+        return mask is None or not any(mask.covers(p) for p in _arrow_body(arrow, bearing))
+
+    def paved(arrow):
+        return asphalt is None or asphalt.covers(arrow)
+
+    first = list(lane_arrows(code, flags, point, base))
+    extra = 0.0
+    while extra <= ARROW_PULLBACK_MAX_METERS:
+        row = first if extra == 0.0 else list(lane_arrows(code, flags, point, base + extra))
+        if all(clear(arrow) and paved(arrow) for arrow, _props in row):
+            return row
+        extra += ARROW_PULLBACK_STEP_METERS
+    if all(clear(arrow) for arrow, _props in first):
+        return [(arrow, props) for arrow, props in first if paved(arrow)]
+    return []
+
+
+def arrow_cells(points, cell):
+    """Клетки сетки вокруг рядов стрелок — асфальт нужен только там."""
+    cells = set()
+    for point in points:
+        if point[0] != POINT_LANE_ARROWS:
+            continue
+        lon, lat = point[2][0]
+        gx, gy = int(lon / cell), int(lat / cell)
+        cells.update((gx + dx, gy + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1))
+    return cells
+
+
+def near_cells(ring, cells, cell):
+    lons = [p[0] for p in ring]
+    lats = [p[1] for p in ring]
+    return any((gx, gy) in cells
+               for gx in range(int(min(lons) / cell), int(max(lons) / cell) + 1)
+               for gy in range(int(min(lats) / cell), int(max(lats) / cell) + 1))
+
+
 # Ряды стрелок на одном подходе. turn:lanes стоит на каждом куске ленты перед
 # перекрёстком, и каждый кусок давал свой ряд: на Навои × Рашидов (снимок
 # 28.09.2026) — по 2–3 ряда подряд. Рядом стоящие ряды одного направления на
@@ -483,11 +551,38 @@ def drop_overlapping_strips(items):
     return kept + others
 
 
+BIG_JUNCTION_M2 = 600.0
+STRIP_IN_JUNCTION_SHARE = 0.4
+
+
 def strip_outside_junction(ring, mask):
-    """Разделительная проспекта, а не обрывок внутри перекрёстка: центр полосы
-    вне площади узла. Центр тяжести у изогнутой полосы может выйти наружу,
-    поэтому выбрасываем, только если внутри и он, и середина вершин."""
-    return not (mask.covers(_box_centre(ring)) and mask.covers(waffle_centre(ring)))
+    """Разделительная проспекта, а не обрывок внутри перекрёстка.
+
+    Выбрасывается, если в узле её центр или больше STRIP_IN_JUNCTION_SHARE её
+    площади: обрывок в зоне слияния лент лежал наполовину на площади узла,
+    а проверка одного центра его пропускала (метрика medians_on_asphalt).
+    """
+    if mask.covers(_box_centre(ring)) and mask.covers(waffle_centre(ring)):
+        return False
+    xs = [p[0] for p in ring]
+    ys = [p[1] for p in ring]
+    samples = inside_points(ring, 12)
+    if samples and sum(mask._covers_area(p) for p in samples) / len(samples) > STRIP_IN_JUNCTION_SHARE:
+        return False
+    return True
+
+
+def inside_points(ring, per_side):
+    """До per_side² точек сетки внутри многоугольника."""
+    x0, x1 = min(p[0] for p in ring), max(p[0] for p in ring)
+    y0, y1 = min(p[1] for p in ring), max(p[1] for p in ring)
+    out = []
+    for i in range(per_side):
+        for j in range(per_side):
+            p = (x0 + (x1 - x0) * (i + 0.5) / per_side, y0 + (y1 - y0) * (j + 0.5) / per_side)
+            if _inside(p, ring):
+                out.append(p)
+    return out
 
 
 def _simplify_straight(run):
@@ -1177,6 +1272,8 @@ def _area_props(kind, flags):
         props["cls"] = (flags >> SURFACE_CLASS_SHIFT) & SURFACE_CLASS_MASK
     if kind == AREA_MEDIAN and flags & 2:
         props["strip"] = True
+    if kind == AREA_MEDIAN and flags & 4:
+        props["island"] = True
     return props
 
 
@@ -1389,13 +1486,21 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             lay(kind, flags, shape)
         # Дома и поверхность — из уже написанных тайлов: в памяти их нет.
         signals = _signal_grid(points)
-        boxes, junction_areas, strips = [], [], []
+        boxes, junction_areas, strips, drawn_islands = [], [], [], []
+        # Полотно — только у стрелок: вся страна в память не влезет.
+        arrow_area = arrow_cells(points, _SIGNAL_CELL)
+        asphalt_rings = []
         for set_name in written_sets:
             for kind, flags, shape in written_areas(target_dir, set_name):
+                if (kind in (AREA_ROAD, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_FILLET) and flags & 1
+                        and near_cells(shape, arrow_area, _SIGNAL_CELL)):
+                    asphalt_rings.append(shape)
                 if kind == AREA_JUNCTION_BOX:
                     boxes.append(shape)
                 if kind in (AREA_JUNCTION, AREA_JUNCTION_BOX) and flags & 1:
                     junction_areas.append(shape)
+                if kind == AREA_MEDIAN and flags & 4:
+                    drawn_islands.append(shape)
                 if (kind == AREA_MEDIAN and flags & 2) or kind == AREA_DIVIDER:
                     strips.append((kind, flags, shape))
                     continue
@@ -1406,7 +1511,13 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # примыкания двора (46–59 м поперёк проспекта) резала пунктир Беруни
         # через каждые 80 м.
         cores = crossing_cores(roads)
-        mask = JunctionMask(cores + boxes
+        # Плюс любая БОЛЬШАЯ площадь узла: там, где поворотные полосы начерчены
+        # отдельными лентами, их пунктир шёл паутиной через весь перекрёсток
+        # (41.281, 69.195; метрика dashes_in_junction — 146 м на 1 км).
+        # Заплатки на стыках лент одной улицы меньше BIG_JUNCTION_M2.
+        big = [ring for ring in junction_areas if _ring_area(ring) >= BIG_JUNCTION_M2]
+        # Островок из OSM — бордюр: пунктир сквозь него не идёт.
+        mask = JunctionMask(cores + boxes + big + drawn_islands
                             + crossing_areas(junction_areas, cores + boxes))
         # Зебры, которые рисуются, — до разметки: пунктир не идёт сквозь
         # переход (Зарканар, 05.10.2026).
@@ -1473,6 +1584,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             for lon, lat in line:
                 crossing_grid[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
         leaders = arrow_leaders(points)
+        asphalt = JunctionMask(asphalt_rings)
+        del asphalt_rings
         junction_centres = defaultdict(list)
         for ring in junction_areas:
             cx, cy = _box_centre(ring)
@@ -1493,7 +1606,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                 _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": code})
             if code == POINT_LANE_ARROWS and index not in leaders:
                 continue          # тот же подход, ряд ближе к перекрёстку уже есть
-            for arrow, props in lane_arrows(code, flags, spot[0], arrow_setback(flags, spot[0], signals)):
+            for arrow, props in placed_arrows(code, flags, spot[0], arrow_setback(flags, spot[0], signals),
+                                              mask, asphalt):
                 _put(buckets, zoom, LAYER_ARROWS, mvt.POINT, [arrow], props)
     finally:
         buckets.close()

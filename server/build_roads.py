@@ -1042,6 +1042,50 @@ def collect_areas(source_path, tolerance_deg):
     return areas
 
 
+def collect_islands(source_path, tolerance_deg):
+    """Островки из OSM (area:highway=traffic_island) → [(вид 9, флаги, кольцо)].
+
+    Едут в том же экстракте местности: свой файл ради сорока контуров на город
+    не нужен. Кольцо, не прошедшее проверку поверхности, отбрасываем — лучше
+    угаданный островок из грани, чем игла поперёк перекрёстка.
+    """
+    islands = []
+    if not source_path or not os.path.exists(source_path):
+        return islands
+    with open(source_path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.lstrip("\x1e").strip()
+            if not line or "traffic_island" not in line:
+                continue
+            try:
+                feature = json.loads(line)
+            except ValueError:
+                continue
+            properties = feature.get("properties") or {}
+            if properties.get(ISLAND_TAG[0]) != ISLAND_TAG[1]:
+                continue
+            for closed, points in _shapes_of(feature.get("geometry") or {}):
+                if not closed:
+                    continue
+                ring = [tuple(p[:2]) for p in points]
+                if len(ring) > 3 and ring[0] == ring[-1]:
+                    ring = ring[:-1]
+                ring = simplify(ring, tolerance_deg)
+                if len(ring) < 3 or surface_check.defect(ring) is not None:
+                    continue
+                islands.append((AREA_MEDIAN, AREA_FLAG_CLOSED | AREA_FLAG_DRAWN, ring))
+    return islands
+
+
+def _covered_by_drawn(ring, drawn):
+    """Угаданный островок, который уже нарисован человеком, — дубль."""
+    centre = _centroid(ring)
+    for _kind, _flags, other in drawn:
+        if _point_in_ring(centre, other) or _point_in_ring(_centroid(other), ring):
+            return True
+    return False
+
+
 def _kept_area(kind, closed, points, tolerance_deg):
     """Упростить и отсеять мелочь. None — объект не доехал."""
     if len(points) < (3 if closed else 2):
@@ -2273,6 +2317,12 @@ AREA_FLAG_CLOSED = 1
 # и рисуется поверх асфальта; островок ширин не знает и лежит под ним.
 # Приложение у вида 9 читает только бит «замкнут» — этот бит оно не видит.
 AREA_FLAG_STRIP = 2
+# Островок, нарисованный в OSM людьми (area:highway=traffic_island), а не
+# угаданный из грани графа. Контур точный — он рисуется ПОВЕРХ асфальта с
+# бордюром: под асфальтом его съедали ленты (метрика islands_under_asphalt —
+# 28,6 % площади островков Ташкента под полотном, 05.10.2026).
+AREA_FLAG_DRAWN = 4
+ISLAND_TAG = ("area:highway", "traffic_island")
 
 
 # Местность обзора: вода и крупная зелень, только площади.
@@ -4146,7 +4196,7 @@ def surface_gate(figure):
     return True
 
 
-def stream_surface(roads, target_dir, degrees, handles=64):
+def stream_surface(roads, target_dir, degrees, handles=64, islands=()):
     """Поверхность — на диск потоком, по тому же закону, что дома.
 
     Контур улицы примерно втрое тяжелее её осевой по вершинам, и держать слой
@@ -4201,7 +4251,11 @@ def stream_surface(roads, target_dir, degrees, handles=64):
         # и порог площади, и правило состава. Отличает его место: центр такой
         # фигуры лежит в пределах досягаемости узлов перекрёстка.
         inner = junction_index([(node, radius * JUNCTION_CORE_REACH) for node, radius in spots])
+        for figure in islands:
+            put(figure)
         for figure in build_islands(roads):
+            if islands and _covered_by_drawn(figure[2], islands):
+                continue
             if _at_junction(_centroid(figure[2]), inner):
                 put((AREA_JUNCTION_BOX, figure[1], figure[2]))
                 continue
@@ -4302,7 +4356,10 @@ class RoadIndex:
         cell = self.CELL_METERS / LAT_METERS
 
         def blocked(left, right):
-            for share in (0.25, 0.5, 0.75):
+            # От края до края поперечника: три точки в середине пропускали
+            # чужую ленту, заходящую на полосу краем (метрика
+            # medians_on_asphalt — 5,7 % разделительных на асфальте).
+            for share in (0.1, 0.3, 0.5, 0.7, 0.9):
                 point = (left[0] + (right[0] - left[0]) * share, left[1] + (right[1] - left[1]) * share)
                 for key, a, b, half in self._grid.get((int(point[0] / cell), int(point[1] / cell)), ()):
                     if key in skip:
@@ -4816,7 +4873,7 @@ def build_road_surface(roads):
 
 def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
                 far_points=(), far=None, addresses=None, houses=None,
-                surface=True, places=()):
+                surface=True, places=(), islands=()):
     """Разложить дороги по тайлам и собрать индексы v1 и v2.
 
     Дорога, задевшая несколько тайлов, попадает в каждый целиком: дубль на
@@ -4933,7 +4990,7 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
     if houses:
         index_v2.update(houses)
     if surface:
-        index_v2.update(stream_surface(roads, target_dir, degrees))
+        index_v2.update(stream_surface(roads, target_dir, degrees, islands=islands))
     for name, by_key in sorted(tiled.items()):
         for key, items in sorted(by_key.items()):
             if not items:
@@ -5110,9 +5167,13 @@ def main():
         identity_count = identity_cells = 0
     del identities
     places = collect_places(args.places)
+    # Островки — точнее дорожного допуска не упрощаем: в них 5–10 м.
+    islands = collect_islands(args.areas, args.tolerance / 111_320.0)
+    if islands:
+        print(f"островков из OSM: {len(islands)}")
     index, index_v2 = write_tiles(roads, args.tiles_dir, args.grid, areas, points,
                                   far_points, far, addresses, houses,
-                                  args.surface, places)
+                                  args.surface, places, islands)
 
     if places:
         ranks = Counter(place[0] for place in places)

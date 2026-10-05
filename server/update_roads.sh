@@ -118,6 +118,7 @@ echo "    дорог в экстракте: $(wc -l < roads.geojsonl)"
 osmium tags-filter uzbekistan.osm.pbf \
     wa/natural=water,wood wa/landuse=reservoir,forest,grass,cemetery \
     wa/leisure=park w/waterway=river,canal w/railway=rail \
+    wa/area:highway=traffic_island \
     -o areas.osm.pbf --overwrite
 osmium export areas.osm.pbf -f geojsonseq \
     --geometry-types=linestring,polygon -o areas.geojsonl --overwrite

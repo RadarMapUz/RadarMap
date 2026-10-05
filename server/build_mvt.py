@@ -521,12 +521,14 @@ def _markings(roads, widths=None, mask=None):
         origin = points[0]
         sx, sy = 111_320 * math.cos(math.radians(origin[1])), 111_320
         metric = [((p[0] - origin[0]) * sx, (p[1] - origin[1]) * sy) for p in points]
+        at_crossing = []
         for endpoint in (points[0], points[-1]):
             degree, node_width, streets = nodes[key(endpoint, flags)]
             # Рвём пунктир только на перекрёстке улиц: двор или проезд,
             # примкнувший к проспекту, его не прерывает — как у Яндекса.
             # Раньше рвал каждый, и от Беруни оставались обрывки (05.10.2026).
             crossing = degree >= 3 and len(streets) >= 2
+            at_crossing.append(crossing)
             metric = trim(metric, node_width / 2 + JUNCTION_MARKING_MARGIN if crossing else 0)
             metric.reverse()
         if len(metric) < 2:
@@ -542,24 +544,78 @@ def _markings(roads, widths=None, mask=None):
                 line.append((origin[0] + x / sx, origin[1] + y / sy))
             if len(line) < 2:
                 continue
-            # Мост и тоннель идут над/под узлом земли — его площадь им не указ.
-            if mask is not None and not flags & (FLAG_BRIDGE | FLAG_TUNNEL):
-                for piece in mask.clip(line):
-                    yield piece, centre
-            else:
-                yield line, centre
+            # Перед перекрёстком улиц — сплошная: у односторонней ленты на
+            # подходе (её конец по ходу), у осевой двусторонней — с обоих
+            # концов. Так размечен подход в жизни и у Яндекса (снимок
+            # 05.10.2026); двор и примыкание ничего не меняют.
+            ends = ((False, at_crossing[1]) if flags & FLAG_ONEWAY and not centre
+                    else (at_crossing[0], at_crossing[1]) if centre
+                    else (False, False))
+            for part, solid in split_approaches(line, ends):
+                kind = (CENTRE_SOLID if solid else centre) if centre else 0
+                # Мост и тоннель идут над/под узлом земли — его площадь им не указ.
+                if mask is not None and not flags & (FLAG_BRIDGE | FLAG_TUNNEL):
+                    for piece in mask.clip(part):
+                        yield piece, kind, solid
+                else:
+                    yield part, kind, solid
+
+
+# Сплошная перед перекрёстком: столько метров до края узла.
+APPROACH_SOLID_METERS = 25.0
+
+
+def split_approaches(line, ends):
+    """[(кусок, сплошной?)]: от начала/конца, отмеченных в ends, отрезается
+    APPROACH_SOLID_METERS сплошной; остальное — как было."""
+    if not any(ends) or len(line) < 2:
+        return [(line, False)]
+    kx = 111_320 * math.cos(math.radians(line[0][1]))
+    lengths = [math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320) for a, b in zip(line, line[1:])]
+    total = sum(lengths)
+    head = APPROACH_SOLID_METERS if ends[0] else 0.0
+    tail = APPROACH_SOLID_METERS if ends[1] else 0.0
+    if head + tail >= total:
+        return [(line, True)]
+
+    def cut(at):
+        travelled = 0.0
+        for (a, b), piece in zip(zip(line, line[1:]), lengths):
+            if piece > 0 and travelled + piece >= at:
+                t = (at - travelled) / piece
+                return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+            travelled += piece
+        return line[-1]
+
+    def between(start, end):
+        out = [cut(start)]
+        travelled = 0.0
+        for point, piece in zip(line[1:], lengths):
+            travelled += piece
+            if start < travelled < end:
+                out.append(point)
+        out.append(cut(end))
+        return out
+
+    parts = []
+    if head:
+        parts.append((between(0.0, head), True))
+    parts.append((between(head, total - tail), False))
+    if tail:
+        parts.append((between(total - tail, total), True))
+    return [(p, solid) for p, solid in parts if len(p) >= 2]
 
 
 def lane_markings(roads, widths=None, mask=None):
     """Разделители полос (без осевых) вне перекрёстков."""
-    for line, centre in _markings(roads, widths, mask):
+    for line, centre, _solid in _markings(roads, widths, mask):
         if not centre:
             yield line
 
 
 def centre_lines(roads, widths=None, mask=None):
     """Осевые двусторонних дорог: (линия, CENTRE_DASHED | CENTRE_SOLID)."""
-    for line, centre in _markings(roads, widths, mask):
+    for line, centre, _solid in _markings(roads, widths, mask):
         if centre:
             yield line, centre
 
@@ -1210,8 +1266,10 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                     lay(kind, flags, piece)
             elif strip_outside_junction(shape, mask):
                 lay(kind, flags, shape)
-        for line, centre in _markings(roads, widths, mask):
+        for line, centre, solid in _markings(roads, widths, mask):
             props = {"centre": centre} if centre else {"verified": True}
+            if solid and not centre:
+                props["solid"] = True
             _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, props)
         # Регулируемые перекрёстки — после всех центров: светофор отдаётся
         # ближайшему узлу. Центры — и «середины узла» (вид 10), и ядра

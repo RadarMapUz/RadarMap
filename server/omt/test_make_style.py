@@ -94,7 +94,8 @@ class StyleTests(unittest.TestCase):
 
     def test_centre_lines_have_their_own_layers(self):
         layers = {l["id"]: l for l in self.style["layers"]}
-        self.assertEqual(layers["radar-markings"]["filter"], ["!", ["has", "centre"]])
+        self.assertIn(["!", ["has", "centre"]], layers["radar-markings"]["filter"])
+        self.assertNotIn("line-dasharray", layers["radar-markings-solid"]["paint"])
         self.assertIn("line-dasharray", layers["radar-centre-dashed"]["paint"])
         self.assertNotIn("line-dasharray", layers["radar-centre-solid"]["paint"])
 

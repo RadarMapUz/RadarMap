@@ -219,9 +219,29 @@ class BuildTests(unittest.TestCase):
                  self.road([(69.28, 41.309), center], name="Рашидов"),
                  self.road([center, (69.28, 41.313)], name="Рашидов")]
         lines = list(build_mvt.lane_markings(roads))
-        self.assertEqual(len(lines), 2)
-        self.assertLess(lines[0][-1][0], center[0] - .00005)
-        self.assertGreater(lines[1][0][0], center[0] + .00005)
+        before = [l for l in lines if max(p[0] for p in l) < center[0]]
+        after = [l for l in lines if min(p[0] for p in l) > center[0]]
+        self.assertEqual(len(before) + len(after), len(lines), "ничего не лежит в перекрёстке")
+        self.assertTrue(before and after)
+        self.assertLess(max(p[0] for l in before for p in l), center[0] - .00005)
+        self.assertGreater(min(p[0] for l in after for p in l), center[0] + .00005)
+
+    def test_approach_to_a_crossing_turns_solid(self):
+        # Подход к перекрёстку улиц: последние 25 м разделителей — сплошная.
+        center = (69.28, 41.311)
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (2 << 4)
+        roads = [self.road([(69.276, 41.311), center], flags=flags),
+                 self.road([center, (69.284, 41.311)], flags=flags),
+                 self.road([(69.28, 41.309), center], name="Рашидов"),
+                 self.road([center, (69.28, 41.313)], name="Рашидов")]
+        marks = list(build_mvt._markings(roads))
+        solid = [l for l, c, s in marks if s and not c]
+        self.assertEqual(len(solid), 1, "сплошная — только на подходе, не на выезде")
+        kx = 111_320 * math.cos(math.radians(41.311))
+        length = sum(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+                     for a, b in zip(solid[0], solid[0][1:]))
+        self.assertAlmostEqual(length, build_mvt.APPROACH_SOLID_METERS, delta=0.5)
+        self.assertLess(max(p[0] for p in solid[0]), center[0], "на подходе, до узла")
 
     def test_junction_area_cuts_the_markings(self):
         # Мукими × Бунёдкор: концы сегментов не совпадают с узлом, пунктир шёл

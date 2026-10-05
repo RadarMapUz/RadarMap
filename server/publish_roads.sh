@@ -72,6 +72,7 @@ else
     scp -q "$(dirname "$0")/build_roads.py" \
         "$(dirname "$0")/build_mvt.py" "$(dirname "$0")/mvt.py" \
         "$(dirname "$0")/surface_check.py" "$(dirname "$0")/lane_inference.py" \
+        "$(dirname "$0")/road_metrics.py" \
         "$HOST:/opt/radarmap/work/"
     # ТЕ ЖЕ слои, что собирает крон.
     #
@@ -278,6 +279,8 @@ if [ -f "$WORK/mvt_index.json" ]; then
     scp -q "$WORK/mvt_index.json" "$HOST:$WEBROOT/mvt_index.json"
     echo "    индекс MVT подписан и выложен"
 fi
+# Метрики опубликованной сборки — эталон, с которым сравнится следующая.
+ssh "$HOST" "[ -f '$TILES/roads_metrics.json' ] && cp '$TILES/roads_metrics.json' /opt/radarmap/work/roads_metrics_live.json || true"
 echo "готово: v1 — $TILE_COUNT тайлов, v2 — $TILE_COUNT_V2 файлов"
 notify "опубликовано. $GATE_OUT"
 echo "телефоны подхватят при проверке (раз в трое суток), свежая установка — сразу"

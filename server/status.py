@@ -546,6 +546,16 @@ def sample_tiles(ctx, tiles, url_of, count):
     return len(keys), bad
 
 
+# Метрики road_metrics.py опубликованной сборки, короткими словами.
+METRIC_TITLES = {"houses_under_asphalt": "дома под асфальтом %",
+                 "islands_under_asphalt": "островки под асфальтом %",
+                 "arrows_after_stop": "стрелки за стоп-линией ‰",
+                 "dashes_in_junction": "пунктир в узле м/км",
+                 "dashes_on_zebra": "пунктир на зебре м/км",
+                 "medians_on_asphalt": "разделительные на узле %",
+                 "dashes_through_medians": "пунктир сквозь разделительную м/км"}
+
+
 def check_roads(ctx):
     meaning = ("Набросок дороги на экране поездки рисуется по старой сети: новые "
                "дороги и правки конструктора до водителей не доезжают.")
@@ -575,6 +585,16 @@ def check_roads(ctx):
             state = worst(state, WARN)
             details.append("кандидат собран %s назад и не опубликован → publish_roads.sh"
                            % days(built))
+    metrics_path = os.path.join(ctx.root, "work", "roads_metrics_live.json")
+    if os.path.exists(metrics_path):
+        try:
+            with open(metrics_path, encoding="utf-8") as handle:
+                metrics = json.load(handle)
+            details.append("качество (Ташкент): " + ", ".join(
+                "%s %s" % (METRIC_TITLES[key], metrics[key])
+                for key in METRIC_TITLES if metrics.get(key) is not None))
+        except (OSError, ValueError) as error:
+            details.append("метрики не читаются: %s" % error)
     summary = "тайлов %d · опубликованы %s назад · выборка %d/%d" % (
         len(tiles), days(age), checked - len(broken), checked)
     return result("roads", "Дороги (набросок)", state, summary, meaning, details)

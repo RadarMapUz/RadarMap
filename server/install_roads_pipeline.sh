@@ -140,6 +140,7 @@ echo "→ 2/5 заливка сборщика и недельного скрип
 # воскресная сборка падает сразу (с 27.09.2026).
 "${SCP[@]}" -q "$DIR/surface_check.py" "$HOST:$WORK/surface_check.py.new"
 "${SCP[@]}" -q "$DIR/lane_inference.py" "$HOST:$WORK/lane_inference.py.new"
+"${SCP[@]}" -q "$DIR/road_metrics.py" "$HOST:$WORK/road_metrics.py.new"
 "${SCP[@]}" -q "$DIR/ml_candidates.py" "$HOST:$WORK/ml_candidates.py.new"
 "${SCP[@]}" -q "$DIR/fetch_candidates.sh" "$HOST:/opt/radarmap/fetch_candidates.sh.new"
 
@@ -154,11 +155,11 @@ echo "→ 3/5 проверка синтаксиса ТОЙ ЖЕ версией p
   mv '$WORK/build_roads.py.new' '$WORK/build_roads.py'
   mv /opt/radarmap/update_roads.sh.new /opt/radarmap/update_roads.sh
   chmod +x /opt/radarmap/update_roads.sh
-  for extra in mvt build_mvt ml_candidates surface_check lane_inference; do
+  for extra in mvt build_mvt ml_candidates surface_check lane_inference road_metrics; do
       python3 -c \"import ast; ast.parse(open('$WORK/\$extra.py.new').read())\"
   done
   bash -n /opt/radarmap/fetch_candidates.sh.new
-  for extra in mvt build_mvt ml_candidates surface_check lane_inference; do
+  for extra in mvt build_mvt ml_candidates surface_check lane_inference road_metrics; do
       mv \"$WORK/\$extra.py.new\" \"$WORK/\$extra.py\"
   done
   mv /opt/radarmap/fetch_candidates.sh.new /opt/radarmap/fetch_candidates.sh

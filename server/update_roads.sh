@@ -264,6 +264,24 @@ if ! diff -rq "$CANDIDATE" "$CANDIDATE.check" >/dev/null; then
 fi
 rm -rf "$CANDIDATE.check"
 
+# Метрики качества картинки (road_metrics.py) — по рамке Ташкента: дома и
+# островки под асфальтом, стрелки за стоп-линией, пунктир в узле и на зебре,
+# разделительные на площади узла. Сравниваются с опубликованной сборкой; на
+# заметном ухудшении кандидат не готов. Осознанный пропуск — только с причиной:
+#   RADARMAP_ALLOW_WORSE="новые правила стрелок" /opt/radarmap/update_roads.sh
+echo "--- метрики качества"
+if [ -f "$WORK/road_metrics.py" ]; then
+    if ! python3 "$WORK/road_metrics.py" "$CANDIDATE" --bbox tashkent --islands areas.geojsonl \
+            --json "$CANDIDATE/roads_metrics.json" --compare "$WORK/roads_metrics_live.json"; then
+        if [ -n "${RADARMAP_ALLOW_WORSE:-}" ]; then
+            echo "    метрики хуже, пропуск: $RADARMAP_ALLOW_WORSE"
+        else
+            echo "СТОП: метрики качества ухудшились (см. выше)"
+            exit 1
+        fi
+    fi
+fi
+
 # Отчёт: то, на что смотрят ворота публикации и человек в телеграме.
 python3 - "$CANDIDATE" "$WEBROOT" <<'PY'
 import json, os, sys

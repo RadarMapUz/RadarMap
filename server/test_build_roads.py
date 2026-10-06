@@ -2315,6 +2315,27 @@ class JunctionClusterSpanTests(unittest.TestCase):
             self.assertLessEqual((max(xs) - min(xs)) * kx, build_roads.JUNCTION_CLUSTER_MAX_SPAN + 1)
         self.assertGreater(len(groups), 1)
 
+
+class LinkLaneTests(unittest.TestCase):
+    """Съезд не наследует полосы магистрали."""
+
+    def test_untagged_link_is_one_lane(self):
+        flags = build_roads.flags_of({"highway": "trunk_link", "oneway": "yes"}, None, 2)
+        self.assertTrue(flags & build_roads.FLAG_LINK)
+        self.assertEqual(build_roads.lanes_of(flags), 1)
+
+    def test_tagged_link_keeps_its_tag(self):
+        flags = build_roads.flags_of({"highway": "trunk_link", "oneway": "yes", "lanes": "2"}, None, 2)
+        self.assertEqual(build_roads.lanes_of(flags), 2)
+
+    def test_link_is_not_inferred_from_the_trunk(self):
+        a, b, c = (69.2800, 41.3100), (69.2810, 41.3100), (69.2820, 41.3100)
+        trunk = build_roads.with_lanes(build_roads.FLAG_ONEWAY, 6) | build_roads.FLAG_LANES_TAGGED
+        link = build_roads.flags_of({"highway": "trunk_link", "oneway": "yes"}, None, 2)
+        roads, _ = build_roads.apply_lane_inference(
+            [(2, trunk, [a, b], "Kichik Halqa"), (2, link, [b, c], "")])
+        self.assertEqual(build_roads.lanes_of(roads[1][1]), 1)
+
 if __name__ == "__main__":
     unittest.main()
 

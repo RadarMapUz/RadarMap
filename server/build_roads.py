@@ -104,6 +104,12 @@ FLAG_HAND_DRAWN = 1 << 9
 # 05.10.2026); сплошная осевая и всё, что про ПДД, — только подтверждённое.
 # Телефон бит не читает, как и TAGGED.
 FLAG_LANES_INFERRED = 1 << 10
+# Съезд (*_link в OSM). Класс у него — класс магистрали, к которой он ведёт, и
+# без этого бита он «угадывал» её полосы: съезд к Малой кольцевой у Чиланзара
+# получал 6 полос и 22,5 м, и асфальт заливал островки между съездом и
+# проспектом (06.10.2026). Съезд без тега — 1 полоса (двусторонний — 2), в
+# голосовании полос не участвует. Телефон бит не читает.
+FLAG_LINK = 1 << 11
 
 # Своя дорога короче этого — не дорога, а дрожь мыши.
 MIN_DRAWN_METERS = 20.0
@@ -954,9 +960,13 @@ def flags_of(properties, points=None, code=None):
         flags |= FLAG_BRIDGE
     if properties.get("tunnel") not in (None, "no"):
         flags |= FLAG_TUNNEL
+    if str(properties.get("highway", "")).endswith("_link"):
+        flags |= FLAG_LINK
     if code is not None:
-        flags = with_lanes(flags, road_lanes(properties, code,
-                                             bool(flags & FLAG_ONEWAY)))
+        lanes = road_lanes(properties, code, bool(flags & FLAG_ONEWAY))
+        if flags & FLAG_LINK and not tagged_lanes(properties):
+            lanes = clamp_lanes(code, 1 if flags & FLAG_ONEWAY else 2)
+        flags = with_lanes(flags, lanes)
         if tagged_lanes(properties):
             flags |= FLAG_LANES_TAGGED
     return flags
@@ -1665,7 +1675,7 @@ def heal_gap_names(roads):
     for road in roads:
         code, flags, points = road[0], road[1], road[2]
         name = road[3] if len(road) > 3 else ""
-        if (name or not flags & FLAG_ONEWAY or code > 5 or len(points) < 2
+        if (name or not flags & FLAG_ONEWAY or flags & FLAG_LINK or code > 5 or len(points) < 2
                 or sum(meters_between(a, b) for a, b in zip(points, points[1:])) > HEAL_NAME_MAX_METERS):
             out.append(road)
             continue
@@ -1695,7 +1705,7 @@ def apply_lane_inference(roads):
     """
     import lane_inference
     guessed = lane_inference.infer_lanes(
-        roads, lanes_of,
+        [road for road in roads if not road[1] & FLAG_LINK], lanes_of,
         lambda flags: flags & FLAG_LANES_TAGGED,
         lambda flags: flags & FLAG_ONEWAY)
     # Короткая безымянная двусторонняя связка без тега (перемычка у

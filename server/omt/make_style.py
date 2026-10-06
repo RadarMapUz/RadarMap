@@ -222,9 +222,51 @@ def _base_layer(layer, p, mode):
     return l
 
 
+# Краска земли — ПОД эстакадой, разметка самой эстакады — над ней. Раньше вся
+# разметка лежала поверх мостов, и полосы, зебры и стоп-линии перекрёстка под
+# эстакадой Бунёдкора у Чиланзара сеткой проступали сквозь пролёт (06.10.2026).
+GROUND_PAINT = ("radar-markings-solid", "radar-markings", "radar-centre-dashed",
+                "radar-centre-solid", "radar-zebra", "radar-stop-line", "radar-arrows")
+BRIDGE_MARKINGS = ("radar-markings-solid", "radar-markings", "radar-centre-dashed",
+                   "radar-centre-solid")
+
+
+def _with(condition, existing):
+    """Добавить условие в фильтр, не вкладывая «all» в «all»."""
+    if existing and existing[0] == "all":
+        return ["all", condition] + existing[1:]
+    return ["all", condition, existing]
+
+
+def _bridge_order(layers):
+    by_id = {layer["id"]: layer for layer in layers}
+    ground = []
+    for layer_id in GROUND_PAINT:
+        layer = copy.deepcopy(by_id[layer_id])
+        if layer["source-layer"] == "markings":
+            layer["filter"] = _with(["!", ["has", "bridge"]], layer["filter"])
+        ground.append(layer)
+    deck = []
+    for layer_id in BRIDGE_MARKINGS:
+        layer = copy.deepcopy(by_id[layer_id])
+        layer["id"] = layer_id + "-bridge"
+        layer["filter"] = _with(["has", "bridge"], layer["filter"])
+        deck.append(layer)
+    rest = [layer for layer in layers if layer["id"] not in GROUND_PAINT]
+    shadow = next(i for i, layer in enumerate(rest) if layer["id"] == "radar-bridge-shadow")
+    rest[shadow:shadow] = ground
+    top = next(i for i, layer in enumerate(rest) if layer["id"] == "radar-bridge") + 1
+    rest[top:top] = deck
+    return rest
+
+
 def _our_layers(p):
     """Наши слои, снизу вверх: каймы, полотна, площади узлов, разделительные,
-    разметка, зебры, стрелки, светофоры."""
+    разметка, зебры, стрелки, мосты с их разметкой, светофоры."""
+    return _bridge_order(_layers_in_draw_order(p))
+
+
+def _layers_in_draw_order(p):
     return [
         # Разделительные и островки — ПОД полотном. Они построены по осям и не
         # знают ширины лент: поверх полотна островок ложился бледным

@@ -867,9 +867,10 @@ def _markings(roads, widths=None, mask=None):
                     pieces = [part]
                 # Пунктир не ложится на чужую ленту: там, где пандус вливается
                 # в проспект, разметка двух лент шла сеткой (Фурката, 05.10.2026).
+                on_bridge = bool(flags & FLAG_BRIDGE)
                 for piece in pieces:
                     for clean in overlap.clip(piece, road):
-                        yield clean, kind, solid
+                        yield clean, kind, solid, on_bridge
 
 
 # Сплошная перед перекрёстком: столько метров до края узла.
@@ -919,14 +920,14 @@ def split_approaches(line, ends):
 
 def lane_markings(roads, widths=None, mask=None):
     """Разделители полос (без осевых) вне перекрёстков."""
-    for line, centre, _solid in _markings(roads, widths, mask):
+    for line, centre, _solid, _bridge in _markings(roads, widths, mask):
         if not centre:
             yield line
 
 
 def centre_lines(roads, widths=None, mask=None):
     """Осевые двусторонних дорог: (линия, CENTRE_DASHED | CENTRE_SOLID)."""
-    for line, centre, _solid in _markings(roads, widths, mask):
+    for line, centre, _solid, _bridge in _markings(roads, widths, mask):
         if centre:
             yield line, centre
 
@@ -1908,10 +1909,12 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                     lay(kind, flags, piece)
             elif strip_outside_junction(shape, mask):
                 lay(kind, flags, shape)
-        for line, centre, solid in _markings(roads, widths, marks_mask):
+        for line, centre, solid, on_bridge in _markings(roads, widths, marks_mask):
             props = {"centre": centre} if centre else {"verified": True}
             if solid and not centre:
                 props["solid"] = True
+            if on_bridge:
+                props["bridge"] = True
             _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, props)
         # Регулируемые перекрёстки — после всех центров: светофор отдаётся
         # ближайшему узлу. Центры — и «середины узла» (вид 10), и ядра

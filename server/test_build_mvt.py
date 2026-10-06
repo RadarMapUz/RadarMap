@@ -235,7 +235,7 @@ class BuildTests(unittest.TestCase):
                  self.road([(69.28, 41.309), center], name="Рашидов"),
                  self.road([center, (69.28, 41.313)], name="Рашидов")]
         marks = list(build_mvt._markings(roads))
-        solid = [l for l, c, s in marks if s and not c]
+        solid = [l for l, c, s, _b in marks if s and not c]
         self.assertEqual(len(solid), 1, "сплошная — только на подходе, не на выезде")
         kx = 111_320 * math.cos(math.radians(41.311))
         length = sum(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)

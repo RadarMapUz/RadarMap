@@ -1077,7 +1077,7 @@ font-size:12px;cursor:pointer;line-height:1.35}}
   <div class="found" id="found" hidden></div>
   <div class="views">
     <button id="viewschema" class="view on">Своя карта</button>
-    <button id="viewsat" class="view">Спутник</button>
+    <button id="viewsat" class="view" title="Это место в iD по снимкам Bing/Esri — правка в OSM (\\)">Снимок → iD</button>
     <button id="viewday" class="view day" title="Дневная и ночная схема (Y)">День</button>
   </div>
   <div class="toolrow">
@@ -1141,7 +1141,7 @@ font-size:12px;cursor:pointer;line-height:1.35}}
     A S D F G обстановка · Z разметить область ·
     Enter закончить · Backspace снять вершину ·
     Delete убрать вершину · Esc отменить · Ctrl+Z вернуть ·
-    \\ схема ⇄ спутник · ] [ по очереди</div>
+    \\ снимок в iD · ] [ по очереди</div>
   <details class="work" id="work">
     <summary id="worksum">Здесь работать</summary>
     <div class="todo" id="todo"></div>

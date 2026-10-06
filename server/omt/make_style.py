@@ -39,7 +39,8 @@ MAJOR = {"motorway", "trunk", "primary", "secondary-tertiary", "link", "motorway
 PALETTES = {
     "light": {
         "bg": "#f5f4f1", "park": "#cfe9b8", "wood": "#c3e3a6", "water": "#9fd2f5",
-        "road": "#b9c0cc", "road_far": "#fff3c4", "edge": "#ecc44a",
+        "road": "#b9c0cc", "road_trunk": "#adb5c2", "road_tertiary": "#c6ccd5",
+        "road_far": "#fff3c4", "edge": "#ecc44a",
         # Мелкие улицы — тот же асфальт, светлее магистрали. Белыми они
         # совпадали с пешеходными дорожками: двор читался тропинкой, а рядом с
         # серыми магистралями кадр выглядел двумя разными картами (аудит
@@ -47,7 +48,7 @@ PALETTES = {
         "minor": "#d5dae2", "minor_edge": "#b4bbc6", "minor_edge_far": "#e6e6e3", "path": "#ffffff",
         "path_edge": "#e3e1db",
         "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#eae7e3", "building_wall": "#d9d1c9", "landuse": "#f1eeea",
-        "boundary": "#c9c2d6",
+        "boundary": "#c9c2d6", "building_shadow": "rgba(90,95,110,0.22)",
         # Свет для 3D: мягкий, тёплый, сбоку-сверху — стены светлые, с тенью,
         # а не плоские серые плиты (06.10.2026).
         "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.3,
@@ -66,11 +67,12 @@ PALETTES = {
     },
     "dark": {
         "bg": "#0f1216", "park": "#16241b", "wood": "#14221a", "water": "#1b3348",
-        "road": "#424955", "road_far": "#4b4536", "edge": "#b8923a",
+        "road": "#424955", "road_trunk": "#4a5260", "road_tertiary": "#3b414c",
+        "road_far": "#4b4536", "edge": "#b8923a",
         "minor": "#262b33", "minor_edge": "#1a1e24", "minor_edge_far": "#1a1e24", "path": "#20252c",
         "path_edge": "#1b1f25",
         "median": "#1c2a22", "concrete": "#3a414c", "zebra_base": "#8c7a2c", "paint": "#d9dee6", "building": "#2b3038", "building_wall": "#1f242d", "landuse": "#13171d",
-        "boundary": "#3a3f4c",
+        "boundary": "#3a3f4c", "building_shadow": "rgba(0,0,0,0.45)",
         "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.18,
                   "position": [1.3, 200, 35]},
         "casing": "#2b3039",
@@ -248,8 +250,13 @@ def _base_layer(layer, p, mode):
                     # Каждая лента проспекта подписана отдельно: на Зарканаре
                     # одно имя стояло шесть раз на экран (05.10.2026). Шаг и
                     # отступ — чтобы улица читалась один-два раза.
-                    "symbol-spacing": 1100, "text-padding": 60, "text-font": ["Noto Sans Bold"]})
-        paint.update({"text-color": p["label"], "text-halo-color": p["halo"], "text-halo-width": 1.6})
+                    "symbol-spacing": 1100, "text-padding": 60, "text-font": ["Noto Sans Bold"],
+                    # Крупнее вблизи: на асфальте в 11 px имя терялось.
+                    "text-size": ["interpolate", ["linear"], ["zoom"], 13, 10, 16, 12, 18, 14.5, 20, 16]})
+        # Мягкий ореол с размытием: тонкая жёсткая обводка на сером асфальте
+        # не отделяла буквы от разметки (06.10.2026).
+        paint.update({"text-color": p["label"], "text-halo-color": p["halo"],
+                      "text-halo-width": 2.0, "text-halo-blur": 0.6})
     elif l["type"] == "symbol":
         paint["text-halo-color"] = p["halo"]
         if "text-color" in paint and mode == "full" and p is PALETTES["dark"]:
@@ -295,6 +302,14 @@ def _bridge_order(layers):
     top = next(i for i, layer in enumerate(rest) if layer["id"] == "radar-bridge") + 1
     rest[top:top] = deck
     return rest
+
+
+def road_color(p):
+    """Асфальт по классу: магистраль темнее, проспект — основной тон,
+    улица третьего класса светлее, двор — светлый. Иерархия читается сразу,
+    а не только по ширине (06.10.2026)."""
+    return ["match", ["get", "cls"], [1, 2], p["road_trunk"], [3, 4], p["road"],
+            5, p["road_tertiary"], p["minor"]]
 
 
 def _our_layers(p):
@@ -366,14 +381,14 @@ def _layers_in_draw_order(p):
         {"id": "radar-roads", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
-         "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["road"], p["minor"]],
+         "paint": {"line-color": road_color(p),
                    "line-width": measured()}},
         # Короткие широкие куски (stub) — с прямыми концами: скругление делало
         # из них «шар» шире соседних лент. Стык закрывают концы соседей.
         {"id": "radar-roads-stub", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7], ["has", "stub"]],
          "layout": {"line-cap": "butt", "line-join": "round"},
-         "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["road"], p["minor"]],
+         "paint": {"line-color": road_color(p),
                    "line-width": measured()}},
         # Галтели (вид 13): скруглённый бордюр на углах перекрёстка — асфальт
         # между точкой встречи кромок и дугой, как у Яндекса.
@@ -444,7 +459,7 @@ def _layers_in_draw_order(p):
         {"id": "radar-bridge", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["==", ["get", "bridge"], True]],
          "layout": {"line-cap": "butt", "line-join": "round"},
-         "paint": {"line-color": ["case", ["<=", ["get", "cls"], 5], p["road"], p["minor"]],
+         "paint": {"line-color": road_color(p),
                    "line-width": measured()}},
         # Сплошная перед перекрёстком (последние 25 м подхода) — без штриха.
         {"id": "radar-markings-solid", "type": "line", "source": "radar", "source-layer": "markings",
@@ -530,6 +545,19 @@ def build(base, theme="light", mode="full"):
     out = [l for l in (_base_layer(layer, p, mode) for layer in s["layers"]) if l is not None]
     if mode == "full":
         first_symbol = next(k for k, l in enumerate(out) if l["type"] == "symbol")
+        # Тень у подножия дома: мягкий тёмный контур, чуть сдвинутый от
+        # света. Плоский слой — значит лёгкий для телефона; в наклоне дом
+        # «стоит» на земле, а не висит над фоном (06.10.2026).
+        out.insert(first_symbol, {"id": "building-ground-shadow", "type": "line", "source": "openmaptiles",
+                                  "source-layer": "building", "minzoom": 15,
+                                  "paint": {"line-color": p["building_shadow"],
+                                            "line-width": ["interpolate", ["exponential", 2], ["zoom"],
+                                                           15, 2, 18, 8, 20, 22],
+                                            "line-blur": ["interpolate", ["exponential", 2], ["zoom"],
+                                                          15, 2, 18, 8, 20, 22],
+                                            "line-translate": [3, 4], "line-translate-anchor": "viewport",
+                                            "line-opacity": ["interpolate", ["linear"], ["zoom"], 15, 0, 16, 1]}})
+        first_symbol += 1
         out.insert(first_symbol, {"id": "building-3d", "type": "fill-extrusion", "source": "openmaptiles",
                                   "source-layer": "building", "minzoom": 14,
                                   "paint": {"fill-extrusion-color": p["building"],

@@ -967,40 +967,126 @@ ZEBRA_WAY_NEAR_METERS = 10.0
 NODE_ON_WAY_METERS = 4.0
 
 
-# Зебра рисуется линией шириной 3 м. На изломе такой линии соединение
-# заливается сплошь — белый клин посреди перекрёстка (Бунёдкор × Сеул,
-# 28.09.2026: переходы OSM ломаются у бордюра). Поэтому линия перехода режется
-# на прямые куски без соединений; почти прямой излом кусок не рвёт — иначе
-# сбился бы шаг штрихов; огрызок короче метра-двух — не зебра.
-ZEBRA_STRAIGHT_DEGREES = 12.0
-ZEBRA_MIN_PIECE_METERS = 2.0
+# Зебра — по ПОДХОДУ, а не по линии OSM. Линию перехода в OSM рисуют от
+# бордюра до бордюра как придётся: наискось через середину узла, ломаной
+# через островок, двумя кусками на одном подходе. Нарисованная как есть, она
+# давала «ромб» зебр посреди Чорсу, зебры за кромкой и по две на подход
+# (06.10.2026). Теперь линия OSM только говорит, ГДЕ переход: в точке, где она
+# пересекает ось проезжей, зебра встаёт строго поперёк этой оси, длиной в
+# ширину полотна. Через двойную проезжую — две зебры, с разрывом на
+# разделительной, как в жизни.
+ZEBRA_EDGE_INSET_METERS = 0.3
+ZEBRA_SAME_APPROACH_METERS = 8.0
+ZEBRA_REACH_METERS = 1.5        # линия OSM, не дотянутая до оси на столько, всё ещё её пересекает
+ZEBRA_ROAD_MAX_CODE = 7
 
 
-def zebra_pieces(line):
-    """Прямые куски линии перехода (каждый — отдельная линия, без изломов)."""
-    if len(line) < 2:
-        return []
-    kx = 111_320 * math.cos(math.radians(line[0][1]))
+class ZebraFitter:
+    """Оси проезжих по клеткам: где линия перехода их пересекает."""
 
-    def heading(a, b):
-        return math.degrees(math.atan2((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320))
+    CELL = 0.0005   # ~50 м
 
-    def length(a, b):
-        return math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+    def __init__(self, roads, widths=None):
+        widths = widths or {}
+        self._grid = defaultdict(list)
+        for road in roads:
+            code, flags, points = road[0], road[1], road[2]
+            if code > ZEBRA_ROAD_MAX_CODE or len(points) < 2 or flags & (FLAG_BRIDGE | FLAG_TUNNEL):
+                continue
+            half = (widths.get(id(road)) or road_width_meters(code, lanes_of(flags))) / 2.0
+            for a, b in zip(points, points[1:]):
+                for gx in range(int(min(a[0], b[0]) / self.CELL) - 1, int(max(a[0], b[0]) / self.CELL) + 2):
+                    for gy in range(int(min(a[1], b[1]) / self.CELL) - 1, int(max(a[1], b[1]) / self.CELL) + 2):
+                        self._grid[(gx, gy)].append((id(road), a, b, half))
 
-    pieces, current = [], [line[0]]
-    for a, b in zip(line, line[1:]):
-        if length(a, b) <= 0:
+    def hits(self, a, b):
+        """[(id дороги, точка пересечения, азимут оси в радианах, полуширина, синус угла)]."""
+        lat0 = (a[1] + b[1]) / 2
+        kx = 111_320 * math.cos(math.radians(lat0))
+
+        def xy(p):
+            return ((p[0] - a[0]) * kx, (p[1] - a[1]) * 111_320)
+
+        bx, by = xy(b)
+        length = math.hypot(bx, by)
+        if length <= 0:
+            return []
+        reach = ZEBRA_REACH_METERS / length
+        seen, out = set(), []
+        cells = {(gx, gy)
+                 for gx in range(int(min(a[0], b[0]) / self.CELL), int(max(a[0], b[0]) / self.CELL) + 1)
+                 for gy in range(int(min(a[1], b[1]) / self.CELL), int(max(a[1], b[1]) / self.CELL) + 1)}
+        for cell in sorted(cells):
+            for key, p, q, half in self._grid.get(cell, ()):
+                mark = (key, p[0], p[1], q[0], q[1])
+                if mark in seen:
+                    continue
+                seen.add(mark)
+                px, py = xy(p)
+                qx, qy = xy(q)
+                rx, ry = qx - px, qy - py
+                denom = bx * ry - by * rx
+                if abs(denom) < 1e-9:
+                    continue
+                t = (px * ry - py * rx) / denom          # вдоль перехода
+                u = (px * by - py * bx) / denom          # вдоль оси дороги
+                if not (-reach <= t <= 1 + reach and 0.0 <= u <= 1.0):
+                    continue
+                road_len = math.hypot(rx, ry)
+                sine = abs(denom) / (length * road_len)
+                point = (a[0] + bx * t / kx, a[1] + by * t / 111_320)
+                out.append((key, point, math.atan2(rx, ry), half, sine))
+        return out
+
+
+def fit_zebras(crossings, fitter):
+    """Зебры поперёк проезжих: [((точка, точка), размечена ли)]."""
+    candidates = []
+    for line, marked in crossings:
+        for a, b in zip(line, line[1:]):
+            for key, point, heading, half, sine in fitter.hits(a, b):
+                candidates.append((key, point, heading, half, sine, bool(marked)))
+    # На одном подходе один переход: размеченный и самый поперечный — первым.
+    candidates.sort(key=lambda c: (not c[5], -c[4], c[1][0], c[1][1]))
+    kept = []
+    for key, point, heading, half, sine, marked in candidates:
+        kx = 111_320 * math.cos(math.radians(point[1]))
+        if any(other[0] == key and math.hypot((other[1][0] - point[0]) * kx,
+                                              (other[1][1] - point[1]) * 111_320) < ZEBRA_SAME_APPROACH_METERS
+               for other in kept):
             continue
-        if len(current) >= 2:
-            turn = abs((heading(a, b) - heading(current[-2], current[-1]) + 180) % 360 - 180)
-            if turn > ZEBRA_STRAIGHT_DEGREES:
-                pieces.append(current)
-                current = [a]
-        current.append(b)
-    pieces.append(current)
-    return [[piece[0], piece[-1]] for piece in pieces
-            if len(piece) >= 2 and length(piece[0], piece[-1]) >= ZEBRA_MIN_PIECE_METERS]
+        # Наложенные ленты (поворотная полоса поверх проспекта, связка внутри
+        # узла) пересекаются той же линией в одном месте: зебра, чей центр
+        # лежит на теле уже поставленной, — дубль (11 % зебр Ташкента).
+        line = _zebra_line(point, heading, half)
+        if any(_point_segment_m(point, other[6][0], other[6][1]) < ZEBRA_BODY_CLEAR_METERS
+               or _point_segment_m(other[1], line[0], line[1]) < ZEBRA_BODY_CLEAR_METERS
+               for other in kept):
+            continue
+        kept.append((key, point, heading, half, sine, marked, line))
+    return [(other[6], other[5]) for other in kept]
+
+
+ZEBRA_BODY_CLEAR_METERS = 3.0
+
+
+def _zebra_line(point, heading, half):
+    """Отрезок поперёк оси (азимут + 90°) длиной в полотно без отступа у кромок."""
+    reach = max(1.0, half - ZEBRA_EDGE_INSET_METERS)
+    kx = 111_320 * math.cos(math.radians(point[1]))
+    dx, dy = math.cos(heading), -math.sin(heading)
+    return [(point[0] - dx * reach / kx, point[1] - dy * reach / 111_320),
+            (point[0] + dx * reach / kx, point[1] + dy * reach / 111_320)]
+
+
+def _point_segment_m(p, a, b):
+    kx = 111_320 * math.cos(math.radians(p[1]))
+    ax, ay = (a[0] - p[0]) * kx, (a[1] - p[1]) * 111_320
+    bx, by = (b[0] - p[0]) * kx, (b[1] - p[1]) * 111_320
+    dx, dy = bx - ax, by - ay
+    length = dx * dx + dy * dy
+    t = 0.0 if length == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / length))
+    return math.hypot(ax + t * dx, ay + t * dy)
 
 
 def _near_crossing_way(point, grid, reach=ZEBRA_WAY_NEAR_METERS):
@@ -1544,10 +1630,11 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             if point[0] == 5 and point[1] & PFLAG_PAINTED:
                 lon, lat = point[2][0]
                 zebra_nodes[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
-        drawn_zebras = [line for line, marked in crossings
-                        if marked or any(_near_crossing_way(spot, zebra_nodes, NODE_ON_WAY_METERS)
-                                         for spot in line)]
-        mask.add_zebras(drawn_zebras)
+        drawn_crossings = [(line, marked) for line, marked in crossings
+                           if marked or any(_near_crossing_way(spot, zebra_nodes, NODE_ON_WAY_METERS)
+                                            for spot in line)]
+        fitted_zebras = fit_zebras(drawn_crossings, ZebraFitter(roads, widths))
+        mask.add_zebras([line for line, _marked in fitted_zebras])
         # Разделительная полоса лежит ПОВЕРХ площади узла (ради носа у
         # перехода), и обрывок полосы между лентами поворотов внутри
         # перекрёстка вылез зелёной кляксой в его середине (28.09.2026).
@@ -1584,21 +1671,13 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                 # регулируемый ли перекрёсток и где его центр.
                 for light in approach_lights(waffle, _junction_signals(box, signals, centres)):
                     _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [light], {"kind": KIND_APPROACH_LIGHT})
-        # Зебры линиями переходов. Линия размечена тегом — или на ней лежит
-        # размеченный узел перехода (у Пахтакора линия без тега, а узлы — zebra).
-        # Узловая зебра рядом с нарисованной линией — тот же переход, дубль.
-        painted_nodes = defaultdict(list)
-        for point in points:
-            if point[0] == 5 and point[1] & PFLAG_PAINTED:
-                lon, lat = point[2][0]
-                painted_nodes[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
+        # Зебры — подогнанные к подходам (fit_zebras): линия размечена тегом —
+        # или на ней лежит размеченный узел перехода (у Пахтакора линия без
+        # тега, а узлы — zebra). Узловая зебра рядом с линией — тот же переход.
         crossing_grid = defaultdict(list)
-        for line, marked in crossings:
-            if not marked and not any(_near_crossing_way(spot, painted_nodes, NODE_ON_WAY_METERS)
-                                      for spot in line):
-                continue
-            for piece in zebra_pieces(line):
-                _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, piece, {"kind": KIND_ZEBRA_WAY})
+        for line, _marked in fitted_zebras:
+            _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": KIND_ZEBRA_WAY})
+        for line, _marked in drawn_crossings:
             for lon, lat in line:
                 crossing_grid[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
         leaders = arrow_leaders(points)

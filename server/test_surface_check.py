@@ -511,16 +511,46 @@ class SignalPaintTests(unittest.TestCase):
         self.assertAlmostEqual(centre[1], lat, places=6)
         self.assertIsNotNone(waffles.add(ring((80, -20), (120, -20), (120, 20), (80, 20))))
 
-    def test_bent_crossing_is_cut_into_straight_pieces(self):
-        # Излом у бордюра: одна линия шириной 3 м заливала клин белым.
-        bent = ring((0, 0), (8, 0), (14, 6))
-        pieces = build_mvt.zebra_pieces(bent)
-        self.assertEqual(len(pieces), 2)
-        self.assertTrue(all(len(piece) == 2 for piece in pieces))
-        almost = ring((0, 0), (8, 0), (16, 1))          # 7° — один кусок
-        self.assertEqual(len(build_mvt.zebra_pieces(almost)), 1)
-        stub = ring((0, 0), (10, 0), (10.5, 1))         # хвост в метр — не зебра
-        self.assertEqual(len(build_mvt.zebra_pieces(stub)), 1)
+    def _metres_between(self, a, b):
+        kx = 111_320 * math.cos(math.radians(a[1]))
+        return math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+
+    def test_diagonal_crossing_becomes_a_zebra_across_the_road(self):
+        # Дорога с юга на север шириной 14 м; OSM провёл переход наискось.
+        road = (3, 0, [metres(0, -100), metres(0, 100)], "Беруни")
+        fitter = build_mvt.ZebraFitter([road], {id(road): 14.0})
+        zebras = build_mvt.fit_zebras([([metres(-12, -9), metres(12, 9)], True)], fitter)
+        self.assertEqual(len(zebras), 1)
+        (a, b), marked = zebras[0]
+        self.assertTrue(marked)
+        self.assertAlmostEqual(self._metres_between(a, b), 14.0 - 2 * build_mvt.ZEBRA_EDGE_INSET_METERS, delta=0.1)
+        # Поперёк оси: концы на одной широте, по разные стороны оси.
+        self.assertAlmostEqual(a[1], b[1], places=7)
+        self.assertLess(a[0], metres(0, 0)[0])
+        self.assertGreater(b[0], metres(0, 0)[0])
+
+    def test_dual_carriageway_gets_two_zebras_with_a_gap(self):
+        west = (3, build_mvt.FLAG_ONEWAY, [metres(-6, -100), metres(-6, 100)], "Навои")
+        east = (3, build_mvt.FLAG_ONEWAY, [metres(6, 100), metres(6, -100)], "Навои")
+        fitter = build_mvt.ZebraFitter([west, east], {id(west): 8.0, id(east): 8.0})
+        zebras = build_mvt.fit_zebras([([metres(-15, 0), metres(15, 0)], True)], fitter)
+        self.assertEqual(len(zebras), 2)
+        # Между зебрами — разделительная: ни одна не заходит на середину.
+        for (a, b), _marked in zebras:
+            self.assertGreater(min(abs(a[0] - metres(0, 0)[0]), abs(b[0] - metres(0, 0)[0])) * 83_000, 1.5)
+
+    def test_two_crossings_on_one_approach_are_one_zebra(self):
+        road = (3, 0, [metres(0, -100), metres(0, 100)], "Беруни")
+        fitter = build_mvt.ZebraFitter([road], {id(road): 10.0})
+        zebras = build_mvt.fit_zebras([([metres(-8, 0), metres(8, 0)], False),
+                                       ([metres(-8, 4), metres(8, 4)], True)], fitter)
+        self.assertEqual(len(zebras), 1)
+        self.assertTrue(zebras[0][1])           # остаётся размеченный
+
+    def test_crossing_that_misses_every_road_is_not_drawn(self):
+        road = (3, 0, [metres(0, -100), metres(0, 100)], "Беруни")
+        fitter = build_mvt.ZebraFitter([road], {id(road): 10.0})
+        self.assertEqual(build_mvt.fit_zebras([([metres(20, 0), metres(40, 0)], True)], fitter), [])
 
     def test_node_zebra_near_a_crossing_way_is_a_duplicate(self):
         grid = {}

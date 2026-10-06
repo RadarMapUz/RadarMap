@@ -125,6 +125,21 @@ class PolygonIndex:
 class SegmentIndex:
     CELL = 0.0005
 
+    def count_near(self, p, meters):
+        """Сколько отрезков ближе meters к точке."""
+        kx = LAT_M * math.cos(math.radians(p[1]))
+        cell = (int(p[0] / self.CELL), int(p[1] / self.CELL))
+        seen = 0
+        for a, b in self._grid.get(cell, ()):
+            ax, ay = (a[0] - p[0]) * kx, (a[1] - p[1]) * LAT_M
+            bx, by = (b[0] - p[0]) * kx, (b[1] - p[1]) * LAT_M
+            dx, dy = bx - ax, by - ay
+            length = dx * dx + dy * dy
+            t = 0.0 if length == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / length))
+            if math.hypot(ax + t * dx, ay + t * dy) <= meters:
+                seen += 1
+        return seen
+
     def __init__(self, lines):
         self._grid = defaultdict(list)
         for line in lines:
@@ -181,6 +196,33 @@ def arrows_after_stop(arrows, stop_lines):
                 break
         bad += found
     return bad / len(arrows)
+
+
+def zebra_defects(zebras, asphalt):
+    """(доля зебр с концом за кромкой, доля зебр-дублей) — на 1 зебру.
+
+    Конец «за кромкой» — точка в 0,5 м от конца внутрь не на асфальте.
+    Дубль — центр ближе ZEBRA_DUPLICATE_METERS к центру другой зебры.
+    """
+    if not zebras:
+        return 0.0, 0.0
+    overhang = 0
+    centres = []
+    for line in zebras:
+        a, b = line[0], line[-1]
+        kx = LAT_M * math.cos(math.radians(a[1]))
+        length = math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * LAT_M)
+        if length < 1.0:
+            continue
+        t = 0.5 / length
+        inner = [(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t),
+                 (b[0] + (a[0] - b[0]) * t, b[1] + (a[1] - b[1]) * t)]
+        if not all(asphalt.covers(p) for p in inner):
+            overhang += 1
+        centres.append(((a[0] + b[0]) / 2, (a[1] + b[1]) / 2))
+    index = SegmentIndex([[c, c] for c in centres])
+    duplicates = sum(1 for c in centres if index.count_near(c, ZEBRA_DUPLICATE_METERS) > 1)
+    return overhang / len(zebras), duplicates / len(zebras)
 
 
 def dashes_inside(markings, covered):
@@ -430,6 +472,8 @@ def measure(tiles_dir, islands_path=None, bbox=None):
         markings, lambda p: junctions.covers(p) and not bridges.near(p, BRIDGE_DECK_METERS))
     on_zebra, _ = dashes_inside(markings, lambda p: zebras.near(p, ZEBRA_NEAR_METERS))
     through_medians, _ = dashes_inside(markings, median_index.covers)
+    zebra_lines = [part for g, parts, props in paint if props.get("kind") == 12 for part in parts]
+    zebra_overhang, zebra_duplicates = zebra_defects(zebra_lines, asphalt)
     return {
         "houses_under_asphalt": round(100 * share_under(houses, asphalt), 2),
         "islands_under_asphalt": round(100 * share_under(islands, Uncovered(asphalt, drawn_islands)), 2) if islands else None,
@@ -438,9 +482,11 @@ def measure(tiles_dir, islands_path=None, bbox=None):
         "dashes_on_zebra": round(on_zebra, 1),
         "medians_on_asphalt": round(100 * medians_on_asphalt(medians, open_areas, median_examples), 2),
         "dashes_through_medians": round(through_medians, 1),
+        "zebra_overhang": round(100 * zebra_overhang, 2),
+        "zebra_duplicates": round(100 * zebra_duplicates, 2),
         "_median_examples": median_examples,
         "_counts": {"houses": len(houses), "islands": len(islands), "arrows": len(arrows),
-                    "markings_km": round(total / 1000, 1), "medians": len(medians),
+                    "markings_km": round(total / 1000, 1), "zebras": len(zebra_lines), "medians": len(medians),
                     "junctions": len(junction_rings), "road_lines": len(road_lines)},
     }
 
@@ -453,9 +499,13 @@ UNITS = {
     "dashes_on_zebra": "м на 1 км пунктира",
     "medians_on_asphalt": "% разделительных",
     "dashes_through_medians": "м на 1 км пунктира",
+    "zebra_overhang": "% зебр с концом за кромкой",
+    "zebra_duplicates": "% зебр-дублей",
 }
 
 
+# Центры зебр ближе этого — одна и та же зебра, нарисованная дважды.
+ZEBRA_DUPLICATE_METERS = 5.0
 # Полуширина пролёта эстакады: пунктир ближе к её оси — на мосту, не в узле.
 BRIDGE_DECK_METERS = 9.0
 
@@ -467,7 +517,7 @@ WORSE_FACTOR = 1.2
 # Ниже этого значения метрика — шум, её колебание ворот не трогает.
 NOISE_FLOOR = {"houses_under_asphalt": 0.2, "islands_under_asphalt": 5.0, "arrows_after_stop": 5.0,
                "dashes_in_junction": 10.0, "dashes_on_zebra": 2.0, "medians_on_asphalt": 2.0,
-               "dashes_through_medians": 2.0}
+               "dashes_through_medians": 2.0, "zebra_overhang": 3.0, "zebra_duplicates": 2.0}
 
 
 def compare(previous, current):

@@ -468,8 +468,10 @@ def measure(tiles_dir, islands_path=None, bbox=None):
     # Ленты (вид 7) по краям разделительной законно уходят под неё — она
     # рисуется сверху, и это не видно. Видно другое: разделительная на площади
     # узла и разметка, проходящая сквозь неё.
+    # Перемычка между направлениями (вид 8, свойство fill) — не узел.
     open_areas = PolygonIndex([parts[0] for g, parts, props in surface
-                               if g == 3 and props.get("kind") in (8, 10, 13) and parts])
+                               if g == 3 and props.get("kind") in (8, 10, 13) and parts
+                               and not props.get("fill")])
     median_index = PolygonIndex(medians)
     # Островок, нарисованный поверх асфальта (свойство island), асфальтом не съеден.
     drawn_islands = PolygonIndex([parts[0] for g, parts, props in surface

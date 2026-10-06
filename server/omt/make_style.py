@@ -39,14 +39,19 @@ MAJOR = {"motorway", "trunk", "primary", "secondary-tertiary", "link", "motorway
 PALETTES = {
     "light": {
         "bg": "#f5f4f1", "park": "#cfe9b8", "wood": "#c3e3a6", "water": "#9fd2f5",
-        "road": "#b9c0cc", "road_far": "#fdf3cf", "edge": "#efcb4a",
+        "road": "#b9c0cc", "road_far": "#fff3c4", "edge": "#ecc44a",
         # Мелкие улицы — тот же асфальт, светлее магистрали. Белыми они
         # совпадали с пешеходными дорожками: двор читался тропинкой, а рядом с
         # серыми магистралями кадр выглядел двумя разными картами (аудит
         # 28.09.2026). Белое осталось только у дорожек — их с дорогой не спутать.
         "minor": "#d5dae2", "minor_edge": "#b4bbc6", "minor_edge_far": "#e6e6e3", "path": "#ffffff",
         "path_edge": "#e3e1db",
-        "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#e7e2de", "landuse": None,
+        "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#eae7e3", "building_wall": "#d9d1c9", "landuse": "#f1eeea",
+        "boundary": "#c9c2d6",
+        # Свет для 3D: мягкий, тёплый, сбоку-сверху — стены светлые, с тенью,
+        # а не плоские серые плиты (06.10.2026).
+        "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.3,
+                  "position": [1.3, 200, 35]},
         # Кайма НАШИХ лент — нейтральная: жёлтая у каждой ленты давала «нитки»
         # внутри асфальта там, где две ленты лежат рядом (Фурката, 28.09.2026).
         "casing": "#aab2bf",
@@ -61,10 +66,13 @@ PALETTES = {
     },
     "dark": {
         "bg": "#0f1216", "park": "#16241b", "wood": "#14221a", "water": "#1b3348",
-        "road": "#3b414b", "road_far": "#4b4536", "edge": "#b8923a",
+        "road": "#424955", "road_far": "#4b4536", "edge": "#b8923a",
         "minor": "#262b33", "minor_edge": "#1a1e24", "minor_edge_far": "#1a1e24", "path": "#20252c",
         "path_edge": "#1b1f25",
-        "median": "#1c2a22", "concrete": "#3a414c", "zebra_base": "#8c7a2c", "paint": "#d9dee6", "building": "#1c2027", "landuse": "#151a21",
+        "median": "#1c2a22", "concrete": "#3a414c", "zebra_base": "#8c7a2c", "paint": "#d9dee6", "building": "#2b3038", "building_wall": "#1f242d", "landuse": "#13171d",
+        "boundary": "#3a3f4c",
+        "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.18,
+                  "position": [1.3, 200, 35]},
         "casing": "#2b3039",
         "kerb": "#8c7033", "trees": "trees-dark",
         "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#2a2f37",
@@ -186,6 +194,13 @@ def _base_layer(layer, p, mode):
         # тёмной теме она горела пятном ярче проспекта (Аллея парадов).
         paint["fill-color"] = p["path"]
         paint["fill-opacity"] = 0.6
+    elif i == "boundary-land-level-4":
+        # Районные границы — тонкий бледный штрих только издали: жирная
+        # серая пунктирная ломаная поверх города читалась дорогой (06.10.2026).
+        paint["line-color"] = p["boundary"]
+        paint["line-width"] = ["interpolate", ["linear"], ["zoom"], 10, 0.6, 14, 1.0]
+        paint["line-opacity"] = ["interpolate", ["linear"], ["zoom"], 12, 0.8, 14.5, 0]
+        l["maxzoom"] = 14.5
     elif i in ("building", "building-top"):
         return None      # заменяются объёмными (режим full)
     elif src == "transportation" and l["type"] == "line":
@@ -518,6 +533,7 @@ def build(base, theme="light", mode="full"):
         out.insert(first_symbol, {"id": "building-3d", "type": "fill-extrusion", "source": "openmaptiles",
                                   "source-layer": "building", "minzoom": 14,
                                   "paint": {"fill-extrusion-color": p["building"],
+                                            "fill-extrusion-vertical-gradient": True,
                                             "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 14, 0, 15.5,
                                                                       ["coalesce", ["get", "render_height"], 8]],
                                             "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
@@ -554,6 +570,7 @@ def build(base, theme="light", mode="full"):
                  at + len(ours))
     out.insert(after, tree_3d(p))
     s["layers"] = out
+    s["light"] = p["light"]
     s["name"] = f"RadarMap — {'светлая' if theme == 'light' else 'тёмная'}, {'полная' if mode == 'full' else 'только дорога'}"
     return s
 

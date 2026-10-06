@@ -4622,7 +4622,8 @@ class RoadIndex:
                 for gx in range(int((x0 - pad / scale) / cell), int((x1 + pad / scale) / cell) + 1):
                     for gy in range(int((y0 - pad) / cell), int((y1 + pad) / cell) + 1):
                         self._grid[(gx, gy)].append((id(street), a, b, half,
-                                                     street[1] & (FLAG_BRIDGE | FLAG_TUNNEL)))
+                                                     street[1] & (FLAG_BRIDGE | FLAG_TUNNEL),
+                                                     bool(street[1] & FLAG_LINK and not street[3])))
 
     def blocker(self, *exclude):
         """Функция (кромка, кромка) → True, если поперечник пересекает чужую ленту.
@@ -4639,13 +4640,36 @@ class RoadIndex:
             # medians_on_asphalt — 5,7 % разделительных на асфальте).
             for share in (0.1, 0.3, 0.5, 0.7, 0.9):
                 point = (left[0] + (right[0] - left[0]) * share, left[1] + (right[1] - left[1]) * share)
-                for key, a, b, half, lvl in self._grid.get((int(point[0] / cell), int(point[1] / cell)), ()):
+                for key, a, b, half, lvl, _link in self._grid.get((int(point[0] / cell), int(point[1] / cell)), ()):
                     if key in skip or lvl != level:
                         continue
                     if _point_segment_meters(point, a, b) < half:
                         return True
             return False
         return blocked
+
+    def pocket(self, *exclude):
+        """Функция (кромка, кромка, курс) → True, если поперечник занят ТОЛЬКО
+        безымянным съездом, идущим вдоль, — карманом поворота в разделительной."""
+        skip = {id(street) for street in exclude}
+        cell = self.CELL_METERS / LAT_METERS
+        level = (exclude[0][1] & (FLAG_BRIDGE | FLAG_TUNNEL)) if exclude else 0
+
+        def is_pocket(left, right, course):
+            found = False
+            for share in (0.1, 0.3, 0.5, 0.7, 0.9):
+                point = (left[0] + (right[0] - left[0]) * share, left[1] + (right[1] - left[1]) * share)
+                for key, a, b, half, lvl, link in self._grid.get((int(point[0] / cell), int(point[1] / cell)), ()):
+                    if key in skip or lvl != level or a == b:
+                        continue
+                    if _point_segment_meters(point, a, b) >= half:
+                        continue
+                    off = _angle_between(_heading(a, b), course)
+                    if not link or min(off, 180 - off) > POCKET_DEGREES:
+                        return False
+                    found = True
+            return found
+        return is_pocket
 
 
 def _point_segment_meters(p, a, b):
@@ -4704,9 +4728,59 @@ def build_medians(chains, junctions=()):
                     out.append((AREA_MEDIAN, AREA_FLAG_CLOSED | AREA_FLAG_STRIP, strip))
                 for line in dividers:
                     out.append((AREA_DIVIDER, 0, line))
+                for line in pocket_dividers(one, other, junctions, roads_index.pocket(one, other)):
+                    out.append((AREA_DIVIDER, 0, line))
                 # Промежуток между лентами внутри узла — асфальт перекрёстка.
                 for fill in fills:
                     out.append((AREA_JUNCTION, AREA_FLAG_CLOSED | AREA_FLAG_STRIP, fill))
+    return out
+
+
+# Карман левого поворота в разделительной: в OSM — безымянный съезд вдоль
+# проспекта, и асфальт кармана занимает место полосы. Разделительная там у
+# образца есть — тонкая бетонная полоса у кромки встречного направления;
+# у нас было пусто на 250 м (Навои к востоку от Фурката, 06.10.2026).
+POCKET_DEGREES = 25.0
+POCKET_STEP_METERS = 5.0
+POCKET_MIN_RUN_METERS = 20.0
+POCKET_OFFSET_METERS = 0.8       # полоса — на столько от кромки встречной ленты
+POCKET_SMOOTH = 7
+
+
+def pocket_dividers(one, other, junctions, is_pocket):
+    """Тонкие разделительные вдоль карманов: [[точка, …]] для AREA_DIVIDER."""
+    runs, current = [], []
+    for spot, segment in _walk(one[2], POCKET_STEP_METERS):
+        near, gap, _along = _nearest_along(spot, other[2])
+        ok = near is not None and MEDIAN_MIN_METERS <= gap <= MEDIAN_MAX_METERS
+        if ok and _at_junction(spot, junctions):
+            ok = False
+        if ok:
+            course = _heading(segment[0], segment[1])
+            if not is_pocket(spot, near, course):
+                ok = False
+        if ok:
+            # Точка у кромки встречной ленты: от её оси к нашей на полширины + запас.
+            share = (other[4] / 2.0 + POCKET_OFFSET_METERS) / max(gap, 0.1)
+            current.append((near[0] + (spot[0] - near[0]) * share, near[1] + (spot[1] - near[1]) * share))
+            continue
+        if len(current) >= 2:
+            runs.append(current)
+        current = []
+    if len(current) >= 2:
+        runs.append(current)
+    out = []
+    for run in runs:
+        if sum(meters_between(a, b) for a, b in zip(run, run[1:])) < POCKET_MIN_RUN_METERS:
+            continue
+        # Ось встречной ленты в OSM дрожит на метр — полоса шла волной.
+        # Скользящее среднее по POCKET_SMOOTH точкам, концы на месте.
+        k = POCKET_SMOOTH // 2
+        smooth = [run[0]] + [
+            (sum(p[0] for p in run[max(0, i - k):i + k + 1]) / len(run[max(0, i - k):i + k + 1]),
+             sum(p[1] for p in run[max(0, i - k):i + k + 1]) / len(run[max(0, i - k):i + k + 1]))
+            for i in range(1, len(run) - 1)] + [run[-1]]
+        out.append(simplify(smooth, 0.3 / LAT_METERS))
     return out
 
 

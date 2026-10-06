@@ -1642,6 +1642,8 @@ def street_width(pieces):
 
 
 SHORT_LINK_METERS = 150.0
+# Короче этого безымянная односторонняя без тега — связка: полосы от соседей.
+SHORT_ONEWAY_LINK_METERS = 40.0
 
 
 def apply_lane_inference(roads):
@@ -1666,6 +1668,37 @@ def apply_lane_inference(roads):
                 and not (road[3] if len(road) > 3 else "")
                 and sum(meters_between(a, b) for a, b in zip(road[2], road[2][1:])) < SHORT_LINK_METERS):
             guessed[id(road)] = (2, 1.0)
+    # Короткая безымянная ОДНОСТОРОННЯЯ связка без тега (стык дублёра с
+    # проспектом, кусок поворотной ленты) по классу получала полосы проспекта:
+    # 7 м длины и 11,2 м ширины — клякса асфальта на стыке с двухполосным
+    # дублёром (Беруни у Чорсу, 06.10.2026). Полос у неё столько, сколько у
+    # меньшего из тех, с кем она стыкуется.
+    ends = defaultdict(list)
+    for road in roads:
+        if len(road[2]) >= 2:
+            for point in (road[2][0], road[2][-1]):
+                ends[(round(point[0], 6), round(point[1], 6))].append(road)
+    for road in roads:
+        if (road[0] in lane_inference.INFER_CLASSES
+                and road[1] & FLAG_ONEWAY and not road[1] & FLAG_LANES_TAGGED
+                and id(road) not in guessed
+                and not (road[3] if len(road) > 3 else "")
+                and sum(meters_between(a, b) for a, b in zip(road[2], road[2][1:])) < SHORT_ONEWAY_LINK_METERS):
+            # Только знающие соседи: тег или уже угаданное число. Класс по
+            # умолчанию — это и есть то, чему здесь не верим.
+            neighbours = []
+            for point in (road[2][0], road[2][-1]):
+                for other in ends[(round(point[0], 6), round(point[1], 6))]:
+                    if other is road:
+                        continue
+                    if other[1] & FLAG_LANES_TAGGED:
+                        neighbours.append(lanes_of(other[1]))
+                    elif id(other) in guessed:
+                        neighbours.append(guessed[id(other)][0])
+            if neighbours:
+                lanes = min(neighbours)
+                if lanes < lanes_of(road[1]):
+                    guessed[id(road)] = (lanes, 1.0)
     if not guessed:
         return roads, 0
     out = []

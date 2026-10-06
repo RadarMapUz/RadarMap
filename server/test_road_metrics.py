@@ -65,6 +65,17 @@ class MedianTests(unittest.TestCase):
         self.assertEqual(rm.medians_on_asphalt([median], asphalt), 0.0)
 
 
+class ShapeTests(unittest.TestCase):
+    def test_needle_is_a_spike(self):
+        needle = [m(0, 0), m(30, 1), m(0, 2)]
+        self.assertTrue(rm.spiky(needle))
+        self.assertTrue(rm.thin(needle))
+
+    def test_square_island_is_neither(self):
+        self.assertFalse(rm.spiky(square(0, 0, 10, 10)))
+        self.assertFalse(rm.thin(square(0, 0, 10, 10)))
+
+
 class CompareTests(unittest.TestCase):
     def test_worse_metric_stops_publish(self):
         reasons = rm.compare({"dashes_in_junction": 45.0}, {"dashes_in_junction": 80.0})

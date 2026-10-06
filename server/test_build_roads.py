@@ -2258,6 +2258,26 @@ class FarAreasTests(unittest.TestCase):
         self.assertLess(len(kept[0][2]), 20, "зубцы в 5 м на обзоре не нужны")
 
 
+
+class ShortOnewayLinkTests(unittest.TestCase):
+    """Короткая безымянная односторонняя связка берёт полосы соседей, а не класса."""
+
+    def test_stub_between_two_lane_roads_is_two_lanes(self):
+        a, b, c = (69.2800, 41.3100), (69.2801, 41.3100), (69.2805, 41.3100)
+        tagged = build_roads.with_lanes(build_roads.FLAG_ONEWAY, 2) | build_roads.FLAG_LANES_TAGGED
+        stub = (3, build_roads.FLAG_ONEWAY | build_roads.with_lanes(0, 3), [a, b], "")
+        after = (6, tagged, [b, c], "")
+        before = (6, tagged, [(69.2795, 41.3100), a], "")
+        roads, _ = build_roads.apply_lane_inference([before, stub, after])
+        self.assertEqual(build_roads.lanes_of(roads[1][1]), 2)
+
+    def test_named_stub_is_left_alone(self):
+        a, b = (69.2800, 41.3100), (69.2801, 41.3100)
+        stub = (3, build_roads.FLAG_ONEWAY | build_roads.with_lanes(0, 3), [a, b], "Беруни")
+        roads, _ = build_roads.apply_lane_inference([stub])
+        self.assertEqual(build_roads.lanes_of(roads[0][1]), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
 

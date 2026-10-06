@@ -225,6 +225,40 @@ def zebra_defects(zebras, asphalt):
     return overhang / len(zebras), duplicates / len(zebras)
 
 
+def spiky(ring, degrees=None, min_edge=1.0):
+    """Есть ли у контура острый угол (игла) между рёбрами длиннее min_edge."""
+    degrees = SPIKE_DEGREES if degrees is None else degrees
+    lat0 = ring[0][1]
+    kx = LAT_M * math.cos(math.radians(lat0))
+    pts = [((p[0] - ring[0][0]) * kx, (p[1] - lat0) * LAT_M) for p in ring]
+    if pts[0] == pts[-1]:
+        pts = pts[:-1]
+    n = len(pts)
+    if n < 3:
+        return False
+    for i in range(n):
+        a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
+        u = (a[0] - b[0], a[1] - b[1])
+        v = (c[0] - b[0], c[1] - b[1])
+        lu, lv = math.hypot(*u), math.hypot(*v)
+        if lu < min_edge or lv < min_edge:
+            continue
+        cos = (u[0] * v[0] + u[1] * v[1]) / (lu * lv)
+        if math.degrees(math.acos(max(-1.0, min(1.0, cos)))) < degrees:
+            return True
+    return False
+
+
+def thin(ring, meters=None):
+    """Средняя ширина контура (2·площадь/периметр) меньше meters — клин-игла."""
+    meters = SLIVER_METERS if meters is None else meters
+    lat0 = ring[0][1]
+    kx = LAT_M * math.cos(math.radians(lat0))
+    perimeter = sum(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * LAT_M)
+                    for a, b in zip(ring, ring[1:] + ring[:1]))
+    return perimeter > 0 and 2 * polygon_area_m2(ring) / perimeter < meters
+
+
 def dashes_inside(markings, covered):
     """(метров пунктира, где covered(p) истинно, на 1 км, всего метров)."""
     total = hit = 0.0
@@ -472,6 +506,11 @@ def measure(tiles_dir, islands_path=None, bbox=None):
         markings, lambda p: junctions.covers(p) and not bridges.near(p, BRIDGE_DECK_METERS))
     on_zebra, _ = dashes_inside(markings, lambda p: zebras.near(p, ZEBRA_NEAR_METERS))
     through_medians, _ = dashes_inside(markings, median_index.covers)
+    shapes = [(props.get("kind"), parts[0]) for g, parts, props in surface
+              if g == 3 and parts and props.get("kind") in (8, 9, 10, 13) and len(parts[0]) > 3]
+    spikes = sum(1 for _kind, ring in shapes if spiky(ring))
+    island_rings = [ring for kind, ring in shapes if kind == 9]
+    slivers = sum(1 for ring in island_rings if thin(ring))
     zebra_lines = [part for g, parts, props in paint if props.get("kind") == 12 for part in parts]
     zebra_overhang, zebra_duplicates = zebra_defects(zebra_lines, asphalt)
     return {
@@ -483,6 +522,8 @@ def measure(tiles_dir, islands_path=None, bbox=None):
         "medians_on_asphalt": round(100 * medians_on_asphalt(medians, open_areas, median_examples), 2),
         "dashes_through_medians": round(through_medians, 1),
         "zebra_overhang": round(100 * zebra_overhang, 2),
+        "junction_spikes": round(100 * spikes / len(shapes), 2) if shapes else 0.0,
+        "island_slivers": round(100 * slivers / len(island_rings), 2) if island_rings else 0.0,
         "zebra_duplicates": round(100 * zebra_duplicates, 2),
         "_median_examples": median_examples,
         "_counts": {"houses": len(houses), "islands": len(islands), "arrows": len(arrows),
@@ -500,10 +541,15 @@ UNITS = {
     "medians_on_asphalt": "% разделительных",
     "dashes_through_medians": "м на 1 км пунктира",
     "zebra_overhang": "% зебр с концом за кромкой",
+    "junction_spikes": "% фигур узла с иглой",
+    "island_slivers": "% островков-клиньев",
     "zebra_duplicates": "% зебр-дублей",
 }
 
 
+# Игла: угол контура острее этого. Клин: средняя ширина меньше этого.
+SPIKE_DEGREES = 15.0
+SLIVER_METERS = 1.5
 # Центры зебр ближе этого — одна и та же зебра, нарисованная дважды.
 ZEBRA_DUPLICATE_METERS = 5.0
 # Полуширина пролёта эстакады: пунктир ближе к её оси — на мосту, не в узле.
@@ -517,7 +563,8 @@ WORSE_FACTOR = 1.2
 # Ниже этого значения метрика — шум, её колебание ворот не трогает.
 NOISE_FLOOR = {"houses_under_asphalt": 0.2, "islands_under_asphalt": 5.0, "arrows_after_stop": 5.0,
                "dashes_in_junction": 10.0, "dashes_on_zebra": 2.0, "medians_on_asphalt": 2.0,
-               "dashes_through_medians": 2.0, "zebra_overhang": 3.0, "zebra_duplicates": 2.0}
+               "dashes_through_medians": 2.0, "zebra_overhang": 3.0, "zebra_duplicates": 2.0,
+               "junction_spikes": 2.0, "island_slivers": 2.0}
 
 
 def compare(previous, current):

@@ -49,6 +49,8 @@ PALETTES = {
         "path_edge": "#e3e1db",
         "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#eae7e3", "building_wall": "#d9d1c9", "landuse": "#f1eeea",
         "boundary": "#c9c2d6", "building_shadow": "rgba(90,95,110,0.22)",
+        "underpass": "#b9a8e8", "underpass_edge": "#8f7cc9",
+        "footbridge": "#ffffff", "footbridge_edge": "#a9b0bc", "steps": "#c7cbd3",
         # Свет для 3D: мягкий, тёплый, сбоку-сверху — стены светлые, с тенью,
         # а не плоские серые плиты (06.10.2026).
         "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.3,
@@ -73,6 +75,8 @@ PALETTES = {
         "path_edge": "#1b1f25",
         "median": "#1c2a22", "concrete": "#3a414c", "zebra_base": "#8c7a2c", "paint": "#d9dee6", "building": "#2b3038", "building_wall": "#1f242d", "landuse": "#13171d",
         "boundary": "#3a3f4c", "building_shadow": "rgba(0,0,0,0.45)",
+        "underpass": "#5b4f8a", "underpass_edge": "#7d6fb8",
+        "footbridge": "#3a404b", "footbridge_edge": "#596170", "steps": "#2a2f37",
         "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.18,
                   "position": [1.3, 200, 35]},
         "casing": "#2b3039",
@@ -128,6 +132,10 @@ def tree_3d(p):
                       "fill-extrusion-base": ["get", "base"], "fill-extrusion-height": ["get", "top"],
                       "fill-extrusion-vertical-gradient": True, "fill-extrusion-opacity": 1.0}}
 
+
+# Подземный переход и пешеходный мост — ширина на карте, м.
+UNDERPASS_METERS = 4.0
+FOOTBRIDGE_METERS = 2.2
 
 # Узор крон на газоне виден до TREE_PATTERN_OUT, затухает с TREE_PATTERN_FADE.
 TREE_PATTERN_FADE = 17.5
@@ -218,6 +226,25 @@ def _base_layer(layer, p, mode):
             paint["line-color"] = p["path_edge"] if casing else p["path"]
             paint["line-width"] = class_width(metres, 0.6 if casing else 0, 0.4)
             paint.pop("line-dasharray", None)
+            if i.startswith("tunnel-path"):
+                # Подземный переход — полупрозрачная сиреневая полоса ПОВЕРХ
+                # проезжей части с пунктирной кромкой: под асфальтом его не
+                # было видно вовсе (342 перехода в Ташкенте, 06.10.2026).
+                paint["line-color"] = p["underpass_edge"] if casing else p["underpass"]
+                paint["line-width"] = class_width(UNDERPASS_METERS, 1.2 if casing else 0, 0.4)
+                paint["line-opacity"] = 0.9 if casing else 0.55
+                if casing:
+                    paint["line-dasharray"] = [2, 1.5]
+                l.setdefault("layout", {})["line-cap"] = "butt"
+            elif i.startswith("bridge-path"):
+                # Пешеходный мост — светлый настил с серой кромкой над дорогой.
+                paint["line-color"] = p["footbridge_edge"] if casing else p["footbridge"]
+                paint["line-width"] = class_width(FOOTBRIDGE_METERS, 1.0 if casing else 0, 0.4)
+                l.setdefault("layout", {})["line-cap"] = "butt"
+            if kind == "path-steps" and not casing:
+                # Лестница — поперечные ступени, а не дорожка.
+                paint["line-dasharray"] = [0.25, 0.25]
+                paint["line-color"] = p["steps"]
             if mode == "roads":
                 paint["line-opacity"] = 0.5
         else:
@@ -241,7 +268,10 @@ def _base_layer(layer, p, mode):
             # нитками по краю.
             if casing:
                 l["maxzoom"] = OUR_ROADS_FROM
-        l.setdefault("layout", {}).update({"line-cap": "round", "line-join": "round"})
+        l.setdefault("layout", {}).update({"line-join": "round"})
+        # Настил моста и переход — с прямыми торцами: круглые концы делали
+        # из них «таблетки» (06.10.2026).
+        l["layout"]["line-cap"] = "butt" if i.startswith(("tunnel-path", "bridge-path")) else "round"
     elif l["type"] == "symbol" and src == "transportation_name":
         lay = l.setdefault("layout", {})
         lay.update({"text-transform": "uppercase", "text-letter-spacing": 0.08,
@@ -593,6 +623,23 @@ def build(base, theme="light", mode="full"):
     at = extrusion if extrusion is not None else first_symbol
     ours = _our_layers(p)
     out[at:at] = ours
+    # Переходы и пешеходные мосты пересекают проспекты — рисуются ПОВЕРХ
+    # нашего полотна, но под домами и подписями. Мост — с тенью.
+    above = [l for l in out if l["id"].startswith(("tunnel-path", "bridge-path"))]
+    out = [l for l in out if l not in above]
+    at = next((k for k, l in enumerate(out) if l["type"] == "fill-extrusion"),
+              next((k for k, l in enumerate(out) if l["type"] == "symbol"), len(out)))
+    bridges = [l for l in above if l["id"].startswith("bridge-path")]
+    shadows = []
+    for layer in bridges:
+        if layer["id"].endswith("-casing"):
+            shadow = copy.deepcopy(layer)
+            shadow["id"] = layer["id"].replace("-casing", "-shadow")
+            shadow["paint"] = {"line-color": p["bridge_shadow"], "line-blur": 3,
+                               "line-translate": [2, 3],
+                               "line-width": class_width(FOOTBRIDGE_METERS, 2.0, 0.4)}
+            shadows.append(shadow)
+    out[at:at] = shadows + above
     # Объёмные кроны — рядом с объёмными домами: глубина между ними общая.
     after = next((k + 1 for k, l in enumerate(out) if l["type"] == "fill-extrusion"),
                  at + len(ours))

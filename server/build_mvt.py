@@ -1241,6 +1241,41 @@ def node_zebra_line(flags, point):
             (lon + math.cos(angle) * width / 2 / kx, lat - math.sin(angle) * width / 2 / 111_320)]
 
 
+TREE_CROWN_RADII = (1.9, 2.3, 2.7, 3.1)
+TREE_CROWN_SIDES = 10
+
+
+def tree_crown(point, size, share=1.0, radius=None, sides=TREE_CROWN_SIDES):
+    """Кольцо вокруг точки дерева: радиус кроны по классу размера (× share), метры."""
+    lon, lat = point
+    if radius is None:
+        radius = TREE_CROWN_RADII[size % len(TREE_CROWN_RADII)] * share
+    kx = 111_320 * math.cos(math.radians(lat))
+    ring = [(lon + radius * math.cos(2 * math.pi * i / sides) / kx,
+             lat + radius * math.sin(2 * math.pi * i / sides) / 111_320)
+            for i in range(sides)]
+    return ring + ring[:1]
+
+
+TREE_TRUNK_METERS = 2.2
+TREE_TRUNK_RADIUS = 0.25
+TREE_CROWN_HEIGHTS = (4.5, 5.5, 6.5, 7.5)
+# Ярус кроны: (доля радиуса, низ и верх в долях высоты кроны).
+TREE_TIERS = ((0.72, 0.0, 0.22), (1.0, 0.22, 0.62), (0.78, 0.62, 0.84), (0.42, 0.84, 1.0))
+
+
+def tree_tiers(point, size):
+    """[(кольцо, свойства)] — ствол и ярусы кроны с высотами в метрах."""
+    crown = TREE_CROWN_HEIGHTS[size % len(TREE_CROWN_HEIGHTS)]
+    out = [(tree_crown(point, size, radius=TREE_TRUNK_RADIUS, sides=6),
+            {"crown": True, "trunk": True, "base": 0.0, "top": TREE_TRUNK_METERS + 0.3})]
+    for share, low, high in TREE_TIERS:
+        out.append((tree_crown(point, size, share),
+                    {"crown": True, "base": round(TREE_TRUNK_METERS + low * crown, 2),
+                     "top": round(TREE_TRUNK_METERS + high * crown, 2)}))
+    return out
+
+
 def zebra_centre_grid(zebras):
     grid = defaultdict(list)
     for line, _marked in zebras:
@@ -1943,7 +1978,13 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         for tree in trees:
             if on_road.covers(tree):
                 continue
-            _put(buckets, zoom, LAYER_TREES, mvt.POINT, [tree], {"size": tree_size(tree)})
+            size = tree_size(tree)
+            _put(buckets, zoom, LAYER_TREES, mvt.POINT, [tree], {"size": size})
+            # Объёмное дерево: ствол и крона ярусами (узкий низ, широкая
+            # середина, сужающийся верх). Один цилиндр в наклоне читался
+            # зелёной банкой (06.10.2026); ярусы дают округлый силуэт.
+            for ring, props in tree_tiers(tree, size):
+                _put(buckets, zoom, LAYER_TREES, mvt.POLYGON, ring, props)
         leaders = arrow_leaders(points)
         asphalt = JunctionMask(asphalt_rings)
         del asphalt_rings

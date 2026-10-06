@@ -97,6 +97,12 @@ class StyleTests(unittest.TestCase):
         # Нос у перехода лежит на асфальте узла, а не под ним.
         self.assertLess(ids.index("radar-junction"), ids.index("radar-median-strip"))
 
+    def test_roads_lie_under_3d_buildings(self):
+        ids = [layer["id"] for layer in self.style["layers"]]
+        if "building-3d" in ids:
+            self.assertLess(ids.index("radar-roads"), ids.index("building-3d"))
+            self.assertLess(ids.index("radar-arrows"), ids.index("building-3d"))
+
     def test_ground_paint_lies_under_bridges(self):
         ids = [layer["id"] for layer in self.style["layers"]]
         deck = ids.index("radar-bridge")

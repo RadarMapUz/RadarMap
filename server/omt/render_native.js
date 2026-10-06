@@ -1,12 +1,12 @@
 // Проверочный рендер стиля движком MapLibre Native (тем же, что в приложении), без браузера.
 // Headless Chrome не дорисовывает подложку; этот — рисует всё.
 //   Node 22 (у пакета нет сборок под 25) + npm install @maplibre/maplibre-gl-native pngjs
-//   node render_native.js http://127.0.0.1:8770/st_light_full.json 18 41.3265 69.2345 out.png [w h]
+//   node render_native.js http://127.0.0.1:8770/st_light_full.json 18 41.3265 69.2345 out.png [w h pitch bearing]
 const mbgl = require('@maplibre/maplibre-gl-native');
 const { PNG } = require('pngjs');
 const http = require('http');
 const fs = require('fs');
-const [styleUrl, zoom, lat, lon, out, w = '1400', h = '900'] = process.argv.slice(2);
+const [styleUrl, zoom, lat, lon, out, w = '1400', h = '900', pitch = '0', bearing = '0'] = process.argv.slice(2);
 function get(url) {
   return new Promise((resolve) => {
     http.get(url, (res) => {
@@ -27,7 +27,8 @@ const map = new mbgl.Map({
 });
 get(styleUrl).then(({ data }) => {
   map.load(JSON.parse(data.toString()));
-  map.render({ zoom: Number(zoom), center: [Number(lon), Number(lat)], width: Number(w), height: Number(h) },
+  map.render({ zoom: Number(zoom), center: [Number(lon), Number(lat)], width: Number(w), height: Number(h),
+                pitch: Number(pitch), bearing: Number(bearing) },
     (err, buffer) => {
       if (err) { console.error(err.message); process.exit(1); }
       const png = new PNG({ width: Number(w), height: Number(h) });

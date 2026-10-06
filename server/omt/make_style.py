@@ -55,7 +55,7 @@ PALETTES = {
         # Мост: светлый край-ограждение и тень под пролётом; тоннель —
         # полупрозрачный асфальт с пунктирной кромкой (как у Яндекса).
         "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#c9ced8",
-        "tree_crown": "#a3d184", "tree_light": "#c4e4a8", "tree_edge": "#94c676",
+        "tree_crown": "#a3d184", "tree_light": "#c4e4a8", "tree_trunk": "#9b8a76", "tree_edge": "#94c676",
         "tree_shadow": "rgba(60,100,40,0.28)",
         "label": "#4a4a4a", "halo": "#ffffff", "signal": "#3b3b3b", "signal_ring": "#f5d547",
     },
@@ -68,7 +68,7 @@ PALETTES = {
         "casing": "#2b3039",
         "kerb": "#8c7033", "trees": "trees-dark",
         "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#2a2f37",
-        "tree_crown": "#22402c", "tree_light": "#2e5238", "tree_edge": "#2e5238",
+        "tree_crown": "#22402c", "tree_light": "#2e5238", "tree_trunk": "#3a332b", "tree_edge": "#2e5238",
         "tree_shadow": "rgba(0,0,0,0.5)",
         "label": "#c9ced6", "halo": "#0f1216", "signal": "#101318", "signal_ring": "#f0c64a",
     },
@@ -102,6 +102,21 @@ def class_width(metres, extra=0.0, low=0.6, near_share=1.0):
     return ["interpolate", ["exponential", 2], ["zoom"], 10, stop(10), 13, stop(13),
             edge - 0.1, stop(edge - 0.1), edge, stop(edge, near_share),
             16, stop(16, near_share), 20, stop(20, near_share)]
+
+
+# Объёмные кроны деревьев OSM — с этого зума; ствол — TREE_TRUNK_METERS.
+TREE_3D_FROM = 16.8
+
+
+def tree_3d(p):
+    """Объёмное дерево из тайла: ствол и ярусы кроны с высотами base/top в
+    метрах (build_mvt.tree_tiers). Сверху — круг, в наклоне — округлая крона.
+    Среди объёмных слоёв: дома и деревья закрывают друг друга по глубине."""
+    return {"id": "radar-tree-3d", "type": "fill-extrusion", "source": "radar", "source-layer": "trees",
+            "minzoom": TREE_3D_FROM, "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["has", "crown"]],
+            "paint": {"fill-extrusion-color": ["case", ["has", "trunk"], p["tree_trunk"], p["tree_crown"]],
+                      "fill-extrusion-base": ["get", "base"], "fill-extrusion-height": ["get", "top"],
+                      "fill-extrusion-vertical-gradient": True, "fill-extrusion-opacity": 1.0}}
 
 
 # Узор крон на газоне виден до TREE_PATTERN_OUT, затухает с TREE_PATTERN_FADE.
@@ -284,18 +299,20 @@ def _layers_in_draw_order(p):
         # обводки — обведённые круги рядом с узором читались наклейками.
         # Тень и блик сдвигаются в пикселях, растущих с зумом, как и крона.
         {"id": "radar-tree-shadow", "type": "circle", "source": "radar", "source-layer": "trees",
-         "minzoom": 15.5,
+         "minzoom": 15.5, "filter": ["==", ["geometry-type"], "Point"],
          "paint": {"circle-color": p["tree_shadow"], "circle-radius": tree_radius(1.05),
                    "circle-blur": 0.5,
                    "circle-translate": ["interpolate", ["linear"], ["zoom"],
                                         16, ["literal", [0.5, 1]], 18, ["literal", [2, 3]],
                                         20, ["literal", [7, 11]]]}},
+        # Плоская крона — только издали: с TREE_3D_FROM её сменяет объёмная.
         {"id": "radar-tree", "type": "circle", "source": "radar", "source-layer": "trees",
-         "minzoom": 15.5,
+         "minzoom": 15.5, "maxzoom": TREE_3D_FROM + 0.3, "filter": ["==", ["geometry-type"], "Point"],
          "paint": {"circle-color": p["tree_crown"], "circle-radius": tree_radius(),
-                   "circle-opacity": ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 1]}},
+                   "circle-opacity": ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 1,
+                                      TREE_3D_FROM, 1, TREE_3D_FROM + 0.3, 0]}},
         {"id": "radar-tree-light", "type": "circle", "source": "radar", "source-layer": "trees",
-         "minzoom": 16.5,
+         "minzoom": 16.5, "maxzoom": TREE_3D_FROM + 0.3, "filter": ["==", ["geometry-type"], "Point"],
          "paint": {"circle-color": p["tree_light"], "circle-radius": tree_radius(0.45),
                    "circle-blur": 0.4,
                    "circle-translate": ["interpolate", ["linear"], ["zoom"],
@@ -503,8 +520,18 @@ def build(base, theme="light", mode="full"):
             "paint": {"fill-pattern": p["trees"],
                       "fill-opacity": ["interpolate", ["linear"], ["zoom"], 15, 0, 15.6, 1,
                                        TREE_PATTERN_FADE, 1, TREE_PATTERN_OUT, 0]}})
+    # Наши плоские слои — ДО объёмных домов. Плоский слой, нарисованный после
+    # объёмного, ложится поверх стен: в наклоне дороги перекрывали здания
+    # (Бунёдкор, 06.10.2026).
+    extrusion = next((k for k, l in enumerate(out) if l["type"] == "fill-extrusion"), None)
     first_symbol = next((k for k, l in enumerate(out) if l["type"] == "symbol"), len(out))
-    out[first_symbol:first_symbol] = _our_layers(p)
+    at = extrusion if extrusion is not None else first_symbol
+    ours = _our_layers(p)
+    out[at:at] = ours
+    # Объёмные кроны — рядом с объёмными домами: глубина между ними общая.
+    after = next((k + 1 for k, l in enumerate(out) if l["type"] == "fill-extrusion"),
+                 at + len(ours))
+    out.insert(after, tree_3d(p))
     s["layers"] = out
     s["name"] = f"RadarMap — {'светлая' if theme == 'light' else 'тёмная'}, {'полная' if mode == 'full' else 'только дорога'}"
     return s

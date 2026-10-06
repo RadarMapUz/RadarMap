@@ -539,6 +539,15 @@ class SignalPaintTests(unittest.TestCase):
         for (a, b), _marked in zebras:
             self.assertGreater(min(abs(a[0] - metres(0, 0)[0]), abs(b[0] - metres(0, 0)[0])) * 83_000, 1.5)
 
+    def test_diagonal_crossing_of_a_dual_carriageway_is_one_straight_zebra(self):
+        west = (3, build_mvt.FLAG_ONEWAY, [metres(-6, -100), metres(-6, 100)], "Беруни")
+        east = (3, build_mvt.FLAG_ONEWAY, [metres(6, 100), metres(6, -100)], "Беруни")
+        fitter = build_mvt.ZebraFitter([west, east], {id(west): 8.0, id(east): 8.0})
+        zebras = build_mvt.fit_zebras([([metres(-15, -6), metres(15, 6)], True)], fitter)
+        self.assertEqual(len(zebras), 2)
+        lats = {round(p[1], 7) for (a, b), _m in zebras for p in (a, b)}
+        self.assertEqual(len(lats), 1)                     # обе на одной поперечной
+
     def test_two_crossings_on_one_approach_are_one_zebra(self):
         road = (3, 0, [metres(0, -100), metres(0, 100)], "Беруни")
         fitter = build_mvt.ZebraFitter([road], {id(road): 10.0})

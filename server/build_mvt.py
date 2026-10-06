@@ -1195,6 +1195,16 @@ def tree_size(point):
     return key % TREE_SIZES
 
 
+def node_zebra_line(flags, point):
+    """Поперечная линия зебры-узла — по его азимуту и ширине (как road_paint)."""
+    lon, lat = point
+    width = point_width(flags)
+    angle = math.radians(point_azimuth(flags))
+    kx = 111_320 * math.cos(math.radians(lat))
+    return [(lon - math.cos(angle) * width / 2 / kx, lat + math.sin(angle) * width / 2 / 111_320),
+            (lon + math.cos(angle) * width / 2 / kx, lat - math.sin(angle) * width / 2 / 111_320)]
+
+
 def zebra_centre_grid(zebras):
     grid = defaultdict(list)
     for line, _marked in zebras:
@@ -1206,14 +1216,30 @@ def zebra_centre_grid(zebras):
 def fit_zebras(crossings, fitter):
     """Зебры поперёк проезжих: [((точка, точка), размечена ли)]."""
     candidates = []
-    for line, marked in crossings:
+    for group, (line, marked) in enumerate(crossings):
         for a, b in zip(line, line[1:]):
             for key, point, heading, half, sine in fitter.hits(a, b):
-                candidates.append((key, point, heading, half, sine, bool(marked)))
+                candidates.append((key, point, heading, half, sine, bool(marked), group))
     # На одном подходе один переход: размеченный и самый поперечный — первым.
     candidates.sort(key=lambda c: (not c[5], -c[4], c[1][0], c[1][1]))
+    # Переход через двойную проезжую — одна полоса зебры: куски одной линии
+    # OSM на параллельных лентах выстраиваются поперёк первой. Наискосок
+    # проведённая линия давала две зебры со сдвигом, и двойная жёлтая шла
+    # между ними насквозь (Беруни у Чорсу, 06.10.2026).
+    anchors = {}
+    aligned = []
+    for key, point, heading, half, sine, marked, group in candidates:
+        anchor = anchors.get(group)
+        if anchor is None:
+            anchors[group] = (point, heading)
+        elif abs(math.sin(heading - anchor[1])) < ZEBRA_PARALLEL_SINE:
+            kx = 111_320 * math.cos(math.radians(point[1]))
+            fx, fy = math.sin(heading), math.cos(heading)
+            shift = (anchor[0][0] - point[0]) * kx * fx + (anchor[0][1] - point[1]) * 111_320 * fy
+            point = (point[0] + fx * shift / kx, point[1] + fy * shift / 111_320)
+        aligned.append((key, point, heading, half, sine, marked))
     kept = []
-    for key, point, heading, half, sine, marked in candidates:
+    for key, point, heading, half, sine, marked in aligned:
         kx = 111_320 * math.cos(math.radians(point[1]))
         if any(other[0] == key and math.hypot((other[1][0] - point[0]) * kx,
                                               (other[1][1] - point[1]) * 111_320) < ZEBRA_SAME_APPROACH_METERS
@@ -1232,6 +1258,7 @@ def fit_zebras(crossings, fitter):
 
 
 ZEBRA_BODY_CLEAR_METERS = 3.0
+ZEBRA_PARALLEL_SINE = 0.26      # ленты параллельны в пределах 15°
 
 
 def _zebra_line(point, heading, half):
@@ -1798,6 +1825,17 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         drawn_crossings = [(line, marked) for line, marked in crossings
                            if marked or any(_near_crossing_way(spot, zebra_nodes, NODE_ON_WAY_METERS)
                                             for spot in line)]
+        # Зебра-узел (переход в OSM точкой, без линии) — та же подгонка, что
+        # у линий: поперёк оси, слияние дублей, выравнивание по лентам. Сама по
+        # себе она рисовалась штрихами по своему азимуту, и две точки в 3 м
+        # друг от друга давали двойную зебру (Беруни у Чорсу, 06.10.2026).
+        drawn_way_spots = defaultdict(list)
+        for line, _marked in drawn_crossings:
+            for lon, lat in line:
+                drawn_way_spots[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
+        drawn_crossings += [(node_zebra_line(point[1], point[2][0]), True) for point in points
+                            if point[0] == 5 and point[1] & PFLAG_PAINTED and point_width(point[1]) > 0
+                            and not _near_crossing_way(point[2][0], drawn_way_spots)]
         zebra_fitter = ZebraFitter(roads, widths)
         fitted_zebras = fit_zebras(drawn_crossings, zebra_fitter)
         zebra_centres = zebra_centre_grid(fitted_zebras)
@@ -1838,15 +1876,10 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                 # регулируемый ли перекрёсток и где его центр.
                 for light in approach_lights(waffle, _junction_signals(box, signals, centres)):
                     _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [light], {"kind": KIND_APPROACH_LIGHT})
-        # Зебры — подогнанные к подходам (fit_zebras): линия размечена тегом —
-        # или на ней лежит размеченный узел перехода (у Пахтакора линия без
-        # тега, а узлы — zebra). Узловая зебра рядом с линией — тот же переход.
-        crossing_grid = defaultdict(list)
+        # Зебры — подогнанные к подходам (fit_zebras): и линии переходов, и
+        # размеченные узлы, одним слоем.
         for line, _marked in fitted_zebras:
             _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": KIND_ZEBRA_WAY})
-        for line, _marked in drawn_crossings:
-            for lon, lat in line:
-                crossing_grid[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
         # Деревья — после полотна: на проезжей части крону не рисуем (в OSM
         # точку дерева ставят и на кромке, и на осевой). У каждой кроны свой
         # размер — одинаковые круги читались «мячиками» (Чорсу, 06.10.2026).
@@ -1884,7 +1917,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             code, flags, spot = point[0], point[1], point[2]
             for line, kind in stop_lines.get(index, ()):
                 _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": kind})
-            if code == 5 and _near_crossing_way(spot[0], crossing_grid):
+            if code == 5:
+                # Краска перехода — в fit_zebras; точка остаётся приложению.
                 _put(buckets, zoom, LAYER_POINTS, mvt.POINT, list(spot),
                      point_properties(code, flags))
                 continue

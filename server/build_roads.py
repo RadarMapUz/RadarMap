@@ -4129,13 +4129,142 @@ def _distance_to_segment(p, a, b):
     return math.hypot(p[0] - a[0] - ax * t, p[1] - a[1] - ay * t)
 
 
+# Контур узла по подходам (а не выпуклая оболочка).
+#
+# Оболочка между двумя дорогами срезает угол прямой хордой и заливает
+# асфальтом то, что в жизни тротуар, — узел читается кляксой (Навои ×
+# Фуркат, 06.10.2026). Настоящий перекрёсток: у каждого подхода устье
+# (поперёк дороги), между соседними подходами — кромки дорог и ВОГНУТАЯ
+# дуга бордюра. Подходы почти параллельны (две ленты одного проспекта) —
+# устья соединяются прямо, разделительная ложится поверх.
+MOUTH_MIN_METERS = 2.0
+MOUTH_PARALLEL_DEGREES = 20.0
+MOUTH_ARC_STEP_DEGREES = 15.0
+MOUTH_MAX_TANGENT_METERS = 30.0
+
+
+def mouth_outline(legs):
+    """Кольцо узла по устьям подходов с дугами бордюра или None (не вышло)."""
+    nodes = {}
+    for node, _neighbour, _width in legs:
+        nodes[_node_key(node)] = node
+    centre = (sum(p[0] for p in nodes.values()) / len(nodes),
+              sum(p[1] for p in nodes.values()) / len(nodes))
+    kx = LAT_METERS * math.cos(math.radians(centre[1]))
+
+    def xy(p):
+        return ((p[0] - centre[0]) * kx, (p[1] - centre[1]) * LAT_METERS)
+
+    def back(p):
+        return (centre[0] + p[0] / kx, centre[1] + p[1] / LAT_METERS)
+
+    span = max((math.hypot(*xy(p)) for p in nodes.values()), default=0.0) * 2
+    others = [xy(p) for p in nodes.values()]
+    approaches = []
+    seen = set()
+    for node, neighbour, width in legs:
+        n, q = xy(node), xy(neighbour)
+        d = _unit(q[0] - n[0], q[1] - n[1])
+        if d == (0.0, 0.0):
+            continue
+        # Внутренний кусок кластера (к другому его узлу) — не подход.
+        internal = False
+        for m in others:
+            vx, vy = m[0] - n[0], m[1] - n[1]
+            dist = math.hypot(vx, vy)
+            if 0.5 < dist <= span + 5 and (vx * d[0] + vy * d[1]) / dist > math.cos(math.radians(15)):
+                internal = True
+                break
+        key = (round(n[0], 1), round(n[1], 1), round(d[0], 2), round(d[1], 2))
+        if internal or key in seen:
+            continue
+        seen.add(key)
+        approaches.append({"n": n, "d": d, "half": width / 2.0,
+                           "angle": math.atan2(d[1], d[0])})
+    if len(approaches) < 2:
+        return None
+    approaches.sort(key=lambda a: a["angle"])
+    radius = kerb_radius(legs)
+
+    def edge(a, side):
+        # side +1 — левая кромка (против часовой от хода наружу), −1 — правая.
+        nx, ny = -a["d"][1] * side, a["d"][0] * side
+        return (a["n"][0] + nx * a["half"], a["n"][1] + ny * a["half"])
+
+    # Для каждой пары соседей (A, затем B против часовой): кромка A слева и
+    # кромка B справа, дуга между ними; запоминаем, на сколько дуга уходит
+    # вдоль каждого подхода, — оттуда начинается устье.
+    corners = []
+    reach = [MOUTH_MIN_METERS] * len(approaches)
+    for i, a in enumerate(approaches):
+        b = approaches[(i + 1) % len(approaches)]
+        pa, pb = edge(a, 1), edge(b, -1)
+        turn = (b["angle"] - a["angle"]) % (2 * math.pi)
+        if turn < math.radians(MOUTH_PARALLEL_DEGREES) or turn > math.radians(180 - 5):
+            corners.append(None)
+            continue
+        # Пересечение кромок: pa + s·dA = pb + t·dB.
+        det = a["d"][0] * (-b["d"][1]) - a["d"][1] * (-b["d"][0])
+        if abs(det) < 1e-9:
+            corners.append(None)
+            continue
+        rx, ry = pb[0] - pa[0], pb[1] - pa[1]
+        s = (rx * (-b["d"][1]) - ry * (-b["d"][0])) / det
+        t = (a["d"][0] * ry - a["d"][1] * rx) / det
+        corner = (pa[0] + a["d"][0] * s, pa[1] + a["d"][1] * s)
+        tangent = radius / math.tan(turn / 2)
+        ta, tb = s + tangent, t + tangent
+        if ta > MOUTH_MAX_TANGENT_METERS or tb > MOUTH_MAX_TANGENT_METERS:
+            corners.append(None)
+            continue
+        start = (corner[0] + a["d"][0] * tangent, corner[1] + a["d"][1] * tangent)
+        end = (corner[0] + b["d"][0] * tangent, corner[1] + b["d"][1] * tangent)
+        # Центр дуги — по биссектрисе наружу от угла кромок.
+        bis = _unit(a["d"][0] + b["d"][0], a["d"][1] + b["d"][1])
+        dist = radius / math.sin(turn / 2)
+        centre_arc = (corner[0] + bis[0] * dist, corner[1] + bis[1] * dist)
+        a0 = math.atan2(start[1] - centre_arc[1], start[0] - centre_arc[0])
+        a1 = math.atan2(end[1] - centre_arc[1], end[0] - centre_arc[0])
+        sweep = (a1 - a0 + math.pi) % (2 * math.pi) - math.pi
+        steps = max(2, int(abs(math.degrees(sweep)) / MOUTH_ARC_STEP_DEGREES))
+        arc = [(centre_arc[0] + radius * math.cos(a0 + sweep * k / steps),
+                centre_arc[1] + radius * math.sin(a0 + sweep * k / steps)) for k in range(steps + 1)]
+        corners.append(arc)
+        reach[i] = max(reach[i], ta + 1.0)
+        reach[(i + 1) % len(approaches)] = max(reach[(i + 1) % len(approaches)], tb + 1.0)
+
+    ring = []
+    for i, a in enumerate(approaches):
+        m = reach[i]
+        right = edge(a, -1)
+        left = edge(a, 1)
+        ring.append((right[0] + a["d"][0] * m, right[1] + a["d"][1] * m))
+        ring.append((left[0] + a["d"][0] * m, left[1] + a["d"][1] * m))
+        if corners[i]:
+            ring.extend(corners[i])
+    if len(ring) < 3:
+        return None
+    out = [back(p) for p in ring]
+    if signed_area_meters(out) < 0:
+        out.reverse()
+    if surface_check.defect(out) is not None:
+        return None
+    return out
+
+
 def iter_junctions(arms):
-    """Асфальт перекрёстка — оболочка кромок ВСЕХ его дорог, а не одного узла."""
+    """Асфальт перекрёстка — по устьям подходов с дугами бордюра; где так не
+    вышло — прежняя оболочка кромок всех его дорог."""
     for legs in cluster_junctions(arms):
         if len(legs) < MIN_JUNCTION_ARMS and not _seam_needs_patch(legs):
             continue
         if max(leg[2] for leg in legs) < JUNCTION_MIN_WIDEST_METERS:
             continue
+        if len(legs) >= MIN_JUNCTION_ARMS:
+            outline = mouth_outline(legs)
+            if outline and len(outline) >= 3:
+                yield (AREA_JUNCTION, AREA_FLAG_CLOSED, outline)
+                continue
         ring = _hull_of(legs)
         if not ring:
             continue

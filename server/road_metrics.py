@@ -515,6 +515,12 @@ def measure(tiles_dir, islands_path=None, bbox=None):
         markings, lambda p: junctions.covers(p) and not bridges.near(p, BRIDGE_DECK_METERS))
     on_zebra, _ = dashes_inside(markings, lambda p: zebras.near(p, ZEBRA_NEAR_METERS))
     through_medians, _ = dashes_inside(markings, median_index.covers)
+    # Раздутый узел: площадь узла больше BLOATED_JUNCTION_M2 — клякса вдоль
+    # улицы вместо компактного перекрёстка (Навои × Фуркат, 06.10.2026).
+    junction_all = [parts[0] for g, parts, props in surface
+                    if g == 3 and props.get("kind") in (8, 10) and parts and not props.get("fill")
+                    and polygon_area_m2(parts[0]) >= JUNCTION_MIN_AREA_M2]
+    bloated = sum(1 for ring in junction_all if polygon_area_m2(ring) > BLOATED_JUNCTION_M2)
     shapes = [(props.get("kind"), parts[0]) for g, parts, props in surface
               if g == 3 and parts and props.get("kind") in (8, 9, 10, 13) and len(parts[0]) > 3]
     spikes = sum(1 for _kind, ring in shapes if spiky(ring))
@@ -531,6 +537,7 @@ def measure(tiles_dir, islands_path=None, bbox=None):
         "medians_on_asphalt": round(100 * medians_on_asphalt(medians, open_areas, median_examples), 2),
         "dashes_through_medians": round(through_medians, 1),
         "zebra_overhang": round(100 * zebra_overhang, 2),
+        "junction_bloat": round(100 * bloated / len(junction_all), 2) if junction_all else 0.0,
         "junction_spikes": round(100 * spikes / len(shapes), 2) if shapes else 0.0,
         "island_slivers": round(100 * slivers / len(island_rings), 2) if island_rings else 0.0,
         "zebra_duplicates": round(100 * zebra_duplicates, 2),
@@ -550,12 +557,16 @@ UNITS = {
     "medians_on_asphalt": "% разделительных",
     "dashes_through_medians": "м на 1 км пунктира",
     "zebra_overhang": "% зебр с концом за кромкой",
+    "junction_bloat": "% раздутых узлов",
     "junction_spikes": "% фигур узла с иглой",
     "island_slivers": "% островков-клиньев",
     "zebra_duplicates": "% зебр-дублей",
 }
 
 
+# Площадь узла больше этого — раздут (крупнейшие настоящие узлы Ташкента
+# между стоп-линиями — около 60 × 60 м).
+BLOATED_JUNCTION_M2 = 3500.0
 # Игла: угол контура острее этого. Клин: средняя ширина меньше этого.
 SPIKE_DEGREES = 15.0
 SLIVER_METERS = 1.5
@@ -573,7 +584,7 @@ WORSE_FACTOR = 1.2
 NOISE_FLOOR = {"houses_under_asphalt": 0.2, "islands_under_asphalt": 5.0, "arrows_after_stop": 5.0,
                "dashes_in_junction": 10.0, "dashes_on_zebra": 2.0, "medians_on_asphalt": 2.0,
                "dashes_through_medians": 2.0, "zebra_overhang": 3.0, "zebra_duplicates": 2.0,
-               "junction_spikes": 2.0, "island_slivers": 2.0}
+               "junction_spikes": 2.0, "island_slivers": 2.0, "junction_bloat": 2.0}
 
 
 def compare(previous, current):

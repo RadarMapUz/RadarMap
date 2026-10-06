@@ -556,6 +556,7 @@ METRIC_TITLES = {"houses_under_asphalt": "дома под асфальтом %",
                  "dashes_through_medians": "пунктир сквозь разделительную м/км",
                  "zebra_overhang": "зебры за кромкой %",
                  "zebra_duplicates": "зебры-дубли %",
+                 "junction_bloat": "раздутые узлы %",
                  "junction_spikes": "иглы у фигур узла %",
                  "island_slivers": "островки-клинья %"}
 

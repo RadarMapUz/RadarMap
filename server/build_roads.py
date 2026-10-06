@@ -4492,11 +4492,16 @@ class RoadIndex:
                 y0, y1 = sorted((a[1], b[1]))
                 for gx in range(int((x0 - pad / scale) / cell), int((x1 + pad / scale) / cell) + 1):
                     for gy in range(int((y0 - pad) / cell), int((y1 + pad) / cell) + 1):
-                        self._grid[(gx, gy)].append((id(street), a, b, half))
+                        self._grid[(gx, gy)].append((id(street), a, b, half,
+                                                     street[1] & (FLAG_BRIDGE | FLAG_TUNNEL)))
 
     def blocker(self, *exclude):
-        """Функция (кромка, кромка) → True, если поперечник пересекает чужую ленту."""
+        """Функция (кромка, кромка) → True, если поперечник пересекает чужую ленту.
+
+        Только ленту ТОГО ЖЕ уровня: тоннель Фурката под Навои стирал
+        разделительную наверху на 250 м (06.10.2026)."""
         skip = {id(street) for street in exclude}
+        level = (exclude[0][1] & (FLAG_BRIDGE | FLAG_TUNNEL)) if exclude else 0
         cell = self.CELL_METERS / LAT_METERS
 
         def blocked(left, right):
@@ -4505,8 +4510,8 @@ class RoadIndex:
             # medians_on_asphalt — 5,7 % разделительных на асфальте).
             for share in (0.1, 0.3, 0.5, 0.7, 0.9):
                 point = (left[0] + (right[0] - left[0]) * share, left[1] + (right[1] - left[1]) * share)
-                for key, a, b, half in self._grid.get((int(point[0] / cell), int(point[1] / cell)), ()):
-                    if key in skip:
+                for key, a, b, half, lvl in self._grid.get((int(point[0] / cell), int(point[1] / cell)), ()):
+                    if key in skip or lvl != level:
                         continue
                     if _point_segment_meters(point, a, b) < half:
                         return True

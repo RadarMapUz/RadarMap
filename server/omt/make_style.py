@@ -55,7 +55,8 @@ PALETTES = {
         # Мост: светлый край-ограждение и тень под пролётом; тоннель —
         # полупрозрачный асфальт с пунктирной кромкой (как у Яндекса).
         "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#c9ced8",
-        "tree_crown": "#acd690", "tree_edge": "#94c676", "tree_shadow": "rgba(70,110,50,0.18)",
+        "tree_crown": "#a3d184", "tree_light": "#c4e4a8", "tree_edge": "#94c676",
+        "tree_shadow": "rgba(60,100,40,0.28)",
         "label": "#4a4a4a", "halo": "#ffffff", "signal": "#3b3b3b", "signal_ring": "#f5d547",
     },
     "dark": {
@@ -67,7 +68,8 @@ PALETTES = {
         "casing": "#2b3039",
         "kerb": "#8c7033", "trees": "trees-dark",
         "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#2a2f37",
-        "tree_crown": "#22402c", "tree_edge": "#2e5238", "tree_shadow": "rgba(0,0,0,0.5)",
+        "tree_crown": "#22402c", "tree_light": "#2e5238", "tree_edge": "#2e5238",
+        "tree_shadow": "rgba(0,0,0,0.5)",
         "label": "#c9ced6", "halo": "#0f1216", "signal": "#101318", "signal_ring": "#f0c64a",
     },
 }
@@ -102,6 +104,9 @@ def class_width(metres, extra=0.0, low=0.6, near_share=1.0):
             16, stop(16, near_share), 20, stop(20, near_share)]
 
 
+# Узор крон на газоне виден до TREE_PATTERN_OUT, затухает с TREE_PATTERN_FADE.
+TREE_PATTERN_FADE = 17.5
+TREE_PATTERN_OUT = 18.5
 # Крона 2–3 м радиусом, четыре размера по свойству size из тайла: одинаковые
 # круги в 3 м читались «мячиками» (Чорсу, 06.10.2026).
 TREE_CROWN_METERS = 2.4
@@ -275,16 +280,28 @@ def _layers_in_draw_order(p):
         # Деревья из OSM (вид — крона кружком настоящего размера, ~3 м
         # радиусом) с мягкой тенью — как у Яндекса. Под дорогами: крона у
         # бордюра не ложится на асфальт.
+        # Тем же приёмом, что кроны узора: тень, крона, блик слева сверху, без
+        # обводки — обведённые круги рядом с узором читались наклейками.
+        # Тень и блик сдвигаются в пикселях, растущих с зумом, как и крона.
         {"id": "radar-tree-shadow", "type": "circle", "source": "radar", "source-layer": "trees",
          "minzoom": 15.5,
-         "paint": {"circle-color": p["tree_shadow"], "circle-radius": tree_radius(1.1),
-                   "circle-blur": 0.6, "circle-translate": [1, 1.5]}},
+         "paint": {"circle-color": p["tree_shadow"], "circle-radius": tree_radius(1.05),
+                   "circle-blur": 0.5,
+                   "circle-translate": ["interpolate", ["linear"], ["zoom"],
+                                        16, ["literal", [0.5, 1]], 18, ["literal", [2, 3]],
+                                        20, ["literal", [7, 11]]]}},
         {"id": "radar-tree", "type": "circle", "source": "radar", "source-layer": "trees",
          "minzoom": 15.5,
          "paint": {"circle-color": p["tree_crown"], "circle-radius": tree_radius(),
-                   "circle-stroke-color": p["tree_edge"], "circle-stroke-width": 0.6,
-                   "circle-opacity": ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 1],
-                   "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 1]}},
+                   "circle-opacity": ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 1]}},
+        {"id": "radar-tree-light", "type": "circle", "source": "radar", "source-layer": "trees",
+         "minzoom": 16.5,
+         "paint": {"circle-color": p["tree_light"], "circle-radius": tree_radius(0.45),
+                   "circle-blur": 0.4,
+                   "circle-translate": ["interpolate", ["linear"], ["zoom"],
+                                        16.5, ["literal", [-1, -1]], 18, ["literal", [-3, -3]],
+                                        20, ["literal", [-11, -11]]],
+                   "circle-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.2, 0.8]}},
         {"id": "radar-median", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 15.5,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
                     ["!", ["has", "strip"]], ["!", ["has", "island"]]],
@@ -466,7 +483,9 @@ def build(base, theme="light", mode="full"):
                                             "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 14, 0, 15.5,
                                                                       ["coalesce", ["get", "render_height"], 8]],
                                             "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
-                                            "fill-extrusion-opacity": 0.92}})
+                                            # Непрозрачные: сквозь 0,92 на крышах
+                                            # проступал узор крон газона под домом.
+                                            "fill-extrusion-opacity": 1.0}})
     # Деревья поверх зелени (узор крон из спрайта), сразу над последним слоем
     # газона/парка/леса — под дорогами и домами. С 15-го зума: дальше кроны
     # сливаются в рябь.
@@ -475,9 +494,15 @@ def build(base, theme="light", mode="full"):
     if green:
         out.insert(green[-1] + 1, {
             "id": "trees", "type": "fill", "source": "openmaptiles", "source-layer": "landcover",
-            "minzoom": 15, "filter": ["in", ["get", "class"], ["literal", ["wood", "grass"]]],
+            # Узор — пиксели спрайта, с картой он не растёт: на 16-м зуме это
+            # деревья, а при приближении — мелкие бледные «призраки» (06.10.2026).
+            # Поэтому после 17,5 он уходит, и ближе остаются ровный газон и
+            # настоящие кроны из OSM, которые растут в метрах.
+            "minzoom": 15, "maxzoom": TREE_PATTERN_OUT,
+            "filter": ["in", ["get", "class"], ["literal", ["wood", "grass"]]],
             "paint": {"fill-pattern": p["trees"],
-                      "fill-opacity": ["interpolate", ["linear"], ["zoom"], 15, 0, 15.6, 1]}})
+                      "fill-opacity": ["interpolate", ["linear"], ["zoom"], 15, 0, 15.6, 1,
+                                       TREE_PATTERN_FADE, 1, TREE_PATTERN_OUT, 0]}})
     first_symbol = next((k for k, l in enumerate(out) if l["type"] == "symbol"), len(out))
     out[first_symbol:first_symbol] = _our_layers(p)
     s["layers"] = out

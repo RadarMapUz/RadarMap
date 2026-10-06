@@ -33,7 +33,7 @@ OUR_ROADS_FROM = 15   # с этого зума полотно — наше
 ONEWAY_SHARE = 0.55
 # Ширина по классу OpenMapTiles, метры (до 15-го зума — там наших лент нет).
 CLASS_M = {"motorway": 32, "trunk": 30, "primary": 24, "secondary-tertiary": 16, "link": 8,
-           "motorway-link": 9, "minor": 9, "service-track": 5.5, "path": 2.5, "path-steps": 2.5}
+           "motorway-link": 9, "minor": 9, "service-track": 5.5, "path": 1.8, "path-steps": 1.8}
 MAJOR = {"motorway", "trunk", "primary", "secondary-tertiary", "link", "motorway-link"}
 
 PALETTES = {
@@ -45,6 +45,7 @@ PALETTES = {
         # серыми магистралями кадр выглядел двумя разными картами (аудит
         # 28.09.2026). Белое осталось только у дорожек — их с дорогой не спутать.
         "minor": "#d5dae2", "minor_edge": "#b4bbc6", "minor_edge_far": "#e6e6e3", "path": "#ffffff",
+        "path_edge": "#e3e1db",
         "median": "#dfe5d6", "paint": "#ffffff", "building": "#e7e2de", "landuse": None,
         # Кайма НАШИХ лент — нейтральная: жёлтая у каждой ленты давала «нитки»
         # внутри асфальта там, где две ленты лежат рядом (Фурката, 28.09.2026).
@@ -54,13 +55,14 @@ PALETTES = {
         # Мост: светлый край-ограждение и тень под пролётом; тоннель —
         # полупрозрачный асфальт с пунктирной кромкой (как у Яндекса).
         "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#c9ced8",
-        "tree_crown": "#9fd078", "tree_edge": "#bfe39c", "tree_shadow": "rgba(70,110,50,0.35)",
+        "tree_crown": "#acd690", "tree_edge": "#94c676", "tree_shadow": "rgba(70,110,50,0.18)",
         "label": "#4a4a4a", "halo": "#ffffff", "signal": "#3b3b3b", "signal_ring": "#f5d547",
     },
     "dark": {
         "bg": "#0f1216", "park": "#16241b", "wood": "#14221a", "water": "#1b3348",
         "road": "#3b414b", "road_far": "#4b4536", "edge": "#b8923a",
         "minor": "#262b33", "minor_edge": "#1a1e24", "minor_edge_far": "#1a1e24", "path": "#20252c",
+        "path_edge": "#1b1f25",
         "median": "#1c2a22", "paint": "#d9dee6", "building": "#1c2027", "landuse": "#151a21",
         "casing": "#2b3039",
         "kerb": "#8c7033", "trees": "trees-dark",
@@ -100,13 +102,21 @@ def class_width(metres, extra=0.0, low=0.6, near_share=1.0):
             16, stop(16, near_share), 20, stop(20, near_share)]
 
 
-TREE_CROWN_METERS = 3.0
+# Крона 2–3 м радиусом, четыре размера по свойству size из тайла: одинаковые
+# круги в 3 м читались «мячиками» (Чорсу, 06.10.2026).
+TREE_CROWN_METERS = 2.4
+TREE_SIZE_SCALES = (0.8, 0.95, 1.1, 1.25)
 
 
 def tree_radius(scale=1.0):
     """Радиус кроны в пикселях — по метрам, как ширина наших лент."""
+    size = ["match", ["coalesce", ["get", "size"], 1]]
+    for index, factor in enumerate(TREE_SIZE_SCALES):
+        size += [index, factor]
+    size.append(1.0)
+
     def stop(z):
-        return max(1.5, TREE_CROWN_METERS * scale * (2 ** z) * M)
+        return ["max", 1.2, ["*", size, TREE_CROWN_METERS * scale * (2 ** z) * M]]
     return ["interpolate", ["exponential", 2], ["zoom"], 15, stop(15), 18, stop(18), 20, stop(20)]
 
 
@@ -166,8 +176,10 @@ def _base_layer(layer, p, mode):
         major = kind in MAJOR
         metres = CLASS_M[kind]
         if kind.startswith("path"):
-            paint["line-color"] = p["minor_edge"] if casing else p["path"]
-            paint["line-width"] = class_width(metres, 1.2 if casing else 0, 0.4)
+            # Тротуар тише дороги: уже и с бледной каймой — широкие белые
+            # дорожки с серой обводкой спорили с проезжей частью (Чорсу).
+            paint["line-color"] = p["path_edge"] if casing else p["path"]
+            paint["line-width"] = class_width(metres, 0.6 if casing else 0, 0.4)
             paint.pop("line-dasharray", None)
             if mode == "roads":
                 paint["line-opacity"] = 0.5
@@ -224,11 +236,11 @@ def _our_layers(p):
         {"id": "radar-tree-shadow", "type": "circle", "source": "radar", "source-layer": "trees",
          "minzoom": 15.5,
          "paint": {"circle-color": p["tree_shadow"], "circle-radius": tree_radius(1.1),
-                   "circle-blur": 0.6, "circle-translate": [1.5, 2.5]}},
+                   "circle-blur": 0.6, "circle-translate": [1, 1.5]}},
         {"id": "radar-tree", "type": "circle", "source": "radar", "source-layer": "trees",
          "minzoom": 15.5,
          "paint": {"circle-color": p["tree_crown"], "circle-radius": tree_radius(),
-                   "circle-stroke-color": p["tree_edge"], "circle-stroke-width": 1,
+                   "circle-stroke-color": p["tree_edge"], "circle-stroke-width": 0.6,
                    "circle-opacity": ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 1],
                    "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 1]}},
         {"id": "radar-median", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 15.5,

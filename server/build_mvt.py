@@ -1186,6 +1186,15 @@ ARROW_STOP_BEHIND_METERS = 40.0
 ARROW_STOP_SAME_POINT_METERS = 3.0
 
 
+TREE_SIZES = 4
+
+
+def tree_size(point):
+    """Класс размера кроны 0…3 — от координаты, одинаково при каждой сборке."""
+    key = int(round(point[0] * 1e6)) * 73_856_093 ^ int(round(point[1] * 1e6)) * 19_349_663
+    return key % TREE_SIZES
+
+
 def zebra_centre_grid(zebras):
     grid = defaultdict(list)
     for line, _marked in zebras:
@@ -1720,8 +1729,6 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         for road in roads:
             _put(buckets, zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
                  _road_props(road, widths.get(id(road))))
-        for tree in trees:
-            _put(buckets, zoom, LAYER_TREES, mvt.POINT, [tree], {})
         for road in far:
             _put(buckets, far_zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
                  _road_props(road))
@@ -1748,12 +1755,15 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         boxes, junction_areas, strips, drawn_islands = [], [], [], []
         # Полотно — только у стрелок: вся страна в память не влезет.
         arrow_area = arrow_cells(points, _SIGNAL_CELL)
-        asphalt_rings = []
+        tree_area = {(int(t[0] / JunctionMask.CELL), int(t[1] / JunctionMask.CELL)) for t in trees}
+        asphalt_rings, tree_asphalt = [], []
         for set_name in written_sets:
             for kind, flags, shape in written_areas(target_dir, set_name):
-                if (kind in (AREA_ROAD, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_FILLET) and flags & 1
-                        and near_cells(shape, arrow_area, _SIGNAL_CELL)):
-                    asphalt_rings.append(shape)
+                if kind in (AREA_ROAD, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_FILLET) and flags & 1:
+                    if near_cells(shape, arrow_area, _SIGNAL_CELL):
+                        asphalt_rings.append(shape)
+                    if tree_area and near_cells(shape, tree_area, JunctionMask.CELL):
+                        tree_asphalt.append(shape)
                 if kind == AREA_JUNCTION_BOX:
                     boxes.append(shape)
                 if kind in (AREA_JUNCTION, AREA_JUNCTION_BOX) and flags & 1:
@@ -1837,6 +1847,15 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         for line, _marked in drawn_crossings:
             for lon, lat in line:
                 crossing_grid[(int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))].append((lon, lat))
+        # Деревья — после полотна: на проезжей части крону не рисуем (в OSM
+        # точку дерева ставят и на кромке, и на осевой). У каждой кроны свой
+        # размер — одинаковые круги читались «мячиками» (Чорсу, 06.10.2026).
+        on_road = JunctionMask(tree_asphalt)
+        del tree_asphalt
+        for tree in trees:
+            if on_road.covers(tree):
+                continue
+            _put(buckets, zoom, LAYER_TREES, mvt.POINT, [tree], {"size": tree_size(tree)})
         leaders = arrow_leaders(points)
         asphalt = JunctionMask(asphalt_rings)
         del asphalt_rings

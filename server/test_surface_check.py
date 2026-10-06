@@ -552,6 +552,36 @@ class SignalPaintTests(unittest.TestCase):
         fitter = build_mvt.ZebraFitter([road], {id(road): 10.0})
         self.assertEqual(build_mvt.fit_zebras([([metres(20, 0), metres(40, 0)], True)], fitter), [])
 
+    def test_oblique_stop_line_is_squared_to_its_own_carriageway(self):
+        road = (3, build_mvt.FLAG_ONEWAY, [metres(0, -100), metres(0, 100)], "Беруни")
+        fitter = build_mvt.ZebraFitter([road], {id(road): 10.0})
+        oblique = [metres(-9, -3), metres(7, 4)]                 # через островок, за кромку
+        line = build_mvt.fit_stop_line(oblique, 0.0, fitter, {})
+        self.assertAlmostEqual(line[0][1], line[1][1], places=7)  # строго поперёк
+        self.assertAlmostEqual(self._metres_between(line[0], line[1]), 10.0 - 2 * 0.3, delta=0.1)
+
+    def test_stop_line_stands_before_the_zebra(self):
+        road = (3, build_mvt.FLAG_ONEWAY, [metres(0, -100), metres(0, 100)], "Беруни")
+        fitter = build_mvt.ZebraFitter([road], {id(road): 10.0})
+        zebras = [([metres(-4.7, 2), metres(4.7, 2)], True)]       # зебра в 2 м за линией
+        line = build_mvt.fit_stop_line([metres(-5, 0), metres(5, 0)], 0.0, fitter,
+                                       build_mvt.zebra_centre_grid(zebras))
+        y = (line[0][1] - metres(0, 0)[1]) * 111_320
+        self.assertAlmostEqual(y, 2 - 1.5 - 1.5, delta=0.1)
+
+    def test_stop_line_without_an_axis_is_not_drawn(self):
+        road = (3, build_mvt.FLAG_ONEWAY, [metres(0, -100), metres(0, 100)], "Беруни")
+        fitter = build_mvt.ZebraFitter([road], {id(road): 10.0})
+        self.assertIsNone(build_mvt.fit_stop_line([metres(30, 0), metres(40, 0)], 0.0, fitter, {}))
+
+    def test_two_way_stop_line_covers_only_its_half(self):
+        road = (5, 0, [metres(0, -100), metres(0, 100)], "Мукими")
+        fitter = build_mvt.ZebraFitter([road], {id(road): 12.0})
+        line = build_mvt.fit_stop_line([metres(0.3, 0), metres(6, 0)], 0.0, fitter, {}, True)
+        xs = sorted((p[0] - metres(0, 0)[0]) * 111_320 * math.cos(math.radians(p[1])) for p in line)
+        self.assertGreater(xs[0], 0.0)                              # правее оси
+        self.assertAlmostEqual(xs[1], 6 - 0.3, delta=0.1)
+
     def test_node_zebra_near_a_crossing_way_is_a_duplicate(self):
         grid = {}
         way = [metres(-10, 0), metres(10, 0)]

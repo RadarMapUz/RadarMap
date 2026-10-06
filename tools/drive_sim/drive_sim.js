@@ -53,8 +53,12 @@
       if (i > 0) { s += Math.hypot(x - pts[i - 1].x, y - pts[i - 1].y); }
       pts.push({ x: x, y: y, s: s, width: p[2], lanes: Math.max(1, p[3]), speed: p[4] || 40 });
     });
+    // Светофор: {s — где он, stop — стоп-линия перед переходом подхода}.
+    const signals = (data.signals || []).map(function (v) {
+      return typeof v === 'number' ? { s: v, stop: v - STOP_BEFORE_SIGNAL } : v;
+    });
     return { origin: origin, kx: kx, points: pts, length: s, maneuvers: data.maneuvers || [],
-             signals: data.signals || [], cameras: data.cameras || [] };
+             signals: signals, cameras: data.cameras || [] };
   }
   function toLonLat(x, y) { return [route.origin[0] + x / route.kx, route.origin[1] + y / KM]; }
 
@@ -120,12 +124,12 @@
     // Скорость: лимит участка, плавные разгон и торможение; на красный — стоп
     // у стоп-линии, на жёлтый — стоп, если успеваем затормозить.
     let target = at.speed / 3.6;
-    const light = route.signals.find(function (s) { return s > car.s && s - car.s < 150; });
+    const light = route.signals.find(function (g) { return g.stop > car.s - 1 && g.stop - car.s < 150; });
     car.light = null;
     if (light !== undefined) {
-      const phase = signalPhase(light, car.time);
-      car.light = { distance: light - car.s, phase: phase };
-      const stopAt = light - STOP_BEFORE_SIGNAL - car.s;
+      const phase = signalPhase(light.s, car.time);
+      car.light = { distance: light.stop - car.s, phase: phase };
+      const stopAt = light.stop - car.s;
       const brakeNeed = car.v * car.v / (2 * BRAKE);
       if (phase !== 'green' && stopAt > 0 && (phase === 'red' || stopAt > brakeNeed)) {
         target = Math.min(target, Math.sqrt(Math.max(0, 2 * BRAKE * stopAt)) * 0.9);
@@ -217,11 +221,12 @@
   }
   function lightsShape() {
     const features = [];
-    route.signals.forEach(function (s) {
+    route.signals.forEach(function (g) {
+      const s = g.stop + 1;          // столб — у стоп-линии, справа по ходу
       if (Math.abs(s - car.s) > 400) { return; }
       const at = sample(s);
       const x = at.x + at.ty * (at.width / 2 + 1.2), y = at.y - at.tx * (at.width / 2 + 1.2);
-      const phase = signalPhase(s, car.time);
+      const phase = signalPhase(g.s, car.time);
       const colour = phase === 'green' ? '#00c853' : phase === 'yellow' ? '#ffd600' : '#ff1744';
       const ring = function (r) {
         const out = [];

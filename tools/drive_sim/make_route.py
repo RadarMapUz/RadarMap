@@ -31,6 +31,8 @@ MATCH_METERS = 18.0
 MATCH_DEGREES = 40.0
 ARROW_BEFORE_METERS = 120.0
 SIGNAL_METERS = 22.0
+STOP_SEARCH_METERS = 45.0      # где искать переход перед светофором
+STOP_GAP_METERS = 3.5          # стоп-линия до перехода
 CAMERA_METERS = 35.0
 SPEED_MAIN, SPEED_OTHER = 60, 40          # как пол лимитов города (extract_speed_limits)
 
@@ -204,19 +206,33 @@ def main():
                               "name": step.get("name", ""), "turns": turns,
                               "lanes": allowed_lanes(turns, m.get("modifier"), m["type"])})
 
-    signals = []
+    signals, crossings = [], []
     with open(points_path, encoding="utf-8") as handle:
         for line_ in handle:
             line_ = line_.lstrip("\x1e").strip()
             if not line_:
                 continue
             feature = json.loads(line_)
-            if (feature.get("properties") or {}).get("highway") != "traffic_signals":
+            kind = (feature.get("properties") or {}).get("highway")
+            if kind not in ("traffic_signals", "crossing"):
                 continue
-            hit = project(xy(feature["geometry"]["coordinates"], origin), centre, svals, SIGNAL_METERS)
-            if hit and all(abs(hit[1] - s) > 25 for s in signals):
+            hit = project(xy(feature["geometry"]["coordinates"], origin), centre, svals,
+                          SIGNAL_METERS if kind == "traffic_signals" else 12.0)
+            if not hit:
+                continue
+            if kind == "crossing":
+                crossings.append(hit[1])
+            elif all(abs(hit[1] - s) > 25 for s in signals):
                 signals.append(round(hit[1], 1))
     signals.sort()
+    # Стоп-линия — перед переходом своего подхода, а не у точки светофора:
+    # в OSM светофор часто стоит уже внутри перекрёстка (Чиланзар).
+    stops = []
+    for s in signals:
+        before = [c for c in crossings if s - STOP_SEARCH_METERS <= c <= s + 5]
+        stop = round((min(before) if before else s) - STOP_GAP_METERS, 1)
+        if all(abs(stop - other["stop"]) > 10 for other in stops):    # один подход — одна линия
+            stops.append({"s": s, "stop": stop})
 
     cameras = []
     with open(cameras_path, encoding="utf-8") as handle:
@@ -235,7 +251,7 @@ def main():
                round(w, 1), n, v] for p, (w, n, v) in zip(centre, info)]
     with open(out, "w", encoding="utf-8") as handle:
         json.dump({"from": start, "to": end, "length": round(svals[-1]), "points": points,
-                   "maneuvers": maneuvers, "signals": signals, "cameras": cameras}, handle,
+                   "maneuvers": maneuvers, "signals": stops, "cameras": cameras}, handle,
                   ensure_ascii=False)
     print(f"{svals[-1]:.0f} м, точек {len(points)}, манёвров {len(maneuvers)} "
           f"(со стрелками {sum(1 for m in maneuvers if m['turns'])}), светофоров {len(signals)}, "

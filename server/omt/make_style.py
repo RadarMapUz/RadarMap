@@ -46,7 +46,7 @@ PALETTES = {
         # 28.09.2026). Белое осталось только у дорожек — их с дорогой не спутать.
         "minor": "#d5dae2", "minor_edge": "#b4bbc6", "minor_edge_far": "#e6e6e3", "path": "#ffffff",
         "path_edge": "#e3e1db",
-        "median": "#dfe5d6", "paint": "#ffffff", "building": "#e7e2de", "landuse": None,
+        "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#e7e2de", "landuse": None,
         # Кайма НАШИХ лент — нейтральная: жёлтая у каждой ленты давала «нитки»
         # внутри асфальта там, где две ленты лежат рядом (Фурката, 28.09.2026).
         "casing": "#aab2bf",
@@ -64,7 +64,7 @@ PALETTES = {
         "road": "#3b414b", "road_far": "#4b4536", "edge": "#b8923a",
         "minor": "#262b33", "minor_edge": "#1a1e24", "minor_edge_far": "#1a1e24", "path": "#20252c",
         "path_edge": "#1b1f25",
-        "median": "#1c2a22", "paint": "#d9dee6", "building": "#1c2027", "landuse": "#151a21",
+        "median": "#1c2a22", "concrete": "#3a414c", "zebra_base": "#8c7a2c", "paint": "#d9dee6", "building": "#1c2027", "landuse": "#151a21",
         "casing": "#2b3039",
         "kerb": "#8c7033", "trees": "trees-dark",
         "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#2a2f37",
@@ -246,7 +246,9 @@ def _base_layer(layer, p, mode):
 # разметка лежала поверх мостов, и полосы, зебры и стоп-линии перекрёстка под
 # эстакадой Бунёдкора у Чиланзара сеткой проступали сквозь пролёт (06.10.2026).
 GROUND_PAINT = ("radar-markings-solid", "radar-markings", "radar-centre-dashed",
-                "radar-centre-solid", "radar-zebra", "radar-stop-line", "radar-arrows")
+                "radar-centre-solid", "radar-zebra-base", "radar-zebra", "radar-stop-line", "radar-arrows")
+# Ширина бетонной разделительной на карте, м.
+DIVIDER_METERS = 1.6
 BRIDGE_MARKINGS = ("radar-markings-solid", "radar-markings", "radar-centre-dashed",
                    "radar-centre-solid")
 
@@ -365,12 +367,21 @@ def _layers_in_draw_order(p):
          "paint": {"fill-color": ["case", ["get", "major"], p["road"], p["minor"]], "fill-antialias": True}},
         # Двойная разделительная линия (вид 15): между встречными лентами, где
         # места под полосу нет, — как жёлтая двойная у Яндекса на Беруни.
+        # Узкая разделительная (зазор меньше 2,5 м) — бетонная полоса с
+        # бордюром, как у Яндекса на Навои: раньше — двойная жёлтая линия,
+        # и проспект читался одной широкой дорогой (06.10.2026).
+        {"id": "radar-divider-kerb", "type": "line", "source": "radar", "source-layer": "surface",
+         "minzoom": 15.5, "filter": ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "kind"], 15]],
+         "layout": {"line-join": "round", "line-cap": "round"},
+         "paint": {"line-color": p["kerb"],
+                   "line-width": ["interpolate", ["exponential", 2], ["zoom"],
+                                  15.5, 1.5, 20, DIVIDER_METERS * 2 ** 20 * M + 2.5]}},
         {"id": "radar-divider", "type": "line", "source": "radar", "source-layer": "surface",
          "minzoom": 15.5, "filter": ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "kind"], 15]],
-         "layout": {"line-join": "round", "line-cap": "butt"},
-         "paint": {"line-color": p["kerb"],
-                   "line-width": ["interpolate", ["linear"], ["zoom"], 15.5, 0.7, 19, 1.8],
-                   "line-gap-width": ["interpolate", ["exponential", 2], ["zoom"], 15.5, 0.6, 19, 5]}},
+         "layout": {"line-join": "round", "line-cap": "round"},
+         "paint": {"line-color": p["concrete"],
+                   "line-width": ["interpolate", ["exponential", 2], ["zoom"],
+                                  15.5, 0.8, 20, DIVIDER_METERS * 2 ** 20 * M]}},
         # Площадь перекрёстка: скругляет углы между подходами. Узлы строятся
         # только там, где сходится дорога шире 9 м, и обрезаны кругом
         # досягаемости — цвет магистрального асфальта им честен.
@@ -387,7 +398,8 @@ def _layers_in_draw_order(p):
          "minzoom": 15.5,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
                     ["any", ["has", "strip"], ["has", "island"]]],
-         "paint": {"fill-color": p["median"], "fill-antialias": True}},
+         "paint": {"fill-color": ["case", ["has", "concrete"], p["concrete"], p["median"]],
+                   "fill-antialias": True}},
         {"id": "radar-median-kerb", "type": "line", "source": "radar", "source-layer": "surface",
          "minzoom": 16,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
@@ -444,6 +456,14 @@ def _layers_in_draw_order(p):
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"], 15.5, 0.7, 20, 3.5]}},
         # Зебра линией перехода (вид 12): ширина линии — длина штриха зебры
         # (3 м), пунктир — сами штрихи поперёк; одним куском от кромки до кромки.
+        # Жёлто-белая зебра, как на улицах Ташкента и у Яндекса: жёлтая
+        # подложка, белые штрихи поверх.
+        {"id": "radar-zebra-base", "type": "line", "source": "radar", "source-layer": "paint", "minzoom": 16.5,
+         "filter": ["==", ["get", "kind"], 12],
+         "layout": {"line-cap": "butt"},
+         "paint": {"line-color": p["zebra_base"],
+                   "line-width": ["interpolate", ["exponential", 2], ["zoom"],
+                                  16.5, 3 * 2 ** 16.5 * M, 20, 3 * 2 ** 20 * M]}},
         {"id": "radar-zebra", "type": "line", "source": "radar", "source-layer": "paint", "minzoom": 16.5,
          "filter": ["==", ["get", "kind"], 12],
          "layout": {"line-cap": "butt"},

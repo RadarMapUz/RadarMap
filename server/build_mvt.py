@@ -1630,6 +1630,23 @@ def _has_signal(shape, grid):
     return waffle_zone(shape, grid) is not None
 
 
+# Бетон, а не газон: узкая разделительная (средняя ширина меньше этого) и
+# островок у перекрёстка из OSM — как у Яндекса на Навои. Широкая
+# разделительная остаётся зелёной (Чиланзар, Бунёдкор).
+CONCRETE_MAX_METERS = 4.0
+
+
+def is_concrete(flags, ring):
+    if flags & 4:                    # островок, нарисованный в OSM
+        return True
+    if not flags & 2 or len(ring) < 3:
+        return False
+    kx = 111_320 * math.cos(math.radians(ring[0][1]))
+    perimeter = sum(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+                    for a, b in zip(ring, ring[1:] + ring[:1]))
+    return perimeter > 0 and 2 * _ring_area(ring) / perimeter < CONCRETE_MAX_METERS
+
+
 def _area_props(kind, flags):
     props = {"kind": kind}
     if kind == AREA_FILLET:
@@ -1844,9 +1861,11 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             if props["rank"] in FAR_PLACE_RANKS:
                 _put(buckets, far_zoom, LAYER_PLACES, mvt.POINT, spot, props)
         def lay(kind, flags, shape):
+            props = _area_props(kind, flags)
+            if kind == AREA_MEDIAN and flags & 1 and is_concrete(flags, shape):
+                props["concrete"] = True
             _put(buckets, zoom, _layer_of(kind),
-                 mvt.POLYGON if flags & 1 else mvt.LINESTRING,
-                 shape, _area_props(kind, flags))
+                 mvt.POLYGON if flags & 1 else mvt.LINESTRING, shape, props)
 
         for kind, flags, shape in areas:
             lay(kind, flags, shape)

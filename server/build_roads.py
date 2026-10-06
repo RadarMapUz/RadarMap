@@ -1890,12 +1890,21 @@ def street_chains(roads):
 # OSM рисуют по середине проезжих, и расстояние между ними — измерение, а
 # ширина по классу — догадка; при споре правее измерение.
 CARRIAGEWAY_MIN_GAP_METERS = 1.5
+CARRIAGEWAY_GAP_QUANTILE = 10         # 10-й процентиль: узкие места, но не выбросы
 CARRIAGEWAY_MIN_WIDTH_METERS = 3.5
 CARRIAGEWAY_MIN_SAMPLES = 3
 
 
 def carriageway_gap(one, other):
-    """Типичное расстояние между осями встречных лент (медиана по шагам), или None."""
+    """Расстояние между осями встречных лент — 10-й процентиль по шагам, или None.
+
+    Не медиана: улица собирается в одну ленту на километры, и зазор вдоль неё
+    гуляет (Навои — 15 м у Абая и 30+ м дальше). По медиане лента не сужалась
+    там, где оси близко, направления налезали друг на друга, и пунктир двух
+    направлений шёл вперемешку (06.10.2026). По 10-му процентилю лента
+    подгоняется под типичное узкое место; на широких участках разделительная
+    просто шире.
+    """
     gaps = []
     for spot, _segment in _walk(one, MEDIAN_STEP_METERS):
         near, gap, _along = _nearest_along(spot, other)
@@ -1904,7 +1913,7 @@ def carriageway_gap(one, other):
     if len(gaps) < CARRIAGEWAY_MIN_SAMPLES:
         return None
     gaps.sort()
-    return gaps[len(gaps) // 2]
+    return gaps[len(gaps) // CARRIAGEWAY_GAP_QUANTILE]
 
 
 def fit_carriageways(streets):

@@ -4175,12 +4175,19 @@ def mouth_outline(legs):
             if 0.5 < dist <= span + 5 and (vx * d[0] + vy * d[1]) / dist > math.cos(math.radians(15)):
                 internal = True
                 break
+        # Ведёт к центру узла — связка внутри перекрёстка, а не подход.
+        if math.hypot(*n) > 3.0 and (n[0] * d[0] + n[1] * d[1]) / math.hypot(*n) < -0.3:
+            internal = True
         key = (round(n[0], 1), round(n[1], 1), round(d[0], 2), round(d[1], 2))
         if internal or key in seen:
             continue
         seen.add(key)
+        # Порядок вокруг узла — по месту устья, а не по направлению: в
+        # кластере подходы выходят из разных точек.
+        probe = (n[0] + d[0] * (span / 2 + 15), n[1] + d[1] * (span / 2 + 15))
         approaches.append({"n": n, "d": d, "half": width / 2.0,
-                           "angle": math.atan2(d[1], d[0])})
+                           "angle": math.atan2(probe[1], probe[0]),
+                           "heading": math.atan2(d[1], d[0])})
     if len(approaches) < 2:
         return None
     approaches.sort(key=lambda a: a["angle"])
@@ -4191,15 +4198,32 @@ def mouth_outline(legs):
         nx, ny = -a["d"][1] * side, a["d"][0] * side
         return (a["n"][0] + nx * a["half"], a["n"][1] + ny * a["half"])
 
+    # Почти параллельные соседи (раздвоение ленты, две ленты проспекта) —
+    # один подход с общим устьем: их отдельные устья перекрывались, и контур
+    # перекручивался (Навои × Фуркат, 06.10.2026).
+    groups = [[approaches[0]]]
+    for a in approaches[1:]:
+        if abs((a["heading"] - groups[-1][-1]["heading"] + math.pi) % (2 * math.pi) - math.pi) < math.radians(MOUTH_PARALLEL_DEGREES):
+            groups[-1].append(a)
+        else:
+            groups.append([a])
+    if len(groups) > 1 and abs((groups[0][0]["heading"] - groups[-1][-1]["heading"] + math.pi) % (2 * math.pi) - math.pi) < math.radians(MOUTH_PARALLEL_DEGREES):
+        groups[0] = groups.pop() + groups[0]
+    if len(groups) < 2:
+        return None
+    # Подход группы: справа — первый, слева — последний (против часовой).
+    approaches = [{"first": g[0], "last": g[-1], "angle": g[-1]["angle"]} for g in groups]
+
     # Для каждой пары соседей (A, затем B против часовой): кромка A слева и
     # кромка B справа, дуга между ними; запоминаем, на сколько дуга уходит
     # вдоль каждого подхода, — оттуда начинается устье.
     corners = []
     reach = [MOUTH_MIN_METERS] * len(approaches)
-    for i, a in enumerate(approaches):
-        b = approaches[(i + 1) % len(approaches)]
+    for i, group in enumerate(approaches):
+        a = group["last"]
+        b = approaches[(i + 1) % len(approaches)]["first"]
         pa, pb = edge(a, 1), edge(b, -1)
-        turn = (b["angle"] - a["angle"]) % (2 * math.pi)
+        turn = (b["heading"] - a["heading"]) % (2 * math.pi)
         if turn < math.radians(MOUTH_PARALLEL_DEGREES) or turn > math.radians(180 - 5):
             corners.append(None)
             continue
@@ -4234,12 +4258,13 @@ def mouth_outline(legs):
         reach[(i + 1) % len(approaches)] = max(reach[(i + 1) % len(approaches)], tb + 1.0)
 
     ring = []
-    for i, a in enumerate(approaches):
+    for i, group in enumerate(approaches):
         m = reach[i]
-        right = edge(a, -1)
-        left = edge(a, 1)
-        ring.append((right[0] + a["d"][0] * m, right[1] + a["d"][1] * m))
-        ring.append((left[0] + a["d"][0] * m, left[1] + a["d"][1] * m))
+        first, last = group["first"], group["last"]
+        right = edge(first, -1)
+        left = edge(last, 1)
+        ring.append((right[0] + first["d"][0] * m, right[1] + first["d"][1] * m))
+        ring.append((left[0] + last["d"][0] * m, left[1] + last["d"][1] * m))
         if corners[i]:
             ring.extend(corners[i])
     if len(ring) < 3:
@@ -4262,7 +4287,9 @@ def iter_junctions(arms):
             continue
         if len(legs) >= MIN_JUNCTION_ARMS:
             outline = mouth_outline(legs)
-            if outline and len(outline) >= 3:
+            want = max(leg[2] for leg in legs) ** 2
+            if (outline and len(outline) >= 3
+                    and abs(signed_area_meters(outline)) <= want * JUNCTION_MAX_AREA):
                 yield (AREA_JUNCTION, AREA_FLAG_CLOSED, outline)
                 continue
         ring = _hull_of(legs)

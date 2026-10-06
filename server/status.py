@@ -553,7 +553,11 @@ METRIC_TITLES = {"houses_under_asphalt": "дома под асфальтом %",
                  "dashes_in_junction": "пунктир в узле м/км",
                  "dashes_on_zebra": "пунктир на зебре м/км",
                  "medians_on_asphalt": "разделительные на узле %",
-                 "dashes_through_medians": "пунктир сквозь разделительную м/км"}
+                 "dashes_through_medians": "пунктир сквозь разделительную м/км",
+                 "zebra_overhang": "зебры за кромкой %",
+                 "zebra_duplicates": "зебры-дубли %",
+                 "junction_spikes": "иглы у фигур узла %",
+                 "island_slivers": "островки-клинья %"}
 
 
 def check_roads(ctx):

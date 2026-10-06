@@ -1646,6 +1646,48 @@ SHORT_LINK_METERS = 150.0
 SHORT_ONEWAY_LINK_METERS = 40.0
 
 
+# Кусок без имени между двумя кусками одной улицы — та же улица, у которой в
+# OSM потеряли имя на этом отрезке. Без имени он не встаёт в ленту улицы и
+# держит свою ширину: у Малой кольцевой это 22,5 м против 17,6 м ленты —
+# клякса асфальта на каждом таком стыке (06.10.2026).
+HEAL_NAME_DEGREES = 35.0
+HEAL_NAME_MAX_METERS = 200.0
+
+
+def heal_gap_names(roads):
+    """Безымянные односторонние куски, зажатые продолжениями одной улицы, → её имя."""
+    ends = defaultdict(list)
+    for road in roads:
+        if len(road[2]) >= 2:
+            ends[(round(road[2][0][0], 6), round(road[2][0][1], 6))].append(("start", road))
+            ends[(round(road[2][-1][0], 6), round(road[2][-1][1], 6))].append(("end", road))
+    out, healed = [], 0
+    for road in roads:
+        code, flags, points = road[0], road[1], road[2]
+        name = road[3] if len(road) > 3 else ""
+        if (name or not flags & FLAG_ONEWAY or code > 5 or len(points) < 2
+                or sum(meters_between(a, b) for a, b in zip(points, points[1:])) > HEAL_NAME_MAX_METERS):
+            out.append(road)
+            continue
+        head_in = _heading(points[0], points[1])
+        head_out = _heading(points[-2], points[-1])
+        before = {other[3] for side, other in ends[(round(points[0][0], 6), round(points[0][1], 6))]
+                  if side == "end" and other is not road and len(other) > 3 and other[3]
+                  and other[1] & FLAG_ONEWAY and other[0] == code
+                  and _angle_between(_heading(other[2][-2], other[2][-1]), head_in) <= HEAL_NAME_DEGREES}
+        after = {other[3] for side, other in ends[(round(points[-1][0], 6), round(points[-1][1], 6))]
+                 if side == "start" and other is not road and len(other) > 3 and other[3]
+                 and other[1] & FLAG_ONEWAY and other[0] == code
+                 and _angle_between(_heading(other[2][0], other[2][1]), head_out) <= HEAL_NAME_DEGREES}
+        same = before & after
+        if len(same) == 1:
+            out.append((code, flags, points, same.pop()) + tuple(road[4:]))
+            healed += 1
+        else:
+            out.append(road)
+    return out, healed
+
+
 def apply_lane_inference(roads):
     """Дороги с угаданными полосами там, где тега нет. (дороги, сколько угадано).
 
@@ -3701,6 +3743,9 @@ def _edge_points(node, neighbour, width, scale, back=0.0):
 # (тот же порог, что у разделительной), а до соседнего перекрёстка в городской
 # сетке заметно дальше.
 JUNCTION_CLUSTER_METERS = 35.0
+# Шире этого (диагональ рамки узлов) перекрёсток не бывает: крупнейшие
+# перекрёстки Ташкента — 60–80 м между стоп-линиями.
+JUNCTION_CLUSTER_MAX_SPAN = 90.0
 
 
 def _is_major_node(legs):
@@ -3727,10 +3772,25 @@ def cluster_junctions(arms):
             i = parent[i]
         return i
 
+    # Рамка каждого кластера: сведение транзитивно, и цепочка узлов в 25 м
+    # друг от друга (разворот между направлениями, съезды) склеивалась в
+    # «перекрёсток» длиной 160 м поперёк обоих направлений Малой кольцевой
+    # (06.10.2026). Кластер не растёт шире JUNCTION_CLUSTER_MAX_SPAN.
+    boxes = [(legs[0][0][0], legs[0][0][1], legs[0][0][0], legs[0][0][1]) for _key, legs in spots]
+
+    def span(box):
+        return meters_between((box[0], box[1]), (box[2], box[3]))
+
     def unite(a, b):
         ra, rb = root(a), root(b)
         if ra != rb:
-            parent[max(ra, rb)] = min(ra, rb)
+            one, two = boxes[ra], boxes[rb]
+            merged = (min(one[0], two[0]), min(one[1], two[1]), max(one[2], two[2]), max(one[3], two[3]))
+            if span(merged) > JUNCTION_CLUSTER_MAX_SPAN:
+                return
+            keep, drop = min(ra, rb), max(ra, rb)
+            parent[drop] = keep
+            boxes[keep] = merged
 
     # Сетка по клеткам размером с порог: перебор всех пар квадратичен, а узлов
     # в стране сотни тысяч.
@@ -5164,7 +5224,9 @@ def main():
     roads, edits_applied, edits_missed = apply_edits(roads, edits)
     # Полосы там, где OSM молчит, — по соседям той же улицы. До ширины полотна
     # и разметки: и то и другое должно видеть одно и то же число полос.
+    roads, healed_names = heal_gap_names(roads)
     roads, inferred_count = apply_lane_inference(roads)
+    print(f"имена улиц восстановлены у кусков: {healed_names}")
     print(f"полосы угаданы по соседям: {inferred_count} кусков")
     # Сырьё дальше не нужно, и держать его — не мелочь.
     #

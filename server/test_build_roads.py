@@ -2278,6 +2278,43 @@ class ShortOnewayLinkTests(unittest.TestCase):
         self.assertEqual(build_roads.lanes_of(roads[0][1]), 3)
 
 
+
+class HealGapNameTests(unittest.TestCase):
+    """Безымянный кусок между двумя кусками одной улицы — та же улица."""
+
+    def piece(self, a, b, name=""):
+        return (2, build_roads.FLAG_ONEWAY, [a, b], name)
+
+    def test_gap_between_same_street_takes_its_name(self):
+        a, b, c, d = (69.280, 41.31), (69.281, 41.31), (69.2815, 41.31), (69.283, 41.31)
+        roads = [self.piece(a, b, "Kichik Halqa"), self.piece(b, c), self.piece(c, d, "Kichik Halqa")]
+        healed, count = build_roads.heal_gap_names(roads)
+        self.assertEqual(count, 1)
+        self.assertEqual(healed[1][3], "Kichik Halqa")
+
+    def test_ramp_turning_off_keeps_no_name(self):
+        a, b, c = (69.280, 41.31), (69.281, 41.31), (69.281, 41.312)
+        roads = [self.piece(a, b, "Kichik Halqa"), self.piece(b, c), self.piece(c, (69.281, 41.314), "Kichik Halqa")]
+        _healed, count = build_roads.heal_gap_names(roads)
+        self.assertEqual(count, 0)
+
+
+class JunctionClusterSpanTests(unittest.TestCase):
+    """Цепочка узлов вдоль дороги не склеивается в один длинный «перекрёсток»."""
+
+    def test_chain_of_nodes_is_split(self):
+        kx = 111_320 * math.cos(math.radians(41.31))
+        arms = {}
+        for i in range(8):                       # узлы каждые 30 м, 210 м в сумме
+            node = (69.28 + i * 30 / kx, 41.31)
+            legs = [(node, (node[0] + 0.0002, node[1]), 15.0), (node, (node[0], node[1] + 0.0002), 15.0)]
+            arms[(round(node[0], 6), round(node[1], 6))] = legs
+        groups = build_roads.cluster_junctions(arms)
+        for legs in groups:
+            xs = [leg[0][0] for leg in legs]
+            self.assertLessEqual((max(xs) - min(xs)) * kx, build_roads.JUNCTION_CLUSTER_MAX_SPAN + 1)
+        self.assertGreater(len(groups), 1)
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -451,8 +451,15 @@ def measure(tiles_dir, islands_path=None, bbox=None):
     # Настоящие узлы — по площади: заплатки на стыках лент одной улицы (тоже
     # вид 8) пунктир проходит законно.
     junction_rings = [parts[0] for g, parts, props in surface
-                      if g == 3 and props.get("kind") in (8, 10) and parts
+                      if g == 3 and props.get("kind") in (8, 10) and parts and not props.get("fill")
                       and polygon_area_m2(parts[0]) >= JUNCTION_MIN_AREA_M2]
+    # Площадь вдоль одной улицы (разворот, слияние) — не перекрёсток для
+    # пунктира: полосы проспекта идут через неё насквозь (как в build_mvt).
+    names = build_mvt.StreetNames([(props.get("cls", 9), 0, part, props.get("name", ""))
+                                   for g, parts, props in layers.get("roads", []) if g == 2
+                                   for part in parts])
+    junction_rings = [ring for ring in junction_rings
+                      if polygon_area_m2(ring) < build_mvt.BIG_JUNCTION_M2 or len(names.inside(ring)) >= 2]
     medians = [parts[0] for g, parts, props in surface
                if g == 3 and props.get("kind") == 9 and props.get("strip") and parts]
     road_lines = [(parts, props) for g, parts, props in layers.get("roads", []) if g == 2]

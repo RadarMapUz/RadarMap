@@ -511,6 +511,41 @@ def crossing_cores(roads):
 CROSSING_AREA_REACH_METERS = 40.0
 
 
+class StreetNames:
+    """Имена улиц по клеткам: какие улицы проходят через фигуру."""
+
+    CELL = 0.001
+    STEP_METERS = 5.0
+
+    def __init__(self, roads):
+        self._grid = defaultdict(list)
+        for road in roads:
+            code, flags, points = road[0], road[1], road[2]
+            name = road[3] if len(road) > 3 else ""
+            if not name or code > 7 or len(points) < 2 or flags & (FLAG_BRIDGE | FLAG_TUNNEL):
+                continue
+            # Точки вдоль отрезков, а не одни вершины: прямая улица проходит
+            # через узел без единой вершины внутри него.
+            kx = 111_320 * math.cos(math.radians(points[0][1]))
+            for a, b in zip(points, points[1:]):
+                steps = max(1, int(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+                                   / self.STEP_METERS))
+                for i in range(steps + 1):
+                    p = (a[0] + (b[0] - a[0]) * i / steps, a[1] + (b[1] - a[1]) * i / steps)
+                    self._grid[(int(p[0] / self.CELL), int(p[1] / self.CELL))].append((p, name))
+
+    def inside(self, ring):
+        lons = [p[0] for p in ring]
+        lats = [p[1] for p in ring]
+        names = set()
+        for gx in range(int(min(lons) / self.CELL), int(max(lons) / self.CELL) + 1):
+            for gy in range(int(min(lats) / self.CELL), int(max(lats) / self.CELL) + 1):
+                for p, name in self._grid.get((gx, gy), ()):
+                    if name not in names and _inside(p, ring):
+                        names.add(name)
+        return names
+
+
 def crossing_areas(areas, centres_of):
     """Площади узлов, чей центр рядом с ядром перекрёстка или серединой узла."""
     grid = defaultdict(list)
@@ -1567,6 +1602,8 @@ def _area_props(kind, flags):
         props["cls"] = (flags >> SURFACE_CLASS_SHIFT) & SURFACE_CLASS_MASK
     if kind == AREA_MEDIAN and flags & 2:
         props["strip"] = True
+    if kind == AREA_JUNCTION and flags & 2:
+        props["fill"] = True
     if kind == AREA_MEDIAN and flags & 4:
         props["island"] = True
     return props
@@ -1793,7 +1830,13 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                         tree_asphalt.append(shape)
                 if kind == AREA_JUNCTION_BOX:
                     boxes.append(shape)
-                if kind in (AREA_JUNCTION, AREA_JUNCTION_BOX) and flags & 1:
+                # Перемычка между двумя направлениями одной улицы (вид 8 с
+                # флагом полосы) — не перекрёсток. Попадая в маску больших
+                # узлов, она стирала пунктир на 150–200 м магистрали подряд
+                # (Малая кольцевая, 06.10.2026), а в центрах узлов — сбивала
+                # стоп-линии двусторонних дорог.
+                if kind in (AREA_JUNCTION, AREA_JUNCTION_BOX) and flags & 1 and not (
+                        kind == AREA_JUNCTION and flags & 2):
                     junction_areas.append(shape)
                 if kind == AREA_MEDIAN and flags & 4:
                     drawn_islands.append(shape)
@@ -1813,8 +1856,16 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # Заплатки на стыках лент одной улицы меньше BIG_JUNCTION_M2.
         big = [ring for ring in junction_areas if _ring_area(ring) >= BIG_JUNCTION_M2]
         # Островок из OSM — бордюр: пунктир сквозь него не идёт.
-        mask = JunctionMask(cores + boxes + big + drawn_islands
-                            + crossing_areas(junction_areas, cores + boxes))
+        near_cores = crossing_areas(junction_areas, cores + boxes)
+        mask = JunctionMask(cores + boxes + big + drawn_islands + near_cores)
+        # Пунктир полос режется только там, где сходятся РАЗНЫЕ улицы. Большая
+        # площадь вдоль одной улицы — разворот между её направлениями, слияние
+        # съезда — прерывает разделительную, но не полосы: проспект идёт через
+        # неё насквозь, а пунктир пропадал на 100–150 м (Малая кольцевая,
+        # 06.10.2026). Разделительные, стрелки и двойная — по полной маске.
+        street_names = StreetNames(roads)
+        marks_mask = JunctionMask(cores + boxes + drawn_islands + near_cores
+                                  + [ring for ring in big if len(street_names.inside(ring)) >= 2])
         # Зебры, которые рисуются, — до разметки: пунктир не идёт сквозь
         # переход (Зарканар, 05.10.2026).
         zebra_nodes = defaultdict(list)
@@ -1840,6 +1891,7 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         fitted_zebras = fit_zebras(drawn_crossings, zebra_fitter)
         zebra_centres = zebra_centre_grid(fitted_zebras)
         mask.add_zebras([line for line, _marked in fitted_zebras])
+        marks_mask.add_zebras([line for line, _marked in fitted_zebras])
         # Разделительная полоса лежит ПОВЕРХ площади узла (ради носа у
         # перехода), и обрывок полосы между лентами поворотов внутри
         # перекрёстка вылез зелёной кляксой в его середине (28.09.2026).
@@ -1856,7 +1908,7 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                     lay(kind, flags, piece)
             elif strip_outside_junction(shape, mask):
                 lay(kind, flags, shape)
-        for line, centre, solid in _markings(roads, widths, mask):
+        for line, centre, solid in _markings(roads, widths, marks_mask):
             props = {"centre": centre} if centre else {"verified": True}
             if solid and not centre:
                 props["solid"] = True

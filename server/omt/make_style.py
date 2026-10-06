@@ -324,7 +324,8 @@ def _layers_in_draw_order(p):
         {"id": "radar-median", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 15.5,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
                     ["!", ["has", "strip"]], ["!", ["has", "island"]]],
-         "paint": {"fill-color": p["median"], "fill-outline-color": p["minor_edge"]}},
+         # Островок на съезде — бетон, как у Яндекса, а не газон.
+         "paint": {"fill-color": p["concrete"], "fill-outline-color": p["minor_edge"]}},
         # Тоннель — ПОД наземными дорогами: полупрозрачный асфальт и
         # пунктирная кромка. Раньше он рисовался обычной дорогой поверх всего,
         # и на Кичик Халка йули не понять было, что дорога уходит под землю.

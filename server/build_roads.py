@@ -4941,12 +4941,20 @@ MEDIAN_STOP_MARGIN_METERS = 3.0
 
 def median_stops(arms, chains=()):
     """Узлы с радиусом, в котором разделительная обязана прерваться."""
-    spots = {_node_key(node): (node, radius) for node, radius in junction_spots(arms)}
     names = defaultdict(set)
     for street, chain in chains:
         for piece in chain:
             for end in (piece[2][0], piece[2][-1]):
                 names[_node_key(end)].add(street[3] or "")
+    # Разрыв — только где сходятся две РАЗНЫЕ улицы. Безымянный двор или
+    # проезд, примкнувший к одному направлению, разделительную не рвёт: на
+    # Навои она шла кусками через каждые 50–100 м, а в жизни и у Яндекса —
+    # сплошная до перекрёстка (06.10.2026). Развороты ищутся ниже отдельно.
+    spots = {}
+    for node, radius in junction_spots(arms):
+        key = _node_key(node)
+        if not chains or len(names[key] - {""}) >= 2:
+            spots[key] = (node, radius)
     for street, chain in chains:
         points = street[2]
         if len(points) < 2 or street[0] > SURFACE_MAX_CLASS:
@@ -4966,9 +4974,9 @@ def median_stops(arms, chains=()):
             continue
         # Связка шире самой улицы — это не разворот, а часть перекрёстка.
         radius = street[4] / 2.0 + MEDIAN_STOP_MARGIN_METERS
-        for key in ends:
-            if key in spots and radius < spots[key][1]:
-                spots[key] = (spots[key][0], radius)
+        for key, point in zip(ends, (points[0], points[-1])):
+            if key not in spots or radius < spots[key][1]:
+                spots[key] = (spots[key][0] if key in spots else point, radius)
     return [spots[key] for key in sorted(spots)]
 
 

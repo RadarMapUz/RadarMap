@@ -144,6 +144,24 @@ class MedianTests(unittest.TestCase):
         chains = build_roads.street_chains(west + east + link)
         return chains, build_roads.junction_arms(chains)
 
+    def test_side_drive_on_one_carriageway_does_not_break_the_median(self):
+        name = "Navoiy ko'chasi"
+        west = [(3, 1, ring((-200, 0), (0, 0)), name), (3, 1, ring((0, 0), (200, 0)), name)]
+        east = [(3, 1, ring((200, 20), (-200, 20)), name)]
+        drive = [(7, 0, ring((0, 0), (0, -60)), "")]          # двор к одному направлению
+        chains = build_roads.street_chains(west + east + drive)
+        arms = build_roads.junction_arms(chains)
+        self.assertEqual(build_roads.median_stops(arms, chains), [])
+
+    def test_crossing_of_two_streets_breaks_the_median(self):
+        name = "Navoiy ko'chasi"
+        west = [(3, 1, ring((-200, 0), (0, 0)), name), (3, 1, ring((0, 0), (200, 0)), name)]
+        east = [(3, 1, ring((200, 20), (-200, 20)), name)]
+        cross = [(4, 0, ring((0, 0), (0, -100)), "Abay ko'chasi")]
+        chains = build_roads.street_chains(west + east + cross)
+        arms = build_roads.junction_arms(chains)
+        self.assertEqual(len(build_roads.median_stops(arms, chains)), 1)
+
     def test_u_turn_gap_is_as_wide_as_the_crossover(self):
         chains, arms = self.u_turn()
         stops = build_roads.median_stops(arms, chains)

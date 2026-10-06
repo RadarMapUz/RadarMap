@@ -2026,6 +2026,28 @@ class DrawnPointTests(unittest.TestCase):
     def test_unknown_kind_is_refused(self):
         self.assertEqual(build_roads.drawn_points([self.mark(99)]), [])
 
+    def test_turn_lanes_from_the_editor_become_an_arrow_row(self):
+        edit = {"kind": "turn_lanes", "geom": [69.2501, 41.305],
+                "props": {"lanes": 3, "turns": "left|through|through;right"}}
+        pts = build_roads.drawn_points([edit])
+        self.assertEqual(len(pts), 1)
+        kind, flags, _spot = pts[0]
+        self.assertEqual(kind, build_roads.POINT_LANE_ARROWS)
+        self.assertEqual(build_roads.unpack_turns(flags, 3),
+                         build_roads.parse_turn_lanes("left|through|through;right"))
+
+    def test_turn_lanes_without_directions_draw_nothing(self):
+        edit = {"kind": "turn_lanes", "geom": [69.2501, 41.305], "props": {"lanes": 3}}
+        self.assertEqual(build_roads.drawn_points([edit]), [])
+
+    def test_hand_drawn_island_lies_on_top_of_asphalt(self):
+        ring = [[69.2500, 41.3050], [69.2502, 41.3050], [69.2501, 41.3052], [69.2500, 41.3050]]
+        edit = {"kind": "area", "geom": ring, "props": {"area": build_roads.AREA_MEDIAN}}
+        islands = build_roads.drawn_islands([edit])
+        self.assertEqual(len(islands), 1)
+        self.assertTrue(islands[0][1] & build_roads.AREA_FLAG_DRAWN)
+        self.assertEqual(build_roads.drawn_areas([edit]), [])     # не в слой местности
+
     def test_a_road_is_not_a_point(self):
         self.assertEqual(build_roads.drawn_points(
             [{"kind": "geometry", "geom": [[69.25, 41.3], [69.26, 41.3]]}]), [])

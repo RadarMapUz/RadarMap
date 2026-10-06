@@ -1566,3 +1566,35 @@ class SessionEdgeTests(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
+
+
+class JunctionWorklistPageTests(unittest.TestCase):
+    """Очередь перекрёстков: ссылки на правку и честный прогресс."""
+
+    def setUp(self):
+        import tempfile
+        self.dir = tempfile.mkdtemp()
+        self.saved = (admin.WORKLIST_PATH, admin.WORKLIST_FIRST_PATH)
+        admin.WORKLIST_PATH = os.path.join(self.dir, "now.json")
+        admin.WORKLIST_FIRST_PATH = os.path.join(self.dir, "first.json")
+
+    def tearDown(self):
+        admin.WORKLIST_PATH, admin.WORKLIST_FIRST_PATH = self.saved
+
+    def row(self, lat, lon, names=("Беруни",)):
+        return {"lat": lat, "lon": lon, "names": list(names), "missing": ["нет turn:lanes"], "score": 10}
+
+    def test_without_a_worklist_the_page_says_so(self):
+        self.assertIn("ещё не посчитана", admin.junctions_page())
+
+    def test_rows_link_to_the_editor_and_osm(self):
+        with open(admin.WORKLIST_PATH, "w", encoding="utf-8") as handle:
+            json.dump([self.row(41.3249, 69.2307)], handle)
+        html = admin.junctions_page()
+        self.assertIn("#41.3249,69.2307,19", html)
+        self.assertIn("editor=id#map=19/41.3249/69.2307", html)
+
+    def test_progress_counts_junctions_that_left_the_queue(self):
+        first = [self.row(41.3249, 69.2307), self.row(41.3000, 69.2500)]
+        now = [self.row(41.30002, 69.25003)]           # тот же перекрёсток, сдвиг центра
+        self.assertEqual(admin.worklist_progress(first, now), (1, 2))

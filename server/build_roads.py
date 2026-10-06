@@ -1077,6 +1077,26 @@ def collect_islands(source_path, tolerance_deg):
     return islands
 
 
+def drawn_islands(edits):
+    """Островки, обведённые в конструкторе, — как из OSM: поверх асфальта с бордюром."""
+    out = []
+    for edit in edits:
+        if edit.get("kind") != "area" or (edit.get("props") or {}).get("area") != AREA_MEDIAN:
+            continue
+        ring = []
+        for pair in edit.get("geom") or []:
+            try:
+                ring.append((float(pair[0]), float(pair[1])))
+            except (TypeError, ValueError, IndexError):
+                ring = []
+                break
+        if len(ring) > 3 and ring[0] == ring[-1]:
+            ring = ring[:-1]
+        if len(ring) >= 3 and surface_check.defect(ring) is None:
+            out.append((AREA_MEDIAN, AREA_FLAG_CLOSED | AREA_FLAG_DRAWN, ring))
+    return out
+
+
 def _covered_by_drawn(ring, drawn):
     """Угаданный островок, который уже нарисован человеком, — дубль."""
     centre = _centroid(ring)
@@ -3017,6 +3037,18 @@ def drawn_points(edits):
     """Обстановка из правок панели → точки, как из OSM."""
     out = []
     for edit in edits:
+        # Направления полос из конструктора — ряд стрелок, как turn:lanes OSM:
+        # посадка на ось даст азимут и ширину.
+        if edit.get("kind") == "turn_lanes":
+            turns = parse_turn_lanes((edit.get("props") or {}).get("turns"))
+            geom = edit.get("geom") or []
+            if turns and any(turns) and len(geom) >= 2 and not isinstance(geom[0], (list, tuple)):
+                try:
+                    spot = (float(geom[0]), float(geom[1]))
+                except (TypeError, ValueError):
+                    continue
+                out.append((POINT_LANE_ARROWS, pack_turns(0, turns), [spot]))
+            continue
         if edit.get("kind") != "point":
             continue
         props = edit.get("props") or {}
@@ -5168,7 +5200,7 @@ def main():
     del identities
     places = collect_places(args.places)
     # Островки — точнее дорожного допуска не упрощаем: в них 5–10 м.
-    islands = collect_islands(args.areas, args.tolerance / 111_320.0)
+    islands = collect_islands(args.areas, args.tolerance / 111_320.0) + drawn_islands(edits)
     if islands:
         print(f"островков из OSM: {len(islands)}")
     index, index_v2 = write_tiles(roads, args.tiles_dir, args.grid, areas, points,

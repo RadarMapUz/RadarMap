@@ -282,6 +282,16 @@ if [ -f "$WORK/road_metrics.py" ]; then
     fi
 fi
 
+# Очередь перекрёстков для дорисовки в OSM и в конструкторе (вкладка
+# «Перекрёстки» панели). Первая посчитанная очередь — отсчёт прогресса.
+if [ -f "$WORK/junction_worklist.py" ]; then
+    python3 "$WORK/junction_worklist.py" roads.geojsonl points.geojsonl --limit 300 \
+        --json "$WORK/junction_worklist.json" > /dev/null \
+        && { [ -f "$WORK/junction_worklist_first.json" ] \
+             || cp "$WORK/junction_worklist.json" "$WORK/junction_worklist_first.json"; } \
+        || echo "    очередь перекрёстков не посчиталась — сборка идёт дальше"
+fi
+
 # Отчёт: то, на что смотрят ворота публикации и человек в телеграме.
 python3 - "$CANDIDATE" "$WEBROOT" <<'PY'
 import json, os, sys

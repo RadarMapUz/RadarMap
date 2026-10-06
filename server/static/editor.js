@@ -60,12 +60,12 @@
   const WHYS = ['нет в OSM', 'OSM неверен', 'временная схема'];
   const REMOVE_WHYS = ['нет в жизни', 'перекрыта', 'ошибка OSM'];
   // Виды местности — те же коды, что у слоёв из OSM.
-  const AREAS = { 2: 'Зелень', 1: 'Вода', 4: 'Квартал', 6: 'Дом' };
+  const AREAS = { 2: 'Зелень', 1: 'Вода', 4: 'Квартал', 6: 'Дом', 9: 'Островок' };
   // Дом обводится по одному, и порог у него свой: типовой дом в периметре —
   // сорок метров, общий порог местности выбросил бы половину нарисованных.
   const HOUSE_AREA = 6;
   // Заливка обведённого — тех же тонов, что слои местности на схеме телефона.
-  const AREA_FILL = { 2: '#1d3a2455', 1: '#16324a55', 4: '#1a1d2255',
+  const AREA_FILL = { 9: '#dfe5d677', 2: '#1d3a2455', 1: '#16324a55', 4: '#1a1d2255',
                      6: '#21243066' };
   // Обстановка. Коды те же, что у точек из OSM: панель заводит объект ТОГО ЖЕ
   // вида, а не параллельный, поэтому на телефоне он рисуется тем же кодом и
@@ -73,6 +73,12 @@
   const POINTS = { 1: 'Светофор', 2: 'Лежачий полицейский', 3: 'Стоп-линия',
                    4: 'Разворот', 5: 'Пешеходный переход' };
   const DRAFT = 0, ACCEPTED = 1, PUBLISHED = 2, WITHDRAWN = 3;
+  // Направление одной полосы: значение — как в turn:lanes OSM.
+  const TURNS = [['left', '↰ налево'], ['slight_left', '↖ левее'], ['through', '↑ прямо'],
+                 ['slight_right', '↗ правее'], ['right', '↱ направо'],
+                 ['left;through', '↰↑ налево и прямо'], ['through;right', '↑↱ прямо и направо'],
+                 ['left;through;right', '↰↑↱ все'], ['reverse', '↶ разворот'],
+                 ['left;reverse', '↶↰ разворот и налево'], ['none', '— без стрелки']];
 
   // Состояние правки — ТРЕМЯ способами сразу: цветом, штрихом и подписью.
   //
@@ -505,14 +511,51 @@
     lanesInput.input.addEventListener('keydown', function (e) {
       if (e.key !== 'Enter') { return; }
       e.preventDefault();
-      commit(parseInt(lanesInput.input.value, 10), noteInput.input.value);
+      commit(parseInt(lanesInput.input.value, 10), noteInput.input.value, turnsNow());
     });
     els.card.appendChild(lanesInput.label);
+
+    // Направления полос — по одной на полосу, слева направо по ходу, как
+    // turn:lanes в OSM. Сборка ставит по ним ряд стрелок перед стоп-линией
+    // подхода. Раньше карточка спрашивала только число полос, и нарисованные
+    // направления до карты не доезжали (06.10.2026).
+    let turnPickers = [];
+    const turnRow = node('div', '', 'turnrow');
+    function drawTurns() {
+      const count = Math.max(0, Math.min(8, parseInt(lanesInput.input.value, 10) || 0));
+      const before = turnPickers.map(function (p) { return p.value; });
+      const saved = ((current.props && current.props.turns) || '').split('|');
+      turnRow.innerHTML = '';
+      turnPickers = [];
+      for (let i = 0; i < count; i += 1) {
+        const pick = document.createElement('select');
+        TURNS.forEach(function (t) {
+          const option = document.createElement('option');
+          option.value = t[0];
+          option.textContent = t[1];
+          pick.appendChild(option);
+        });
+        pick.value = before[i] || saved[i] || 'through';
+        pick.title = 'Полоса ' + (i + 1) + ' слева';
+        turnRow.appendChild(pick);
+        turnPickers.push(pick);
+      }
+    }
+    function turnsNow() {
+      return current.kind === 'turn_lanes'
+        ? turnPickers.map(function (p) { return p.value; }).join('|') : null;
+    }
+    if (current.kind === 'turn_lanes') {
+      els.card.appendChild(node('div', 'Направления, слева направо по ходу', 'muted'));
+      els.card.appendChild(turnRow);
+      lanesInput.input.addEventListener('input', drawTurns);
+      drawTurns();
+    }
     els.card.appendChild(noteInput.label);
 
     const save = node('button', current.id ? 'Сохранить' : 'Принять');
     save.addEventListener('click', function () {
-      commit(parseInt(lanesInput.input.value, 10), noteInput.input.value);
+      commit(parseInt(lanesInput.input.value, 10), noteInput.input.value, turnsNow());
     });
     els.card.appendChild(save);
 
@@ -588,13 +631,15 @@
 
   // --- Сохранение ---------------------------------------------------------
 
-  function commit(lanes, note) {
+  function commit(lanes, note, turns) {
     if (!(lanes >= 1 && lanes <= 15)) { hint('Полос от 1 до 15.'); return; }
     const before = current.id ? known[current.id] : null;
+    const props = { lanes: lanes };
+    if (turns) { props.turns = turns; }
     const payload = {
       kind: current.kind, geom: current.geom, raw: current.raw,
       anchor: current.anchor, fingerprint: current.fingerprint,
-      props: { lanes: lanes }, note: note || '', status: ACCEPTED,
+      props: props, note: note || '', status: ACCEPTED,
     };
     if (current.id) { payload.id = current.id; payload.version = current.version; }
 
@@ -3603,6 +3648,11 @@
       // путает соседние клавиши в одном.
       if (e.key.toLowerCase() === 'h' || e.key.toLowerCase() === 'р') {
         const button = document.querySelector('[data-area="6"]');
+        if (button) { button.click(); }
+        return;
+      }
+      if (e.key.toLowerCase() === 'i' || e.key.toLowerCase() === 'ш') {
+        const button = document.querySelector('[data-area="9"]');
         if (button) { button.click(); }
         return;
       }

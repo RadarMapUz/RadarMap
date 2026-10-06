@@ -327,6 +327,7 @@ button.ghost { background:transparent; color:var(--text-2);
 """
 
 TABS = (("/", "Сводка"), ("/map", "Карта"), ("/editor", "Конструктор"),
+        ("/junctions", "Перекрёстки"),
         ("/changes", "Что изменилось"), ("/cameras", "Камеры"),
         ("/mobile", "Передвижные"), ("/feedback", "Обращения"),
         ("/usage", "Люди"), ("/journal", "Журнал"), ("/status", "Пульт"),
@@ -776,6 +777,9 @@ rx="5" fill="#1d3a24" stroke="#2f6b3c"/></svg>""",
 rx="5" fill="#16324a" stroke="#2b6285"/></svg>""",
     4: """<svg viewBox="0 0 48 28"><rect x="2" y="3" width="44" height="22"
 rx="5" fill="#1a1d22" stroke="#343a44"/></svg>""",
+    # Островок — зелёный клин с жёлтым бордюром, как на карте.
+    9: """<svg viewBox="0 0 48 28"><path d="M6 22L42 6L36 22z" fill="#dfe5d6"
+stroke="#f0c93f" stroke-width="1.5" stroke-linejoin="round"/></svg>""",
 }
 
 LOCK_ICON = """<svg viewBox="0 0 48 28"><circle cx="24" cy="14" r="11"
@@ -1119,6 +1123,7 @@ font-size:12px;cursor:pointer;line-height:1.35}}
       {tool_button(AREA_ICONS[2], "Зелень", "", 'data-kind="area" data-area="2"')}
       {tool_button(AREA_ICONS[1], "Вода", "", 'data-kind="area" data-area="1"')}
       {tool_button(AREA_ICONS[4], "Квартал", "", 'data-kind="area" data-area="4"')}
+      {tool_button(AREA_ICONS[9], "Островок", "I", 'data-kind="area" data-area="9"')}
     </div>
   </details>
   <details class="work" id="areabox">
@@ -1132,7 +1137,7 @@ font-size:12px;cursor:pointer;line-height:1.35}}
   <div class="legend" id="hint">Черновиков: {drafts}. Клик по дороге ставит
     объект, клик по объекту — правит. Панель ничего не публикует.</div>
   <div class="legend keyhelp">V выбрать · 1–3 свойства · Q W E R дорога ·
-    Ctrl+D не примыкать · H дом ·
+    Ctrl+D не примыкать · H дом · I островок ·
     A S D F G обстановка · Z разметить область ·
     Enter закончить · Backspace снять вершину ·
     Delete убрать вершину · Esc отменить · Ctrl+Z вернуть ·
@@ -1551,6 +1556,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, self.health_page(conn))
             if path == "/status":
                 return self._send(200, status_page())
+            if path == "/junctions":
+                return self._send(200, junctions_page())
             if path == "/map":
                 return self.moderation_map(conn)
             if path == "/api/cameras":
@@ -3179,6 +3186,67 @@ class Handler(BaseHTTPRequestHandler):
 # Проверки делает server/status.py по крону; страница только читает его
 # отчёт и историю. Сама она в сеть не ходит: пульт, который тормозит или
 # падает, когда тормозит сеть, бесполезен ровно тогда, когда нужен.
+# Очередь перекрёстков (junction_worklist.py) — пересчитывается воскресной
+# сборкой; первая очередь хранится рядом как отсчёт прогресса.
+WORKLIST_PATH = os.environ.get("RADARMAP_WORKLIST", "/opt/radarmap/work/junction_worklist.json")
+WORKLIST_FIRST_PATH = os.environ.get("RADARMAP_WORKLIST_FIRST",
+                                     "/opt/radarmap/work/junction_worklist_first.json")
+
+
+def _load_worklist(path):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            rows = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    return rows if isinstance(rows, list) else None
+
+
+def worklist_progress(first, current):
+    """(сколько из первой очереди уже не в очереди, сколько было) — по месту, ±60 м."""
+    if not first:
+        return 0, 0
+    def key(row):
+        return (round(row["lat"] / 0.0005), round(row["lon"] / 0.0007))
+    left = {key(row) for row in current or []}
+    done = sum(1 for row in first
+               if not any((key(row)[0] + dy, key(row)[1] + dx) in left
+                          for dy in (-1, 0, 1) for dx in (-1, 0, 1)))
+    return done, len(first)
+
+
+def junctions_page():
+    rows = _load_worklist(WORKLIST_PATH)
+    if rows is None:
+        return page("/junctions", "Перекрёстки", """
+<h1>Перекрёстки</h1><div class="card muted">Очередь ещё не посчитана: её строит
+воскресная сборка (<code>update_roads.sh</code> → <code>junction_worklist.py</code>).</div>""")
+    done, total = worklist_progress(_load_worklist(WORKLIST_FIRST_PATH), rows)
+
+    def links(row):
+        spot = f'{row["lat"]},{row["lon"]},19'
+        osm = f'map=19/{row["lat"]}/{row["lon"]}'
+        return (f'<a href="{esc(u("/editor"))}#{spot}">конструктор</a> · '
+                f'<a href="https://www.openstreetmap.org/edit?editor=id#{osm}" target="_blank" rel="noopener">iD</a> · '
+                f'<a href="https://rapideditor.org/edit#{osm}" target="_blank" rel="noopener">RapiD</a>')
+    body = "".join(
+        f'<div class="card"><div class="row"><b>{i}. {esc(" × ".join(row.get("names", [])[:3]) or "без названий")}</b>'
+        f'<span class="tag">вес {esc(row.get("score"))}</span></div>'
+        f'<div class="muted">{esc("; ".join(row.get("missing", [])))}</div>'
+        f'<div>{links(row)}</div></div>'
+        for i, row in enumerate(rows[:100], 1))
+    return page("/junctions", "Перекрёстки", f"""
+<h1>Перекрёстки: что дорисовать</h1>
+<div class="card"><div class="row">
+  <span class="tag">в очереди: {len(rows)}</span>
+  <span class="tag {'ok' if done else ''}">из первой очереди готово: {done} из {total}</span>
+</div><div class="muted">Сверху — где ездят больше всего и данных меньше всего.
+В OSM (iD/RapiD) — только по снимкам Bing или Esri: полосы, <code>turn:lanes</code>,
+переходы, островки. Google и Яндекс как источник нельзя. Что не ложится в OSM —
+в конструкторе. Правка доезжает до карты воскресной сборкой.</div></div>
+{body}""")
+
+
 STATUS_JSON = os.environ.get("RADARMAP_STATUS", "/opt/radarmap/api/status.json")
 STATUS_DB = os.environ.get("RADARMAP_STATUS_DB", "/opt/radarmap/api/status.db")
 STATUS_RANK = {"ok": 0, "idle": 0, "warn": 1, "bad": 2}

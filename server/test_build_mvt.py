@@ -577,5 +577,49 @@ class TaperTests(unittest.TestCase):
         c = (3, build_mvt.FLAG_ONEWAY, [(69.2812, 41.31), (69.2812, 41.312)], "Y")
         self.assertEqual(build_mvt.taper_targets([a, b, c], {}), {})
 
+
+class ApproachStopTests(unittest.TestCase):
+    """Регулируемый узел: стоп-линия перед зеброй каждого подхода, не на выезде."""
+
+    def setUp(self):
+        kx = 111_320 * math.cos(math.radians(41.31))
+        self.m = lambda dx, dy: (69.28 + dx / kx, 41.31 + dy / 111_320)
+
+    def test_oneway_approach_gets_a_line_before_the_zebra(self):
+        m = self.m
+        road = (4, build_mvt.FLAG_ONEWAY, [m(0, -120), m(0, 0)], "A")   # к узлу с юга
+        fitter = build_mvt.ZebraFitter([road], {id(road): 12.0})
+        zebras = build_mvt.fit_zebras([([m(-8, -15), m(8, -15)], True)], fitter, with_meta=True)
+        centres = {(int(69.28 / build_mvt._SIGNAL_CELL), int(41.31 / build_mvt._SIGNAL_CELL)): [m(0, 0)]}
+        signal = m(5, 5)
+        signals = {(int(signal[0] / build_mvt._SIGNAL_CELL), int(signal[1] / build_mvt._SIGNAL_CELL)):
+                   [(signal[0], signal[1], None)]}
+        lines = build_mvt.approach_stop_lines(zebras, fitter, signals, centres, build_mvt.StopIndex([]))
+        self.assertEqual(len(lines), 1)
+        (a, b) = lines[0]
+        self.assertLess(max(a[1], b[1]), m(0, -15)[1])     # до зебры, а не за ней
+
+    def test_exit_gets_no_line(self):
+        m = self.m
+        road = (4, build_mvt.FLAG_ONEWAY, [m(0, 0), m(0, -120)], "A")   # от узла на юг
+        fitter = build_mvt.ZebraFitter([road], {id(road): 12.0})
+        zebras = build_mvt.fit_zebras([([m(-8, -15), m(8, -15)], True)], fitter, with_meta=True)
+        centres = {(int(69.28 / build_mvt._SIGNAL_CELL), int(41.31 / build_mvt._SIGNAL_CELL)): [m(0, 0)]}
+        signal = m(5, 5)
+        signals = {(int(signal[0] / build_mvt._SIGNAL_CELL), int(signal[1] / build_mvt._SIGNAL_CELL)):
+                   [(signal[0], signal[1], None)]}
+        self.assertEqual(build_mvt.approach_stop_lines(zebras, fitter, signals, centres,
+                                                       build_mvt.StopIndex([])), [])
+
+    def test_unregulated_junction_gets_none(self):
+        m = self.m
+        road = (4, 0, [m(0, -120), m(0, 0)], "A")
+        fitter = build_mvt.ZebraFitter([road], {id(road): 12.0})
+        zebras = build_mvt.fit_zebras([([m(-8, -15), m(8, -15)], True)], fitter, with_meta=True)
+        centres = {(int(69.28 / build_mvt._SIGNAL_CELL), int(41.31 / build_mvt._SIGNAL_CELL)): [m(0, 0)]}
+        self.assertEqual(build_mvt.approach_stop_lines(zebras, fitter, {}, centres,
+                                                       build_mvt.StopIndex([])), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

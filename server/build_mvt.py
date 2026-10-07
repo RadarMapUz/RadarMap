@@ -1033,12 +1033,14 @@ class ZebraFitter:
         widths = widths or {}
         self._grid = defaultdict(list)
         self.names = {}
+        self.oneway = {}
         for road in roads:
             code, flags, points = road[0], road[1], road[2]
             if code > ZEBRA_ROAD_MAX_CODE or len(points) < 2 or flags & (FLAG_BRIDGE | FLAG_TUNNEL):
                 continue
             half = (widths.get(id(road)) or road_width_meters(code, lanes_of(flags))) / 2.0
             self.names[id(road)] = road[3] if len(road) > 3 else ""
+            self.oneway[id(road)] = bool(flags & FLAG_ONEWAY)
             for a, b in zip(points, points[1:]):
                 for gx in range(int(min(a[0], b[0]) / self.CELL) - 1, int(max(a[0], b[0]) / self.CELL) + 2):
                     for gy in range(int(min(a[1], b[1]) / self.CELL) - 1, int(max(a[1], b[1]) / self.CELL) + 2):
@@ -1177,8 +1179,11 @@ class StopIndex:
     def __init__(self, lines):
         self._grid = defaultdict(list)
         for line in lines:
-            cx, cy = (line[0][0] + line[-1][0]) / 2, (line[0][1] + line[-1][1]) / 2
-            self._grid[(int(cx / _SIGNAL_CELL), int(cy / _SIGNAL_CELL))].append(line)
+            self.add(line)
+
+    def add(self, line):
+        cx, cy = (line[0][0] + line[-1][0]) / 2, (line[0][1] + line[-1][1]) / 2
+        self._grid[(int(cx / _SIGNAL_CELL), int(cy / _SIGNAL_CELL))].append(line)
 
     def ahead(self, point, bearing, width):
         """Метров по ходу до стоп-линии своего подхода (отрицательное — позади), или None.
@@ -1398,6 +1403,99 @@ def inner_share(road, overlap):
     return inside / total if total else 0.0
 
 
+REGULATED_REACH_METERS = 45.0      # светофор от центра узла — узел регулируемый
+ZEBRA_CENTRE_REACH_METERS = 45.0   # зебра от центра узла — устье его подхода
+STOP_EXISTS_METERS = 18.0
+
+
+def _regulated(centre, signals):
+    lon, lat = centre
+    kx = 111_320 * math.cos(math.radians(lat))
+    cell = (int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))
+    for gx in range(cell[0] - 1, cell[0] + 2):
+        for gy in range(cell[1] - 1, cell[1] + 2):
+            for slon, slat, _b in signals.get((gx, gy), ()):
+                if math.hypot((slon - lon) * kx, (slat - lat) * 111_320) <= REGULATED_REACH_METERS:
+                    return True
+    return False
+
+
+def _nearest_centre(point, centres):
+    lon, lat = point
+    kx = 111_320 * math.cos(math.radians(lat))
+    cell = (int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))
+    best = None
+    for gx in range(cell[0] - 1, cell[0] + 2):
+        for gy in range(cell[1] - 1, cell[1] + 2):
+            for cx, cy in centres.get((gx, gy), ()):
+                d = math.hypot((cx - lon) * kx, (cy - lat) * 111_320)
+                if best is None or d < best[0]:
+                    best = (d, (cx, cy))
+    return best
+
+
+def approach_stop_lines(zebras, fitter, signals, centres, known):
+    """Стоп-линии перед зебрами регулируемых узлов, где своей нет.
+
+    Зебра у регулируемого узла — надёжный признак устья подхода: стоп-линия
+    встаёт перед ней по ходу К узлу, поперёк своей ленты; у двусторонней —
+    на правую половину. Поиск подхода по центру узла ставил линии и на
+    выездах (стрелок за стоп-линией 12 → 97 на 1000, 07.10.2026).
+    zebras — fit_zebras(..., with_meta=True).
+    """
+    out = []
+    oneway = getattr(fitter, "oneway", {})
+    for line, _marked, key, point, heading, half in zebras:
+        hit = _nearest_centre(point, centres)
+        if not hit or hit[0] > ZEBRA_CENTRE_REACH_METERS or not _regulated(hit[1], signals):
+            continue
+        kx = 111_320 * math.cos(math.radians(point[1]))
+        vx, vy = (hit[1][0] - point[0]) * kx, (hit[1][1] - point[1]) * 111_320
+        axis = (math.sin(heading), math.cos(heading))          # ход ленты (ось a→b)
+        # Только односторонние ленты: у двусторонней «к узлу» по одной оси не
+        # определить надёжно, и линия вставала на выезде (стрелок за
+        # стоп-линией 12 → 20 на 1000, 07.10.2026).
+        if not oneway.get(key):
+            continue
+        directions = [1]
+        for sign in directions:
+            fx, fy = axis[0] * sign, axis[1] * sign
+            if vx * fx + vy * fy <= 0:
+                continue                                       # от узла — выезд
+            back = ZEBRA_DEPTH_METERS / 2 + STOP_BEFORE_ZEBRA_METERS
+            spot = (point[0] - fx * back / kx, point[1] - fy * back / 111_320)
+            bearing = math.degrees(math.atan2(fx, fy)) % 360
+            existing = known.ahead(spot, bearing, half * 2)
+            if existing is not None and abs(existing) < STOP_EXISTS_METERS:
+                continue
+            rx, ry = fy, -fx                                   # вправо по ходу
+            reach = max(1.0, half - ZEBRA_EDGE_INSET_METERS)
+            start = ZEBRA_EDGE_INSET_METERS if sign and not oneway.get(key) else -reach
+            stop = [(spot[0] + rx * start / kx, spot[1] + ry * start / 111_320),
+                    (spot[0] + rx * reach / kx, spot[1] + ry * reach / 111_320)]
+            out.append(stop)
+            known.add(stop)
+    return out
+
+
+SUPERSEDE_METERS = 45.0
+
+
+def _superseded(line, fresh):
+    """Стоп-линия, за которой на том же подходе (до SUPERSEDE_METERS) стоит
+    новая — перед зеброй."""
+    a, b = line[0], line[-1]
+    kx = 111_320 * math.cos(math.radians(a[1]))
+    centre = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+    across = math.degrees(math.atan2((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320))
+    width = math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+    for bearing in ((across - 90) % 360, (across + 90) % 360):
+        ahead = fresh.ahead(centre, bearing, width)
+        if ahead is not None and 2.0 < ahead <= SUPERSEDE_METERS:
+            return True
+    return False
+
+
 def zebra_centre_grid(zebras):
     grid = defaultdict(list)
     for line, _marked in zebras:
@@ -1406,7 +1504,7 @@ def zebra_centre_grid(zebras):
     return grid
 
 
-def fit_zebras(crossings, fitter):
+def fit_zebras(crossings, fitter, with_meta=False):
     """Зебры поперёк проезжих: [((точка, точка), размечена ли)]."""
     candidates = []
     for group, (line, marked) in enumerate(crossings):
@@ -1462,6 +1560,8 @@ def fit_zebras(crossings, fitter):
                for other in kept):
             continue
         kept.append((key, point, heading, half, sine, marked, line))
+    if with_meta:
+        return [(other[6], other[5], other[0], other[1], other[2], other[3]) for other in kept]
     return [(other[6], other[5]) for other in kept]
 
 
@@ -2187,7 +2287,28 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             lines = [(line, kind) for line, kind in lines if line]
             if lines:
                 stop_lines[index] = lines
+        # Стоп-линии на подходах регулируемого узла, у которых своего
+        # светофора в OSM нет: светофоры часто стоят одним узлом на весь
+        # перекрёсток, и стоп-линия была на одном подходе из четырёх.
+        known = StopIndex(line for lines in stop_lines.values() for line, _code in lines)
+        extra = approach_stop_lines(fit_zebras(drawn_crossings, zebra_fitter, with_meta=True),
+                                    zebra_fitter, signals, junction_centres, known)
+        if extra:
+            # Линия перед зеброй — главная на своём подходе: прежняя, стоящая
+            # позади неё (по точке светофора, далеко от узла), уже лишняя —
+            # стрелки вставали между двумя стоп-линиями (07.10.2026).
+            fresh = StopIndex(extra)
+            for index in list(stop_lines):
+                kept = [(line, kind) for line, kind in stop_lines[index]
+                        if not _superseded(line, fresh)]
+                if kept:
+                    stop_lines[index] = kept
+                else:
+                    del stop_lines[index]
+            stop_lines[-1] = [(line, 1) for line in extra]
         stops = StopIndex(line for lines in stop_lines.values() for line, _code in lines)
+        for line, kind in stop_lines.get(-1, ()):
+            _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": kind})
         for index, point in enumerate(points):
             code, flags, spot = point[0], point[1], point[2]
             for line, kind in stop_lines.get(index, ()):

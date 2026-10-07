@@ -1,0 +1,94 @@
+# Передача контекста: карта дорог RadarMap (07.10.2026)
+
+Файл для продолжения работы в новой сессии Claude Code (другой аккаунт,
+сброс контекста). Прочитай его целиком, затем CLAUDE.md и ARCHITECTURE.md.
+
+## Цель владельца
+
+Своя карта дорог «как у Яндекса»: реалистичные перекрёстки, полосы, зебры,
+стоп-линии, стрелки, разделительные, островки, деревья, парковки, 3D — по
+всей стране. Сверка с Яндексом — только глазами по снимкам владельца;
+данные Яндекса/Google/2ГИС не берём (их условия). Источники: OSM, снимки
+Bing/Esri — только для правок В OSM.
+
+## Где что лежит
+
+- Сборка: `server/build_roads.py` (OSM → JSON-тайлы + полотно),
+  `server/build_mvt.py` (MVT для движка), `server/omt/make_style.py` (стиль),
+  `server/omt/make_arrows.py` (спрайт: стрелки, деревья, асфальт, штриховка),
+  `server/parking.py` (парковки), `server/lane_inference.py`.
+- Метрики качества: `server/road_metrics.py` (ворота публикации, /status).
+- Очередь перекрёстков для OSM: `server/junction_worklist.py`, вкладка
+  «Перекрёстки» в админке.
+- Конвейер: `server/update_roads.sh` (воскресный крон на VPS),
+  `server/install_roads_pipeline.sh`, `server/publish_roads.sh --auto`
+  (подпись ключом владельца ~/.radarmap/ota_signing.pem — ключ НЕ читать).
+- Планы: `docs/plan_junctions_polish.md`, `docs/plan_junction_model.md`,
+  `docs/plan_free_mapping.md`, `docs/plan_imagery_ml.md`,
+  `docs/plan_ml_roads.md`, `docs/plan_drive_sim.md`.
+- Симулятор: `tools/drive_sim/` (make_route.py + drive_sim.js + drive.html).
+- Автоподбор параметров: `tools/autotune/autotune.py`.
+
+## Как работаем локально (мак владельца)
+
+- Вырезка Ташкента: `~/RadarMapBuild/tash` (сборка ~2 мин в `out_new`):
+  `python3 server/build_roads.py --in roads.geojsonl --areas areas.geojsonl
+  --points points.geojsonl --houses houses.geojsonl --places places.geojsonl
+  --trees trees.geojsonl --addresses addresses.geojsonl --edits edits.json
+  --mvt --tiles out_new`
+- Метрики: `python3 server/road_metrics.py ~/RadarMapBuild/tash/out_new
+  --islands ~/RadarMapBuild/tash/area_highway.geojsonl --json m.json --compare old.json`
+- Превью: `~/RadarMapBuild/omt/web/serve.py 8770 ../uz.mbtiles <tiles>`;
+  стили пересобирает scratchpad `regen_styles.py` (из make_style.py, пути /tiles /radar).
+- Рендер как на телефоне (без браузера): `server/omt/render_native.js`
+  (Node 22 + @maplibre/maplibre-gl-native + pngjs; наклон ≤ 60°).
+  Headless Chrome подложку не дорисовывает — не использовать.
+- Страна: `~/RadarMapBuild/build_country.sh` (последовательно, ~70 мин,
+  проверка байт в байт). Две сборки параллельно — своп, не делать.
+- Публикация: tar кандидата → заливка кусками с sha256 (скрипт
+  upload_chunks.sh в scratchpad; rsync на VPS нет) → распаковка в
+  `/opt/radarmap/work/roads_tiles_candidate` → `admin.py --sweep` →
+  `bash server/publish_roads.sh --auto` → стиль: `make_style.py
+  https://soulmed.uz/radarmap` → `/opt/radarmap/www/map_style.json`
+  (прежний — map_style.prev.json). Всё под `caffeinate -i` (мак засыпает).
+- Проверка: `/opt/radarmap/api/status.py` → roads/mvt/omt ok.
+
+## Состояние на 07.10.2026 ~11:15
+
+- Последняя ПУБЛИКАЦИЯ — 07.10 ночью (перекрёстки по устьям, Навои, палитра,
+  тени, переходы/мосты). Позже сделанное — только в коммитах и превью.
+- Идёт сборка страны (запущена 11:07, лог scratchpad country16.log) с:
+  парковками, стоп-линиями на подходах, ограждениями мостов, асфальтом с
+  зерном, плавными стыками, зебрами на обеих половинах, едиными тонами
+  асфальта, без клиньев-галтелей, разметкой до стоп-линии, тёплыми домами,
+  отбраковкой «звёзд». Штриховка островков (коммит e24bc7c) — только стиль,
+  выкладывается вместе со стилем.
+- Тротуары-полосы и поднятый бордюр — УБРАНЫ по решению владельца
+  (флаг SIDEWALKS_ENABLED=False). Фаски подходов выключены (FLARES_ENABLED).
+- После сборки: метрики против /opt/radarmap/work/roads_metrics_live.json,
+  заливка, публикация, стиль, status.
+
+## Метрики Ташкента (последние)
+
+пунктир в узле ~19 м/км (было 146), зебры за кромкой ~3 %, дубли ~0,4 %,
+стрелки за стоп-линией ~13 ‰, разделительные на узле ~1 %, островки под
+асфальтом ~4 %, раздутые узлы ~0,1 %.
+
+## Открытые задачи
+
+1. Опубликовать текущую сборку (см. выше).
+2. Предложено владельцу: газон во дворах по геометрии (ждёт ответа).
+3. Режим «съёмка» (камера телефона → знаки/разметка) — план по запросу.
+4. Стоп-линии на двусторонних подходах (сейчас только односторонние).
+5. Перезапуск автоподбора параметров на новом коде.
+6. Владельцу: аккаунт OSM и дорисовка по очереди «Перекрёстки»;
+   три решения по камерам ждут подписи (`publish_overrides.sh`).
+
+## Правила (не нарушать)
+
+- Ключ подписи не читать; публикует владельческий скрипт.
+- Данные с Яндекса/Google не брать; Bing/Esri — только для правок в OSM.
+- Коммиты на русском, ветка `server/vps-stage1`, в main — через merge.
+- Каждое изменение: тесты (`python3 -m unittest test_build_mvt
+  test_build_roads test_surface_check test_road_metrics`, `cd omt &&
+  python3 -m unittest test_make_style`), метрики, рендер эталонных мест.

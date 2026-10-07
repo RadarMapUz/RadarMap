@@ -49,6 +49,8 @@ LAYER_PAINT = "paint"
 LAYER_PLACES = "places"
 # Деревья из OSM (build_roads.collect_trees): точка на крону, без свойств.
 LAYER_TREES = "trees"
+# Парковки: площадка (Polygon) и черты мест (LineString), parking.py.
+LAYER_PARKING = "parking"
 # Стрелки полос: одна точка на ПОЛОСУ, свойства turn (код build_roads.TURN_*)
 # и bearing (куда смотрит стрелка, градусы по часовой от севера).
 LAYER_ARROWS = "arrows"
@@ -1496,6 +1498,45 @@ def _superseded(line, fresh):
     return False
 
 
+class RoadAxes:
+    """Оси дорог по клеткам: близко ли точка к оси (в метрах)."""
+
+    CELL = 0.0005
+
+    def __init__(self, roads):
+        self._grid = defaultdict(list)
+        for road in roads:
+            for a, b in zip(road[2], road[2][1:]):
+                for gx in range(int(min(a[0], b[0]) / self.CELL), int(max(a[0], b[0]) / self.CELL) + 1):
+                    for gy in range(int(min(a[1], b[1]) / self.CELL), int(max(a[1], b[1]) / self.CELL) + 1):
+                        self._grid[(gx, gy)].append((a, b, road[0]))
+
+    def near(self, point, meters):
+        cell = (int(point[0] / self.CELL), int(point[1] / self.CELL))
+        for gx in range(cell[0] - 1, cell[0] + 2):
+            for gy in range(cell[1] - 1, cell[1] + 2):
+                for a, b, _code in self._grid.get((gx, gy), ()):
+                    if _point_segment_m(point, a, b) <= meters:
+                        return True
+        return False
+
+    def aisles_in(self, ring):
+        """Отрезки проездов (service/жилые) с серединой внутри контура."""
+        lons = [p[0] for p in ring]
+        lats = [p[1] for p in ring]
+        seen, out = set(), []
+        for gx in range(int(min(lons) / self.CELL), int(max(lons) / self.CELL) + 1):
+            for gy in range(int(min(lats) / self.CELL), int(max(lats) / self.CELL) + 1):
+                for a, b, code in self._grid.get((gx, gy), ()):
+                    mark = (a[0], a[1], b[0], b[1])
+                    if code < 6 or mark in seen:
+                        continue
+                    seen.add(mark)
+                    if _inside(((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), ring):
+                        out.append((a, b))
+        return out
+
+
 def zebra_centre_grid(zebras):
     grid = defaultdict(list)
     for line, _marked in zebras:
@@ -2085,7 +2126,7 @@ def written_areas(target_dir, set_name):
 def build_mvt(roads, target_dir, areas=(), points=(), far=(),
               zoom=ZOOM_DETAIL, far_zoom=ZOOM_FAR, handles=64,
               written_sets=("h", "d"), far_areas=(), places=(), widths=None,
-              crossings=(), trees=()):
+              crossings=(), trees=(), parking=()):
     """Написать .mvt под target_dir/mvt/<z>/<x>/<y>.mvt. Возвращает {путь: байты}."""
     work = os.path.join(target_dir, "_mvt")
     buckets = _Buckets(work, handles)
@@ -2264,6 +2305,18 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             # зелёной банкой (06.10.2026); ярусы дают округлый силуэт.
             for ring, props in tree_tiers(tree, size):
                 _put(buckets, zoom, LAYER_TREES, mvt.POLYGON, ring, props)
+        # Парковки — площадка и разметка мест; места на проездах (оси дорог
+        # сети, включая внутренние проезды площадки) не рисуются.
+        if parking:
+            import parking as parking_rules
+            axes = RoadAxes(roads)
+            near_road = axes.near
+            for ring, kind in parking:
+                _put(buckets, zoom, LAYER_PARKING, mvt.POLYGON, ring, {"kind": "lot"})
+                if kind in parking_rules.SKIP_KINDS:
+                    continue
+                for line in parking_rules.stall_lines(ring, near_road, axes.aisles_in(ring)):
+                    _put(buckets, zoom, LAYER_PARKING, mvt.LINESTRING, line, {"kind": "stall"})
         leaders = arrow_leaders(points)
         asphalt = JunctionMask(asphalt_rings)
         del asphalt_rings

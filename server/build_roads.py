@@ -3229,6 +3229,12 @@ def _middle_of(geometry):
 TREE_ROW_STEP_METERS = 7.0
 
 
+def collect_parking_areas(source_path):
+    """Парковки из экстракта местности — только для MVT (приложению не нужны)."""
+    import parking
+    return parking.collect_parking(source_path)
+
+
 def collect_trees(source_path):
     trees = []
     if not source_path or not os.path.exists(source_path):
@@ -5593,6 +5599,7 @@ def main():
                                    points=mvt_points, far=far,
                                    far_areas=far_areas, places=places,
                                    trees=collect_trees(args.trees),
+                                   parking=collect_parking_areas(args.areas),
                                    widths=widths, crossings=crossings)
         del widths
         print(f"MVT обзор: местности {len(far_areas)} площадей, мест {len(places)}; "

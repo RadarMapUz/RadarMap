@@ -221,6 +221,7 @@ final class AppEnvironment {
         location.onCameraSpoken = { [weak usage] grade in usage?.noteCameraSpoken(grade) }
         route.onManeuverSpoken = { [weak usage] kind in usage?.noteManeuver(kind) }
         trip.onTripDropped = { [weak usage] reason in usage?.noteTripDropped(reason) }
+        trip.recordsTimedTrack = settings.recordTimedTrack
         // Снап отметки на ось дороги и очередь без сети — обе зависимости
         // слабые: отметка обязана уходить и когда тайлов нет, и когда сеть
         // молчит.

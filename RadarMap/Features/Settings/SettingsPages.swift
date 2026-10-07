@@ -176,6 +176,16 @@ struct TripSettingsPage: View {
             }
 
             Section {
+                Toggle("Подробный трек для регистратора", isOn: $settings.recordTimedTrack)
+                    .onChange(of: settings.recordTimedTrack) { _, on in
+                        env.trip.recordsTimedTrack = on
+                    }
+            } footer: {
+                Text("Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней; отдать файл GPX можно в карточке поездки.")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section {
                 Toggle("Не гасить экран в поездке", isOn: $settings.keepScreenOn)
                     .onChange(of: settings.keepScreenOn) { _, keepOn in
                         if env.location.isTripActive {

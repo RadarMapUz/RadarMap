@@ -14541,6 +14541,54 @@
           }
         }
       }
+    },
+    "Трек GPX": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Трек GPX"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPX trek"
+          }
+        }
+      }
+    },
+    "Подробный трек для регистратора": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подробный трек для регистратора"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Videoregistrator uchun batafsil trek"
+          }
+        }
+      }
+    },
+    "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней; отдать файл GPX можно в карточке поездки.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней; отдать файл GPX можно в карточке поездки."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har soniyada vaqt bilan nuqta — videoregistrator yozuvini xaritaga bog‘lash uchun. Faqat telefonda 30 kun saqlanadi; GPX faylni safar kartochkasidan yuborish mumkin."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

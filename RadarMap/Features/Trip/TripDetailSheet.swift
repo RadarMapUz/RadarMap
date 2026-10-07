@@ -250,6 +250,7 @@ struct TripDetailContent: View {
     var onOpenPass: ((PassedCamera) -> Void)? = nil
 
     @State private var shareSubject: ShareSubjectBox?
+    @State private var gpxFile: ShareFilePayload?
     @State private var appeared = false
 
     var body: some View {
@@ -309,12 +310,33 @@ struct TripDetailContent: View {
         .background(Theme.screenBackground)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { share() } label: { Image(systemName: "square.and.arrow.up") }
-                    .accessibilityLabel(Text("Поделиться поездкой"))
+                // Карточка — для людей, GPX — для разбора видео регистратора
+                // и редакторов OSM. Трек уходит с телефона только так, руками.
+                Menu {
+                    Button { share() } label: {
+                        Label("Поделиться поездкой", systemImage: "photo")
+                    }
+                    if record.hasTrack {
+                        Button {
+                            if let url = TimedTrackStore.gpxFile(for: record) {
+                                gpxFile = ShareFilePayload(url: url)
+                            }
+                        } label: {
+                            Label("Трек GPX", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .accessibilityLabel(Text("Поделиться поездкой"))
             }
         }
         .sheet(item: $shareSubject) { box in
             SharePreviewSheet(subject: box.subject)
+        }
+        .sheet(item: $gpxFile) { payload in
+            ActivityFileSheet(url: payload.url)
+                .presentationDetents([.medium, .large])
         }
     }
 

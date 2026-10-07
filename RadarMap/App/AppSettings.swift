@@ -486,6 +486,10 @@ final class AppSettings {
     /// Варианты маршрута сравниваются с вашими поездками: «Знакомый», «Без
     /// ваших превышений» (RouteChoice). Считается на телефоне.
     var personalRoutes: Bool { didSet { store.set(personalRoutes, forKey: Keys.personalRoutes) } }
+    /// Подробный трек поездки со временем (TimedTrack) — для привязки видео
+    /// регистратора. По умолчанию выключено: точка каждую секунду — это уже
+    /// не «упрощённая линия для итогов», а точная история передвижений.
+    var recordTimedTrack: Bool { didSet { store.set(recordTimedTrack, forKey: Keys.timedTrack) } }
     var turnByTurnVoice: Bool { didSet { store.set(turnByTurnVoice, forKey: Keys.turnByTurn) } }
     var speedLimitsEnabled: Bool { didSet { store.set(speedLimitsEnabled, forKey: Keys.speedLimits) } }
     var overspeedTolerance: Double { didSet { store.set(overspeedTolerance, forKey: Keys.overspeed) } }
@@ -625,6 +629,7 @@ final class AppSettings {
         static let work = "workPlace"
         static let alternatives = "routeAlternatives"
         static let personalRoutes = "personalRoutes"
+        static let timedTrack = "recordTimedTrack"
         static let turnByTurn = "turnByTurnVoice"
         static let speedLimits = "speedLimitsEnabled"
         static let overspeed = "overspeedTolerance"
@@ -724,6 +729,7 @@ final class AppSettings {
         workPlace = Self.load(store, Keys.work)
         routeAlternatives = store.bool(forKey: Keys.alternatives)
         personalRoutes = store.bool(forKey: Keys.personalRoutes)
+        recordTimedTrack = store.bool(forKey: Keys.timedTrack)
         turnByTurnVoice = store.bool(forKey: Keys.turnByTurn)
         speedLimitsEnabled = store.bool(forKey: Keys.speedLimits)
         overspeedTolerance = store.double(forKey: Keys.overspeed)

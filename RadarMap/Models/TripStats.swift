@@ -71,6 +71,10 @@ final class TripStats {
     @ObservationIgnored private var lastCoordinate: CLLocationCoordinate2D?
     /// Сырой трек текущей поездки: точка каждые ≥30 м, упрощается при финише.
     @ObservationIgnored private var trackBuffer: [TrackPoint] = []
+    /// Подробный трек со временем (TimedTrack) — только когда включено в
+    /// настройках; ставит AppEnvironment. Пишется лишь в поездке.
+    @ObservationIgnored var recordsTimedTrack = false
+    @ObservationIgnored private var timedBuffer: [TimedPoint] = []
 
     /// Хвост живого трека для схемы на приборке: откуда я приехал.
     /// Отдаём последние N точек, а не весь буфер: чертим двести метров вокруг
@@ -132,6 +136,7 @@ final class TripStats {
         passed = []
         stops = []
         trackBuffer = []
+        timedBuffer = []
         finishedDuration = 0
         startBatteryPercent = batteryPercent
         startedAt = Date()
@@ -164,6 +169,8 @@ final class TripStats {
         maxSpeedKmh = record.maxSpeedKmh
         passed = record.passed
         trackBuffer = record.trackPoints
+        // Склейка: подробный трек первой ноги продолжается той же записью.
+        timedBuffer = TimedTrackStore.load(tripID: record.id) ?? []
         lastCoordinate = record.endCoordinate
         stops = (record.stops ?? []) + [
             TripStop(id: UUID(),
@@ -189,6 +196,10 @@ final class TripStats {
         lastCoordinate = coordinate
         maxSpeedKmh = max(maxSpeedKmh, speedKmh)
         lastPointAt = Date()
+        if recordsTimedTrack, startedAt != nil {
+            timedBuffer.append(TimedPoint(time: Date(), lat: coordinate.latitude,
+                                          lon: coordinate.longitude, speedKmh: speedKmh))
+        }
 
         // Трек: точка каждые ≥30 м (память копеечная, финальное сжатие при финише).
         if let last = trackBuffer.last {
@@ -297,6 +308,11 @@ final class TripStats {
         history.insert(record, at: 0)
         history = TripHistory.pruned(history)
         lastSavedAt = Date()
+        if !timedBuffer.isEmpty {
+            let points = timedBuffer, id = record.id
+            timedBuffer = []
+            Task.detached(priority: .utility) { TimedTrackStore.save(points, tripID: id) }
+        }
         // Дневной агрегат — до чистки истории по смыслу и после по коду:
         // запись может уехать из истории, день останется навсегда.
         days = TripDayBook.folded(record, into: days)

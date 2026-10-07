@@ -68,6 +68,27 @@ nonisolated struct APIClient {
         return data
     }
 
+    // MARK: - Файлы
+
+    /// Скачать файл (офлайн-регион, десятки МБ) с прогрессом 0…1. Возвращает
+    /// временный файл, принадлежащий вызывающему: проверить и перенести его —
+    /// его дело. Таймаут ресурса задаёт `resourceTimeout` клиента.
+    func download(_ path: String, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+        let watcher = DownloadProgress(progress)
+        let (temporary, response): (URL, URLResponse)
+        do {
+            (temporary, response) = try await session.download(for: request(path), delegate: watcher)
+        } catch {
+            throw Failure.transport(error)
+        }
+        try Self.checkStatus(response, path: path)
+        // Временный файл системы живёт недолго — сразу переносим в свой.
+        let owned = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + "-" + base.appendingPathComponent(path).lastPathComponent)
+        try FileManager.default.moveItem(at: temporary, to: owned)
+        return owned
+    }
+
     // MARK: - POST
 
     /// POST JSON-словаря с декодированием ответа в `T`.
@@ -142,6 +163,23 @@ nonisolated struct APIClient {
         guard let http = response as? HTTPURLResponse else { return }
         guard (200..<300).contains(http.statusCode) else {
             throw Failure.badStatus(http.statusCode)
+        }
+    }
+}
+
+/// Прогресс загрузки: задача создаётся внутри URLSession, её `progress`
+/// наблюдается с момента создания (`didCreateTask`).
+private nonisolated final class DownloadProgress: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let report: @Sendable (Double) -> Void
+    private var observation: NSKeyValueObservation?
+
+    init(_ report: @escaping @Sendable (Double) -> Void) {
+        self.report = report
+    }
+
+    func urlSession(_ session: URLSession, didCreateTask task: URLSessionTask) {
+        observation = task.progress.observe(\.fractionCompleted) { [report] progress, _ in
+            report(progress.fractionCompleted)
         }
     }
 }

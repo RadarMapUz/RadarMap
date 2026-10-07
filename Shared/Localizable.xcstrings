@@ -13821,6 +13821,230 @@
           }
         }
       }
+    },
+    "Офлайн-карты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Офлайн-карты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oflayn xaritalar"
+          }
+        }
+      }
+    },
+    "Карта области сохраняется на телефоне и рисуется без интернета — на трассе, в тоннеле, в роуминге. Камеры предупреждают и без этого: их база всегда на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта области сохраняется на телефоне и рисуется без интернета — на трассе, в тоннеле, в роуминге. Камеры предупреждают и без этого: их база всегда на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viloyat xaritasi telefonda saqlanadi va internetsiz chiziladi — trassada, tunnelda, roumingda. Kameralar busiz ham ogohlantiradi: ularning bazasi doim telefonda."
+          }
+        }
+      }
+    },
+    "Ваша область": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваша область"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sizning viloyatingiz"
+          }
+        }
+      }
+    },
+    "Все области": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Все области"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barcha viloyatlar"
+          }
+        }
+      }
+    },
+    "Занято на телефоне: %@. Вся страна — %@. Лучше качать по Wi-Fi.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Занято на телефоне: %@. Вся страна — %@. Лучше качать по Wi-Fi."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonda band: %@. Butun mamlakat — %@. Wi-Fi orqali yuklash yaxshiroq."
+          }
+        }
+      }
+    },
+    "Загружаем список областей…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загружаем список областей…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viloyatlar ro‘yxati yuklanmoqda…"
+          }
+        }
+      }
+    },
+    "Список областей не загрузился — проверьте интернет.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Список областей не загрузился — проверьте интернет."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viloyatlar ro‘yxati yuklanmadi — internetni tekshiring."
+          }
+        }
+      }
+    },
+    "Скачано": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачано"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuklab olingan"
+          }
+        }
+      }
+    },
+    "Есть обновление": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Есть обновление"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yangilanish bor"
+          }
+        }
+      }
+    },
+    "Скачивается": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачивается"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuklanmoqda"
+          }
+        }
+      }
+    },
+    "Скачать": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuklab olish"
+          }
+        }
+      }
+    },
+    "Обновить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yangilash"
+          }
+        }
+      }
+    },
+    "Не удалось скачать — проверьте связь и попробуйте ещё раз": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось скачать — проверьте связь и попробуйте ещё раз"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuklab bo‘lmadi — aloqani tekshirib, qayta urinib ko‘ring"
+          }
+        }
+      }
+    },
+    "Весь маршрут": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Весь маршрут"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Butun yo‘nalish"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -149,6 +149,11 @@ struct SettingsView: View {
                         ForEach(MapAppearance.allCases) { Text($0.title).tag($0) }
                     }
                     Toggle("Кнопки масштаба", isOn: $settings.mapZoomButtons)
+                    NavigationLink {
+                        OfflineMapsView()
+                    } label: {
+                        Label("Офлайн-карты", systemImage: "arrow.down.circle")
+                    }
                 } header: {
                     Text("Карта")
                 } footer: {

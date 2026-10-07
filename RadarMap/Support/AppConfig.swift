@@ -932,6 +932,12 @@ nonisolated enum AppConfig {
     /// Часы без тревоги: не чаще раза в столько секунд.
     static let watchCalmInterval: TimeInterval = 10
 
+    // MARK: - Офлайн-карты (docs/plan_map_offline.md §2.7)
+
+    /// Подписанный каталог регионов и каталог с их файлами на сервере.
+    static let offlineRegionsPath = "regions.json"
+    static let offlineRegionsDirectory = "regions"
+
     // MARK: - Новая карта: выпуск тайлов (docs/plan_map_offline.md §2.6)
 
     /// Подписанный корень выпуска: номер N и sha256 каждой корзины индекса.

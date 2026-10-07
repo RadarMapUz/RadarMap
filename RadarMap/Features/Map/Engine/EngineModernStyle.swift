@@ -32,7 +32,8 @@ nonisolated enum EngineModernStyle {
     /// Стиль новой карты. nil — ресурса нет, он битый или в выпуске нет
     /// нужного набора: тогда вызывающий остаётся на прежнем стиле.
     static func json(daylight: Bool, base: URL, release: TileRelease,
-                     houses: Bool, places: Bool = true, bundle: Bundle = .main) -> String? {
+                     houses: Bool, places: Bool = true, offline: OfflineFiles? = nil,
+                     bundle: Bundle = .main) -> String? {
         guard var style = template(daylight: daylight, base: base, bundle: bundle),
               var sources = style["sources"] as? [String: Any],
               var layers = style["layers"] as? [[String: Any]],
@@ -45,6 +46,17 @@ nonisolated enum EngineModernStyle {
             guard var source = sources[name] as? [String: Any] else { return nil }
             source["tiles"] = [tiles]
             sources[name] = source
+        }
+        // Без связи внутри скачанного региона — локальные файлы PMTiles.
+        // Они проверены sha256 при скачивании (OfflineMapService), поэтому
+        // сторож тайлов здесь не нужен: чтение идёт с диска, не из сети.
+        if let offline {
+            for (name, file) in [("openmaptiles", offline.omt), ("radar", offline.mvt)] {
+                guard var source = sources[name] as? [String: Any] else { return nil }
+                source["tiles"] = nil
+                source["url"] = "pmtiles://" + file.absoluteString
+                sources[name] = source
+            }
         }
         let empty: [String: Any] = ["type": "FeatureCollection", "features": [] as [Any]]
         for name in liveSources { sources[name] = ["type": "geojson", "data": empty] }

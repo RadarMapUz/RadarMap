@@ -76,6 +76,8 @@ struct EngineMapView: UIViewRepresentable {
     /// Кнопки «+ / −»: счётчик нажатий и шаг — для свободной карты.
     var zoomCommand: Int = 0
     var zoomDelta: Double = 0
+    /// Без связи внутри скачанного региона — его локальные файлы.
+    var offline: OfflineFiles?
     /// Общие POI на новой карте (тумблер «Места»).
     var places: Bool = true
     /// «Весь маршрут»: счётчик нажатий — вписать линию маршрута в экран.
@@ -161,6 +163,7 @@ struct EngineMapView: UIViewRepresentable {
         private var lastDaylight: Bool?
         private var lastHouses: Bool?
         private var lastPlaces: Bool?
+        private var lastOffline: OfflineFiles?
         private var themeLayers: [[String: Any]] = []
         private var lastCameras: [Camera]?
         private var lastLimits: [Int: Int] = [:]
@@ -368,13 +371,14 @@ struct EngineMapView: UIViewRepresentable {
             lastDaylight = model.daylight
             lastHouses = model.houses
             lastPlaces = model.places
+            lastOffline = model.offline
             lastModern = model.modernStyle
             os_signpost(.event, log: performanceLog, name: "Style replacement")
             if model.modernStyle, release == nil { release = TileReleaseStore.restoredFromDisk() }
             if model.modernStyle, !modernBroken, let release {
                 if let json = EngineModernStyle.json(daylight: model.daylight, base: AppConfig.syncBaseURL,
                                                      release: release, houses: model.houses,
-                                                     places: model.places) {
+                                                     places: model.places, offline: model.offline) {
                     modernLoaded = true
                     view.styleJSON = json
                     themeLayers = []
@@ -518,7 +522,7 @@ struct EngineMapView: UIViewRepresentable {
                 lastCameraModel = nil
             }
 
-            if modernLoaded, lastPlaces != model.places {
+            if modernLoaded, lastPlaces != model.places || lastOffline != model.offline {
                 loadStyle(model, in: view)
                 return
             }

@@ -55,6 +55,12 @@ struct EngineBaseLayer: View {
             // ровно там, где это приложение живёт: при подключённом CarPlay
             // «главный экран» может оказаться не телефоном, и курсор машины
             // уехал бы мимо. Геометрия контейнера верна всегда.
+            // Без связи — файлы скачанного региона, если машина в нём; со
+            // связью — всегда онлайн (свежий выпуск). Отдельной константой:
+            // внутри огромного вызова ниже тернарник с опционалом заставлял
+            // компилятор выводить типы минутами.
+            let offlineFiles: OfflineFiles? = env.network.isOnline
+                ? nil : env.offlineMaps.offlineFiles(at: me)
             GeometryReader { geo in
                 ZStack {
                     EngineMapView(
@@ -93,6 +99,7 @@ struct EngineBaseLayer: View {
                         northUp: map.orientation == .following,
                         zoomCommand: map.zoomCommand,
                         zoomDelta: map.lastZoomDelta,
+                        offline: offlineFiles,
                         places: env.settings.mapPlaces,
                         overviewCommand: map.overviewCommand,
                         onHeading: { map.noteMapDirection($0) },

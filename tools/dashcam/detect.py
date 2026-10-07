@@ -36,7 +36,10 @@ def ensure_binary():
     if os.path.exists(BIN) and os.path.getmtime(BIN) >= os.path.getmtime(SWIFT_SRC):
         return BIN
     os.makedirs(os.path.dirname(BIN), exist_ok=True)
-    subprocess.run([SWIFTC, '-O', '-sdk', MACOS_SDK, SWIFT_SRC, '-o', BIN], check=True)
+    # Собираем рядом и подменяем файл целиком: перезапись подписанного бинарника
+    # на месте macOS наказывает SIGKILL у всех, кто его сейчас запускает.
+    subprocess.run([SWIFTC, '-O', '-sdk', MACOS_SDK, SWIFT_SRC, '-o', BIN + '.new'], check=True)
+    os.replace(BIN + '.new', BIN)
     return BIN
 
 

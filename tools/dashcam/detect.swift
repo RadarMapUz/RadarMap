@@ -337,11 +337,14 @@ func detectLights(_ im: RGBA) -> [Det] {
             }
             let fill = Double(lit) / Double(w * h)
             if fill < 0.5 { continue }
-            // Корпус: кольцо шириной в диаметр вокруг пятна — тёмное.
+            // Корпус: кольцо в пол-диаметра вокруг пятна — тёмное. Корпус секции
+            // всего в ~1,6 раза шире линзы: кольцо шире захватывает небо по бокам,
+            // и светофор на фоне неба не проходил.
             let d = max(w, h)
+            let ring = max(2, d / 2)
             var dark = 0, bright = 0, tot = 0
-            let x0 = max(0, b.minX - d), x1 = min(im.w - 1, b.maxX + d)
-            let y0 = max(0, b.minY - d), y1 = min(im.h - 1, b.maxY + d)
+            let x0 = max(0, b.minX - ring), x1 = min(im.w - 1, b.maxX + ring)
+            let y0 = max(0, b.minY - ring), y1 = min(im.h - 1, b.maxY + ring)
             for y in y0...y1 {
                 for x in x0...x1 {
                     if x >= b.minX - 1 && x <= b.maxX + 1 && y >= b.minY - 1 && y <= b.maxY + 1 { continue }
@@ -369,7 +372,9 @@ func detectLights(_ im: RGBA) -> [Det] {
                 let ya = above ? b.minY - Int(2.2 * Double(d)) : b.maxY + Int(0.4 * Double(d))
                 let yb = above ? b.minY - Int(0.4 * Double(d)) : b.maxY + Int(2.2 * Double(d))
                 var dk = 0, n = 0
-                for y in max(0, ya)...min(im.h - 1, max(ya, yb)) {
+                let y0 = max(0, ya), y1 = min(im.h - 1, max(ya, yb))
+                if y1 < y0 { return 0 }   // секция у края кадра — столбца не видно
+                for y in y0...y1 {
                     for x in max(0, b.minX)...min(im.w - 1, b.maxX) {
                         n += 1
                         if hsv(im.r(x, y), im.g(x, y), im.b(x, y)).2 < 0.35 { dk += 1 }
@@ -559,9 +564,10 @@ func share(_ im: RGBA, _ b: Blob, _ fx0: Double, _ fx1: Double, _ fy0: Double, _
            _ f: (Int, Int, Int) -> Bool) -> Double {
     let x0 = b.minX + Int(Double(b.w) * fx0), x1 = b.minX + max(Int(Double(b.w) * fx1) - 1, 0)
     let y0 = b.minY + Int(Double(b.h) * fy0), y1 = b.minY + max(Int(Double(b.h) * fy1) - 1, 0)
-    if x1 < x0 || y1 < y0 { return 0 }
+    let ya = max(0, y0), yb = min(im.h - 1, y1), xa = max(0, x0), xb = min(im.w - 1, x1)
+    if xb < xa || yb < ya { return 0 }
     var n = 0, k = 0
-    for y in max(0, y0)...min(im.h - 1, y1) { for x in max(0, x0)...min(im.w - 1, x1) {
+    for y in ya...yb { for x in xa...xb {
         n += 1; if f(im.r(x, y), im.g(x, y), im.b(x, y)) { k += 1 } } }
     return n > 0 ? Double(k) / Double(n) : 0
 }

@@ -15,6 +15,7 @@
     <button data-tab="trips" class="on">Поездки</button>
     <button data-tab="finds">Находки</button>
     <button data-tab="label">Разметка</button>
+    <button data-tab="signs">Знаки</button>
   </nav>
   <div id="trips" class="pane"></div>
   <div id="finds" class="pane" hidden>
@@ -30,7 +31,18 @@
     </div>
     <div id="finds-count" class="muted"></div>
     <div id="finds-list"></div>
+    <label class="muted"><input id="f-cov" type="checkbox"> слой покрытия (закреплено / в работе)</label>
     <div class="muted">A — принять, R — отклонить, ←/→ — соседняя находка</div>
+  </div>
+  <div id="signs" class="pane" hidden>
+    <p class="muted">Кандидаты всех знаков, собранные в кластеры по похожести. Выберите класс
+      для кластера целиком — подпись ляжет на все его вырезки. Смешанный кластер — «Разбить».</p>
+    <select id="s-shape"><option value="">все формы</option><option value="red_circle">круг с красным кантом</option>
+      <option value="blue_circle">синий круг</option><option value="blue_square">синий квадрат</option>
+      <option value="red_triangle">треугольник</option><option value="red_inverted">треугольник вниз</option>
+      <option value="red_octagon">восьмиугольник</option><option value="yellow_diamond">ромб</option></select>
+    <label class="muted"><input id="s-all" type="checkbox"> показывать подписанные</label>
+    <div id="signs-stats" class="muted"></div>
   </div>
   <div id="label" class="pane" hidden>
     <p class="muted">Быстрая разметка для обучения: на вырезке — то, что нашёл черновой детектор.
@@ -50,6 +62,7 @@
   <div id="banner" hidden></div>
   <div id="map"></div>
   <aside id="card" hidden></aside>
+  <div id="signgrid" hidden></div>
   <div id="labeler" hidden>
     <div id="l-q"></div>
     <img id="l-img" alt="">
@@ -77,5 +90,6 @@
 </main>
 <script src="/ui/app.js"></script>
 <script src="/ui/finds.js"></script>
+<script src="/ui/signs.js"></script>
 </body>
 </html>

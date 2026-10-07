@@ -29,6 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(HERE, 'ui')
 UI_FILES = {'index.html': 'text/html; charset=utf-8',
             'finds.js': 'text/javascript; charset=utf-8',
+            'signs.js': 'text/javascript; charset=utf-8',
             'app.js': 'text/javascript; charset=utf-8',
             'app.css': 'text/css; charset=utf-8'}
 HOST = '127.0.0.1'
@@ -187,6 +188,32 @@ def label_stats(conn):
     return out
 
 
+def sign_clusters(conn, shape=None, show_all=False):
+    sql = 'SELECT * FROM sign_clusters'
+    cond, args = [], []
+    if shape:
+        cond.append('shape=?')
+        args.append(shape)
+    if not show_all:
+        cond.append('label IS NULL')
+    if cond:
+        sql += ' WHERE ' + ' AND '.join(cond)
+    out = []
+    for r in conn.execute(sql + ' ORDER BY size DESC', args):
+        reps = json.loads(r['reps'] or '[]')
+        out.append({'id': r['id'], 'shape': r['shape'], 'size': r['size'], 'label': r['label'],
+                    'reps': [{'id': i, 'url': f'/sign/{i}.jpg'} for i in reps]})
+    return out
+
+
+def coverage_cells(conn):
+    import coverage
+    coverage.connect(conn)
+    return [{'lat': round(r['lat'], 6), 'lon': round(r['lon'], 6), 'course': r['course'],
+             'passes': r['passes'], 'days': r['days'], 'pinned': bool(r['pinned'])}
+            for r in conn.execute('SELECT * FROM coverage')]
+
+
 def run_job(key):
     """OCR поездки и синхронизация со всеми её треками — в фоне."""
     conn = catalog.connect()
@@ -290,6 +317,18 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r'/api/findings/(\d+)', p)
             if m:
                 return self._with_conn(lambda c: finding_detail(c, int(m.group(1))), notfound=True)
+            if p == '/api/signs/clusters':
+                q = parse_qs(url.query)
+                return self._with_conn(lambda c: sign_clusters(c, q.get('shape', [''])[0] or None,
+                                                               q.get('all', ['0'])[0] == '1'))
+            if p == '/api/signs/labels':
+                import signs
+                return self._json([{'key': k, 'name': n} for k, n in signs.LABELS])
+            if p == '/api/coverage':
+                return self._with_conn(coverage_cells)
+            m = re.fullmatch(r'/sign/(\d+)\.jpg', p)
+            if m:
+                return self._sign_crop(int(m.group(1)))
             if p == '/api/label/next':
                 q = parse_qs(url.query)
                 return self._with_conn(lambda c: label_next(c, q.get('cls', [''])[0] or None))
@@ -340,6 +379,24 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 conn.close()
             return self._json({'ok': ok}) if ok else self._error(404, 'нет такой находки')
+        m = re.fullmatch(r'/api/signs/clusters/(\d+)/(label|split)', p)
+        if m:
+            import signs
+            conn = self._conn()
+            try:
+                if m.group(2) == 'split':
+                    n = signs.split(conn, int(m.group(1)))
+                else:
+                    lab = body.get('label')
+                    if lab not in signs.LABEL_KEYS:
+                        return self._error(400, 'неизвестный класс знака')
+                    val = body.get('value')
+                    if lab == 'speed_limit' and val not in (20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120):
+                        return self._error(400, 'для ограничения нужно число 20…120')
+                    n = signs.label_cluster(conn, int(m.group(1)), lab, val)
+            finally:
+                conn.close()
+            return self._json({'ok': True, 'n': n})
         if p == '/api/label':
             ans = body.get('answer')
             det = body.get('det_id')
@@ -392,6 +449,17 @@ class Handler(BaseHTTPRequestHandler):
         if not path or not os.path.isfile(path):
             return self._error(404, 'нет вырезки')
         with open(path, 'rb') as f:
+            self._send(200, f.read(), 'image/jpeg')
+
+    def _sign_crop(self, crop_id):
+        conn = self._conn()
+        try:
+            r = conn.execute('SELECT path FROM sign_crops WHERE id=?', (crop_id,)).fetchone()
+        finally:
+            conn.close()
+        if r is None or not r['path'] or not os.path.isfile(r['path']):
+            return self._error(404, 'нет вырезки')
+        with open(r['path'], 'rb') as f:
             self._send(200, f.read(), 'image/jpeg')
 
     def _static(self, name):

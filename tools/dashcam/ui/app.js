@@ -32,6 +32,8 @@ function syncText(s) {
 }
 const STAGE = { no_gpx: 'нет GPX', no_anchors: 'нет опор', before_history: 'до начала истории (опоры с 17.09)', ocr: 'нужен OCR полосы', sync: 'не синхронизировано',
   bad_sync: 'синхронизация не годится', ready: 'готово' };
+const BATCH_STAGE = { ingested: 'кадры вынуты', located: 'привязано', detected: 'детекторы',
+  objects: 'готово', repeat: 'повтор, не требуется', error: 'ошибка', stopped: 'остановлено' };
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`); }
 
 async function api(path, body) {
@@ -79,6 +81,8 @@ function renderTrips() {
       <div class="muted">${tr ? esc(tr.name) + (tr.kind === 'anchored' ? (/опор/.test(tr.name) ? '' : ' · по опорам') : ' · подробный')
         + (tr.synthetic ? '<span class="badge synth">синтетика</span>' : '') : 'трека нет'}</div>
       <div class="stage ${cls}">${esc(stage)}</div>
+      ${t.batch ? `<div class="muted">разбор: ${esc(BATCH_STAGE[t.batch.stage] || t.batch.stage)}${t.batch.note ? ' · ' + esc(t.batch.note) : ''}</div>` : ''}
+      ${t.video_geo ? `<div class="muted">${t.video_geo.status === 'ok' ? 'опоры найдены по видео ' + t.video_geo.n : 'по видео: не привязана'}</div>` : ''}
       ${t.sync ? `<div class="muted">${esc(syncText(t.sync))}</div>` : ''}`;
     if (t.tracks.length > 1) {
       const sel = document.createElement('select');

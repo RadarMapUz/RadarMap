@@ -249,11 +249,11 @@ class TripGeo:
 
 
 def segment_reliable(line_m, odo_m):
+    """Расхождение пути по скорости с длиной маршрута — доля от длины маршрута."""
     diff = abs(odo_m - line_m)
-    base = max(line_m, odo_m)
-    if base < SHORT_SEGMENT_M:
+    if max(line_m, odo_m) < SHORT_SEGMENT_M:
         return diff <= SHORT_SEGMENT_TOL_M
-    return diff / base <= UNRELIABLE_SHARE
+    return diff / max(line_m, 1.0) <= UNRELIABLE_SHARE
 
 
 def build_segments(model, failed=()):

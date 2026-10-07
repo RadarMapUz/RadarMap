@@ -501,6 +501,157 @@ func detectCrossings(_ im: RGBA) -> [Det] {
     return out
 }
 
+// MARK: - кандидаты всех дорожных знаков (для разметки кластерами)
+//
+// Не классификатор, а сито: форма и цвет, по которым знаки различимы издалека.
+//   red_circle   — круг с красным кантом (запрещающие: стоянка/остановка, повороты, въезд…)
+//   blue_circle  — синий круг (предписывающие: только прямо/направо…)
+//   blue_square  — синий квадрат/прямоугольник (переход, одностороннее, полосы)
+//   red_triangle — красный треугольник вершиной вверх (предупреждающие)
+//   red_inverted — вершиной вниз («уступи дорогу»)
+//   red_octagon  — сплошной красный с белым текстом (STOP)
+//   yellow_diamond — «главная дорога»
+// Фары, фонари и реклама отсекаются размером, долей заливки, белой/синей
+// серединой и тем, что кант — контраст к середине, а не сплошная клякса.
+
+struct SignCand: Encodable {
+    let shape: String
+    let x: Double, y: Double, w: Double, h: Double
+    let score: Double
+    var file: String? = nil
+}
+
+@inline(__always) func isOrange(_ r: Int, _ g: Int, _ b: Int) -> Bool {
+    let (h, s, v) = hsv(r, g, b)
+    // оранжевый знака — яркий и насыщенный; осенняя листва бледнее и темнее
+    return h >= 24 && h <= 46 && s >= 0.72 && v >= 0.62
+}
+
+func maskOf(_ im: RGBA, _ ylim: Int, _ f: (Int, Int, Int) -> Bool) -> [Bool] {
+    var m = [Bool](repeating: false, count: im.w * im.h)
+    for y in 0..<ylim { for x in 0..<im.w where f(im.r(x, y), im.g(x, y), im.b(x, y)) { m[y * im.w + x] = true } }
+    return m
+}
+
+/// Доля пикселей рамки, удовлетворяющих условию, в нормированной области [fx0,fx1]×[fy0,fy1].
+func share(_ im: RGBA, _ b: Blob, _ fx0: Double, _ fx1: Double, _ fy0: Double, _ fy1: Double,
+           _ f: (Int, Int, Int) -> Bool) -> Double {
+    let x0 = b.minX + Int(Double(b.w) * fx0), x1 = b.minX + max(Int(Double(b.w) * fx1) - 1, 0)
+    let y0 = b.minY + Int(Double(b.h) * fy0), y1 = b.minY + max(Int(Double(b.h) * fy1) - 1, 0)
+    if x1 < x0 || y1 < y0 { return 0 }
+    var n = 0, k = 0
+    for y in max(0, y0)...min(im.h - 1, y1) { for x in max(0, x0)...min(im.w - 1, x1) {
+        n += 1; if f(im.r(x, y), im.g(x, y), im.b(x, y)) { k += 1 } } }
+    return n > 0 ? Double(k) / Double(n) : 0
+}
+
+/// Ширина маски в строке fy (доля ширины рамки).
+func rowWidth(_ mask: [Bool], _ w: Int, _ b: Blob, _ fy: Double) -> Double {
+    let y = b.minY + min(b.h - 1, Int(Double(b.h) * fy))
+    var lo = -1, hi = -1
+    for x in b.minX...b.maxX where mask[y * w + x] { if lo < 0 { lo = x }; hi = x }
+    return lo < 0 ? 0 : Double(hi - lo + 1) / Double(b.w)
+}
+
+func detectSignCandidates(_ im: RGBA) -> [SignCand] {
+    if frameBrightness(im) < 0.22 { return [] }
+    let ylim = Int(Double(im.h) * SIGN_YLIM)
+    var out: [SignCand] = []
+    let corners = { (im: RGBA, b: Blob, f: (Int, Int, Int) -> Bool) -> Double in
+        (share(im, b, 0, 0.16, 0, 0.16, f) + share(im, b, 0.84, 1, 0, 0.16, f) +
+         share(im, b, 0, 0.16, 0.84, 1, f) + share(im, b, 0.84, 1, 0.84, 1, f)) / 4 }
+    // Знак на столбе (2–3 м) виден выше горизонта (камера на ~1,3 м);
+    // задние фонари и кузова машин — на горизонте и ниже.
+    let horizonY = Double(im.h) * (HORIZON + 0.01)
+    // Синих фонарей у машин нет, а «объезд справа» стоит на островке низко —
+    // синим разрешаем и чуть ниже горизонта.
+    var yLimit = horizonY
+    func ok(_ b: Blob, _ minS: Int = 10, _ maxS: Int = 170, _ aLo: Double = 0.7, _ aHi: Double = 1.4) -> Bool {
+        let a = Double(b.w) / Double(b.h)
+        return Double(b.minY + b.maxY) / 2 < yLimit && b.w >= minS && b.h >= minS && b.w <= maxS && b.h <= maxS && a >= aLo && a <= aHi
+    }
+    // красные
+    var red = maskOf(im, ylim, isRed)
+    red = dilate(red, im.w, ylim)
+    for b in components(red, im.w, ylim) where ok(b) {
+        let fill = Double(b.n) / Double(b.w * b.h)
+        let centerWhite = share(im, b, 0.3, 0.7, 0.3, 0.7, isWhitish)
+        let centerBlue = share(im, b, 0.3, 0.7, 0.3, 0.7, isSignBlue)
+        let cornerRed = corners(im, b, isRed)
+        let top = rowWidth(red, im.w, b, 0.12), bottom = rowWidth(red, im.w, b, 0.88)
+        if fill >= 0.72 && centerWhite >= 0.08 && centerWhite <= 0.45 && cornerRed >= 0.2 {
+            out.append(SignCand(shape: "red_octagon", x: Double(b.minX), y: Double(b.minY), w: Double(b.w),
+                                h: Double(b.h), score: centerWhite))
+        } else if fill < 0.72 && fill > 0.18 && (centerWhite + centerBlue) >= 0.35 {
+            if top < 0.45 && bottom > 0.75 && cornerRed < 0.35 {
+                out.append(SignCand(shape: "red_triangle", x: Double(b.minX), y: Double(b.minY),
+                                    w: Double(b.w), h: Double(b.h), score: bottom - top))
+            } else if top > 0.75 && bottom < 0.45 && cornerRed < 0.35 {
+                out.append(SignCand(shape: "red_inverted", x: Double(b.minX), y: Double(b.minY),
+                                    w: Double(b.w), h: Double(b.h), score: top - bottom))
+            } else if cornerRed < 0.2 {
+                let (ring, _) = ringScore(im, b)
+                if ring >= 0.55 {
+                    out.append(SignCand(shape: "red_circle", x: Double(b.minX), y: Double(b.minY),
+                                        w: Double(b.w), h: Double(b.h), score: ring))
+                }
+            }
+        }
+    }
+    // синие
+    yLimit = Double(im.h) * (HORIZON + 0.12)
+    let blue = maskOf(im, ylim, isSignBlue)
+    for b in components(blue, im.w, ylim) where ok(b, 10, 170, 0.5, 2.0) {
+        let fill = Double(b.n) / Double(b.w * b.h)
+        if fill < 0.4 || fill > 0.95 { continue }
+        let white = share(im, b, 0.15, 0.85, 0.15, 0.85, isWhitish)
+        if white < 0.06 || white > 0.6 { continue }   // знак — синее с белым символом
+        let cb = corners(im, b, isSignBlue)
+        let a = Double(b.w) / Double(b.h)
+        if cb < 0.25 && a > 0.75 && a < 1.33 && fill < 0.85 {
+            out.append(SignCand(shape: "blue_circle", x: Double(b.minX), y: Double(b.minY), w: Double(b.w),
+                                h: Double(b.h), score: 1 - cb))
+        } else if cb >= 0.45 {
+            out.append(SignCand(shape: "blue_square", x: Double(b.minX), y: Double(b.minY), w: Double(b.w),
+                                h: Double(b.h), score: cb))
+        }
+    }
+    // «главная дорога»: оранжевый ромб — заливка ~половина рамки, углы пустые
+    yLimit = horizonY
+    let orange = maskOf(im, ylim, isOrange)
+    for b in components(orange, im.w, ylim) where ok(b, 9, 120, 0.75, 1.33) {
+        let fill = Double(b.n) / Double(b.w * b.h)
+        let co = corners(im, b, isOrange)
+        let mid = rowWidth(orange, im.w, b, 0.5), top = rowWidth(orange, im.w, b, 0.12)
+        let solid = share(im, b, 0.35, 0.65, 0.35, 0.65, isOrange)
+        if fill > 0.35 && fill < 0.7 && co < 0.12 && mid > 0.7 && top < 0.4 && solid > 0.85 {
+            out.append(SignCand(shape: "yellow_diamond", x: Double(b.minX), y: Double(b.minY),
+                                w: Double(b.w), h: Double(b.h), score: mid - top))
+        }
+    }
+    return out
+}
+
+func writeSignCrop(_ cg: CGImage, _ c: SignCand, _ path: String) -> Bool {
+    let side = max(c.w, c.h) * 1.3
+    let rect = CGRect(x: c.x + c.w / 2 - side / 2, y: c.y + c.h / 2 - side / 2, width: side, height: side)
+    let cs = CGColorSpaceCreateDeviceRGB()
+    guard let ctx = CGContext(data: nil, width: 96, height: 96, bitsPerComponent: 8, bytesPerRow: 0, space: cs,
+                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+    ctx.setFillColor(CGColor(gray: 0, alpha: 1))
+    ctx.fill(CGRect(x: 0, y: 0, width: 96, height: 96))
+    ctx.interpolationQuality = .high
+    // CGContext — снизу вверх: кадр рисуем целиком со сдвигом и масштабом
+    let k = 96.0 / side
+    let H = Double(cg.height)
+    ctx.draw(cg, in: CGRect(x: -rect.minX * k, y: -(H - rect.maxY) * k, width: Double(cg.width) * k, height: H * k))
+    guard let img = ctx.makeImage(),
+          let dst = CGImageDestinationCreateWithURL(URL(fileURLWithPath: path) as CFURL, "public.jpeg" as CFString, 1, nil)
+    else { return false }
+    CGImageDestinationAddImage(dst, img, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+    return CGImageDestinationFinalize(dst)
+}
+
 // MARK: - вырезки с размытием
 
 struct CropSpec: Decodable { let src: String; let dst: String; let box: [Double]; let keep: [Double]? }
@@ -565,8 +716,21 @@ if args[1] == "detect" {
                 }
             }
             RING_CANDS.removeAll()
-            struct Line: Encodable { let f: String; let d: [Det] }
-            print(String(data: try! enc.encode(Line(f: path, d: dets)), encoding: .utf8)!)
+            // Кандидаты знаков: вырезки 96×96 пишутся сразу, пока кадр в памяти.
+            var signs: [SignCand] = []
+            if let dir = ProcessInfo.processInfo.environment["SIGN_DIR"] {
+                let stem = (path as NSString).lastPathComponent.replacingOccurrences(of: ".jpg", with: "")
+                let parent = ((path as NSString).deletingLastPathComponent as NSString).lastPathComponent
+                for (k, var c) in detectSignCandidates(im).enumerated() {
+                    let sub = dir + "/" + c.shape
+                    try? FileManager.default.createDirectory(atPath: sub, withIntermediateDirectories: true)
+                    let file = sub + "/" + parent + "_" + stem + "_\(k).jpg"
+                    if writeSignCrop(cg, c, file) { c.file = file }
+                    signs.append(c)
+                }
+            }
+            struct Line: Encodable { let f: String; let d: [Det]; let s: [SignCand] }
+            print(String(data: try! enc.encode(Line(f: path, d: dets, s: signs)), encoding: .utf8)!)
             fflush(stdout)
         }
     }
@@ -576,6 +740,7 @@ if args[1] == "detect" {
         let im = rgba(cg)
         let d = detectSigns(im, cg) + detectLights(im) + detectCrossings(im)
         print(String(data: try! enc.encode(d), encoding: .utf8)!)
+        print(String(data: try! enc.encode(detectSignCandidates(im)), encoding: .utf8)!)
     }
 } else if args[1] == "crop" {
     let ci = CIContext()

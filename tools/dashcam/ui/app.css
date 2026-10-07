@@ -60,7 +60,7 @@ main { display: grid; grid-template-rows: auto minmax(200px, 1fr) auto; min-widt
 
 /* ---- вкладки, находки, разметка ---- */
 #tabs { display: flex; gap: 4px; }
-#tabs button { flex: 1; }
+#tabs button { flex: 1; padding: 4px 2px; font-size: 13px; min-width: 0; }
 #tabs button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .filters { display: flex; flex-direction: column; gap: 6px; }
 .filters select { font: inherit; padding: 3px; border-radius: 6px; border: 1px solid var(--line);
@@ -85,3 +85,17 @@ main { display: grid; grid-template-rows: auto minmax(200px, 1fr) auto; min-widt
   border-radius: 8px; background: #000; }
 #l-q { font-size: 20px; font-weight: 600; }
 .l-btns button { font-size: 18px; padding: 8px 20px; margin: 0 6px; }
+
+#signgrid { position: absolute; inset: 0; z-index: 5; background: var(--bg); overflow-y: auto;
+  padding: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px;
+  align-content: start; }
+.scl { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
+.scl.done { opacity: .55; }
+.scl .g { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
+.scl .g img { width: 100%; aspect-ratio: 1; border-radius: 3px; background: #000; }
+.scl select, .scl input { font: inherit; width: 100%; margin-top: 4px; }
+.scl .row { display: flex; gap: 4px; margin-top: 4px; }
+.scl .row button { flex: 1; }
+
+/* атрибут hidden сильнее display: flex/grid у панелей */
+[hidden] { display: none !important; }

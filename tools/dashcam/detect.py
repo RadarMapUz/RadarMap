@@ -80,8 +80,37 @@ def parse_output(text):
         if 'f' not in j:
             continue
         dets = [s for s in (sanitize(d) for d in j.get('d', [])) if s]
-        out.append((j['f'], dets, j.get('err')))
+        signs = [s for s in (sanitize_sign(x) for x in j.get('s', [])) if s]
+        out.append((j['f'], dets, j.get('err'), signs))
     return out
+
+
+SIGN_DIR = os.path.join(os.path.dirname(catalog.DB_PATH), 'signs')
+SIGN_SHAPES = frozenset(('red_circle', 'blue_circle', 'blue_square', 'red_triangle', 'red_inverted',
+                         'red_octagon', 'yellow_diamond'))
+
+
+def sign_side(x_src, w_src):
+    """Сторона дороги по положению в кадре: левая/правая треть или над дорогой."""
+    cx = x_src + w_src / 2
+    if cx < 0.4 * fr.SRC_W:
+        return 'left'
+    if cx > 0.6 * fr.SRC_W:
+        return 'right'
+    return 'over'
+
+
+def sanitize_sign(s):
+    if s.get('shape') not in SIGN_SHAPES:
+        return None
+    try:
+        x, y, w, h, score = (float(s[k]) for k in ('x', 'y', 'w', 'h', 'score'))
+    except (KeyError, TypeError, ValueError):
+        return None
+    sx, sy = fr.to_src(x, y)
+    f = s.get('file')
+    return {'shape': s['shape'], 'x': sx, 'y': sy, 'w': w / fr.SCALE, 'h': h / fr.SCALE,
+            'score': score, 'file': f if isinstance(f, str) and f.startswith(SIGN_DIR) else None}
 
 
 def run_frames(paths, binary=None):
@@ -90,29 +119,32 @@ def run_frames(paths, binary=None):
         f.write('\n'.join(paths))
         lst = f.name
     try:
+        env = dict(os.environ, SIGN_DIR=SIGN_DIR)
         text = subprocess.run([binary, 'detect', lst], capture_output=True, text=True,
-                              check=True).stdout
+                              check=True, env=env).stdout
     finally:
         os.remove(lst)
     return parse_output(text)
 
 
 def detect_trip(conn, key, log=print):
-    rows = conn.execute('SELECT id, path FROM frames WHERE trip_key=? AND detected=0 ORDER BY t',
-                        (key,)).fetchall()
+    rows = conn.execute('SELECT id, path, t, lat, lon, course FROM frames WHERE trip_key=? AND detected=0 '
+                        'ORDER BY t', (key,)).fetchall()
     if not rows:
         return 0
     binary = ensure_binary()
     by_path = {r['path']: r['id'] for r in rows}
+    frame = {r['id']: r for r in rows}
     total = 0
     for i in range(0, len(rows), CHUNK):
         chunk = [r['path'] for r in rows[i:i + CHUNK] if os.path.exists(r['path'])]
         res = run_frames(chunk, binary)
         with conn:
-            for path, dets, err in res:
+            for path, dets, err, signs in res:
                 fid = by_path.get(path)
                 if fid is None:
                     continue
+                store_signs(conn, frame[fid], signs)
                 conn.execute('DELETE FROM detections WHERE frame_id=?', (fid,))
                 conn.executemany('INSERT INTO detections(frame_id, cls, value, color, x, y, w, h, conf) '
                                  'VALUES(?,?,?,?,?,?,?,?,?)',
@@ -126,6 +158,23 @@ def detect_trip(conn, key, log=print):
             with conn:
                 conn.executemany('UPDATE frames SET detected=2 WHERE id=?', [(m,) for m in missing])
     return total
+
+
+def store_signs(conn, f, signs):
+    """Кандидаты знаков кадра → sign_crops; файл вырезки переименовывается в <id>.jpg."""
+    for (p,) in conn.execute('SELECT path FROM sign_crops WHERE frame_id=?', (f['id'],)).fetchall():
+        if p and os.path.exists(p):
+            os.remove(p)
+    conn.execute('DELETE FROM sign_crops WHERE frame_id=?', (f['id'],))
+    for s in signs:
+        cur = conn.execute('INSERT INTO sign_crops(frame_id, shape, x, y, w, h, score, t, lat, lon, course, '
+                           'side) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+                           (f['id'], s['shape'], s['x'], s['y'], s['w'], s['h'], s['score'], f['t'],
+                            f['lat'], f['lon'], f['course'], sign_side(s['x'], s['w'])))
+        if s['file'] and os.path.exists(s['file']):
+            dst = os.path.join(SIGN_DIR, s['shape'], f'{cur.lastrowid}.jpg')
+            os.replace(s['file'], dst)
+            conn.execute('UPDATE sign_crops SET path=? WHERE id=?', (dst, cur.lastrowid))
 
 
 def make_crops(specs, binary=None):

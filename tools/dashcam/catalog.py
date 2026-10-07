@@ -169,6 +169,20 @@ CREATE TABLE IF NOT EXISTS crops(
 CREATE TABLE IF NOT EXISTS gpx_imports(
   path TEXT PRIMARY KEY, first_t REAL, last_t REAL, n_trk INTEGER, n_wpt INTEGER, imported REAL
 );
+-- Кандидаты всех дорожных знаков (форма + цвет): вырезка 96×96 для подписи
+-- кластерами. Рамка — в пикселях исходного кадра; side — слева/справа/над.
+CREATE TABLE IF NOT EXISTS sign_crops(
+  id INTEGER PRIMARY KEY, frame_id INTEGER NOT NULL, shape TEXT NOT NULL,
+  x REAL, y REAL, w REAL, h REAL, score REAL, t REAL, lat REAL, lon REAL, course REAL,
+  side TEXT, path TEXT, cluster INTEGER, label TEXT, labeled_at REAL
+);
+CREATE INDEX IF NOT EXISTS sign_crops_frame ON sign_crops(frame_id);
+CREATE INDEX IF NOT EXISTS sign_crops_cluster ON sign_crops(cluster);
+CREATE TABLE IF NOT EXISTS sign_clusters(
+  id INTEGER PRIMARY KEY, shape TEXT NOT NULL, size INTEGER, reps TEXT, label TEXT, parent INTEGER
+);
+-- Сколько кадров ролика не вынуто, потому что участок уже закреплён (coverage.py).
+CREATE TABLE IF NOT EXISTS coverage_skips(clip_id INTEGER PRIMARY KEY, skipped INTEGER, total INTEGER);
 CREATE TABLE IF NOT EXISTS batch_state(
   trip_key TEXT PRIMARY KEY, stage TEXT, error TEXT, updated REAL
 );
@@ -372,7 +386,7 @@ def import_all_trips(conn, path, log=print):
             if not mine:
                 continue
             shape = [p for tr in sorted(lines, key=lambda x: x['t']) for p in tr['shape']]
-            name = f'линия + {len(mine)} опор' if shape else f'по опорам {len(mine)}'
+            name = (f'опоры из GPX {len(mine)} + линия' if shape else f'опоры из GPX {len(mine)}')
             if not shape:
                 shape = [(w[1], w[2]) for w in mine]
             if len(set(shape)) < 2:
@@ -387,6 +401,17 @@ def import_all_trips(conn, path, log=print):
             conn.executemany('INSERT INTO waypoints(track_id, t, lat, lon, name) VALUES(?,?,?,?,?)',
                              [(tid, *w) for w in mine])
             made += 1
+    # Треки пересозданы — синхронизация к ним считается заново (иначе поездка
+    # с готовым OCR показывалась бы «не синхронизировано»).
+    import sync
+    for trip in conn.execute('SELECT * FROM trips').fetchall():
+        st = trip_status(conn, trip)
+        if st['ocr_done'] >= st['clips'] and st['track'] is not None:
+            for tr in tracks_for_trip(conn, trip):
+                try:
+                    sync.sync_trip(conn, trip['key'], tr['id'])
+                except Exception as e:  # одна плохая поездка не должна ронять импорт
+                    log(f'синхронизация {trip["key"]}: {e}')
     log(f'all_trips: поездок с опорами {made}, trk {len(trks)}, wpt {len(wpts)}')
     return made
 
@@ -488,7 +513,15 @@ def trip_status(conn, trip, track_id=None):
         stage = 'bad_sync'
     else:
         stage = 'ready'
+    b = conn.execute('SELECT stage, error FROM batch_state WHERE trip_key=?', (trip['key'],)).fetchone()
+    vg = None
+    try:
+        vg = conn.execute('SELECT status, n FROM video_geo WHERE trip_key=?', (trip['key'],)).fetchone()
+    except sqlite3.OperationalError:
+        pass  # таблицы ещё нет — этап «опоры по видео» не запускался
     return {'key': trip['key'], 'start': trip['start'], 'end': trip['end'],
+            'batch': {'stage': b['stage'], 'note': b['error']} if b else None,
+            'video_geo': {'status': vg['status'], 'n': vg['n']} if vg else None,
             'clips': len(clips), 'ocr_done': done, 'stage': stage, 'sync': sync,
             'track': None if tr is None else track_brief(tr),
             'tracks': [track_brief(t) for t in candidates]}

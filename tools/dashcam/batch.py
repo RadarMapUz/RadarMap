@@ -99,11 +99,31 @@ def has_anchors(conn, trip):
                for tr in catalog.tracks_for_trip(conn, trip))
 
 
-def plan(conn):
-    """Порядок разбора: сначала поездки с опорами (без них кадры не привязать
-    к месту), внутри — от новых к старым; остальные — в конце."""
-    trips = day_trips(conn)
-    return [t for t in trips if has_anchors(conn, t)] + [t for t in trips if not has_anchors(conn, t)]
+def trip_shape(conn, trip):
+    """Оценка пути поездки до разбора: линия трека all_trips (или ломаная по опорам)."""
+    for tr in catalog.tracks_for_trip(conn, trip):
+        sh = catalog.track_shape(conn, tr['id'])
+        if len(sh) >= 2:
+            return sh
+    return []
+
+
+def plan(conn, pinned=None):
+    """Порядок разбора — по новизне: сначала поездки с опорами и с наибольшим
+    НЕзакреплённым путём; поездки целиком по закреплённым участкам — «повтор»
+    (в конце списка, разбор их пропускает); без опор — в самом конце.
+    → [(поездка, доля нового, длина нового м)]."""
+    import coverage
+    pinned = coverage.pinned_keys(conn) if pinned is None else pinned
+    with_a, without = [], []
+    for t in day_trips(conn):
+        if not has_anchors(conn, t):
+            without.append((t, 1.0, 0.0))
+            continue
+        nov, total = coverage.novelty(trip_shape(conn, t), pinned)
+        with_a.append((t, nov, nov * total))
+    with_a.sort(key=lambda x: -x[2])
+    return with_a + without
 
 
 def set_stage(conn, key, stage, error=None):
@@ -160,10 +180,33 @@ def clip_ocr_rows(conn, clip_id):
         'SELECT t, kmh FROM ocr WHERE clip_id=? ORDER BY t', (clip_id,))]
 
 
-def process_clip(conn, card, clip):
+def clip_positions(conn, clip, keep=None):
+    """Позиции кадров ролика по OCR (путь) → (все позиции, оставленные фильтром keep(t))."""
+    prof = fr.speed_profile(clip_ocr_rows(conn, clip['id']), clip['duration'])
+    pos = fr.select_positions(prof, clip['duration'])
+    kept = [p for p in pos if keep is None or keep(clip['start'] + p)]
+    return prof, pos, kept
+
+
+def process_clip(conn, card, clip, ocr_only=False, keep=None):
+    """Ролик: копия с карты → ffprobe → OCR полосы → кадры → удалить копию.
+    ocr_only — только OCR (первый проход поездки с закреплёнными участками);
+    keep(t) — какие моменты разбирать (False — участок закреплён, кадр не нужен).
+    Если OCR уже есть и все кадры отфильтрованы — ролик даже не копируется."""
     st = clip_state(conn, clip['id'])
     if st['frames'] is not None and st['probed']:
         return 0
+    ocr_done = conn.execute('SELECT 1 FROM ocr_done WHERE clip_id=?', (clip['id'],)).fetchone()
+    if ocr_only and ocr_done and st['probed']:
+        return 0
+    if not ocr_only and ocr_done and st['probed'] and keep is not None:
+        _, pos, kept = clip_positions(conn, clip, keep)
+        if not kept:
+            with conn:
+                conn.execute('UPDATE clip_state SET frames=0, error=NULL WHERE clip_id=?', (clip['id'],))
+                conn.execute('INSERT OR REPLACE INTO coverage_skips(clip_id, skipped, total) VALUES(?,?,?)',
+                             (clip['id'], len(pos), len(pos)))
+            return 0
     if free_gb() < MIN_FREE_GB + clip['size'] / 1e9:
         raise DiskLow(f'свободно {free_gb():.1f} ГБ < {MIN_FREE_GB} ГБ — стоп')
     os.makedirs(TMP_DIR, exist_ok=True)
@@ -181,8 +224,7 @@ def process_clip(conn, card, clip):
             start = catalog.initial_start(clip['name_start'], info['duration'], info.get('end'))
             with conn:
                 # OCR уже был (M1) — его старт точнее, не перетираем
-                done = conn.execute('SELECT 1 FROM ocr_done WHERE clip_id=?', (clip['id'],)).fetchone()
-                if done:
+                if ocr_done:
                     conn.execute('UPDATE clips SET duration=? WHERE id=?', (info['duration'], clip['id']))
                 else:
                     conn.execute('UPDATE clips SET duration=?, start=?, width=?, height=? WHERE id=?',
@@ -192,12 +234,13 @@ def process_clip(conn, card, clip):
         clip = conn.execute('SELECT * FROM clips WHERE id=?', (clip['id'],)).fetchone()
         overlay.ocr_clip(conn, clip, log=lambda *_: None, path=local)
         clip = conn.execute('SELECT * FROM clips WHERE id=?', (clip['id'],)).fetchone()
+        if ocr_only:
+            return 0
         n = 0
         if st['frames'] is None:
-            prof = fr.speed_profile(clip_ocr_rows(conn, clip['id']), clip['duration'])
-            pos = fr.select_positions(prof, clip['duration'])
+            prof, pos, kept = clip_positions(conn, clip, keep)
             times = fr.frame_times(local)
-            picks = fr.nearest_indices(times, pos)
+            picks = fr.nearest_indices(times, kept)
             outdir = os.path.join(FRAMES_DIR, clip['trip_key'])
             paths = [os.path.join(outdir, fr.frame_name(clip['start'] + t)) for _, t in picks]
             n = fr.extract(local, [i for i, _ in picks], paths, tmp)
@@ -210,18 +253,41 @@ def process_clip(conn, card, clip):
                                  'VALUES(?,?,?,?,?,?)', rows)
                 conn.execute('UPDATE clip_state SET frames=?, error=NULL WHERE clip_id=?',
                              (n, clip['id']))
+                if keep is not None:
+                    conn.execute('INSERT OR REPLACE INTO coverage_skips(clip_id, skipped, total) '
+                                 'VALUES(?,?,?)', (clip['id'], len(pos) - len(kept), len(pos)))
         return n
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def ingest_trip(conn, card, key):
+def ingest_trip(conn, card, key, pinned=None):
+    """Разбор роликов поездки. Если на её пути есть закреплённые участки —
+    два прохода: сначала OCR всех роликов (нужен для пути между опорами),
+    затем привязка и кадры только там, где участок не закреплён."""
     clips = catalog.trip_clips(conn, key)
+    keep = None
+    if pinned:
+        for i, c in enumerate(clips):
+            try:
+                process_clip(conn, card, c, ocr_only=True)
+            except DiskLow:
+                raise
+            except Exception as e:
+                log(f'  OCR {c["name"]}: ошибка {e}')
+        catalog.regroup(conn)
+        g, _ = trip_geo(conn, key)
+        import coverage
+
+        def keep(t):
+            p = g.locate(t)
+            # без привязки участок неизвестен — разбираем (лучше лишний кадр)
+            return p is None or coverage.cell_key(p[0], p[1], p[2]) not in pinned
     total = 0
     for i, c in enumerate(clips):
         t = time.time()
         try:
-            n = process_clip(conn, card, c)
+            n = process_clip(conn, card, c, keep=keep)
         except DiskLow:
             raise
         except Exception as e:
@@ -300,8 +366,12 @@ STAGES = ('ingest', 'geo', 'detect', 'objects')
 
 
 def run(conn, keys=None, limit=None, stages=STAGES):
+    import coverage
     card = Card()
-    trips = plan(conn)
+    pinned = coverage.pinned_keys(conn)
+    planned = plan(conn, pinned)
+    novelty = {t['key']: (n, m) for t, n, m in planned}
+    trips = [t for t, _, _ in planned]
     if keys:
         trips = [t for t in trips if t['key'] in keys] + \
             [catalog.get_trip(conn, k) for k in keys if k not in {t['key'] for t in trips}
@@ -314,10 +384,17 @@ def run(conn, keys=None, limit=None, stages=STAGES):
         for trip in trips:
             key = trip['key']
             done = get_stage(conn, key)
-            log(f'поездка {key} ({trip["n_clips"]} рол.), стадия {done or "—"}')
+            nov, new_m = novelty.get(key, (1.0, 0.0))
+            log(f'поездка {key} ({trip["n_clips"]} рол.), стадия {done or "—"}, нового пути '
+                f'{nov:.0%} ({new_m / 1000:.1f} км)')
+            if nov < coverage.REPEAT_NOVELTY and done in (None, 'repeat') and not keys:
+                set_stage(conn, key, 'repeat', f'нового пути {nov:.0%}')
+                log('  повтор: путь целиком по закреплённым участкам — пропуск')
+                continue
             try:
                 if 'ingest' in stages:
-                    n = ingest_trip(conn, card, key)
+                    trip_pinned = pinned if nov < 0.98 else None
+                    n = ingest_trip(conn, card, key, trip_pinned)
                     set_stage(conn, key, 'ingested')
                     log(f'  кадров новых: {n}')
                     key = _rekey(conn, trip)
@@ -340,6 +417,11 @@ def run(conn, keys=None, limit=None, stages=STAGES):
                     n = objects.build_trip(conn, key)
                     set_stage(conn, key, 'objects')
                     log(f'  объекты: {n}')
+                    # кластеры и покрытие — задним числом по всему разобранному
+                    import cluster
+                    log(f'  кластеры: {cluster.rebuild(conn, log=lambda *_: None)}')
+                    log(f'  покрытие: {coverage.rebuild(conn)}')
+                    pinned = coverage.pinned_keys(conn)
             except DiskLow as e:
                 set_stage(conn, key, 'stopped', str(e))
                 log(f'СТОП: {e}')

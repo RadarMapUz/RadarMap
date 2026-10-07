@@ -353,12 +353,36 @@ class PrivacyTest(unittest.TestCase):
                               'w': 1, 'h': 1, 'conf': 1})
         self.assertIsNone(lt['value'])
 
+    def test_plate_text_only_from_street_plates(self):
+        base = {'x': 1, 'y': 1, 'w': 40, 'h': 10, 'score': 0.5}
+        s = detect.sanitize_sign({**base, 'shape': 'name_plate', 'text': 'Navoiy ko`chasi 12'})
+        self.assertEqual(s['text'], 'Navoiy ko`chasi 12')
+        self.assertIsNone(detect.sanitize_sign({**base, 'shape': 'name_plate', 'text': '01 A 123 BC'})['text'])
+        self.assertIsNone(detect.sanitize_sign({**base, 'shape': 'red_circle', 'text': 'Navoiy'})['text'])
+        self.assertIsNone(detect.sanitize_sign({**base, 'shape': 'car_plate'}))
+
     def test_parse_output_skips_garbage(self):
         out = detect.parse_output('мусор\n{"f":"a.jpg","d":[{"cls":"crossing","x":1,"y":2,"w":3,"h":4,'
                                   '"conf":0.5}]}\n{"f":"b.jpg","err":"read"}\n')
         self.assertEqual(len(out), 2)
         self.assertEqual(out[0][1][0]['cls'], 'crossing')
         self.assertEqual(out[1][2], 'read')
+
+    def test_jolts_need_strong_isolated_shift(self):
+        import random
+        rnd = random.Random(1)
+        base = [rnd.randint(0, 255) for _ in range(140)]
+        profiles, times = [], []
+        for i in range(300):
+            off = 10
+            if 150 <= i < 156:          # рывок: картинка прыгает вверх-вниз на 3 строки
+                off = 10 + (3 if i % 2 else -3)
+            profiles.append(bytes(base[off:off + 120]))
+            times.append(i / 30)
+        ev = frames.jolts(times, profiles, lambda t: 20.0, min_score=20)
+        self.assertEqual(len(ev), 1)
+        self.assertAlmostEqual(ev[0][0], 5.0, delta=0.6)
+        self.assertEqual(frames.jolts(times, profiles, lambda t: 5.0, min_score=20), [])
 
 
 class EventsAndIdentifyTest(unittest.TestCase):
@@ -395,3 +419,44 @@ class EventsAndIdentifyTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class CoverageTest(unittest.TestCase):
+    def rows(self, trips, clusters_by_trip=None, kmh=40, w=0.9):
+        import coverage  # noqa
+        out = []
+        for k, (trip, day) in enumerate(trips):
+            for i in range(5):
+                lat, lon = at(i * 10, 0)
+                cl = (clusters_by_trip or {}).get(trip, ())
+                out.append((trip, day, k * 1000 + i, lat, lon, 90.0, kmh, w, cl))
+        return out
+
+    def test_pinned_needs_four_days_and_stable(self):
+        import coverage
+        trips = [('A', 'd1'), ('B', 'd2'), ('C', 'd3'), ('D', 'd4')]
+        cells = coverage.compute(self.rows(trips, {'A': {1}, 'B': {1}, 'C': {1}, 'D': {1}}))
+        self.assertTrue(any(v['pinned'] for v in cells.values()))
+        # тот же день дважды — три дня, не закреплён
+        cells = coverage.compute(self.rows([('A', 'd1'), ('B', 'd1'), ('C', 'd2'), ('D', 'd3')]))
+        self.assertFalse(any(v['pinned'] for v in cells.values()))
+        # новый объект в последнем проезде — нестабильно
+        cells = coverage.compute(self.rows(trips, {'A': {1}, 'B': {1}, 'C': {1}, 'D': {1, 2}}))
+        self.assertFalse(any(v['pinned'] for v in cells.values()))
+
+    def test_slow_or_unreliable_passes_do_not_count(self):
+        import coverage
+        trips = [('A', 'd1'), ('B', 'd2'), ('C', 'd3'), ('D', 'd4')]
+        self.assertFalse(any(v['pinned'] for v in coverage.compute(self.rows(trips, kmh=5)).values()))
+        self.assertFalse(any(v['pinned'] for v in coverage.compute(self.rows(trips, w=0.2)).values()))
+
+    def test_direction_matters_and_novelty(self):
+        import coverage
+        a, b = at(0, 0), at(200, 0)
+        east = coverage.path_cells([a, b])
+        west = coverage.path_cells([b, a])
+        self.assertTrue({k for k, _ in east}.isdisjoint({k for k, _ in west}))
+        nov, total = coverage.novelty([a, b], {k for k, _ in east})
+        self.assertAlmostEqual(nov, 0.0)
+        self.assertAlmostEqual(total, 200, delta=2)
+        self.assertAlmostEqual(coverage.novelty([b, a], {k for k, _ in east})[0], 1.0)

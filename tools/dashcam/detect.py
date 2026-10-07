@@ -87,7 +87,7 @@ def parse_output(text):
 
 SIGN_DIR = os.path.join(os.path.dirname(catalog.DB_PATH), 'signs')
 SIGN_SHAPES = frozenset(('red_circle', 'blue_circle', 'blue_square', 'red_triangle', 'red_inverted',
-                         'red_octagon', 'yellow_diamond'))
+                         'red_octagon', 'yellow_diamond', 'name_plate', 'orange_cone'))
 
 
 def sign_side(x_src, w_src):
@@ -109,8 +109,13 @@ def sanitize_sign(s):
         return None
     sx, sy = fr.to_src(x, y)
     f = s.get('file')
+    # Текст — только с табличек улиц/домов и никогда похожий на номер машины.
+    text = s.get('text') if s['shape'] == 'name_plate' else None
+    if not isinstance(text, str) or PLATE_RE.search(text) or len(text) > 80:
+        text = None
     return {'shape': s['shape'], 'x': sx, 'y': sy, 'w': w / fr.SCALE, 'h': h / fr.SCALE,
-            'score': score, 'file': f if isinstance(f, str) and f.startswith(SIGN_DIR) else None}
+            'score': score, 'text': text,
+            'file': f if isinstance(f, str) and f.startswith(SIGN_DIR) else None}
 
 
 def run_frames(paths, binary=None):
@@ -168,9 +173,9 @@ def store_signs(conn, f, signs):
     conn.execute('DELETE FROM sign_crops WHERE frame_id=?', (f['id'],))
     for s in signs:
         cur = conn.execute('INSERT INTO sign_crops(frame_id, shape, x, y, w, h, score, t, lat, lon, course, '
-                           'side) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+                           'side, text) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
                            (f['id'], s['shape'], s['x'], s['y'], s['w'], s['h'], s['score'], f['t'],
-                            f['lat'], f['lon'], f['course'], sign_side(s['x'], s['w'])))
+                            f['lat'], f['lon'], f['course'], sign_side(s['x'], s['w']), s.get('text')))
         if s['file'] and os.path.exists(s['file']):
             dst = os.path.join(SIGN_DIR, s['shape'], f'{cur.lastrowid}.jpg')
             os.replace(s['file'], dst)

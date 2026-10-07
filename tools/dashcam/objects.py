@@ -321,4 +321,12 @@ def build_trip(conn, key, lens=None):
             conn.executemany('UPDATE detections SET obj=? WHERE id=?',
                              [(cur.lastrowid, o['id']) for o in tr])
             n += 1
+        # Рывки (кандидаты «лежачий полицейский»): точка — сама машина в момент рывка.
+        for j in conn.execute('SELECT * FROM jolts WHERE trip_key=? AND lat IS NOT NULL', (key,)).fetchall():
+            w = j['weight'] or 0.3
+            conn.execute('INSERT INTO objects(trip_key, cls, lat, lon, err_m, n_frames, method, weight, conf) '
+                         "VALUES(?, 'speed_bump', ?, ?, ?, 1, 'jolt', ?, ?)",
+                         (key, j['lat'], j['lon'], LOC_ERR_BASE_M + LOC_ERR_SPAN_M * (1 - w), w,
+                          min(0.6, j['score'] / 150)))
+            n += 1
     return n

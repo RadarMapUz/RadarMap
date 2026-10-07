@@ -34,8 +34,8 @@ CROPS_DIR = os.path.join(BASE, 'crops')
 
 MERGE_M = 12.0
 MAX_ERR_M = 60.0           # объект с погрешностью больше — в кластеры не идёт
-CONFIRM_M = {'traffic_light': 30.0, 'crossing': 25.0, 'speed_limit': 30.0}
-DIFFER_M = {'traffic_light': 60.0, 'crossing': 50.0, 'speed_limit': 30.0}
+CONFIRM_M = {'traffic_light': 30.0, 'crossing': 25.0, 'speed_limit': 30.0, 'speed_bump': 0.0}
+DIFFER_M = {'traffic_light': 60.0, 'crossing': 50.0, 'speed_limit': 30.0, 'speed_bump': 0.0}
 DECISION_M = 12.0
 CROPS_PER_CLUSTER = 3
 
@@ -212,6 +212,8 @@ def compare(c, pts_idx, seg_idx):
         return ('confirms' if d <= CONFIRM_M[cls] else 'differs'), {
             'near': 'osm_' + ('signal' if cls == 'traffic_light' else 'crossing'),
             'dist_m': round(d, 1), 'lat': hit[1][0], 'lon': hit[1][1]}
+    if cls == 'speed_bump':
+        return 'new', {'near': None, 'note': 'неровностей в нашей карте нет — сверять не с чем'}
     if seg_idx is None:
         return 'new', {'near': None, 'note': 'лимиты не загружены'}
     near = seg_idx.near(c['lat'], c['lon'], CONFIRM_M[cls])

@@ -3,10 +3,11 @@
 // решения Принять/Отклонить и быстрая разметка «да/нет» для обучения.
 // Общие функции (api, esc, $, map, mapReady) — из app.js.
 
-const CLS_NAME = { traffic_light: 'Светофор', speed_limit: 'Знак ограничения', crossing: 'Пешеходный переход' };
+const CLS_NAME = { traffic_light: 'Светофор', speed_limit: 'Знак ограничения', crossing: 'Пешеходный переход',
+  speed_bump: 'Неровность? (рывок)' };
 const ST_NAME = { new: 'новое', confirms: 'подтверждает', differs: 'расходится' };
 const ST_COLOR = { new: '#1f6feb', confirms: '#1a7f37', differs: '#d97706' };
-const CLS_STROKE = { traffic_light: '#111', speed_limit: '#c62828', crossing: '#1565c0' };
+const CLS_STROKE = { traffic_light: '#111', speed_limit: '#c62828', crossing: '#1565c0', speed_bump: '#8d6e63' };
 let tab = 'trips', finds = [], selFind = null, labelItem = null;
 
 // ---------- вкладки ----------
@@ -37,7 +38,8 @@ async function ensureFindLayer() {
       'circle-color': ['match', ['get', 'status'], 'new', ST_COLOR.new, 'confirms', ST_COLOR.confirms,
         'differs', ST_COLOR.differs, '#888'],
       'circle-stroke-color': ['match', ['get', 'cls'], 'traffic_light', CLS_STROKE.traffic_light,
-        'speed_limit', CLS_STROKE.speed_limit, 'crossing', CLS_STROKE.crossing, '#fff'],
+        'speed_limit', CLS_STROKE.speed_limit, 'crossing', CLS_STROKE.crossing,
+        'speed_bump', CLS_STROKE.speed_bump, '#fff'],
       'circle-stroke-width': ['case', ['==', ['get', 'sel'], true], 4, 2],
       'circle-opacity': ['case', ['==', ['get', 'decision'], 'reject'], 0.3, 1],
     } });

@@ -132,6 +132,17 @@ def label_frames(conn, key, wpts, cam_grid, wpt_grid):
     return pos, neg
 
 
+# Камера фиксации висит над дорогой: в выборку и в классификатор идёт верхняя
+# полоса кадра — машины и асфальт только мешают (на целом кадре точность
+# на val была на уровне монетки).
+BAND = 0.55
+
+
+def top_band(src, dst):
+    subprocess.run([os.environ.get('FFMPEG', '/opt/homebrew/bin/ffmpeg'), '-v', 'error', '-y', '-i', src,
+                    '-vf', f'crop=iw:ih*{BAND}:0:0', '-q:v', '4', dst], check=True)
+
+
 def build_dataset(conn, seed=7, log=print):
     _, wpts = geo.load_all_trips(ALL_TRIPS_GPX)
     cams = [(c['lat'], c['lon']) for c in load_cameras()]
@@ -162,7 +173,7 @@ def build_dataset(conn, seed=7, log=print):
             for p in paths:
                 dst = os.path.join(d, k + '_' + os.path.basename(p))
                 if not os.path.exists(dst):
-                    os.link(p, dst)
+                    top_band(p, dst)
             counts[(split[k], lab)] = counts.get((split[k], lab), 0) + len(paths)
     info = {'trips': {s: sorted(k for k in trips if split[k] == s) for s in ('train', 'val')},
             'counts': {f'{a}/{b}': n for (a, b), n in counts.items()}}
@@ -249,10 +260,62 @@ def main(argv=None):
         build_dataset(conn)
     elif argv[0] == 'train':
         train()
+    elif argv[0] == 'oracle':
+        oracle_eval(conn, argv[1:] or None)
+    elif argv[0] == 'mark':
+        print(mark_unlocated(conn, ' '.join(argv[1:]) or 'классификатор «камера близко» не обучен'))
     elif argv[0] == 'predict':
         keys = argv[1:] or [r[0] for r in conn.execute('SELECT DISTINCT trip_key FROM frames')]
         for k in keys:
             print(k, predict(conn, k))
+
+
+
+# ---------- честная проверка и статусы ----------
+
+def oracle_eval(conn, keys=None, log=print):
+    """Опознание при ИДЕАЛЬНЫХ событиях: времена проездов берутся из GPX, камеры —
+    спрятаны. Если даже так цепочка не опознаётся верно, классификатор не спасёт.
+    → [(поездка, статус, событий, найдено, верно)]."""
+    import re
+    import anchorhmm
+    trks, wpts = geo.load_all_trips(ALL_TRIPS_GPX)
+    cams = load_cameras()
+    idx = anchorhmm.CamIndex(cams)
+    osrm = geo.OSRM(conn)
+    keys = keys or [r[0] for r in conn.execute('SELECT DISTINCT trip_key FROM frames WHERE lat IS NOT NULL')]
+    out = []
+    for key in keys:
+        trip = catalog.get_trip(conn, key)
+        odo = locate.Odometer(sync.clean_ocr(catalog.ocr_series(conn, key)))
+        an = [a for a in geo.anchors_for(wpts, trip['start'], trip['end']) if odo.covers(a[0])]
+        if len(an) < 3:
+            continue
+        res = anchorhmm.identify([(a[0], 1.0) for a in an], odo.at, idx, osrm)
+        truth = {}
+        for a in an:
+            m = re.search(r'камера (\d+)', a[3])
+            if m:
+                truth[a[0]] = int(m.group(1))
+        got = [(t, cams[j]['id']) for t, j, _ in res['anchors']]
+        ok = sum(1 for t, cid in got if truth.get(t) == cid)
+        out.append((key, res['status'], len(an), len(got), ok))
+        log(key, res['status'], f'событий {len(an)}, опознано {len(got)}, верно {ok}')
+    return out
+
+
+def mark_unlocated(conn, reason):
+    """Поездки без опор GPX: опоры по видео не найдены — честное «не привязана»."""
+    import batch
+    n = 0
+    with conn:
+        for t in batch.day_trips(conn):
+            if batch.has_anchors(conn, t):
+                continue
+            conn.execute('INSERT OR REPLACE INTO video_geo(trip_key, status, n, detail, computed) '
+                         'VALUES(?,?,?,?,strftime(\'%s\',\'now\'))', (t['key'], 'not_located', 0, reason))
+            n += 1
+    return n
 
 
 if __name__ == '__main__':

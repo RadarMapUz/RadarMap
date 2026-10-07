@@ -183,6 +183,12 @@ CREATE TABLE IF NOT EXISTS sign_clusters(
 );
 -- Сколько кадров ролика не вынуто, потому что участок уже закреплён (coverage.py).
 CREATE TABLE IF NOT EXISTS coverage_skips(clip_id INTEGER PRIMARY KEY, skipped INTEGER, total INTEGER);
+-- Рывки картинки по вертикали (кандидаты «лежачий полицейский»): t — часы регистратора.
+CREATE TABLE IF NOT EXISTS jolts(
+  id INTEGER PRIMARY KEY, trip_key TEXT, clip_id INTEGER, t REAL, score REAL, kmh REAL,
+  lat REAL, lon REAL, course REAL, weight REAL, UNIQUE(clip_id, t)
+);
+CREATE TABLE IF NOT EXISTS jolt_done(clip_id INTEGER PRIMARY KEY, n INTEGER);
 CREATE TABLE IF NOT EXISTS batch_state(
   trip_key TEXT PRIMARY KEY, stage TEXT, error TEXT, updated REAL
 );
@@ -197,6 +203,12 @@ def connect(path=None):
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA journal_mode=WAL')
     conn.executescript(SCHEMA)
+    # Поля, добавленные после первых запусков (CREATE IF NOT EXISTS их не добавит).
+    for table, col in (('sign_crops', 'text TEXT'),):
+        try:
+            conn.execute(f'ALTER TABLE {table} ADD COLUMN {col}')
+        except sqlite3.OperationalError:
+            pass  # уже есть
     return conn
 
 

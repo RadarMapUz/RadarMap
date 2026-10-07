@@ -181,3 +181,64 @@ def extract(path, indices, out_paths, tmpdir):
 def to_src(x, y):
     """Пиксель JPEG кадра детекторов → пиксель исходного кадра 1920×1080."""
     return x / SCALE, y / SCALE + CROP_TOP
+
+
+# ---------- рывок картинки по вертикали (лежачие полицейские) ----------
+
+# Полоса выше горизонта (дома, деревья): при езде вперёд она почти не «растёт»,
+# а при наезде на неровность вся картинка разом прыгает вверх-вниз.
+JOLT_TOP, JOLT_H, JOLT_ROWS = 150, 350, 120
+
+
+def vertical_profile(path):
+    """Профиль яркости по строкам полосы для КАЖДОГО кадра (полный fps):
+    ffmpeg сам усредняет строку до одного пикселя (scale=1:N, area).
+    → (времена кадров, [bytes длиной JOLT_ROWS])."""
+    raw = subprocess.run([FFMPEG, '-v', 'error', '-nostdin', '-i', path, '-fps_mode', 'passthrough', '-vf',
+                          f'crop=iw:{JOLT_H}:0:{JOLT_TOP},scale=1:{JOLT_ROWS}:flags=area,format=gray',
+                          '-f', 'rawvideo', '-'], capture_output=True, check=True).stdout
+    n = len(raw) // JOLT_ROWS
+    return [raw[i * JOLT_ROWS:(i + 1) * JOLT_ROWS] for i in range(n)]
+
+
+def row_shift(a, b, max_s=6):
+    """Сдвиг профиля b относительно a (строк), по минимуму средней |разности|."""
+    best, bs = None, 0
+    n = len(a)
+    for s in range(-max_s, max_s + 1):
+        lo, hi = max(0, -s), min(n, n - s)
+        if hi - lo < n // 2:
+            continue
+        d = sum(abs(a[i] - b[i + s]) for i in range(lo, hi)) / (hi - lo)
+        if best is None or d < best:
+            best, bs = d, s
+    return bs
+
+
+def jolts(times, profiles, speed_at, min_kmh=10.0, window=1.0, min_score=24, rel=5.0):
+    """Ряд сдвигов соседних кадров → события «рывок»: [(t, сила)].
+    Сила — сумма |сдвигов| в окне ±window/2; событие — локальный максимум,
+    превышающий и абсолютный порог, и rel × медиану поездки, на скорости ≥ min_kmh."""
+    shifts = [0] + [row_shift(profiles[i - 1], profiles[i]) for i in range(1, len(profiles))]
+    ts = times[:len(shifts)]
+    score = []
+    j0 = 0
+    acc = 0
+    for i, t in enumerate(ts):
+        acc += abs(shifts[i])
+        while ts[j0] < t - window:
+            acc -= abs(shifts[j0])
+            j0 += 1
+        score.append(acc)
+    nz = sorted(score)
+    med = nz[len(nz) // 2] if nz else 0
+    thr = max(min_score, rel * med)
+    out, last = [], -9
+    for i, t in enumerate(ts):
+        if score[i] < thr or (speed_at(t) or 0) < min_kmh:
+            continue
+        lo, hi = max(0, i - 15), min(len(score), i + 16)
+        if score[i] == max(score[lo:hi]) and t - last > 2.0:
+            out.append((t - window / 2, score[i]))
+            last = t
+    return out

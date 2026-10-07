@@ -519,6 +519,27 @@ struct SignCand: Encodable {
     let x: Double, y: Double, w: Double, h: Double
     let score: Double
     var file: String? = nil
+    var text: String? = nil      // только для табличек улиц/домов
+}
+
+/// Текст таблички улицы/дома. Читается ТОЛЬКО внутри синей таблички; номер
+/// машины так не прочитать (он на белом), а Python-сторона ещё и отбрасывает
+/// всё, похожее на номер.
+func readPlate(_ cg: CGImage, _ c: SignCand) -> String? {
+    let rect = CGRect(x: c.x, y: c.y, width: c.w, height: c.h).insetBy(dx: -2, dy: -2)
+        .intersection(CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+    guard rect.width >= 8, rect.height >= 6, let crop = cropScaled(cg, rect, minH: 72) else { return nil }
+    let req = VNRecognizeTextRequest()
+    req.recognitionLevel = .accurate
+    req.usesLanguageCorrection = true
+    req.recognitionLanguages = ["ru-RU", "en-US"]
+    do { try VNImageRequestHandler(cgImage: crop).perform([req]) } catch { return nil }
+    let parts = (req.results ?? []).compactMap { o -> String? in
+        guard let t = o.topCandidates(1).first, t.confidence >= 0.4 else { return nil }
+        return t.string
+    }
+    let s = parts.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+    return s.count >= 2 ? s : nil
 }
 
 @inline(__always) func isOrange(_ r: Int, _ g: Int, _ b: Int) -> Bool {
@@ -615,6 +636,31 @@ func detectSignCandidates(_ im: RGBA) -> [SignCand] {
             out.append(SignCand(shape: "blue_square", x: Double(b.minX), y: Double(b.minY), w: Double(b.w),
                                 h: Double(b.h), score: cb))
         }
+    }
+    // Таблички улиц и домов: синий вытянутый прямоугольник с белым текстом.
+    for b in components(blue, im.w, ylim) {
+        let a = Double(b.w) / Double(b.h)
+        if a < 1.8 || a > 6.5 || b.w < 24 || b.w > 320 || b.h < 8 || b.h > 90 { continue }
+        if Double(b.minY + b.maxY) / 2 > Double(im.h) * (HORIZON + 0.12) { continue }
+        let fill = Double(b.n) / Double(b.w * b.h)
+        let white = share(im, b, 0.05, 0.95, 0.15, 0.85, isWhitish)
+        if fill < 0.45 || white < 0.08 || white > 0.55 { continue }
+        if corners(im, b, isSignBlue) < 0.4 { continue }
+        out.append(SignCand(shape: "name_plate", x: Double(b.minX), y: Double(b.minY), w: Double(b.w),
+                            h: Double(b.h), score: white))
+    }
+    // Конусы ремонта: красно-оранжевый узкий треугольник на дороге (ниже горизонта).
+    let coneMask = maskOf(im, ylim) { r, g, b in
+        let (h, s, v) = hsv(r, g, b); return h >= 6 && h <= 28 && s >= 0.65 && v >= 0.5 }
+    for b in components(coneMask, im.w, ylim) {
+        let a = Double(b.w) / Double(b.h)
+        if a < 0.3 || a > 0.9 || b.h < 10 || b.h > 90 { continue }
+        if Double(b.minY + b.maxY) / 2 < Double(im.h) * HORIZON { continue }
+        let fill = Double(b.n) / Double(b.w * b.h)
+        let top = rowWidth(coneMask, im.w, b, 0.15), bot = rowWidth(coneMask, im.w, b, 0.85)
+        if fill < 0.3 || fill > 0.75 || bot < top * 1.4 { continue }
+        out.append(SignCand(shape: "orange_cone", x: Double(b.minX), y: Double(b.minY), w: Double(b.w),
+                            h: Double(b.h), score: bot - top))
     }
     // «главная дорога»: оранжевый ромб — заливка ~половина рамки, углы пустые
     yLimit = horizonY
@@ -722,6 +768,7 @@ if args[1] == "detect" {
                 let stem = (path as NSString).lastPathComponent.replacingOccurrences(of: ".jpg", with: "")
                 let parent = ((path as NSString).deletingLastPathComponent as NSString).lastPathComponent
                 for (k, var c) in detectSignCandidates(im).enumerated() {
+                    if c.shape == "name_plate" { c.text = readPlate(cg, c) }
                     let sub = dir + "/" + c.shape
                     try? FileManager.default.createDirectory(atPath: sub, withIntermediateDirectories: true)
                     let file = sub + "/" + parent + "_" + stem + "_\(k).jpg"

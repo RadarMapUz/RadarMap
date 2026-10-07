@@ -180,6 +180,36 @@ def clip_ocr_rows(conn, clip_id):
         'SELECT t, kmh FROM ocr WHERE clip_id=? ORDER BY t', (clip_id,))]
 
 
+# Лежачий полицейский: сильный рывок (сумма сдвигов строк за 1 с) на малой
+# скорости — перед неровностью тормозят. На ходу 50+ км/ч рывки — обычная
+# тряска дороги, их не берём.
+JOLT_MIN_SCORE = 40
+JOLT_MAX_KMH = 30
+
+
+def jolt_clip(conn, clip, local):
+    if conn.execute('SELECT 1 FROM jolt_done WHERE clip_id=?', (clip['id'],)).fetchone():
+        return 0
+    prof = fr.speed_profile(clip_ocr_rows(conn, clip['id']), clip['duration'])
+
+    def speed_at(t):
+        return prof[min(int(t), len(prof) - 1)] if prof else None
+    try:
+        profiles = fr.vertical_profile(local)
+        times = fr.frame_times(local)
+        n = min(len(profiles), len(times))
+        ev = fr.jolts(times[:n], profiles[:n], speed_at, min_score=JOLT_MIN_SCORE)
+    except Exception as e:  # рывки — второстепенное; ролик из-за них не теряем
+        log(f'  рывки {clip["name"]}: {e}')
+        ev = []
+    ev = [(t, s) for t, s in ev if (speed_at(t) or 0) <= JOLT_MAX_KMH]
+    with conn:
+        conn.executemany('INSERT OR IGNORE INTO jolts(trip_key, clip_id, t, score, kmh) VALUES(?,?,?,?,?)',
+                         [(clip['trip_key'], clip['id'], clip['start'] + t, s, speed_at(t)) for t, s in ev])
+        conn.execute('INSERT OR REPLACE INTO jolt_done(clip_id, n) VALUES(?,?)', (clip['id'], len(ev)))
+    return len(ev)
+
+
 def clip_positions(conn, clip, keep=None):
     """Позиции кадров ролика по OCR (путь) → (все позиции, оставленные фильтром keep(t))."""
     prof = fr.speed_profile(clip_ocr_rows(conn, clip['id']), clip['duration'])
@@ -234,6 +264,7 @@ def process_clip(conn, card, clip, ocr_only=False, keep=None):
         clip = conn.execute('SELECT * FROM clips WHERE id=?', (clip['id'],)).fetchone()
         overlay.ocr_clip(conn, clip, log=lambda *_: None, path=local)
         clip = conn.execute('SELECT * FROM clips WHERE id=?', (clip['id'],)).fetchone()
+        jolt_clip(conn, clip, local)
         if ocr_only:
             return 0
         n = 0
@@ -347,7 +378,12 @@ def geo_trip(conn, key):
     anchors = ([{'t': a['t'], 'lat': a['lat'], 'lon': a['lon'], 'name': a['name'],
                  'used': a['used'], 'offset_m': round(a['offset_m'], 1)} for a in g.model.anchors]
                if g.model else [])
+    jupd = []
+    for r in conn.execute('SELECT id, t FROM jolts WHERE trip_key=?', (key,)).fetchall():
+        p = g.locate(r['t'])
+        jupd.append((p[0], p[1], p[2], p[3], r['id']) if p else (None, None, None, None, r['id']))
     with conn:
+        conn.executemany('UPDATE jolts SET lat=?, lon=?, course=?, weight=? WHERE id=?', jupd)
         conn.executemany('UPDATE frames SET lat=?, lon=?, course=?, weight=?, seg=? WHERE id=?', upd)
         conn.execute('DELETE FROM segments WHERE trip_key=?', (key,))
         conn.executemany('INSERT INTO segments(trip_key, idx, t0, t1, line_m, odo_m, residual_m, '

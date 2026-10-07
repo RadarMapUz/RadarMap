@@ -2,7 +2,15 @@
 //  SettingsView.swift
 //  RadarMap
 //
-//  Настройки: звук/голос, радиус оповещения, фильтр по типу.
+//  Настройки — как «Настройки» iPhone: первый экран — короткий список
+//  разделов с цветными иконками, каждый раздел — своя страница.
+//
+//  Раньше это был один экран на четырнадцать секций и три экрана высотой:
+//  нужный тумблер искали прокруткой, а «Офлайн-карты» терялись в середине
+//  «Карты». Список разделов читается за взгляд, справа у раздела — текущее
+//  значение главного выбора (профиль, тема, язык), чтобы не заходить внутрь
+//  ради проверки. Сами настройки и их поведение не менялись — только место.
+//  Страницы — SettingsPages.swift.
 //
 
 import SwiftUI
@@ -10,416 +18,247 @@ import UIKit
 
 struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.dismiss) private var dismiss
+    @State private var showFeedback = false
 
     /// Версия и номер сборки: первое, что спрашивают в ответ на письмо.
-    private static var appVersion: String {
+    static var appVersion: String {
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "—"
         let build = info?["CFBundleVersion"] as? String ?? "—"
         return "\(version) (\(build))"
     }
-    @Environment(\.dismiss) private var dismiss
-    @State private var assignSlot: PlaceSlot?
-    @State private var showFeedback = false
-    @State private var showLanguageRestart = false
 
     var body: some View {
-        @Bindable var settings = env.settings
-
+        let settings = env.settings
         NavigationStack {
-            Form {
+            List {
                 Section {
-                    Toggle("Звук", isOn: $settings.soundEnabled)
-                    if settings.soundEnabled {
-                        HStack(spacing: 10) {
-                            Image(systemName: "speaker.fill").foregroundStyle(Theme.textSecondary)
-                            Slider(value: $settings.alertVolume, in: 0.2...1.0).tint(Theme.accent)
-                            Image(systemName: "speaker.wave.3.fill").foregroundStyle(Theme.textSecondary)
-                        }
-                        // Ползунок без прослушивания — это гадание: громкость
-                        // оповещения зависит и от него, и от системного звука,
-                        // и от того, играет ли музыка. Проверять это на дороге,
-                        // когда камера уже рядом, поздно.
-                        Button {
-                            env.alerts.beep(count: 1)
-                            env.alerts.speak(String(localized: "Камера, триста метров"))
-                        } label: {
-                            Label("Прослушать оповещение", systemImage: "play.circle.fill")
-                                .font(.rounded(14, .semibold))
-                                .foregroundStyle(Theme.accent)
-                        }
+                    link(.alerts, value: settings.alertProfile.title) { AlertSettingsPage() }
+                    link(.speed, value: settings.speedLimitsEnabled
+                         ? Self.tolerance(settings.overspeedTolerance) : String(localized: "Выкл.")) {
+                        SpeedSettingsPage()
                     }
-                    Toggle("Вибрация у камер", isOn: $settings.hapticsEnabled)
-                    // Один профиль вместо четырёх перечислений. Раньше поведение
-                    // задавали голос, режим город/трасса, фоновые баннеры и старт
-                    // поездки, и в трёх из них было своё «Авто»/«Умно» с разным
-                    // смыслом — предсказать комбинацию было нельзя.
-                    Picker("Профиль", selection: $settings.alertProfile) {
-                        ForEach(AlertProfile.allCases) { Text($0.title).tag($0) }
-                    }
-                    Text(settings.alertProfile.detail)
-                        .font(.rounded(11))
-                        .foregroundStyle(Theme.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    // «Свой» — для тех, кто хочет разобрать поведение по частям.
-                    if settings.alertProfile == .custom {
-                        Picker("Голос о камерах", selection: $settings.voiceMode) {
-                            ForEach(VoiceMode.allCases) { Text($0.title).tag($0) }
-                        }
-                        Text(settings.voiceMode.detail)
-                            .font(.rounded(11))
-                            .foregroundStyle(Theme.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Picker("Город или трасса", selection: $settings.alertMode) {
-                            ForEach(AlertMode.allCases) { Text($0.title).tag($0) }
-                        }
-                    }
-
-                    // Голос о САМОМ превышении — отдельно от голоса о камерах:
-                    // просьба из реальной поездки — фраза без камеры впереди
-                    // воспринимается как ворчание, штраф-то возможен у камеры.
-                    Picker("Голос о превышении", selection: $settings.overspeedVoice) {
-                        ForEach(OverspeedVoice.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("Баннеры в фоне", selection: $settings.backgroundAlerts) {
-                        ForEach(BackgroundAlertMode.allCases) { Text($0.title).tag($0) }
-                    }
-                    Toggle("Итоги недели по воскресеньям", isOn: $settings.weeklyDigest)
-                        .onChange(of: settings.weeklyDigest) { _, enabled in
-                            if !enabled { env.notifications.cancelWeeklyDigest() }
-                        }
-                } header: {
-                    Text("Оповещения")
-                } footer: {
-                    SettingsFootnote([
-                        "Звук и вибрация предупреждают о камере всегда. Голос настраивается отдельно.",
-                        "«Авто» различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громче и с лимитом.",
-                        "О камерах, которые вы каждый день проезжаете спокойно, приложение молчит и только отмечает вибрацией. Подъедете с превышением — заговорит.",
-                        "«Голос о превышении» — про фразу без камеры. В режиме «У камер» она звучит, только когда камера впереди по вашей дороге; в остальное время превышение видно цветом скорости.",
-                    ])
+                    link(.trip, value: settings.tripStartMode.title) { TripSettingsPage() }
+                    link(.route) { RouteSettingsPage() }
                 }
 
                 Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Радиус оповещения")
-                            Spacer()
-                            Text("\(Int(settings.alertRadius)) м")
-                                .foregroundStyle(Theme.accent)
-                                .font(.rounded(15, .semibold))
-                        }
-                        Slider(value: $settings.alertRadius, in: 200...1000, step: 50)
-                            .tint(Theme.accent)
-                            .onChange(of: settings.alertRadius) { _, _ in
-                                env.location.refreshMonitoring()
-                            }
-                    }
-                } header: {
-                    Text("Дистанция")
-                } footer: {
-                    Text("За сколько метров до камеры предупреждать. Голос отсчитывает пороги по мере приближения.")
-                        .fixedSize(horizontal: false, vertical: true)
+                    link(.map, value: settings.mapAppearance.title) { MapSettingsPage() }
+                    link(.offline, value: offlineValue) { OfflineMapsView().settingsPage() }
+                    link(.places) { PlacesSettingsPage() }
                 }
 
                 Section {
-                    Toggle("Лимиты скорости", isOn: $settings.speedLimitsEnabled)
-                    if settings.speedLimitsEnabled {
-                        Picker("Допуск превышения", selection: $settings.overspeedTolerance) {
-                            Text("0 км/ч").tag(0.0)
-                            Text("+5 км/ч").tag(5.0)
-                            Text("+10 км/ч").tag(10.0)
-                            Text("+15 км/ч").tag(15.0)
-                            Text("+20 км/ч").tag(20.0)
-                        }
-                    }
-                } header: {
-                    Text("Скорость")
-                } footer: {
-                    Text("Знак лимита дороги на панели и голос при превышении. Допуск — на сколько можно превысить, прежде чем приложение сочтёт это превышением.")
-                        .fixedSize(horizontal: false, vertical: true)
+                    link(.learning) { LearningSettingsPage() }
+                    link(.battery, value: settings.adaptiveGPS
+                         ? String(localized: "Адаптивный GPS") : nil) { BatterySettingsPage() }
+                    link(.privacy) { PrivacySettingsPage() }
                 }
 
                 Section {
-                    Picker("Тип камер", selection: $settings.filter) {
-                        ForEach(CameraFilter.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    Picker("Тема", selection: $settings.mapAppearance) {
-                        ForEach(MapAppearance.allCases) { Text($0.title).tag($0) }
-                    }
-                    Toggle("Кнопки масштаба", isOn: $settings.mapZoomButtons)
-                    NavigationLink {
-                        OfflineMapsView()
-                    } label: {
-                        Label("Офлайн-карты", systemImage: "arrow.down.circle")
-                    }
-                } header: {
-                    Text("Карта")
-                } footer: {
-                    Text("«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Приборка и экран тревоги тёмные всегда.\n\nЧем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу.")
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Section {
-                    Picker("Старт поездки", selection: $settings.tripStartMode) {
-                        ForEach(TripStartMode.allCases) { Text($0.title).tag($0) }
-                    }
-                    .onChange(of: settings.tripStartMode) { _, _ in env.motion.syncEnabled() }
-                    Toggle("Не гасить экран в поездке", isOn: $settings.keepScreenOn)
-                        .onChange(of: settings.keepScreenOn) { _, keepOn in
-                            if env.location.isTripActive {
-                                UIApplication.shared.isIdleTimerDisabled = keepOn
-                            }
-                        }
-                    Toggle("Спидометр при старте поездки", isOn: $settings.dashboardAutoOpens)
-                } footer: {
-                    SettingsFootnote([
-                        "«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола); в чужой сначала спросит «вы за рулём?».",
-                        "«Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем.",
-                        "Заезд по пути — магазин, заправка — новой поездкой не становится: это остановка внутри той же.",
-                        "Спидометр — самый экономный экран: чёрный фон и схема вместо карты. Закрыли руками — до конца поездки сам не откроется.",
-                    ])
-                }
-
-                Section {
-                    Toggle("Голосовая навигация", isOn: $settings.turnByTurnVoice)
-                    Toggle("Варианты маршрута", isOn: $settings.routeAlternatives)
-                    Toggle("Следующая камера в панели", isOn: $settings.showNextCamera)
-                } header: {
-                    Text("Маршрут")
-                } footer: {
-                    Text("Подсказки манёвров «через 300 м направо» и выбор из нескольких вариантов при построении. Панель маршрута может показывать ближайшую камеру по курсу.")
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Section {
-                    Toggle("Адаптивный GPS", isOn: $settings.adaptiveGPS)
-                        .onChange(of: settings.adaptiveGPS) { _, _ in
-                            // Иначе выключение в поездке залипало бы на последнем тире.
-                            env.location.refreshLocationMode()
-                        }
-                } header: {
-                    Text("Батарея")
-                } footer: {
-                    Text("Вдали от камер и манёвров точность GPS снижается, у самой камеры возвращается к максимальной. Выключать стоит, только если кажется, что оповещения запаздывают.")
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                // Что приложение выучивает само. Обе вещи меняют поведение
-                // молча (камера перестала называться вслух, на экране появилась
-                // подсказка «Домой»), поэтому им нужен и тумблер, и объяснение:
-                // необъяснённая догадка читается как сбой.
-                Section {
-                    Toggle("Умная тишина у знакомых камер", isOn: $settings.smartSilence)
-                        .onChange(of: settings.smartSilence) { _, _ in
-                            env.location.refreshFamiliarCameras()
-                        }
-                    Toggle("Подсказка «Домой» и «На работу»", isOn: $settings.destinationSuggestions)
-                        .onChange(of: settings.destinationSuggestions) { _, _ in
-                            env.refreshLearnedPlaces()
-                        }
-                    // Выключенная настройка не должна оставлять данные лежать:
-                    // человек выключил подсказки — значит и списку мест на
-                    // диске взяться неоткуда.
-                    Toggle("Подсказки о треногах по памяти", isOn: $settings.tripodHints)
-                        .onChange(of: settings.tripodHints) { _, enabled in
-                            if enabled {
-                                Task { await env.hotspots.refresh() }
-                            } else {
-                                env.hotspots.clear()
-                            }
-                        }
-                } header: {
-                    Text("Приложение учится")
-                } footer: {
-                    SettingsFootnote([
-                        "Камеру, которую вы проезжаете шесть и больше раз за месяц и ни разу с превышением, приложение перестаёт называть вслух. На карте у неё галочка, предупреждение остаётся.",
-                        "Одно превышение — и она снова говорит. О передвижных радарах, треногах и ДТП голос звучит всегда.",
-                        "Дом и работа определяются по распорядку: куда вы приезжаете вечером и куда утром буднего дня.",
-                        "Всё считается на телефоне и никуда не отправляется.",
-                    ])
-                }
-
-                Section {
-                    ForEach(PlaceSlot.allCases) { slot in
-                        placeRow(slot)
-                    }
-                } header: {
-                    Text("Мои места")
-                } footer: {
-                    Text("Маршрут в один тап из «Поиска» — домой или на работу.")
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Section {
-                    LabeledContent("Версия базы", value: "v\(env.cameras.dbVersion)")
-                    LabeledContent("Своих камер", value: "\(env.cameras.custom.count)")
-                    if !env.cameras.hiddenIDs.isEmpty {
-                        LabeledContent("Скрыто", value: "\(env.cameras.hiddenIDs.count)")
-                    }
-                    Button {
-                        Task { await env.sync.check() }
-                    } label: {
-                        HStack {
-                            Text("Проверить обновления")
-                            Spacer()
-                            syncStatusView
-                        }
-                    }
-                    .disabled(env.sync.state == .checking || env.sync.state == .downloading)
-                } header: {
-                    Text("База камер")
-                } footer: {
-                    if let date = env.sync.lastCheckDate {
-                        Text("Последняя проверка: \(date.formatted(date: .abbreviated, time: .shortened))")
-                    }
-                }
-
-                Section {
-                    Toggle("Помогать улучшать приложение", isOn: $settings.usageStatsEnabled)
-                } header: {
-                    Text("Конфиденциальность")
-                } footer: {
-                    Text("Раз в сутки отправляем обезличенные счётчики: сколько поездок, километров и оповещений было. Ни маршрутов, ни координат, ни времени — только числа. Идентификатор меняется каждые 30 дней.")
-                        .fixedSize(horizontal: false, vertical: true)
+                    link(.database, value: "v\(env.cameras.dbVersion)") { DatabaseSettingsPage() }
+                    link(.language, value: settings.appLanguage.title) { LanguageSettingsPage() }
                 }
 
                 Section {
                     Button {
                         showFeedback = true
                     } label: {
-                        HStack {
-                            Label("Написать разработчику", systemImage: "envelope.fill")
-                                .foregroundStyle(Theme.textPrimary)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.rounded(12, .semibold))
-                                .foregroundStyle(Theme.textTertiary)
-                        }
+                        SettingsRow(.feedback)
                     }
-                } header: {
-                    Text("Обратная связь")
-                } footer: {
-                    Text("Ошибки, идеи, неточные камеры — мы читаем каждое сообщение и правим базу.")
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Section {
-                    Picker("Язык приложения", selection: $settings.appLanguage) {
-                        ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
-                    }
-                    .onChange(of: settings.appLanguage) { _, _ in
-                        showLanguageRestart = true
-                    }
-                } header: {
-                    Text("Язык")
-                }
-
-
-                // Страница проекта: что это, откуда данные, политика,
-                // возможность помочь. Внутрь приложения платёжная кнопка не
-                // ставится намеренно — App Review отдельно смотрит на ссылки,
-                // уводящие на стороннюю оплату (Guideline 3.1.1). Здесь —
-                // обычная ссылка на сайт проекта, а поддержка живёт на нём.
-                Section {
+                    .tint(Theme.textPrimary)
+                    // Страница проекта: что это, откуда данные, политика,
+                    // возможность помочь. Внутрь приложения платёжная кнопка
+                    // не ставится намеренно — App Review отдельно смотрит на
+                    // ссылки, уводящие на стороннюю оплату (Guideline 3.1.1).
+                    // Здесь — обычная ссылка на сайт проекта.
                     Link(destination: AppConfig.projectPageURL) {
-                        HStack {
-                            Label("Страница проекта", systemImage: "safari.fill")
-                                .foregroundStyle(Theme.textPrimary)
-                            Spacer()
-                            Image(systemName: "arrow.up.right")
-                                .font(.rounded(12, .semibold))
-                                .foregroundStyle(Theme.textTertiary)
-                        }
+                        SettingsRow(.project, accessory: "arrow.up.right")
                     }
-                    HStack {
-                        Label("Версия", systemImage: "number")
-                            .foregroundStyle(Theme.textSecondary)
-                        Spacer()
-                        Text(Self.appVersion)
-                            .font(.rounded(14).monospacedDigit())
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                } header: {
-                    Text("О приложении")
+                    .tint(Theme.textPrimary)
+                    SettingsRow(.version, value: Self.appVersion)
                 } footer: {
                     Text("Карты и ограничения скорости — © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки.")
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(Theme.screenBackground)
-            .backport.scrollEdgeEffectStyle(.hard, for: .top)
+            .settingsPage("Настройки")
             .onAppear { env.usage.noteScreen("settings") }
-            .navigationTitle("Настройки")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Готово") { dismiss() }
                 }
             }
-            .sheet(item: $assignSlot) { slot in
-                SearchView(initialAssign: slot)
-            }
             .sheet(isPresented: $showFeedback) {
                 FeedbackFormView()
             }
-            .alert("Язык изменён", isPresented: $showLanguageRestart) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text("Перезапустите приложение, чтобы язык применился полностью.")
-            }
         }
     }
 
-    private func placeRow(_ slot: PlaceSlot) -> some View {
-        let place = env.settings.place(for: slot)
-        return HStack(spacing: 12) {
-            Image(systemName: slot.symbol)
-                .foregroundStyle(place == nil ? Theme.textSecondary : Theme.accent)
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(slot.name)
-                if let place {
-                    Text(place.title)
-                        .font(.rounded(12))
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
-                }
-            }
-            Spacer()
-            Button(place == nil ? String(localized: "Задать") : String(localized: "Изменить")) { assignSlot = slot }
-                .font(.rounded(13, .semibold))
-                .foregroundStyle(Theme.accent)
-                .buttonStyle(.borderless)
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if place != nil {
-                Button(role: .destructive) {
-                    env.settings.setPlace(nil, for: slot)
-                } label: {
-                    Label("Удалить", systemImage: "trash")
-                }
-            }
+    private func link<Page: View>(_ item: SettingsItem, value: String? = nil,
+                                  @ViewBuilder page: @escaping () -> Page) -> some View {
+        NavigationLink {
+            page()
+        } label: {
+            SettingsRow(item, value: value)
         }
     }
 
-    @ViewBuilder private var syncStatusView: some View {
-        switch env.sync.state {
-        case .checking, .downloading:
-            ProgressView().controlSize(.small)
-        case .upToDate:
-            Label("Актуальна", systemImage: "checkmark.circle.fill")
-                .font(.rounded(13)).foregroundStyle(Theme.success).labelStyle(.titleAndIcon)
-        case .updated:
-            Label("Обновлено", systemImage: "arrow.down.circle.fill")
-                .font(.rounded(13)).foregroundStyle(Theme.accent).labelStyle(.titleAndIcon)
-        case .failed:
-            Label("Ошибка сети", systemImage: "wifi.slash")
-                .font(.rounded(13)).foregroundStyle(Theme.danger).labelStyle(.titleAndIcon)
-        case .idle:
-            EmptyView()
+    /// Справа у «Офлайн-карт»: сколько занято, если что-то скачано.
+    private var offlineValue: String? {
+        let used = env.offlineMaps.usedBytes
+        return used > 0 ? OfflineMapsView.size(used) : nil
+    }
+
+    static func tolerance(_ value: Double) -> String {
+        value == 0 ? "0 км/ч" : "+\(Int(value)) км/ч"
+    }
+}
+
+// MARK: - Строка раздела
+
+/// Раздел настроек: иконка, цвет плитки, название. Один список вместо
+/// разбросанных по строкам `Label(systemImage:)` — цвета разделов не
+/// повторяются у соседей и не спорят с цветами камер.
+enum SettingsItem {
+    case alerts, speed, trip, route
+    case map, offline, places
+    case learning, battery, privacy
+    case database, language
+    case feedback, project, version
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .alerts:   return "Оповещения и звук"
+        case .speed:    return "Скорость"
+        case .trip:     return "Поездка"
+        case .route:    return "Маршрут"
+        case .map:      return "Карта"
+        case .offline:  return "Офлайн-карты"
+        case .places:   return "Мои места"
+        case .learning: return "Приложение учится"
+        case .battery:  return "Батарея"
+        case .privacy:  return "Конфиденциальность"
+        case .database: return "База камер"
+        case .language: return "Язык"
+        case .feedback: return "Написать разработчику"
+        case .project:  return "Страница проекта"
+        case .version:  return "Версия"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .alerts:   return "bell.badge.fill"
+        case .speed:    return "gauge.with.dots.needle.67percent"
+        case .trip:     return "car.fill"
+        case .route:    return "arrow.triangle.turn.up.right.diamond.fill"
+        case .map:      return "map.fill"
+        case .offline:  return "arrow.down.circle.fill"
+        case .places:   return "house.fill"
+        case .learning: return "sparkles"
+        case .battery:  return "battery.75percent"
+        case .privacy:  return "hand.raised.fill"
+        case .database: return "camera.fill"
+        case .language: return "globe"
+        case .feedback: return "envelope.fill"
+        case .project:  return "safari.fill"
+        case .version:  return "info.circle.fill"
+        }
+    }
+
+    /// Системные цвета iOS — те же, что у плиток в «Настройках» iPhone:
+    /// плитка — опознавательный знак раздела, а не элемент палитры приложения.
+    var tint: Color {
+        switch self {
+        case .alerts:   return Color(uiColor: .systemRed)
+        case .speed:    return Color(uiColor: .systemOrange)
+        case .trip:     return Color(uiColor: .systemGreen)
+        case .route:    return Color(uiColor: .systemBlue)
+        case .map:      return Color(uiColor: .systemTeal)
+        case .offline:  return Color(uiColor: .systemIndigo)
+        case .places:   return Color(uiColor: .systemBlue)
+        case .learning: return Color(uiColor: .systemPurple)
+        case .battery:  return Color(uiColor: .systemGreen)
+        case .privacy:  return Color(uiColor: .systemBlue)
+        case .database: return Color(uiColor: .systemGray)
+        case .language: return Color(uiColor: .systemBlue)
+        case .feedback: return Color(uiColor: .systemBlue)
+        case .project:  return Color(uiColor: .systemCyan)
+        case .version:  return Color(uiColor: .systemGray)
+        }
+    }
+}
+
+/// Плитка раздела: белый символ на цветном скруглённом квадрате.
+struct SettingsIcon: View {
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 29, height: 29)
+            .background(tint.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .accessibilityHidden(true)
+    }
+}
+
+struct SettingsRow: View {
+    private let item: SettingsItem
+    private let value: String?
+    private let accessory: String?
+
+    init(_ item: SettingsItem, value: String? = nil, accessory: String? = nil) {
+        self.item = item
+        self.value = value
+        self.accessory = accessory
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            SettingsIcon(symbol: item.symbol, tint: item.tint)
+            Text(item.title)
+                .foregroundStyle(Theme.textPrimary)
+            Spacer(minLength: 8)
+            if let value {
+                Text(value)
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)
+            }
+            if let accessory {
+                Image(systemName: accessory)
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+extension View {
+    /// Общий вид страницы настроек: фон приложения, заголовок посередине.
+    func settingsPage(_ title: LocalizedStringKey? = nil) -> some View {
+        self
+            .scrollContentBackground(.hidden)
+            .background(Theme.screenBackground)
+            .backport.scrollEdgeEffectStyle(.hard, for: .top)
+            .modifier(SettingsTitle(title: title))
+    }
+}
+
+private struct SettingsTitle: ViewModifier {
+    let title: LocalizedStringKey?
+
+    func body(content: Content) -> some View {
+        if let title {
+            content
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+        } else {
+            content.navigationBarTitleDisplayMode(.inline)
         }
     }
 }

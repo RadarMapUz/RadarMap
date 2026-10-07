@@ -40,6 +40,7 @@ enum Storage {
         case hintTogglesShown       // разовая подсказка «долгий тап — переключатели» показана
         case hintRadarShown         // разовая подсказка «жёлтая кнопка — радар» показана
         case hintSilenceShown       // разовая подсказка «знакомые камеры не называю вслух» показана
+        case offlineOfferAnswered   // на предложение «скачать карту области» ответили (любой ответ)
         case mergeSuggestDismissedID // id поездки, для которой «Объединить?» отклонили
         case pendingReports         // отметки, ждущие связи (ReportQueue)
         case myReports              // свои отметки и их судьба (счётчик в Итогах)

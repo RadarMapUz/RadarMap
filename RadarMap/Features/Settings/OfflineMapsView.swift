@@ -155,10 +155,11 @@ struct OfflineMapsView: View {
     /// Область дома — по адресу «Дом», иначе по выученному дому, иначе там,
     /// где человек сейчас.
     private func recommended(in catalog: RegionCatalog) -> RegionCatalog.Region? {
-        let home = env.settings.homePlace?.coordinate
-            ?? env.learnedPlaces.first { $0.kind == .home }?.coordinate
-            ?? env.location.currentCoordinate
-        return home.flatMap { catalog.region(containing: $0) }
+        let anchor = OfflineOffer.anchor(
+            home: env.settings.homePlace?.coordinate,
+            learnedHome: env.learnedPlaces.first { $0.kind == .home }?.coordinate,
+            current: env.location.currentCoordinate)
+        return anchor.flatMap { catalog.region(containing: $0) }
     }
 
     private func sorted(_ regions: [RegionCatalog.Region]) -> [RegionCatalog.Region] {

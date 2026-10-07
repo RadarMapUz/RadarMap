@@ -23,14 +23,21 @@ import os
 @Observable
 final class NetworkMonitor {
     private(set) var isOnline = true   // до первого ответа считаем, что связь есть
+    /// Связь платная или урезанная (сотовая, режим экономии трафика). До
+    /// первого ответа — да: предложить скачать сотни мегабайт по мобильной
+    /// сети хуже, чем не предложить вовсе.
+    private(set) var isExpensive = true
 
     @ObservationIgnored private let monitor = NWPathMonitor()
 
     init() {
         monitor.pathUpdateHandler = { [weak self] path in
             let online = path.status == .satisfied
+            let expensive = path.isExpensive || path.isConstrained
             Task { @MainActor [weak self] in
-                guard let self, self.isOnline != online else { return }
+                guard let self else { return }
+                if self.isExpensive != expensive { self.isExpensive = expensive }
+                guard self.isOnline != online else { return }
                 self.isOnline = online
                 Log.network.notice("связь: \(online ? "есть" : "нет", privacy: .public)")
             }

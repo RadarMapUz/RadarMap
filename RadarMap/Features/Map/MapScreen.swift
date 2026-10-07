@@ -130,6 +130,12 @@ struct MapScreen: View {
             Task {
                 await Task.pause(seconds: 3)
                 maybeShowHint()
+                // Каталог областей — маленький подписанный файл; нужен, только
+                // пока на предложение скачать карту не ответили.
+                if !Storage.bool(.offlineOfferAnswered), env.offlineMaps.catalog == nil,
+                   !env.network.isExpensive {
+                    await env.offlineMaps.refreshCatalog()
+                }
             }
         }
         .onChange(of: env.settings.filter) { _, newValue in
@@ -975,6 +981,8 @@ struct MapScreen: View {
                         // всегда, и незаданные выглядели невыполненным
                         // заданием от приложения человеку; распорядок оно
                         // знает само (FrequentPlaces).
+                        // Разовое «Карта без интернета?» — до первого ответа.
+                        OfflineOfferCard(ownMap: shownBase == .engine)
                         DestinationSuggestionBar { coordinate, name in
                             buildRoute(to: coordinate, name: name)
                         }

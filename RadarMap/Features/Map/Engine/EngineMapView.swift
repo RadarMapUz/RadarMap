@@ -71,6 +71,13 @@ struct EngineMapView: UIViewRepresentable {
     /// Тепловой режим и энергосбережение: частота кадров и порог сдвига.
     var performance: PerformanceMode = .full
     var lowPower: Bool = false
+    /// Север вверху (режим «следить»); иначе карта крутится по курсу.
+    var northUp: Bool = false
+    /// Кнопки «+ / −»: счётчик нажатий и шаг — для свободной карты.
+    var zoomCommand: Int = 0
+    var zoomDelta: Double = 0
+    /// Поворот карты (градусы от севера) — компасу экрана.
+    var onHeading: (Double) -> Void = { _ in }
     var onBrowse: () -> Void = {}
     var onSelectCamera: (Camera) -> Void = { _ in }
 
@@ -90,7 +97,11 @@ struct EngineMapView: UIViewRepresentable {
         view.isScrollEnabled = true
         view.isZoomEnabled = true
         view.isRotateEnabled = true
-        view.isPitchEnabled = false
+        // Наклон двумя пальцами — как у навигаторов, но не круче 45°: выше
+        // начинается известная беда движка (#3029, перегрев), см.
+        // AppConfig.engineMapPitchDegrees.
+        view.isPitchEnabled = true
+        view.maximumPitch = AppConfig.engineMapPitchDegrees
         view.compassView.isHidden = true
         view.logoView.isHidden = true
         // Ссылка на источник данных обязана остаться: тайлы построены по OSM.
@@ -180,6 +191,7 @@ struct EngineMapView: UIViewRepresentable {
         /// работаем как прежняя карта — со своим индексом, а не пустой.
         private var modernBroken = false
         private var lastFPS: Int?
+        private var lastZoomCommand = 0
 
         // MapLibre invokes this for every native camera gesture, including tap zoom.
         func mapView(_ mapView: MLNMapView, shouldChangeFrom oldCamera: MLNMapCamera,
@@ -193,6 +205,7 @@ struct EngineMapView: UIViewRepresentable {
 
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
             if let current, styleReady { updateCameras(current, in: mapView) }
+            current?.onHeading(mapView.direction)
         }
 
         #if DEBUG
@@ -511,7 +524,8 @@ struct EngineMapView: UIViewRepresentable {
             // contentInset» — известная беда движка (issue #3029, до 400 %
             // процессора и перегрев). Смещаем саму точку взгляда вперёд по
             // курсу: та же картинка, обычной арифметикой.
-            let heading = EngineMapPresentation.heading(model.courseDegrees, near: view.direction)
+            let heading = model.northUp ? 0
+                : EngineMapPresentation.heading(model.courseDegrees, near: view.direction)
             let ahead = model.spanMeters * (model.anchorY - 0.5)
             let centre = GeoMath.destination(from: model.coordinate,
                                               bearing: heading,
@@ -531,6 +545,7 @@ struct EngineMapView: UIViewRepresentable {
                 || GeoMath.angleDifference(previous.courseDegrees, model.courseDegrees) >= AppConfig.engineCameraHeadingThreshold
                 || abs(previous.spanMeters - model.spanMeters) >= AppConfig.engineCameraSpanThreshold
                 || previous.pitchDegrees != model.pitchDegrees || previous.anchorY != model.anchorY
+                || previous.northUp != model.northUp
             } ?? true
             // Частота кадров: полная — только когда водитель сам двигает карту.
             let fps = Self.framesPerSecond(browsing: browsing, performance: model.performance,
@@ -540,6 +555,14 @@ struct EngineMapView: UIViewRepresentable {
                 view.preferredFramesPerSecond = fps > 0
                     ? MLNMapViewPreferredFramesPerSecond(rawValue: fps)
                     : .default
+            }
+            // «+ / −» на свободной карте приближают сам вид; при слежении масштаб
+            // уже учтён в охвате (spanMeters).
+            if model.zoomCommand != lastZoomCommand {
+                lastZoomCommand = model.zoomCommand
+                if browsing {
+                    view.setZoomLevel(min(19, max(5, view.zoomLevel + model.zoomDelta)), animated: true)
+                }
             }
             if !browsing && changed {
                 let now = CACurrentMediaTime()

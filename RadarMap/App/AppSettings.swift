@@ -438,6 +438,23 @@ final class AppSettings {
         get { voiceMode != .off }
         set { voiceMode = newValue ? .smart : .off }
     }
+
+    /// Беззвучно (кнопка с динамиком на карте): ни голоса, ни сигналов.
+    /// Вибрация и экран тревоги остаются — камера не исчезает, она молчит.
+    var isMuted: Bool { !soundEnabled && voiceMode == .off }
+
+    /// Выключить/вернуть звук одной кнопкой. Возвращается ПРЕЖНИЙ режим
+    /// голоса, а не «по умолчанию»: выбранное человеком не теряется.
+    func setMuted(_ muted: Bool) {
+        if muted {
+            if voiceMode != .off { store.set(voiceMode.rawValue, forKey: Keys.voiceBeforeMute) }
+            soundEnabled = false
+            voiceMode = .off
+        } else {
+            soundEnabled = true
+            voiceMode = store.string(forKey: Keys.voiceBeforeMute).flatMap(VoiceMode.init(rawValue:)) ?? .smart
+        }
+    }
     var alertRadius: CLLocationDistance { didSet { store.set(alertRadius, forKey: Keys.radius) } }
     var filter: CameraFilter { didSet { store.set(filter.rawValue, forKey: Keys.filter) } }
     /// Режим старта поездки (заменил тумблер «Автостарт», см. миграцию в init).
@@ -534,6 +551,12 @@ final class AppSettings {
     /// её увидели тестировщики; выключатель — без релиза, если на живом
     /// телефоне что-то пойдёт не так.
     var mapModernStyle: Bool { didSet { store.set(mapModernStyle, forKey: Keys.mapModernStyle) } }
+    /// 3D-вид: карта наклонена, видно дорогу вперёд (кнопка «3D» на карте).
+    /// Запоминается: выбор человека сильнее режима.
+    var map3D: Bool { didSet { store.set(map3D, forKey: Keys.map3D) } }
+    /// Кнопки масштаба «+ / −» на карте. За рулём масштаб ведёт автозум по
+    /// скорости, поэтому кнопки можно убрать в настройках.
+    var mapZoomButtons: Bool { didSet { store.set(mapZoomButtons, forKey: Keys.mapZoomButtons) } }
     /// Имена знакомых автомобильных магнитол (BT): подключены к своей машине —
     /// автостарт не переспрашивает «вы за рулём?».
     var knownCarAudio: [String] { didSet { store.set(knownCarAudio, forKey: Keys.knownCarAudio) } }
@@ -609,6 +632,9 @@ final class AppSettings {
         static let mapHouses = "mapHouses"
         static let mapSidewalks = "mapSidewalks"
         static let mapModernStyle = "mapModernStyle"
+        static let map3D = "map3D"
+        static let voiceBeforeMute = "voiceBeforeMute"
+        static let mapZoomButtons = "mapZoomButtons"
         static let sketchWhileDriving = "sketchWhileDriving"
         static let engineMap = "engineMapEnabled"
         static let mapBase = "mapBase"
@@ -650,6 +676,8 @@ final class AppSettings {
             Keys.tripodHints: true,
             Keys.mapPlaces: true,
             Keys.mapModernStyle: true,
+            Keys.map3D: true,
+            Keys.mapZoomButtons: true,
         ])
         soundEnabled = store.bool(forKey: Keys.sound)
         // Миграция с трёх переключателей на один. Голос был выключен — «Молча»;
@@ -698,6 +726,8 @@ final class AppSettings {
         mapHouses = store.bool(forKey: Keys.mapHouses)
         mapSidewalks = store.bool(forKey: Keys.mapSidewalks)
         mapModernStyle = store.bool(forKey: Keys.mapModernStyle)
+        map3D = store.bool(forKey: Keys.map3D)
+        mapZoomButtons = store.bool(forKey: Keys.mapZoomButtons)
         engineMap = store.bool(forKey: Keys.engineMap)
         // Перенос со старых тумблеров: выбор человека не теряется при
         // обновлении — кто включил схему, с ней и останется.

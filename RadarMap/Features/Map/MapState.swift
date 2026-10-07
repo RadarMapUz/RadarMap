@@ -67,6 +67,56 @@ final class MapState {
 
     private(set) var orientation: Orientation = .following
 
+    // MARK: - Вид: 3D и масштаб кнопками (общие для карты Apple и движка)
+
+    /// 3D-вид из настроек (кнопка «3D»): ставит MapScreen, читают обе карты.
+    var prefers3D = true
+
+    /// Масштаб кнопками «+ / −» поверх автозума: шаг — вдвое, плюс — ближе.
+    /// Автозум по скорости остаётся: кнопка сдвигает его, а не выключает.
+    private(set) var zoomBias: Double = 0
+    /// Счётчик нажатий и шаг последнего — движку, когда карта свободна
+    /// (тогда приближает сам вид, а не охват слежения).
+    private(set) var zoomCommand = 0
+    private(set) var lastZoomDelta: Double = 0
+
+    func zoomStep(_ delta: Double) {
+        zoomBias = min(3, max(-3, zoomBias + delta))
+        lastZoomDelta = delta
+        zoomCommand += 1
+        // Карта Apple в слежении по курсу берёт масштаб из followDistance
+        // (следующий фикс); в остальных режимах — приближаем регион сразу.
+        if orientation != .heading { zoom(delta > 0 ? 0.5 : 2) }
+    }
+
+    /// Карту утащили пальцем (движок сообщает о жесте) — она больше не едет
+    /// за машиной; кнопка «моё местоположение» вернёт.
+    func releaseToFree() {
+        guard orientation != .free else { return }
+        orientation = .free
+        followsDeviceHeading = false
+    }
+
+    /// Карта повёрнута (не север вверху) — компасу. Отдельно от mapHeading и
+    /// пишется только на смене: тот меняется на каждом изгибе дороги, и
+    /// чтение его телом экрана пересобирало бы весь главный экран.
+    private(set) var isRotated = false
+    /// Поворот карты для стрелки компаса, шаг 10° — читает только компас.
+    private(set) var displayedDirection: Double = 0
+
+    func noteMapDirection(_ degrees: Double) {
+        let rotated = abs(remainder(degrees, 360)) > 2
+        if rotated != isRotated { isRotated = rotated }
+        let stepped = (degrees / 10).rounded() * 10
+        if stepped != displayedDirection { displayedDirection = stepped }
+    }
+
+    /// Тап по компасу: север вверх, слежение за машиной.
+    func showNorth(coordinate: CLLocationCoordinate2D?, inTrip: Bool) {
+        orientationChosenByHand = true
+        apply(orientation: .following, coordinate: coordinate, course: -1, inTrip: inTrip)
+    }
+
     /// Ориентацию выбрали пальцем, а не вывел режим.
     ///
     /// Без этого флага выбор человека терялся ДВАЖДЫ за поездку: старт ставил
@@ -103,6 +153,8 @@ final class MapState {
     func setMapHeading(_ heading: Double?) {
         let quantized = heading.map { ($0 / 5).rounded() * 5 }
         if mapHeading != quantized { mapHeading = quantized }
+        // nil — карту крутит компас телефона: она повёрнута.
+        noteMapDirection(quantized ?? 90)
     }
 
     /// Точка, от которой считается важность маркеров (CameraTier).
@@ -386,7 +438,7 @@ final class MapState {
                 // (магнитное поле машины), да и смотрит водитель вперёд, а не
                 // туда, куда лежит телефон.
                 followsDeviceHeading = false
-                follow(coordinate: coordinate, course: course, pitched: true, force: true)
+                follow(coordinate: coordinate, course: course, pitched: prefers3D, force: true)
             } else {
                 followsDeviceHeading = true
                 setMapHeading(nil)   // карту крутит компас телефона — угла мы не знаем
@@ -440,6 +492,7 @@ final class MapState {
         // Автозум: стоишь — ближе, летишь — шире. Ступень меняем только
         // целиком — шум скорости не должен заставлять карту дышать.
         let target = Self.cameraDistance(forSpeedKmh: speedKmh, pitched: pitched)
+            * pow(2, -zoomBias)
         if followDistance == 0 || abs(target - followDistance) >= 100 {
             followDistance = target
         }

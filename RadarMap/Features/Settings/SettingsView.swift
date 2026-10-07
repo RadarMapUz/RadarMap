@@ -148,6 +148,7 @@ struct SettingsView: View {
                     Picker("Тема", selection: $settings.mapAppearance) {
                         ForEach(MapAppearance.allCases) { Text($0.title).tag($0) }
                     }
+                    Toggle("Кнопки масштаба", isOn: $settings.mapZoomButtons)
                 } header: {
                     Text("Карта")
                 } footer: {

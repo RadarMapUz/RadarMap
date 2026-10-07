@@ -207,7 +207,7 @@ struct LocationFollowDriver: View {
                                    ? env.location.displayCourse
                                    : env.location.currentCourse,
                                speedKmh: env.location.speedKmh,
-                               pitched: true)
+                               pitched: map.prefers3D)
                 }
                 if let coordinate = env.location.currentCoordinate {
                     map.snapToUserOnce(coordinate)   // первый фикс после запуска → окрестности

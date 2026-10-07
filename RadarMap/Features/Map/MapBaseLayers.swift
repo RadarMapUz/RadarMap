@@ -30,8 +30,11 @@ struct EngineBaseLayer: View {
     var onSelectCamera: (Camera) -> Void = { _ in }
     @Environment(AppEnvironment.self) private var env
     let state: SketchState
-    @State private var browsing = false
+    /// Общий вид главного экрана: ориентация, 3D, масштаб кнопками — одни на
+    /// карту Apple и движок, чтобы кнопки на карте значили одно и то же.
+    let map: MapState
     @State private var recenterToken = 0
+    private var browsing: Bool { map.orientation == .free }
 
     var body: some View {
         let me = env.location.displayCoordinate ?? env.location.currentCoordinate
@@ -59,11 +62,17 @@ struct EngineBaseLayer: View {
                         courseDegrees: env.location.displayCourse,
                         // Ступенями: дрожание скорости и дистанции до манёвра на
                         // стоянке запускало новую анимацию камеры каждый фикс.
-                        spanMeters: (span / AppConfig.engineSpanStep).rounded() * AppConfig.engineSpanStep,
+                        // «+ / −» сдвигают автозум вдвое за нажатие.
+                        spanMeters: (span * pow(2, -map.zoomBias) / AppConfig.engineSpanStep).rounded()
+                            * AppConfig.engineSpanStep,
                         anchorY: insets.meY,
-                        pitchDegrees: !env.location.isTripActive ? 0 : (AppConfig.engineMapPitchDegrees
-                            * min(1, max(0, (maneuverDistance ?? AppConfig.engineManeuverApproachMeters)
-                                         / AppConfig.engineManeuverApproachMeters))
+                        // 3D — кнопкой «3D» (по умолчанию включено); в поездке
+                        // наклон уменьшается к манёвру — развилку видно сверху.
+                        pitchDegrees: !map.prefers3D ? 0 : (AppConfig.engineMapPitchDegrees
+                            * (env.location.isTripActive
+                               ? min(1, max(0, (maneuverDistance ?? AppConfig.engineManeuverApproachMeters)
+                                            / AppConfig.engineManeuverApproachMeters))
+                               : 1)
                             / AppConfig.enginePitchStep).rounded() * AppConfig.enginePitchStep,
                         daylight: env.settings.mapAppearance.isDaylight(at: me, now: Date()),
                         houses: env.settings.mapHouses,
@@ -81,14 +90,19 @@ struct EngineBaseLayer: View {
                         modernStyle: env.settings.mapModernStyle,
                         performance: env.thermal.mode,
                         lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled,
-                        onBrowse: { browsing = true },
+                        northUp: map.orientation == .following,
+                        zoomCommand: map.zoomCommand,
+                        zoomDelta: map.lastZoomDelta,
+                        onHeading: { map.noteMapDirection($0) },
+                        onBrowse: { map.releaseToFree() },
                         onSelectCamera: onSelectCamera)
                     if browsing {
                         VStack {
                             Spacer()
                             Button {
-                                browsing = false
-                                recenterToken += 1
+                                map.cycleOrientation(coordinate: env.location.currentCoordinate,
+                                                     course: env.location.currentCourse,
+                                                     inTrip: env.location.isTripActive)
                             } label: {
                                 Label("К машине", systemImage: "location.fill")
                                     .font(.rounded(14, .semibold))
@@ -101,6 +115,11 @@ struct EngineBaseLayer: View {
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
+                // Кнопка «моё местоположение» (или «К машине») вывела карту из
+                // свободы — движок снова цепляется за машину.
+                .onChange(of: map.orientation) { old, new in
+                    if old == .free, new != .free { recenterToken += 1 }
+                }
             }
         } else {
             SketchPalette.ground

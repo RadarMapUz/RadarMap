@@ -364,7 +364,7 @@ struct MapScreen: View {
             #if canImport(MapLibre)
             // Карту рисует движок. Панели поверх — те же: они про скорость и
             // камеры, а не про подложку.
-            EngineBaseLayer(onSelectCamera: { map.select($0) }, state: sketch).ignoresSafeArea()
+            EngineBaseLayer(onSelectCamera: { map.select($0) }, state: sketch, map: map).ignoresSafeArea()
             #else
             mapLayer.ignoresSafeArea().environment(\.colorScheme, scheme)
             #endif
@@ -758,11 +758,22 @@ struct MapScreen: View {
                              showsBuildingLayers: shownBase != .apple,
                              available: Self.availableBases,
                              showsLegend: shownBase == .apple)
+            // Вид карты, как у навигаторов: 2D/3D, «моё местоположение»
+            // (1-й тап — к машине, 2-й — по ходу движения), компас — только
+            // когда карта повёрнута, звук. Масштаб — вне поездки: за рулём его
+            // ведёт автозум, и колонка не должна перерасти маленький экран.
+            Map3DToggle(map: map)
             MapOrientationControl(orientation: map.orientation) {
                 map.cycleOrientation(coordinate: env.location.currentCoordinate,
                                      course: env.location.currentCourse,
                                      inTrip: env.location.isTripActive)
             }
+            MapCompassButton(map: map)
+            if env.settings.mapZoomButtons && !mode.showsTripBar {
+                MapZoomButtons(map: map)
+                    .transition(.scale.combined(with: .opacity))
+            }
+            MapMuteButton()
             // Жёлтой кнопки «Радар здесь» здесь БОЛЬШЕ НЕТ, и это не потеря.
             //
             // В поездке их было две, обе жёлтые, обе на одном экране — и

@@ -4280,7 +4280,30 @@ def mouth_outline(legs):
         out.reverse()
     if surface_check.defect(out) is not None:
         return None
+    # Звезда: острый угол контура — устье узкого примыкания вылезло лучом
+    # (Чиланзар, 07.10.2026). Такой контур не годится — прежняя оболочка.
+    if _sharpest_degrees(ring) < MOUTH_MIN_CORNER_DEGREES:
+        return None
     return out
+
+
+MOUTH_MIN_CORNER_DEGREES = 40.0
+
+
+def _sharpest_degrees(ring):
+    """Самый острый внутренний угол кольца (в метрах, xy), рёбра длиннее 0,5 м."""
+    best = 180.0
+    n = len(ring)
+    for i in range(n):
+        a, b, c = ring[i - 1], ring[i], ring[(i + 1) % n]
+        u = (a[0] - b[0], a[1] - b[1])
+        v = (c[0] - b[0], c[1] - b[1])
+        lu, lv = math.hypot(*u), math.hypot(*v)
+        if lu < 0.5 or lv < 0.5:
+            continue
+        cos = max(-1.0, min(1.0, (u[0] * v[0] + u[1] * v[1]) / (lu * lv)))
+        best = min(best, math.degrees(math.acos(cos)))
+    return best
 
 
 def iter_junctions(arms, outlined=None):

@@ -39,7 +39,7 @@ MAJOR = {"motorway", "trunk", "primary", "secondary-tertiary", "link", "motorway
 PALETTES = {
     "light": {
         "bg": "#f5f4f1", "park": "#cfe9b8", "wood": "#c3e3a6", "water": "#9fd2f5",
-        "road": "#b9c0cc", "road_trunk": "#adb5c2", "road_tertiary": "#c6ccd5",
+        "road": "#b4bccb", "road_trunk": "#aab3c4", "road_tertiary": "#c3cad6",
         "road_far": "#fff3c4", "edge": "#ecc44a",
         # Мелкие улицы — тот же асфальт, светлее магистрали. Белыми они
         # совпадали с пешеходными дорожками: двор читался тропинкой, а рядом с
@@ -47,7 +47,7 @@ PALETTES = {
         # 28.09.2026). Белое осталось только у дорожек — их с дорогой не спутать.
         "minor": "#d5dae2", "minor_edge": "#b4bbc6", "minor_edge_far": "#e6e6e3", "path": "#ffffff",
         "path_edge": "#e3e1db",
-        "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#eae7e3", "building_wall": "#d9d1c9", "landuse": "#f1eeea",
+        "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#e6dcd7", "building_wall": "#d3c6c0", "landuse": "#f1eeea",
         "boundary": "#c9c2d6", "building_shadow": "rgba(90,95,110,0.22)",
         "underpass": "#b9a8e8", "underpass_edge": "#8f7cc9",
         "footbridge": "#ffffff", "footbridge_edge": "#a9b0bc", "steps": "#c7cbd3",
@@ -562,7 +562,7 @@ def _layers_in_draw_order(p):
          "minzoom": 16.5,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["in", ["get", "kind"], ["literal", [7, 8, 10, 13]]]],
          "paint": {"fill-pattern": p["asphalt"],
-                   "fill-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.5, 0.4, 20, 0.5]}},
+                   "fill-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.5, 0.18, 20, 0.28]}},
         # Сплошная перед перекрёстком (последние 25 м подхода) — без штриха.
         {"id": "radar-markings-solid", "type": "line", "source": "radar", "source-layer": "markings",
          "minzoom": 16, "filter": ["all", ["!", ["has", "centre"]], ["has", "solid"]],
@@ -572,7 +572,8 @@ def _layers_in_draw_order(p):
         {"id": "radar-markings", "type": "line", "source": "radar", "source-layer": "markings", "minzoom": 16,
          "filter": ["all", ["!", ["has", "centre"]], ["!", ["has", "solid"]]],
          "layout": {"line-cap": "butt"},
-         "paint": {"line-color": p["paint"], "line-dasharray": [4, 5],
+         # Реже, как у Яндекса: частый пунктир на многополосной улице рябил.
+         "paint": {"line-color": p["paint"], "line-dasharray": [3, 7],
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3]}},
         # Осевая двусторонней дороги (build_mvt.centre_lines): прерывистая с
         # длинным штрихом (1.5 ПДД) или сплошная при подтверждённых 4+ полосах

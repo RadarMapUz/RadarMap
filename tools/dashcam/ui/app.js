@@ -30,7 +30,7 @@ function syncText(s) {
   if (s.offset == null) return 'нет общих данных с треком';
   return `сдвиг ${s.offset >= 0 ? '+' : ''}${s.offset.toFixed(1)} с · r ${s.quality.toFixed(3)}`;
 }
-const STAGE = { no_gpx: 'нет GPX', ocr: 'нужен OCR полосы', sync: 'не синхронизировано',
+const STAGE = { no_gpx: 'нет GPX', no_anchors: 'нет опор', before_history: 'до начала истории (опоры с 17.09)', ocr: 'нужен OCR полосы', sync: 'не синхронизировано',
   bad_sync: 'синхронизация не годится', ready: 'готово' };
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`); }
 
@@ -76,7 +76,7 @@ function renderTrips() {
       <div class="when">${hms(t.start).substr(0, 5)}–${hms(t.end).substr(0, 5)}
         <span class="muted">${new Date((t.start + TZ) * 1000).toISOString().substr(0, 10)}</span></div>
       <div class="muted">${t.clips} рол. · ${mins} мин · OCR ${t.ocr_done}/${t.clips}</div>
-      <div class="muted">${tr ? esc(tr.name) + (tr.kind === 'anchored' ? ' · по опорам' : ' · подробный')
+      <div class="muted">${tr ? esc(tr.name) + (tr.kind === 'anchored' ? (/опор/.test(tr.name) ? '' : ' · по опорам') : ' · подробный')
         + (tr.synthetic ? '<span class="badge synth">синтетика</span>' : '') : 'трека нет'}</div>
       <div class="stage ${cls}">${esc(stage)}</div>
       ${t.sync ? `<div class="muted">${esc(syncText(t.sync))}</div>` : ''}`;
@@ -93,7 +93,7 @@ function renderTrips() {
       sel.onchange = () => { selTrack = +sel.value; selectTrip(t.key, false, true); };
       div.appendChild(sel);
     }
-    if (t.stage !== 'ready' && t.stage !== 'no_gpx' && !(job && ['ocr', 'sync'].includes(job.state))) {
+    if (t.stage !== 'ready' && !['no_gpx', 'no_anchors', 'before_history'].includes(t.stage) && !(job && ['ocr', 'sync'].includes(job.state))) {
       const b = document.createElement('button');
       b.textContent = t.ocr_done < t.clips ? 'OCR + синхронизация' : 'Синхронизировать';
       b.onclick = async (e) => { e.stopPropagation(); await api(`/api/trips/${t.key}/process`, {}); loadTrips(); };
@@ -370,7 +370,7 @@ async function selectTrip(key, keepPosition, trackChanged) {
   if (detail.track && detail.track.synthetic) {
     banner.hidden = false;
     banner.textContent = 'Трек СИНТЕТИЧЕСКИЙ: скорость из кадра, разложенная по форме маршрута со сдвигом часов. Для отладки синхронизации, не правда о поездке.';
-  } else if (detail.stage !== 'ready' && detail.stage !== 'no_gpx') {
+  } else if (detail.stage !== 'ready' && !['no_gpx', 'no_anchors', 'before_history'].includes(detail.stage)) {
     banner.hidden = false; banner.className = 'warn';
     banner.textContent = `${STAGE[detail.stage] || detail.stage}: машинка на карте может расходиться с видео.`;
   }

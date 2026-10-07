@@ -120,6 +120,21 @@ class FAT32:
             if isdir and cl:
                 yield from self.walk(cl, prefix + name + '/')
 
+    def read_file(self, cl, size, start, length, chain=None):
+        """Кусок файла [start, start+length) по цепочке кластеров (для HTTP Range)."""
+        chain = chain if chain is not None else self.chain(cl)
+        end = min(size, start + length)
+        out = []
+        pos = start
+        while pos < end:
+            k, off = divmod(pos, self.cluster)
+            if k >= len(chain):
+                break
+            n = min(self.cluster - off, end - pos)
+            out.append(self.read(self.cluster_off(chain[k]) + off, n))
+            pos += n
+        return b''.join(out)
+
     def copy(self, cl, size, dest):
         """Копирует файл по цепочке кластеров; во временный файл, затем rename."""
         tmp = dest + '.part'

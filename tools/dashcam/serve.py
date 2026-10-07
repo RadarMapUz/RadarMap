@@ -261,6 +261,8 @@ class Handler(BaseHTTPRequestHandler):
             row = conn.execute('SELECT path FROM clips WHERE id=?', (clip_id,)).fetchone()
         finally:
             conn.close()
+        if row is not None and row['path'].startswith(CARD_PREFIX):
+            return self._card_video(row['path'][len(CARD_PREFIX):])
         if row is None or not os.path.isfile(row['path']):
             return self._error(404, 'нет такого ролика')
         size = os.path.getsize(row['path'])
@@ -287,6 +289,66 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 self.wfile.write(chunk)
                 left -= len(chunk)
+
+
+CARD_PREFIX = 'card:'
+CARD_DEVICE = os.environ.get('DASHCAM_CARD', '/dev/disk12s1')
+_card = {'fs': None, 'index': None, 'chains': {}}
+_card_lock = threading.Lock()
+
+
+def card_file(path):
+    """Ролик на карте регистратора (читаем FAT32 напрямую, только чтение) →
+    (fs, кластер, размер, цепочка) или None — карты нет / файла нет."""
+    import fat32
+    with _card_lock:
+        if _card['fs'] is None:
+            try:
+                fs = fat32.FAT32(CARD_DEVICE)
+            except OSError:
+                return None
+            _card['fs'] = fs
+            _card['index'] = {p: (cl, size) for p, isdir, cl, size, _ in fs.walk() if not isdir}
+        hit = _card['index'].get(path)
+        if hit is None:
+            return None
+        cl, size = hit
+        if path not in _card['chains']:
+            _card['chains'][path] = _card['fs'].chain(cl)
+        return _card['fs'], cl, size, _card['chains'][path]
+
+
+def _card_video_impl(handler, path):
+    hit = card_file(path)
+    if hit is None:
+        return handler._error(404, 'ролика нет: карта регистратора не вставлена')
+    fs, cl, size, chain = hit
+    rng = parse_range(handler.headers.get('Range'), size)
+    if rng == 'invalid':
+        return handler._send(416, extra={'Content-Range': f'bytes */{size}'})
+    start, end = rng if rng else (0, size - 1)
+    length = end - start + 1
+    handler.send_response(206 if rng else 200)
+    handler.send_header('Content-Type', 'video/mp4')
+    handler.send_header('Accept-Ranges', 'bytes')
+    handler.send_header('Content-Length', str(length))
+    if rng:
+        handler.send_header('Content-Range', f'bytes {start}-{end}/{size}')
+    handler.end_headers()
+    if handler.command == 'HEAD':
+        return
+    pos = start
+    while pos <= end:
+        n = min(CHUNK, end - pos + 1)
+        with _card_lock:
+            chunk = fs.read_file(cl, size, pos, n, chain)
+        if not chunk:
+            break
+        handler.wfile.write(chunk)
+        pos += len(chunk)
+
+
+Handler._card_video = lambda self, path: _card_video_impl(self, path)
 
 
 def make_server(port=DEFAULT_PORT, db_path=None):

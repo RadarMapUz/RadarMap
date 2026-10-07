@@ -89,6 +89,89 @@ CREATE TABLE IF NOT EXISTS sync(
   offset REAL, quality REAL, n INTEGER, good INTEGER, detail TEXT, computed REAL,
   PRIMARY KEY(trip_key, track_id)
 );
+
+-- ===== Пакетный разбор (batch.py) =====
+-- Ролик «на карте»: clips.path = 'card:Recorder/Normal/ИМЯ'. Сам ролик после
+-- разбора не хранится — только этот путь и признаки стадий.
+CREATE TABLE IF NOT EXISTS clip_state(
+  clip_id INTEGER PRIMARY KEY,
+  probed INTEGER NOT NULL DEFAULT 0,   -- длительность/старт уточнены ffprobe
+  frames INTEGER,                      -- сколько кадров вынуто (NULL — ещё нет)
+  error TEXT
+);
+-- Кадр для детекторов: JPEG без полосы и капота. t — время кадра по часам
+-- регистратора; lat/lon/course — где была машина (NULL — привязать не удалось);
+-- weight — вес привязки 0…1 (ненадёжный перегон — низкий).
+CREATE TABLE IF NOT EXISTS frames(
+  id INTEGER PRIMARY KEY,
+  trip_key TEXT NOT NULL, clip_id INTEGER NOT NULL, pos REAL NOT NULL, t REAL NOT NULL,
+  kmh REAL, path TEXT NOT NULL,
+  lat REAL, lon REAL, course REAL, weight REAL, seg INTEGER,
+  detected INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(clip_id, pos)
+);
+CREATE INDEX IF NOT EXISTS frames_trip ON frames(trip_key, t);
+-- Ответы OSRM: ключ — пара опор, округлённых до 1e-5°.
+CREATE TABLE IF NOT EXISTS route_cache(
+  key TEXT PRIMARY KEY, body TEXT, fetched REAL
+);
+-- Привязка поездки: источник формы (trk — линия из GPX, osrm — восстановлена
+-- по опорам), перегоны между опорами с невязкой и признаком надёжности.
+CREATE TABLE IF NOT EXISTS trip_geo(
+  trip_key TEXT PRIMARY KEY, source TEXT, shape TEXT, anchors TEXT, summary TEXT, computed REAL
+);
+CREATE TABLE IF NOT EXISTS segments(
+  trip_key TEXT NOT NULL, idx INTEGER NOT NULL, t0 REAL, t1 REAL,
+  line_m REAL, odo_m REAL, residual_m REAL, reliable INTEGER, source TEXT,
+  PRIMARY KEY(trip_key, idx)
+);
+-- Сработки детекторов на кадре. Рамка — в пикселях исходного кадра 1920×1080.
+-- value — число на знаке (только из допустимого ряда); никакого иного текста.
+CREATE TABLE IF NOT EXISTS detections(
+  id INTEGER PRIMARY KEY,
+  frame_id INTEGER NOT NULL, cls TEXT NOT NULL, value INTEGER, color TEXT,
+  x REAL, y REAL, w REAL, h REAL, conf REAL, obj INTEGER
+);
+CREATE INDEX IF NOT EXISTS detections_frame ON detections(frame_id);
+CREATE INDEX IF NOT EXISTS detections_obj ON detections(obj);
+-- Объект одной поездки: трек сработок по соседним кадрам → точка (триангуляция).
+CREATE TABLE IF NOT EXISTS objects(
+  id INTEGER PRIMARY KEY,
+  trip_key TEXT NOT NULL, cls TEXT NOT NULL, value INTEGER, color TEXT,
+  lat REAL, lon REAL, err_m REAL, n_frames INTEGER, method TEXT, weight REAL, conf REAL,
+  cluster INTEGER
+);
+CREATE INDEX IF NOT EXISTS objects_trip ON objects(trip_key);
+-- Кластер = объект, увиденный в одной или нескольких поездках.
+CREATE TABLE IF NOT EXISTS clusters(
+  id INTEGER PRIMARY KEY,
+  cls TEXT NOT NULL, value INTEGER, lat REAL, lon REAL, err_m REAL,
+  n_trips INTEGER, n_frames INTEGER, confidence REAL,
+  status TEXT,             -- confirms | new | differs
+  map_ref TEXT             -- JSON: что нашлось в нашей карте рядом
+);
+-- Решения человека по находке — по месту, а не по id кластера: кластеры
+-- пересобираются, решение переносится на кластер того же класса рядом.
+CREATE TABLE IF NOT EXISTS decisions(
+  id INTEGER PRIMARY KEY, cls TEXT NOT NULL, value INTEGER, lat REAL, lon REAL,
+  decision TEXT NOT NULL, at REAL
+);
+-- Разметка для обучения: да/нет по отдельной сработке.
+CREATE TABLE IF NOT EXISTS labels(
+  det_id INTEGER PRIMARY KEY, answer TEXT NOT NULL, at REAL
+);
+-- Вырезки для карточки находки (номера и лица размыты).
+CREATE TABLE IF NOT EXISTS crops(
+  det_id INTEGER PRIMARY KEY, path TEXT NOT NULL
+);
+-- Выгрузка «все поездки» (all_trips.gpx), разложенная по поездкам: период
+-- её опор — чтобы отличить «до начала истории» от «опор в окне нет».
+CREATE TABLE IF NOT EXISTS gpx_imports(
+  path TEXT PRIMARY KEY, first_t REAL, last_t REAL, n_trk INTEGER, n_wpt INTEGER, imported REAL
+);
+CREATE TABLE IF NOT EXISTS batch_state(
+  trip_key TEXT PRIMARY KEY, stage TEXT, error TEXT, updated REAL
+);
 """
 
 
@@ -218,10 +301,17 @@ def import_gpx(conn, path):
     return True
 
 
+def _is_multi_trip(path):
+    """Выгрузка «все поездки»: несколько <trk>, у точек нет времени."""
+    with open(path, 'rb') as f:
+        head = f.read()
+    return head.count(b'<trk>') > 1 and b'<trkpt' in head and b'</time></trkpt>' not in head
+
+
 def import_paths(conn, paths, probe_fn=probe, log=print):
     """Папки и файлы: *.mp4 с именем-временем → ролики, *.gpx → треки."""
     clips = tracks = 0
-    files = []
+    files, multi = [], []
     for p in paths:
         p = os.path.expanduser(p)
         if os.path.isdir(p):
@@ -235,12 +325,75 @@ def import_paths(conn, paths, probe_fn=probe, log=print):
         if low.endswith('.mp4'):
             if import_clip(conn, f, probe_fn):
                 clips += 1
+        elif low.endswith('.gpx') and _is_multi_trip(f):
+            multi.append(f)
         elif low.endswith('.gpx'):
             if import_gpx(conn, f):
                 tracks += 1
                 log(f'трек {os.path.basename(f)}')
     regroup(conn)
+    for f in multi:  # по поездкам — после того, как поездки собраны
+        import_all_trips(conn, f, log)
+        tracks += 1
     return clips, tracks
+
+
+# Опора относится к поездке, если её время внутри окна поездки с таким запасом.
+ALL_TRIPS_SLACK = 120
+
+
+def import_all_trips(conn, path, log=print):
+    """Выгрузка «все поездки» (много trk без времени + wpt-проезды камер со
+    временем UTC) → по треку на каждую поездку регистратора: её опоры — wpt
+    в окне поездки ±ALL_TRIPS_SLACK; её линия — trk, чьё время из имени
+    («RadarMap 2026-10-06T090904», местное) попадает в окно поездки (с запасом
+    15 мин до старта: приложение стартует поездку позже регистратора).
+    Без линии форма — ломаная через опоры (для страницы; пакетный разбор
+    восстанавливает маршрут через OSRM). Повторный импорт пересобирает всё."""
+    import geo
+    path = os.path.abspath(path)
+    trks, wpts = geo.load_all_trips(path)
+    prefix = path + '#'
+    with conn:
+        old = [r[0] for r in conn.execute('SELECT id FROM tracks WHERE path LIKE ?', (prefix + '%',))]
+        for tid in old:
+            for tbl in ('track_points', 'track_shape', 'waypoints', 'sync'):
+                conn.execute(f'DELETE FROM {tbl} WHERE track_id=?', (tid,))
+            conn.execute('DELETE FROM tracks WHERE id=?', (tid,))
+        conn.execute('INSERT OR REPLACE INTO gpx_imports(path, first_t, last_t, n_trk, n_wpt, imported) '
+                     'VALUES(?,?,?,?,?,strftime(\'%s\',\'now\'))',
+                     (path, wpts[0][0] if wpts else None, wpts[-1][0] if wpts else None,
+                      len(trks), len(wpts)))
+        made = 0
+        for trip in conn.execute('SELECT * FROM trips ORDER BY start').fetchall():
+            lo, hi = trip['start'] - ALL_TRIPS_SLACK, trip['end'] + ALL_TRIPS_SLACK
+            mine = [w for w in wpts if lo <= w[0] <= hi]
+            lines = geo.trks_for(trks, trip['start'], trip['end'])
+            if not mine:
+                continue
+            shape = [p for tr in sorted(lines, key=lambda x: x['t']) for p in tr['shape']]
+            name = f'линия + {len(mine)} опор' if shape else f'по опорам {len(mine)}'
+            if not shape:
+                shape = [(w[1], w[2]) for w in mine]
+            if len(set(shape)) < 2:
+                continue  # одна опора: формы нет, привязать нечем
+            cur = conn.execute('INSERT INTO tracks(path, name, synthetic, kind, start, end, n) '
+                               'VALUES(?,?,0,?,?,?,?)',
+                               (prefix + trip['key'], name, 'anchored', trip['start'], trip['end'],
+                                len(shape)))
+            tid = cur.lastrowid
+            conn.executemany('INSERT INTO track_shape(track_id, seq, lat, lon) VALUES(?,?,?,?)',
+                             [(tid, i, a, b) for i, (a, b) in enumerate(shape)])
+            conn.executemany('INSERT INTO waypoints(track_id, t, lat, lon, name) VALUES(?,?,?,?,?)',
+                             [(tid, *w) for w in mine])
+            made += 1
+    log(f'all_trips: поездок с опорами {made}, trk {len(trks)}, wpt {len(wpts)}')
+    return made
+
+
+def history_start(conn):
+    r = conn.execute('SELECT MIN(first_t) FROM gpx_imports').fetchone()
+    return r[0] if r else None
 
 
 def trip_clips(conn, key):
@@ -320,7 +473,13 @@ def trip_status(conn, trip, track_id=None):
     tr = track_for_trip(conn, trip, track_id)
     sync = sync_row(conn, trip['key'], tr['id']) if tr is not None else None
     if tr is None:
-        stage = 'no_gpx'
+        hs = history_start(conn)
+        if hs is None:
+            stage = 'no_gpx'
+        elif trip['end'] < hs - ALL_TRIPS_SLACK:
+            stage = 'before_history'   # выгрузка начинается позже этой поездки
+        else:
+            stage = 'no_anchors'       # выгрузка есть, но проездов камер в окне нет
     elif done < len(clips):
         stage = 'ocr'
     elif sync is None:

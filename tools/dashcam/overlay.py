@@ -75,7 +75,9 @@ def refine_start(rows, start):
     return statistics.median(diffs) + 0.5
 
 
-def ocr_clip(conn, clip, log=print):
+def ocr_clip(conn, clip, log=print, path=None):
+    """path — где ролик лежит сейчас (копия с карты во временной папке);
+    по умолчанию clip['path']."""
     if conn.execute('SELECT 1 FROM ocr_done WHERE clip_id=?', (clip['id'],)).fetchone():
         return False
     binary = ensure_binary()
@@ -84,7 +86,7 @@ def ocr_clip(conn, clip, log=print):
     tmp = tempfile.mkdtemp(prefix='dashcam_bar_')
     try:
         subprocess.run([FFMPEG, '-v', 'error', '-nostdin', '-hwaccel', 'videotoolbox',
-                        '-i', clip['path'], '-vf', f'fps=1,crop=iw:{bar}:0:0',
+                        '-i', path or clip['path'], '-vf', f'fps=1,crop=iw:{bar}:0:0',
                         os.path.join(tmp, '%05d.png')], check=True)
         text = subprocess.run([binary, tmp], capture_output=True, text=True, check=True).stdout
     finally:

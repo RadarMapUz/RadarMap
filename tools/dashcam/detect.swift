@@ -237,11 +237,12 @@ func readNumber(_ cg: CGImage) -> (Int, Double)? {
     for o in req.results ?? [] {
         dbg("  ocr: \(o.topCandidates(3).map { "\($0.string)/\($0.confidence)" })")
         for cand in o.topCandidates(3) {
-            let digits = cand.string.filter { $0.isNumber }
-            // O/o часто читаются вместо нуля — но только цифры из ряда
-            let fixed = cand.string.replacingOccurrences(of: "O", with: "0")
-                .replacingOccurrences(of: "o", with: "0").filter { $0.isNumber }
-            for s in [digits, fixed] {
+            // Строка целиком — число (O/o вместо нуля допускаем): «−50%», «30%»,
+            // «110» с буквами маршрута — реклама и транспорт, не знак.
+            let raw = cand.string.trimmingCharacters(in: .whitespaces)
+            let fixed = raw.replacingOccurrences(of: "O", with: "0").replacingOccurrences(of: "o", with: "0")
+            for s in [raw, fixed] {
+                if !s.allSatisfy({ $0.isNumber }) { continue }
                 if let v = Int(s), ALLOWED.contains(v), s.count == String(v).count {
                     let c = Double(cand.confidence)
                     if best == nil || c > best!.1 { best = (v, c) }
@@ -273,6 +274,7 @@ func detectSigns(_ im: RGBA, _ cg: CGImage) -> [Det] {
         let (ring, inner) = ringScore(im, b)
         dbg("ring cand \(b.minX),\(b.minY) \(w)x\(h) fill \(fill) ring \(ring) inner \(inner)")
         if ring < 0.45 || inner < -0.6 { continue }
+        let strictRing = ring >= 0.6 && inner >= 0.3
         if ring >= 0.6 && inner >= 0.3 { RING_CANDS.append((b.minX, b.minY, w, h)) }
         // Кольцо на сжатом кадре часто рвётся, и рамка компоненты — только его
         // часть. Читаем три вырезки: середину рамки, квадрат по большей стороне
@@ -294,6 +296,8 @@ func detectSigns(_ im: RGBA, _ cg: CGImage) -> [Det] {
             if let crop = cropScaled(cg, rr), let res = readNumber(crop) { found = res; break }
         }
         guard let (v, c) = found else { continue }
+        // мягкое сито пропускает и вывески: там число должно читаться уверенно
+        if !strictRing && (c < 0.8 || ring < 0.55) { continue }
         let conf = min(1.0, 0.45 * ring + 0.25 * min(1, inner) + 0.3 * c)
         // Рамка знака — квадрат по большей стороне кольца (разорванное кольцо
         // даёт рамку меньше знака, а по размеру рамки оценивается расстояние).

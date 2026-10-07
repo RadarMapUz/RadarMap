@@ -175,10 +175,10 @@ def detect_trip(conn, key, log=print):
 # Текст сначала (плитки с апскейлом): медленно (~0,45 с/кадр), поэтому каждый
 # TEXT_EVERY-й кадр на ходу. Знак виден в 5–8 кадрах подхода — пропуск не страшен.
 TEXT_EVERY = 5
-# Кант вокруг цифр — только в уверенность: рамка числа от Vision смещена, и у
-# половины настоящих знаков проверка канта промахивается. На 4 тыс. кадров все
-# числа из ряда 20…120, найденные так, оказались знаками (в т. ч. «МАКТАБ 50»).
-TEXT_MIN_RING = 0.0
+# Красное вокруг цифр обязательно, хоть немного: без этого проходят «−50%» на
+# рекламе, номера маршрутов и цифры на кузовах (проверено глазами: 23 из 40
+# сработок были такими). Рамка числа от Vision смещена, поэтому порог низкий.
+TEXT_MIN_RING = 0.15
 
 
 def textscan_trip(conn, key, binary=None):
@@ -186,7 +186,8 @@ def textscan_trip(conn, key, binary=None):
     сито их пропустило). Кадры отмечаются в text_done, повтор не читается."""
     conn.execute('CREATE TABLE IF NOT EXISTS text_done(frame_id INTEGER PRIMARY KEY)')
     rows = conn.execute('SELECT f.id, f.path FROM frames f LEFT JOIN text_done t ON t.frame_id=f.id '
-                        'WHERE f.trip_key=? AND f.kmh>8 AND t.frame_id IS NULL ORDER BY f.t', (key,)).fetchall()
+                        'WHERE f.trip_key=? AND f.kmh>8 AND f.lat IS NOT NULL AND t.frame_id IS NULL '
+                        'ORDER BY f.t', (key,)).fetchall()  # без привязки знак не поставить на карту
     rows = [r for i, r in enumerate(rows) if i % TEXT_EVERY == 0 and os.path.exists(r['path'])]
     if not rows:
         return 0

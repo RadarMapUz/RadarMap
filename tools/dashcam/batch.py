@@ -500,6 +500,41 @@ def redetect(conn, keys=None, log=log):
     log(f'покрытие: {coverage.rebuild(conn)}')
 
 
+def relimit(conn, log=log):
+    """Знаки ограничения пересчитать только на «подозрительных» кадрах (где были
+    сработки ограничения или кандидаты «красный круг»): детекторы — заново,
+    текст сначала — заново с проверкой канта. Остальные кадры не трогаются."""
+    import detect
+    import objects
+    rows = conn.execute("SELECT DISTINCT f.id, f.trip_key FROM frames f WHERE f.id IN "
+                        "(SELECT frame_id FROM detections WHERE cls='speed_limit' UNION "
+                        "SELECT frame_id FROM sign_crops WHERE shape='red_circle')").fetchall()
+    trips = sorted({r['trip_key'] for r in rows})
+    with conn:
+        conn.executemany('UPDATE frames SET detected=0 WHERE id=?', [(r['id'],) for r in rows])
+        conn.execute('CREATE TABLE IF NOT EXISTS text_done(frame_id INTEGER PRIMARY KEY)')
+        conn.executemany('DELETE FROM text_done WHERE frame_id=?', [(r['id'],) for r in rows])
+    log(f'кадров на пересчёт: {len(rows)}, поездок {len(trips)}')
+    for k in trips:
+        detect.detect_trip(conn, k, log=log)
+        # текст сначала — на всех кадрах из пересчёта (без прореживания)
+        save = detect.TEXT_EVERY
+        detect.TEXT_EVERY = 1
+        try:
+            ids = {r['id'] for r in rows if r['trip_key'] == k}
+            with conn:
+                conn.executemany('INSERT OR IGNORE INTO text_done(frame_id) SELECT id FROM frames '
+                                 'WHERE trip_key=? AND id NOT IN (%s)' % ','.join('?' * len(ids)),
+                                 [(k, *ids)])
+            n = detect.textscan_trip(conn, k)
+        finally:
+            detect.TEXT_EVERY = save
+        objects.build_trip(conn, k)
+        log(f'{k}: текст сначала +{n}')
+    import cluster
+    log(f'кластеры: {cluster.rebuild(conn, log=log)}')
+
+
 def backfill_jolts(conn, log=log):
     """Рывки для роликов, разобранных до появления детектора рывков: копия с
     карты → профиль строк → удалить (кадры не трогаются)."""
@@ -605,6 +640,7 @@ def main(argv=None):
     p = sub.add_parser('redetect')
     p.add_argument('--trips')
     sub.add_parser('backfill-jolts')
+    sub.add_parser('relimit')
     sub.add_parser('summary')
     a = ap.parse_args(argv)
     conn = catalog.connect()
@@ -624,6 +660,8 @@ def main(argv=None):
         status(conn)
     elif a.cmd == 'redetect':
         redetect(conn, a.trips.split(',') if a.trips else None)
+    elif a.cmd == 'relimit':
+        relimit(conn)
     elif a.cmd == 'backfill-jolts':
         backfill_jolts(conn)
     elif a.cmd == 'summary':

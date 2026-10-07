@@ -4283,9 +4283,10 @@ def mouth_outline(legs):
     return out
 
 
-def iter_junctions(arms):
+def iter_junctions(arms, outlined=None):
     """Асфальт перекрёстка — по устьям подходов с дугами бордюра; где так не
-    вышло — прежняя оболочка кромок всех его дорог."""
+    вышло — прежняя оболочка кромок всех его дорог. outlined (множество) —
+    сюда пишутся узлы, построенные по устьям."""
     for legs in cluster_junctions(arms):
         if len(legs) < MIN_JUNCTION_ARMS and not _seam_needs_patch(legs):
             continue
@@ -4296,6 +4297,8 @@ def iter_junctions(arms):
             want = max(leg[2] for leg in legs) ** 2
             if (outline and len(outline) >= 3
                     and abs(signed_area_meters(outline)) <= want * JUNCTION_MAX_AREA):
+                if outlined is not None:
+                    outlined.update(_node_key(leg[0]) for leg in legs)
                 yield (AREA_JUNCTION, AREA_FLAG_CLOSED, outline)
                 continue
         ring = _hull_of(legs)
@@ -4419,11 +4422,15 @@ def fillet_between(node, leg_a, leg_b):
     return (AREA_FILLET, flags, [world(p) for p in ring])
 
 
-def iter_fillets(arms):
-    """Галтели на углах каждого перекрёстка: между соседними по углу подходами."""
+def iter_fillets(arms, skip=()):
+    """Галтели на углах каждого перекрёстка: между соседними по углу подходами.
+
+    skip — узлы, чей перекрёсток уже построен по устьям с дугами бордюра:
+    там галтель лишняя и торчала серым клином у примыкания (07.10.2026).
+    """
     for key in sorted(arms):
         legs = arms[key]
-        if len(legs) < MIN_JUNCTION_ARMS:
+        if len(legs) < MIN_JUNCTION_ARMS or key in skip:
             continue
         node = legs[0][0]
         kx = LAT_METERS * math.cos(math.radians(node[1]))
@@ -4437,6 +4444,9 @@ def iter_fillets(arms):
 
 def build_junctions(arms):
     return list(iter_junctions(arms))
+
+
+FLARES_ENABLED = False
 
 
 def iter_flares(arms):
@@ -4542,11 +4552,16 @@ def stream_surface(roads, target_dir, degrees, handles=64, islands=()):
 
         for figure in iter_surface(street for street, _chain in chains):
             put(figure)
-        for figure in iter_junctions(arms):
+        outlined = set()
+        for figure in iter_junctions(arms, outlined):
             put(figure)
-        for figure in iter_flares(arms):
-            put(figure)
-        for figure in iter_fillets(arms):
+        # Фаски подходов больше не нужны: узел строится по устьям с дугами
+        # бордюра, а фаска поверх него торчала серым клином у каждого
+        # примыкания (Кумарик, Олмазор, 07.10.2026).
+        if FLARES_ENABLED:
+            for figure in iter_flares(arms):
+                put(figure)
+        for figure in iter_fillets(arms, outlined):
             put(figure)
         spots = junction_spots(arms)
         for figure in build_medians(chains, junction_index(median_stops(arms, chains))):
@@ -5250,16 +5265,19 @@ def _nearest_with_gap(point, line):
 
 
 def build_road_surface(roads):
-    """Весь слой поверхности: полотно улиц, перекрёстки, фаски.
+    """Весь слой поверхности: полотно улиц, перекрёстки, скругления.
 
     Осевые остаются нетронутыми — по ним работает магнит, привязка правок и
     конструктор. Это ДОПОЛНИТЕЛЬНЫЙ слой для картинки, а не замена сети.
+    Порядок и правила — те же, что у stream_surface.
     """
     chains = street_chains(roads)
     arms = junction_arms(chains)
+    outlined = set()
+    junctions = list(iter_junctions(arms, outlined))
+    flares = list(iter_flares(arms)) if FLARES_ENABLED else []
     return (list(iter_surface(street for street, _chain in chains))
-            + list(iter_junctions(arms)) + list(iter_flares(arms))
-            + list(iter_fillets(arms))
+            + junctions + flares + list(iter_fillets(arms, outlined))
             + build_medians(chains, median_stops(arms, chains))
             + build_islands(roads))
 

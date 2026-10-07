@@ -2352,13 +2352,6 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                     lay(kind, flags, piece)
             elif strip_outside_junction(shape, mask):
                 lay(kind, flags, shape)
-        for line, centre, solid, on_bridge in _markings(roads, widths, marks_mask):
-            props = {"centre": centre} if centre else {"verified": True}
-            if solid and not centre:
-                props["solid"] = True
-            if on_bridge:
-                props["bridge"] = True
-            _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, props)
         # Регулируемые перекрёстки — после всех центров: светофор отдаётся
         # ближайшему узлу. Центры — и «середины узла» (вид 10), и ядра
         # перекрёстков двух улиц: середины узла у многих перекрёстков нет вовсе
@@ -2465,6 +2458,17 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                     del stop_lines[index]
             stop_lines[-1] = [(line, 1) for line in extra]
         stops = StopIndex(line for lines in stop_lines.values() for line, _code in lines)
+        # Разметка — после стоп-линий: полосы и сплошные обрываются у стоп-линии,
+        # а не проходят сквозь неё крестом (Кумарик, 07.10.2026).
+        marks_mask.add_zebras([line for line, _m in fitted_zebras]
+                              + [line for lines in stop_lines.values() for line, _code in lines])
+        for line, centre, solid, on_bridge in _markings(roads, widths, marks_mask):
+            props = {"centre": centre} if centre else {"verified": True}
+            if solid and not centre:
+                props["solid"] = True
+            if on_bridge:
+                props["bridge"] = True
+            _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, props)
         for line, kind in stop_lines.get(-1, ()):
             _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": kind})
         for index, point in enumerate(points):

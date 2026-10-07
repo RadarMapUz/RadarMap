@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Разметка полос</title>
+<style>
+  :root { --bg: #16181c; --fg: #e8e8e8; --dim: #9aa0a6; --card: #23262c; --acc: #ffd23f; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.35 -apple-system, system-ui, sans-serif; }
+  header { display: flex; gap: 16px; align-items: center; padding: 8px 12px; background: var(--card); flex-wrap: wrap; }
+  header b { color: var(--acc); }
+  #wrap { position: relative; padding: 8px 12px; }
+  canvas { display: block; width: 100%; cursor: crosshair; background: #000; }
+  #bar { display: flex; gap: 6px; flex-wrap: wrap; padding: 6px 12px; }
+  .cls { padding: 3px 8px; border-radius: 4px; border: 1px solid #444; cursor: pointer; user-select: none; }
+  .cls.on { outline: 2px solid var(--acc); }
+  #help { color: var(--dim); padding: 4px 12px 16px; font-size: 13px; columns: 2; }
+  #help kbd { background: #333; border-radius: 3px; padding: 0 4px; color: var(--fg); }
+  #msg { color: var(--acc); min-height: 1.3em; }
+  #strip { display: flex; gap: 1px; padding: 0 12px; height: 6px; }
+  #strip i { flex: 1; background: #333; }
+  #strip i.d { background: #3c9; } #strip i.s { background: #a63; } #strip i.c { background: var(--acc); }
+</style>
+</head>
+<body>
+<header>
+  <span>Кадр <b id="pos">–</b></span>
+  <span id="meta"></span>
+  <span>Размечено <b id="done">0</b> / <span id="total">0</span>, пропущено <span id="skipped">0</span></span>
+  <span>Время на кадр: среднее <b id="mean">–</b> с, медиана <span id="median">–</span> с</span>
+  <span>Сейчас: <b id="timer">0</b> с</span>
+  <span id="msg"></span>
+</header>
+<div id="strip"></div>
+<div id="bar"></div>
+<div id="wrap"><canvas id="cv" width="1280" height="529"></canvas></div>
+<div id="help">
+  <div><kbd>1</kbd> сплошная · <kbd>2</kbd> прерывистая · <kbd>3</kbd> двойная · <kbd>4</kbd> бордюр (верхняя кромка) — класс выбранной линии или новой</div>
+  <div><kbd>5</kbd> припаркованная · <kbd>6</kbd> движущаяся машина — класс рамки; <kbd>B</kbd> — нарисовать рамку (тянуть мышью)</div>
+  <div><kbd>N</kbd> новая линия: щелчки — узлы, <kbd>Enter</kbd>/<kbd>N</kbd> — готово, <kbd>Esc</kbd> — отмена</div>
+  <div>Тянуть узел — двигать; <kbd>Shift</kbd>+щелчок по линии — новый узел; двойной щелчок по узлу — удалить узел</div>
+  <div>Щелчок по линии/рамке — выбрать; <kbd>Del</kbd>/<kbd>Backspace</kbd> — удалить выбранное; <kbd>Z</kbd> — отменить</div>
+  <div><kbd>Пробел</kbd> — сохранить и следующий неразмеченный; <kbd>X</kbd> — кадр непригоден (пропуск)</div>
+  <div><kbd>←</kbd>/<kbd>→</kbd> — предыдущий/следующий без сохранения; <kbd>R</kbd> — вернуть предзаполнение</div>
+  <div><kbd>T</kbd> — принять перенос с соседнего кадра (пунктир); <kbd>V</kbd> — увеличить дорогу; <kbd>H</kbd> — скрыть разметку</div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

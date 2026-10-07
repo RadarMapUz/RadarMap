@@ -83,3 +83,39 @@ def marking_masks(rgb, static=None, return_ghost=False):
     if return_ghost:
         return white, yellow, gray, ghost
     return white, yellow, gray
+
+
+# Маска из обученной модели (seg_model.py) — вместо порогов. Модель
+# говорит, ГДЕ линия (класс «прерывистая» у неё сплошной полосой через
+# разрывы, как в разметке), а сами штрихи краски внутри её полосы
+# выделяет мягкий порог top-hat: вдвое ниже порогового режима, ведь
+# отражения и бока машин модель уже убрала. Без этого v2 не увидел бы
+# разрывов, и «штрихи бегут» молчал бы. Бордюр модели идёт в маску целиком:
+# v2 сам признаёт его краем (асфальт с одной стороны).
+MODEL_K = 3.5
+MODEL_MIN = 7.0
+
+
+def model_masks(rgb, return_ghost=False):
+    """→ (white, yellow, gray[, ghost=None]) — как marking_masks, но по модели."""
+    from seg_common import CLS
+    from seg_model import LINE_IDS, predictor
+    cls = predictor().classes(rgb)
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    gray = 0.299 * r + 0.587 * g + 0.114 * b
+    yel = (r + g) / 2 - b
+    th = tophat_rows(gray)
+    line = np.isin(cls, LINE_IDS)
+    paint = np.zeros(gray.shape, bool)
+    for y0, y1, _ in ROW_BANDS:
+        t = th[y0:y1]
+        med = np.median(t)
+        mad = np.median(np.abs(t - med)) + 1e-3
+        paint[y0:y1] = t > max(MODEL_MIN, med + MODEL_K * mad)
+    m = (line & paint) | (cls == CLS["curb"])
+    m[:ROW_BANDS[0][0]] = False
+    yellow = m & (yel > 18)
+    white = m & ~yellow
+    if return_ghost:
+        return white, yellow, gray, None
+    return white, yellow, gray

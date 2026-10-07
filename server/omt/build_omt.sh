@@ -26,7 +26,12 @@ sed "s#uzbekistan-latest.osm.pbf#uzbekistan.osm.pbf.new#" uzbekistan.osm.pbf.md5
 mv uzbekistan.osm.pbf.new uzbekistan.osm.pbf
 
 echo "→ Planetiler (схема OpenMapTiles, зумы 0–14)"
+# Языки подписей — ровно те, что показывает приложение: русский, узбекский
+# (name:uz — подписи узбекской версии; по умолчанию его в наборе нет) и
+# английский как запасной. Набор по умолчанию — ~70 языков: каждое имя
+# в тайле хранилось семьюдесятью копиями, и это ехало в каждый офлайн-регион.
 "$JAVA" -Xmx8g -jar planetiler.jar --osm-path=uzbekistan.osm.pbf --download \
+    --languages=ru,uz,en \
     --output=uz.mbtiles --force --maxzoom=14 > planetiler.log 2>&1
 
 echo "→ тайлы и индекс"

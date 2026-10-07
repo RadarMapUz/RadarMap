@@ -172,6 +172,62 @@ def detect_trip(conn, key, log=print):
     return total
 
 
+# Текст сначала (плитки с апскейлом): медленно (~0,45 с/кадр), поэтому каждый
+# TEXT_EVERY-й кадр на ходу. Знак виден в 5–8 кадрах подхода — пропуск не страшен.
+TEXT_EVERY = 5
+# Кант вокруг цифр — только в уверенность: рамка числа от Vision смещена, и у
+# половины настоящих знаков проверка канта промахивается. На 4 тыс. кадров все
+# числа из ряда 20…120, найденные так, оказались знаками (в т. ч. «МАКТАБ 50»).
+TEXT_MIN_RING = 0.0
+
+
+def textscan_trip(conn, key, binary=None):
+    """Знаки ограничения «текст сначала» → сработки speed_limit (если кольцевое
+    сито их пропустило). Кадры отмечаются в text_done, повтор не читается."""
+    conn.execute('CREATE TABLE IF NOT EXISTS text_done(frame_id INTEGER PRIMARY KEY)')
+    rows = conn.execute('SELECT f.id, f.path FROM frames f LEFT JOIN text_done t ON t.frame_id=f.id '
+                        'WHERE f.trip_key=? AND f.kmh>8 AND t.frame_id IS NULL ORDER BY f.t', (key,)).fetchall()
+    rows = [r for i, r in enumerate(rows) if i % TEXT_EVERY == 0 and os.path.exists(r['path'])]
+    if not rows:
+        return 0
+    binary = binary or ensure_binary()
+    by_path = {r['path']: r['id'] for r in rows}
+    with tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False) as f:
+        f.write('\n'.join(by_path))
+        lst = f.name
+    try:
+        out = subprocess.run([binary, 'textscan', lst], capture_output=True, text=True, check=True).stdout
+    finally:
+        os.remove(lst)
+    n = 0
+    with conn:
+        for line in out.splitlines():
+            parts = line.split('\t')
+            if len(parts) < 7 or parts[0] not in by_path:
+                continue
+            try:
+                v, x, y, w, h, ring = int(parts[1]), *map(float, parts[2:7])
+            except ValueError:
+                continue
+            if v not in ALLOWED_LIMITS or ring < TEXT_MIN_RING:
+                continue
+            fid = by_path[parts[0]]
+            side = max(w, h) * 2.1
+            cx, cy = x + w / 2, y + h / 2
+            sx, sy = fr.to_src(cx - side / 2, cy - side / 2)
+            s_src = side / fr.SCALE
+            dup = conn.execute("SELECT 1 FROM detections WHERE frame_id=? AND cls='speed_limit' AND "
+                               'abs(x + w / 2 - ?) < w AND abs(y + h / 2 - ?) < h',
+                               (fid, sx + s_src / 2, sy + s_src / 2)).fetchone()
+            if not dup:
+                conn.execute("INSERT INTO detections(frame_id, cls, value, x, y, w, h, conf) "
+                             "VALUES(?, 'speed_limit', ?, ?, ?, ?, ?, ?)",
+                             (fid, v, sx, sy, s_src, s_src, 0.5 + 0.4 * ring))
+                n += 1
+        conn.executemany('INSERT OR IGNORE INTO text_done(frame_id) VALUES(?)', [(i,) for i in by_path.values()])
+    return n
+
+
 def store_signs(conn, f, signs):
     """Кандидаты знаков кадра → sign_crops; файл вырезки переименовывается в <id>.jpg."""
     for (p,) in conn.execute('SELECT path FROM sign_crops WHERE frame_id=?', (f['id'],)).fetchall():

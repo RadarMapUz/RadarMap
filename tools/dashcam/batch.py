@@ -446,6 +446,7 @@ def run(conn, keys=None, limit=None, stages=STAGES):
                 if 'detect' in stages:
                     import detect
                     n = detect.detect_trip(conn, key, log=log)
+                    log(f'  знаки ограничения «текст сначала»: +{detect.textscan_trip(conn, key)}')
                     set_stage(conn, key, 'detected')
                     log(f'  детекторы: {n}')
                 if 'objects' in stages:
@@ -488,6 +489,7 @@ def redetect(conn, keys=None, log=log):
         with conn:
             conn.execute('UPDATE frames SET detected=0 WHERE trip_key=?', (k,))
         n = detect.detect_trip(conn, k, log=log)
+        n += detect.textscan_trip(conn, k)
         m = objects.build_trip(conn, k)
         log(f'{k}: сработок {n}, объектов {m}')
     import cluster

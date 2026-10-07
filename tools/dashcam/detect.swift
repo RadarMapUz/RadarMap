@@ -152,6 +152,14 @@ let LOW_BAND: Double = 0.58
     return (h >= 318 || h <= 20) && s >= 0.28 && v >= 0.25
 }
 
+/// Красный кант знака в тени и против солнца: тёмный и блёклый (s ~0,2, v ~0,2–0,4).
+/// Только для сита знаков ограничения — дальше всё решает прочитанное число.
+@inline(__always) func isShadedRed(_ r: Int, _ g: Int, _ b: Int) -> Bool {
+    if isRed(r, g, b) { return true }
+    let (h, s, v) = hsv(r, g, b)
+    return (h >= 335 || h <= 20) && s >= 0.16 && v >= 0.14 && r - g >= 12 && r - b >= 8
+}
+
 @inline(__always) func isWhitish(_ r: Int, _ g: Int, _ b: Int) -> Bool {
     let (_, s, v) = hsv(r, g, b)
     return s <= 0.30 && v >= 0.50
@@ -170,7 +178,7 @@ func ringScore(_ im: RGBA, _ b: Blob) -> (Double, Double) {
         var f = 0.62
         while f <= 1.05 && !found {
             let x = Int((cx + cos(a) * rx * f).rounded()), y = Int((cy + sin(a) * ry * f).rounded())
-            if x >= 0 && y >= 0 && x < im.w && y < im.h && isRed(im.r(x, y), im.g(x, y), im.b(x, y)) { found = true }
+            if x >= 0 && y >= 0 && x < im.w && y < im.h && isShadedRed(im.r(x, y), im.g(x, y), im.b(x, y)) { found = true }
             f += 0.07
         }
         if found { hit += 1 }
@@ -248,21 +256,24 @@ func detectSigns(_ im: RGBA, _ cg: CGImage) -> [Det] {
     let ylim = Int(Double(im.h) * SIGN_YLIM)
     var mask = [Bool](repeating: false, count: im.w * im.h)
     for y in 0..<ylim {
-        for x in 0..<im.w where isRed(im.r(x, y), im.g(x, y), im.b(x, y)) { mask[y * im.w + x] = true }
+        for x in 0..<im.w where isShadedRed(im.r(x, y), im.g(x, y), im.b(x, y)) { mask[y * im.w + x] = true }
     }
-    mask = dilate(mask, im.w, ylim)
+    // Два шага расширения: тонкое кольцо маленького знака (20–30 px) на сжатом
+    // кадре рвётся на куски. Сито кольца — мягкое: строгий затвор — число
+    // из ряда 20…120, прочитанное в вырезке (OCR), без него сработки нет.
+    mask = dilate(dilate(mask, im.w, ylim), im.w, ylim)
     var out: [Det] = []
     for b in components(mask, im.w, ylim) {
         let w = b.w, h = b.h
-        if w < 9 || h < 9 || w > 220 || h > 220 { continue }
+        if w < 8 || h < 8 || w > 220 || h > 220 { continue }
         let asp = Double(w) / Double(h)
-        if asp < 0.6 || asp > 1.55 { continue }
+        if asp < 0.5 || asp > 2.0 { continue }
         let fill = Double(b.n) / Double(w * h)
-        if fill > 0.75 || fill < 0.15 { continue }
+        if fill > 0.85 || fill < 0.15 { continue }
         let (ring, inner) = ringScore(im, b)
         dbg("ring cand \(b.minX),\(b.minY) \(w)x\(h) fill \(fill) ring \(ring) inner \(inner)")
-        if ring < 0.6 || inner < 0.3 { continue }
-        RING_CANDS.append((b.minX, b.minY, w, h))
+        if ring < 0.45 || inner < -0.6 { continue }
+        if ring >= 0.6 && inner >= 0.3 { RING_CANDS.append((b.minX, b.minY, w, h)) }
         // Кольцо на сжатом кадре часто рвётся, и рамка компоненты — только его
         // часть. Читаем три вырезки: середину рамки, квадрат по большей стороне
         // и тот же квадрат с полями; первая, где нашлось число из ряда, — ответ.
@@ -272,7 +283,10 @@ func detectSigns(_ im: RGBA, _ cg: CGImage) -> [Det] {
         let bounds = CGRect(x: 0, y: 0, width: im.w, height: im.h)
         let crops = [rect.insetBy(dx: Double(w) * 0.12, dy: Double(h) * 0.12),
                      CGRect(x: cxr - side * 0.45, y: cyr - side * 0.45, width: side * 0.9, height: side * 0.9),
-                     CGRect(x: cxr - side * 0.7, y: cyr - side * 0.7, width: side * 1.4, height: side * 1.4)]
+                     CGRect(x: cxr - side * 0.7, y: cyr - side * 0.7, width: side * 1.4, height: side * 1.4),
+                     // кусок разорванного кольца: знак целиком — в окрестности побольше
+                     CGRect(x: cxr - max(24, side * 1.5), y: cyr - max(24, side * 1.5),
+                            width: max(48, side * 3), height: max(48, side * 3))]
         var found: (Int, Double)? = nil
         for r in crops {
             let rr = r.intersection(bounds)
@@ -871,6 +885,53 @@ if args[1] == "detect" {
             }
             struct Line: Encodable { let f: String; let d: [Det]; let s: [SignCand] }
             print(String(data: try! enc.encode(Line(f: path, d: dets, s: signs)), encoding: .utf8)!)
+            fflush(stdout)
+        }
+    }
+} else if args[1] == "textscan" {
+    // Текст сначала: числа из ряда 20…120 по всему верху кадра (медленно — для
+    // поиска эталонных кадров и проверки полноты кандидатов). Текст не выводится.
+    let list = try String(contentsOfFile: args[2], encoding: .utf8).split(separator: "\n").map(String.init)
+    for path in list where !path.isEmpty {
+        autoreleasepool {
+            guard let cg = loadCG(path) else { return }
+            let im0 = rgba(cg)
+            // Плитки 400×280 с перекрытием, апскейл ×2.5: целый кадр Vision
+            // уменьшает, и цифры знака (12–20 px) пропадают.
+            let ylim = Int(Double(cg.height) * SIGN_YLIM)
+            var seen = Set<String>()
+            for ty in stride(from: 0, to: max(1, ylim - 140), by: 200) {
+                for tx in stride(from: 0, to: cg.width - 200, by: 300) {
+                    let tile = CGRect(x: tx, y: ty, width: min(400, cg.width - tx), height: min(280, ylim - ty))
+                    guard let crop = cropScaled(cg, tile, minH: 700) else { continue }
+                    let req = VNRecognizeTextRequest()
+                    req.recognitionLevel = .accurate
+                    req.usesLanguageCorrection = false
+                    try? VNImageRequestHandler(cgImage: crop).perform([req])
+                    for o in req.results ?? [] {
+                        guard let c = o.topCandidates(1).first else { continue }
+                        let digits = c.string.filter { $0.isNumber }
+                        guard let v = Int(digits), ALLOWED.contains(v), digits.count == c.string.count else { continue }
+                        // рамка Vision — в вырезке с полями (pad = h/4 у cropScaled)
+                        let W = Double(crop.width), H = Double(crop.height)
+                        let pad = (H / 1.5) / 4
+                        let sc = (H - 2 * pad) / tile.height
+                        let bx = (o.boundingBox.minX * W - pad) / sc + tile.minX
+                        let by = ((1 - o.boundingBox.maxY) * H - pad) / sc + tile.minY
+                        let key = "\(v)_\(Int(bx / 20))_\(Int(by / 20))"
+                        if seen.contains(key) { continue }
+                        seen.insert(key)
+                        let bw = o.boundingBox.width * W / sc, bh = o.boundingBox.height * H / sc
+                        // Кант вокруг цифр: круг радиусом ~1,1 ширины числа — доля лучей с красным.
+                        let side = max(bw, bh) * 2.1
+                        let blob = Blob(minX: Int(bx + bw / 2 - side / 2), minY: Int(by + bh / 2 - side / 2),
+                                        maxX: Int(bx + bw / 2 + side / 2), maxY: Int(by + bh / 2 + side / 2), n: 1)
+                        let ring = (blob.minX >= 0 && blob.minY >= 0 && blob.maxX < im0.w && blob.maxY < im0.h)
+                            ? ringScore(im0, blob).0 : 0
+                        print("\(path)\t\(v)\t\(Int(bx))\t\(Int(by))\t\(Int(bw))\t\(Int(bh))\t\(String(format: "%.2f", ring))")
+                    }
+                }
+            }
             fflush(stdout)
         }
     }

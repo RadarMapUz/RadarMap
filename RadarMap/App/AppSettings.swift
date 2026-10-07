@@ -741,7 +741,12 @@ final class AppSettings {
             // своей, а не карту Apple. Ключ читается только ради этой миграции.
             mapBase = .engine
         } else {
-            mapBase = .apple
+            // С 2.0 по умолчанию — своя карта (новая, OpenMapTiles + наши слои).
+            // Прежде по умолчанию стояла Apple, и свежая установка новой карты
+            // не видела вовсе: она пряталась за кнопкой слоёв. Сознательный
+            // выбор Apple сохранён ключом mapBase выше и здесь не трогается;
+            // без пакета движка MapBase.resolved сам вернёт Apple.
+            mapBase = .engine
         }
         alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []

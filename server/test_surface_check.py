@@ -566,6 +566,14 @@ class SignalPaintTests(unittest.TestCase):
         lats = {round(p[1], 7) for (a, b), _m in zebras for p in (a, b)}
         self.assertEqual(len(lats), 1)                     # обе на одной поперечной
 
+    def test_crossing_ending_on_the_median_reaches_the_other_carriageway(self):
+        west = (3, build_mvt.FLAG_ONEWAY, [metres(-6, -100), metres(-6, 100)], "Navoiy")
+        east = (3, build_mvt.FLAG_ONEWAY, [metres(6, 100), metres(6, -100)], "Navoiy")
+        side = (3, build_mvt.FLAG_ONEWAY, [metres(40, -100), metres(40, 100)], "Other")
+        fitter = build_mvt.ZebraFitter([west, east, side], {id(west): 8.0, id(east): 8.0, id(side): 8.0})
+        zebras = build_mvt.fit_zebras([([metres(-15, 0), metres(0, 0)], True)], fitter)
+        self.assertEqual(len(zebras), 2)                    # обе ленты Навои, не чужая
+
     def test_two_crossings_on_one_approach_are_one_zebra(self):
         road = (3, 0, [metres(0, -100), metres(0, 100)], "Беруни")
         fitter = build_mvt.ZebraFitter([road], {id(road): 10.0})

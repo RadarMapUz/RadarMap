@@ -401,7 +401,8 @@ def _layers_in_draw_order(p):
          "layout": {"line-join": "round", "line-cap": "butt"},
          "paint": {"line-color": p["tunnel"], "line-width": measured(), "line-opacity": 0.65}},
         {"id": "radar-roads-case", "type": "line", "source": "radar", "source-layer": "roads",
-         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
+         "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7],
+                                              ["!", ["has", "stub"]], ["!", ["has", "inner"]]],
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
          # Кромка: у магистралей (trunk…secondary) — жёлтая, как у Яндекса;
          # у tertiary — нейтральная, у мелких — цвет края мелкой улицы.

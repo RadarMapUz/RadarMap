@@ -1032,11 +1032,13 @@ class ZebraFitter:
     def __init__(self, roads, widths=None):
         widths = widths or {}
         self._grid = defaultdict(list)
+        self.names = {}
         for road in roads:
             code, flags, points = road[0], road[1], road[2]
             if code > ZEBRA_ROAD_MAX_CODE or len(points) < 2 or flags & (FLAG_BRIDGE | FLAG_TUNNEL):
                 continue
             half = (widths.get(id(road)) or road_width_meters(code, lanes_of(flags))) / 2.0
+            self.names[id(road)] = road[3] if len(road) > 3 else ""
             for a, b in zip(points, points[1:]):
                 for gx in range(int(min(a[0], b[0]) / self.CELL) - 1, int(max(a[0], b[0]) / self.CELL) + 2):
                     for gy in range(int(min(a[1], b[1]) / self.CELL) - 1, int(max(a[1], b[1]) / self.CELL) + 2):
@@ -1276,6 +1278,27 @@ def tree_tiers(point, size):
     return out
 
 
+INNER_ROAD_SHARE = 0.6
+INNER_STEP_METERS = 4.0
+
+
+def inner_share(road, overlap):
+    """Доля точек оси ленты, лежащих на ЧУЖОЙ ленте того же уровня."""
+    points = road[2]
+    if len(points) < 2:
+        return 0.0
+    kx = 111_320 * math.cos(math.radians(points[0][1]))
+    total = inside = 0
+    for a, b in zip(points, points[1:]):
+        length = math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+        steps = max(1, int(length / INNER_STEP_METERS))
+        for i in range(steps):
+            p = (a[0] + (b[0] - a[0]) * i / steps, a[1] + (b[1] - a[1]) * i / steps)
+            total += 1
+            inside += overlap.foreign(p, road)
+    return inside / total if total else 0.0
+
+
 def zebra_centre_grid(zebras):
     grid = defaultdict(list)
     for line, _marked in zebras:
@@ -1288,9 +1311,24 @@ def fit_zebras(crossings, fitter):
     """Зебры поперёк проезжих: [((точка, точка), размечена ли)]."""
     candidates = []
     for group, (line, marked) in enumerate(crossings):
+        found = []
         for a, b in zip(line, line[1:]):
-            for key, point, heading, half, sine in fitter.hits(a, b):
-                candidates.append((key, point, heading, half, sine, bool(marked), group))
+            found.extend(fitter.hits(a, b))
+        # Переход в OSM часто кончается на разделительной: у двойной проезжей
+        # зебра была только на одной ленте (Навои у Драмтеатра, 07.10.2026).
+        # Продлеваем линию за концы — но берём только встречную ленту ТОЙ ЖЕ
+        # улицы, не первую попавшуюся дорогу.
+        named = {fitter.names.get(hit[0]) for hit in found} - {"", None}
+        if named and len(line) >= 2:
+            seen = {hit[0] for hit in found}
+            for tip, before in ((line[-1], line[-2]), (line[0], line[1])):
+                far = _extend(before, tip, ZEBRA_EXTEND_METERS)
+                for hit in fitter.hits(tip, far):
+                    if hit[0] not in seen and fitter.names.get(hit[0]) in named:
+                        found.append(hit)
+                        seen.add(hit[0])
+        for key, point, heading, half, sine in found:
+            candidates.append((key, point, heading, half, sine, bool(marked), group))
     # На одном подходе один переход: размеченный и самый поперечный — первым.
     candidates.sort(key=lambda c: (not c[5], -c[4], c[1][0], c[1][1]))
     # Переход через двойную проезжую — одна полоса зебры: куски одной линии
@@ -1329,6 +1367,17 @@ def fit_zebras(crossings, fitter):
 
 
 ZEBRA_BODY_CLEAR_METERS = 3.0
+ZEBRA_EXTEND_METERS = 30.0
+
+
+def _extend(a, b, meters):
+    """Точка на продолжении отрезка a→b за b на meters метров."""
+    kx = 111_320 * math.cos(math.radians(b[1]))
+    dx, dy = (b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320
+    length = math.hypot(dx, dy)
+    if length == 0:
+        return b
+    return (b[0] + dx / length * meters / kx, b[1] + dy / length * meters / 111_320)
 ZEBRA_PARALLEL_SINE = 0.26      # ленты параллельны в пределах 15°
 
 
@@ -1843,9 +1892,15 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
     buckets = _Buckets(work, handles)
     try:
         widths = widths or {}
+        # Лента внутри асфальта другой (карман поворота, полоса разгона): своей
+        # жёлтой кромки у неё нет — она рисовала жёлтые клинья посреди
+        # проспекта (Навои у Драмтеатра, 07.10.2026).
+        overlap = OverlapIndex(roads, widths)
         for road in roads:
-            _put(buckets, zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
-                 _road_props(road, widths.get(id(road))))
+            props = _road_props(road, widths.get(id(road)))
+            if road[0] <= 7 and inner_share(road, overlap) >= INNER_ROAD_SHARE:
+                props["inner"] = True
+            _put(buckets, zoom, LAYER_ROADS, mvt.LINESTRING, road[2], props)
         for road in far:
             _put(buckets, far_zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
                  _road_props(road))

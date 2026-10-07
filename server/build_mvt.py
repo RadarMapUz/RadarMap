@@ -373,9 +373,10 @@ class JunctionMask:
             lons = [p[0] for p in ring]
             lats = [p[1] for p in ring]
             box = (min(lons), min(lats), max(lons), max(lats))
+            entry = (box, ring)   # один на площадь — см. OverlapIndex
             for gx in range(int(box[0] / self.CELL), int(box[2] / self.CELL) + 1):
                 for gy in range(int(box[1] / self.CELL), int(box[3] / self.CELL) + 1):
-                    self._grid[(gx, gy)].append((box, ring))
+                    self._grid[(gx, gy)].append(entry)
 
     ZEBRA_CLEAR_METERS = 2.5
 
@@ -1602,9 +1603,10 @@ class RoadAxes:
         self._grid = defaultdict(list)
         for road in roads:
             for a, b in zip(road[2], road[2][1:]):
+                entry = (a, b, road[0])   # один на отрезок — см. OverlapIndex
                 for gx in range(int(min(a[0], b[0]) / self.CELL), int(max(a[0], b[0]) / self.CELL) + 1):
                     for gy in range(int(min(a[1], b[1]) / self.CELL), int(max(a[1], b[1]) / self.CELL) + 1):
-                        self._grid[(gx, gy)].append((a, b, road[0]))
+                        self._grid[(gx, gy)].append(entry)
 
     def near(self, point, meters):
         cell = (int(point[0] / self.CELL), int(point[1] / self.CELL))

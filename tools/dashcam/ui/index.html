@@ -6,6 +6,7 @@
 <title>Разбор видео</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link rel="stylesheet" href="/ui/app.css">
+<link rel="stylesheet" href="/ui/cams.css">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 </head>
 <body>
@@ -16,6 +17,7 @@
     <button data-tab="finds">Находки</button>
     <button data-tab="label">Разметка</button>
     <button data-tab="signs">Знаки</button>
+    <button data-tab="cams">Камеры</button>
   </nav>
   <div id="trips" class="pane"></div>
   <div id="finds" class="pane" hidden>
@@ -57,6 +59,14 @@
       <option value="speed_limit">знаки ограничения</option><option value="crossing">переходы</option></select>
     <div id="label-stats" class="muted"></div>
   </div>
+  <div id="cams" class="pane" hidden>
+    <p class="muted">Камеры фиксации по видео: кандидаты «новая» и «возможно, снята». Кандидат — не правка.</p>
+    <select id="cams-kind"><option value="">все</option><option value="new">новые</option>
+      <option value="removed">снятые</option></select>
+    <div id="cams-summary" class="muted"></div>
+    <div id="cams-report"></div>
+    <div id="cams-list"></div>
+  </div>
   <form id="import">
     <label for="import-path">Загрузить папку роликов или GPX</label>
     <input id="import-path" placeholder="~/RadarMapBuild/dashcam/morning" autocomplete="off">
@@ -68,6 +78,7 @@
   <div id="banner" hidden></div>
   <div id="map"></div>
   <aside id="card" hidden></aside>
+  <aside id="cams-card" hidden></aside>
   <div id="signgrid" hidden></div>
   <div id="labeler" hidden>
     <div id="l-q"></div>
@@ -100,5 +111,6 @@
 <script src="/ui/finds.js"></script>
 <script src="/ui/signs.js"></script>
 <script src="/ui/boxes.js"></script>
+<script src="/ui/cams.js"></script>
 </body>
 </html>

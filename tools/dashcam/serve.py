@@ -32,8 +32,17 @@ UI_FILES = {'index.html': 'text/html; charset=utf-8',
             'signs.js': 'text/javascript; charset=utf-8',
             'boxes.js': 'text/javascript; charset=utf-8',
             'app.js': 'text/javascript; charset=utf-8',
-            'app.css': 'text/css; charset=utf-8'}
+            'app.css': 'text/css; charset=utf-8',
+            'cams.js': 'text/javascript; charset=utf-8',
+            'cams.css': 'text/css; charset=utf-8'}
 HOST = '127.0.0.1'
+
+
+def _cams_web():
+    sys.path.insert(0, os.path.join(HERE, 'cams'))
+    import camsweb
+    return camsweb
+
 DEFAULT_PORT = 8780
 CHUNK = 1 << 20
 # Поле трека вокруг поездки: сдвиг часов ищется в ±120 с.
@@ -339,6 +348,12 @@ class Handler(BaseHTTPRequestHandler):
             if p == '/api/signs/labels':
                 import signs
                 return self._json([{'key': k, 'name': n} for k, n in signs.LABELS])
+            if p == '/api/cams':                       # вкладка «Камеры» (cams/camsweb.py)
+                return self._json(_cams_web().ui_data())
+            m = re.fullmatch(r'/cams/crop/([a-z]+_\d+\.jpg)', p)
+            if m:
+                data = _cams_web().crop_bytes(m.group(1))
+                return self._send(200, data, 'image/jpeg') if data else self._error(404, 'нет вырезки')
             if p == '/api/coverage':
                 return self._with_conn(coverage_cells)
             m = re.fullmatch(r'/sign/(\d+)\.jpg', p)

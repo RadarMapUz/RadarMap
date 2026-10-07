@@ -1,0 +1,13 @@
+/* Вкладка «Камеры» (cams.js) — цвета из app.css */
+#cams-report div { margin: 4px 0; font-size: 13px; }
+#cams-list { margin-top: 8px; }
+.cams-item { padding: 6px 8px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
+.cams-item:hover { background: var(--bg); }
+.cams-item.new b { color: #1f6feb; }
+.cams-item.removed b { color: #d97706; }
+#cams-card { position: absolute; right: 12px; top: 12px; z-index: 6; width: min(460px, calc(100% - 24px));
+  max-height: calc(100% - 24px); overflow-y: auto; background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; padding: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
+#cams-card h3 { margin: 0 0 6px; font-size: 15px; }
+#cams-card > div { margin: 6px 0; font-size: 13px; }
+.cams-crops img { width: 100%; display: block; margin: 6px 0; border-radius: 4px; }

@@ -696,12 +696,16 @@ class OverlapIndex:
             half = (widths.get(id(road)) or road_width_meters(code, lanes_of(flags))) / 2.0
             level = flags & (FLAG_BRIDGE | FLAG_TUNNEL)
             pad = (half + 2.0) / 111_320
+            key = id(road)
             for a, b in zip(points, points[1:]):
                 x0, x1 = sorted((a[0], b[0]))
                 y0, y1 = sorted((a[1], b[1]))
+                # Один кортеж на отрезок, в клетки — ссылка на него: копия на
+                # каждую клетку держала страну в 30 ГБ (07.10.2026).
+                entry = (key, level, a, b, half)
                 for gx in range(int((x0 - pad * 1.4) / self.CELL), int((x1 + pad * 1.4) / self.CELL) + 1):
                     for gy in range(int((y0 - pad) / self.CELL), int((y1 + pad) / self.CELL) + 1):
-                        self._grid[(gx, gy)].append((id(road), level, a, b, half))
+                        self._grid[(gx, gy)].append(entry)
 
     def foreign(self, point, road):
         level = road[1] & (FLAG_BRIDGE | FLAG_TUNNEL)
@@ -755,7 +759,7 @@ class OverlapIndex:
         return out
 
 
-def _markings(roads, widths=None, mask=None):
+def _markings(roads, widths=None, mask=None, overlap=None):
     """(линия, осевая: 0 / CENTRE_DASHED / CENTRE_SOLID) вне перекрёстков.
 
     Вход — сеть ПОСЛЕ generalise: общие узлы уже стали концами сегментов.
@@ -794,7 +798,8 @@ def _markings(roads, widths=None, mask=None):
             result.pop(0)
         return result
 
-    overlap = OverlapIndex(roads, widths)
+    # Сборка передаёт свой индекс: второй такой же по всей стране — гигабайты.
+    overlap = overlap or OverlapIndex(roads, widths)
     for road in roads:
         code, flags, points = road[0], road[1], road[2]
         # В тоннеле разметку не рисуем: он под землёй и показан полупрозрачным,
@@ -1047,10 +1052,12 @@ class ZebraFitter:
             half = (widths.get(id(road)) or road_width_meters(code, lanes_of(flags))) / 2.0
             self.names[id(road)] = road[3] if len(road) > 3 else ""
             self.oneway[id(road)] = bool(flags & FLAG_ONEWAY)
+            key = id(road)
             for a, b in zip(points, points[1:]):
+                entry = (key, a, b, half)   # один на отрезок — см. OverlapIndex
                 for gx in range(int(min(a[0], b[0]) / self.CELL) - 1, int(max(a[0], b[0]) / self.CELL) + 2):
                     for gy in range(int(min(a[1], b[1]) / self.CELL) - 1, int(max(a[1], b[1]) / self.CELL) + 2):
-                        self._grid[(gx, gy)].append((id(road), a, b, half))
+                        self._grid[(gx, gy)].append(entry)
 
     def hits(self, a, b):
         """[(id дороги, точка пересечения, азимут оси в радианах, полуширина, синус угла)]."""
@@ -2444,6 +2451,7 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         known = StopIndex(line for lines in stop_lines.values() for line, _code in lines)
         extra = approach_stop_lines(fit_zebras(drawn_crossings, zebra_fitter, with_meta=True),
                                     zebra_fitter, signals, junction_centres, known)
+        del zebra_fitter   # дальше не нужен, а по стране это гигабайты
         if extra:
             # Линия перед зеброй — главная на своём подходе: прежняя, стоящая
             # позади неё (по точке светофора, далеко от узла), уже лишняя —
@@ -2462,13 +2470,14 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # а не проходят сквозь неё крестом (Кумарик, 07.10.2026).
         marks_mask.add_zebras([line for line, _m in fitted_zebras]
                               + [line for lines in stop_lines.values() for line, _code in lines])
-        for line, centre, solid, on_bridge in _markings(roads, widths, marks_mask):
+        for line, centre, solid, on_bridge in _markings(roads, widths, marks_mask, overlap):
             props = {"centre": centre} if centre else {"verified": True}
             if solid and not centre:
                 props["solid"] = True
             if on_bridge:
                 props["bridge"] = True
             _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, props)
+        del overlap
         for line, kind in stop_lines.get(-1, ()):
             _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": kind})
         for index, point in enumerate(points):

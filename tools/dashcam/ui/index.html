@@ -48,6 +48,11 @@
   <div id="label" class="pane" hidden>
     <p class="muted">Быстрая разметка для обучения: на вырезке — то, что нашёл черновой детектор.
       Да (Y) — объект этого класса, нет (N), пропустить (S). Номера и лица размыты.</p>
+    <select id="l-task"><option value="yesno">да/нет по сработкам</option>
+      <option value="camera">рамка: камера фиксации</option></select>
+    <p class="muted" id="l-task-help" hidden>Кадр за 15–45 м до проезда камеры из GPX. Обведите мышью
+      камеру (корпус на столбе/консоли) — можно несколько. Enter — сохранить, N — не видно,
+      Backspace — убрать последнюю рамку. Из рамок обучится детектор камер.</p>
     <select id="l-cls"><option value="">все классы</option><option value="traffic_light">светофоры</option>
       <option value="speed_limit">знаки ограничения</option><option value="crossing">переходы</option></select>
     <div id="label-stats" class="muted"></div>
@@ -66,10 +71,12 @@
   <div id="signgrid" hidden></div>
   <div id="labeler" hidden>
     <div id="l-q"></div>
-    <img id="l-img" alt="">
+    <div id="l-wrap"><img id="l-img" alt=""><canvas id="l-canvas"></canvas></div>
     <div id="l-meta" class="muted"></div>
     <div class="l-btns"><button id="l-yes">Да (Y)</button><button id="l-no">Нет (N)</button>
       <button id="l-skip">Пропустить (S)</button></div>
+    <div class="l-btns" id="b-btns" hidden><button id="b-save">Сохранить (Enter)</button>
+      <button id="b-none">Не видно (N)</button><button id="b-undo">Убрать рамку (⌫)</button></div>
   </div>
   <div id="legend" class="muted"></div>
   <section id="player">
@@ -92,5 +99,6 @@
 <script src="/ui/app.js"></script>
 <script src="/ui/finds.js"></script>
 <script src="/ui/signs.js"></script>
+<script src="/ui/boxes.js"></script>
 </body>
 </html>

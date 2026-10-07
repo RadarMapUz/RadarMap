@@ -30,6 +30,7 @@ UI_DIR = os.path.join(HERE, 'ui')
 UI_FILES = {'index.html': 'text/html; charset=utf-8',
             'finds.js': 'text/javascript; charset=utf-8',
             'signs.js': 'text/javascript; charset=utf-8',
+            'boxes.js': 'text/javascript; charset=utf-8',
             'app.js': 'text/javascript; charset=utf-8',
             'app.css': 'text/css; charset=utf-8'}
 HOST = '127.0.0.1'
@@ -176,6 +177,20 @@ def label_next(conn, cls=None):
         return {'done': True}
     return {'det_id': r['id'], 'cls': r['cls'], 'value': r['value'], 'color': r['color'],
             'conf': _r(r['conf'], 2), 'url': f"/crop/{r['id']}.jpg"}
+
+
+def box_next(conn):
+    import selfcam
+    selfcam.connect().close()
+    total = conn.execute('SELECT COUNT(*) FROM box_queue').fetchone()[0]
+    done = conn.execute('SELECT COUNT(DISTINCT q.frame_id) FROM box_queue q JOIN frame_boxes b '
+                        'ON b.frame_id=q.frame_id').fetchone()[0]
+    r = conn.execute('SELECT q.* FROM box_queue q LEFT JOIN frame_boxes b ON b.frame_id=q.frame_id '
+                     'WHERE b.frame_id IS NULL ORDER BY q.trip_key, q.frame_id LIMIT 1').fetchone()
+    if r is None:
+        return {'done': True, 'total': total, 'labeled': done}
+    return {'frame_id': r['frame_id'], 'url': f"/frame/{r['frame_id']}.jpg", 'camera_id': r['camera_id'],
+            'dist_m': _r(r['dist_m'], 0), 'total': total, 'labeled': done}
 
 
 def label_stats(conn):
@@ -329,6 +344,11 @@ class Handler(BaseHTTPRequestHandler):
             m = re.fullmatch(r'/sign/(\d+)\.jpg', p)
             if m:
                 return self._sign_crop(int(m.group(1)))
+            if p == '/api/boxes/next':
+                return self._with_conn(box_next)
+            m = re.fullmatch(r'/frame/(\d+)\.jpg', p)
+            if m:
+                return self._frame(int(m.group(1)))
             if p == '/api/label/next':
                 q = parse_qs(url.query)
                 return self._with_conn(lambda c: label_next(c, q.get('cls', [''])[0] or None))
@@ -397,6 +417,29 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 conn.close()
             return self._json({'ok': True, 'n': n})
+        if p == '/api/boxes':
+            fid, boxes, none = body.get('frame_id'), body.get('boxes') or [], bool(body.get('none'))
+            if not isinstance(fid, int) or not isinstance(boxes, list) or len(boxes) > 20:
+                return self._error(400, 'нужны frame_id и boxes')
+            try:
+                clean = [[float(v) for v in b[:4]] for b in boxes if len(b) >= 4]
+            except (TypeError, ValueError):
+                return self._error(400, 'рамка — четыре числа')
+            conn = self._conn()
+            try:
+                import selfcam
+                selfcam.connect().close()   # таблицы рамок
+                with conn:
+                    conn.execute("DELETE FROM frame_boxes WHERE frame_id=? AND task='camera'", (fid,))
+                    if none or not clean:
+                        conn.execute("INSERT INTO frame_boxes(frame_id, task, none, at) VALUES(?, 'camera', 1, ?)",
+                                     (fid, time.time()))
+                    for x, y, w, h in clean:
+                        conn.execute("INSERT INTO frame_boxes(frame_id, task, label, x, y, w, h, at) "
+                                     "VALUES(?, 'camera', 'camera', ?, ?, ?, ?, ?)", (fid, x, y, w, h, time.time()))
+            finally:
+                conn.close()
+            return self._json({'ok': True})
         if p == '/api/label':
             ans = body.get('answer')
             det = body.get('det_id')
@@ -460,6 +503,27 @@ class Handler(BaseHTTPRequestHandler):
         if r is None or not r['path'] or not os.path.isfile(r['path']):
             return self._error(404, 'нет вырезки')
         with open(r['path'], 'rb') as f:
+            self._send(200, f.read(), 'image/jpeg')
+
+    def _frame(self, frame_id):
+        """Кадр целиком для разметки рамкой — с размытыми лицами и номерами."""
+        import cluster
+        import detect
+        conn = self._conn()
+        try:
+            r = conn.execute('SELECT path FROM frames WHERE id=?', (frame_id,)).fetchone()
+        finally:
+            conn.close()
+        if r is None or not os.path.isfile(r['path']):
+            return self._error(404, 'нет кадра')
+        dst = os.path.join(cluster.CROPS_DIR, f'frame_{frame_id}.jpg')
+        if not os.path.exists(dst):
+            import frames as fr
+            os.makedirs(cluster.CROPS_DIR, exist_ok=True)
+            detect.make_crops([{'src': r['path'], 'dst': dst, 'box': [0, 0, fr.OUT_W, fr.OUT_H], 'keep': None}])
+        if not os.path.exists(dst):
+            return self._error(500, 'не удалось подготовить кадр')
+        with open(dst, 'rb') as f:
             self._send(200, f.read(), 'image/jpeg')
 
     def _static(self, name):

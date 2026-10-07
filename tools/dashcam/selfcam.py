@@ -57,6 +57,16 @@ CREATE TABLE IF NOT EXISTS video_anchors(
   camera_id INTEGER, lat REAL, lon REAL, conf REAL, method TEXT, hidden_eval INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS video_anchors_trip ON video_anchors(trip_key);
+-- Разметка рамкой: кадры проездов камер фиксации (камера должна быть в кадре).
+CREATE TABLE IF NOT EXISTS box_queue(
+  frame_id INTEGER PRIMARY KEY, task TEXT NOT NULL, camera_id INTEGER, dist_m REAL, trip_key TEXT
+);
+-- Рамки человека (пиксели JPEG кадра детекторов). none=1 — «на кадре не видно».
+CREATE TABLE IF NOT EXISTS frame_boxes(
+  id INTEGER PRIMARY KEY, frame_id INTEGER NOT NULL, task TEXT NOT NULL, label TEXT,
+  x REAL, y REAL, w REAL, h REAL, none INTEGER DEFAULT 0, at REAL
+);
+CREATE INDEX IF NOT EXISTS frame_boxes_frame ON frame_boxes(frame_id);
 CREATE TABLE IF NOT EXISTS video_geo(
   trip_key TEXT PRIMARY KEY, status TEXT, n INTEGER, detail TEXT, computed REAL
 );
@@ -265,6 +275,10 @@ def main(argv=None):
         train()
     elif argv[0] == 'oracle':
         oracle_eval(conn, argv[1:] or None)
+    elif argv[0] == 'boxqueue':
+        build_box_queue(conn)
+    elif argv[0] == 'export-boxes':
+        print(export_boxes(conn, argv[1]))
     elif argv[0] == 'mark':
         print(mark_unlocated(conn, ' '.join(argv[1:]) or 'классификатор «камера близко» не обучен'))
     elif argv[0] == 'predict':
@@ -275,6 +289,62 @@ def main(argv=None):
 
 
 # ---------- честная проверка и статусы ----------
+
+BOX_DIST = (15.0, 45.0)   # камера в кадре крупно, но ещё не над головой
+
+
+def build_box_queue(conn, per_pass=2, log=print):
+    """Очередь «нарисуй рамку вокруг камеры»: на каждый проезд камеры из GPX —
+    до per_pass кадров за 15–45 м до неё (по пути из скорости)."""
+    import re
+    trks, wpts = geo.load_all_trips(ALL_TRIPS_GPX)
+    keys = [r[0] for r in conn.execute('SELECT DISTINCT trip_key FROM frames')]
+    rows = []
+    for key in keys:
+        trip = catalog.get_trip(conn, key)
+        if trip is None:
+            continue
+        odo = locate.Odometer(sync.clean_ocr(catalog.ocr_series(conn, key)))
+        fr = conn.execute('SELECT id, t, kmh FROM frames WHERE trip_key=? ORDER BY t', (key,)).fetchall()
+        for a in geo.anchors_for(wpts, trip['start'], trip['end']):
+            m = re.search(r'камера (\d+)', a[3])
+            picked = []
+            for f in fr:
+                if not (0 < a[0] - f['t'] < 8):
+                    continue
+                d = odo.at(a[0]) - odo.at(f['t'])
+                if BOX_DIST[0] <= d <= BOX_DIST[1] and (f['kmh'] or 0) > 3:
+                    picked.append((abs(d - 28), f['id'], d))
+            for _, fid, d in sorted(picked)[:per_pass]:
+                rows.append((fid, 'camera', int(m.group(1)) if m else None, d, key))
+    with conn:
+        conn.executemany('INSERT OR IGNORE INTO box_queue(frame_id, task, camera_id, dist_m, trip_key) '
+                         'VALUES(?,?,?,?,?)', rows)
+    n = conn.execute('SELECT COUNT(*) FROM box_queue').fetchone()[0]
+    log(f'очередь рамок: {n}')
+    return n
+
+
+def export_boxes(conn, dest, task='camera'):
+    """Рамки → выборка Create ML Object Detection: картинки + annotations.json."""
+    os.makedirs(dest, exist_ok=True)
+    out = {}
+    for r in conn.execute('SELECT b.*, f.path FROM frame_boxes b JOIN frames f ON f.id=b.frame_id '
+                          'WHERE b.task=?', (task,)):
+        name = f"{r['frame_id']}.jpg"
+        item = out.setdefault(name, {'image': name, 'annotations': [], 'src': r['path']})
+        if not r['none']:
+            item['annotations'].append({'label': r['label'] or task, 'coordinates': {
+                'x': r['x'] + r['w'] / 2, 'y': r['y'] + r['h'] / 2, 'width': r['w'], 'height': r['h']}})
+    for name, item in out.items():
+        dst = os.path.join(dest, name)
+        if not os.path.exists(dst) and os.path.exists(item['src']):
+            os.link(item['src'], dst)
+        item.pop('src')
+    with open(os.path.join(dest, 'annotations.json'), 'w') as f:
+        json.dump(list(out.values()), f, ensure_ascii=False)
+    return len(out)
+
 
 def oracle_eval(conn, keys=None, log=print):
     """Опознание при ИДЕАЛЬНЫХ событиях: времена проездов берутся из GPX, камеры —

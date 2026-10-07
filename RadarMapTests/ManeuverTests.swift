@@ -27,7 +27,7 @@ final class ManeuverTests: XCTestCase {
                 maneuver: RouteService.OSRMResponse.Maneuver(
                     type: type, modifier: modifier, exit: exit),
                 intersections: intersections),
-            at: 500)
+            at: 500, language: "ru")
     }
 
     private func lane(_ indications: [String], valid: Bool)

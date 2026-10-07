@@ -112,6 +112,13 @@ final class RouteService {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: personalHistory,
                                                "RouteService.personalHistory") }
     }
+    /// Язык названий улиц в манёврах (`AppLanguage.mapCode`). Спрашиваем в
+    /// момент построения: OSRM отдаёт имя узбекской латиницей, и в русской
+    /// версии его надо переписать (см. StreetName). nil — как в русской.
+    @ObservationIgnored var streetNameLanguage: (() -> String)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: streetNameLanguage,
+                                               "RouteService.streetNameLanguage") }
+    }
     @ObservationIgnored var onManeuver: ((String) -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onManeuver,
                                                "RouteService.onManeuver") }
@@ -530,6 +537,8 @@ final class RouteService {
             throw RouteError.noRoute
         }
 
+        // Один язык на весь ответ: фраза баннера и голос получают одно имя.
+        let language = streetNameLanguage?() ?? "ru"
         return routes.prefix(3).compactMap { route -> BuiltVariant? in
             guard route.geometry.coordinates.count >= 2 else { return nil }
             let points = route.geometry.coordinates.map {
@@ -538,7 +547,9 @@ final class RouteService {
             var steps: [RouteStep] = []
             var along: CLLocationDistance = 0
             for step in route.legs.first?.steps ?? [] {
-                if let built = Self.maneuverStep(step, at: along) { steps.append(built) }
+                if let built = Self.maneuverStep(step, at: along, language: language) {
+                    steps.append(built)
+                }
                 along += step.distance
             }
             return BuiltVariant(points: points, distance: route.distance,
@@ -583,8 +594,11 @@ final class RouteService {
     }
 
     /// OSRM-манёвр → человеческая фраза + иконка. nil — шаг не озвучиваем (смена названия улицы и т.п.).
+    /// `language` — язык приложения («ru»/«uz»): имя улицы во фразе приводится
+    /// к нему (StreetName), и ту же фразу произносит голос (onManeuver).
     nonisolated static func maneuverStep(_ step: OSRMResponse.Step,
-                                                 at along: CLLocationDistance) -> RouteStep? {
+                                         at along: CLLocationDistance,
+                                         language: String) -> RouteStep? {
         let m = step.maneuver
         var text: String?
         var icon = "arrow.up"
@@ -644,7 +658,11 @@ final class RouteService {
 
         guard var result = text else { return nil }
         if !step.name.isEmpty, m.type != "arrive" {
-            result += String(format: String(localized: " на %@"), step.name)
+            // «на улицу Беруни», а не «на Beruniy shoh ko'chasi»: фраза просит
+            // винительный падеж.
+            let street = StreetName.display(step.name, language: language,
+                                            grammaticalCase: .accusative)
+            result += String(format: String(localized: " на %@"), street)
         }
         // Тип манёвра — отдельно от фразы. Фраза зависит ещё и от типа
         // развязки («держитесь правее» на развилке против «поверните направо»

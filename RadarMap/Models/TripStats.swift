@@ -45,6 +45,11 @@ final class TripStats {
     private(set) var startBatteryPercent: Int?
 
     private(set) var history: [TripRecord] = []
+    /// Когда последняя поездка легла в историю. Карточке «Поездка сохранена»
+    /// нужен именно этот момент: `endedAt` записи — это время последнего
+    /// фикса, а на стоянке фиксов нет, и минута у подъезда делала только что
+    /// сохранённую поездку «несвежей» (см. TripEndPrompt).
+    private(set) var lastSavedAt: Date?
     /// Дневные агрегаты — живут вечно, в отличие от записей (чистка режет треки
     /// через неделю и записи через 30 дней). По ним считается статистика за
     /// месяц и дальше, поэтому она не «худеет» вместе с историей.
@@ -291,6 +296,7 @@ final class TripStats {
         )
         history.insert(record, at: 0)
         history = TripHistory.pruned(history)
+        lastSavedAt = Date()
         // Дневной агрегат — до чистки истории по смыслу и после по коду:
         // запись может уехать из истории, день останется навсегда.
         days = TripDayBook.folded(record, into: days)

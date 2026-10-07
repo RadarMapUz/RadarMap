@@ -322,6 +322,8 @@ final class AppEnvironment {
             guard settings.personalRoutes, let trip else { return nil }
             return RouteChoice.history(from: trip.history, now: Date())
         }
+        // Имена улиц в манёврах — на языке приложения (баннер и голос).
+        route.streetNameLanguage = { settings.appLanguage.mapCode }
         route.onManeuver = { [weak alerts] text in
             guard settings.turnByTurnVoice else { return }
             alerts?.speak(text)

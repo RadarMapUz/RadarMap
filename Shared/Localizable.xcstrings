@@ -3163,6 +3163,22 @@
         }
       }
     },
+    "Дома": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дома"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uylar"
+          }
+        }
+      }
+    },
     "Домой": {
       "localizations": {
         "ru": {
@@ -6409,6 +6425,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Oldingisi bilan birlashtirish"
+          }
+        }
+      }
+    },
+    "Объёмный вид": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Объёмный вид"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hajmli ko‘rinish"
           }
         }
       }
@@ -10426,6 +10458,22 @@
         }
       }
     },
+    "Тротуары": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тротуары"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Piyodalar yo‘lagi"
+          }
+        }
+      }
+    },
     "Тёмная": {
       "localizations": {
         "ru": {
@@ -11261,6 +11309,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "safar bali"
+          }
+        }
+      }
+    },
+    "без голоса": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "без голоса"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ovozsiz"
           }
         }
       }

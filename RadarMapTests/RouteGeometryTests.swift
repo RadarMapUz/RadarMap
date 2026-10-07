@@ -118,7 +118,7 @@ final class RouteGeometryTests: XCTestCase {
                 RouteService.OSRMResponse.Step(
                     distance: 100, name: name,
                     maneuver: RouteService.OSRMResponse.Maneuver(type: type, modifier: modifier, exit: exit)),
-                at: 500)
+                at: 500, language: "ru")
         }
 
         XCTAssertEqual(step("turn", "right")?.icon, "arrow.turn.up.right")
@@ -146,7 +146,7 @@ final class RouteGeometryTests: XCTestCase {
                     distance: 100, name: "",
                     maneuver: RouteService.OSRMResponse.Maneuver(type: type, modifier: modifier,
                                                                  exit: nil)),
-                at: 500)
+                at: 500, language: "ru")
         }
 
         XCTAssertNil(step("continue", "right"), "изгиб дороги — не команда свернуть")

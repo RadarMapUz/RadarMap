@@ -116,6 +116,9 @@ struct MapScreen: View {
             map.configure(env.cameras, speedLimits: env.speedLimits, thermal: env.thermal,
                           hotspots: env.hotspots)
             map.filter = env.settings.filter
+            // 3D в поездке переключается из меню «…», где кнопки Map3DToggle
+            // нет — её onAppear мог и не случиться (старт сразу в поездке).
+            map.prefers3D = env.settings.map3D
             // Если карта уже отдала регион до конфигурации (статичный старт без геопозиции) —
             // пересчитываем принудительно, иначе аннотации не появятся до первого движения карты.
             map.invalidateVisible()
@@ -187,7 +190,6 @@ struct MapScreen: View {
         }
         .overlay { loadErrorOverlay }
         .overlay { approachOverlay }
-        .overlay { arrivalOverlay }
         // Пуш «Итоги поездки» и другие диплинки на статистику ведут сюда.
         .onOpenURL { url in
             guard url.scheme == "radarmap", url.host() == "trip" else { return }
@@ -263,11 +265,11 @@ struct MapScreen: View {
         }
     }
 
-    @ViewBuilder private var arrivalOverlay: some View {
-        if let arrival = env.route.lastArrival {
-            ArrivalCardView(arrival: arrival, onDismiss: { env.route.dismissArrival() })
-                .transition(.opacity)
-        }
+    /// «Вы на месте» на экране — вместо панели поездки (TripScreenLayout).
+    private var arrivalShown: Bool {
+        TripScreenLayout.showsArrival(hasArrival: env.route.lastArrival != nil,
+                                      isTripActive: env.location.isTripActive,
+                                      showsTripEnd: tripEndRecord != nil)
     }
 
     @ViewBuilder private var approachOverlay: some View {
@@ -620,6 +622,12 @@ struct MapScreen: View {
         VStack(spacing: 10) {
             // The next turn stays at a fixed top position as statuses appear.
             ManeuverBannerGate()
+            // В навигации сверху — ОДНА карточка, манёвр. Камера на подходе —
+            // компактным чипом под ней; скорость с лимитом — внизу слева
+            // (bottomLayer). Две крупные карточки занимали треть экрана.
+            if mode.speedPlacement == .bottomLeading {
+                TripCameraChip()
+            }
             // Почему приложение работает не в полную силу: объявление сервера,
             // серая карта без сети, урезанная карта в жару, отсутствие лимитов.
             // Выше всего, потому что человек должен узнать причину раньше, чем
@@ -631,22 +639,12 @@ struct MapScreen: View {
             // в фоне, и место ей рядом с остальными «почему не в полную силу».
             permissionBanner
             // Тап по HUD — «Спидометр»; долгий тап — быстрые тумблеры оповещений.
-            // В навигации главный элемент — манёвр, поэтому HUD уходит на
-            // второй план: одного «главного» на экране достаточно, два спорят
-            // за взгляд (MapMode.focus).
-            SpeedHUDView(secondary: mode.focus != .speed)
-                .onTapGesture { showDashboard = true }
-                .onLongPressGesture(minimumDuration: 0.4) {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    withMotion(.spring(duration: 0.3)) { showQuickToggles.toggle() }
-                }
-                // Жесты для VoiceOver не существуют — даём оба входа действиями.
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint(Text("Открывает спидометр"))
-                .accessibilityAction(named: Text("Спидометр")) { showDashboard = true }
-                .accessibilityAction(named: Text("Быстрые тумблеры")) {
-                    withMotion(.spring(duration: 0.3)) { showQuickToggles.toggle() }
-                }
+            // HUD сверху всегда компактный: в покое главное «куда поедем», а в
+            // поездке без маршрута полноразмерная карточка занимала пятую часть
+            // экрана ради двух чисел. В навигации его здесь нет вовсе.
+            if mode.speedPlacement == .top {
+                hudGestures(SpeedHUDView(secondary: true))
+            }
             // Разовые подсказки по жестам и экономии — по одной, не простынёй.
             if let hint = activeHint {
                 HintChip(text: hint.text)
@@ -693,8 +691,11 @@ struct MapScreen: View {
                     topPanelEdge = $0 + 8
                     applySketchInsets()
                 }
-            // Кнопки навигации — сразу под HUD справа. Не прячутся: см. controlColumn.
-            if !map.isAddingCamera {
+            // Кнопки навигации — сразу под HUD справа. Не прячутся по таймеру
+            // (см. controlColumn), но уходят под карточкой прибытия: это
+            // последний экран поездки, и крутить карту в этот момент незачем.
+            if TripScreenLayout.showsControlColumn(arrivalShown: arrivalShown,
+                                                   isAddingCamera: map.isAddingCamera) {
                 HStack {
                     Spacer()
                     controlColumn
@@ -706,6 +707,25 @@ struct MapScreen: View {
         .padding(.horizontal, 16)
         .padding(.top, 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// Входы HUD: тап — «Спидометр», долгий тап — быстрые тумблеры. Одни и те
+    /// же у HUD сверху и у скорости внизу слева в навигации — жест не должен
+    /// зависеть от того, где сейчас стоит цифра.
+    private func hudGestures(_ content: some View) -> some View {
+        content
+            .onTapGesture { showDashboard = true }
+            .onLongPressGesture(minimumDuration: 0.4) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                withMotion(.spring(duration: 0.3)) { showQuickToggles.toggle() }
+            }
+            // Жесты для VoiceOver не существуют — даём оба входа действиями.
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint(Text("Открывает спидометр"))
+            .accessibilityAction(named: Text("Спидометр")) { showDashboard = true }
+            .accessibilityAction(named: Text("Быстрые тумблеры")) {
+                withMotion(.spring(duration: 0.3)) { showQuickToggles.toggle() }
+            }
     }
 
     /// Баннер пассажирского режима: молчание — осознанное, выход — один тап.
@@ -744,101 +764,156 @@ struct MapScreen: View {
     /// нужно хром (легенду, быстрые цели, бар действий), а не органы управления.
     private var controlColumn: some View {
         VStack(spacing: 12) {
-            // Слои карты — первой в колонке и в ЛЮБОМ режиме.
-            //
-            // Подложка лежала в десятом разделе настроек и включалась только
-            // после старта поездки; пробки и места жили в отдельной панели,
-            // которой в поездке не бывало вовсе. Теперь это одна панель, и она
-            // на месте всегда.
-            MapLayersControl(base: Binding(get: { env.settings.mapBase },
-                                           set: { env.settings.mapBase = $0 }),
-                             traffic: Binding(get: { env.settings.mapTraffic },
-                                              set: { env.settings.mapTraffic = $0 }),
-                             places: Binding(get: { env.settings.mapPlaces },
-                                             set: { env.settings.mapPlaces = $0 }),
-                             houses: Binding(get: { env.settings.mapHouses },
-                                             set: { env.settings.mapHouses = $0 }),
-                             sidewalks: Binding(get: { env.settings.mapSidewalks },
-                                                set: { env.settings.mapSidewalks = $0 }),
-                             modern: Binding(get: { env.settings.mapModernStyle },
-                                             set: { env.settings.mapModernStyle = $0 }),
-                             showsBuildingLayers: shownBase != .apple,
-                             available: Self.availableBases,
-                             showsLegend: shownBase == .apple)
-            // Вид карты, как у навигаторов: 2D/3D, «моё местоположение»
-            // (1-й тап — к машине, 2-й — по ходу движения), компас — только
-            // когда карта повёрнута, звук. Масштаб — вне поездки: за рулём его
-            // ведёт автозум, и колонка не должна перерасти маленький экран.
-            Map3DToggle(map: map)
-            MapOrientationControl(orientation: map.orientation) {
-                map.cycleOrientation(coordinate: env.location.currentCoordinate,
-                                     course: env.location.currentCourse,
-                                     inTrip: env.location.isTripActive)
-            }
-            MapCompassButton(map: map)
-            // «Весь маршрут» — пока он есть: в поездке посмотреть, сколько
-            // осталось и где развилки, не останавливая ведение надолго.
-            if env.route.isActive, let polyline = env.route.polyline {
-                CircleControl(systemName: "point.topleft.down.to.point.bottomright.curvepath",
-                              tint: Theme.textPrimary, size: 42,
-                              accessibilityLabel: "Весь маршрут") {
-                    map.showRouteOverview(rect: polyline.boundingMapRect)
-                }
-                .transition(.scale.combined(with: .opacity))
-            }
-            if env.settings.mapZoomButtons && !mode.showsTripBar {
-                MapZoomButtons(map: map)
-                    .transition(.scale.combined(with: .opacity))
-            }
-            MapMuteButton()
-            // Жёлтой кнопки «Радар здесь» здесь БОЛЬШЕ НЕТ, и это не потеря.
-            //
-            // В поездке их было две, обе жёлтые, обе на одном экране — и
-            // поведение разное: эта открывала выбор типа из четырёх плиток,
-            // а квадратная в панели поездки отправляла сразу и потом шесть
-            // секунд предлагала уточнить. Один и тот же жест давал два исхода
-            // в зависимости от того, в какой угол попал палец; за рулём это
-            // гарантированная ошибка.
-            //
-            // Осталась та, что быстрее: отправка одним тапом с последующим
-            // уточнением. Выбор типа никуда не делся — он в уточнении и в
-            // долгом тапе по карте.
-            // Спидометр — здесь же, а не отдельной пилюлей над панелью
-            // поездки. Пилюля была четвёртой формой на экране (карточка,
-            // круглые кнопки, капсула, панель) и висела в пустоте у нижнего
-            // края; дверь на приборку от переезда в общую колонку не
-            // пропадает, а экран перестаёт говорить четырьмя голосами.
-            if mode.showsTripBar {
-                CircleControl(systemName: "gauge.with.needle", tint: Theme.textPrimary,
-                              accessibilityLabel: "Открыть спидометр") {
-                    showDashboard = true
-                }
-                .transition(.scale.combined(with: .opacity))
-            }
-            // Семь функций, до которых в поездке было не добраться.
-            //
-            // Поиск, «Рядом», «Итоги», «Добавить камеру» и Настройки живут в
-            // нижнем баре, а бар показывается только в покое: стоило поездке
-            // начаться — и с главного экрана они пропадали все разом. Причина
-            // верная (за рулём экран отдан карте), следствие нет: адрес ищут и
-            // список камер смотрят именно в дороге, а единственным способом
-            // было остановить запись поездки — то есть испортить её же данные.
-            //
-            // Меню, а не пять кнопок: в колонке живёт то, чем управляют на
-            // ходу, остальное открывается одним тапом и одним взглядом
-            // (plan_app_ui.md, У6).
-            if mode.showsTripBar {
-                Menu {
-                    tripActionItems
-                } label: {
-                    CircleControlFace(systemName: "ellipsis")
-                }
-                .accessibilityLabel(Text("Ещё"))
-                .transition(.scale.combined(with: .opacity))
+            if mode.keepsMapToolsInMenu {
+                tripControls
+            } else {
+                idleControls
             }
             // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
-        .motionAnimation(.spring(duration: 0.3), value: mode.showsTripBar)
+        .motionAnimation(.spring(duration: 0.3), value: mode.keepsMapToolsInMenu)
+    }
+
+    /// В поездке — три кнопки: звук, ориентация, «…». Слои, 3D, «весь
+    /// маршрут» и спидометр — пунктами меню. Семь кругов столбиком закрывали
+    /// треть карты справа, а на ходу из них нажимают звук и «к машине»
+    /// (docs/plan_drive_ux_2026-10-07.md, п. 4). Компас — только когда карту
+    /// повернули руками.
+    @ViewBuilder private var tripControls: some View {
+        MapMuteButton()
+        orientationControl
+        MapCompassButton(map: map)
+        // Семь функций, до которых в поездке было не добраться.
+        //
+        // Поиск, «Рядом», «Итоги», «Добавить камеру» и Настройки живут в
+        // нижнем баре, а бар показывается только в покое: стоило поездке
+        // начаться — и с главного экрана они пропадали все разом. Причина
+        // верная (за рулём экран отдан карте), следствие нет: адрес ищут и
+        // список камер смотрят именно в дороге, а единственным способом
+        // было остановить запись поездки — то есть испортить её же данные.
+        //
+        // Меню, а не пять кнопок: в колонке живёт то, чем управляют на
+        // ходу, остальное открывается одним тапом и одним взглядом
+        // (plan_app_ui.md, У6).
+        Menu {
+            Section { mapViewItems }
+            Section { tripActionItems }
+        } label: {
+            CircleControlFace(systemName: "ellipsis")
+        }
+        .accessibilityLabel(Text("Ещё"))
+        .transition(.scale.combined(with: .opacity))
+    }
+
+    /// Покой: как было — слои, 3D, ориентация, компас, весь маршрут, масштаб, звук.
+    @ViewBuilder private var idleControls: some View {
+        // Слои карты — первой в колонке.
+        //
+        // Подложка лежала в десятом разделе настроек и включалась только
+        // после старта поездки; пробки и места жили в отдельной панели,
+        // которой в поездке не бывало вовсе. Теперь это одна панель; в
+        // поездке та же панель — подменю «…» (mapLayersMenu).
+        MapLayersControl(base: setting(\.mapBase),
+                         traffic: setting(\.mapTraffic),
+                         places: setting(\.mapPlaces),
+                         houses: setting(\.mapHouses),
+                         sidewalks: setting(\.mapSidewalks),
+                         modern: setting(\.mapModernStyle),
+                         showsBuildingLayers: shownBase != .apple,
+                         available: Self.availableBases,
+                         showsLegend: shownBase == .apple)
+        // Вид карты, как у навигаторов: 2D/3D, «моё местоположение»
+        // (1-й тап — к машине, 2-й — по ходу движения), компас — только
+        // когда карта повёрнута, звук.
+        Map3DToggle(map: map)
+        orientationControl
+        MapCompassButton(map: map)
+        // «Весь маршрут» — пока он есть: посмотреть его целиком до старта.
+        if env.route.isActive, let polyline = env.route.polyline {
+            CircleControl(systemName: "point.topleft.down.to.point.bottomright.curvepath",
+                          tint: Theme.textPrimary, size: 42,
+                          accessibilityLabel: "Весь маршрут") {
+                map.showRouteOverview(rect: polyline.boundingMapRect)
+            }
+            .transition(.scale.combined(with: .opacity))
+        }
+        if env.settings.mapZoomButtons {
+            MapZoomButtons(map: map)
+                .transition(.scale.combined(with: .opacity))
+        }
+        MapMuteButton()
+        // Жёлтой кнопки «Радар здесь» здесь БОЛЬШЕ НЕТ: в поездке их было
+        // две с разным поведением, осталась та, что в панели поездки
+        // (отправка одним тапом с последующим уточнением).
+    }
+
+    private var orientationControl: some View {
+        MapOrientationControl(orientation: map.orientation) {
+            map.cycleOrientation(coordinate: env.location.currentCoordinate,
+                                 course: env.location.currentCourse,
+                                 inTrip: env.location.isTripActive)
+        }
+    }
+
+    /// Привязка к настройке без восьми одинаковых `Binding(get:set:)`.
+    private func setting<Value>(_ keyPath: ReferenceWritableKeyPath<AppSettings, Value>) -> Binding<Value> {
+        let settings = env.settings
+        return Binding(get: { settings[keyPath: keyPath] },
+                       set: { settings[keyPath: keyPath] = $0 })
+    }
+
+    /// Вид карты в меню «…» поездки: то, что в покое стоит кнопками колонки.
+    @ViewBuilder private var mapViewItems: some View {
+        mapLayersMenu
+        Toggle(isOn: Binding(get: { env.settings.map3D },
+                             set: { on in
+                                 env.settings.map3D = on
+                                 map.prefers3D = on
+                             })) {
+            Label("Объёмный вид", systemImage: "view.3d")
+        }
+        if env.route.isActive, let polyline = env.route.polyline {
+            Button {
+                map.showRouteOverview(rect: polyline.boundingMapRect)
+            } label: {
+                Label("Весь маршрут", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+            }
+        }
+    }
+
+    /// Слои подменю: те же переключатели, что в панели MapLayersControl, и
+    /// по тем же правилам — пробки только у Apple, застройка только у нашей карты.
+    private var mapLayersMenu: some View {
+        Menu {
+            Picker(selection: setting(\.mapBase)) {
+                ForEach(Self.availableBases) { base in
+                    Label(base.title, systemImage: base.symbol).tag(base)
+                }
+            } label: {
+                Text("Карта")
+            }
+            if env.settings.mapBase == .apple {
+                Toggle(isOn: setting(\.mapTraffic)) {
+                    Label("Пробки", systemImage: "car.2.fill")
+                }
+            }
+            Toggle(isOn: setting(\.mapPlaces)) {
+                Label("Места", systemImage: "fuelpump.fill")
+            }
+            if shownBase != .apple {
+                Toggle(isOn: setting(\.mapModernStyle)) {
+                    Label("Новая карта (бета)", systemImage: "sparkles")
+                }
+                Toggle(isOn: setting(\.mapHouses)) {
+                    Label("Дома", systemImage: "building.2.fill")
+                }
+                Toggle(isOn: setting(\.mapSidewalks)) {
+                    Label("Тротуары", systemImage: "figure.walk")
+                }
+            }
+        } label: {
+            Label("Слои карты", systemImage: env.settings.mapBase.symbol)
+        }
     }
 
     // MARK: - Низ: панель действий / режим добавления
@@ -934,7 +1009,14 @@ struct MapScreen: View {
                             withMotion(.spring(duration: 0.3)) { tripEndRecord = nil }
                         })
                 }
-                if mode.showsTripBar {
+                if arrivalShown, let arrival = env.route.lastArrival {
+                    // «Вы на месте» — НА МЕСТЕ панели поездки, а не поверх
+                    // экрана: у карточки своя «Завершить поездку», и второй
+                    // «стоп» рядом с ней означал бы вопрос, какой настоящий.
+                    ArrivalCardView(arrival: arrival, onDismiss: {
+                        withMotion(.spring(duration: 0.3)) { env.route.dismissArrival() }
+                    })
+                } else if TripScreenLayout.showsTripBar(mode: mode, arrivalShown: arrivalShown) {
                     // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
                     // максимум экрана отдан карте, и она не прячется вместе с кнопками.
                     TripLiveBar(
@@ -1003,6 +1085,16 @@ struct MapScreen: View {
     private var bottomLayer: some View {
         VStack(spacing: 10) {
             Spacer()
+            // Скорость и лимит в навигации — внизу слева, над панелью поездки.
+            // Вне замера кромки: это угол, а не полоса поперёк экрана, и
+            // карта под ним видна справа.
+            if mode.speedPlacement == .bottomLeading, !arrivalShown, !map.isAddingCamera {
+                HStack {
+                    hudGestures(TripSpeedCluster())
+                    Spacer(minLength: 0)
+                }
+                .transition(.move(edge: .leading).combined(with: .opacity))
+            }
             bottomPanels
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
                     bottomPanelEdge = $0 - 8
@@ -1015,6 +1107,7 @@ struct MapScreen: View {
         .motionAnimation(.spring(duration: 0.3), value: map.isAddingCamera)
         .motionAnimation(.spring(duration: 0.3), value: map.pressedPoint)
         .motionAnimation(.spring(duration: 0.3), value: reportPoint)
+        .motionAnimation(.spring(duration: 0.3), value: arrivalShown)
     }
 
     /// Долгий тап: маркер + бар действий (кроме режима прицела добавления камеры).
@@ -1041,10 +1134,18 @@ struct MapScreen: View {
     /// 100 м поездка не пишется вовсе — свежести нет, карточки нет) и не
     /// поверх открытых Итогов — там те же цифры уже на экране.
     private func maybeShowTripEnd() {
+        // Свежесть — по моменту СОХРАНЕНИЯ, а не по endedAt записи: endedAt —
+        // это последний фикс, а на стоянке фиксов нет. Минута у подъезда — и
+        // только что сохранённая поездка считалась старой, карточка не
+        // появлялась, и поездка выглядела пропавшей («после него куда делся»).
         guard scenePhase == .active, !map.showStats,
-              let record = env.trip.history.first,
-              Date().timeIntervalSince(record.endedAt) < 60 else { return }
-        withMotion(.spring(duration: 0.4)) { tripEndRecord = record }
+              TripScreenLayout.isTripEndFresh(savedAt: env.trip.lastSavedAt, now: Date()),
+              let record = env.trip.history.first else { return }
+        withMotion(.spring(duration: 0.4)) {
+            tripEndRecord = record
+            // Итог поездки сказал всё, что говорила карточка прибытия, и больше.
+            env.route.dismissArrival()
+        }
     }
 
     /// Построить авто-маршрут от текущей позиции и показать все варианты целиком.

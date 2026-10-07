@@ -53,6 +53,8 @@ LAYER_TREES = "trees"
 LAYER_PARKING = "parking"
 # Тротуар полосой вдоль магистралей (Polygon) — sidewalk_bands.
 LAYER_SIDEWALKS = "sidewalks"
+# Ограждения мостов и эстакад (Polygon, объём задаёт стиль) — barrier_strips.
+LAYER_BARRIERS = "barriers"
 # Стрелки полос: одна точка на ПОЛОСУ, свойства turn (код build_roads.TURN_*)
 # и bearing (куда смотрит стрелка, градусы по часовой от севера).
 LAYER_ARROWS = "arrows"
@@ -1253,7 +1255,7 @@ def node_zebra_line(flags, point):
 
 
 TREE_CROWN_RADII = (1.9, 2.3, 2.7, 3.1)
-TREE_CROWN_SIDES = 20
+TREE_CROWN_SIDES = 16
 
 
 def tree_crown(point, size, share=1.0, radius=None, sides=TREE_CROWN_SIDES):
@@ -1274,7 +1276,7 @@ TREE_CROWN_HEIGHTS = (4.5, 5.5, 6.5, 7.5)
 # Ярусы кроны по профилю эллипсоида: радиус яруса = R·√(1 − z²), где z — его
 # середина от центра кроны. Четыре резких ступени в наклоне читались колючей
 # «шишкой» (07.10.2026); шесть по эллипсу — округлой кроной.
-TREE_TIER_COUNT = 7
+TREE_TIER_COUNT = 5
 TREE_TIERS = tuple(
     (round(max(0.32, math.sqrt(max(0.0, 1 - ((i + 0.5) / TREE_TIER_COUNT * 2 - 1) ** 2))), 3),
      round(i / TREE_TIER_COUNT, 3), round((i + 1) / TREE_TIER_COUNT, 3))
@@ -1554,6 +1556,31 @@ def sidewalk_bands(road, half, overlap, mask):
                 run = []
         flush()
     return rings
+
+
+BARRIER_THICK_METERS = 0.45
+
+
+def barrier_strips(points, half):
+    """Две узкие полосы по кромкам ленты: [кольцо слева, кольцо справа]."""
+    lat0 = points[0][1]
+    kx = 111_320 * math.cos(math.radians(lat0))
+    normals = []
+    for i in range(len(points)):
+        a = points[max(0, i - 1)]
+        b = points[min(len(points) - 1, i + 1)]
+        dx, dy = (b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320
+        length = math.hypot(dx, dy) or 1.0
+        normals.append((dy / length, -dx / length))
+    out = []
+    for side in (1, -1):
+        inner = [(p[0] + n[0] * side * (half - 0.1) / kx, p[1] + n[1] * side * (half - 0.1) / 111_320)
+                 for p, n in zip(points, normals)]
+        outer = [(p[0] + n[0] * side * (half - 0.1 + BARRIER_THICK_METERS) / kx,
+                  p[1] + n[1] * side * (half - 0.1 + BARRIER_THICK_METERS) / 111_320)
+                 for p, n in zip(points, normals)]
+        out.append(inner + list(reversed(outer)))
+    return out
 
 
 class RoadAxes:
@@ -2379,6 +2406,13 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # в газон. Только там, где у кромки нет другой ленты, узла или
         # разделительной: на стороне разделительной и между проспектом и
         # дублёром тротуара нет (07.10.2026).
+        # Ограждения по обеим кромкам мостов и эстакад: в наклоне пролёт
+        # читается мостом, а не полосой краски на земле (07.10.2026).
+        for road in roads:
+            if road[0] <= 5 and road[1] & FLAG_BRIDGE and len(road[2]) >= 2:
+                half = (widths.get(id(road)) or road_width_meters(road[0], lanes_of(road[1]))) / 2.0
+                for ring in barrier_strips(road[2], half):
+                    _put(buckets, zoom, LAYER_BARRIERS, mvt.POLYGON, ring, {"kind": "parapet"})
         for road in roads:
             if not SIDEWALK_MIN_CODE <= road[0] <= SIDEWALK_MAX_CODE or road[1] & (FLAG_BRIDGE | FLAG_TUNNEL):
                 continue

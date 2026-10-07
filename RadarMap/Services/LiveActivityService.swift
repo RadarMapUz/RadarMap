@@ -74,7 +74,7 @@ final class LiveActivityService {
         // Смена камеры (заголовка) — сразу; бегущая дистанция — не чаще
         // minInterval.
         if quantized.nearestTitle == lastSentState?.nearestTitle,
-           Date().timeIntervalSince(lastSentAt) < Self.minInterval { return }
+           Date().timeIntervalSince(lastSentAt) < Self.interval(for: quantized) { return }
         lastSentState = quantized
         lastSentAt = Date()
         Task { await activity.update(.init(state: quantized,
@@ -88,11 +88,23 @@ final class LiveActivityService {
         Task { await activity.end(nil, dismissalPolicy: .immediate) }
     }
 
-    private static func quantize(_ state: CameraActivityAttributes.ContentState) -> CameraActivityAttributes.ContentState {
+    /// Вблизи камеры — каждые 25 м и раз в 3 с, как раньше. Вдали — 100 м и
+    /// раз в 15 с: на трассе плашка обновлялась ~1 200 раз в час, и каждый раз
+    /// будила расширение виджета и экран блокировки, а дистанцию «4,3 км»
+    /// за рулём точнее сотни метров не читают (docs/perf_audit_2026-10-07.md).
+    static func quantize(_ state: CameraActivityAttributes.ContentState) -> CameraActivityAttributes.ContentState {
         var s = state
         if let d = s.distanceMeters {
-            s.distanceMeters = (d / 25).rounded() * 25
+            let step = d > AppConfig.liveActivityNearMeters ? 100.0 : 25.0
+            s.distanceMeters = (d / step).rounded() * step
         }
         return s
+    }
+
+    static func interval(for state: CameraActivityAttributes.ContentState) -> TimeInterval {
+        guard let d = state.distanceMeters, d <= AppConfig.liveActivityNearMeters else {
+            return AppConfig.liveActivityFarInterval
+        }
+        return minInterval
     }
 }

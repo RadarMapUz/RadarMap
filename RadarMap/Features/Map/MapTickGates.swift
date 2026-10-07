@@ -179,6 +179,10 @@ struct LocationFollowDriver: View {
     /// экономия приборки сводилась к яркости пикселей. На паузе не следим;
     /// снятие крышки догоняет позицию первым же тиком.
     var isCovered = false
+    /// Камера карты Apple на экране. Когда подложка — движок, у него своё
+    /// ведение; follow здесь двигал невидимую карту Apple и пересобирал её
+    /// аннотации каждый тик (docs/perf_audit_2026-10-07.md).
+    var drivesAppleCamera = true
 
     var body: some View {
         Color.clear
@@ -189,7 +193,7 @@ struct LocationFollowDriver: View {
                 // здесь только следование карты за курсом. Вне поездки поворот
                 // по компасу телефона делает сам MapKit (.userLocation
                 // followsHeading), догонять его тиками не нужно.
-                if map.orientation == .heading, env.location.isTripActive {
+                if drivesAppleCamera, map.orientation == .heading, env.location.isTripActive {
                     // Прижатые к дороге координата и курс: камера карты ведёт
                     // по полотну, а не по гуляющему вбок GPS. Скорость — для
                     // автозума (стоишь — ближе, летишь — шире).

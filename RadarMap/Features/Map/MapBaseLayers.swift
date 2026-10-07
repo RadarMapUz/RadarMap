@@ -57,11 +57,14 @@ struct EngineBaseLayer: View {
                     EngineMapView(
                         coordinate: me,
                         courseDegrees: env.location.displayCourse,
-                        spanMeters: span,
+                        // Ступенями: дрожание скорости и дистанции до манёвра на
+                        // стоянке запускало новую анимацию камеры каждый фикс.
+                        spanMeters: (span / AppConfig.engineSpanStep).rounded() * AppConfig.engineSpanStep,
                         anchorY: insets.meY,
-                        pitchDegrees: !env.location.isTripActive ? 0 : AppConfig.engineMapPitchDegrees
+                        pitchDegrees: !env.location.isTripActive ? 0 : (AppConfig.engineMapPitchDegrees
                             * min(1, max(0, (maneuverDistance ?? AppConfig.engineManeuverApproachMeters)
-                                         / AppConfig.engineManeuverApproachMeters)),
+                                         / AppConfig.engineManeuverApproachMeters))
+                            / AppConfig.enginePitchStep).rounded() * AppConfig.enginePitchStep,
                         daylight: env.settings.mapAppearance.isDaylight(at: me, now: Date()),
                         houses: env.settings.mapHouses,
                         cameras: [],
@@ -76,6 +79,8 @@ struct EngineBaseLayer: View {
                         maneuverAlong: env.route.nextStep?.kind?.isDrawable == true ? env.route.nextStep?.distanceAlong : nil,
                         recenterToken: recenterToken,
                         modernStyle: env.settings.mapModernStyle,
+                        performance: env.thermal.mode,
+                        lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled,
                         onBrowse: { browsing = true },
                         onSelectCamera: onSelectCamera)
                     if browsing {

@@ -29,9 +29,11 @@ struct DashboardView: View {
             // Штрафное превышение: красное свечение краёв, видное боковым
             // зрением. БЕЗ пульса — вечная анимация на экране экономии жгла бы
             // GPU-композитинг часами; у камеры (короткие секунды) пульс уместен.
-            if isFineOverspeed {
-                OverspeedVignette(pulses: false)
-            }
+            DashFineVignette()
+            // Тик GPS → точка зрения схемы. Отдельной вью: прочитанный в корне
+            // locationTick пересобирал ВСЮ приборку каждую секунду
+            // (docs/perf_audit_2026-10-07.md).
+            SketchTickDriver(sketch: sketch)
 
             // Порядок зон — просьба водителя с реальной поездки: направления
             // (манёвр и схема) — на самом верху, как в настоящем навигаторе;
@@ -46,42 +48,23 @@ struct DashboardView: View {
                 // Манёвр при активном маршруте. Голос и так говорит «через
                 // 300 метров направо», но приборка — экран поездки, и взгляд
                 // на неё не должен оставлять вопрос «а поворот-то где?».
-                if env.route.isActive, let step = env.route.nextStep {
-                    maneuverRow(step)
-                        .padding(.top, 12)
-                }
+                DashManeuverRow()
 
                 // Схема «где камера»: чертим сами, без карты и без сети.
                 // Приборка — режим «телефон в держателе», она обязана быть
                 // самым дешёвым экраном приложения, а не самым дорогим.
-                if let scene = sketch.scene, !scene.isEmpty {
-                    RoadSketchView(scene: scene, state: sketch, tint: alertColor,
-                                   trim: env.thermal.mode.sketchTrim)
-                        .frame(height: 200)
-                        .padding(.horizontal, 28)
-                        .padding(.top, 6)
-                        .opacity(min(sketchIsStale ? 0.45 : 1, isParkedDim ? 0.4 : 1))
-                        .motionAnimation(.easeOut(duration: 0.4), value: sketchIsStale)
-                }
+                DashSketch(sketch: sketch, dimmed: isParkedDim)
 
                 Spacer(minLength: 14)
 
                 VStack(spacing: 18) {
-                    speedHero
+                    DashSpeedHero()
                         .opacity(isParkedDim ? 0.4 : 1)
 
                     // Ближайшая камера: дистанция крупно, цвет греется по
                     // уровню тревоги. НЕ гаснет на стоянке никогда: камера —
                     // то, ради чего приложение существует.
-                    if let camera = env.location.nearestCamera,
-                       let distance = env.location.distanceToNearest {
-                        cameraBlock(camera: camera, distance: distance)
-                    } else {
-                        Label("Камер рядом нет", systemImage: "checkmark.shield.fill")
-                            .font(.rounded(18, .semibold))
-                            .foregroundStyle(Theme.success)
-                            .padding(.vertical, 24)
-                    }
+                    DashCameraBlock()
                 }
 
                 Spacer(minLength: 14)
@@ -97,7 +80,7 @@ struct DashboardView: View {
                     ReportRefineBar()
 
                     if env.location.isTripActive {
-                        tripRow
+                        DashTripRow()
                     }
 
                     // Кнопка «Радар!» — во всю ширину: тап делается вслепую, и
@@ -122,14 +105,6 @@ struct DashboardView: View {
         .onTapGesture { dismiss() }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .statusBarHidden()
-        // Тик GPS → точка зрения схемы (и изредка пересборка её растра).
-        // Только пока экран телефона действительно на виду: fullScreenCover в
-        // фоне не размонтируется, и без этого гейта приборка всю поездку в
-        // кармане пересчитывала схему дороги раз в секунду — рисуя в никуда.
-        .onChange(of: env.location.locationTick) {
-            guard env.isPhoneSceneActive else { return }
-            sketch.refresh(env)
-        }
         // Приборка светится всю поездку — но по тумблеру пользователя: раньше
         // автопереход молча перебивал выключенное «не гасить экран», отменяя
         // единственный рычаг против главного потребителя.
@@ -203,6 +178,104 @@ struct DashboardView: View {
             .background(Theme.warning.opacity(0.12), in: Capsule())
     }
 
+    /// Жара: троттлинг уже работает (бюджет сетки схемы, буст GPS погашен) —
+    /// но молча. Молчаливая деградация читается как поломка, один чип
+    /// честности дешевле жалобы «лагает».
+    private var thermalChip: some View {
+        statusChip("Жарко — экономлю экран", symbol: "thermometer.sun.fill")
+    }
+
+    /// Стояночное затемнение: долгая стоянка И тихо. Любая тревога возвращает
+    /// полную яркость — камера всегда важнее экономии.
+    private var isParkedDim: Bool {
+        env.location.isStandingStill && env.location.alertLevel == 0
+    }
+
+}
+
+// MARK: - Листья приборки: каждый читает только своё
+//
+// Корень приборки читал скорость, дистанцию, курс, прогресс маршрута и путь
+// поездки — и пересобирался ЦЕЛИКОМ на каждом фиксе, вместе со схемой и
+// кнопками (docs/perf_audit_2026-10-07.md). Теперь тиковые значения читают
+// только эти листья; корень пересобирается на редких сменах.
+
+/// Правила цвета и превышения — общие для листьев.
+private enum DashRules {
+    static func speedColor(_ env: AppEnvironment) -> Color {
+        guard let limit = env.speedLimits.currentLimit else { return .white }
+        let over = env.location.speedKmh - Double(limit)
+        if over <= 2 { return .white }
+        if FineSchedule.fine(overKmh: over) == 0 { return Theme.role(.attention) }
+        return Theme.danger
+    }
+
+    /// Превышение уже стоит денег — то же условие, что красит скорость красным.
+    static func isFineOverspeed(_ env: AppEnvironment) -> Bool {
+        guard let limit = env.speedLimits.currentLimit else { return false }
+        return FineSchedule.fine(overKmh: env.location.speedKmh - Double(limit)) > 0
+    }
+
+    static func alertColor(_ env: AppEnvironment) -> Color {
+        guard let distance = env.location.distanceToNearest else { return Theme.accent }
+        let radius = AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
+                                                 baseRadius: env.settings.alertRadius,
+                                                 context: env.location.alertContext)
+        // Три ступени: вплотную — опасность, в средней зоне — внимание,
+        // в радиусе — нейтральный акцент. Раньше вторая ветка звала
+        // Theme.role(.alarm) — тот же danger, и эскалация была двухступенчатой.
+        if distance <= radius * 0.3 { return Theme.danger }
+        if distance <= radius * 0.6 { return Theme.warning }
+        if distance <= radius { return Theme.accent }
+        return Theme.accent
+    }
+}
+
+/// Тик GPS → точка зрения схемы (и изредка пересборка её растра).
+/// Только пока экран телефона действительно на виду: fullScreenCover в
+/// фоне не размонтируется, и без этого гейта приборка всю поездку в
+/// кармане пересчитывала схему дороги раз в секунду — рисуя в никуда.
+private struct SketchTickDriver: View {
+    @Environment(AppEnvironment.self) private var env
+    let sketch: SketchState
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onChange(of: env.location.locationTick) {
+                guard env.isPhoneSceneActive else { return }
+                sketch.refresh(env)
+            }
+    }
+}
+
+/// Штрафное превышение: красное свечение краёв, видное боковым зрением.
+/// БЕЗ пульса — вечная анимация на экране экономии жгла бы GPU-композитинг
+/// часами; у камеры (короткие секунды) пульс уместен.
+private struct DashFineVignette: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        if DashRules.isFineOverspeed(env) {
+            OverspeedVignette(pulses: false)
+        }
+    }
+}
+
+/// Манёвр при активном маршруте. Голос и так говорит «через 300 метров
+/// направо», но приборка — экран поездки, и взгляд на неё не должен
+/// оставлять вопрос «а поворот-то где?».
+private struct DashManeuverRow: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        if env.route.isActive, let step = env.route.nextStep {
+            maneuverRow(step)
+                .padding(.top, 12)
+        }
+    }
+
     /// Манёвр — верхний баннер, как в навигаторе: иконка + дистанция + фраза.
     private func maneuverRow(_ step: RouteStep) -> some View {
         HStack(spacing: 12) {
@@ -222,12 +295,40 @@ struct DashboardView: View {
         .padding(.horizontal, 28)
     }
 
-    /// Жара: троттлинг уже работает (бюджет сетки схемы, буст GPS погашен) —
-    /// но молча. Молчаливая деградация читается как поломка, один чип
-    /// честности дешевле жалобы «лагает».
-    private var thermalChip: some View {
-        statusChip("Жарко — экономлю экран", symbol: "thermometer.sun.fill")
+}
+
+/// Схема «где камера»: чертим сами, без карты и без сети. Приборка — режим
+/// «телефон в держателе», она обязана быть самым дешёвым экраном
+/// приложения, а не самым дорогим.
+private struct DashSketch: View {
+    @Environment(AppEnvironment.self) private var env
+    let sketch: SketchState
+    let dimmed: Bool
+
+    var body: some View {
+        if let scene = sketch.scene, !scene.isEmpty {
+            RoadSketchView(scene: scene, state: sketch, tint: DashRules.alertColor(env),
+                           trim: env.thermal.mode.sketchTrim)
+                .frame(height: 200)
+                .padding(.horizontal, 28)
+                .padding(.top, 6)
+                .opacity(min(sketchIsStale ? 0.45 : 1, dimmed ? 0.4 : 1))
+                .motionAnimation(.easeOut(duration: 0.4), value: sketchIsStale)
+        }
     }
+
+    /// Схема нарисована по устаревшему курсу (стоим, курса нет) — показываем
+    /// приглушённо: «это последнее, что мы знали», а не «это происходит
+    /// сейчас». Проверено на симуляции: раньше схема на остановке исчезала
+    /// целиком, то есть панель гасла бы на каждом светофоре.
+    private var sketchIsStale: Bool { env.location.currentCourse < 0 }
+
+}
+
+private struct DashSpeedHero: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View { speedHero }
 
     /// Скорость — главное, во весь экран.
     private var speedHero: some View {
@@ -236,7 +337,7 @@ struct DashboardView: View {
                 Text("\(Int(env.location.speedKmh.rounded()))")
                     .font(.system(size: 148, weight: .heavy, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(speedColor)
+                    .foregroundStyle(DashRules.speedColor(env))
                     .contentTransition(.numericText())
                     .motionAnimation(.snappy(duration: 0.3), value: Int(env.location.speedKmh))
                 if let limit = env.speedLimits.currentLimit {
@@ -277,47 +378,22 @@ struct DashboardView: View {
         return parts.joined(separator: ", ")
     }
 
-    /// Строка поездки: время · путь · камеры, заряд и «Стоп». Приборка — экран
-    /// поездки, с неё не должно приходиться уходить: ни чтобы посмотреть,
-    /// сколько едем, ни чтобы завершить.
-    private var tripRow: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 1) {
-                if let started = env.trip.startedAt {
-                    // Системный таймер: тикает сам, без пересборки body каждую секунду.
-                    Text(timerInterval: started...Date.distantFuture, countsDown: false)
-                        .font(.rounded(20, .heavy).monospacedDigit())
-                        .foregroundStyle(Theme.success)
-                }
-                HStack(spacing: 4) {
-                    Text(Formatting.distance(env.trip.distanceMeters))
-                        .contentTransition(.numericText())
-                    Text("·")
-                    Image(systemName: "camera.fill")
-                        .font(.rounded(10, .semibold))
-                    Text("\(env.trip.camerasPassed)")
-                        .contentTransition(.numericText())
-                }
-                .font(.rounded(12, .medium))
-                .foregroundStyle(Theme.textSecondary)
-            }
-            Spacer(minLength: 8)
-            BatteryChip(sinceStartPercent: env.trip.startBatteryPercent)
-            // Тот же путь, что стоп на карте, и то же подтверждение в два
-            // касания; приборку закроет сам конец поездки (MapScreen прячет её
-            // по isTripActive).
-            StopTripButton { env.location.endTrip() }
-        }
-        .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(Theme.surface.opacity(0.6),
-                    in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-    }
+}
 
-    /// Схема нарисована по устаревшему курсу (стоим, курса нет) — показываем
-    /// приглушённо: «это последнее, что мы знали», а не «это происходит
-    /// сейчас». Проверено на симуляции: раньше схема на остановке исчезала
-    /// целиком, то есть панель гасла бы на каждом светофоре.
-    private var sketchIsStale: Bool { env.location.currentCourse < 0 }
+private struct DashCameraBlock: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        if let camera = env.location.nearestCamera,
+           let distance = env.location.distanceToNearest {
+            cameraBlock(camera: camera, distance: distance)
+        } else {
+            Label("Камер рядом нет", systemImage: "checkmark.shield.fill")
+                .font(.rounded(18, .semibold))
+                .foregroundStyle(Theme.success)
+                .padding(.vertical, 24)
+        }
+    }
 
     /// Блок ближайшей камеры.
     ///
@@ -345,7 +421,7 @@ struct DashboardView: View {
                         let angle = CameraDirection.arrowAngle(relativeBearing: rel)
                         Image(systemName: "arrowtriangle.up.fill")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(alertColor)
+                            .foregroundStyle(DashRules.alertColor(env))
                             .offset(y: -37)
                             .rotationEffect(.degrees(angle))
                             // Шаг в 10° — стрелка не дрожит от шума курса.
@@ -355,7 +431,7 @@ struct DashboardView: View {
                 Text(Formatting.distance(distance))
                     .font(.system(size: 56, weight: .heavy, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(alertColor)
+                    .foregroundStyle(DashRules.alertColor(env))
                     .contentTransition(.numericText())
                     .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
                 if let side = env.location.nearestSideWord {
@@ -404,7 +480,7 @@ struct DashboardView: View {
         }
         .padding(.vertical, 18)
         .frame(maxWidth: .infinity)
-        .background(alertColor.opacity(0.10),
+        .background(DashRules.alertColor(env).opacity(0.10),
                     in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
         .padding(.horizontal, 28)
     }
@@ -420,7 +496,7 @@ struct DashboardView: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.white.opacity(0.10))
                 Capsule()
-                    .fill(alertColor)
+                    .fill(DashRules.alertColor(env))
                     .frame(width: geometry.size.width * progress)
             }
         }
@@ -431,37 +507,47 @@ struct DashboardView: View {
         .accessibilityHidden(true)   // цифру рядом VoiceOver уже читает
     }
 
-    private var speedColor: Color {
-        guard let limit = env.speedLimits.currentLimit else { return .white }
-        let over = env.location.speedKmh - Double(limit)
-        if over <= 2 { return .white }
-        if FineSchedule.fine(overKmh: over) == 0 { return Theme.role(.attention) }
-        return Theme.danger
+}
+
+private struct DashTripRow: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View { tripRow }
+
+    /// Строка поездки: время · путь · камеры, заряд и «Стоп». Приборка — экран
+    /// поездки, с неё не должно приходиться уходить: ни чтобы посмотреть,
+    /// сколько едем, ни чтобы завершить.
+    private var tripRow: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 1) {
+                if let started = env.trip.startedAt {
+                    // Системный таймер: тикает сам, без пересборки body каждую секунду.
+                    Text(timerInterval: started...Date.distantFuture, countsDown: false)
+                        .font(.rounded(20, .heavy).monospacedDigit())
+                        .foregroundStyle(Theme.success)
+                }
+                HStack(spacing: 4) {
+                    Text(Formatting.distance(env.trip.distanceMeters))
+                        .contentTransition(.numericText())
+                    Text("·")
+                    Image(systemName: "camera.fill")
+                        .font(.rounded(10, .semibold))
+                    Text("\(env.trip.camerasPassed)")
+                        .contentTransition(.numericText())
+                }
+                .font(.rounded(12, .medium))
+                .foregroundStyle(Theme.textSecondary)
+            }
+            Spacer(minLength: 8)
+            BatteryChip(sinceStartPercent: env.trip.startBatteryPercent)
+            // Тот же путь, что стоп на карте, и то же подтверждение в два
+            // касания; приборку закроет сам конец поездки (MapScreen прячет её
+            // по isTripActive).
+            StopTripButton { env.location.endTrip() }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(Theme.surface.opacity(0.6),
+                    in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
     }
 
-    /// Превышение уже стоит денег — то же условие, что красит скорость красным.
-    private var isFineOverspeed: Bool {
-        guard let limit = env.speedLimits.currentLimit else { return false }
-        return FineSchedule.fine(overKmh: env.location.speedKmh - Double(limit)) > 0
-    }
-
-    /// Стояночное затемнение: долгая стоянка И тихо. Любая тревога возвращает
-    /// полную яркость — камера всегда важнее экономии.
-    private var isParkedDim: Bool {
-        env.location.isStandingStill && env.location.alertLevel == 0
-    }
-
-    private var alertColor: Color {
-        guard let distance = env.location.distanceToNearest else { return Theme.accent }
-        let radius = AlertEngine.effectiveRadius(speedKmh: env.location.speedKmh,
-                                                 baseRadius: env.settings.alertRadius,
-                                                 context: env.location.alertContext)
-        // Три ступени: вплотную — опасность, в средней зоне — внимание,
-        // в радиусе — нейтральный акцент. Раньше вторая ветка звала
-        // Theme.role(.alarm) — тот же danger, и эскалация была двухступенчатой.
-        if distance <= radius * 0.3 { return Theme.danger }
-        if distance <= radius * 0.6 { return Theme.warning }
-        if distance <= radius { return Theme.accent }
-        return Theme.accent
-    }
 }

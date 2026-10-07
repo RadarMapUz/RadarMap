@@ -260,10 +260,16 @@ struct OverspeedVignette: View {
     @State private var pulse = false
 
     var body: some View {
+        // Размытая рамка растеризуется ОДИН раз (drawingGroup), а пульсирует
+        // только непрозрачность готовой картинки. Прежде пульс менял цвет
+        // обводки ПОД blur(24) — и размытие во весь экран пересчитывалось
+        // каждый кадр анимации, пока длится превышение
+        // (docs/perf_audit_2026-10-07.md). Картинка та же: 0.25…0.55.
         RoundedRectangle(cornerRadius: 44, style: .continuous)
-            .strokeBorder(Theme.danger.opacity(pulses ? (pulse ? 0.55 : 0.25) : 0.4),
-                          lineWidth: 22)
+            .strokeBorder(Theme.danger, lineWidth: 22)
             .blur(radius: 24)
+            .drawingGroup()
+            .opacity(pulses ? (pulse ? 0.55 : 0.25) : 0.4)
             .ignoresSafeArea()
             .allowsHitTesting(false)
             .onAppear {

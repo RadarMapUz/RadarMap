@@ -907,6 +907,31 @@ nonisolated enum AppConfig {
     static let engineCameraSpanThreshold = 30.0
     static let engineCameraDuration = 0.8
 
+    // MARK: - Карта на движке: кадры и нагрев (docs/perf_audit_2026-10-07.md)
+
+    /// Кадров в секунду при ведении за машиной. Камера движется раз в фикс
+    /// (~1 Гц) плавной анимацией; полная частота экрана (60–120) рисовала то же
+    /// самое вдвое-вчетверо чаще — поле показало часы GPU при минутах на экране.
+    static let engineFollowFPS = 30
+    /// Телефон греется или включено энергосбережение.
+    static let engineWarmFPS = 20
+    /// Телефон горячий: карта почти статична, HUD и голос важнее картинки.
+    static let engineHotFPS = 15
+    /// Ступени наклона и охвата: дрожание GPS на стоянке не должно запускать
+    /// новую анимацию камеры каждую секунду.
+    static let enginePitchStep = 5.0
+    static let engineSpanStep = 60.0
+    /// Порог сдвига камеры на горячем телефоне, метры (на холодном — 2 м).
+    static let engineCameraMoveThresholdWarm = 6.0
+
+    /// Live Activity: ближе этой дистанции до камеры — частые обновления
+    /// (25 м / 3 с); дальше — 100 м и не чаще `liveActivityFarInterval`.
+    /// С запасом к самому большому эффективному радиусу оповещения (~800 м).
+    static let liveActivityNearMeters = 1_200.0
+    static let liveActivityFarInterval: TimeInterval = 15
+    /// Часы без тревоги: не чаще раза в столько секунд.
+    static let watchCalmInterval: TimeInterval = 10
+
     // MARK: - Новая карта: выпуск тайлов (docs/plan_map_offline.md §2.6)
 
     /// Подписанный корень выпуска: номер N и sha256 каждой корзины индекса.

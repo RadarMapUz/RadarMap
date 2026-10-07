@@ -68,6 +68,9 @@ struct EngineMapView: UIViewRepresentable {
     /// Новая карта: основа OpenMapTiles + наши слои (EngineModernStyle) по
     /// выпуску тайлов. Выключено или выпуска нет — прежний стиль.
     var modernStyle: Bool = false
+    /// Тепловой режим и энергосбережение: частота кадров и порог сдвига.
+    var performance: PerformanceMode = .full
+    var lowPower: Bool = false
     var onBrowse: () -> Void = {}
     var onSelectCamera: (Camera) -> Void = { _ in }
 
@@ -176,6 +179,7 @@ struct EngineMapView: UIViewRepresentable {
         /// Стиль новой карты не собрался (битый ресурс): до конца жизни экрана
         /// работаем как прежняя карта — со своим индексом, а не пустой.
         private var modernBroken = false
+        private var lastFPS: Int?
 
         // MapLibre invokes this for every native camera gesture, including tap zoom.
         func mapView(_ mapView: MLNMapView, shouldChangeFrom oldCamera: MLNMapCamera,
@@ -515,11 +519,22 @@ struct EngineMapView: UIViewRepresentable {
                                       heading: heading)
             let changed = lastCameraModel.map { previous in
                 GeoMath.fastDistance(previous.coordinate.latitude, previous.coordinate.longitude,
-                                     model.coordinate.latitude, model.coordinate.longitude) >= AppConfig.engineCameraMoveThreshold
+                                     model.coordinate.latitude, model.coordinate.longitude)
+                    >= (model.performance == .full ? AppConfig.engineCameraMoveThreshold
+                                                   : AppConfig.engineCameraMoveThresholdWarm)
                 || GeoMath.angleDifference(previous.courseDegrees, model.courseDegrees) >= AppConfig.engineCameraHeadingThreshold
                 || abs(previous.spanMeters - model.spanMeters) >= AppConfig.engineCameraSpanThreshold
                 || previous.pitchDegrees != model.pitchDegrees || previous.anchorY != model.anchorY
             } ?? true
+            // Частота кадров: полная — только когда водитель сам двигает карту.
+            let fps = Self.framesPerSecond(browsing: browsing, performance: model.performance,
+                                           lowPower: model.lowPower)
+            if fps != lastFPS {
+                lastFPS = fps
+                view.preferredFramesPerSecond = fps > 0
+                    ? MLNMapViewPreferredFramesPerSecond(rawValue: fps)
+                    : .default
+            }
             if !browsing && changed {
                 let now = CACurrentMediaTime()
                 let interval = lastFollowTime.map { min(AppConfig.engineCameraDuration, max(0, now - $0)) }
@@ -612,6 +627,16 @@ struct EngineMapView: UIViewRepresentable {
                 return point
             }
             (view.style?.source(withIdentifier: "cameras") as? MLNShapeSource)?.shape = MLNShapeCollectionFeature(shapes: points)
+        }
+
+        /// 0 — частота по умолчанию (движок сам выбирает, плавно для жестов).
+        static func framesPerSecond(browsing: Bool, performance: PerformanceMode, lowPower: Bool) -> Int {
+            if browsing { return performance == .full && !lowPower ? 0 : AppConfig.engineWarmFPS }
+            switch performance {
+            case .minimal: return AppConfig.engineHotFPS
+            case .reduced: return AppConfig.engineWarmFPS
+            case .full:    return lowPower ? AppConfig.engineWarmFPS : AppConfig.engineFollowFPS
+            }
         }
 
         static func zoom(spanMeters: Double, height: Double, latitude: Double) -> Double {

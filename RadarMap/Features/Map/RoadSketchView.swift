@@ -636,18 +636,23 @@ private struct AlertCameraMarker: View {
                 .frame(width: 30 * scale, height: 30 * scale)
                 .scaleEffect(pulsing ? 1.9 : 1)
                 .opacity(pulsing ? 0 : 0.9)
-            Circle()
-                .fill(tint.opacity(0.18))
-                .frame(width: 40 * scale, height: 40 * scale)
-            Circle()
-                .fill(Theme.danger)
-                .frame(width: 22 * scale, height: 22 * scale)
-                .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 1.5 * scale))
-            Image(systemName: "camera.fill")
-                .font(.roundedFree(10 * scale, .bold))
-                .foregroundStyle(.white)
+            // Тень — только у неподвижного знака. Висела на всём ZStack вместе
+            // с пульсом, и компоновщик пересчитывал размытую тень расходящегося
+            // кольца каждый кадр (docs/perf_audit_2026-10-07.md).
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.18))
+                    .frame(width: 40 * scale, height: 40 * scale)
+                Circle()
+                    .fill(Theme.danger)
+                    .frame(width: 22 * scale, height: 22 * scale)
+                    .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 1.5 * scale))
+                Image(systemName: "camera.fill")
+                    .font(.roundedFree(10 * scale, .bold))
+                    .foregroundStyle(.white)
+            }
+            .shadow(color: .black.opacity(0.6), radius: 3 * scale)
         }
-        .shadow(color: .black.opacity(0.6), radius: 3 * scale)
         .onAppear {
             withMotion(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) {
                 pulsing = true

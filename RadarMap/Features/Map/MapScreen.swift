@@ -106,7 +106,8 @@ struct MapScreen: View {
             }
 
             // Следование за GPS: единственный подписчик locationTick.
-            LocationFollowDriver(map: map, isCovered: showDashboard)
+            LocationFollowDriver(map: map, isCovered: showDashboard,
+                                 drivesAppleCamera: shownBase == .apple)
             MobilePassDriver()
         }
         .mapScope(mapScope)
@@ -344,6 +345,20 @@ struct MapScreen: View {
     /// включённая своя карта пересобирала весь экран раз в секунду.
     @ViewBuilder
     private func baseLayer(scheme: ColorScheme) -> some View {
+        // Под приборкой карты нет ВОВСЕ. Раньше движок здесь уступал место
+        // карте Apple: невидимая под полноэкранной приборкой, она всё равно
+        // монтировалась и грузила тайлы, а при закрытии приборки движок
+        // собирался заново. Поле показывает GPU в часах при минутах на экране
+        // (docs/perf_audit_2026-10-07.md) — под закрытым экраном не рисуем ничего.
+        if showDashboard {
+            Theme.background.ignoresSafeArea()
+        } else {
+            mapBase(scheme: scheme)
+        }
+    }
+
+    @ViewBuilder
+    private func mapBase(scheme: ColorScheme) -> some View {
         switch shownBase {
         case .engine:
             #if canImport(MapLibre)

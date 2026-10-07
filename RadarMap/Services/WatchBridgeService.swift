@@ -54,20 +54,29 @@ final class WatchBridgeService: NSObject {
         guard WCSession.isSupported(), session.activationState == .activated,
               session.isPaired, session.isWatchAppInstalled else { return }
 
-        // Квантуем: скорость до 2 км/ч, дистанцию до 25 м — меньше пробуждений радио.
+        // Квантуем — меньше пробуждений радио. Без тревоги грубее: скорость до
+        // 5 км/ч, дальняя дистанция до 100 м, — ступень в 2 км/ч менялась почти
+        // каждый тик, и часы получали сообщение раз в 3 с всю поездку
+        // (docs/perf_audit_2026-10-07.md). В тревоге — как раньше.
+        let calm = alertLevel == 0
+        let speedStep = calm ? 5.0 : 2.0
+        let distStep = (distanceMeters ?? .infinity) > AppConfig.liveActivityNearMeters ? 100.0 : 25.0
         let quantized: [String: Int] = [
             "active": isTripActive ? 1 : 0,
-            "speed": Int((speedKmh / 2).rounded()) * 2,
-            "dist": distanceMeters.map { Int(($0 / 25).rounded()) * 25 } ?? -1,
+            "speed": Int((speedKmh / speedStep).rounded() * speedStep),
+            "dist": distanceMeters.map { Int(($0 / distStep).rounded() * distStep) } ?? -1,
             "level": alertLevel,
             // Смена ближайшей камеры при совпавших квантах — тоже повод отправить:
             // иначе на часах висело бы название прошлой камеры со свежей дистанцией.
             "title": cameraTitle?.hashValue ?? 0,
         ]
         guard quantized != lastSent else { return }
-        // Вне тревоги — не чаще раза в minInterval; рост/сброс уровня — сразу.
-        if quantized["level"] == lastSent["level"],
-           Date().timeIntervalSince(lastSentAt) < Self.minInterval { return }
+        // Рост/сброс уровня и смена камеры — сразу; бегущие цифры — не чаще
+        // раза в minInterval (в тревоге) или watchCalmInterval (без неё).
+        if quantized["level"] == lastSent["level"], quantized["title"] == lastSent["title"],
+           Date().timeIntervalSince(lastSentAt) < (calm ? AppConfig.watchCalmInterval : Self.minInterval) {
+            return
+        }
         lastSent = quantized
         lastSentAt = Date()
 

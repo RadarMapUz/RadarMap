@@ -60,4 +60,24 @@ final class MapViewStateTests: XCTestCase {
         XCTAssertEqual(map.orientation, .following)
         XCTAssertFalse(map.isRotated)
     }
+
+    /// «К машине» из свободной карты в поездке — «по ходу», а не север, и
+    /// это не ручной выбор: следующая поездка повернёт карту сама.
+    func testRecenterInTripGoesHeadingUp() {
+        XCTAssertEqual(MapState.recenterOrientation(lastTracking: .following, inTrip: true,
+                                                    chosenByHand: false), .heading)
+        XCTAssertEqual(MapState.recenterOrientation(lastTracking: .following, inTrip: false,
+                                                    chosenByHand: false), .following)
+        XCTAssertEqual(MapState.recenterOrientation(lastTracking: .following, inTrip: true,
+                                                    chosenByHand: true), .following,
+                       "север, выбранный рукой, — выбор человека")
+    }
+
+    func testRecenterDoesNotCountAsHandChoice() {
+        let map = MapState()
+        map.releaseToFree()
+        map.cycleOrientation(coordinate: nil, course: -1, inTrip: true)
+        XCTAssertEqual(map.orientation, .heading)
+        XCTAssertFalse(map.orientationChosenByHand)
+    }
 }

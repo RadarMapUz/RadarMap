@@ -1114,6 +1114,14 @@ final class LocationService: NSObject {
                 route?.updateProgress(coordinate: coordinate, cameras: repository.cameras,
                                       announce: isTripActive, course: course)
             }
+            // На маршруте стрелка садится на его линию: OSRM ведёт по нужной
+            // проезжей части, и машина на карте едет по своей стороне
+            // проспекта, а не рядом с линией (поездка 07.10.2026). Только
+            // картинка, как и прижим к оси выше.
+            if route?.isActive == true, let snap = route?.displaySnap {
+                displayCoordinate = snap.coordinate
+                displayCourse = snap.course
+            }
             tuneAdaptiveAccuracy()
             // Долгая стоянка (стояночное затемнение приборки): пишем только
             // на смене — наблюдатели не будятся каждым тиком.

@@ -410,19 +410,43 @@ final class MapState {
         return (raw / 20).rounded() * 20
     }
 
-    /// Тап по контролу ориентации: свободна → следование → поворот → следование.
+    /// Тап по контролу ориентации: свободна → слежение → поворот → следование.
     /// Вернуть «свободу» тапом нельзя — она наступает сама, когда карту тянут
     /// рукой; кнопка, отменяющая слежение, водителю не нужна.
+    ///
+    /// Из свободной карты тап — это «вернись к машине», а не выбор режима:
+    /// карта встаёт в тот режим слежения, что был до жеста (в поездке — «по
+    /// ходу»). Раньше «К машине» ставила север вверху и запоминала это как
+    /// ручной выбор — и ни одна следующая поездка уже не поворачивала карту
+    /// сама: стрелка ехала боком у края экрана (поездка 07.10.2026).
     func cycleOrientation(coordinate: CLLocationCoordinate2D?,
                           course: CLLocationDirection, inTrip: Bool) {
+        if orientation == .free {
+            apply(orientation: Self.recenterOrientation(lastTracking: lastTracking, inTrip: inTrip,
+                                                        chosenByHand: orientationChosenByHand),
+                  coordinate: coordinate, course: course, inTrip: inTrip)
+            return
+        }
         let next: Orientation = orientation == .following ? .heading : .following
         orientationChosenByHand = true   // дальше режим её не перебивает
         apply(orientation: next, coordinate: coordinate, course: course, inTrip: inTrip)
     }
 
+    /// Последний режим слежения (не «свободно») — куда возвращает «К машине».
+    private(set) var lastTracking: Orientation = .following
+
+    /// Куда вернуть карту из свободного режима: выбранный рукой режим —
+    /// его; иначе в поездке — «по ходу», вне поездки — прежний.
+    nonisolated static func recenterOrientation(lastTracking: Orientation, inTrip: Bool,
+                                                chosenByHand: Bool) -> Orientation {
+        if chosenByHand, lastTracking != .free { return lastTracking }
+        return inTrip ? .heading : (lastTracking == .free ? .following : lastTracking)
+    }
+
     func apply(orientation next: Orientation, coordinate: CLLocationCoordinate2D?,
                course: CLLocationDirection, inTrip: Bool) {
         orientation = next
+        if next != .free { lastTracking = next }
         switch next {
         case .free:
             followsDeviceHeading = false

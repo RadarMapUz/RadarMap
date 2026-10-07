@@ -71,6 +71,12 @@ final class RouteService {
 
     // Живой прогресс (обновляется на каждой GPS-точке при активном маршруте).
     private(set) var progressAlong: CLLocationDistance = 0
+    /// Где рисовать стрелку: точка и направление НА линии маршрута, если
+    /// машина от неё ближе routeSnapMeters, иначе nil. Только картинка —
+    /// алерты и проезды живут на сыром фиксе. Не наблюдается: читает
+    /// LocationService сразу после updateProgress.
+    @ObservationIgnored private(set) var displaySnap: (coordinate: CLLocationCoordinate2D,
+                                                       course: CLLocationDirection)?
     private(set) var nextCamera: RouteCamera?
     private(set) var nextCameraDistance: CLLocationDistance = 0
     private(set) var nextStep: RouteStep?
@@ -306,6 +312,7 @@ final class RouteService {
 
     private func resetProgress() {
         progressAlong = 0
+        displaySnap = nil
         nextCamera = nil
         nextCameraDistance = 0
         nextStep = nil
@@ -340,6 +347,9 @@ final class RouteService {
                                               allowFullScan: offRouteTicks % 3 == 0,
                                               course: course)
         progressAlong = along
+        displaySnap = deviation <= AppConfig.routeSnapMeters
+            ? Self.pointAndCourse(along: along, pts: variant.points, cum: selectedCumulative)
+            : nil
 
         // Прибытие: у самой цели ИЛИ проехали финиш по маршруту (парковка чуть в стороне,
         // GPS-точка не попала в малый радиус — маршрут всё равно выполнен).
@@ -764,6 +774,33 @@ final class RouteService {
     /// от нуля НА КАЖДОМ ТИКЕ — O(позиция), к середине междугородного маршрута
     /// это тысячи sqrt в секунду на main, и чем дольше едешь, тем горячее
     /// телефон. Ровно профиль жалобы «греется в дальней дороге».
+    /// Точка и направление на линии через `along` метров от старта.
+    nonisolated static func pointAndCourse(along: CLLocationDistance, pts: [MKMapPoint],
+                                           cum: [CLLocationDistance])
+    -> (coordinate: CLLocationCoordinate2D, course: CLLocationDirection)? {
+        let n = pts.count
+        guard n >= 2, cum.count == n else { return nil }
+        let target = min(max(0, along), cum[n - 1])
+        // Двоичный поиск сегмента: cum возрастает.
+        var lo = 0, hi = n - 1
+        while hi - lo > 1 {
+            let mid = (lo + hi) / 2
+            if cum[mid] <= target { lo = mid } else { hi = mid }
+        }
+        let i = lo
+        let a = pts[i], b = pts[i + 1]
+        let span = cum[i + 1] - cum[i]
+        let t = span > 0 ? (target - cum[i]) / span : 0
+        let point = MKMapPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+        let from = a.coordinate, to = b.coordinate
+        let dLon = (to.longitude - from.longitude) * .pi / 180
+        let lat1 = from.latitude * .pi / 180, lat2 = to.latitude * .pi / 180
+        let y = sin(dLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+        let course = (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+        return (point.coordinate, course)
+    }
+
     nonisolated static func cumulative(of pts: [MKMapPoint]) -> [CLLocationDistance] {
         guard !pts.isEmpty else { return [] }
         var cum = [CLLocationDistance](repeating: 0, count: pts.count)

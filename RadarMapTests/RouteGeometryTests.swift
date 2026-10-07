@@ -222,4 +222,20 @@ final class RouteGeometryTests: XCTestCase {
         let aligned = RouteService.project(probe, onto: pts, cum: cum, hint: &b, course: 90)
         XCTAssertEqual(blind.along, aligned.along, accuracy: 1)
     }
+
+    /// Стрелка на линии маршрута: точка через N метров и направление сегмента.
+    func testPointAndCourseOnRoute() throws {
+        let start = CLLocationCoordinate2D(latitude: 41.30, longitude: 69.20)
+        let east = CLLocationCoordinate2D(latitude: 41.30, longitude: 69.21)
+        let north = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.21)
+        let pts = [start, east, north].map(MKMapPoint.init)
+        let cum = RouteService.cumulative(of: pts)
+        let mid = try XCTUnwrap(RouteService.pointAndCourse(along: cum[1] / 2, pts: pts, cum: cum))
+        XCTAssertEqual(mid.coordinate.longitude, 69.205, accuracy: 0.0005)
+        XCTAssertEqual(mid.course, 90, accuracy: 1, "первый отрезок — на восток")
+        let turn = try XCTUnwrap(RouteService.pointAndCourse(along: cum[1] + 100, pts: pts, cum: cum))
+        XCTAssertEqual(turn.course, 0, accuracy: 1, "после поворота — на север")
+        let beyond = try XCTUnwrap(RouteService.pointAndCourse(along: cum[2] + 500, pts: pts, cum: cum))
+        XCTAssertEqual(beyond.coordinate.latitude, 41.31, accuracy: 0.0001, "за финишем — на финише")
+    }
 }

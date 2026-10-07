@@ -60,6 +60,8 @@ Bing/Esri — только для правок В OSM.
 - После публикации дорог/основы — `bash server/publish_tileset.sh`: выпуск
   v/<N>/ (кэш на год) и корзины индекса под подписанным tiles_root.json —
   контракт для приложения в docs/plan_map_offline.md §2.6.
+- Офлайн-регионы (после сборки страны, раз в месяц): `region_boundaries.sh` →
+  `build_regions.py` → `publish_regions.sh` — контракт в §2.7 того же плана.
 - Проверка: `/opt/radarmap/api/status.py` → roads/mvt/omt ok.
 - Крон VPS (`update_roads.sh`, вс 04:17) с 07.10 готовит ТОЛЬКО экстракт:
   сборка страны на 2 ГБ невозможна. Вернуть — RADARMAP_BUILD_ON_VPS=1.

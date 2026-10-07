@@ -57,32 +57,50 @@ nonisolated enum TimedTrack {
         let name: String
     }
 
+    /// Одна поездка в выгрузке «все сразу»: свой трек и свои опорные точки.
+    struct Trip {
+        let name: String
+        let points: [(lat: Double, lon: Double, time: Date?, speedKmh: Double)]
+        let waypoints: [Waypoint]
+    }
+
     static func gpx(name: String, points: [(lat: Double, lon: Double, time: Date?, speedKmh: Double)],
                     waypoints: [Waypoint] = []) -> String {
+        gpx(trips: [Trip(name: name, points: points, waypoints: waypoints)])
+    }
+
+    /// Несколько поездок в одном файле: каждая — свой <trk>, опорные точки
+    /// всех поездок — в начале (так требует порядок элементов GPX 1.1).
+    /// Поездка без линии (у старых записей её не хранят) — только опоры.
+    static func gpx(trips: [Trip]) -> String {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime]
-        let escaped = name.replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+        func escape(_ text: String) -> String {
+            text.replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+        }
         var out = """
         <?xml version="1.0" encoding="UTF-8"?>
         <gpx version="1.1" creator="RadarMap" xmlns="http://www.topografix.com/GPX/1/1">
 
         """
-        for w in waypoints {
-            let label = w.name.replacingOccurrences(of: "&", with: "&amp;")
-                .replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
+        for w in trips.flatMap(\.waypoints) {
             out += String(format: "<wpt lat=\"%.6f\" lon=\"%.6f\">", w.lat, w.lon)
-                + "<time>\(iso.string(from: w.time))</time><name>\(label)</name></wpt>\n"
+                + "<time>\(iso.string(from: w.time))</time><name>\(escape(w.name))</name></wpt>\n"
         }
-        out += "<trk><name>\(escaped)</name><trkseg>\n"
-        for p in points {
-            out += String(format: "<trkpt lat=\"%.6f\" lon=\"%.6f\">", p.lat, p.lon)
-            if let time = p.time { out += "<time>\(iso.string(from: time))</time>" }
-            // Скорость в м/с — в расширении, без схемы: стандартные читатели
-            // её пропустят, наш разбор видео — возьмёт.
-            out += String(format: "<extensions><speed>%.2f</speed></extensions></trkpt>\n", p.speedKmh / 3.6)
+        for trip in trips where !trip.points.isEmpty {
+            out += "<trk><name>\(escape(trip.name))</name><trkseg>\n"
+            for p in trip.points {
+                out += String(format: "<trkpt lat=\"%.6f\" lon=\"%.6f\">", p.lat, p.lon)
+                if let time = p.time { out += "<time>\(iso.string(from: time))</time>" }
+                // Скорость в м/с — в расширении, без схемы: стандартные
+                // читатели её пропустят, наш разбор видео — возьмёт.
+                out += String(format: "<extensions><speed>%.2f</speed></extensions></trkpt>\n",
+                              p.speedKmh / 3.6)
+            }
+            out += "</trkseg></trk>\n"
         }
-        out += "</trkseg></trk>\n</gpx>\n"
+        out += "</gpx>\n"
         return out
     }
 }
@@ -133,25 +151,45 @@ nonisolated enum TimedTrackStore {
     /// GPX-файл поездки во временной папке — для системного «Поделиться».
     /// Есть подробный трек — с секундами; нет — упрощённый трек без времени.
     static func gpxFile(for record: TripRecord) -> URL? {
+        let trip = trip(of: record)
+        guard trip.points.count >= 2 else { return nil }
+        return write(TimedTrack.gpx(trips: [trip]), name: "RadarMap-\(stamp(record.startedAt)).gpx")
+    }
+
+    /// Все поездки истории одним файлом. У старых записей линии нет (её не
+    /// хранят дольше недели) — тогда в файл идут только проезды камер.
+    static func gpxFile(forAll records: [TripRecord]) -> URL? {
+        let trips = records.sorted { $0.startedAt < $1.startedAt }.map(trip(of:))
+            .filter { !$0.points.isEmpty || !$0.waypoints.isEmpty }
+        guard !trips.isEmpty else { return nil }
+        return write(TimedTrack.gpx(trips: trips), name: "RadarMap-все-поездки-\(stamp(Date())).gpx")
+    }
+
+    private static func trip(of record: TripRecord) -> TimedTrack.Trip {
         let timed = load(tripID: record.id)
         let points: [(lat: Double, lon: Double, time: Date?, speedKmh: Double)] =
             timed.map { $0.map { ($0.lat, $0.lon, $0.time, $0.speedKmh) } }
             ?? record.trackPoints.map { ($0.lat, $0.lon, nil, $0.speedKmh) }
-        guard points.count >= 2 else { return nil }
-        let stamp = ISO8601DateFormatter.string(from: record.startedAt, timeZone: .current,
-                                                formatOptions: [.withFullDate, .withTime])
+        let anchors = record.passed.compactMap { pass -> TimedTrack.Waypoint? in
+            guard let lat = pass.lat, let lon = pass.lon else { return nil }
+            return TimedTrack.Waypoint(lat: lat, lon: lon, time: pass.date,
+                                       name: String(format: "камера %d, %.0f км/ч",
+                                                    pass.cameraID, pass.speedKmh))
+        }
+        return TimedTrack.Trip(name: "RadarMap \(stamp(record.startedAt))", points: points,
+                               waypoints: anchors)
+    }
+
+    private static func stamp(_ date: Date) -> String {
+        ISO8601DateFormatter.string(from: date, timeZone: .current,
+                                    formatOptions: [.withFullDate, .withTime])
             .replacingOccurrences(of: ":", with: "-")
-        let file = FileManager.default.temporaryDirectory
-            .appendingPathComponent("RadarMap-\(stamp).gpx")
+    }
+
+    private static func write(_ text: String, name: String) -> URL? {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         do {
-            let anchors = record.passed.compactMap { pass -> TimedTrack.Waypoint? in
-                guard let lat = pass.lat, let lon = pass.lon else { return nil }
-                return TimedTrack.Waypoint(lat: lat, lon: lon, time: pass.date,
-                                           name: String(format: "камера %d, %.0f км/ч",
-                                                        pass.cameraID, pass.speedKmh))
-            }
-            try TimedTrack.gpx(name: "RadarMap \(stamp)", points: points, waypoints: anchors)
-                .write(to: file, atomically: true, encoding: .utf8)
+            try text.write(to: file, atomically: true, encoding: .utf8)
             return file
         } catch {
             Log.trips.error("GPX не записан: \(error.localizedDescription, privacy: .public)")

@@ -158,6 +158,7 @@ struct SpeedSettingsPage: View {
 
 struct TripSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
+    @State private var allTracks: ShareFilePayload?
 
     var body: some View {
         @Bindable var settings = env.settings
@@ -180,8 +181,14 @@ struct TripSettingsPage: View {
                     .onChange(of: settings.recordTimedTrack) { _, on in
                         env.trip.recordsTimedTrack = on
                     }
+                Button("Выгрузить все поездки (GPX)") {
+                    if let url = TimedTrackStore.gpxFile(forAll: env.trip.history) {
+                        allTracks = ShareFilePayload(url: url)
+                    }
+                }
+                .disabled(env.trip.history.isEmpty)
             } footer: {
-                Text("Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней; отдать файл GPX можно в карточке поездки.")
+                Text("Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней. «Выгрузить все поездки» отдаёт один файл GPX: линии поездок последней недели и проезды камер за месяц.")
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -201,6 +208,10 @@ struct TripSettingsPage: View {
             }
         }
         .settingsPage("Поездка")
+        .sheet(item: $allTracks) { payload in
+            ActivityFileSheet(url: payload.url)
+                .presentationDetents([.medium, .large])
+        }
     }
 }
 

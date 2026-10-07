@@ -14574,18 +14574,34 @@
         }
       }
     },
-    "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней; отдать файл GPX можно в карточке поездки.": {
+    "Выгрузить все поездки (GPX)": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней; отдать файл GPX можно в карточке поездки."
+            "value": "Выгрузить все поездки (GPX)"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Har soniyada vaqt bilan nuqta — videoregistrator yozuvini xaritaga bog‘lash uchun. Faqat telefonda 30 kun saqlanadi; GPX faylni safar kartochkasidan yuborish mumkin."
+            "value": "Barcha safarlarni yuklash (GPX)"
+          }
+        }
+      }
+    },
+    "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней. «Выгрузить все поездки» отдаёт один файл GPX: линии поездок последней недели и проезды камер за месяц.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней. «Выгрузить все поездки» отдаёт один файл GPX: линии поездок последней недели и проезды камер за месяц."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har soniyada vaqt bilan nuqta — videoregistrator yozuvini xaritaga bog‘lash uchun. Faqat telefonda 30 kun saqlanadi. «Barcha safarlarni yuklash» bitta GPX fayl beradi: oxirgi haftadagi safar chiziqlari va oy davomidagi kamera o‘tishlari."
           }
         }
       }

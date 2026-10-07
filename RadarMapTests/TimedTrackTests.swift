@@ -38,4 +38,16 @@ final class TimedTrackTests: XCTestCase {
         XCTAssertEqual(gpx.components(separatedBy: "<trkpt").count - 1, 2)
         XCTAssertEqual(gpx.components(separatedBy: "<time>").count - 1, 2, "точка без времени — без <time>")
     }
+
+    func testManyTripsInOneFile() {
+        let a = TimedTrack.Trip(name: "утро", points: [(41.3, 69.2, nil, 30), (41.31, 69.21, nil, 40)],
+                                waypoints: [.init(lat: 41.305, lon: 69.205, time: t0, name: "камера 1")])
+        let old = TimedTrack.Trip(name: "сентябрь", points: [],
+                                  waypoints: [.init(lat: 41.2, lon: 69.1, time: t0, name: "камера 2")])
+        let gpx = TimedTrack.gpx(trips: [a, old])
+        XCTAssertEqual(gpx.components(separatedBy: "<trk>").count - 1, 1, "поездка без линии — без пустого <trk>")
+        XCTAssertEqual(gpx.components(separatedBy: "<wpt").count - 1, 2, "опоры обеих поездок")
+        XCTAssertLessThan(gpx.range(of: "<wpt")!.lowerBound, gpx.range(of: "<trk>")!.lowerBound,
+                          "GPX 1.1: wpt раньше trk")
+    }
 }

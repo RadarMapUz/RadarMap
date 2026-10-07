@@ -11,6 +11,7 @@ from scipy import ndimage
 
 # Полосы строк JPEG и ширина окна открытия (px) — линия 10–20 см
 # на 6–40 м занимает от ~14 до ~2 px.
+GHOST = 10.0    # отклик неподвижной структуры, выше которого пиксель — нить отражения
 ROW_BANDS = ((350, 385, 7), (385, 410, 11), (410, 445, 17), (445, 529, 27))
 
 
@@ -28,14 +29,38 @@ def tophat_rows(ch):
     return out
 
 
-def marking_masks(rgb):
+def static_gain(resp, med, floor=2.0, max_gain=3.0):
+    """Насколько сильно неподвижная структура (медиана поездки) проступает
+    в этом кадре: МНК-коэффициент resp ≈ a·med по пикселям, где медиана
+    заметна. Отражение сетки то ярче (солнце сбоку), то пропадает (тень),
+    поэтому вычитаем a·med, а не саму медиану."""
+    m = med > floor
+    if m.sum() < 500:
+        return 1.0
+    a = float((resp[m] * med[m]).sum() / ((med[m] ** 2).sum() + 1e-6))
+    return min(max(a, 0.0), max_gain)
+
+
+def marking_masks(rgb, static=None, return_ghost=False):
     """→ (white, yellow, gray): булевы маски белой и жёлтой разметки
-    и яркость. Выше строки 350 — всегда False (там дорога уже не видна)."""
+    и яркость. Выше строки 350 — всегда False (там дорога уже не видна).
+    static — (медиана top-hat яркости, жёлтости) по поездке (reflect.py):
+    неподвижные отражения вычитаются из отклика до порога."""
     r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
     gray = 0.299 * r + 0.587 * g + 0.114 * b
     yel = (r + g) / 2 - b
     th = tophat_rows(gray)
     thy = tophat_rows(np.clip(yel, 0, None))
+    ghost = None
+    if static is not None:
+        a = static_gain(th, static[0])
+        th = th - a * static[0]
+        thy = thy - static_gain(thy, static[1]) * static[1]
+        # Сами нити сетки (где отражение заметно и в этом кадре) из маски
+        # убираем: вычитание медианы оставляет на них остаток, который «стоит»
+        # в кадре и тянет за собой профиль настоящей линии. Просветы между
+        # нитями остаются — линия через сетку видна по ним.
+        ghost = a * static[0] > GHOST
     white = np.zeros(gray.shape, bool)
     yellow = np.zeros(gray.shape, bool)
     for y0, y1, _ in ROW_BANDS:
@@ -50,6 +75,11 @@ def marking_masks(rgb):
         mady = np.median(np.abs(ty - medy)) + 1e-3
         yellow[y0:y1] = (ty > max(10.0, medy + 7 * mady)) & (yel[y0:y1] > 18) & (t > 6)
     white &= ~yellow
+    if ghost is not None:
+        white &= ~ghost
+        yellow &= ~ghost
     # Одиночные пиксели — шум JPEG.
     white = ndimage.binary_opening(white, structure=np.ones((2, 1), bool))
+    if return_ghost:
+        return white, yellow, gray, ghost
     return white, yellow, gray

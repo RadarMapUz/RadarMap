@@ -64,11 +64,10 @@ class BuildTests(unittest.TestCase):
         names = set()
         for path in self.tiles():
             names.update(self.parsed(path))
-        # Разметка — осевая: дорога в фикстуре двусторонняя primary; вдоль
-        # неё по обе стороны свободно — тротуар.
+        # Разметка — осевая: дорога в фикстуре двусторонняя primary.
         self.assertEqual(names, {build_mvt.LAYER_ROADS, build_mvt.LAYER_HOUSES,
                                  build_mvt.LAYER_LAND, build_mvt.LAYER_POINTS,
-                                 build_mvt.LAYER_MARKINGS, build_mvt.LAYER_SIDEWALKS})
+                                 build_mvt.LAYER_MARKINGS})
 
     def test_surface_carries_its_class(self):
         flags = 1 | (4 << build_mvt.SURFACE_CLASS_SHIFT)

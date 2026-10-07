@@ -1502,6 +1502,9 @@ def _superseded(line, fresh):
     return False
 
 
+# Полоса тротуара выключена по решению владельца (07.10.2026): на карте она
+# читалась лишней. Код оставлен — включается этим флагом.
+SIDEWALKS_ENABLED = False
 SIDEWALK_MIN_CODE, SIDEWALK_MAX_CODE = 2, 5
 SIDEWALK_GAP_METERS = 0.35       # от кромки асфальта — бордюр
 SIDEWALK_WIDTH_METERS = 2.6
@@ -2413,7 +2416,7 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                 half = (widths.get(id(road)) or road_width_meters(road[0], lanes_of(road[1]))) / 2.0
                 for ring in barrier_strips(road[2], half):
                     _put(buckets, zoom, LAYER_BARRIERS, mvt.POLYGON, ring, {"kind": "parapet"})
-        for road in roads:
+        for road in roads if SIDEWALKS_ENABLED else ():
             if not SIDEWALK_MIN_CODE <= road[0] <= SIDEWALK_MAX_CODE or road[1] & (FLAG_BRIDGE | FLAG_TUNNEL):
                 continue
             half = (widths.get(id(road)) or road_width_meters(road[0], lanes_of(road[1]))) / 2.0

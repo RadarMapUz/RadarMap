@@ -405,16 +405,6 @@ def _layers_in_draw_order(p):
                                         16.5, ["literal", [-1, -1]], 18, ["literal", [-3, -3]],
                                         20, ["literal", [-11, -11]]],
                    "circle-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.2, 0.8]}},
-        # Тротуар полосой вдоль магистралей: светлая плитка с бордюрной
-        # кромкой — дорога не висит в газоне (07.10.2026).
-        {"id": "radar-sidewalk", "type": "fill", "source": "radar", "source-layer": "sidewalks",
-         "minzoom": 15.5,
-         "paint": {"fill-color": p["sidewalk"], "fill-antialias": True,
-                   "fill-opacity": ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 1]}},
-        {"id": "radar-sidewalk-edge", "type": "line", "source": "radar", "source-layer": "sidewalks",
-         "minzoom": 16.5, "layout": {"line-join": "round"},
-         "paint": {"line-color": p["sidewalk_edge"],
-                   "line-width": ["interpolate", ["linear"], ["zoom"], 16.5, 0.4, 19, 1.0]}},
         # Парковка: площадка асфальта с бордюром и белые черты мест (как у
         # Яндекса у аэропорта). Под дорогами — проезды площадки лежат сверху.
         {"id": "radar-parking", "type": "fill", "source": "radar", "source-layer": "parking",
@@ -713,18 +703,13 @@ def build(base, theme="light", mode="full"):
     after = next((k + 1 for k, l in enumerate(out) if l["type"] == "fill-extrusion"),
                  at + len(ours))
     out.insert(after, tree_3d(p))
-    # Объём дороги: бордюр — тротуар приподнят на 18 см, у мостов —
-    # ограждение в метр. Среди объёмных слоёв, рядом с домами.
+    # Объём моста: ограждение в метр по кромкам пролёта. Среди объёмных
+    # слоёв, рядом с домами.
     out.insert(after, {"id": "radar-barrier-3d", "type": "fill-extrusion", "source": "radar",
                        "source-layer": "barriers", "minzoom": 16,
                        "paint": {"fill-extrusion-color": p["barrier"], "fill-extrusion-base": 0,
                                  "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 16, 0, 16.6, 1.1],
                                  "fill-extrusion-vertical-gradient": True, "fill-extrusion-opacity": 1.0}})
-    out.insert(after, {"id": "radar-kerb-3d", "type": "fill-extrusion", "source": "radar",
-                       "source-layer": "sidewalks", "minzoom": 16.5,
-                       "paint": {"fill-extrusion-color": p["sidewalk"], "fill-extrusion-base": 0,
-                                 "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.2, 0.18],
-                                 "fill-extrusion-vertical-gradient": False, "fill-extrusion-opacity": 1.0}})
     s["layers"] = out
     s["light"] = p["light"]
     s["name"] = f"RadarMap — {'светлая' if theme == 'light' else 'тёмная'}, {'полная' if mode == 'full' else 'только дорога'}"

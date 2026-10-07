@@ -621,5 +621,62 @@ class ApproachStopTests(unittest.TestCase):
                                                        build_mvt.StopIndex([])), [])
 
 
+class JunctionLightTests(unittest.TestCase):
+    """Значки светофоров: узел с вытянутой оболочкой тоже регулируемый."""
+
+    def setUp(self):
+        self.kx = 111_320 * math.cos(math.radians(41.3219))
+        self.m = lambda dx, dy: (69.2428 + dx / self.kx, 41.3219 + dy / 111_320)
+        self.box = [self.m(-6, -6), self.m(6, -6), self.m(6, 6), self.m(-6, 6)]
+
+    def facing(self, x, y):
+        bearing = math.degrees(math.atan2(-x, -y)) % 360
+        return (1, build_roads.point_flags(bearing, 12), [self.m(x, y)])
+
+    def lights(self, signals):
+        grid = build_mvt._signal_grid(signals)
+        found = build_mvt.junction_light_zone(self.box, grid)
+        return None if found is None else build_mvt.approach_lights(*found)
+
+    def test_elongated_signals_along_the_avenue_still_get_lights(self):
+        # Навои × Фурката: светофоры вытянуты вдоль проспекта (запад–восток),
+        # оболочка не компактна — «вафли» нет, но узел регулируемый.
+        spots = ((-50, 3), (-35, -3), (-20, 4), (20, -4), (35, 3), (50, -3))
+        signals = [self.facing(x, y) for x, y in spots]
+        self.assertIsNone(build_mvt.waffle_zone(self.box, build_mvt._signal_grid(signals)))
+        lights = self.lights(signals)
+        self.assertIsNotNone(lights)
+        self.assertEqual(len(lights), 2, "по значку на подход: запад и восток")
+        east = sorted((lon - 69.2428) * self.kx for lon, _lat in lights)
+        self.assertLess(east[0], 0)
+        self.assertGreater(east[1], 0)
+        for lon, lat in lights:
+            d = math.hypot((lon - 69.2428) * self.kx, (lat - 41.3219) * 111_320)
+            self.assertLessEqual(d, build_mvt.LIGHT_MAX_METERS + 0.5)
+
+    def test_compact_junction_is_unchanged(self):
+        signals = [self.facing(x, y) for x, y in ((48, 8), (-48, -8), (8, -48), (-8, 48))]
+        grid = build_mvt._signal_grid(signals)
+        zone = build_mvt.waffle_zone(self.box, grid)
+        self.assertIsNotNone(zone)
+        found = build_mvt.junction_light_zone(self.box, grid)
+        self.assertEqual(found[0], zone, "компактный узел — прежняя зона")
+        self.assertEqual(len(build_mvt.approach_lights(*found)), 4)
+
+    def test_too_few_signals_still_no_lights(self):
+        signals = [self.facing(x, y) for x, y in ((-40, 2), (40, -2))]
+        self.assertIsNone(self.lights(signals))
+
+    def test_neighbour_centre_of_the_same_junction_is_a_duplicate(self):
+        spots = ((-50, 3), (-35, -3), (-20, 4), (20, -4), (35, 3), (50, -3))
+        grid = build_mvt._signal_grid([self.facing(x, y) for x, y in spots])
+        twin = [self.m(4, 4), self.m(16, 4), self.m(16, 16), self.m(4, 16)]   # центр в 10 м
+        waffles = build_mvt.WaffleSet()
+        first = build_mvt.junction_light_zone(self.box, grid)
+        second = build_mvt.junction_light_zone(twin, grid)
+        self.assertIsNotNone(waffles.add(first[0]))
+        self.assertIsNone(waffles.add(second[0]), "второй центр того же узла — дубль")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

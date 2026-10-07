@@ -1786,7 +1786,8 @@ WAFFLE_SHRINK = 0.75
 WAFFLE_FACING_DEGREES = 40.0
 # Зона перекрёстка — почти квадрат или ромб. Вытянутый треугольник (Навои ×
 # Фурката, 28.09.2026: светофоры эстакады и съездов) — не перекрёсток, а
-# случайная выборка светофоров; такую «вафлю» не рисуем.
+# случайная выборка светофоров; такой оболочке зоной не быть. Значки подходов
+# у такого узла всё равно ставятся — вокруг его центра (junction_light_zone).
 WAFFLE_MIN_COMPACTNESS = 0.4
 _SIGNAL_CELL = 0.002   # ~200 м
 
@@ -1971,6 +1972,42 @@ def waffle_zone(box, grid, centres=None):
     hx = sum(p[0] for p in hull) / len(hull)
     hy = sum(p[1] for p in hull) / len(hull)
     return [(hx + (x - hx) * WAFFLE_SHRINK, hy + (y - hy) * WAFFLE_SHRINK) for x, y in hull]
+
+
+# Узел с вытянутой оболочкой светофоров (Навои × Фурката: ~10 светофоров OSM
+# вдоль проспекта под эстакадой) «вафлей» не стал — и до 07.10.2026 остался
+# совсем без значков, хотя регулируемый. Жёлтую сетку давно не рисуем, зона
+# только решает «регулируемый ли узел» и где центр значков, поэтому вместо
+# оболочки берём кольцо вокруг центра узла: его радиус — половина «одного
+# узла», чтобы WaffleSet погасил дубль соседнего центра того же перекрёстка.
+JUNCTION_RING_METERS = SAME_JUNCTION_METERS / 2
+JUNCTION_RING_SIDES = 8
+
+
+def _centre_ring(cx, cy, radius):
+    kx = 111_320 * math.cos(math.radians(cy))
+    return [(cx + radius * math.sin(2 * math.pi * i / JUNCTION_RING_SIDES) / kx,
+             cy + radius * math.cos(2 * math.pi * i / JUNCTION_RING_SIDES) / 111_320)
+            for i in range(JUNCTION_RING_SIDES)]
+
+
+def junction_light_zone(box, grid, centres=None):
+    """Зона значков светофоров узла и его светофоры: (зона, [(lon, lat)]) или None.
+
+    Компактная оболочка — как раньше (waffle_zone). Не прошла компактность или
+    вырождена, но своих, смотрящих в центр светофоров не меньше
+    WAFFLE_MIN_SIGNALS, — узел всё равно регулируемый: зона — кольцо вокруг
+    центра узла.
+    """
+    if not grid:
+        return None
+    signals = _junction_signals(box, grid, centres)
+    if len(signals) < WAFFLE_MIN_SIGNALS:
+        return None
+    zone = waffle_zone(box, grid, centres)
+    if zone is None:
+        zone = _centre_ring(*_box_centre(box), JUNCTION_RING_METERS)
+    return zone, signals
 
 
 def _waffle_key(ring):
@@ -2391,12 +2428,12 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         centres = box_centres(candidates)
         waffles = WaffleSet()
         for box in candidates:
-            waffle = waffle_zone(box, signals, centres)
-            centre = waffles.add(waffle) if waffle else None
+            found = junction_light_zone(box, signals, centres)
+            centre = waffles.add(found[0]) if found else None
             if centre:
                 # Жёлтой сетки нет (у Яндекса её нет): зона только решает,
                 # регулируемый ли перекрёсток и где его центр.
-                for light in approach_lights(waffle, _junction_signals(box, signals, centres)):
+                for light in approach_lights(*found):
                     _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [light], {"kind": KIND_APPROACH_LIGHT})
         # Зебры — подогнанные к подходам (fit_zebras): и линии переходов, и
         # размеченные узлы, одним слоем.

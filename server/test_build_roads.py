@@ -2336,6 +2336,70 @@ class LinkLaneTests(unittest.TestCase):
             [(2, trunk, [a, b], "Kichik Halqa"), (2, link, [b, c], "")])
         self.assertEqual(build_roads.lanes_of(roads[1][1]), 1)
 
+
+class SlipNodeTests(unittest.TestCase):
+    """Примыкание съезда к ленте — не ядро перекрёстка (Чорсу, 07.10.2026)."""
+
+    def setUp(self):
+        self.kx = 111_320 * math.cos(math.radians(41.31))
+        self.node = (69.28, 41.31)
+
+    def leg(self, degrees, width, length=40.0):
+        dx = math.cos(math.radians(degrees)) * length
+        dy = math.sin(math.radians(degrees)) * length
+        return (self.node, (self.node[0] + dx / self.kx, self.node[1] + dy / 111_320), width)
+
+    def test_narrow_acute_branch_of_a_through_carriageway_is_a_slip(self):
+        legs = [self.leg(0, 11.5), self.leg(180, 11.5), self.leg(20, 7.0)]
+        self.assertFalse(build_roads._joins_cluster(legs))
+        self.assertEqual(build_roads._slip_nodes(legs), {build_roads._node_key(self.node)})
+
+    def test_crossing_and_seam_stay_junction_nodes(self):
+        cross = [self.leg(0, 11.5), self.leg(180, 11.5), self.leg(90, 7.0), self.leg(270, 7.0)]
+        self.assertTrue(build_roads._joins_cluster(cross))
+        side_street = [self.leg(0, 11.5), self.leg(180, 11.5), self.leg(70, 7.0)]
+        self.assertTrue(build_roads._joins_cluster(side_street), "примыкание улицы, а не съезда")
+        fork = [self.leg(0, 11.5), self.leg(180, 11.5), self.leg(20, 10.5)]
+        self.assertTrue(build_roads._joins_cluster(fork), "развилка магистралей — перекрёсток")
+        seam = [self.leg(0, 11.5), self.leg(180, 10.0)]
+        self.assertTrue(build_roads._joins_cluster(seam))
+
+    def test_lone_slip_patch_is_asphalt_not_a_junction(self):
+        legs = [self.leg(0, 11.5), self.leg(180, 11.5), self.leg(20, 7.0)]
+        made = build_roads.build_junctions({build_roads._node_key(self.node): legs})
+        self.assertTrue(made)
+        for _kind, flags, _ring in made:
+            self.assertTrue(flags & build_roads.AREA_FLAG_STRIP, "бит полосы — не центр для стоп-линий")
+
+
+class MouthAreaTests(unittest.TestCase):
+    """Контур по устьям: компактный крест двух проспектов — сверх потолка площади."""
+
+    def ring(self, w, h):
+        kx = 111_320 * math.cos(math.radians(41.31))
+        return [(69.28 + x / kx, 41.31 + y / 111_320) for x, y in ((0, 0), (w, 0), (w, h), (0, h))]
+
+    def legs(self, width):
+        kx = 111_320 * math.cos(math.radians(41.31))
+        c = (69.28 + 20 / kx, 41.31 + 17 / 111_320)
+        out = []
+        for dx, dy in ((60, 0), (-60, 0), (0, 60), (0, -60)):
+            for shift in (-8, 8):
+                n = (c[0] + (shift if dx == 0 else 0) / kx, c[1] + (shift if dy == 0 else 0) / 111_320)
+                out.append((n, (n[0] + dx / kx, n[1] + dy / 111_320), width))
+        return out
+
+    def test_compact_outline_above_the_old_cap_is_kept(self):
+        legs = self.legs(11.0)                    # потолок 11² × 12 = 1452 м²
+        ring = self.ring(42, 38)                  # 1596 м², как Бунёдкор × Катартал
+        self.assertGreater(abs(build_roads.signed_area_meters(ring)), 11.0 ** 2 * build_roads.JUNCTION_MAX_AREA)
+        self.assertTrue(build_roads._mouth_fits(legs, ring))
+
+    def test_strip_along_the_avenue_is_still_rejected(self):
+        legs = self.legs(11.0)
+        strip = self.ring(110, 15)                # 1650 м², полоса вдоль проспекта
+        self.assertFalse(build_roads._mouth_fits(legs, strip))
+
 if __name__ == "__main__":
     unittest.main()
 

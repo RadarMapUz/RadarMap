@@ -3778,6 +3778,50 @@ def _is_major_node(legs):
     return sum(1 for leg in legs if leg[2] >= JUNCTION_MIN_WIDEST_METERS) >= 2
 
 
+# Примыкание съезда острым углом (лента насквозь плюс узкий отросток уже
+# этого угла к ней) — не ядро перекрёстка, хоть лента и магистральная. Чорсу
+# (07.10.2026): узлы съездов в 25–50 м от центра сводились в кластер, контур
+# по устьям выходил «крыльями» и отбраковывался, узел рассыпался на пятачки,
+# асфальт вылезал за зебры. Где контур кластера не вышел, такие узлы
+# отделяются (_junction_figures).
+SLIP_MAX_DEGREES = 35.0
+THROUGH_MAX_TURN_DEGREES = 30.0
+
+
+def _leg_heading(leg):
+    node, neighbour, _width = leg
+    scale = math.cos(math.radians(node[1]))
+    return math.degrees(math.atan2(neighbour[1] - node[1], (neighbour[0] - node[0]) * scale))
+
+
+def _angle_between(a, b):
+    return abs((a - b + 180.0) % 360.0 - 180.0)
+
+
+def _joins_cluster(legs):
+    """Ядро ли это перекрёстка (а не примыкание съезда к ленте)."""
+    if not _is_major_node(legs):
+        return False
+    # Шов из двух концов — не съезд. Отделять швы пробовали: площадь
+    # перекрёстка распадалась на заплатки, и их центры сбивали стоп-линии
+    # (Навои, 07.10.2026: линия перед узлом уезжала к переходу за 45 м до него).
+    if len(legs) < 3:
+        return True
+    headings = [_leg_heading(leg) for leg in legs]
+    wide = [i for i, leg in enumerate(legs) if leg[2] >= JUNCTION_MIN_WIDEST_METERS]
+    for i in wide:
+        for j in wide:
+            if j <= i or _angle_between(headings[i], headings[j]) < 180.0 - THROUGH_MAX_TURN_DEGREES:
+                continue
+            rest = [k for k in range(len(legs)) if k not in (i, j)]
+            if all(legs[k][2] < JUNCTION_MIN_WIDEST_METERS
+                   and min(_angle_between(headings[k], headings[i]),
+                           _angle_between(headings[k], headings[j])) < SLIP_MAX_DEGREES
+                   for k in rest):
+                return False
+    return True
+
+
 def cluster_junctions(arms):
     """Свести узлы одного перекрёстка вместе. Возвращает список списков ног."""
     # Берём и узлы с ДВУМЯ концами, а не только перекрёстки.
@@ -4306,49 +4350,136 @@ def _sharpest_degrees(ring):
     return best
 
 
+# Потолок площади в квадратах самой широкой ноги придуман для выпуклой
+# оболочки (двор под асфальтом). Контур по устьям идёт по кромкам и дугам
+# бордюра, а перекрёсток двух проспектов с раздельными лентами по площади —
+# это три-четыре ленты поперёк, а не одна: Бунёдкор × Катартал (Чиланзар,
+# 07.10.2026) — 13 квадратов ширины при ровном прямоугольнике, и узел
+# рассыпался на пятачки с выгрызами между ними. Сверх обычного потолка
+# контур принимаем, если он компактен (не полоса вдоль улицы) и почти весь
+# лежит на полотне своих дорог.
+JUNCTION_MOUTH_MAX_AREA = 15.0
+JUNCTION_MOUTH_MIN_COMPACTNESS = 0.6
+
+
+def _compactness(ring):
+    """4πS/P² кольца в градусах: круг — 1, полоса — к нулю."""
+    if len(ring) < 3:
+        return 0.0
+    kx = LAT_METERS * math.cos(math.radians(ring[0][1]))
+    pts = [((p[0] - ring[0][0]) * kx, (p[1] - ring[0][1]) * LAT_METERS) for p in ring]
+    perimeter = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(pts, pts[1:] + pts[:1]))
+    if perimeter <= 0:
+        return 0.0
+    return 4 * math.pi * abs(signed_area_meters(ring)) / perimeter ** 2
+
+
+def _mouth_fits(legs, outline):
+    """Годится ли контур по устьям по площади."""
+    want = max(leg[2] for leg in legs) ** 2
+    area = abs(signed_area_meters(outline))
+    if area <= want * JUNCTION_MAX_AREA:
+        return True
+    return (area <= want * JUNCTION_MOUTH_MAX_AREA
+            and _compactness(outline) >= JUNCTION_MOUTH_MIN_COMPACTNESS
+            and uncovered_share(legs, outline) <= JUNCTION_MAX_UNCOVERED)
+
+
 def iter_junctions(arms, outlined=None):
     """Асфальт перекрёстка — по устьям подходов с дугами бордюра; где так не
     вышло — прежняя оболочка кромок всех его дорог. outlined (множество) —
     сюда пишутся узлы, построенные по устьям."""
     for legs in cluster_junctions(arms):
-        if len(legs) < MIN_JUNCTION_ARMS and not _seam_needs_patch(legs):
-            continue
-        if max(leg[2] for leg in legs) < JUNCTION_MIN_WIDEST_METERS:
-            continue
-        if len(legs) >= MIN_JUNCTION_ARMS:
-            outline = mouth_outline(legs)
-            want = max(leg[2] for leg in legs) ** 2
-            if (outline and len(outline) >= 3
-                    and abs(signed_area_meters(outline)) <= want * JUNCTION_MAX_AREA):
-                if outlined is not None:
-                    outlined.update(_node_key(leg[0]) for leg in legs)
-                yield (AREA_JUNCTION, AREA_FLAG_CLOSED, outline)
-                continue
-        ring = _hull_of(legs)
-        if not ring:
-            continue
-        if _hull_fits(legs, ring):
-            scale = _lon_scale([legs[0][0]]) or 1.0
-            shaped = clip_to_reach(legs, round_corners(ring, kerb_radius(legs), scale))
-            if len(shaped) >= 3:
-                yield (AREA_JUNCTION, AREA_FLAG_CLOSED, shaped)
-            continue
-        # Кластер растянулся — разбираем обратно по узлам. Лучше шов, чем
-        # двор, залитый асфальтом.
-        by_node = {}
+        yield from _junction_figures(legs, outlined)
+
+
+def _mouth_figure(legs):
+    """Контур узла по устьям, если он вышел и годится по площади, иначе None."""
+    if len(legs) < MIN_JUNCTION_ARMS:
+        return None
+    outline = mouth_outline(legs)
+    if outline and len(outline) >= 3 and _mouth_fits(legs, outline):
+        return outline
+    return None
+
+
+def _slip_nodes(legs):
+    """Ключи узлов кластера, где к ленте острым углом примыкает съезд."""
+    by_node = {}
+    for leg in legs:
+        by_node.setdefault(_node_key(leg[0]), []).append(leg)
+    return {key for key, alone in by_node.items()
+            if _is_major_node(alone) and not _joins_cluster(alone)}
+
+
+def _junction_figures(legs, outlined, retry=True):
+    if len(legs) < MIN_JUNCTION_ARMS and not _seam_needs_patch(legs):
+        return
+    if max(leg[2] for leg in legs) < JUNCTION_MIN_WIDEST_METERS:
+        return
+    keys = {_node_key(leg[0]) for leg in legs}
+    # Примыкание съезда к ленте (_joins_cluster) само по себе — асфальт, но не
+    # перекрёсток: с битом полосы, как перемычка между направлениями. Его
+    # центр иначе притягивал стоп-линию к переходу за узлом (Навои,
+    # 07.10.2026), а маска узла резала бы пунктир ленты.
+    # Съезд, отделённый от своего перекрёстка (retry=False), остаётся узлом:
+    # его площадь и раньше была частью перекрёстка и резала разметку.
+    flags = AREA_FLAG_CLOSED
+    if retry and len(keys) == 1 and _slip_nodes(legs):
+        flags |= AREA_FLAG_STRIP
+    outline = _mouth_figure(legs)
+    if outline:
+        if outlined is not None:
+            outlined.update(keys)
+        yield (AREA_JUNCTION, flags, outline)
+        return
+    # Ядро, оставшееся без съездов, — только контуром по устьям: оболочка
+    # такого ядра тянулась бы вдоль проспекта на сотню метров через
+    # разделительную (Шота Руставели, 07.10.2026). Не вышел контур — по узлам.
+    ring = _hull_of(legs) if retry or len(keys) == 1 else []
+    if retry and not ring:
+        return
+    if ring and _hull_fits(legs, ring):
+        scale = _lon_scale([legs[0][0]]) or 1.0
+        shaped = clip_to_reach(legs, round_corners(ring, kerb_radius(legs), scale))
+        if len(shaped) >= 3:
+            yield (AREA_JUNCTION, flags, shaped)
+        return
+    # Ни контур по устьям, ни оболочка не вышли, а в кластере есть узлы
+    # съездов в 25–50 м от центра — пробуем без них. Чорсу (07.10.2026): с
+    # ними контур выходил «крыльями» и отбраковывался, узел рассыпался на
+    # пятачки с выгрызами между ними.
+    # Только когда иначе узел рассыпался бы: где вышла оболочка, съезд в ней
+    # остаётся — без неё на Навои × Рашидов открылись стрелки, стоявшие за
+    # стоп-линией и на выезде (их прятала площадь узла).
+    slips = _slip_nodes(legs) if retry and len(keys) > 1 else set()
+    if slips and slips != keys:
+        core = defaultdict(list)
         for leg in legs:
-            by_node.setdefault(_node_key(leg[0]), []).append(leg)
-        for key in sorted(by_node):
-            alone = by_node[key]
-            if len(alone) < MIN_JUNCTION_ARMS and not _seam_needs_patch(alone):
-                continue
-            small = _hull_of(alone)
-            # Оболочка одного узла тоже бывает клином: острый угол входа даёт
-            # её и без сведения узлов. Не влезла — стык закроет линия.
-            if small and _hull_fits(alone, small):
-                small = clip_to_reach(alone, small)
-                if len(small) >= 3:
-                    yield (AREA_JUNCTION, AREA_FLAG_CLOSED, small)
+            if _node_key(leg[0]) not in slips:
+                core[_node_key(leg[0])].append(leg)
+        for group in cluster_junctions(core):
+            yield from _junction_figures(group, outlined, retry=False)
+        for key in sorted(slips):
+            yield from _junction_figures([leg for leg in legs if _node_key(leg[0]) == key],
+                                         outlined, retry=False)
+        return
+    # Кластер растянулся — разбираем обратно по узлам. Лучше шов, чем
+    # двор, залитый асфальтом.
+    by_node = {}
+    for leg in legs:
+        by_node.setdefault(_node_key(leg[0]), []).append(leg)
+    for key in sorted(by_node):
+        alone = by_node[key]
+        if len(alone) < MIN_JUNCTION_ARMS and not _seam_needs_patch(alone):
+            continue
+        small = _hull_of(alone)
+        # Оболочка одного узла тоже бывает клином: острый угол входа даёт
+        # её и без сведения узлов. Не влезла — стык закроет линия.
+        if small and _hull_fits(alone, small):
+            small = clip_to_reach(alone, small)
+            if len(small) >= 3:
+                yield (AREA_JUNCTION, flags, small)
 
 
 # Галтели: радиус бордюра — доля ширины узкой из двух дорог, в пределах.

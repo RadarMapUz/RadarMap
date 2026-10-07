@@ -199,7 +199,7 @@ def connect(path=None):
     path = path or DB_PATH
     if path != ':memory:':
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    conn = sqlite3.connect(path, check_same_thread=False, timeout=30)
+    conn = sqlite3.connect(path, check_same_thread=False, timeout=120)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA journal_mode=WAL')
     conn.executescript(SCHEMA)

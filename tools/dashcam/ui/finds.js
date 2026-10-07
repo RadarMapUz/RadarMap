@@ -103,7 +103,7 @@ async function openFind(id, fly) {
   card.hidden = false;
   card.innerHTML = `<h2>${esc(CLS_NAME[f.cls] || f.cls)}${f.value ? ' ' + f.value + ' км/ч' : ''}</h2>
     <div><span class="st ${f.status}">${esc(ST_NAME[f.status] || f.status)}</span> · ${esc(refText)}</div>
-    <div class="crops">${f.crops.map((c) => `<img src="${c.url}" title="${esc(c.trip)} · ${Math.round(c.conf * 100)} %">`).join('')}</div>
+    <div class="crops">${f.crops.map((c, i) => `<img src="${c.url}" data-i="${i}" title="${esc(c.trip)} · ${Math.round(c.conf * 100)} % — клик: видео с этого места, двойной: крупно">`).join('')}</div>
     <div class="muted">уверенность ${Math.round(f.confidence * 100)} % · поездок ${f.n_trips} · кадров ${f.n_frames}
       · точность места ±${f.err_m ?? '—'} м</div>
     <div class="muted">${f.objects.map((o) => `${esc(o.trip)}: ${o.method === 'tri' ? 'триангуляция' : 'по размеру'}
@@ -111,7 +111,15 @@ async function openFind(id, fly) {
     <div class="btns"><button class="acc" id="c-acc">Принять (A)</button><button class="rej" id="c-rej">Отклонить (R)</button>
       ${f.decision ? '<button id="c-clr">Сбросить</button>' : ''}</div>
     ${f.decision ? `<div class="muted">решение: ${f.decision === 'accept' ? 'принято' : 'отклонено'}</div>` : ''}`;
-  for (const img of card.querySelectorAll('.crops img')) img.onclick = () => window.open(img.src, '_blank');
+  for (const img of card.querySelectorAll('.crops img')) {
+    const c = f.crops[+img.dataset.i];
+    // Видео — главная проверка «модель не врёт»: за 2 с до кадра находки.
+    img.onclick = async () => {
+      if (typeof selKey === 'undefined' || selKey !== c.trip) await selectTrip(c.trip);
+      seekTo(c.t - 2, false);
+    };
+    img.ondblclick = () => window.open(img.src, '_blank');
+  }
   $('c-acc').onclick = () => decide('accept');
   $('c-rej').onclick = () => decide('reject');
   if ($('c-clr')) $('c-clr').onclick = () => decide('clear');

@@ -478,6 +478,106 @@ def _rekey(conn, trip):
     return r[0] if r else trip['key']
 
 
+def redetect(conn, keys=None, log=log):
+    """Детекторы обновились — пересчитать сработки, объекты, кластеры и знаки по уже
+    вынутым кадрам (ролики не читаются)."""
+    import detect
+    import objects
+    keys = keys or [r[0] for r in conn.execute('SELECT DISTINCT trip_key FROM frames')]
+    for k in keys:
+        with conn:
+            conn.execute('UPDATE frames SET detected=0 WHERE trip_key=?', (k,))
+        n = detect.detect_trip(conn, k, log=log)
+        m = objects.build_trip(conn, k)
+        log(f'{k}: сработок {n}, объектов {m}')
+    import cluster
+    import coverage
+    import signs
+    log(f'кластеры: {cluster.rebuild(conn, log=log)}')
+    signs.cluster_all(conn, log=log)
+    log(f'покрытие: {coverage.rebuild(conn)}')
+
+
+def backfill_jolts(conn, log=log):
+    """Рывки для роликов, разобранных до появления детектора рывков: копия с
+    карты → профиль строк → удалить (кадры не трогаются)."""
+    card = Card()
+    rows = conn.execute('SELECT c.* FROM clips c JOIN clip_state s ON s.clip_id=c.id '
+                        'LEFT JOIN jolt_done j ON j.clip_id=c.id WHERE s.frames IS NOT NULL '
+                        'AND j.clip_id IS NULL ORDER BY c.start').fetchall()
+    log(f'роликов без рывков: {len(rows)}')
+    try:
+        for c in rows:
+            if free_gb() < MIN_FREE_GB + c['size'] / 1e9:
+                log('СТОП: мало места')
+                return
+            tmp = tempfile.mkdtemp(prefix='jolt_', dir=TMP_DIR)
+            try:
+                if c['path'].startswith(CARD_PREFIX):
+                    local = os.path.join(tmp, c['name'])
+                    card.copy(c['path'][len(CARD_PREFIX):], local)
+                else:
+                    local = c['path']
+                jolt_clip(conn, c, local)
+            except Exception as e:
+                log(f'  {c["name"]}: {e}')
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+    finally:
+        card.close()
+    for (k,) in conn.execute('SELECT DISTINCT trip_key FROM jolts').fetchall():
+        g, _ = trip_geo(conn, k)
+        with conn:
+            for r in conn.execute('SELECT id, t FROM jolts WHERE trip_key=?', (k,)).fetchall():
+                p = g.locate(r['t'])
+                conn.execute('UPDATE jolts SET lat=?, lon=?, course=?, weight=? WHERE id=?',
+                             (p[0], p[1], p[2], p[3], r['id']) if p else (None, None, None, None, r['id']))
+
+
+def summary(conn):
+    """Счётчики для отчёта: что разобрано и что найдено."""
+    q = lambda sql, *a: conn.execute(sql, a).fetchone()[0]
+    out = {
+        'поездок_разобрано': q("SELECT COUNT(DISTINCT trip_key) FROM frames"),
+        'поездок_с_привязкой': q("SELECT COUNT(DISTINCT trip_key) FROM frames WHERE lat IS NOT NULL"),
+        'роликов_разобрано': q("SELECT COUNT(*) FROM clip_state WHERE frames IS NOT NULL"),
+        'кадров': q("SELECT COUNT(*) FROM frames"),
+        'кадров_с_привязкой': q("SELECT COUNT(*) FROM frames WHERE lat IS NOT NULL"),
+        'часов_видео': round(q("SELECT COALESCE(SUM(c.duration),0) FROM clips c JOIN clip_state s "
+                               "ON s.clip_id=c.id WHERE s.frames IS NOT NULL") / 3600, 1),
+        'повторов_пропущено': q("SELECT COUNT(*) FROM batch_state WHERE stage='repeat'"),
+        'кадров_сэкономлено_покрытием': q("SELECT COALESCE(SUM(skipped),0) FROM coverage_skips"),
+        'роликов_не_скопировано_покрытием': q("SELECT COUNT(*) FROM coverage_skips WHERE skipped=total "
+                                              "AND total>0"),
+    }
+    km = 0.0
+    for (k,) in conn.execute('SELECT DISTINCT trip_key FROM frames').fetchall():
+        o = sync_odometer(conn, k)
+        km += o
+    out['км_по_скорости'] = round(km / 1000, 1)
+    out['сработок'] = {r[0]: r[1] for r in conn.execute('SELECT cls, COUNT(*) FROM detections GROUP BY cls')}
+    out['кластеров'] = {f'{r[0]}/{r[1]}': r[2] for r in conn.execute(
+        'SELECT cls, status, COUNT(*) FROM clusters GROUP BY cls, status')}
+    out['кандидатов_знаков'] = {r[0]: r[1] for r in conn.execute(
+        'SELECT shape, COUNT(*) FROM sign_crops GROUP BY shape')}
+    out['кластеров_знаков'] = q('SELECT COUNT(*) FROM sign_clusters')
+    out['рывков'] = q('SELECT COUNT(*) FROM jolts')
+    try:
+        import coverage
+        coverage.connect(conn)
+        out['участков'] = q('SELECT COUNT(*) FROM coverage')
+        out['участков_закреплено'] = q('SELECT COUNT(*) FROM coverage WHERE pinned=1')
+    except Exception:
+        pass
+    return out
+
+
+def sync_odometer(conn, key):
+    import locate
+    o = locate.Odometer(sync.clean_ocr(catalog.ocr_series(conn, key)))
+    return o.d[-1] if o.d else 0.0
+
+
 def status(conn):
     trips = day_trips(conn)
     st = {r[0]: (r[1], r[2]) for r in conn.execute('SELECT trip_key, stage, error FROM batch_state')}
@@ -500,6 +600,10 @@ def main(argv=None):
     p.add_argument('--stages', default=','.join(STAGES))
     sub.add_parser('cluster')
     sub.add_parser('status')
+    p = sub.add_parser('redetect')
+    p.add_argument('--trips')
+    sub.add_parser('backfill-jolts')
+    sub.add_parser('summary')
     a = ap.parse_args(argv)
     conn = catalog.connect()
     if a.cmd == 'register':
@@ -516,6 +620,13 @@ def main(argv=None):
         print(cluster.rebuild(conn))
     elif a.cmd == 'status':
         status(conn)
+    elif a.cmd == 'redetect':
+        redetect(conn, a.trips.split(',') if a.trips else None)
+    elif a.cmd == 'backfill-jolts':
+        backfill_jolts(conn)
+    elif a.cmd == 'summary':
+        import json
+        print(json.dumps(summary(conn), ensure_ascii=False, indent=1))
 
 
 if __name__ == '__main__':

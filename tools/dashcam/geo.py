@@ -153,9 +153,12 @@ class OSRM:
                 return None  # ошибку сети не кэшируем: в следующий раз спросим снова
             self.last = self.clock()
             self.requests += 1
-            with self.conn:
-                self.conn.execute('INSERT OR REPLACE INTO route_cache(key, body, fetched) '
-                                  'VALUES(?,?,?)', (k, body, time.time()))
+            try:
+                with self.conn:
+                    self.conn.execute('INSERT OR REPLACE INTO route_cache(key, body, fetched) '
+                                      'VALUES(?,?,?)', (k, body, time.time()))
+            except Exception as e:  # кэш — ускорение, а не условие: маршрут уже получен
+                print(f'кэш OSRM не записан: {e}')
         try:
             j = json.loads(body)
         except json.JSONDecodeError:

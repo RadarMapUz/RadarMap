@@ -24,7 +24,7 @@ from lanes import (LINE_W, LUMA, PROF_BANDS, SLOPES, Z_LINES, Z_NEAR, Z_REF, asp
                    features, is_asphalt, paint_width, sample, side_asphalt, side_contrast,
                    strip_stats, visible_z_range)
 from logic import UNDER_CAR, classify, edge_kind, lane_layout2, strip_kind, vote
-from marking import load_rgb, marking_masks
+from marking import load_rgb, marking_masks, model_masks
 from track import (BIN, cumulative, dash_like, frame_peaks, frame_shift, is_line_track, link_tracks,
                    motion_test, path_from_speed, profile, track_x_at)
 
@@ -86,8 +86,13 @@ def speed_series(trip, t_center, pos, pts):
     return out
 
 
-def frame_points(rgb, cam, static):
-    white, yellow, _, ghost = marking_masks(rgb, static, return_ghost=True)
+def frame_points(rgb, cam, static, mask="thr"):
+    """mask: "thr" — пороговая маска (marking_masks), "model" — маска
+    обученной сегментации (marking.model_masks, seg_model.py)."""
+    if mask == "model":
+        white, yellow, _, ghost = model_masks(rgb, return_ghost=True)
+    else:
+        white, yellow, _, ghost = marking_masks(rgb, static, return_ghost=True)
     m = white | yellow
     ys, xs = np.nonzero(m)
     keep = ys >= 360
@@ -145,7 +150,7 @@ def band_edges(feat, cam, ref, s, start, direction):
     return out
 
 
-def analyze_window(fid, trip, t_center, cam, static, stride=STRIDE, keep_debug=False):
+def analyze_window(fid, trip, t_center, cam, static, stride=STRIDE, keep_debug=False, mask="thr"):
     d, names, pts, pos = load_window(fid)
     idx = list(range(0, len(names), stride))
     times = [pts[i] for i in idx]
@@ -155,7 +160,7 @@ def analyze_window(fid, trip, t_center, cam, static, stride=STRIDE, keep_debug=F
     data = []
     for i in idx:
         rgb = load_rgb(os.path.join(d, names[i]))
-        X, Z, yf, GX, GZ = frame_points(rgb, cam, static)
+        X, Z, yf, GX, GZ = frame_points(rgb, cam, static, mask)
         data.append({"X": X, "Z": Z, "yf": yf, "s": best_slope(X, Z), "GX": GX, "GZ": GZ,
                      "rgb": rgb.astype(np.uint8)})
     # Наклонка — общая для соседних кадров: медиана по ±SLOPE_SMOOTH.

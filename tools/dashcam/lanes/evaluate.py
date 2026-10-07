@@ -1,6 +1,9 @@
 """Прогон v2 по кадрам истины и счёт точности.
 
-    python3 evaluate.py [tune|test|all] [--cached]
+    python3 evaluate.py [tune|test|all] [--cached] [--mask model]
+
+--mask model — маска разметки из обученной сегментации (seg_model.py)
+вместо пороговой; результаты — eval_<half>_model.json.
 
 Для каждого кадра истины — окно полного fps вокруг него (window.py),
 ответ окна сравнивается с разметкой глазами. Считаем отдельно для
@@ -25,18 +28,20 @@ from window import analyze_window
 
 _cam = None
 _static = {}
+_mask = "thr"
 
 
-def _init():
-    global _cam
+def _init(mask="thr"):
+    global _cam, _mask
     _cam = load_camera()
+    _mask = mask
 
 
 def _one(r):
     if r["trip"] not in _static:
         _static[r["trip"]] = reflect.load(r["trip"])
     try:
-        res = analyze_window(r["id"], r["trip"], r["t"], _cam, _static[r["trip"]])
+        res = analyze_window(r["id"], r["trip"], r["t"], _cam, _static[r["trip"]], mask=_mask)
     except Exception as e:  # одно битое окно не роняет прогон
         import traceback
         return {"id": r["id"], "error": repr(e), "tb": traceback.format_exc()}
@@ -86,12 +91,13 @@ def score(rows, res):
 def main():
     half = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "tune"
     rows = [r for r in load() if half == "all" or r["half"] == half]
-    path = os.path.join(OUT, f"eval_{half}.json")
+    mask = sys.argv[sys.argv.index("--mask") + 1] if "--mask" in sys.argv else "thr"
+    path = os.path.join(OUT, f"eval_{half}.json" if mask == "thr" else f"eval_{half}_{mask}.json")
     if "--cached" in sys.argv and os.path.exists(path):
         with open(path) as f:
             res = json.load(f)
     else:
-        with Pool(6, initializer=_init) as pool:
+        with Pool(6, initializer=_init, initargs=(mask,)) as pool:
             res = pool.map(_one, rows, chunksize=1)
         with open(path, "w") as f:
             json.dump(res, f, ensure_ascii=False, indent=1, default=str)

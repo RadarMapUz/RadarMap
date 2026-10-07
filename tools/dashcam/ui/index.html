@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Разбор видео</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="/ui/app.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+</head>
+<body>
+<aside id="side">
+  <h1>Разбор видео</h1>
+  <div id="trips"></div>
+  <form id="import">
+    <label for="import-path">Загрузить папку роликов или GPX</label>
+    <input id="import-path" placeholder="~/RadarMapBuild/dashcam/morning" autocomplete="off">
+    <button type="submit">Импорт</button>
+    <div id="import-msg" class="muted"></div>
+  </form>
+</aside>
+<main>
+  <div id="banner" hidden></div>
+  <div id="map"></div>
+  <div id="legend" class="muted"></div>
+  <section id="player">
+    <div id="screens">
+      <video id="va" muted playsinline preload="auto"></video>
+      <video id="vb" muted playsinline preload="auto" hidden></video>
+      <div id="novideo" class="muted">Выберите поездку слева</div>
+    </div>
+    <div id="controls">
+      <button id="play" disabled title="Пробел">▶</button>
+      <input id="seek" type="range" min="0" max="1" step="0.1" value="0" disabled>
+      <div id="clock">
+        <div id="t-phone">—</div>
+        <div id="t-cam" class="muted">—</div>
+      </div>
+      <label class="muted"><input id="follow" type="checkbox" checked> следовать</label>
+    </div>
+  </section>
+</main>
+<script src="/ui/app.js"></script>
+</body>
+</html>

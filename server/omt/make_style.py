@@ -59,7 +59,7 @@ PALETTES = {
         # внутри асфальта там, где две ленты лежат рядом (Фурката, 28.09.2026).
         "casing": "#aab2bf",
         # Жёлтая кромка магистрали — как у Яндекса (снимок 05.10.2026).
-        "kerb": "#f0c93f", "trees": "trees",
+        "kerb": "#f0c93f", "trees": "trees", "asphalt": "asphalt", "gutter": "#9aa2af",
         # Мост: светлый край-ограждение и тень под пролётом; тоннель —
         # полупрозрачный асфальт с пунктирной кромкой (как у Яндекса).
         "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#c9ced8",
@@ -80,7 +80,7 @@ PALETTES = {
         "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.18,
                   "position": [1.3, 200, 35]},
         "casing": "#2b3039",
-        "kerb": "#8c7033", "trees": "trees-dark",
+        "kerb": "#8c7033", "trees": "trees-dark", "asphalt": "asphalt-dark", "gutter": "#2f343c",
         "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#2a2f37",
         "tree_crown": "#22402c", "tree_crown_low": "#18301f", "tree_crown_high": "#33593e", "tree_light": "#2e5238", "tree_trunk": "#3a332b", "tree_edge": "#2e5238",
         "tree_shadow": "rgba(0,0,0,0.5)",
@@ -162,6 +162,16 @@ def tree_radius(scale=1.0):
 
     def stop(z):
         return ["max", 1.2, ["*", size, TREE_CROWN_METERS * scale * (2 ** z) * M]]
+    return ["interpolate", ["exponential", 2], ["zoom"], 15, stop(15), 18, stop(18), 20, stop(20)]
+
+
+GUTTER_SHARE = 0.07
+
+
+def scaled_width(share):
+    """Доля ширины ленты (свойство width, м) в пикселях."""
+    def stop(z):
+        return ["*", ["coalesce", ["get", "width"], 8], share * (2 ** z) * M]
     return ["interpolate", ["exponential", 2], ["zoom"], 15, stop(15), 18, stop(18), 20, stop(20)]
 
 
@@ -304,7 +314,7 @@ def _base_layer(layer, p, mode):
 # Краска земли — ПОД эстакадой, разметка самой эстакады — над ней. Раньше вся
 # разметка лежала поверх мостов, и полосы, зебры и стоп-линии перекрёстка под
 # эстакадой Бунёдкора у Чиланзара сеткой проступали сквозь пролёт (06.10.2026).
-GROUND_PAINT = ("radar-markings-solid", "radar-markings", "radar-centre-dashed",
+GROUND_PAINT = ("radar-asphalt-grain", "radar-markings-solid", "radar-markings", "radar-centre-dashed",
                 "radar-centre-solid", "radar-zebra-base", "radar-zebra", "radar-stop-line", "radar-arrows")
 # Ширина бетонной разделительной на карте, м.
 DIVIDER_METERS = 1.6
@@ -430,6 +440,15 @@ def _layers_in_draw_order(p):
                    "line-width": measured()}},
         # Галтели (вид 13): скруглённый бордюр на углах перекрёстка — асфальт
         # между точкой встречи кромок и дугой, как у Яндекса.
+        # Потемнение у бордюра — под площадью узла: поперёк перекрёстка его нет.
+        {"id": "radar-roads-gutter", "type": "line", "source": "radar", "source-layer": "roads",
+         "minzoom": 16, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 5], ["!", ["has", "inner"]]],
+         "layout": {"line-cap": "butt", "line-join": "round"},
+         # Две полосы по краям ВНУТРИ полотна: зазор между ними — 86 % ширины.
+         "paint": {"line-color": p["gutter"], "line-width": scaled_width(GUTTER_SHARE),
+                   "line-gap-width": scaled_width(1 - 2 * GUTTER_SHARE),
+                   "line-blur": scaled_width(GUTTER_SHARE),
+                   "line-opacity": ["interpolate", ["linear"], ["zoom"], 16, 0, 17, 0.35]}},
         {"id": "radar-fillet", "type": "fill", "source": "radar", "source-layer": "surface",
          "minzoom": OUR_ROADS_FROM,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 13]],
@@ -499,6 +518,14 @@ def _layers_in_draw_order(p):
          "layout": {"line-cap": "butt", "line-join": "round"},
          "paint": {"line-color": road_color(p),
                    "line-width": measured()}},
+        # Асфальт как асфальт: зерно поверх полотна (узор привязан к земле и
+        # не растягивается с шириной ленты) и лёгкое потемнение у бордюра,
+        # где копится пыль. Ровная серая лента читалась пластиком (07.10.2026).
+        {"id": "radar-asphalt-grain", "type": "fill", "source": "radar", "source-layer": "surface",
+         "minzoom": 16.5,
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["in", ["get", "kind"], ["literal", [7, 8, 10, 13]]]],
+         "paint": {"fill-pattern": p["asphalt"],
+                   "fill-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.5, 0.4, 20, 0.5]}},
         # Сплошная перед перекрёстком (последние 25 м подхода) — без штриха.
         {"id": "radar-markings-solid", "type": "line", "source": "radar", "source-layer": "markings",
          "minzoom": 16, "filter": ["all", ["!", ["has", "centre"]], ["has", "solid"]],

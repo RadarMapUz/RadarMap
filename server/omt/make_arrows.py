@@ -142,6 +142,34 @@ def trees(ratio, palette):
     return image
 
 
+# Зерно асфальта: мелкие светлые и тёмные крапины на прозрачном фоне —
+# накладывается поверх полотна с малой непрозрачностью. Ровный серый цвет
+# читался пластиком, а не дорогой (07.10.2026). Зерно задано сидом — повторный
+# запуск даёт те же байты.
+ASPHALT_TILE = 64
+ASPHALT_COLOURS = {
+    "asphalt": ((255, 255, 255), (60, 66, 78)),
+    "asphalt-dark": ((120, 128, 140), (10, 12, 16)),
+}
+
+
+def asphalt(ratio, palette):
+    import random
+    rng = random.Random(20261007)
+    size = ASPHALT_TILE * ratio
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    pen = ImageDraw.Draw(image)
+    light, dark = ASPHALT_COLOURS[palette]
+    for _ in range(int(ASPHALT_TILE * ASPHALT_TILE * 0.05)):
+        x, y = rng.uniform(0, ASPHALT_TILE), rng.uniform(0, ASPHALT_TILE)
+        r = rng.uniform(0.3, 0.6)
+        colour = light if rng.random() < 0.5 else dark
+        alpha = int(rng.uniform(25, 60))
+        pen.ellipse(((x - r) * ratio, (y - r) * ratio, (x + r) * ratio, (y + r) * ratio),
+                    fill=colour + (alpha,))
+    return image
+
+
 def build(ratio):
     suffix = "" if ratio == 1 else f"@{ratio}x"
     base_png = os.path.join(HERE, "sprite", f"base{suffix}.png")
@@ -152,6 +180,7 @@ def build(ratio):
     icons.append(("waffle", waffle(ratio)))
     icons.append(("traffic-light", traffic_light(ratio)))
     icons += [(name, trees(ratio, name)) for name in sorted(TREE_COLOURS)]
+    icons += [(name, asphalt(ratio, name)) for name in sorted(ASPHALT_COLOURS)]
     row = max(icon.height for _n, icon in icons)
     out = Image.new("RGBA", (max(sheet.width, sum(i.width + 2 for _n, i in icons)),
                              sheet.height + row + 2), (0, 0, 0, 0))

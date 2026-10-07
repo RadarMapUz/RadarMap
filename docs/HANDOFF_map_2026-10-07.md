@@ -57,6 +57,9 @@ Bing/Esri — только для правок В OSM.
   `bash server/publish_roads.sh --auto` → стиль: `make_style.py
   https://soulmed.uz/radarmap` → `/opt/radarmap/www/map_style.json`
   (прежний — map_style.prev.json). Всё под `caffeinate -i` (мак засыпает).
+- После публикации дорог/основы — `bash server/publish_tileset.sh`: выпуск
+  v/<N>/ (кэш на год) и корзины индекса под подписанным tiles_root.json —
+  контракт для приложения в docs/plan_map_offline.md §2.6.
 - Проверка: `/opt/radarmap/api/status.py` → roads/mvt/omt ok.
 - Крон VPS (`update_roads.sh`, вс 04:17) с 07.10 готовит ТОЛЬКО экстракт:
   сборка страны на 2 ГБ невозможна. Вернуть — RADARMAP_BUILD_ON_VPS=1.

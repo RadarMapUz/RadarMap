@@ -888,6 +888,20 @@ final class LocationService: NSObject {
                 seedContext(from: CLLocationCoordinate2D(latitude: fix.lat,
                                                          longitude: fix.lon))
             }
+            // Замок стоянки. Тир 3 просит у системы точность 100 м, а фильтр
+            // пропускает не хуже 65 м. Тир пересматривается только на ПРИНЯТОМ
+            // фиксе — и если система отдаёт сотовые 100–300 м (трасса, вышки
+            // вместо Wi-Fi), каждый фикс отбрасывается, тир не поднимается
+            // никогда, и машина уезжает со стоянки с молчащими оповещениями.
+            // Молчание о камере хуже лишнего расхода батареи: забракован по
+            // точности на стоянке в поездке — сразу поднимаем точность до
+            // верхней ступени; следующий принятый фикс выставит тир по правилам.
+            if reason == .accuracy, isTripActive, accuracyTier == 3 {
+                Log.location.notice("стоянка: фикс \(fix.horizontalAccuracy, privacy: .public) м отброшен — поднимаем точность")
+                accuracyTier = 0
+                manager.desiredAccuracy = kCLLocationAccuracyBest
+                manager.distanceFilter = 6
+            }
         case .accepted(let good):
             if isSignalStale { isSignalStale = false }
             if isPositionCoarse { isPositionCoarse = false }

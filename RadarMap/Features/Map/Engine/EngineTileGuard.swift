@@ -226,8 +226,7 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
             Self.log.error("тайл вне подписанного индекса: \(url.path, privacy: .public)")
             return finish(with: URLError(.userAuthenticationRequired))
         }
-        var own = request
-        own.setValue("1", forHTTPHeaderField: Self.ownRequest)
+        let own = Self.guardRequest(from: request)
         loader = Self.session.dataTask(with: own) { [weak self] data, response, error in
             guard let self else { return }
             if let error { return self.finish(with: error) }
@@ -276,11 +275,7 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
     private func startRelease(_ tile: TileRelease.Tile, url: URL) {
         // let, а не var: изменяемую переменную нельзя захватить в задачу,
         // которая идёт параллельно.
-        let own: URLRequest = {
-            var copy = self.request
-            copy.setValue("1", forHTTPHeaderField: Self.ownRequest)
-            return copy
-        }()
+        let own = Self.guardRequest(from: request)
         releaseTask = Task { [weak self] in
             guard let release = TileReleaseStore.current, release.tile(at: url) == tile else {
                 Self.log.error("тайл не из текущего выпуска: \(url.path, privacy: .public)")
@@ -312,6 +307,20 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
                 self.finish(with: error)
             }
         }
+    }
+
+    /// Свой запрос сторожа. Условные заголовки движка СНИМАЮТСЯ: движок
+    /// переспрашивает протухший тайл с If-None-Match, сервер честно отвечает
+    /// 304 без тела — а сторожу нечего хэшировать, и тайл объявлялся
+    /// неподписанным. Через пять минут кэша (max-age=300 старых адресов)
+    /// карта начинала терять тайлы. Сторож всегда берёт тело целиком: кэш —
+    /// забота движка, проверка — наша.
+    static func guardRequest(from request: URLRequest) -> URLRequest {
+        var own = request
+        own.setValue(nil, forHTTPHeaderField: "If-None-Match")
+        own.setValue(nil, forHTTPHeaderField: "If-Modified-Since")
+        own.setValue("1", forHTTPHeaderField: ownRequest)
+        return own
     }
 
     private func deliverEmpty(_ url: URL) {

@@ -118,6 +118,22 @@ final class TileReleaseTests: XCTestCase {
                      "корень, подписанный не владельцем, не открывает ни одного тайла")
     }
 
+    // MARK: - Сторож
+
+    #if canImport(MapLibre)
+    func testGuardFetchesWholeTileEvenOnRevalidation() {
+        // Движок переспрашивает протухший тайл с If-None-Match; 304 без тела
+        // сторожу нечем проверить — тайл объявлялся неподписанным.
+        var request = URLRequest(url: URL(string: "https://soulmed.uz/radarmap/v/1/mvt/15/1/1.mvt")!)
+        request.setValue("\"abc\"", forHTTPHeaderField: "If-None-Match")
+        request.setValue("Tue, 07 Oct 2026 10:00:00 GMT", forHTTPHeaderField: "If-Modified-Since")
+        let own = EngineTileGuard.guardRequest(from: request)
+        XCTAssertNil(own.value(forHTTPHeaderField: "If-None-Match"))
+        XCTAssertNil(own.value(forHTTPHeaderField: "If-Modified-Since"))
+        XCTAssertNotNil(own.value(forHTTPHeaderField: "X-RadarMap-Tile-Guard"))
+    }
+    #endif
+
     // MARK: - Новая карта
 
     private func modernStyle(daylight: Bool, houses: Bool = true) throws -> [String: Any] {

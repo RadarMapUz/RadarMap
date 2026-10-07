@@ -337,6 +337,7 @@ struct EngineMapView: UIViewRepresentable {
             lastHouses = model.houses
             lastModern = model.modernStyle
             os_signpost(.event, log: performanceLog, name: "Style replacement")
+            if model.modernStyle, release == nil { release = TileReleaseStore.restoredFromDisk() }
             if model.modernStyle, !modernBroken, let release {
                 if let json = EngineModernStyle.json(daylight: model.daylight, base: AppConfig.syncBaseURL,
                                                      release: release, houses: model.houses) {
@@ -367,7 +368,9 @@ struct EngineMapView: UIViewRepresentable {
         private func prepareTiles(_ model: EngineMapView, in view: MLNMapView) {
             let modern = model.modernStyle && !modernBroken
             if modern {
-                guard release == nil, !attemptedModern, !preparing else { return }
+                // Корень переспрашивается раз на экран даже при корне с диска:
+                // выпуск мог смениться, пока приложение спало.
+                guard !attemptedModern, !preparing else { return }
                 attemptedModern = true
             } else {
                 guard !EngineTileGuard.isReady, !attemptedLegacy, !preparing else { return }
@@ -375,16 +378,22 @@ struct EngineMapView: UIViewRepresentable {
             }
             preparing = true
             Task { @MainActor [weak self, weak view] in
+                var changed = false
                 if modern {
-                    let fresh = await TileReleaseStore.shared.prepare()
-                    self?.release = fresh
-                    if fresh == nil {
+                    let before = self?.release
+                    if let fresh = await TileReleaseStore.shared.prepare() {
+                        self?.release = fresh
+                    }
+                    changed = self?.release != before
+                    if self?.release == nil {
                         Log.network.error("выпуска тайлов нет — новая карта остаётся на прежнем стиле")
                         self?.attemptedLegacy = true
                         await EngineTileGuard.prepare()
+                        changed = EngineTileGuard.isReady
                     }
                 } else {
                     await EngineTileGuard.prepare()
+                    changed = EngineTileGuard.isReady
                 }
                 guard let self else { return }
                 self.preparing = false
@@ -392,8 +401,9 @@ struct EngineMapView: UIViewRepresentable {
                 let wantsModern = current.modernStyle && !self.modernBroken
                 if wantsModern != modern {
                     self.prepareTiles(current, in: view)
-                } else if wantsModern ? (self.release != nil || EngineTileGuard.isReady)
-                                      : EngineTileGuard.isReady {
+                } else if changed {
+                    // Перезагрузка — только если правда пришло новое: тот же
+                    // выпуск с сети после корня с диска стиль не трогает.
                     self.loadStyle(current, in: view)
                 }
             }

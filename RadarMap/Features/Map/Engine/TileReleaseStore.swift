@@ -76,6 +76,17 @@ actor TileReleaseStore {
         return Self.current
     }
 
+    /// Корень с диска — синхронно, до первого стиля. Без этого карта на
+    /// каждом открытии грузила стиль дважды (прежний, потом новый — с
+    /// миганием). Проверка подписи та же, что у сети; становится текущим,
+    /// только если текущего ещё нет, — сеть позже сменит его по правилам.
+    nonisolated static func restoredFromDisk() -> TileRelease? {
+        if let current { return current }
+        guard let cached = readRoot() else { return nil }
+        currentLock.withLock { if $0 == nil { $0 = cached } }
+        return current
+    }
+
     private func adopt(_ release: TileRelease) {
         if Self.current?.version != release.version {
             buckets.removeAll()

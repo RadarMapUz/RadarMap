@@ -61,6 +61,7 @@ PALETTES = {
         # Жёлтая кромка магистрали — как у Яндекса (снимок 05.10.2026).
         "kerb": "#f0c93f", "trees": "trees", "asphalt": "asphalt", "gutter": "#9aa2af",
         "parking": "#c4cad4", "parking_edge": "#e6c75a",
+        "sidewalk": "#ebe7e1", "sidewalk_edge": "#d6d0c7",
         # Мост: светлый край-ограждение и тень под пролётом; тоннель —
         # полупрозрачный асфальт с пунктирной кромкой (как у Яндекса).
         "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#c9ced8",
@@ -83,6 +84,7 @@ PALETTES = {
         "casing": "#2b3039",
         "kerb": "#8c7033", "trees": "trees-dark", "asphalt": "asphalt-dark", "gutter": "#2f343c",
         "parking": "#363c46", "parking_edge": "#7a6532",
+        "sidewalk": "#262a31", "sidewalk_edge": "#33383f",
         "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#2a2f37",
         "tree_crown": "#22402c", "tree_crown_low": "#18301f", "tree_crown_high": "#33593e", "tree_light": "#2e5238", "tree_trunk": "#3a332b", "tree_edge": "#2e5238",
         "tree_shadow": "rgba(0,0,0,0.5)",
@@ -403,6 +405,16 @@ def _layers_in_draw_order(p):
                                         16.5, ["literal", [-1, -1]], 18, ["literal", [-3, -3]],
                                         20, ["literal", [-11, -11]]],
                    "circle-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.2, 0.8]}},
+        # Тротуар полосой вдоль магистралей: светлая плитка с бордюрной
+        # кромкой — дорога не висит в газоне (07.10.2026).
+        {"id": "radar-sidewalk", "type": "fill", "source": "radar", "source-layer": "sidewalks",
+         "minzoom": 15.5,
+         "paint": {"fill-color": p["sidewalk"], "fill-antialias": True,
+                   "fill-opacity": ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 1]}},
+        {"id": "radar-sidewalk-edge", "type": "line", "source": "radar", "source-layer": "sidewalks",
+         "minzoom": 16.5, "layout": {"line-join": "round"},
+         "paint": {"line-color": p["sidewalk_edge"],
+                   "line-width": ["interpolate", ["linear"], ["zoom"], 16.5, 0.4, 19, 1.0]}},
         # Парковка: площадка асфальта с бордюром и белые черты мест (как у
         # Яндекса у аэропорта). Под дорогами — проезды площадки лежат сверху.
         {"id": "radar-parking", "type": "fill", "source": "radar", "source-layer": "parking",

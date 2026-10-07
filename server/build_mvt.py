@@ -51,6 +51,8 @@ LAYER_PLACES = "places"
 LAYER_TREES = "trees"
 # Парковки: площадка (Polygon) и черты мест (LineString), parking.py.
 LAYER_PARKING = "parking"
+# Тротуар полосой вдоль магистралей (Polygon) — sidewalk_bands.
+LAYER_SIDEWALKS = "sidewalks"
 # Стрелки полос: одна точка на ПОЛОСУ, свойства turn (код build_roads.TURN_*)
 # и bearing (куда смотрит стрелка, градусы по часовой от севера).
 LAYER_ARROWS = "arrows"
@@ -1498,6 +1500,62 @@ def _superseded(line, fresh):
     return False
 
 
+SIDEWALK_MIN_CODE, SIDEWALK_MAX_CODE = 2, 5
+SIDEWALK_GAP_METERS = 0.35       # от кромки асфальта — бордюр
+SIDEWALK_WIDTH_METERS = 2.6
+SIDEWALK_CLEAR_METERS = 9.0      # дальше кромки: другая лента ближе — это разделительная
+SIDEWALK_STEP_METERS = 4.0
+SIDEWALK_MIN_RUN_METERS = 16.0
+
+
+def sidewalk_bands(road, half, overlap, mask):
+    """Кольца полосы тротуара по обе стороны ленты (только свободные участки)."""
+    from build_roads import simplify
+    points = road[2]
+    if len(points) < 2:
+        return []
+    lat0 = points[0][1]
+    kx = 111_320 * math.cos(math.radians(lat0))
+    samples = []                       # (точка, единичная нормаль вправо)
+    for a, b in zip(points, points[1:]):
+        dx, dy = (b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320
+        length = math.hypot(dx, dy)
+        if length <= 0:
+            continue
+        nx, ny = dy / length, -dx / length
+        steps = max(1, int(length / SIDEWALK_STEP_METERS))
+        for k in range(steps + (1 if b is points[-1] else 0)):
+            t = k / steps
+            samples.append(((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), (nx, ny)))
+    inner = half + SIDEWALK_GAP_METERS
+    outer = inner + SIDEWALK_WIDTH_METERS
+
+    def at(p, n, d, side):
+        return (p[0] + n[0] * d * side / kx, p[1] + n[1] * d * side / 111_320)
+
+    rings = []
+    for side in (1, -1):
+        run = []
+
+        def flush():
+            if len(run) >= 2 and len(run) * SIDEWALK_STEP_METERS >= SIDEWALK_MIN_RUN_METERS:
+                near = simplify([at(p, n, inner, side) for p, n in run], 0.25 / 111_320)
+                far = simplify([at(p, n, outer, side) for p, n in run], 0.25 / 111_320)
+                rings.append(near + list(reversed(far)))
+        for p, n in samples:
+            mid = at(p, n, (inner + outer) / 2, side)
+            probe = at(p, n, half + SIDEWALK_CLEAR_METERS, side)
+            free = (not mask._covers_area(mid) and not overlap.foreign(mid, road)
+                    and not overlap.foreign(probe, road))
+            if free:
+                run.append((p, n))
+            else:
+                flush()
+                run = []
+        flush()
+    return rings
+
+
 class RoadAxes:
     """Оси дорог по клеткам: близко ли точка к оси (в метрах)."""
 
@@ -2317,6 +2375,16 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                     continue
                 for line in parking_rules.stall_lines(ring, near_road, axes.aisles_in(ring)):
                     _put(buckets, zoom, LAYER_PARKING, mvt.LINESTRING, line, {"kind": "stall"})
+        # Тротуар полосой вдоль магистралей: асфальт больше не упирается прямо
+        # в газон. Только там, где у кромки нет другой ленты, узла или
+        # разделительной: на стороне разделительной и между проспектом и
+        # дублёром тротуара нет (07.10.2026).
+        for road in roads:
+            if not SIDEWALK_MIN_CODE <= road[0] <= SIDEWALK_MAX_CODE or road[1] & (FLAG_BRIDGE | FLAG_TUNNEL):
+                continue
+            half = (widths.get(id(road)) or road_width_meters(road[0], lanes_of(road[1]))) / 2.0
+            for ring in sidewalk_bands(road, half, overlap, mask):
+                _put(buckets, zoom, LAYER_SIDEWALKS, mvt.POLYGON, ring, {"cls": road[0]})
         leaders = arrow_leaders(points)
         asphalt = JunctionMask(asphalt_rings)
         del asphalt_rings

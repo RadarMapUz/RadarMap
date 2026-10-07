@@ -430,8 +430,16 @@ def _layers_in_draw_order(p):
         {"id": "radar-median", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 15.5,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
                     ["!", ["has", "strip"]], ["!", ["has", "island"]]],
-         # Островок на съезде — бетон, как у Яндекса, а не газон.
-         "paint": {"fill-color": p["concrete"], "fill-outline-color": p["minor_edge"]}},
+         # Островок на съезде — асфальт с белой штриховкой поверх.
+         "paint": {"fill-color": p["road"], "fill-outline-color": p["paint"]}},
+        # Островок на съезде — асфальт со штриховкой (разметка 1.16), как у
+        # Яндекса, а не серая заплатка.
+        {"id": "radar-island-hatch", "type": "fill", "source": "radar", "source-layer": "surface",
+         "minzoom": 16.5,
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
+                    ["!", ["has", "strip"]], ["!", ["has", "island"]]],
+         "paint": {"fill-pattern": "hatch",
+                   "fill-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.2, 0.9]}},
         # Тоннель — ПОД наземными дорогами: полупрозрачный асфальт и
         # пунктирная кромка. Раньше он рисовался обычной дорогой поверх всего,
         # и на Кичик Халка йули не понять было, что дорога уходит под землю.

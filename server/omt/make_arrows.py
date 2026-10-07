@@ -170,6 +170,21 @@ def asphalt(ratio, palette):
     return image
 
 
+# Штриховка направляющего островка (разметка 1.16): белые диагонали на
+# прозрачном, плитка замыкается сама — как у Яндекса у съездов.
+HATCH_TILE = 16
+
+
+def hatch(ratio):
+    size = HATCH_TILE * ratio
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    pen = ImageDraw.Draw(image)
+    width = max(1, int(2.2 * ratio))
+    for offset in (-size, 0, size):
+        pen.line([(offset, size), (offset + size, 0)], fill=(255, 255, 255, 235), width=width)
+    return image
+
+
 def build(ratio):
     suffix = "" if ratio == 1 else f"@{ratio}x"
     base_png = os.path.join(HERE, "sprite", f"base{suffix}.png")
@@ -181,6 +196,7 @@ def build(ratio):
     icons.append(("traffic-light", traffic_light(ratio)))
     icons += [(name, trees(ratio, name)) for name in sorted(TREE_COLOURS)]
     icons += [(name, asphalt(ratio, name)) for name in sorted(ASPHALT_COLOURS)]
+    icons.append(("hatch", hatch(ratio)))
     row = max(icon.height for _n, icon in icons)
     out = Image.new("RGBA", (max(sheet.width, sum(i.width + 2 for _n, i in icons)),
                              sheet.height + row + 2), (0, 0, 0, 0))

@@ -194,7 +194,7 @@ extension Backport where Content: View {
             // эмулирует ultraThinMaterial + тонкая кайма (та же читаемость).
             content
                 .background(.ultraThinMaterial, in: shape)
-                .overlay(shape.stroke(.white.opacity(0.08), lineWidth: 1))
+                .overlay(shape.stroke(Theme.stroke, lineWidth: 1))
         }
     }
 

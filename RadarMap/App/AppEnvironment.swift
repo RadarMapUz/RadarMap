@@ -94,6 +94,19 @@ final class AppEnvironment {
         }
     }
 
+    /// Тема интерфейса: днём светлая, ночью тёмная — по той же настройке, что
+    /// подложка карты (`AppSettings.mapAppearance`; «Авто» — по солнцу в точке
+    /// пользователя). Пишется только на смене: её читает корень приложения, и
+    /// запись на каждом пересчёте пересобирала бы всё дерево.
+    private(set) var interfaceIsDaylight = false
+
+    /// Пересчёт темы: на старте, при открытии, при смене настройки и раз в
+    /// пять минут (RootView) — закат не ждёт перезапуска.
+    func refreshInterfaceAppearance() {
+        let day = settings.mapAppearance.isDaylight(at: location.currentCoordinate, now: Date())
+        if day != interfaceIsDaylight { interfaceIsDaylight = day }
+    }
+
     /// Ставит RootView по scenePhase телефона.
     func setPhoneSceneActive(_ active: Bool) {
         isPhoneSceneActive = active
@@ -307,6 +320,9 @@ final class AppEnvironment {
         speedLimits.onOverspeed = { [weak alerts] in
             alerts?.speak(String(localized: "Превышение скорости"))
         }
+        // Тема интерфейса — до первого кадра: днём приложение не должно
+        // мигнуть тёмным при запуске.
+        refreshInterfaceAppearance()
     }
 
     var loadError: String? { cameras.loadError }

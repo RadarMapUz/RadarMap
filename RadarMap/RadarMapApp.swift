@@ -23,14 +23,15 @@ struct RadarMapApp: App {
         WindowGroup {
             RootView()
                 .environment(env)
-                // Тёмный «радар-детектор» стиль. Двумя модификаторами намеренно:
-                // preferredColorScheme просит систему о тёмном окне (статус-бар),
-                // а environment ЗАДАЁТ схему нашему дереву — материалы, стекло и
-                // карта берут её оттуда. Одного первого мало: если вид приложения
-                // переопределён в настройках iOS, окно остаётся светлым, стекло
-                // становится белёсым и белые иконки на нём пропадают.
-                .preferredColorScheme(.dark)
-                .environment(\.colorScheme, .dark)
+                // Тема: днём светлая, ночью тёмная — по настройке подложки
+                // (env.interfaceIsDaylight). Двумя модификаторами намеренно:
+                // preferredColorScheme просит систему об окне нужной темы
+                // (статус-бар), а environment ЗАДАЁТ схему нашему дереву —
+                // адаптивные токены Theme, материалы и стекло берут её оттуда.
+                // Одного первого мало: если вид приложения переопределён в
+                // настройках iOS, окно осталось бы в чужой теме.
+                .preferredColorScheme(env.interfaceIsDaylight ? .light : .dark)
+                .environment(\.colorScheme, env.interfaceIsDaylight ? .light : .dark)
                 .tint(Theme.accent)
         }
     }

@@ -13597,6 +13597,38 @@
           }
         }
       }
+    },
+    "Тема": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тема"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mavzu"
+          }
+        }
+      }
+    },
+    "«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Приборка и экран тревоги тёмные всегда.\n\nЧем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Приборка и экран тревоги тёмные всегда.\n\nЧем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Avto» — kunduzi yorug‘ panellar va xarita (quyoshda qorong‘i ekran yaltiraydi), kechasi grafit rang. Spidometr va ogohlantirish ekrani har doim qorong‘i.\n\nXaritani nima chizadi — Apple, o‘z sxemamiz yoki dvijok — xaritadagi qatlamlar tugmasi bilan tanlanadi: natija o‘sha yerda ko‘rinadi va almashtirish darhol ishlaydi."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

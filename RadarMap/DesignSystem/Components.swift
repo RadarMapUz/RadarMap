@@ -231,7 +231,9 @@ struct PressableStyle: ButtonStyle {
 struct PrimaryButton: View {
     let title: LocalizedStringKey
     var systemImage: String? = nil
-    var tint: Color = Theme.accent
+    /// По умолчанию — жёлтое главное действие с тёмным текстом. Другой
+    /// заливке (danger и т.п.) — белый текст.
+    var tint: Color = Theme.action
     let action: () -> Void
 
     var body: some View {
@@ -241,7 +243,7 @@ struct PrimaryButton: View {
                 Text(title)
             }
             .font(.rounded(17, .semibold))
-            .foregroundStyle(Theme.background)
+            .foregroundStyle(tint == Theme.action ? Theme.onAction : Color.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(tint, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
@@ -293,7 +295,8 @@ struct LegendChip: View {
         HStack(spacing: 6) {
             Image(systemName: symbol)
                 .font(.rounded(10, .bold))
-                .foregroundStyle(.white)
+                // Светлый радар — тёмный значок (как на маркере), остальные — белый.
+                .foregroundStyle(color == Theme.Types.radar ? Theme.Types.darkGlyph : .white)
                 .frame(width: 20, height: 20)
                 .background(color, in: Circle())
             Text(text)

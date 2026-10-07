@@ -167,7 +167,7 @@ struct CarPlayAheadPanel: View {
                            height: item.isTarget ? 34 : 24)
                 Image(systemName: item.kind.symbolName)
                     .font(.rounded(item.isTarget ? 15 : 11, .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(item.isTarget ? Theme.background : item.kind.glyphTint)
             }
             .shadow(color: (item.isTarget ? Theme.danger : .black).opacity(0.55), radius: 6)
 

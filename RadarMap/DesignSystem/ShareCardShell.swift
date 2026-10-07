@@ -83,6 +83,11 @@ struct ShareCardShell<Content: View>: View {
                                center: .center, startRadius: 40, endRadius: 380)
             }
         )
+        // Карточка — картинка для чужих лент, и она ТЁМНАЯ всегда: белый
+        // текст в ней местами задан прямо, а ImageRenderer рисует вне
+        // окружения приложения (по умолчанию в светлой схеме), и адаптивные
+        // токены Theme дали бы тёмный текст на тёмной карточке.
+        .environment(\.colorScheme, .dark)
     }
 }
 

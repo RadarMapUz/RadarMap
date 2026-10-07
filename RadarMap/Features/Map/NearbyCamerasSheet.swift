@@ -54,7 +54,7 @@ struct NearbyCamerasSheet: View {
         HStack(spacing: 14) {
             Image(systemName: camera.kind.symbolName)
                 .font(.rounded(15, .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(camera.kind.glyphTint)
                 .frame(width: 40, height: 40)
                 .background(camera.kind.tint.gradient, in: Circle())
 

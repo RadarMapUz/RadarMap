@@ -58,6 +58,10 @@ struct ApproachOverlayGate: View {
                     alertRadius: env.location.effectiveAlertRadius,
                     onDismiss: { dismissedID = camera.id }
                 )
+                // Экран тревоги тёмный при любой теме: на полностью затемнённой
+                // карте крупная цифра и цвет типа читаются за долю секунды, а
+                // белая простыня посреди дня ослепляла бы.
+                .environment(\.colorScheme, .dark)
             }
         }
         .motionAnimation(.easeInOut(duration: 0.25), value: env.location.isApproachingCamera)

@@ -101,6 +101,10 @@ struct DashboardView: View {
             // Тронулись — мгновенно ярко (isStandingStill пишется на смене).
             .motionAnimation(.easeInOut(duration: 0.8), value: isParkedDim)
         }
+        // Приборка тёмная ВСЕГДА, при любой теме приложения: OLED-экономия —
+        // смысл этого экрана, и адаптивные токены Theme здесь обязаны
+        // разрешаться в ночные значения.
+        .environment(\.colorScheme, .dark)
         .contentShape(Rectangle())
         .onTapGesture { dismiss() }
         .sheet(isPresented: $showSettings) { SettingsView() }
@@ -414,7 +418,7 @@ private struct DashCameraBlock: View {
                 ZStack {
                     Image(systemName: camera.kind.symbolName)
                         .font(.rounded(26, .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(camera.kind.glyphTint)
                         .frame(width: 54, height: 54)
                         .background(camera.kind.tint.gradient, in: Circle())
                     if let rel = env.location.displayBearingToNearest {

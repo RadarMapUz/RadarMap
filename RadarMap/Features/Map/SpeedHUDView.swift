@@ -167,7 +167,7 @@ struct SpeedHUDView: View {
                 ZStack {
                     Image(systemName: camera.kind.symbolName)
                         .font(.rounded(16, .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(proximityGlyph(distance, camera))
                         .frame(width: 38, height: 38)
                         .background(proximityTint(distance, camera).gradient, in: Circle())
                         .shadow(color: near ? camera.kind.tint.opacity(0.6) : .clear, radius: 6)
@@ -228,6 +228,13 @@ struct SpeedHUDView: View {
     /// десяти километрах читается как тревога, хотя ехать до неё двадцать минут:
     /// далеко — спокойный серый, на подходе — приглушённый цвет типа, в зоне
     /// оповещения — полный цвет со свечением.
+    /// Значок поверх `proximityTint`: на цвете типа — его glyphTint (тёмный на
+    /// светлом радаре), на сером «далеко» — контрастный фону темы.
+    private func proximityGlyph(_ distance: Double, _ camera: Camera) -> Color {
+        distance <= env.location.effectiveAlertRadius * 3
+            ? camera.kind.glyphTint : Theme.background
+    }
+
     private func proximityTint(_ distance: Double, _ camera: Camera) -> Color {
         let radius = env.location.effectiveAlertRadius
         if distance <= radius { return camera.kind.tint }

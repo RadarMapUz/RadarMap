@@ -308,25 +308,41 @@ nonisolated enum EngineMapStyle {
         return out
     }
 
+    /// Цвет типа камеры для слоёв движка — те же значения, что Theme.Types
+    /// (движок принимает только строку цвета).
+    static func typeHex(_ kind: CameraType) -> String {
+        switch kind {
+        case .stationaryCamera:        return "#D93025"
+        case .stationaryRadar, .tripod: return "#F2B200"
+        case .intelligentRadar:        return "#6A3FD6"
+        case .mobileRadar:             return "#C2409E"
+        case .dpsPost:                 return "#46525E"
+        case .accident:                return "#D93025"
+        case .other:                   return "#6B6B70"
+        }
+    }
+
     /// Камеры и «я» — над всем, в обоих стилях.
     static func markerLayers(label: String, halo: String) -> [[String: Any]] {
         var out: [[String: Any]] = []
-        // Only the current alert has a halo; ordinary cameras stay quiet.
+        // Ореол только у текущей тревоги; обычные камеры молчат.
         out.append([
             "id": "camera-halo", "type": "circle", "source": "cameras",
             "filter": ["==", ["get", "alert"], true],
-            "paint": ["circle-radius": 23, "circle-color": "#f4ae43",
+            "paint": ["circle-radius": 26, "circle-color": "#D93025",
                       "circle-opacity": 0.18],
         ])
+        // Точка мелкого масштаба — тот же язык, что значок: цвет типа и
+        // белое кольцо (макет 07.10). Цвет приходит свойством точки.
         out.append([
             "id": "camera-dot", "type": "circle", "source": "cameras",
             "maxzoom": 14.5,
             "paint": ["circle-radius": ["interpolate", ["linear"], ["zoom"],
-                                        12, 4, 15, 12, 17, 15],
-                      "circle-color": ["case", ["get", "alert"], "#80551c", "#243d49"],
+                                        12, 4, 15, 10, 17, 13],
+                      "circle-color": ["coalesce", ["get", "color"], "#D93025"],
                       "circle-opacity": ["case", ["get", "unconfirmed"], 0.55, 1],
-                      "circle-stroke-width": ["case", ["get", "alert"], 3, 1.5],
-                      "circle-stroke-color": ["case", ["get", "alert"], "#f4ae43", "#a8c8d2"]],
+                      "circle-stroke-width": ["case", ["get", "alert"], 3, 1.8],
+                      "circle-stroke-color": "#FFFFFF"],
         ])
         out.append([
             "id": "camera-icons", "type": "symbol", "source": "cameras",

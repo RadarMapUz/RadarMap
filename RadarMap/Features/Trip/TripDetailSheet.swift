@@ -52,7 +52,7 @@ struct PassRow: View {
         HStack(spacing: 12) {
             Image(systemName: pass.kind.symbolName)
                 .font(.rounded(15, .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(pass.kind.glyphTint)
                 .frame(width: 34, height: 34)
                 .background(pass.kind.tint.gradient, in: Circle())
             VStack(alignment: .leading, spacing: 2) {
@@ -587,7 +587,7 @@ struct TripShareCard: View {
                         .frame(height: format == .story ? 430 : 300)
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(.white.opacity(0.08), lineWidth: 1))
+                            .stroke(Theme.stroke, lineWidth: 1))
                 }
             }
             // Рейтинг — бейджем на карте: главная цифра поездки видна сразу.

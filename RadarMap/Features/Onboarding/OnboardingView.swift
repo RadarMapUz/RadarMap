@@ -310,7 +310,7 @@ struct OnboardingView: View {
 
     private var backgroundGradient: some View {
         LinearGradient(
-            colors: [Theme.background, Color(red: 0.05, green: 0.08, blue: 0.16)],
+            colors: [Theme.background, Theme.adaptive(0xE6E8EE, 0x1F2023)],
             startPoint: .top, endPoint: .bottom
         )
         .ignoresSafeArea()

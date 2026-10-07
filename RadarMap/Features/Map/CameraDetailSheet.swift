@@ -92,7 +92,7 @@ struct CameraDetailSheet: View {
         HStack(spacing: 12) {
             Image(systemName: camera.kind.symbolName)
                 .font(.rounded(20, .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(camera.kind.glyphTint)
                 .frame(width: 46, height: 46)
                 .background(camera.kind.tint.gradient, in: Circle())
                 .shadow(color: camera.kind.tint.opacity(0.6), radius: 8)

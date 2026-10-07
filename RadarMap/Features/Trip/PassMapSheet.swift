@@ -224,7 +224,7 @@ struct PassDetailView: View {
             HStack(spacing: 12) {
                 Image(systemName: pass.kind.symbolName)
                     .font(.rounded(15, .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(pass.kind.glyphTint)
                     .frame(width: 38, height: 38)
                     .background(pass.kind.tint.gradient, in: Circle())
                 VStack(alignment: .leading, spacing: 2) {

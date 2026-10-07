@@ -331,7 +331,7 @@ final class CameraMarkerView: MKAnnotationView {
 
             let config = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
             if let glyph = UIImage(systemName: kind.symbolName, withConfiguration: config)?
-                .withTintColor(.white, renderingMode: .alwaysOriginal) {
+                .withTintColor(UIColor(kind.glyphTint), renderingMode: .alwaysOriginal) {
                 glyph.draw(in: CGRect(x: (size.width - glyph.size.width) / 2,
                                       y: (size.height - glyph.size.height) / 2,
                                       width: glyph.size.width, height: glyph.size.height))

@@ -168,7 +168,7 @@ struct TripLiveBar: View {
                         HStack(spacing: 6) {
                             Image(systemName: next.camera.kind.symbolName)
                                 .font(.rounded(11, .bold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(next.camera.kind.glyphTint)
                                 .frame(width: 24, height: 24)
                                 .background(next.camera.kind.tint.gradient, in: Circle())
                             Text(Formatting.distance(route.nextCameraDistance))
@@ -230,7 +230,9 @@ struct TripLiveBar: View {
 struct ManeuverBanner: View {
     let step: RouteStep
     let distance: CLLocationDistance
-    private let jade = Color(red: 0.64, green: 0.88, blue: 0.71)
+    /// Цвет манёвра — акцент темы (был нефритовый на тёмно-зелёной плашке,
+    /// вшитый под тёмный интерфейс; днём он читался бы бледным пятном).
+    private let jade = Theme.accent
 
     var body: some View {
         VStack(spacing: 0) {
@@ -275,7 +277,8 @@ struct ManeuverBanner: View {
             .padding(8)
         }
         }
-        .background(Color(red: 0.075, green: 0.14, blue: 0.12), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .liftPanel()
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
         .transition(.move(edge: .top).combined(with: .opacity))
     }
@@ -301,7 +304,7 @@ struct RouteCamerasSheet: View {
                             .frame(width: 24)
                         Image(systemName: item.camera.kind.symbolName)
                             .font(.rounded(13, .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(item.camera.kind.glyphTint)
                             .frame(width: 34, height: 34)
                             .background(item.camera.kind.tint.gradient, in: Circle())
                         VStack(alignment: .leading, spacing: 2) {

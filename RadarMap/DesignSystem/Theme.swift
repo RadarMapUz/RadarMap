@@ -2,7 +2,19 @@
 //  Theme.swift
 //  RadarMap
 //
-//  Палитра и метрики тёмного интерфейса «радар-детектора».
+//  Палитра и метрики интерфейса: светлые панели днём, графит ночью.
+//
+//  ПЕРЕСМОТР 7 октября: тёмный неоновый «радар-детектор» (циан на почти
+//  чёрном синем) владелец назвал неприятным. Новая палитра — в духе
+//  Яндекс Навигатора: белые панели днём, графитовые ночью, один жёлтый
+//  акцент только на главном действии. Каждый токен проверен расчётом:
+//  текстовые — не ниже 4,5:1 и на фоне, и на карточке, в обеих темах;
+//  маркеры типов — различимы при дейтеранопии/протанопии/тританопии.
+//  Макет: https://claude.ai/artifact/KVGkR4VWkSTneGn4SZHhbs.
+//
+//  Токены АДАПТИВНЫЕ: один и тот же `Theme.textPrimary` чёрный днём и
+//  светлый ночью, решает схема окружения (AppEnvironment.interfaceScheme;
+//  приборка и экран тревоги всегда тёмные — они задают схему себе сами).
 //
 //  ГЛАВНОЕ ПРАВИЛО: цветом кодируется СОСТОЯНИЕ (норма → внимание → опасность),
 //  а тип объекта различается глифом и формой. До этого цвет значил и то и
@@ -25,16 +37,36 @@ import UIKit
 
 enum Theme {
 
+    /// Цвет по теме: `light` днём, `dark` ночью. Решает схема окружения
+    /// SwiftUI, а не системная настройка iOS.
+    static func adaptive(_ light: UInt32, _ dark: UInt32,
+                         lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? rgb(dark, darkAlpha) : rgb(light, lightAlpha)
+        })
+    }
+
+    static func rgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> UIColor {
+        UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
+    }
+
     // MARK: - Состояния (единственные «громкие» цвета интерфейса)
 
-    /// Нейтральное действие и всё «своё»: маршрут, кнопки, ссылки, акценты.
-    static let accent  = Color(red: 0.235, green: 0.863, blue: 1.0)   // неоновый циан
+    /// Выделение и всё «своё»: маршрут, выбранное, ссылки, значки активного.
+    /// Синий, а не жёлтый: этот цвет бывает ТЕКСТОМ, а жёлтый текст на белой
+    /// панели не читается (1,3:1). 4,9:1 днём, 5,3:1 ночью.
+    static let accent  = adaptive(0x2563D9, 0x6BA3FF)
+    /// Главное действие — заливка кнопки («Радар!», «Поехали»). Один на экран.
+    /// Текст на нём — `onAction` (11,9:1).
+    static let action  = Color(uiColor: rgb(0xFFD43B))
+    static let onAction = Color(uiColor: rgb(0x1C1C1E))
     /// Внимание: приближение к камере, превышение в допуске, «на грани».
-    static let warning = Color(red: 1.0,   green: 0.71,  blue: 0.15)  // янтарный
+    static let warning = adaptive(0x9A5800, 0xFFB020)
     /// Опасность: штрафуемое превышение, камера вплотную, ошибка.
-    static let danger  = Color(red: 1.0,   green: 0.27,  blue: 0.38)  // красный
+    static let danger  = adaptive(0xC62828, 0xFF7A70)
     /// Норма: в лимите, чисто, выполнено.
-    static let success = Color(red: 0.22,  green: 0.9,   blue: 0.55)  // зелёный
+    static let success = adaptive(0x177A41, 0x4CC27A)
 
     /// Состояние объекта — единственный законный способ выбрать «смысловой»
     /// цвет там, где состояние вычисляется. Прямая ссылка на warning/danger
@@ -115,43 +147,38 @@ enum Theme {
 
     // MARK: - Типы камер
     //
-    // Приглушённое семейство: тип узнаётся по глифу, цвет здесь — лишь
-    // подсказка «это другой вид точки». Насыщенность заметно ниже, чем у
-    // состояний, поэтому маркер камеры больше не читается как тревога.
+    // Маркер — цветной круг с белым кольцом (читается на любой подложке),
+    // тип различает и цвет, и глиф. Подбор расчётом: камера и радар
+    // различаются СВЕТЛОТОЙ (красный с белым значком / светлый янтарь с
+    // тёмным), поэтому не сливаются и при дейтеранопии; значок на каждом
+    // круге — не ниже 4,6:1. Цвет типа — не цвет состояния: тревогу несёт
+    // ореол и размер маркера, а не его заливка.
 
     enum Types {
         /// Стационарная камера.
-        static let camera      = Color(red: 0.94, green: 0.45, blue: 0.55)
-        /// Стационарный радар и тренога.
-        static let radar       = Color(red: 0.95, green: 0.74, blue: 0.40)
-        /// Интеллектуальная камера + радар.
-        static let intelligent = Color(red: 0.45, green: 0.60, blue: 1.0)
-        /// Передвижной радар (краудсорс).
-        static let mobile      = Color(red: 0.72, green: 0.45, blue: 1.0)
+        static let camera      = Color(uiColor: rgb(0xD93025))
+        /// Стационарный радар и тренога — СВЕТЛЫЙ: глиф на нём тёмный (glyph(on:)).
+        static let radar       = Color(uiColor: rgb(0xF2B200))
+        /// Интеллектуальная камера + радар. Индиго, а не синий: синим говорит
+        /// интерфейс (accent), и маркер читался бы кнопкой (ΔE 12 → 30).
+        static let intelligent = Color(uiColor: rgb(0x6A3FD6))
+        /// Передвижной радар (краудсорс). Неподтверждённая — пунктир кольца.
+        static let mobile      = Color(uiColor: rgb(0xC2409E))
         /// Пост ДПС.
-        ///
-        /// Был rgb(0.36, 0.78, 0.86) — циан, и от `accent` его отделяло
-        /// **ΔE = 12,0**, то есть «тот же цвет с другой яркостью». Маркер
-        /// поста на карте читался как элемент интерфейса: линия маршрута,
-        /// активный круг ориентации, ссылка. Это прямое нарушение правила,
-        /// которое тема объявляет сама: типы не спорят с состояниями.
-        ///
-        /// Тёплая олива выбрана расчётом, а не на глаз: ΔE до `accent` 59,4,
-        /// до ближайшего соседа по всей палитре 30,9, контраст на карточке
-        /// 7,98 при пороге 4,5, насыщенность 30 — приглушённее состояний, как
-        /// и положено типу. Заодно она уместна по смыслу: пост ДПС — это не
-        /// прибор, а люди, и холодный приборный циан ему не шёл.
-        static let post        = Color(red: 0.66, green: 0.70, blue: 0.48)
-        /// ДТП — единственный тип с «громким» цветом: это не характеристика
-        /// точки, а событие, которое требует внимания прямо сейчас.
+        static let post        = Color(uiColor: rgb(0x46525E))
+        /// ДТП — событие, а не характеристика точки: цвет опасности.
         static let accident    = Theme.danger
+        /// Кольцо маркера.
+        static let ring        = Color.white
+        /// Глиф на СВЕТЛОЙ заливке (радар, тренога) — 9:1.
+        static let darkGlyph   = Color(uiColor: rgb(0x1C1C1E))
     }
 
     // MARK: - Поверхности и текст
 
-    static let background    = Color(red: 0.02,  green: 0.04,  blue: 0.07)  // почти чёрный навигационный
-    static let surface       = Color(red: 0.07,  green: 0.09,  blue: 0.14)
-    static let stroke        = Color.white.opacity(0.10)
+    static let background    = adaptive(0xF2F2F5, 0x17181A)
+    static let surface       = adaptive(0xFFFFFF, 0x2E2F33)
+    static let stroke        = adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.08, darkAlpha: 0.10)
 
     // MARK: - Глубина
     //
@@ -166,7 +193,7 @@ enum Theme {
     // и дальше «глубина» это не новый стиль, а тот же, доведённый до конца.
 
     /// Верх карточки: поверхность, поймавшая свет. Пара к `surface` — низ.
-    static let surfaceTop = Color(red: 0.102, green: 0.133, blue: 0.200)
+    static let surfaceTop = adaptive(0xFFFFFF, 0x36373B)
 
     /// Заливка карточки: светлее сверху, темнее снизу. Один градиент даёт
     /// больше объёма, чем любая тень на почти чёрном фоне, — тень там просто
@@ -178,16 +205,17 @@ enum Theme {
     /// для мест, где нужна именно КРАСКА (точка на карте, подложка значка), —
     /// градиент туда класть незачем.
     static let screenBackground = RadialGradient(
-        colors: [Color(red: 0.059, green: 0.102, blue: 0.169), background],
+        colors: [adaptive(0xFAFAFC, 0x222326), background],
         center: .top, startRadius: 0, endRadius: 620)
 
-    static let textPrimary   = Color.white
-    static let textSecondary = Color.white.opacity(0.62)
+    static let textPrimary   = adaptive(0x1C1C1E, 0xF5F5F7)
+    static let textSecondary = adaptive(0x5E5E63, 0xA1A1A8)
     /// 0.50, а не 0.38: на почти чёрном фоне приложения прежняя ступень давала
     /// контраст 3.5:1 при пороге WCAG AA 4.5:1 — и это не абстракция, а 117
     /// подписей под цифрами, которые читают на ходу, в машине, через блик.
     /// 0.50 даёт 5.3:1 и всё ещё отличается от textSecondary на глаз.
-    static let textTertiary  = Color.white.opacity(0.50)
+    /// Пересчитано 7 октября: 4,7:1 и днём, и ночью, на фоне и на карточке.
+    static let textTertiary  = adaptive(0x6B6B70, 0x9A9AA1)
 
     // MARK: - Метрики
 
@@ -211,17 +239,20 @@ enum Theme {
 
     /// Кромка панели: карточка, бар действий, панель слоёв.
     static let edgePanel = LinearGradient(
-        colors: [.white.opacity(0.16), .white.opacity(0.02)],
+        colors: [adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.08, darkAlpha: 0.16),
+                 adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.04, darkAlpha: 0.02)],
         startPoint: .top, endPoint: .bottom)
 
     /// Кромка круглой кнопки поверх карты.
     static let edgeControl = LinearGradient(
-        colors: [.white.opacity(0.22), .white.opacity(0.04)],
+        colors: [adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.10, darkAlpha: 0.22),
+                 adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.04, darkAlpha: 0.04)],
         startPoint: .top, endPoint: .bottom)
 
     /// Кромка акцентной кнопки: света больше, потому что она главная.
     static let edgeAccent = LinearGradient(
-        colors: [.white.opacity(0.45), .white.opacity(0.03)],
+        colors: [adaptive(0xFFFFFF, 0xFFFFFF, lightAlpha: 0.55, darkAlpha: 0.45),
+                 adaptive(0xFFFFFF, 0xFFFFFF, lightAlpha: 0.05, darkAlpha: 0.03)],
         startPoint: .top, endPoint: .bottom)
 
     // MARK: - Сетка отступов
@@ -412,6 +443,15 @@ extension CameraType {
         case .dpsPost:          return Theme.Types.post
         case .accident:         return Theme.Types.accident
         case .other:            return Theme.textSecondary
+        }
+    }
+
+    /// Цвет значка НА заливке типа. Радар и тренога светлые — значок тёмный;
+    /// остальные заливки тёмные — значок белый. Контраст не ниже 4,6:1.
+    var glyphTint: Color {
+        switch self {
+        case .stationaryRadar, .tripod: return Theme.Types.darkGlyph
+        default:                        return .white
         }
     }
 }

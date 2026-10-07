@@ -190,7 +190,7 @@ struct ReportRadarButton: View {
     private var largeLabel: some View {
         HStack(spacing: 10) {
             if isSending {
-                ProgressView().controlSize(.regular).tint(.white)
+                ProgressView().controlSize(.regular).tint(foreground)
             } else {
                 Image(systemName: symbol)
                     .font(.system(size: 22, weight: .bold))
@@ -200,7 +200,7 @@ struct ReportRadarButton: View {
                 .font(.rounded(21, .heavy))
                 .contentTransition(.numericText())
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(foreground)
         .frame(maxWidth: .infinity)
         .frame(height: 62)
         .background(
@@ -220,11 +220,11 @@ struct ReportRadarButton: View {
             RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous)
                 .fill(background.gradient)
             if isSending {
-                ProgressView().controlSize(.small).tint(.white)
+                ProgressView().controlSize(.small).tint(foreground)
             } else {
                 Image(systemName: symbol)
                     .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(foreground)
             }
         }
         // Крупнее «стопа» рядом: по ней бьют вслепую и чаще всего.
@@ -247,8 +247,15 @@ struct ReportRadarButton: View {
         switch flash {
         case .ok: return Theme.success
         case .no: return Theme.textTertiary
-        case nil: return Theme.warning
+        // Покой — жёлтое главное действие (макет 07.10): «Радар!» — то, ради
+        // чего водитель тянется к телефону, и цвет у неё один на всё приложение.
+        case nil: return Theme.action
         }
+    }
+
+    /// Текст и значок поверх `background`: тёмные на жёлтом, белые на остальных.
+    private var foreground: Color {
+        fan?.isCancelling != true && flash == nil ? Theme.onAction : .white
     }
 
     private func send(kind: ReportKind) {
@@ -384,7 +391,7 @@ struct ReportRefineBar: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(kind.cameraType.glyphTint)
             .frame(width: 62, height: 44)
             .background(kind.cameraType.tint.gradient,
                         in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
@@ -415,7 +422,7 @@ struct MobileConfirmBar: View {
             HStack(spacing: 10) {
                 Image(systemName: camera.kind.symbolName)
                     .font(.rounded(15, .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(camera.kind.glyphTint)
                     .frame(width: 34, height: 34)
                     .background(camera.kind.tint.gradient, in: Circle())
                 Text("Радар ещё стоял?")

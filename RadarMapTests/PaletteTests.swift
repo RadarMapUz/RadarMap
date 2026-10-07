@@ -14,6 +14,9 @@
 //  (ΔE76, D65, sRGB), но для вопроса «эти два цвета различимы?» их хватает:
 //  ошибка метрики — единицы, а ловим мы разрывы в десятки.
 //
+//  С 7 октября палитра адаптивная (светлая днём, графит ночью): каждое
+//  правило проверяется в ОБЕИХ темах — цвет разрешается под стиль вручную.
+//
 
 import SwiftUI
 import XCTest
@@ -23,11 +26,22 @@ final class PaletteTests: XCTestCase {
 
     // MARK: - Измерения
 
+    /// Тема, в которой сейчас меряем (адаптивные токены разрешаются под неё).
+    private var style: UIUserInterfaceStyle = .dark
+
     private func components(_ color: Color) -> (Double, Double, Double) {
-        let ui = UIColor(color)
+        let ui = UIColor(color).resolvedColor(with: UITraitCollection(userInterfaceStyle: style))
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         ui.getRed(&r, green: &g, blue: &b, alpha: &a)
         return (Double(r), Double(g), Double(b))
+    }
+
+    /// Прогнать проверку в обеих темах.
+    private func inBothThemes(_ check: (String) -> Void) {
+        for theme in [UIUserInterfaceStyle.light, .dark] {
+            style = theme
+            check(theme == .light ? "днём" : "ночью")
+        }
     }
 
     private func linear(_ c: Double) -> Double {
@@ -60,6 +74,25 @@ final class PaletteTests: XCTestCase {
         return ((l1 - l2) * (l1 - l2) + (a1 - a2) * (a1 - a2) + (b1 - b2) * (b1 - b2)).squareRoot()
     }
 
+    /// ΔE при дейтеранопии (матрица Machado 2009, полная тяжесть).
+    private func deltaEDeutan(_ a: Color, _ b: Color) -> Double {
+        func simulated(_ color: Color) -> (Double, Double, Double) {
+            let (r0, g0, b0) = components(color)
+            let r = linear(r0), g = linear(g0), b = linear(b0)
+            let m = [[0.367322, 0.860646, -0.227968],
+                     [0.280085, 0.672501, 0.047413],
+                     [-0.011820, 0.042940, 0.968881]]
+            let out = m.map { min(1, max(0, $0[0] * r + $0[1] * g + $0[2] * b)) }
+            let x = (0.4124 * out[0] + 0.3576 * out[1] + 0.1805 * out[2]) / 0.95047
+            let y = 0.2126 * out[0] + 0.7152 * out[1] + 0.0722 * out[2]
+            let z = (0.0193 * out[0] + 0.1192 * out[1] + 0.9505 * out[2]) / 1.08883
+            func f(_ t: Double) -> Double { t > 0.008856 ? pow(t, 1.0 / 3) : 7.787 * t + 16.0 / 116 }
+            return (116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z)))
+        }
+        let (l1, a1, b1) = simulated(a), (l2, a2, b2) = simulated(b)
+        return ((l1 - l2) * (l1 - l2) + (a1 - a2) * (a1 - a2) + (b1 - b2) * (b1 - b2)).squareRoot()
+    }
+
     // MARK: - Наборы
 
     private var states: [(String, Color)] {
@@ -73,46 +106,89 @@ final class PaletteTests: XCTestCase {
          ("post", Theme.Types.post)]
     }
 
+    /// Тип камеры → его заливка и глиф на ней (как рисует маркер).
+    private var markers: [(String, Color, Color)] {
+        [(CameraType.stationaryCamera, "camera"), (.stationaryRadar, "radar"),
+         (.intelligentRadar, "intelligent"), (.mobileRadar, "mobile"), (.dpsPost, "post"),
+         (.tripod, "tripod")].map { ($0.1, $0.0.tint, $0.0.glyphTint) }
+    }
+
     // MARK: - Правила
 
-    /// Всё, что несёт смысл, читается на карточке. Порог WCAG AA — 4.5.
-    func testEveryMeaningfulColourIsReadableOnSurface() {
-        for (name, colour) in states + types {
-            XCTAssertGreaterThanOrEqual(contrast(colour, Theme.surface), 4.5,
-                                        "\(name) не читается на карточке")
+    /// Цвет состояния бывает ТЕКСТОМ — он читается и на фоне, и на карточке,
+    /// в обеих темах. Порог WCAG AA — 4.5.
+    func testStatesAreReadableEverywhere() {
+        inBothThemes { theme in
+            for (name, colour) in states {
+                XCTAssertGreaterThanOrEqual(contrast(colour, Theme.surface), 4.5,
+                                            "\(name) не читается на карточке \(theme)")
+                XCTAssertGreaterThanOrEqual(contrast(colour, Theme.background), 4.5,
+                                            "\(name) не читается на фоне \(theme)")
+            }
+            for (name, colour) in [("textPrimary", Theme.textPrimary), ("textSecondary", Theme.textSecondary),
+                                   ("textTertiary", Theme.textTertiary)] {
+                XCTAssertGreaterThanOrEqual(contrast(colour, Theme.surface), 4.5, "\(name) \(theme)")
+                XCTAssertGreaterThanOrEqual(contrast(colour, Theme.background), 4.5, "\(name) \(theme)")
+            }
+        }
+    }
+
+    /// Главная кнопка: тёмный текст на жёлтом.
+    func testActionButtonIsReadable() {
+        inBothThemes { theme in
+            XCTAssertGreaterThanOrEqual(contrast(Theme.onAction, Theme.action), 7, theme)
+        }
+    }
+
+    /// Значок на маркере читается: белый на тёмных заливках, тёмный на радаре.
+    func testMarkerGlyphsAreReadable() {
+        inBothThemes { theme in
+            for (name, fill, glyph) in markers {
+                XCTAssertGreaterThanOrEqual(contrast(glyph, fill), 4.5, "значок на \(name) \(theme)")
+            }
         }
     }
 
     /// Состояния различимы между собой — иначе цвет ничего не кодирует.
     func testStatesAreDistinguishableFromEachOther() {
-        for i in states.indices {
-            for j in states.indices where j > i {
-                XCTAssertGreaterThanOrEqual(deltaE(states[i].1, states[j].1), 40,
-                    "\(states[i].0) и \(states[j].0) слишком близки")
+        inBothThemes { theme in
+            for i in states.indices {
+                for j in states.indices where j > i {
+                    XCTAssertGreaterThanOrEqual(deltaE(states[i].1, states[j].1), 40,
+                        "\(states[i].0) и \(states[j].0) слишком близки \(theme)")
+                }
             }
         }
     }
 
-    /// ГЛАВНОЕ правило темы: тип объекта не должен читаться как состояние.
+    /// Маркер не должен читаться элементом интерфейса.
     ///
-    /// Именно оно и было нарушено: `Types.post` отстоял от `accent` на 12
-    /// единиц, то есть маркер поста ДПС выглядел элементом интерфейса.
-    /// Порог 25 — это «видно, что цвета разные», а не «похожи, но не совсем».
-    func testTypesDoNotCollideWithStates() {
-        for (typeName, type) in types {
-            for (stateName, state) in states {
-                XCTAssertGreaterThanOrEqual(deltaE(type, state), 25,
-                    "тип \(typeName) читается как состояние \(stateName)")
+    /// Пост ДПС когда-то отстоял от `accent` на ΔE 12, а в первом наброске
+    /// новой палитры так же сел «интеллектуальный» синий — маркер выглядел
+    /// кнопкой. Красная «камера» намеренно близка к `danger` (язык Яндекс
+    /// Навигатора: камера красная); тревогу несёт ореол и размер маркера,
+    /// а не его заливка, поэтому с состояниями тип сверяется только по
+    /// цвету интерфейса.
+    func testTypesDoNotLookLikeInterface() {
+        inBothThemes { theme in
+            for (name, type) in types {
+                XCTAssertGreaterThanOrEqual(deltaE(type, Theme.accent), 25,
+                    "тип \(name) читается как элемент интерфейса \(theme)")
             }
         }
     }
 
-    /// Типы различимы и между собой: иначе «другой вид точки» не считывается.
+    /// Типы различимы между собой — и при дейтеранопии (у ~6 % водителей).
+    /// Камера и радар разведены СВЕТЛОТОЙ, поэтому не сливаются и тогда.
     func testTypesAreDistinguishableFromEachOther() {
-        for i in types.indices {
-            for j in types.indices where j > i {
-                XCTAssertGreaterThanOrEqual(deltaE(types[i].1, types[j].1), 25,
-                    "типы \(types[i].0) и \(types[j].0) слишком близки")
+        inBothThemes { theme in
+            for i in types.indices {
+                for j in types.indices where j > i {
+                    XCTAssertGreaterThanOrEqual(deltaE(types[i].1, types[j].1), 25,
+                        "типы \(types[i].0) и \(types[j].0) слишком близки \(theme)")
+                    XCTAssertGreaterThanOrEqual(deltaEDeutan(types[i].1, types[j].1), 15,
+                        "типы \(types[i].0) и \(types[j].0) сливаются при дейтеранопии \(theme)")
+                }
             }
         }
     }

@@ -145,13 +145,13 @@ struct SettingsView: View {
                         ForEach(CameraFilter.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
-                    Picker("Тема карты", selection: $settings.mapAppearance) {
+                    Picker("Тема", selection: $settings.mapAppearance) {
                         ForEach(MapAppearance.allCases) { Text($0.title).tag($0) }
                     }
                 } header: {
                     Text("Карта")
                 } footer: {
-                    Text("«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nЧем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу.")
+                    Text("«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Приборка и экран тревоги тёмные всегда.\n\nЧем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу.")
                         .fixedSize(horizontal: false, vertical: true)
                 }
 

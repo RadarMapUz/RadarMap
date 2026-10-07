@@ -76,6 +76,17 @@ struct RootView: View {
                 .background(Theme.background)
         }
         #endif
+        // Тема по солнцу: закат не ждёт перезапуска. Раз в пять минут — дешёвый
+        // расчёт NOAA без подписки на тик GPS (её корню иметь нельзя).
+        .task {
+            while !Task.isCancelled {
+                env.refreshInterfaceAppearance()
+                await Task.pause(seconds: 300)
+            }
+        }
+        .onChange(of: env.settings.mapAppearance) { _, _ in
+            env.refreshInterfaceAppearance()
+        }
         .task {
             #if DEBUG
             // Экран передачи без машины: проверить глазами на симуляторе.
@@ -101,6 +112,7 @@ struct RootView: View {
             guard hasCompletedOnboarding else { return }
             switch phase {
             case .active:
+                env.refreshInterfaceAppearance()
                 env.location.setForeground(true)
                 env.setPhoneSceneActive(true)   // опрос радаров: жив любой экран
                 env.motion.start()

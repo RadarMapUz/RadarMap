@@ -80,7 +80,8 @@ struct CameraAnnotationView: View {
         return pinShape
             .fill(camera.kind.tint.opacity(isGhost ? 0.45 : 1))
             .frame(width: size, height: size)
-            .overlay(pinShape.stroke(.white.opacity(0.75), lineWidth: 1))
+            // Белое кольцо — как у полного маркера: читается на любой подложке.
+            .overlay(pinShape.stroke(Theme.Types.ring, lineWidth: 1.5))
             // Тап-мишень больше самой точки, и не на глаз: 44 pt — размер
             // подушечки пальца. По камере тыкают НА ХОДУ, из держателя, и
             // тридцать точек здесь означали промах через раз — по объекту,
@@ -130,11 +131,13 @@ struct CameraAnnotationView: View {
                     .frame(width: selected ? 54 : 46, height: selected ? 54 : 46)
             }
             directionCone(radius: selected ? 30 : 24)
+            // Ровная заливка типом и белое кольцо (макет 07.10): маркер — знак,
+            // а не объёмная кнопка; кольцо отделяет его от любой подложки.
             pinShape
-                .fill(camera.kind.tint.opacity(isGhost ? 0.5 : 1).gradient)
+                .fill(camera.kind.tint.opacity(isGhost ? 0.5 : 1))
                 .frame(width: selected ? 38 : 28, height: selected ? 38 : 28)
-                .overlay(pinShape.stroke(.white.opacity(0.9),
-                                         style: StrokeStyle(lineWidth: 2,
+                .overlay(pinShape.stroke(Theme.Types.ring,
+                                         style: StrokeStyle(lineWidth: selected ? 3 : 2.5,
                                                             dash: isGhost ? [3, 3] : [])))
                 // Тень только у выбранного маркера: shadow = offscreen-проход рендера,
                 // на ~220 аннотациях при панорамировании это заметно.
@@ -142,13 +145,14 @@ struct CameraAnnotationView: View {
 
             Image(systemName: camera.kind.symbolName)
                 .font(.rounded(selected ? 16 : 13, .bold))
-                .foregroundStyle(.white.opacity(isGhost ? 0.8 : 1))
+                // Тёмный на светлом радаре, белый на остальных (glyphTint).
+                .foregroundStyle(camera.kind.glyphTint.opacity(isGhost ? 0.8 : 1))
 
             if camera.isApproximate {
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.warning)
-                    .background(Circle().fill(.black).frame(width: 10, height: 10))
+                    .background(Circle().fill(Theme.surface).frame(width: 11, height: 11))
                     .offset(x: 13, y: -13)
             } else if isGhost {
                 // «?» на плече — та же позиция, что у бейджа неточной камеры:
@@ -156,7 +160,7 @@ struct CameraAnnotationView: View {
                 Image(systemName: "questionmark.circle.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textSecondary)
-                    .background(Circle().fill(.black).frame(width: 10, height: 10))
+                    .background(Circle().fill(Theme.surface).frame(width: 11, height: 11))
                     .offset(x: 13, y: -13)
             } else if isFamiliar {
                 // «Своя»: галочка вместо голоса. Тот же слот на плече —
@@ -164,7 +168,7 @@ struct CameraAnnotationView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.success)
-                    .background(Circle().fill(.black).frame(width: 10, height: 10))
+                    .background(Circle().fill(Theme.surface).frame(width: 11, height: 11))
                     .offset(x: 13, y: -13)
             }
         }

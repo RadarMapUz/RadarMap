@@ -115,7 +115,9 @@ struct PeriodMapSheet: View {
             if marker.times > 1 {
                 Text("\(marker.times)")
                     .font(.system(size: size * 0.42, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
+                    // Заливки состояний ночью светлые — белая цифра на них не
+                    // читалась бы; Theme.background контрастен в обеих темах.
+                    .foregroundStyle(Theme.background)
             }
         }
         .overlay(Circle().stroke(.white.opacity(isSelected ? 1 : 0.85),

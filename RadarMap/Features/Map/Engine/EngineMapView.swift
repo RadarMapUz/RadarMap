@@ -234,15 +234,21 @@ struct EngineMapView: UIViewRepresentable {
             for kind in kinds {
                 let configuration = UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
                 if let image = UIImage(systemName: kind.symbolName, withConfiguration: configuration) {
-                    // Bake SF Symbol tint into pixels: Native does not apply
-                    // UIKit's template rendering mode to a style image.
+                    // Маркер (макет 07.10): круг цветом ТИПА с белым кольцом,
+                    // значок тёмный на светлом радаре и белый на остальных.
+                    // Тревожный — крупнее; ореол рисует слой camera-halo.
+                    // Цвет запекается в пиксели: движок не применяет к
+                    // картинке стиля template-режим UIKit.
                     for alert in [false, true] {
-                        let bitmap = UIGraphicsImageRenderer(size: CGSize(width: 30, height: 30)).image { _ in
-                            (alert ? UIColor(red: 0.50, green: 0.33, blue: 0.11, alpha: 1)
-                             : UIColor(red: 0.10, green: 0.22, blue: 0.18, alpha: 1)).setFill()
-                            UIBezierPath(roundedRect: CGRect(x: 1, y: 1, width: 28, height: 28), cornerRadius: 10).fill()
-                            image.withTintColor(.white, renderingMode: .alwaysOriginal)
-                                .draw(at: CGPoint(x: (30 - image.size.width) / 2, y: (30 - image.size.height) / 2))
+                        let side: CGFloat = alert ? 38 : 30
+                        let bitmap = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
+                            let disc = CGRect(x: 1, y: 1, width: side - 2, height: side - 2)
+                            UIColor.white.setFill()
+                            UIBezierPath(ovalIn: disc).fill()
+                            UIColor(kind.tint).setFill()
+                            UIBezierPath(ovalIn: disc.insetBy(dx: alert ? 3 : 2.5, dy: alert ? 3 : 2.5)).fill()
+                            image.withTintColor(UIColor(kind.glyphTint), renderingMode: .alwaysOriginal)
+                                .draw(at: CGPoint(x: (side - image.size.width) / 2, y: (side - image.size.height) / 2))
                         }
                         style.setImage(bitmap, forName: kind.symbolName + (alert ? "-alert" : ""))
                     }
@@ -621,6 +627,7 @@ struct EngineMapView: UIViewRepresentable {
                 let point = MLNPointFeature()
                 point.coordinate = camera.coordinate
                 point.attributes = ["id": camera.id, "alert": camera.id == model.alertCameraID,
+                    "color": EngineMapStyle.typeHex(camera.kind),
                     "icon": camera.kind.symbolName + (camera.id == model.alertCameraID ? "-alert" : ""),
                     "limit": cachedLimits[camera.id].map(String.init) ?? "",
                     "unconfirmed": camera.isUnconfirmedMobile]

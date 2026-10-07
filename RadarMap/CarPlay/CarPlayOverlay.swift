@@ -218,7 +218,7 @@ struct CarPlayOverlay: View {
             ZStack {
                 Image(systemName: camera.kind.symbolName)
                     .font(.rounded(15, .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(proximityGlyph(distance, camera))
                     .frame(width: 38, height: 38)
                     .background(proximityTint(distance, camera).gradient, in: Circle())
 
@@ -484,6 +484,13 @@ struct CarPlayOverlay: View {
 
     /// Цвет значка камеры по БЛИЗОСТИ, а не по типу: красный кружок при камере
     /// в трёх километрах читается как тревога, хотя ехать до неё минуты.
+    /// Значок поверх `proximityTint`: на цвете типа — его glyphTint (тёмный на
+    /// светлом радаре), на сером «далеко» — контрастный фону темы.
+    private func proximityGlyph(_ distance: CLLocationDistance, _ camera: Camera) -> Color {
+        distance <= env.location.effectiveAlertRadius * 3
+            ? camera.kind.glyphTint : Theme.background
+    }
+
     private func proximityTint(_ distance: CLLocationDistance, _ camera: Camera) -> Color {
         let radius = env.location.effectiveAlertRadius
         if distance <= radius { return camera.kind.tint }

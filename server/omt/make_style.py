@@ -63,7 +63,7 @@ PALETTES = {
         # Мост: светлый край-ограждение и тень под пролётом; тоннель —
         # полупрозрачный асфальт с пунктирной кромкой (как у Яндекса).
         "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#c9ced8",
-        "tree_crown": "#a3d184", "tree_light": "#c4e4a8", "tree_trunk": "#9b8a76", "tree_edge": "#94c676",
+        "tree_crown": "#a3d184", "tree_crown_low": "#7fb565", "tree_crown_high": "#c2e3a2", "tree_light": "#c4e4a8", "tree_trunk": "#9b8a76", "tree_edge": "#94c676",
         "tree_shadow": "rgba(60,100,40,0.28)",
         "label": "#4a4a4a", "halo": "#ffffff", "signal": "#3b3b3b", "signal_ring": "#f5d547",
     },
@@ -82,7 +82,7 @@ PALETTES = {
         "casing": "#2b3039",
         "kerb": "#8c7033", "trees": "trees-dark",
         "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#2a2f37",
-        "tree_crown": "#22402c", "tree_light": "#2e5238", "tree_trunk": "#3a332b", "tree_edge": "#2e5238",
+        "tree_crown": "#22402c", "tree_crown_low": "#18301f", "tree_crown_high": "#33593e", "tree_light": "#2e5238", "tree_trunk": "#3a332b", "tree_edge": "#2e5238",
         "tree_shadow": "rgba(0,0,0,0.5)",
         "label": "#c9ced6", "halo": "#0f1216", "signal": "#101318", "signal_ring": "#f0c64a",
     },
@@ -128,7 +128,14 @@ def tree_3d(p):
     Среди объёмных слоёв: дома и деревья закрывают друг друга по глубине."""
     return {"id": "radar-tree-3d", "type": "fill-extrusion", "source": "radar", "source-layer": "trees",
             "minzoom": TREE_3D_FROM, "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["has", "crown"]],
-            "paint": {"fill-extrusion-color": ["case", ["has", "trunk"], p["tree_trunk"], p["tree_crown"]],
+            # Ярус кроны: низ темнее, верх светлее; размер дерева чуть меняет
+            # оттенок — роща не одного цвета.
+            "paint": {"fill-extrusion-color": ["case", ["has", "trunk"], p["tree_trunk"],
+                                               ["interpolate", ["linear"],
+                                                ["+", ["coalesce", ["get", "tier"], 3],
+                                                 ["*", 0.4, ["coalesce", ["get", "size"], 1]]],
+                                                0, p["tree_crown_low"], 3, p["tree_crown"],
+                                                6.2, p["tree_crown_high"]]],
                       "fill-extrusion-base": ["get", "base"], "fill-extrusion-height": ["get", "top"],
                       "fill-extrusion-vertical-gradient": True, "fill-extrusion-opacity": 1.0}}
 

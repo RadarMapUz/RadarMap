@@ -149,9 +149,16 @@ class SegIndex:
 
 # ---------- кластеризация ----------
 
+# Сколько кадров нужно, чтобы встреча считалась полной. Горящий светофор
+# в одном кадре — часто блик или вывеска; знак и переход черновой детектор
+# находит с точностью 80–97 % (проверено глазами) и видит обычно в 1–2 кадрах.
+FULL_TRACK_FRAMES = {'traffic_light': 3, 'speed_bump': 1, 'speed_limit': 1, 'crossing': 1}
+
+
 def object_quality(o):
+    need = FULL_TRACK_FRAMES.get(o['cls'], 3)
     return (o['conf'] or 0) * (o['weight'] if o['weight'] is not None else 0.3) * \
-        min(1.0, (o['n_frames'] or 1) / 3)
+        min(1.0, (o['n_frames'] or 1) / need)
 
 
 def cluster_objects(objs, merge_m=MERGE_M):

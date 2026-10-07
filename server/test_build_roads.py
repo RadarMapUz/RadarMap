@@ -2699,6 +2699,14 @@ class MedianTests(unittest.TestCase):
         self.assertTrue(flags & build_roads.AREA_FLAG_CLOSED)
         self.assertGreaterEqual(len(ring), 4)
 
+    def test_tunnel_pair_gets_no_median(self):
+        # Тоннель под землёй: его разделительная легла бы поверх наземного
+        # перекрёстка (Навои × Фурката, 07.10.2026).
+        south, north = self.pair(20 / 111_320.0)
+        tunnel = build_roads.FLAG_ONEWAY | build_roads.FLAG_TUNNEL
+        under = [((s[0], tunnel) + s[2:], chain) for s, chain in (south, north)]
+        self.assertEqual(build_roads.build_medians(under), [])
+
     def test_two_way_street_gets_nothing(self):
         # Одна проезжая — разделять нечего, там честная разметка.
         self.assertEqual(build_roads.build_medians(

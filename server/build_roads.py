@@ -4793,6 +4793,11 @@ def build_medians(chains, junctions=()):
                 # не делит с ней разделительную (Фурката, 05.10.2026).
                 if (one[1] ^ other[1]) & (FLAG_BRIDGE | FLAG_TUNNEL):
                     continue
+                # Тоннель — под землёй и нарисован полупрозрачной полосой;
+                # его разделительная ложилась поверх НАЗЕМНОГО перекрёстка
+                # (Навои × Фурката, 07.10.2026: серая линия через узел).
+                if one[1] & FLAG_TUNNEL:
+                    continue
                 fills, dividers = [], []
                 blocked = roads_index.blocker(one, other)
                 for strip in _median_strips(one, other, junctions, fills, dividers, blocked):

@@ -139,7 +139,11 @@ struct Det: Encodable {
 let ALLOWED: Set<Int> = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
 let SIGN_YLIM: Double = 0.80          // верхние ~65 % исходного кадра
 let LIGHT_YLIM: Double = 0.66         // верхние ~55 % исходного кадра
-let HORIZON: Double = 0.55            // примерно горизонт в кадре детекторов
+// Горизонт — строка 615 исходного кадра (калибровка агента полос): в кадре
+// детекторов (строки 70…864) это (615 − 70) / 794 ≈ 0,686.
+let HORIZON: Double = 0.686
+// Полоса «у горизонта» для светофоров: там же задние фонари автобусов и грузовиков.
+let LOW_BAND: Double = 0.58
 
 @inline(__always) func isRed(_ r: Int, _ g: Int, _ b: Int) -> Bool {
     let (h, s, v) = hsv(r, g, b)
@@ -358,7 +362,7 @@ func detectLights(_ im: RGBA) -> [Det] {
             let darkShare = Double(dark) / Double(tot)
             // Солнце, небо, блик на стекле — вокруг светло, а не корпус.
             if Double(bright) / Double(tot) > 0.25 { continue }
-            let low = b.cy > Double(im.h) * HORIZON
+            let low = b.cy > Double(im.h) * LOW_BAND
             if darkShare < (low ? 0.6 : 0.45) { continue }
             // Горящая секция светится: в пятне есть почти белые/предельно яркие пиксели.
             var vmax: Float = 0
@@ -409,7 +413,7 @@ func detectLights(_ im: RGBA) -> [Det] {
             if dx < 3 * d || dx > 30 * d { continue }
             let ratio = Double(a.n) / Double(max(b.n, 1))
             if ratio < 0.4 || ratio > 2.5 { continue }
-            if min(a.cy, b.cy) > Double(im.h) * (HORIZON - 0.05) { drop.insert(i); drop.insert(j) }
+            if min(a.cy, b.cy) > Double(im.h) * (LOW_BAND - 0.05) { drop.insert(i); drop.insert(j) }
         }
     }
     var out: [Det] = []
@@ -525,6 +529,7 @@ struct SignCand: Encodable {
     let score: Double
     var file: String? = nil
     var text: String? = nil      // только для табличек улиц/домов
+    var value: Int? = nil        // число на круге с красным кантом (ограничение скорости)
 }
 
 /// Текст таблички улицы/дома. Читается ТОЛЬКО внутри синей таблички; номер
@@ -580,6 +585,60 @@ func rowWidth(_ mask: [Bool], _ w: Int, _ b: Blob, _ fy: Double) -> Double {
     return lo < 0 ? 0 : Double(hi - lo + 1) / Double(b.w)
 }
 
+/// Насыщенный красный краски знака (кирпич, листва и вывески в тени — бледнее).
+@inline(__always) func isStrictRed(_ r: Int, _ g: Int, _ b: Int) -> Bool {
+    let (h, s, v) = hsv(r, g, b)
+    return (h >= 340 || h <= 12) && s >= 0.6 && v >= 0.45
+}
+
+/// Доля насыщенного красного в точках (нормированных к рамке), с допуском ±1 px.
+func redEdges(_ im: RGBA, _ b: Blob, _ pts: [(Double, Double)], strict: Bool = true) -> Double {
+    var hit = 0
+    for (fx, fy) in pts {
+        let x0 = b.minX + Int(Double(b.w - 1) * fx), y0 = b.minY + Int(Double(b.h - 1) * fy)
+        var ok = false
+        for dy in -1...1 { for dx in -1...1 {
+            let x = x0 + dx, y = y0 + dy
+            if x >= 0 && y >= 0 && x < im.w && y < im.h {
+                let r = im.r(x, y), g = im.g(x, y), bl = im.b(x, y)
+                if strict ? isStrictRed(r, g, bl) : isRed(r, g, bl) { ok = true }
+            }
+        } }
+        if ok { hit += 1 }
+    }
+    return pts.isEmpty ? 0 : Double(hit) / Double(pts.count)
+}
+
+/// Точки на сторонах треугольника (вершиной вверх или вниз), с отступом от края.
+func triEdges(up: Bool) -> [(Double, Double)] {
+    var out: [(Double, Double)] = []
+    let apexY = up ? 0.06 : 0.94, baseY = up ? 0.94 : 0.06
+    for k in 1...5 {
+        let t = Double(k) / 6
+        out.append((0.5 - 0.44 * t, apexY + (baseY - apexY) * t))   // левая сторона
+        out.append((0.5 + 0.44 * t, apexY + (baseY - apexY) * t))   // правая
+        out.append((0.06 + 0.88 * t, baseY))                         // основание
+    }
+    return out
+}
+
+/// Круглый синий знак: на 0,8 радиуса — синее по всей окружности, на 1,15 —
+/// не синее (белый кант / фон). Кусок стекла или неба так не выглядит.
+func blueCircleScore(_ im: RGBA, _ b: Blob) -> Double {
+    let cx = Double(b.minX + b.maxX) / 2, cy = Double(b.minY + b.maxY) / 2
+    let rx = Double(b.w) / 2, ry = Double(b.h) / 2
+    var inside = 0, outside = 0
+    let rays = 24
+    for k in 0..<rays {
+        let a = Double(k) / Double(rays) * 2 * Double.pi
+        let xi = Int(cx + cos(a) * rx * 0.8), yi = Int(cy + sin(a) * ry * 0.8)
+        let xo = Int(cx + cos(a) * rx * 1.15), yo = Int(cy + sin(a) * ry * 1.15)
+        if xi >= 0 && yi >= 0 && xi < im.w && yi < im.h && isSignBlue(im.r(xi, yi), im.g(xi, yi), im.b(xi, yi)) { inside += 1 }
+        if xo < 0 || yo < 0 || xo >= im.w || yo >= im.h || !isSignBlue(im.r(xo, yo), im.g(xo, yo), im.b(xo, yo)) { outside += 1 }
+    }
+    return min(Double(inside), Double(outside)) / Double(rays)
+}
+
 func detectSignCandidates(_ im: RGBA) -> [SignCand] {
     if frameBrightness(im) < 0.22 { return [] }
     let ylim = Int(Double(im.h) * SIGN_YLIM)
@@ -606,19 +665,26 @@ func detectSignCandidates(_ im: RGBA) -> [SignCand] {
         let centerBlue = share(im, b, 0.3, 0.7, 0.3, 0.7, isSignBlue)
         let cornerRed = corners(im, b, isRed)
         let top = rowWidth(red, im.w, b, 0.12), bottom = rowWidth(red, im.w, b, 0.88)
-        if fill >= 0.72 && centerWhite >= 0.08 && centerWhite <= 0.45 && cornerRed >= 0.2 {
+        if fill >= 0.6 && centerWhite >= 0.08 && centerWhite <= 0.45 && cornerRed < 0.25 && b.w >= 14
+            && redEdges(im, b, [(0.5, 0.04), (0.5, 0.96), (0.04, 0.5), (0.96, 0.5)]) >= 0.75
+            && share(im, b, 0.1, 0.9, 0.1, 0.9, isStrictRed) >= 0.45 {
+            // восьмиугольник: середины сторон красные, углы срезаны (вывеска — прямоугольник)
             out.append(SignCand(shape: "red_octagon", x: Double(b.minX), y: Double(b.minY), w: Double(b.w),
                                 h: Double(b.h), score: centerWhite))
         } else if fill < 0.72 && fill > 0.18 && (centerWhite + centerBlue) >= 0.35 {
-            if top < 0.45 && bottom > 0.75 && cornerRed < 0.35 {
+            if top < 0.45 && bottom > 0.75 && cornerRed < 0.35 && b.w >= 14 && centerWhite >= 0.3
+                && redEdges(im, b, triEdges(up: true), strict: false) >= 0.7 {
                 out.append(SignCand(shape: "red_triangle", x: Double(b.minX), y: Double(b.minY),
                                     w: Double(b.w), h: Double(b.h), score: bottom - top))
-            } else if top > 0.75 && bottom < 0.45 && cornerRed < 0.35 {
+            } else if top > 0.75 && bottom < 0.45 && cornerRed < 0.35 && b.w >= 14 && centerWhite >= 0.3
+                && redEdges(im, b, triEdges(up: false), strict: false) >= 0.7 {
                 out.append(SignCand(shape: "red_inverted", x: Double(b.minX), y: Double(b.minY),
                                     w: Double(b.w), h: Double(b.h), score: top - bottom))
-            } else if cornerRed < 0.2 {
+            } else if cornerRed < 0.2 && b.w >= 18 && b.h >= 18 && centerWhite + centerBlue >= 0.5 {
+                // Знак: кант по всей окружности и белое (запрещающие) или синее
+                // («остановка/стоянка запрещена») поле. Фасады и стёкла — нет.
                 let (ring, _) = ringScore(im, b)
-                if ring >= 0.55 {
+                if ring >= 0.7 {
                     out.append(SignCand(shape: "red_circle", x: Double(b.minX), y: Double(b.minY),
                                         w: Double(b.w), h: Double(b.h), score: ring))
                 }
@@ -635,7 +701,9 @@ func detectSignCandidates(_ im: RGBA) -> [SignCand] {
         if white < 0.06 || white > 0.6 { continue }   // знак — синее с белым символом
         let cb = corners(im, b, isSignBlue)
         let a = Double(b.w) / Double(b.h)
-        if cb < 0.25 && a > 0.75 && a < 1.33 && fill < 0.85 {
+        let field = share(im, b, 0.12, 0.88, 0.12, 0.88, isSignBlue)
+        if cb < 0.25 && a > 0.75 && a < 1.33 && fill < 0.85 && b.w >= 18 && b.h >= 18 && field >= 0.45
+            && blueCircleScore(im, b) >= 0.7 {
             out.append(SignCand(shape: "blue_circle", x: Double(b.minX), y: Double(b.minY), w: Double(b.w),
                                 h: Double(b.h), score: 1 - cb))
         } else if cb >= 0.45 {
@@ -682,6 +750,20 @@ func detectSignCandidates(_ im: RGBA) -> [SignCand] {
         }
     }
     return out
+}
+
+/// Число в круге с красным кантом: середина круга (без канта), апскейл ×3+.
+func readCircleNumber(_ cg: CGImage, _ c: SignCand) -> Int? {
+    let side = max(c.w, c.h)
+    let cx = c.x + c.w / 2, cy = c.y + c.h / 2
+    let bounds = CGRect(x: 0, y: 0, width: cg.width, height: cg.height)
+    for k in [0.36, 0.45, 0.6] {
+        let r = CGRect(x: cx - side * k, y: cy - side * k, width: side * 2 * k, height: side * 2 * k)
+            .intersection(bounds)
+        if r.width < 6 || r.height < 6 { continue }
+        if let crop = cropScaled(cg, r, minH: max(96, Int(r.height * 3))), let (v, _) = readNumber(crop) { return v }
+    }
+    return nil
 }
 
 func writeSignCrop(_ cg: CGImage, _ c: SignCand, _ path: String) -> Bool {
@@ -774,7 +856,12 @@ if args[1] == "detect" {
                 let stem = (path as NSString).lastPathComponent.replacingOccurrences(of: ".jpg", with: "")
                 let parent = ((path as NSString).deletingLastPathComponent as NSString).lastPathComponent
                 for (k, var c) in detectSignCandidates(im).enumerated() {
-                    if c.shape == "name_plate" { c.text = readPlate(cg, c) }
+                    if c.shape == "name_plate" {
+                        // табличка без прочитанного текста — почти всегда кусок неба/фасада
+                        c.text = readPlate(cg, c)
+                        if c.text == nil { continue }
+                    }
+                    if c.shape == "red_circle" { c.value = readCircleNumber(cg, c) }
                     let sub = dir + "/" + c.shape
                     try? FileManager.default.createDirectory(atPath: sub, withIntermediateDirectories: true)
                     let file = sub + "/" + parent + "_" + stem + "_\(k).jpg"

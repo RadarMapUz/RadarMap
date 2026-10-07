@@ -116,8 +116,11 @@ def sanitize_sign(s):
     text = s.get('text') if s['shape'] == 'name_plate' else None
     if not isinstance(text, str) or PLATE_RE.search(text) or len(text) > 80:
         text = None
+    value = s.get('value') if s['shape'] == 'red_circle' else None
+    if value not in ALLOWED_LIMITS:
+        value = None
     return {'shape': s['shape'], 'x': sx, 'y': sy, 'w': w / fr.SCALE, 'h': h / fr.SCALE,
-            'score': score, 'text': text,
+            'score': score, 'text': text, 'value': value,
             'file': f if isinstance(f, str) and f.startswith(SIGN_DIR) else None}
 
 
@@ -152,12 +155,13 @@ def detect_trip(conn, key, log=print):
                 fid = by_path.get(path)
                 if fid is None:
                     continue
-                store_signs(conn, frame[fid], signs)
                 conn.execute('DELETE FROM detections WHERE frame_id=?', (fid,))
                 conn.executemany('INSERT INTO detections(frame_id, cls, value, color, x, y, w, h, conf) '
                                  'VALUES(?,?,?,?,?,?,?,?,?)',
                                  [(fid, d['cls'], d['value'], d['color'], d['x'], d['y'], d['w'], d['h'],
                                    d['conf']) for d in dets])
+                # после сработок: число в красном круге добавит speed_limit, если его нет
+                store_signs(conn, frame[fid], signs)
                 conn.execute('UPDATE frames SET detected=? WHERE id=?', (2 if err else 1, fid))
                 total += len(dets)
         # кадры, которых нет на диске, — тоже «разобраны», чтобы не крутиться
@@ -176,9 +180,20 @@ def store_signs(conn, f, signs):
     conn.execute('DELETE FROM sign_crops WHERE frame_id=?', (f['id'],))
     for s in signs:
         cur = conn.execute('INSERT INTO sign_crops(frame_id, shape, x, y, w, h, score, t, lat, lon, course, '
-                           'side, text) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                           'side, text, value) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
                            (f['id'], s['shape'], s['x'], s['y'], s['w'], s['h'], s['score'], f['t'],
-                            f['lat'], f['lon'], f['course'], sign_side(s['x'], s['w']), s.get('text')))
+                            f['lat'], f['lon'], f['course'], sign_side(s['x'], s['w']), s.get('text'),
+                            s.get('value')))
+        # Число в красном круге — знак ограничения, даже если основной детектор
+        # (кольцо → OCR) его пропустил: добавляем сработку speed_limit.
+        if s.get('value'):
+            cx, cy = s['x'] + s['w'] / 2, s['y'] + s['h'] / 2
+            dup = conn.execute("SELECT 1 FROM detections WHERE frame_id=? AND cls='speed_limit' AND "
+                               'abs(x + w / 2 - ?) < w AND abs(y + h / 2 - ?) < h', (f['id'], cx, cy)).fetchone()
+            if not dup:
+                conn.execute("INSERT INTO detections(frame_id, cls, value, x, y, w, h, conf) "
+                             "VALUES(?, 'speed_limit', ?, ?, ?, ?, ?, ?)",
+                             (f['id'], s['value'], s['x'], s['y'], s['w'], s['h'], 0.7))
         if s['file'] and os.path.exists(s['file']):
             dst = os.path.join(SIGN_DIR, s['shape'], f'{cur.lastrowid}.jpg')
             os.replace(s['file'], dst)

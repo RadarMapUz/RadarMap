@@ -1,11 +1,10 @@
 """Точка объекта на карте: трек сработок по соседним кадрам → триангуляция.
 
 Модель объектива: направление на объект = курс машины + угол по горизонтали
-в кадре + поправка установки (регистратор может смотреть чуть в сторону).
-Угол по горизонтали — модель «равноудалённого» широкоугольника
-α = (x − cx) / f, f = (W/2) / (HFOV/2); для угла обзора ~120° она ближе к
-правде, чем точечная камера (у той края кадра растянуты). Параметры —
-в calib.json рядом с каталогом (их пишет calibrate.py), по умолчанию 120°.
+в кадре + поправка установки (регистратор смотрит чуть левее). Модель «byd»
+измерена агентом полос по линейке скорости: пинхол f ≈ 1124 px (~95°),
+радиальная дисторсия k = 0,3, горизонт — строка 615 (см. Lens). Переопределить —
+calib.json рядом с каталогом.
 
 Один объект виден в нескольких кадрах подряд: сработки связываются в трек
 (тот же класс, рамка сдвигается немного и растёт, объект уходит от центра
@@ -23,7 +22,8 @@ import frames as fr
 
 EARTH_R = 6371000.0
 CALIB_PATH = os.path.join(os.path.dirname(catalog.DB_PATH), 'calib.json')
-DEFAULT_CALIB = {'hfov_deg': 120.0, 'yaw_deg': 0.0, 'cx': fr.SRC_W / 2, 'model': 'equidistant'}
+DEFAULT_CALIB = {'model': 'byd', 'f': 1123.6, 'k': 0.3, 'yaw_deg': -1.402, 'cx': fr.SRC_W / 2, 'cy': 540.0,
+                 'horizon': 615.0, 'hfov_deg': 95.0}
 
 # Реальные размеры, м: знак 3.24 Ø 0,7 (в городе 0,6–0,7), квадрат 5.19 — 0,6,
 # горящая секция светофора — светящийся круг ~0,2 (секция 0,3 с козырьком).
@@ -48,29 +48,60 @@ def load_calib(path=CALIB_PATH):
 
 
 class Lens:
-    def __init__(self, hfov_deg=120.0, yaw_deg=0.0, cx=fr.SRC_W / 2, model='equidistant', **_):
+    """Объектив регистратора. Модель «byd» — измерена агентом полос по линейке
+    скорости (tools/dashcam/lanes/camera.py, ~/RadarMapBuild/dashcam/lanes/calib.json):
+    пинхол f ≈ 1124 px исходного кадра (горизонтальный угол ~95°, а не
+    «паспортные» 120°), радиальная дисторсия r_u = r_d·(1 + k·(r_d/1000)²),
+    центр (960, 540), рыскание −1,4° (ось камеры чуть левее оси машины),
+    горизонт на строке 615. Модели «equidistant»/«pinhole» — для сравнения."""
+
+    def __init__(self, hfov_deg=95.0, yaw_deg=0.0, cx=fr.SRC_W / 2, model='byd', f=None, k=0.0,
+                 cy=540.0, horizon=615.0, **_):
         self.hfov, self.yaw, self.cx, self.model = hfov_deg, yaw_deg, cx, model
+        self.k, self.cy, self.horizon = k, cy, horizon
         half = math.radians(hfov_deg) / 2
-        if model == 'pinhole':
-            self.f = (fr.SRC_W / 2) / math.tan(half)
-        else:
+        if f:
+            self.f = f
+        elif model == 'equidistant':
             self.f = (fr.SRC_W / 2) / half
+        else:
+            self.f = (fr.SRC_W / 2) / math.tan(half)
 
-    def angle(self, x):
-        """Пиксель по горизонтали исходного кадра → угол от оси объектива, ° (вправо +)."""
-        u = (x - self.cx) / self.f
-        return math.degrees(math.atan(u) if self.model == 'pinhole' else u) + self.yaw
+    def _undistort(self, dx, dy):
+        if not self.k:
+            return dx
+        rd = math.hypot(dx, dy) / 1000.0
+        return dx * (1 + self.k * rd * rd)
 
-    def pixel(self, angle_deg):
+    def angle(self, x, y=None):
+        """Пиксель исходного кадра → угол от оси машины по горизонтали, ° (вправо +)."""
+        if self.model == 'equidistant':
+            return math.degrees((x - self.cx) / self.f) + self.yaw
+        y = self.horizon if y is None else y
+        xu = self._undistort(x - self.cx, y - self.cy)
+        return math.degrees(math.atan(xu / self.f)) + self.yaw
+
+    def pixel(self, angle_deg, y=None):
+        """Обратное к angle (по горизонтали, на строке y; по умолчанию — горизонт)."""
         a = math.radians(angle_deg - self.yaw)
-        u = math.tan(a) if self.model == 'pinhole' else a
-        return self.cx + u * self.f
+        if self.model == 'equidistant':
+            return self.cx + a * self.f
+        xu = math.tan(a) * self.f
+        if not self.k:
+            return self.cx + xu
+        y = self.horizon if y is None else y
+        dy = y - self.cy
+        xd = xu
+        for _ in range(20):  # Ньютон: xd·(1 + k·r²) = xu, r — от центра с учётом dy
+            rd2 = (xd * xd + dy * dy) / 1e6
+            g = xd * (1 + self.k * rd2) - xu
+            dg = 1 + self.k * rd2 + 2 * self.k * xd * xd / 1e6
+            xd -= g / dg
+        return self.cx + xd
 
     def local_f(self, x):
-        """Пикселей на радиан в точке x (для оценки расстояния по размеру рамки)."""
-        if self.model == 'pinhole':
-            return self.f
-        return self.f  # у равноудалённой модели масштаб по углу постоянен
+        """Пикселей на радиан (для оценки расстояния по размеру рамки)."""
+        return self.f
 
 
 # ---------- плоская система координат ----------
@@ -136,8 +167,8 @@ def angular_spread(angles):
 # ---------- связывание сработок в треки ----------
 
 # Фокус расширения: точка, из которой при езде прямо «разлетаются» объекты, —
-# центр кадра по горизонтали на линии горизонта (≈520 px исходного кадра BYD).
-FOE = (fr.SRC_W / 2, 520.0)
+# точка прямо по оси машины на линии горизонта (строка 615 исходного кадра BYD).
+FOE = (987.5, 615.0)   # прямо по оси машины: рыскание −1,4° → +27,5 px от центра
 
 
 def link_cost(last, o):
@@ -226,7 +257,7 @@ def locate_track(track, lens, plane):
         if o.get('lat') is None or o.get('course') is None:
             continue
         p = plane.xy(o['lat'], o['lon'])
-        brg = (o['course'] + lens.angle(o['x'] + o['w'] / 2)) % 360
+        brg = (o['course'] + lens.angle(o['x'] + o['w'] / 2, o['y'] + o['h'] / 2)) % 360
         rays.append((p, brg))
         pts.append((p, o))
     if not rays:
@@ -254,7 +285,7 @@ def locate_track(track, lens, plane):
     d = lens.local_f(o['x']) * REAL_SIZE_M[o['cls']] / size_px
     if d > MAX_RANGE_M:
         return None
-    brg = (o['course'] + lens.angle(o['x'] + o['w'] / 2)) % 360
+    brg = (o['course'] + lens.angle(o['x'] + o['w'] / 2, o['y'] + o['h'] / 2)) % 360
     ux, uy = unit(brg)
     lat, lon = plane.ll(p[0] + ux * d, p[1] + uy * d)
     return {'lat': lat, 'lon': lon, 'err_m': max(5.0, 0.35 * d), 'method': 'size',

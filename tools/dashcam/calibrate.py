@@ -68,7 +68,7 @@ def light_tracks(conn):
     keys = [r[0] for r in conn.execute('SELECT DISTINCT trip_key FROM objects')]
     for k in keys:
         rows = conn.execute(
-            'SELECT d.obj, d.x, d.w, f.lat, f.lon, f.course, f.weight FROM detections d '
+            'SELECT d.obj, d.x, d.y, d.w, d.h, f.lat, f.lon, f.course, f.weight FROM detections d '
             'JOIN frames f ON f.id=d.frame_id JOIN objects o ON o.id=d.obj '
             "WHERE f.trip_key=? AND d.cls='traffic_light' AND f.lat IS NOT NULL AND o.n_frames>=2 "
             'ORDER BY d.obj, f.t', (k,)).fetchall()
@@ -85,7 +85,7 @@ def lens_score(tracks, lens, sig_idx):
     for tr in tracks:
         if plane is None:
             plane = objects.Plane(tr[0]['lat'], tr[0]['lon'])
-        obs = [{**o, 'cls': 'traffic_light', 'y': 0, 'h': o['w']} for o in tr]
+        obs = [{**o, 'cls': 'traffic_light'} for o in tr]
         loc = objects.locate_track(obs, lens, plane)
         if not loc or loc['method'] != 'tri':
             continue

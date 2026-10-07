@@ -204,6 +204,12 @@ class LensTriangulationTest(unittest.TestCase):
             for x in (100, 700, 960, 1500, 1850):
                 self.assertAlmostEqual(lens.pixel(lens.angle(x)), x, places=6)
             self.assertAlmostEqual(lens.angle(1920) - lens.angle(0), 120, places=6)
+        byd = objects.Lens(**objects.DEFAULT_CALIB)
+        for x, y in ((100, 300), (960, 615), (1700, 700)):
+            self.assertAlmostEqual(byd.pixel(byd.angle(x, y), y), x, places=4)
+        # измеренный угол обзора ~95° (с дисторсией по краям чуть шире)
+        self.assertTrue(90 < byd.angle(1920) - byd.angle(0) < 110)
+        self.assertAlmostEqual(byd.angle(987.5), 0.0, delta=0.2)   # ось машины
 
     def test_triangulate_exact(self):
         target = (12.0, 60.0)
@@ -227,12 +233,12 @@ class LensTriangulationTest(unittest.TestCase):
     def test_track_located_end_to_end(self):
         """Машина едет на север, светофор в 6 м правее оси на 60 м: кадры
         с правильными пикселями по модели объектива → точка в пределах метра."""
-        lens = objects.Lens()
+        lens = objects.Lens(**objects.DEFAULT_CALIB)
         plane = objects.Plane(LAT0, LON0)
         obs = []
         for k, y in enumerate((0.0, 8.0, 16.0, 24.0, 32.0)):
             ang = math.degrees(math.atan2(6.0, 60.0 - y))
-            px = lens.pixel(ang)
+            px = lens.pixel(ang, 305)
             lat, lon = plane.ll(0.0, y)
             obs.append({'id': k, 't': k, 'cls': 'traffic_light', 'value': None, 'x': px - 5, 'y': 300,
                         'w': 10, 'h': 10, 'lat': lat, 'lon': lon, 'course': 0.0})
@@ -243,7 +249,7 @@ class LensTriangulationTest(unittest.TestCase):
         self.assertAlmostEqual(y, 60.0, delta=1.0)
 
     def test_size_fallback(self):
-        lens = objects.Lens()
+        lens = objects.Lens(**objects.DEFAULT_CALIB)
         plane = objects.Plane(LAT0, LON0)
         o = {'id': 1, 't': 0, 'cls': 'crossing', 'value': None, 'x': 955, 'y': 300, 'w': 10, 'h': 10,
              'lat': LAT0, 'lon': LON0, 'course': 0.0}

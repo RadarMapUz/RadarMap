@@ -204,7 +204,7 @@ def connect(path=None):
     conn.execute('PRAGMA journal_mode=WAL')
     conn.executescript(SCHEMA)
     # Поля, добавленные после первых запусков (CREATE IF NOT EXISTS их не добавит).
-    for table, col in (('sign_crops', 'text TEXT'),):
+    for table, col in (('sign_crops', 'text TEXT'), ('sign_crops', 'value INTEGER')):
         try:
             conn.execute(f'ALTER TABLE {table} ADD COLUMN {col}')
         except sqlite3.OperationalError:

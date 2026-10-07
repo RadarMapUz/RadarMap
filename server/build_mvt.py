@@ -1598,15 +1598,37 @@ class RoadAxes:
     """Оси дорог по клеткам: близко ли точка к оси (в метрах)."""
 
     CELL = 0.0005
+    # Запас вокруг площадок, в клетках: near() смотрит ±1 клетку от точки, а
+    # точки мест лежат в контуре или в паре метров за ним.
+    AROUND_PAD = 3
 
-    def __init__(self, roads):
+    def __init__(self, roads, around=None):
+        """around — контуры, у которых будут спрашивать (парковки).
+
+        Сетка по осям всей страны с клеткой 50 м — гигабайты, а спрашивают её
+        только у площадок. С around клетки вдали от них не заводятся; ответы
+        в заведённых клетках те же, порядок отрезков тот же (07.10.2026).
+        """
         self._grid = defaultdict(list)
+        allowed = None
+        if around is not None:
+            allowed = set()
+            pad = self.AROUND_PAD
+            for ring in around:
+                if not ring:
+                    continue
+                lons = [p[0] for p in ring]
+                lats = [p[1] for p in ring]
+                for gx in range(int(min(lons) / self.CELL) - pad, int(max(lons) / self.CELL) + pad + 1):
+                    for gy in range(int(min(lats) / self.CELL) - pad, int(max(lats) / self.CELL) + pad + 1):
+                        allowed.add((gx, gy))
         for road in roads:
             for a, b in zip(road[2], road[2][1:]):
                 entry = (a, b, road[0])   # один на отрезок — см. OverlapIndex
                 for gx in range(int(min(a[0], b[0]) / self.CELL), int(max(a[0], b[0]) / self.CELL) + 1):
                     for gy in range(int(min(a[1], b[1]) / self.CELL), int(max(a[1], b[1]) / self.CELL) + 1):
-                        self._grid[(gx, gy)].append(entry)
+                        if allowed is None or (gx, gy) in allowed:
+                            self._grid[(gx, gy)].append(entry)
 
     def near(self, point, meters):
         cell = (int(point[0] / self.CELL), int(point[1] / self.CELL))
@@ -2399,7 +2421,7 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # сети, включая внутренние проезды площадки) не рисуются.
         if parking:
             import parking as parking_rules
-            axes = RoadAxes(roads)
+            axes = RoadAxes(roads, around=[ring for ring, _kind in parking])
             near_road = axes.near
             for ring, kind in parking:
                 _put(buckets, zoom, LAYER_PARKING, mvt.POLYGON, ring, {"kind": "lot"})

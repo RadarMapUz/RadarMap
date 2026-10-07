@@ -1249,7 +1249,7 @@ def node_zebra_line(flags, point):
 
 
 TREE_CROWN_RADII = (1.9, 2.3, 2.7, 3.1)
-TREE_CROWN_SIDES = 14
+TREE_CROWN_SIDES = 20
 
 
 def tree_crown(point, size, share=1.0, radius=None, sides=TREE_CROWN_SIDES):
@@ -1270,7 +1270,7 @@ TREE_CROWN_HEIGHTS = (4.5, 5.5, 6.5, 7.5)
 # Ярусы кроны по профилю эллипсоида: радиус яруса = R·√(1 − z²), где z — его
 # середина от центра кроны. Четыре резких ступени в наклоне читались колючей
 # «шишкой» (07.10.2026); шесть по эллипсу — округлой кроной.
-TREE_TIER_COUNT = 6
+TREE_TIER_COUNT = 7
 TREE_TIERS = tuple(
     (round(max(0.32, math.sqrt(max(0.0, 1 - ((i + 0.5) / TREE_TIER_COUNT * 2 - 1) ** 2))), 3),
      round(i / TREE_TIER_COUNT, 3), round((i + 1) / TREE_TIER_COUNT, 3))

@@ -137,7 +137,10 @@ def tree_3d(p):
                                                 0, p["tree_crown_low"], 3, p["tree_crown"],
                                                 6.2, p["tree_crown_high"]]],
                       "fill-extrusion-base": ["get", "base"], "fill-extrusion-height": ["get", "top"],
-                      "fill-extrusion-vertical-gradient": True, "fill-extrusion-opacity": 1.0}}
+                      # Без градиента по высоте: он затемнял низ КАЖДОГО яруса,
+                      # и стыки ярусов читались тёмными зубцами (07.10.2026);
+                      # тень кроны даёт тон яруса.
+                      "fill-extrusion-vertical-gradient": False, "fill-extrusion-opacity": 1.0}}
 
 
 # Подземный переход и пешеходный мост — ширина на карте, м.

@@ -418,3 +418,185 @@ def robust_count(values, min_n=3, min_agree=0.6):
     if share < min_agree:
         return None, share, len(vals)
     return top, share, len(vals)
+
+
+# ── v2: раскладка по отслеженным линиям и правило краёв ────────────────
+
+UNMARKED_MIN = 2.8     # ряд у бордюра без разметки — полоса, если до бордюра ≥
+CURB_LANE_MAX = 6.5    # …и не дальше (широкий ряд у бордюра в Ташкенте — 5–6 м)
+BOUND_SNAP = 0.6       # линия ближе к бордюру — кромка самого бордюра
+STEP_TOL = 0.7         # шаг цепочки: ширина ряда отличается от своей не больше, м
+SPURIOUS = 0.6         # линия ближе этой доли своей полосы — ложная, пропускаем
+EDGE_BAND_SPREAD = 0.7  # бордюр: края по полосам дальности согласны в пределах, м
+EDGE_TIME_SPREAD = 0.4  # …и во времени гуляют не больше (размах IQR), м
+EDGE_AGREE = 0.6        # …в такой доле кадров
+
+
+def edge_kind(band_edges, strip=None):
+    """Что ограничивает дорогу с этой стороны — по краям асфальта.
+
+    band_edges — по кадрам списки краёв в нескольких полосах дальности
+    (6–8,5 м, 8,5–11, 11–14…; None — края в этой полосе не видно). Бордюр —
+    длинная непрерывная граница: во всех полосах дальности край на одном
+    поперечном месте, и от кадра к кадру не гуляет. Припаркованные машины —
+    колёса, просветы между машинами, разная длина: края по полосам
+    расходятся и меняются, когда проезжаем мимо очередной машины.
+    strip — что за краем (strip_kind): «асфальт» бордюр отменяет.
+    → ('curb', x) | ('cars', x) | (None, None)."""
+    agree, xs, seen = 0, [], 0
+    for edges in band_edges:
+        e = [x for x in edges if x is not None]
+        if len(e) < 2:
+            continue
+        seen += 1
+        if max(e) - min(e) <= EDGE_BAND_SPREAD:
+            agree += 1
+            xs.append(sorted(e)[len(e) // 2])
+    if seen < 3:
+        return None, None
+    if not xs:
+        return "cars", None
+    xs.sort()
+    med = xs[len(xs) // 2]
+    q1, q3 = xs[len(xs) // 4], xs[(3 * len(xs)) // 4]
+    stable = q3 - q1 <= EDGE_TIME_SPREAD
+    if agree / seen >= EDGE_AGREE and stable and strip != "асфальт":
+        return "curb", med
+    return "cars", med
+
+
+def outer_unmarked(last_x, bound_x, last_kind):
+    """Сколько полос без разметки между крайней линией и бордюром: 1, если
+    до бордюра UNMARKED_MIN…CURB_LANE_MAX и крайняя линия не сама граница;
+    иначе 0."""
+    if bound_x is None or last_kind == "edge":
+        return 0
+    gap = abs(bound_x - last_x)
+    return 1 if UNMARKED_MIN <= gap <= CURB_LANE_MAX else 0
+
+
+def lane_layout2(lines, left_bound=None, right_bound=None):
+    """Раскладка полос по отслеженным линиям.
+
+    lines — [(x, kind)] на Z_REF, kind: 'solid'/'dashed'/'edge'.
+    left_bound / right_bound — поперечное место подтверждённой физической
+    границы (бордюр, газон, ограждение — edge_kind == 'curb') или None.
+
+    Линии за границей не считаем, линия в BOUND_SNAP от границы — её
+    кромка; граница сама становится линией 'edge'. Своя полоса — между
+    ближайшими линиями слева и справа, шире LANE_MIN; если одна из них
+    граница — до CURB_LANE_MAX (ряд у бордюра широкий), иначе до LANE_MAX.
+    Цепочка наружу шагами lanes_in_gap; слева останавливают сплошная (ось)
+    и край, справа — только край (сплошная справа — автобусная или
+    правоповоротная, за ней тоже наша полоса). Крайний ряд без разметки у
+    границы — полоса, если до неё ≥ UNMARKED_MIN. За прерывистой справа
+    всегда есть ещё полоса нашего направления: если границы справа не
+    видно, считаем одну.
+    → dict или None (нельзя сказать)."""
+    xs = sorted((float(x), k) for x, k in lines)
+    if left_bound is not None:
+        xs = [l for l in xs if l[0] > left_bound + BOUND_SNAP]
+        xs.append((float(left_bound), "edge"))
+    if right_bound is not None:
+        xs = [l for l in xs if l[0] < right_bound - BOUND_SNAP]
+        xs.append((float(right_bound), "edge"))
+    xs.sort()
+    if any(abs(x) < UNDER_CAR for x, _ in xs):
+        return None
+    left = [l for l in xs if l[0] < 0]
+    right = [l for l in xs if l[0] > 0]
+    if not left or not right:
+        return None
+    # Своя полоса; одну ложную линию у самой машины пропускаем.
+    own = None
+    for li, ri in ((1, 0), (1, 1), (2, 0)):
+        if len(left) < li or len(right) <= ri:
+            continue
+        a, b = left[-li], right[ri]
+        w = b[0] - a[0]
+        wmax = CURB_LANE_MAX if "edge" in (a[1], b[1]) else LANE_MAX
+        if LANE_MIN <= w <= wmax:
+            own = (li, ri)
+            break
+    if own is None:
+        return None
+    left = left[:len(left) - own[0] + 1]
+    right = right[own[1]:]
+    widths = [right[0][0] - left[-1][0]]
+
+    # Ряды одной дороги — почти одной ширины: шаг цепочки меряем своей
+    # полосой (если она между двумя линиями краски), а не допуском 2,6–4,2:
+    # иначе любая трава на обочине в 3–4 м от линии становится «полосой».
+    own_w = widths[0]
+    ref_w = own_w if "edge" not in (left[-1][1], right[0][1]) and own_w <= LANE_MAX else 3.4
+
+    def lanes_step(gap, to_kind):
+        # Через ряд (потерянная линия посередине) шагаем только к бордюру:
+        # ложная линия вдали — трава, стоящие машины — встречается чаще,
+        # чем пропущенная настоящая между двумя найденными.
+        for k in ((1, 2) if to_kind == "edge" else (1,)):
+            w = gap / k
+            hi = CURB_LANE_MAX if (to_kind == "edge" and k == 1) else LANE_MAX
+            if LANE_MIN <= w <= hi and (abs(w - ref_w) <= STEP_TOL or to_kind == "edge"):
+                return k
+        return 0
+
+    def chain(start, cand, stop, sign):
+        n, cur, i = 0, start, 0
+        while i < len(cand):
+            if cur[1] in stop:
+                break
+            gap = sign * (cand[i][0] - cur[0])
+            if gap < SPURIOUS * ref_w and cand[i][1] != "edge":
+                i += 1          # ложная линия внутри ряда (бок машины, шов) — мимо
+                continue
+            k = lanes_step(gap, cand[i][1])
+            if k == 0:
+                break
+            n += k
+            widths.append(gap / k)
+            cur = cand[i]
+            i += 1
+        return n, cur
+
+    n_left, cur_l = chain(left[-1], list(reversed(left[:-1])), BOUNDARY, -1)
+    n_right, cur_r = chain(right[0], right[1:], BOUNDARY_RIGHT, 1)
+    extra_l = 0 if cur_l[1] in BOUNDARY else outer_unmarked(cur_l[0], left_bound, cur_l[1])
+    extra_r = outer_unmarked(cur_r[0], right_bound, cur_r[1])
+    # За крайней прерывистой всегда ещё полоса: прерывистая не бывает краем.
+    if right_bound is None and cur_r[1] == "dashed":
+        extra_r = 1
+    if left_bound is None and cur_l[1] == "dashed":
+        extra_l = 1
+    n_left += extra_l
+    n_right += extra_r
+    return {
+        "lanes": n_left + 1 + n_right,
+        "own": n_left + 1,
+        "left": n_left,
+        "right": n_right,
+        "own_width": widths[0],
+        "mean_width": sum(widths) / len(widths),
+        "left_line": cur_l[0], "left_kind": cur_l[1],
+        "right_line": cur_r[0], "right_kind": cur_r[1],
+        "unmarked": extra_l + extra_r,
+    }
+
+
+def vote(layouts, min_share=0.6, min_n=3):
+    """Ответ окна по раскладкам кадров: число полос — мода, если за неё не
+    меньше min_share голосов и голосов не меньше min_n; своя — мода среди
+    кадров с этим числом. Кадр без раскладки — голос «не знаю» (он тоже в
+    знаменателе: окно, где половина кадров молчит, не отвечает).
+    → (lanes, own, доля) или (None, None, доля)."""
+    n = len(layouts)
+    got = [l for l in layouts if l is not None]
+    if n < min_n or not got:
+        return None, None, 0.0
+    c = Counter(l["lanes"] for l in got)
+    top, cnt = c.most_common(1)[0]
+    share = cnt / n
+    if share < min_share or cnt < min_n:
+        return None, None, share
+    own = Counter(l["own"] for l in got if l["lanes"] == top).most_common(1)[0][0]
+    return top, own, share

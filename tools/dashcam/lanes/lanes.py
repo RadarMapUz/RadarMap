@@ -84,12 +84,12 @@ def asphalt_ref(feat, cam):
     return float(np.median(px[:, :3] @ LUMA)) if len(px) > 20 else 100.0
 
 
-def is_asphalt(px, ref):
+def is_asphalt(px, ref, tex=TEX_MAX):
     """Асфальт — серый, гладкий и близкий по яркости к опоре."""
     rgb = px[:, :3]
     gray = rgb @ LUMA
     sat = rgb.max(1) - rgb.min(1)
-    return (np.abs(gray - ref) <= 32) & (sat <= 38) & (px[:, 3] <= TEX_MAX)
+    return (np.abs(gray - ref) <= 32) & (sat <= 38) & (px[:, 3] <= tex)
 
 
 def occlusion(rgb, cam, ref):
@@ -109,7 +109,7 @@ SIDE_EDGE = (0.15, 0.55)   # с одной стороны < 0,15, с друго�
                            # части (машина в соседнем ряду даёт ~0,35, не край)
 
 
-def side_asphalt(rgb, cam, ref, c, s):
+def side_asphalt(rgb, cam, ref, c, s, tex=TEX_MAX):
     """Доли асфальта слева и справа от линии x = c + s(Z − Z_REF) на 5–16 м.
     Линия между полосами — асфальт с обеих сторон; бордюр или край —
     с одной; ни с одной — не дорога вовсе (забор, машина, тротуар)."""
@@ -120,7 +120,7 @@ def side_asphalt(rgb, cam, ref, c, s):
     out = []
     for sign in (-1, 1):
         px = sample(rgb, cam, xc + sign * Og, Zg)
-        out.append(float(is_asphalt(px, ref).mean()) if len(px) >= 10 else 0.0)
+        out.append(float(is_asphalt(px, ref, tex).mean()) if len(px) >= 10 else 0.0)
     return out
 
 

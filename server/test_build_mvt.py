@@ -558,5 +558,24 @@ class ClipTests(unittest.TestCase):
         self.assertGreater(len(written), 1, "длинная улица покрывает несколько тайлов")
 
 
+
+class TaperTests(unittest.TestCase):
+    """Стык лент разной ширины — клин, а не ступенька."""
+
+    def test_width_change_is_tapered_on_both_sides(self):
+        a = (3, build_mvt.FLAG_ONEWAY, [(69.28, 41.31), (69.2812, 41.31)], "X")
+        b = (3, build_mvt.FLAG_ONEWAY, [(69.2812, 41.31), (69.2824, 41.31)], "X")
+        targets = build_mvt.taper_targets([a, b], {id(a): 17.5, id(b): 11.0})
+        widths_a = [w for _p, w in build_mvt.tapered_pieces(a, 17.5, targets[id(a)])]
+        widths_b = [w for _p, w in build_mvt.tapered_pieces(b, 11.0, targets[id(b)])]
+        steps = [abs(x - y) for x, y in zip(widths_a + widths_b, (widths_a + widths_b)[1:])]
+        self.assertLess(max(steps), 1.0)
+
+    def test_junction_is_not_tapered(self):
+        a = (3, build_mvt.FLAG_ONEWAY, [(69.28, 41.31), (69.2812, 41.31)], "X")
+        b = (3, build_mvt.FLAG_ONEWAY, [(69.2812, 41.31), (69.2824, 41.31)], "X")
+        c = (3, build_mvt.FLAG_ONEWAY, [(69.2812, 41.31), (69.2812, 41.312)], "Y")
+        self.assertEqual(build_mvt.taper_targets([a, b, c], {}), {})
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

@@ -1285,6 +1285,98 @@ def tree_tiers(point, size):
     return out
 
 
+# Плавный стык: где лента продолжается лентой другой ширины (эстакада сходит
+# на землю, развилка, смена числа полос), кромка «прыгала» ступенькой поперёк
+# проспекта (Бунёдкор, 07.10.2026). Обе ленты у стыка сходятся к средней
+# ширине клином длиной TAPER_METERS, ступенями по TAPER_STEPS.
+TAPER_METERS = 30.0
+TAPER_STEPS = 5
+TAPER_MIN_DIFF_METERS = 1.5
+TAPER_MAX_DEGREES = 25.0
+
+
+def taper_targets(roads, widths):
+    """{id(ленты): (ширина у начала или None, ширина у конца или None)} — к какой
+    ширине сходиться у стыка с продолжением другой ширины."""
+    def width_of(road):
+        return widths.get(id(road)) or road_width_meters(road[0], lanes_of(road[1]))
+
+    def heading(a, b):
+        kx = math.cos(math.radians(a[1]))
+        return math.degrees(math.atan2((b[0] - a[0]) * kx, b[1] - a[1])) % 360
+
+    starts, ends = defaultdict(list), defaultdict(list)
+    for road in roads:
+        if road[0] > 5 or len(road[2]) < 2:
+            continue
+        starts[(round(road[2][0][0], 6), round(road[2][0][1], 6))].append(road)
+        ends[(round(road[2][-1][0], 6), round(road[2][-1][1], 6))].append(road)
+    out = {}
+    for key, leaving in starts.items():
+        arriving = ends.get(key, ())
+        if len(leaving) != 1 or len(arriving) != 1:
+            continue                        # узел, а не продолжение
+        a, b = arriving[0], leaving[0]
+        turn = abs((heading(a[2][-2], a[2][-1]) - heading(b[2][0], b[2][1]) + 180) % 360 - 180)
+        wa, wb = width_of(a), width_of(b)
+        if turn > TAPER_MAX_DEGREES or abs(wa - wb) < TAPER_MIN_DIFF_METERS:
+            continue
+        middle = round((wa + wb) / 2, 1)
+        out.setdefault(id(a), [None, None])[1] = middle
+        out.setdefault(id(b), [None, None])[0] = middle
+    return out
+
+
+def _cut(points, distance):
+    """(до distance м, после) — ломаная, разрезанная на расстоянии от начала."""
+    kx = 111_320 * math.cos(math.radians(points[0][1]))
+    walked = 0.0
+    for i, (a, b) in enumerate(zip(points, points[1:])):
+        step = math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+        if walked + step >= distance and step > 0:
+            t = (distance - walked) / step
+            mid = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+            return points[:i + 1] + [mid], [mid] + points[i + 1:]
+        walked += step
+    return points, [points[-1]]
+
+
+def _length(points):
+    kx = 111_320 * math.cos(math.radians(points[0][1]))
+    return sum(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+               for a, b in zip(points, points[1:]))
+
+
+def tapered_pieces(road, width, target):
+    """[(кусок, ширина)]: у концов со стыком — ступени от средней ширины к своей."""
+    points = road[2]
+    if not target or len(points) < 2:
+        return [(points, width)]
+    start, end = target
+    length = _length(points)
+    reach = min(TAPER_METERS, length / (2 if start is not None and end is not None else 1.5))
+    if reach < 4.0:
+        return [(points, width)]
+    step = reach / TAPER_STEPS
+    head, tail = [], []
+    rest = points
+    if start is not None:
+        for k in range(TAPER_STEPS):
+            piece, rest = _cut(rest, step)
+            share = (k + 0.5) / TAPER_STEPS
+            head.append((piece, round(start + (width - start) * share, 1)))
+    if end is not None:
+        remaining = _length(rest)
+        body, rest_tail = _cut(rest, max(0.0, remaining - reach))
+        rest = body
+        for k in range(TAPER_STEPS):
+            piece, rest_tail = _cut(rest_tail, step)
+            share = (k + 0.5) / TAPER_STEPS
+            tail.append((piece, round(width + (end - width) * share, 1)))
+    middle = [(rest, width)] if len(rest) >= 2 and _length(rest) > 0.5 else []
+    return [(p, w) for p, w in head + middle + tail if len(p) >= 2]
+
+
 INNER_ROAD_SHARE = 0.6
 INNER_STEP_METERS = 4.0
 
@@ -1903,11 +1995,17 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # жёлтой кромки у неё нет — она рисовала жёлтые клинья посреди
         # проспекта (Навои у Драмтеатра, 07.10.2026).
         overlap = OverlapIndex(roads, widths)
+        tapers = taper_targets(roads, widths)
         for road in roads:
             props = _road_props(road, widths.get(id(road)))
             if road[0] <= 7 and inner_share(road, overlap) >= INNER_ROAD_SHARE:
                 props["inner"] = True
-            _put(buckets, zoom, LAYER_ROADS, mvt.LINESTRING, road[2], props)
+            for piece, width in tapered_pieces(road, props["width"], tapers.get(id(road))):
+                piece_props = dict(props)
+                if width != props["width"]:
+                    piece_props["width"] = width
+                    piece_props.pop("stub", None)
+                _put(buckets, zoom, LAYER_ROADS, mvt.LINESTRING, piece, piece_props)
         for road in far:
             _put(buckets, far_zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
                  _road_props(road))

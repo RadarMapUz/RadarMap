@@ -244,28 +244,7 @@ nonisolated enum EngineMapStyle {
             "paint": ["line-color": daylight ? "#d0c8aa" : "#e2e7db",
                       "line-width": ["interpolate", ["exponential", 2], ["zoom"], 18, 2.2, 20, 8.8]],
         ])
-        out.append([
-            "id": "route-traveled", "type": "line", "source": "traveled",
-            "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": daylight ? "#8a9f94" : "#52685f",
-                      "line-width": routeWidth(extra: 0), "line-opacity": 0.75],
-        ])
-        // Маршрут — под подписями и над дорогой.
-        out.append([
-            "id": "route-case", "type": "line", "source": "route",
-            "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": daylight ? "#d1eadb" : "#163e32", "line-width": routeWidth(extra: 2)],
-        ])
-        out.append([
-            "id": "route", "type": "line", "source": "route",
-            "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": daylight ? "#278660" : "#a2dfb5", "line-width": routeWidth(extra: 0)],
-        ])
-        out.append([
-            "id": "route-maneuver", "type": "line", "source": "maneuver",
-            "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": daylight ? "#145c42" : "#e2f6b9", "line-width": routeWidth(extra: 1)],
-        ])
+        out += routeLayers(daylight: daylight)
         out.append([
             "id": "traffic-signals", "type": "symbol", "source": "near", "source-layer": "points",
             "minzoom": 16.2, "filter": ["==", ["get", "kind"], 1],
@@ -296,6 +275,42 @@ nonisolated enum EngineMapStyle {
             "paint": ["text-color": label, "text-halo-color": halo,
                       "text-halo-width": 1.6],
         ])
+        out += markerLayers(label: label, halo: halo)
+        return out
+    }
+
+    /// Маршрут: пройденное, кайма, линия, манёвр. Общие для обоих стилей — в
+    /// новом (EngineModernStyle) ложатся над основой и под подписями.
+    static func routeLayers(daylight: Bool) -> [[String: Any]] {
+        var out: [[String: Any]] = []
+        out.append([
+            "id": "route-traveled", "type": "line", "source": "traveled",
+            "layout": ["line-cap": "round", "line-join": "round"],
+            "paint": ["line-color": daylight ? "#8a9f94" : "#52685f",
+                      "line-width": routeWidth(extra: 0), "line-opacity": 0.75],
+        ])
+        // Маршрут — под подписями и над дорогой.
+        out.append([
+            "id": "route-case", "type": "line", "source": "route",
+            "layout": ["line-cap": "round", "line-join": "round"],
+            "paint": ["line-color": daylight ? "#d1eadb" : "#163e32", "line-width": routeWidth(extra: 2)],
+        ])
+        out.append([
+            "id": "route", "type": "line", "source": "route",
+            "layout": ["line-cap": "round", "line-join": "round"],
+            "paint": ["line-color": daylight ? "#278660" : "#a2dfb5", "line-width": routeWidth(extra: 0)],
+        ])
+        out.append([
+            "id": "route-maneuver", "type": "line", "source": "maneuver",
+            "layout": ["line-cap": "round", "line-join": "round"],
+            "paint": ["line-color": daylight ? "#145c42" : "#e2f6b9", "line-width": routeWidth(extra: 1)],
+        ])
+        return out
+    }
+
+    /// Камеры и «я» — над всем, в обоих стилях.
+    static func markerLayers(label: String, halo: String) -> [[String: Any]] {
+        var out: [[String: Any]] = []
         // Only the current alert has a halo; ordinary cameras stay quiet.
         out.append([
             "id": "camera-halo", "type": "circle", "source": "cameras",

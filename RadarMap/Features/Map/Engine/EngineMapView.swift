@@ -65,6 +65,9 @@ struct EngineMapView: UIViewRepresentable {
     var routeProgress: Double = 0
     var maneuverAlong: Double?
     var recenterToken: Int = 0
+    /// Новая карта: основа OpenMapTiles + наши слои (EngineModernStyle) по
+    /// выпуску тайлов. Выключено или выпуска нет — прежний стиль.
+    var modernStyle: Bool = false
     var onBrowse: () -> Void = {}
     var onSelectCamera: (Camera) -> Void = { _ in }
 
@@ -106,15 +109,10 @@ struct EngineMapView: UIViewRepresentable {
         // Система предупреждает о памяти ПЕРЕД тем, как убить приложение;
         // до сих пор это предупреждение не слушал никто (см. MemoryPressure).
         MemoryPressure.onWarning(context.coordinator) { $0.releaseMemory() }
+        // Стиль сразу (живые слои рисуются и без тайлов), а подписанный
+        // индекс нужного стиля догружается и перезагружает стиль сам —
+        // в обход сторожа тайлы не грузятся никогда (prepareTiles).
         context.coordinator.loadStyle(self, in: view)
-        Task { @MainActor [weak view, weak coordinator = context.coordinator] in
-            await EngineTileGuard.prepare()
-            guard EngineTileGuard.isReady, let view, let coordinator,
-                  let model = coordinator.current else { return }
-            // The first tile requests can precede the signed index. Retry only
-            // after verification; never bypass the tile guard for a preview.
-            coordinator.loadStyle(model, in: view)
-        }
         return view
     }
 
@@ -168,6 +166,16 @@ struct EngineMapView: UIViewRepresentable {
         fileprivate var lastCameraModel: EngineMapView?
         private var browsing = false
         private var lastRecenterToken = 0
+        /// Выпуск тайлов новой карты (подписанный корень) и что сейчас в стиле.
+        private var release: TileRelease?
+        private var lastModern: Bool?
+        private var modernLoaded = false
+        private var preparing = false
+        private var attemptedModern = false
+        private var attemptedLegacy = false
+        /// Стиль новой карты не собрался (битый ресурс): до конца жизни экрана
+        /// работаем как прежняя карта — со своим индексом, а не пустой.
+        private var modernBroken = false
 
         // MapLibre invokes this for every native camera gesture, including tap zoom.
         func mapView(_ mapView: MLNMapView, shouldChangeFrom oldCamera: MLNMapCamera,
@@ -280,6 +288,8 @@ struct EngineMapView: UIViewRepresentable {
             cameraRegion = nil          // следующий кадр соберёт выборку заново
             themeLayers = []            // перечитается из EngineMapStyle при смене темы
             routeIndex = nil            // соберётся из маршрута на следующем тике
+            // Корзины индекса выпуска поднимутся с диска, не с сети.
+            Task { await TileReleaseStore.shared.releaseMemory() }
         }
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
@@ -325,12 +335,68 @@ struct EngineMapView: UIViewRepresentable {
             routeGeneration += 1
             lastDaylight = model.daylight
             lastHouses = model.houses
+            lastModern = model.modernStyle
             os_signpost(.event, log: performanceLog, name: "Style replacement")
+            if model.modernStyle, !modernBroken, let release {
+                if let json = EngineModernStyle.json(daylight: model.daylight, base: AppConfig.syncBaseURL,
+                                                     release: release, houses: model.houses) {
+                    modernLoaded = true
+                    view.styleJSON = json
+                    themeLayers = []
+                    prepareTiles(model, in: view)
+                    return
+                }
+                Log.network.error("стиль новой карты не собрался — работаем на прежнем")
+                modernBroken = true
+            }
+            modernLoaded = false
             view.styleJSON = EngineMapStyle.json(daylight: model.daylight,
                                                  base: AppConfig.syncBaseURL,
                                                  houses: true,
                                                  tilesReady: EngineTileGuard.isReady)
             themeLayers = Self.layers(daylight: model.daylight)
+            prepareTiles(model, in: view)
+        }
+
+        /// Подписанный индекс для выбранного стиля: корень выпуска для новой
+        /// карты, прежний индекс MVT — для старой. Готово — стиль
+        /// перезагружается сам. Новая карта без выпуска (сервер недоступен, а
+        /// на диске пусто) честно откатывается на прежний стиль, а не на
+        /// пустой экран. Каждая попытка — одна на экран: повтор в цикле бил
+        /// бы по сети без связи.
+        private func prepareTiles(_ model: EngineMapView, in view: MLNMapView) {
+            let modern = model.modernStyle && !modernBroken
+            if modern {
+                guard release == nil, !attemptedModern, !preparing else { return }
+                attemptedModern = true
+            } else {
+                guard !EngineTileGuard.isReady, !attemptedLegacy, !preparing else { return }
+                attemptedLegacy = true
+            }
+            preparing = true
+            Task { @MainActor [weak self, weak view] in
+                if modern {
+                    let fresh = await TileReleaseStore.shared.prepare()
+                    self?.release = fresh
+                    if fresh == nil {
+                        Log.network.error("выпуска тайлов нет — новая карта остаётся на прежнем стиле")
+                        self?.attemptedLegacy = true
+                        await EngineTileGuard.prepare()
+                    }
+                } else {
+                    await EngineTileGuard.prepare()
+                }
+                guard let self else { return }
+                self.preparing = false
+                guard let view, let current = self.current else { return }
+                let wantsModern = current.modernStyle && !self.modernBroken
+                if wantsModern != modern {
+                    self.prepareTiles(current, in: view)
+                } else if wantsModern ? (self.release != nil || EngineTileGuard.isReady)
+                                      : EngineTileGuard.isReady {
+                    self.loadStyle(current, in: view)
+                }
+            }
         }
 
         private static func layers(daylight: Bool) -> [[String: Any]] {
@@ -392,6 +458,11 @@ struct EngineMapView: UIViewRepresentable {
             os_signpost(.begin, log: performanceLog, name: "Map apply")
             defer { os_signpost(.end, log: performanceLog, name: "Map apply") }
             current = model
+            // Смена стиля тумблером — перезагрузка целиком: у основы свои слои.
+            if let lastModern, lastModern != model.modernStyle {
+                loadStyle(model, in: view)
+                return
+            }
             guard styleReady, view.bounds.width > 0, view.bounds.height > 0 else {
                 pending = model
                 return
@@ -404,6 +475,13 @@ struct EngineMapView: UIViewRepresentable {
             }
 
             if lastDaylight != model.daylight || lastHouses != model.houses {
+                // Новая карта меняет тему перезагрузкой: у основы сотня своих
+                // цветов, и перекрашивать её по слою незачем — день и ночь
+                // сменяются дважды в сутки.
+                if modernLoaded {
+                    loadStyle(model, in: view)
+                    return
+                }
                 if let style = view.style { updateAppearance(model, in: style) }
             }
 

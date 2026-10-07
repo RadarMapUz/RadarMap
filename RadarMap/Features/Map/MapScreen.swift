@@ -738,6 +738,8 @@ struct MapScreen: View {
                                              set: { env.settings.mapHouses = $0 }),
                              sidewalks: Binding(get: { env.settings.mapSidewalks },
                                                 set: { env.settings.mapSidewalks = $0 }),
+                             modern: Binding(get: { env.settings.mapModernStyle },
+                                             set: { env.settings.mapModernStyle = $0 }),
                              showsBuildingLayers: shownBase != .apple,
                              available: Self.availableBases,
                              showsLegend: shownBase == .apple)

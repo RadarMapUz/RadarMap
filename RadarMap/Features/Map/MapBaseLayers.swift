@@ -75,6 +75,7 @@ struct EngineBaseLayer: View {
                         routeProgress: env.route.progressAlong,
                         maneuverAlong: env.route.nextStep?.kind?.isDrawable == true ? env.route.nextStep?.distanceAlong : nil,
                         recenterToken: recenterToken,
+                        modernStyle: env.settings.mapModernStyle,
                         onBrowse: { browsing = true },
                         onSelectCamera: onSelectCamera)
                     if browsing {

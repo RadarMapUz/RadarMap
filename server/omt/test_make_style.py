@@ -218,6 +218,25 @@ class DarkRoads(LightRoads):
     theme, mode = "dark", "roads"
 
 
+class AppResourceTests(unittest.TestCase):
+    """Стиль в бандле приложения обязан совпадать с генератором: забыть
+    перегенерировать — красный тест, а не старая карта у водителя."""
+
+    def test_bundled_styles_match_the_generator(self):
+        for name, text in make_style.app_styles().items():
+            path = os.path.join(make_style.APP_STYLE_DIR, name)
+            with open(path, encoding="utf-8") as handle:
+                self.assertEqual(handle.read(), text,
+                                 f"{name} устарел: python3 server/omt/make_style.py --app")
+
+    def test_app_tiles_come_from_the_release(self):
+        style = make_style.build(make_style.APP_BASE, "light", "full", tileset=make_style.APP_TILESET)
+        for source in style["sources"].values():
+            for url in source["tiles"]:
+                self.assertTrue(url.startswith("{{BASE}}/v/{{TILESET}}/"), url)
+        self.assertTrue(style["glyphs"].startswith("{{BASE}}/glyphs/"))
+
+
 class PaletteTests(unittest.TestCase):
     def test_themes_define_the_same_colours(self):
         light, dark = make_style.PALETTES["light"], make_style.PALETTES["dark"]

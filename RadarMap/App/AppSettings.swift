@@ -529,6 +529,11 @@ final class AppSettings {
     /// одном центре против 8 455 дорог, и объясняют они, где кончается
     /// асфальт, — вопрос пешехода, а не водителя.
     var mapSidewalks: Bool { didSet { store.set(mapSidewalks, forKey: Keys.mapSidewalks) } }
+    /// Новая карта (бета): основа OpenMapTiles и наши слои дороги по выпуску
+    /// тайлов (docs/plan_map_offline.md). Включена по умолчанию в 2.0, чтобы
+    /// её увидели тестировщики; выключатель — без релиза, если на живом
+    /// телефоне что-то пойдёт не так.
+    var mapModernStyle: Bool { didSet { store.set(mapModernStyle, forKey: Keys.mapModernStyle) } }
     /// Имена знакомых автомобильных магнитол (BT): подключены к своей машине —
     /// автостарт не переспрашивает «вы за рулём?».
     var knownCarAudio: [String] { didSet { store.set(knownCarAudio, forKey: Keys.knownCarAudio) } }
@@ -603,6 +608,7 @@ final class AppSettings {
         static let mapPlaces = "mapPlaces"
         static let mapHouses = "mapHouses"
         static let mapSidewalks = "mapSidewalks"
+        static let mapModernStyle = "mapModernStyle"
         static let sketchWhileDriving = "sketchWhileDriving"
         static let engineMap = "engineMapEnabled"
         static let mapBase = "mapBase"
@@ -643,6 +649,7 @@ final class AppSettings {
             Keys.smartSilence: true,
             Keys.tripodHints: true,
             Keys.mapPlaces: true,
+            Keys.mapModernStyle: true,
         ])
         soundEnabled = store.bool(forKey: Keys.sound)
         // Миграция с трёх переключателей на один. Голос был выключен — «Молча»;
@@ -690,6 +697,7 @@ final class AppSettings {
         // ровно тот ответ, который нужен. Кто их включит — включит осознанно.
         mapHouses = store.bool(forKey: Keys.mapHouses)
         mapSidewalks = store.bool(forKey: Keys.mapSidewalks)
+        mapModernStyle = store.bool(forKey: Keys.mapModernStyle)
         engineMap = store.bool(forKey: Keys.engineMap)
         // Перенос со старых тумблеров: выбор человека не теряется при
         // обновлении — кто включил схему, с ней и останется.

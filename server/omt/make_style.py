@@ -637,18 +637,29 @@ def _layers_in_draw_order(p):
     ]
 
 
-def build(base, theme="light", mode="full"):
+# Профиль приложения: стиль вшивается в бандл (docs/plan_map_offline.md §2.1),
+# адрес сервера и номер выпуска тайлов подставляет телефон. Тайлы — только из
+# выпуска v/<N>/ (кэш на год, корзины индекса), иначе сторож их не пропустит.
+APP_BASE = "{{BASE}}"
+APP_TILESET = "{{TILESET}}"
+APP_STYLE_DIR = os.path.join(HERE, "..", "..", "RadarMap", "Resources", "MapStyle")
+
+
+def build(base, theme="light", mode="full", tileset=None):
+    """tileset — номер выпуска (или плейсхолдер): тайлы из /v/<N>/, а не из
+    старых адресов без версии."""
     if theme not in PALETTES or mode not in ("full", "roads"):
         raise ValueError(f"тема {theme!r} / режим {mode!r}")
     p = PALETTES[theme]
     base = base.rstrip("/")
+    tiles_root = base if tileset is None else f"{base}/v/{tileset}"
     with open(os.path.join(HERE, "osm-bright.json")) as handle:
         s = json.load(handle)
     s["sources"] = {
-        "openmaptiles": {"type": "vector", "tiles": [base + "/omt/{z}/{x}/{y}.pbf"],
+        "openmaptiles": {"type": "vector", "tiles": [tiles_root + "/omt/{z}/{x}/{y}.pbf"],
                          "minzoom": 0, "maxzoom": 14,
                          "attribution": "© OpenMapTiles © OpenStreetMap contributors"},
-        "radar": {"type": "vector", "tiles": [base + "/mvt/{z}/{x}/{y}.mvt"],
+        "radar": {"type": "vector", "tiles": [tiles_root + "/mvt/{z}/{x}/{y}.mvt"],
                   "minzoom": 15, "maxzoom": 15},
     }
     s["glyphs"] = base + "/glyphs/{fontstack}/{range}.pbf"
@@ -738,7 +749,23 @@ def build(base, theme="light", mode="full"):
     return s
 
 
+def app_styles():
+    """{имя файла: текст} — стили для бандла приложения, светлый и тёмный."""
+    return {f"map_style_{theme}.json": json.dumps(build(APP_BASE, theme, "full", tileset=APP_TILESET),
+                                                  ensure_ascii=False, sort_keys=True, indent=1) + "\n"
+            for theme in ("light", "dark")}
+
+
 def main(argv):
+    if "--app" in argv:
+        # python3 server/omt/make_style.py --app — перегенерировать ресурсы
+        # приложения; test_make_style сверяет, что в репо лежит ровно это.
+        os.makedirs(APP_STYLE_DIR, exist_ok=True)
+        for name, text in app_styles().items():
+            with open(os.path.join(APP_STYLE_DIR, name), "w", encoding="utf-8") as handle:
+                handle.write(text)
+            print(f"{name}: {len(text) // 1024} КБ")
+        return
     base = next((a for a in argv[1:] if not a.startswith("--")), "https://soulmed.uz/radarmap")
     theme = argv[argv.index("--theme") + 1] if "--theme" in argv else "light"
     mode = argv[argv.index("--mode") + 1] if "--mode" in argv else "full"

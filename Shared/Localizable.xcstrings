@@ -13581,6 +13581,22 @@
           }
         }
       }
+    },
+    "Новая карта (бета)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая карта (бета)"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yangi xarita (beta)"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

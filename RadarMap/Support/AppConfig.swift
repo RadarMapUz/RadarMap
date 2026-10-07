@@ -906,4 +906,15 @@ nonisolated enum AppConfig {
     static let engineCameraHeadingThreshold = 2.0
     static let engineCameraSpanThreshold = 30.0
     static let engineCameraDuration = 0.8
+
+    // MARK: - Новая карта: выпуск тайлов (docs/plan_map_offline.md §2.6)
+
+    /// Подписанный корень выпуска: номер N и sha256 каждой корзины индекса.
+    static let tileReleaseRootName = "tiles_root.json"
+    /// Как часто переспрашивать корень. Выпуск меняется после публикации карты
+    /// (раз в неделю–месяц), а корень с коротким кэшем стоит 150 КБ.
+    static let tileReleaseRefresh: TimeInterval = 6 * 3600
+    static let tileReleaseRequestTimeout: TimeInterval = 15
+    /// Корзин в памяти: одна — 6–40 КБ, город с окрестностью — десяток.
+    static let tileReleaseBucketsInMemory = 48
 }

@@ -207,6 +207,11 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
     override class func canInit(with request: URLRequest) -> Bool {
         guard request.value(forHTTPHeaderField: ownRequest) == nil,
               let url = request.url else { return false }
+        // Тайлы выпуска (/v/<N>/…) — и наши, и основа карты: основа тоже
+        // проходит через подпись, иначе правило 19 кончалось бы на подложке.
+        if TileRelease.parse(url) != nil {
+            return url.pathExtension == "mvt" || url.pathExtension == "pbf"
+        }
         return url.path.contains(mvtPath) && url.path.hasSuffix(".mvt")
     }
 
@@ -214,6 +219,7 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
 
     override func startLoading() {
         guard let url = request.url else { return finish(with: URLError(.badURL)) }
+        if let tile = TileRelease.parse(url) { return startRelease(tile, url: url) }
         guard Self.isSigned(url) else {
             // Тайла нет в индексе — либо индекс не пришёл, либо сервер отдаёт
             // то, чего владелец не подписывал. Оба случая — отказ.
@@ -255,6 +261,65 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
     override func stopLoading() {
         loader?.cancel()
         loader = nil
+        releaseTask?.cancel()
+        releaseTask = nil
+    }
+
+    // MARK: - Тайл выпуска: корень → корзина → тайл
+
+    private var releaseTask: Task<Void, Never>?
+
+    /// Цепочка доверия выпуска (TileRelease): корень подписан, корзина сошлась
+    /// с корнем, тайл — с корзиной. Корзины или тайла в ней нет — это пустая
+    /// клетка (степь, чужая страна), отдаём пустой тайл, а не ошибку: иначе
+    /// движок переспрашивал бы её на каждом кадре.
+    private func startRelease(_ tile: TileRelease.Tile, url: URL) {
+        // let, а не var: изменяемую переменную нельзя захватить в задачу,
+        // которая идёт параллельно.
+        let own: URLRequest = {
+            var copy = self.request
+            copy.setValue("1", forHTTPHeaderField: Self.ownRequest)
+            return copy
+        }()
+        releaseTask = Task { [weak self] in
+            guard let release = TileReleaseStore.current, release.tile(at: url) == tile else {
+                Self.log.error("тайл не из текущего выпуска: \(url.path, privacy: .public)")
+                self?.finish(with: URLError(.userAuthenticationRequired))
+                return
+            }
+            let bucket = await TileReleaseStore.shared.bucket(for: tile)
+            guard let self, !Task.isCancelled else { return }
+            guard bucket.exists else { return self.deliverEmpty(url) }
+            guard let index = bucket.index else {
+                return self.finish(with: URLError(.userAuthenticationRequired))
+            }
+            guard index.contains(tileKey: tile.key) else { return self.deliverEmpty(url) }
+            do {
+                let (data, response) = try await Self.session.data(for: own)
+                guard !Task.isCancelled else { return }
+                guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                    return self.finish(with: URLError(.badServerResponse))
+                }
+                let signed = SHA256.hash(data: data).withUnsafeBytes {
+                    index.matches(tileKey: tile.key, digest: $0)
+                }
+                guard signed else {
+                    Self.log.error("sha256 тайла выпуска не сошёлся: \(url.path, privacy: .public)")
+                    return self.finish(with: URLError(.userAuthenticationRequired))
+                }
+                self.deliver(data: data, response: response)
+            } catch {
+                self.finish(with: error)
+            }
+        }
+    }
+
+    private func deliverEmpty(_ url: URL) {
+        let response: URLResponse = HTTPURLResponse(url: url, statusCode: 204, httpVersion: "HTTP/1.1",
+                                       headerFields: nil) ?? URLResponse(url: url, mimeType: nil,
+                                                                         expectedContentLength: 0,
+                                                                         textEncodingName: nil)
+        deliver(data: Data(), response: response)
     }
 
     /// Своя загрузка тайла. Имя не `task`: у URLProtocol такое свойство уже

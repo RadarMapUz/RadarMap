@@ -29,6 +29,8 @@ struct MapLayersControl: View {
     /// тротуары — один), и нужны они разным людям.
     @Binding var houses: Bool
     @Binding var sidewalks: Bool
+    /// Новая карта (бета) — основа OpenMapTiles вместо прежнего стиля движка.
+    @Binding var modern: Bool
     /// Тумблеры застройки показываются там, где они что-то меняют: на карте
     /// Apple ни домов наших, ни тротуаров нет.
     var showsBuildingLayers: Bool
@@ -73,6 +75,7 @@ struct MapLayersControl: View {
             }
 
             if showsBuildingLayers {
+                toggle("Новая карта (бета)", "sparkles", isOn: $modern)
                 toggle("Дома", "building.2.fill", isOn: $houses)
                 // Тротуары рисует и движок (SketchPalette.sidewalkTone в стиле),
                 // так что тумблер больше не привязан к снятой подложке.

@@ -49,6 +49,9 @@ final class RouteService {
         let travelTime: TimeInterval
         let cameras: [RouteCamera]
         let steps: [RouteStep]
+        /// Чем вариант хорош на фоне остальных (RouteChoice). У единственного
+        /// варианта и после перестроения — пусто: сравнивать не с чем.
+        var assessment: RouteChoice.Assessment = .none
 
         var etaText: String { Formatting.duration(travelTime) }
         var distanceText: String { Formatting.distance(distance) }
@@ -96,6 +99,12 @@ final class RouteService {
     @ObservationIgnored var onArrived: (() -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onArrived,
                                                "RouteService.onArrived") }
+    }
+    /// Что выбор варианта знает о водителе (треки, камеры с превышением).
+    /// nil — выбор по своим поездкам выключен в настройках.
+    @ObservationIgnored var personalHistory: (() -> RouteChoice.History?)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: personalHistory,
+                                               "RouteService.personalHistory") }
     }
     @ObservationIgnored var onManeuver: ((String) -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onManeuver,
@@ -251,7 +260,7 @@ final class RouteService {
             let built = try await calculate(from: source, to: destination, alternatives: alternatives)
             guard gen == generation else { return }   // пока считали — маршрут сбросили/заменили
             await apply(built, name: name, destination: destination,
-                        cameras: cameras, gen: gen)
+                        cameras: cameras, gen: gen, history: personalHistory?())
         } catch RouteError.serverUnreachable {
             errorMessage = String(localized: "Нет связи с сервером маршрутов — проверьте интернет")
         } catch {
@@ -389,7 +398,7 @@ final class RouteService {
             guard gen == generation else { return }   // маршрут успели сбросить/заменить
             rerouteFailures = 0
             await apply(built, name: name, destination: destination,
-                        cameras: cameras, gen: gen)
+                        cameras: cameras, gen: gen, history: nil)
             onRerouted?()
         }
     }
@@ -662,20 +671,30 @@ final class RouteService {
 
     private func apply(_ built: [BuiltVariant], name: String,
                        destination: CLLocationCoordinate2D, cameras: [Camera],
-                       gen: Int) async {
+                       gen: Int, history: RouteChoice.History?) async {
         // Камеры по коридору каждого варианта считаем ВНЕ главного потока —
         // длинные маршруты не должны дёргать UI даже на старых устройствах.
         let inputs = built.filter { $0.points.count >= 2 }
         guard !inputs.isEmpty else { return }
 
-        let variantCameras = await Task.detached(priority: .userInitiated) {
-            inputs.map { variant -> [RouteCamera] in
+        // Там же — выбор варианта по своим поездкам: сравнение с сотней
+        // треков стоит десятки миллисекунд, главному потоку они не нужны.
+        let (variantCameras, verdict) = await Task.detached(priority: .userInitiated) {
+            let found = inputs.map { variant -> [RouteCamera] in
                 var bbox = MKMapRect.null
                 for p in variant.points { bbox = bbox.union(MKMapRect(origin: p, size: MKMapSize())) }
                 let centerLat = variant.points[variant.points.count / 2].coordinate.latitude
                 return Self.camerasAlong(pts: variant.points, bbox: bbox,
                                          centerLat: centerLat, cameras: cameras)
             }
+            let choice = RouteChoice.decide(inputs.indices.map { index in
+                RouteChoice.Input(path: inputs[index].points.map(\.coordinate),
+                                  distance: inputs[index].distance,
+                                  travelTime: inputs[index].travelTime,
+                                  cameraIDs: found[index].map(\.camera.id),
+                                  hardManeuvers: RouteChoice.hardManeuvers(inputs[index].steps))
+            }, history: history)
+            return (found, choice)
         }.value
 
         // Второй раз, и это не дублирование проверки у вызывающего: тот
@@ -693,9 +712,10 @@ final class RouteService {
                     distance: variant.distance,
                     travelTime: variant.travelTime,
                     cameras: variantCameras[index],
-                    steps: variant.steps)
+                    steps: variant.steps,
+                    assessment: verdict.assessments[index])
         }
-        selectedID = 0
+        selectedID = verdict.recommended
         destinationName = name
         destinationCoordinate = destination
         errorMessage = nil

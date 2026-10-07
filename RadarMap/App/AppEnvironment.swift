@@ -315,6 +315,12 @@ final class AppEnvironment {
             guard settings.voiceEnabled else { return }
             alerts?.speak(String(localized: "Вы прибыли"))
         }
+        // Выбор варианта по своим поездкам: история читается в момент
+        // построения маршрута, а не копится заранее.
+        route.personalHistory = { [weak trip] in
+            guard settings.personalRoutes, let trip else { return nil }
+            return RouteChoice.history(from: trip.history, now: Date())
+        }
         route.onManeuver = { [weak alerts] text in
             guard settings.turnByTurnVoice else { return }
             alerts?.speak(text)

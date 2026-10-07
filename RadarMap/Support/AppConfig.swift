@@ -713,6 +713,41 @@ nonisolated enum AppConfig {
     /// Радиус прибытия: ближе этого до финиша — маршрут выполнен.
     static let arrivalRadiusMeters: CLLocationDistance = 60
 
+    // MARK: - Выбор варианта по своим поездкам (RouteChoice)
+
+    /// Клетка сетки, которой сравниваются варианты с прошлыми треками. С
+    /// соседними клетками допуск выходит ~45–60 м: шум трека и разметка
+    /// полос проходят, параллельная улица в 150 м — нет.
+    static let routeFamiliarCellMeters: Double = 30
+    /// Шаг, которым проходим линию варианта и трек (трек упрощён — между
+    /// точками бывают сотни метров прямой, их надо заполнить).
+    static let routeFamiliarStepMeters: Double = 20
+    /// Начало и конец маршрута в сравнении не участвуют: от своего подъезда
+    /// все варианты выезжают одинаково, и «знакомость» там ничего не различает.
+    static let routeFamiliarEdgeMeters: Double = 400
+    /// Доля варианта, пройденная раньше, чтобы назвать его «Знакомым».
+    static let routeFamiliarMinShare = 0.6
+    /// Насколько знакомый должен быть знакомее остальных: иначе «знакомы»
+    /// все, и ярлык ничего не говорит.
+    static let routeFamiliarMargin = 0.2
+    /// Поездки, покрывшие хотя бы такую долю варианта, считаются «ездил так».
+    static let routeFamiliarTripShare = 0.5
+    /// Сколько раз нужно проехать, чтобы путь стал «знакомым».
+    static let routeFamiliarMinTrips = 3
+    /// Сколько последних поездок смотрим (и сколько дней назад — не дальше).
+    static let routeFamiliarMaxTrips = 200
+    static let routeFamiliarWindowDays = 120
+    /// Знакомый вариант предлагается первым, если он дольше быстрого не
+    /// больше чем на столько (абсолютно или долей — что больше). Дальше
+    /// привычка уже стоит человеку времени, и решать должен он сам.
+    static let routeFamiliarMaxExtraSeconds: TimeInterval = 180
+    static let routeFamiliarMaxExtraShare = 0.10
+    /// «Короткий» — только если короче быстрого заметно.
+    static let routeShorterMinMeters: Double = 300
+    static let routeShorterMinShare = 0.03
+    /// «Проще» — минимум на столько сложных манёвров меньше быстрого.
+    static let routeSimplerMinDelta = 2
+
     /// Через сколько метров пересобирать «пройденный кусок» маршрута.
     ///
     /// Это не косметическая константа: `traveledPolyline` читает тело экрана

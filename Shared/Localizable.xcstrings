@@ -14157,6 +14157,278 @@
           }
         }
       }
+    },
+    "Знакомый": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Знакомый"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tanish"
+          }
+        }
+      }
+    },
+    "Быстрый": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Быстрый"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tez"
+          }
+        }
+      }
+    },
+    "Без камер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamerasiz"
+          }
+        }
+      }
+    },
+    "Меньше камер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Меньше камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera kamroq"
+          }
+        }
+      }
+    },
+    "Спокойнее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Спокойнее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xotirjamroq"
+          }
+        }
+      }
+    },
+    "Проще": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проще"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Osonroq"
+          }
+        }
+      }
+    },
+    "Короткий": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Короткий"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qisqa"
+          }
+        }
+      }
+    },
+    "поездок этим путём: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "поездок этим путём: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "shu yo‘ldan safarlar: %lld"
+          }
+        }
+      }
+    },
+    "камер: %1$lld вместо %2$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "камер: %1$lld вместо %2$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kameralar: %2$lld o‘rniga %1$lld"
+          }
+        }
+      }
+    },
+    "без камер, где вы превышали (на быстром: %lld)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "без камер, где вы превышали (на быстром: %lld)"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "siz tezlikni oshirgan kameralarsiz (tez yo‘lda: %lld)"
+          }
+        }
+      }
+    },
+    "сложных манёвров: %1$lld вместо %2$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сложных манёвров: %1$lld вместо %2$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "murakkab manyovrlar: %2$lld o‘rniga %1$lld"
+          }
+        }
+      }
+    },
+    "на %@ короче": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на %@ короче"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ qisqaroq"
+          }
+        }
+      }
+    },
+    "+%@ к быстрому": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%@ к быстрому"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tez yo‘ldan +%@"
+          }
+        }
+      }
+    },
+    "Учитывать мои поездки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Учитывать мои поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlarimni hisobga olish"
+          }
+        }
+      }
+    },
+    "Варианты сравниваются с вашими поездками: «Знакомый» — путь, которым вы уже ездили, «Спокойнее» — без камер, где вы раньше превышали.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Варианты сравниваются с вашими поездками: «Знакомый» — путь, которым вы уже ездили, «Спокойнее» — без камер, где вы раньше превышали."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variantlar safarlaringiz bilan solishtiriladi: «Tanish» — siz yurgan yo‘l, «Xotirjamroq» — avval tezlikni oshirgan kameralaringizsiz."
+          }
+        }
+      }
+    },
+    "Знакомый предлагается первым, если он ненамного дольше быстрого.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Знакомый предлагается первым, если он ненамного дольше быстрого."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tanish yo‘l, agar tez yo‘ldan ancha uzoq bo‘lmasa, birinchi taklif qilinadi."
+          }
+        }
+      }
+    },
+    "Всё считается на телефоне и никуда не отправляется.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Всё считается на телефоне и никуда не отправляется."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hammasi telefonda hisoblanadi va hech qayerga yuborilmaydi."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

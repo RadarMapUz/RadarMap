@@ -20,6 +20,16 @@ struct RoutePanel: View {
             // Выбор варианта — только пока стоим и есть из чего выбирать.
             if route.variants.count > 1, !env.location.isTripActive {
                 variantChips
+                if let selected = route.selected, let why = Self.reason(selected, among: route.variants) {
+                    Text(why)
+                        .font(.rounded(12, .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .contentTransition(.opacity)
+                }
             }
 
             GlassCard(cornerRadius: Theme.cornerLarge) {
@@ -78,20 +88,30 @@ struct RoutePanel: View {
     // MARK: - Варианты маршрута
 
     private var variantChips: some View {
-        HStack(spacing: 8) {
+        // Строка ярлыка есть у всех плашек, если она есть хоть у одной, —
+        // иначе плашки разной высоты прыгают.
+        let labeled = env.route.variants.contains { !$0.assessment.labels.isEmpty }
+        return HStack(spacing: 8) {
             ForEach(env.route.variants) { variant in
-                variantChip(variant)
+                variantChip(variant, labeled: labeled)
             }
         }
     }
 
-    private func variantChip(_ variant: RouteService.Variant) -> some View {
+    private func variantChip(_ variant: RouteService.Variant, labeled: Bool) -> some View {
         let isSelected = variant.id == env.route.selectedID
         return Button {
             env.route.selectVariant(variant.id)
             UISelectionFeedbackGenerator().selectionChanged()
         } label: {
             VStack(spacing: 3) {
+                if labeled {
+                    Text(variant.assessment.labels.first.map { Self.title($0, variant) } ?? " ")
+                        .font(.rounded(11, .bold))
+                        .foregroundStyle(isSelected ? Theme.background : Theme.accent)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
                 Text(variant.etaText)
                     .font(.rounded(15, .bold))
                     .foregroundStyle(isSelected ? Theme.background : Theme.textPrimary)
@@ -112,6 +132,57 @@ struct RoutePanel: View {
                 .stroke(isSelected ? .clear : Theme.stroke, lineWidth: 1))
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Ярлыки вариантов (RouteChoice)
+
+    static func title(_ label: RouteChoice.Label, _ variant: RouteService.Variant) -> String {
+        switch label {
+        case .familiar:        return String(localized: "Знакомый")
+        case .fastest:         return String(localized: "Быстрый")
+        case .fewerCameras:    return variant.cameras.isEmpty
+                                   ? String(localized: "Без камер") : String(localized: "Меньше камер")
+        case .avoidsOverspeed: return String(localized: "Спокойнее")
+        case .simpler:         return String(localized: "Проще")
+        case .shortest:        return String(localized: "Короткий")
+        }
+    }
+
+    /// Почему вариант такой — одной строкой под плашками. Числа рядом с
+    /// ярлыком: «Знакомый» без «поездок этим путём: 12» — просто слово.
+    static func reason(_ variant: RouteService.Variant, among all: [RouteService.Variant]) -> String? {
+        guard let fastest = all.min(by: { $0.travelTime < $1.travelTime }) else { return nil }
+        let a = variant.assessment
+        var parts: [String] = []
+        for label in a.labels {
+            switch label {
+            case .familiar:
+                parts.append(String(format: String(localized: "поездок этим путём: %lld"), a.familiarTrips))
+            case .fewerCameras:
+                parts.append(String(format: String(localized: "камер: %1$lld вместо %2$lld"),
+                                    variant.cameras.count, fastest.cameras.count))
+            case .avoidsOverspeed:
+                parts.append(String(format: String(localized: "без камер, где вы превышали (на быстром: %lld)"),
+                                    fastest.assessment.overspeedCameras))
+            case .simpler:
+                if let mine = a.hardManeuvers, let base = fastest.assessment.hardManeuvers {
+                    parts.append(String(format: String(localized: "сложных манёвров: %1$lld вместо %2$lld"),
+                                        mine, base))
+                }
+            case .shortest:
+                parts.append(String(format: String(localized: "на %@ короче"),
+                                    Formatting.distance(fastest.distance - variant.distance)))
+            case .fastest:
+                break
+            }
+        }
+        let extra = variant.travelTime - fastest.travelTime
+        if variant.id != fastest.id, extra >= 60 {
+            parts.append(String(format: String(localized: "+%@ к быстрому"), Formatting.duration(extra)))
+        }
+        guard !parts.isEmpty else { return nil }
+        let head = a.labels.first.map { title($0, variant) }
+        return ([head].compactMap { $0 } + parts).joined(separator: " · ")
     }
 
     // MARK: - Камеры

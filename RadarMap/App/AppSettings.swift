@@ -473,6 +473,9 @@ final class AppSettings {
 
     // Маршрут и скорость — каждую функцию можно выключить.
     var routeAlternatives: Bool { didSet { store.set(routeAlternatives, forKey: Keys.alternatives) } }
+    /// Варианты маршрута сравниваются с вашими поездками: «Знакомый», «Без
+    /// ваших превышений» (RouteChoice). Считается на телефоне.
+    var personalRoutes: Bool { didSet { store.set(personalRoutes, forKey: Keys.personalRoutes) } }
     var turnByTurnVoice: Bool { didSet { store.set(turnByTurnVoice, forKey: Keys.turnByTurn) } }
     var speedLimitsEnabled: Bool { didSet { store.set(speedLimitsEnabled, forKey: Keys.speedLimits) } }
     var overspeedTolerance: Double { didSet { store.set(overspeedTolerance, forKey: Keys.overspeed) } }
@@ -611,6 +614,7 @@ final class AppSettings {
         static let home = "homePlace"
         static let work = "workPlace"
         static let alternatives = "routeAlternatives"
+        static let personalRoutes = "personalRoutes"
         static let turnByTurn = "turnByTurnVoice"
         static let speedLimits = "speedLimitsEnabled"
         static let overspeed = "overspeedTolerance"
@@ -662,6 +666,7 @@ final class AppSettings {
             Keys.autoStart: true,
             Keys.volume: 1.0,
             Keys.alternatives: true,
+            Keys.personalRoutes: true,
             Keys.turnByTurn: true,
             Keys.speedLimits: true,
             Keys.overspeed: 5.0,
@@ -708,6 +713,7 @@ final class AppSettings {
         homePlace = Self.load(store, Keys.home)
         workPlace = Self.load(store, Keys.work)
         routeAlternatives = store.bool(forKey: Keys.alternatives)
+        personalRoutes = store.bool(forKey: Keys.personalRoutes)
         turnByTurnVoice = store.bool(forKey: Keys.turnByTurn)
         speedLimitsEnabled = store.bool(forKey: Keys.speedLimits)
         overspeedTolerance = store.double(forKey: Keys.overspeed)

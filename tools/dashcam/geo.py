@@ -35,6 +35,8 @@ UNRELIABLE_SHARE = 0.35          # |путь по скорости − длин�
 SHORT_SEGMENT_M = 60             # на коротких перегонах доля шумная — там порог в метрах
 SHORT_SEGMENT_TOL_M = 25
 WEIGHT_UNRELIABLE = 0.15
+SINGLE_ANCHOR_M = 400      # одна опора: привязываем только в стольких метрах от неё
+EDGE_SLACK_M = 30          # за концом формы — не дальше
 # Трек GPX относится к поездке, если время в его имени — от TRK_BEFORE до
 # конца поездки (приложение стартует поездку позже регистратора).
 TRK_BEFORE = 15 * 60
@@ -121,9 +123,14 @@ class OSRM:
     def key(a, b):
         return f'{a[0]:.5f},{a[1]:.5f};{b[0]:.5f},{b[1]:.5f}'
 
-    def route(self, a, b):
-        """a, b: (lat, lon) → ([(lat, lon)…], метры) или None (маршрута нет / ошибка)."""
+    def route(self, a, b, bearings=None):
+        """a, b: (lat, lon) → ([(lat, lon)…], метры) или None (маршрута нет / ошибка).
+        bearings: (курс в a | None, курс в b | None) — направление движения у
+        точки: камера стоит на одной стороне разделённой дороги, и без курса
+        OSRM садит её на встречную полосу (крюк с разворотом в сотни метров)."""
         k = self.key(a, b)
+        if bearings and any(x is not None for x in bearings):
+            k += '|' + ','.join('' if x is None else str(int(x) % 360) for x in bearings)
         row = self.conn.execute('SELECT body FROM route_cache WHERE key=?', (k,)).fetchone()
         if row is not None:
             self.hits += 1
@@ -134,6 +141,9 @@ class OSRM:
                 if wait > 0:
                     self.sleep(wait)
             url = OSRM_URL.format(lat1=a[0], lon1=a[1], lat2=b[0], lon2=b[1])
+            if bearings and any(x is not None for x in bearings):
+                url += '&bearings=' + ';'.join('' if x is None else f'{int(x) % 360},45'
+                                               for x in bearings)
             try:
                 body = self.fetch(url)
             except Exception as e:  # сеть — не повод валить разбор; перегон станет ненадёжным
@@ -200,8 +210,15 @@ class TripGeo:
         if t < A[0]['t'] or t > A[-1]['t']:
             if not self.edge_ok:
                 return None
-            ref = A[0]['t'] if t < A[0]['t'] else A[-1]['t']
-            d = abs(self.model.odo.at(t) - self.model.odo.at(ref))
+            ref = A[0] if t < A[0]['t'] else A[-1]
+            d = abs(self.model.odo.at(t) - self.model.odo.at(ref['t']))
+            # одна опора — курс и форма до неё ненадёжны: только рядом с ней
+            if len(A) < 2 and d > SINGLE_ANCHOR_M:
+                return None
+            # за концом формы точку не придумываем (форма короче поездки)
+            raw = ref['s'] - d if t < A[0]['t'] else ref['s'] + d
+            if raw < -EDGE_SLACK_M or raw > self.model.line.length + EDGE_SLACK_M:
+                return None
             w = max(0.2, 0.6 * (1 - d / 3000))
             seg = -1
         else:

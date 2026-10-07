@@ -93,6 +93,19 @@ def day_trips(conn):
     return [t for t in rows if is_day_trip(t)]
 
 
+def has_anchors(conn, trip):
+    """Есть ли у поездки опоры (трек all_trips с проездами камер в окне)."""
+    return any(tr['path'].split('#')[0].endswith('all_trips.gpx') or tr['kind'] == 'anchored'
+               for tr in catalog.tracks_for_trip(conn, trip))
+
+
+def plan(conn):
+    """Порядок разбора: сначала поездки с опорами (без них кадры не привязать
+    к месту), внутри — от новых к старым; остальные — в конце."""
+    trips = day_trips(conn)
+    return [t for t in trips if has_anchors(conn, t)] + [t for t in trips if not has_anchors(conn, t)]
+
+
 def set_stage(conn, key, stage, error=None):
     with conn:
         conn.execute('INSERT INTO batch_state(trip_key, stage, error, updated) VALUES(?,?,?,?) '
@@ -288,7 +301,7 @@ STAGES = ('ingest', 'geo', 'detect', 'objects')
 
 def run(conn, keys=None, limit=None, stages=STAGES):
     card = Card()
-    trips = day_trips(conn)
+    trips = plan(conn)
     if keys:
         trips = [t for t in trips if t['key'] in keys] + \
             [catalog.get_trip(conn, k) for k in keys if k not in {t['key'] for t in trips}

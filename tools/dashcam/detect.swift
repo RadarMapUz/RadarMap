@@ -297,8 +297,23 @@ enum LampColor: String { case red, yellow, green }
     return nil
 }
 
+/// Средняя яркость верхней части кадра: в тоннеле и под эстакадой темно, и
+/// зелёные огни тоннеля и указатели выхода похожи на светофор — там не ищем.
+func frameBrightness(_ im: RGBA) -> Double {
+    var s = 0, n = 0
+    for y in stride(from: 0, to: im.h / 2, by: 8) {
+        for x in stride(from: 0, to: im.w, by: 8) {
+            s += max(im.r(x, y), max(im.g(x, y), im.b(x, y))); n += 1
+        }
+    }
+    return Double(s) / Double(max(n, 1)) / 255
+}
+
 func detectLights(_ im: RGBA) -> [Det] {
     let ylim = Int(Double(im.h) * LIGHT_YLIM)
+    let fb = frameBrightness(im)
+    dbg("frame brightness \(fb)")
+    if fb < 0.22 { return [] }
     var cands: [(Blob, LampColor, Double)] = []
     for color in [LampColor.red, .yellow, .green] {
         var mask = [Bool](repeating: false, count: im.w * im.h)
@@ -342,7 +357,38 @@ func detectLights(_ im: RGBA) -> [Det] {
             if Double(bright) / Double(tot) > 0.25 { continue }
             let low = b.cy > Double(im.h) * HORIZON
             if darkShare < (low ? 0.6 : 0.45) { continue }
-            let conf = min(1.0, 0.35 + 0.45 * darkShare + 0.2 * fill)
+            // Горящая секция светится: в пятне есть почти белые/предельно яркие пиксели.
+            var vmax: Float = 0
+            for y in b.minY...b.maxY { for x in b.minX...b.maxX {
+                vmax = max(vmax, hsv(im.r(x, y), im.g(x, y), im.b(x, y)).2) } }
+            // красная/жёлтая вывеска на солнце — до 0.9; горящая лампа пересвечена
+            if vmax < (color == .green ? 0.86 : 0.95) { continue }
+            // Корпус вертикальный: под красной / над зелёной секцией — тёмный столбец
+            // ещё на 1–2 секции (вывески, LED-ленты и знак «главная дорога» так не умеют).
+            func darkColumn(_ above: Bool) -> Double {
+                let ya = above ? b.minY - Int(2.2 * Double(d)) : b.maxY + Int(0.4 * Double(d))
+                let yb = above ? b.minY - Int(0.4 * Double(d)) : b.maxY + Int(2.2 * Double(d))
+                var dk = 0, n = 0
+                for y in max(0, ya)...min(im.h - 1, max(ya, yb)) {
+                    for x in max(0, b.minX)...min(im.w - 1, b.maxX) {
+                        n += 1
+                        if hsv(im.r(x, y), im.g(x, y), im.b(x, y)).2 < 0.35 { dk += 1 }
+                    }
+                }
+                return n > 0 ? Double(dk) / Double(n) : 0
+            }
+            let below = darkColumn(false), above = darkColumn(true)
+            let column: Double
+            switch color {
+            case .red: column = below
+            case .green: column = above
+            case .yellow: column = min(above, below)
+            }
+            dbg("light \(color) \(b.minX),\(b.minY) dark \(darkShare) column \(column) vmax \(vmax)")
+            if column < 0.5 { continue }
+            var conf = min(1.0, 0.25 + 0.35 * darkShare + 0.2 * fill + 0.2 * column)
+            // жёлтый чаще всего — оранжевый знак «главная дорога» или вывеска
+            if color == .yellow { conf *= 0.7 }
             cands.append((b, color, conf))
         }
     }

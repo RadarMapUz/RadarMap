@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import threading
+import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -27,6 +28,7 @@ import sync
 HERE = os.path.dirname(os.path.abspath(__file__))
 UI_DIR = os.path.join(HERE, 'ui')
 UI_FILES = {'index.html': 'text/html; charset=utf-8',
+            'finds.js': 'text/javascript; charset=utf-8',
             'app.js': 'text/javascript; charset=utf-8',
             'app.css': 'text/css; charset=utf-8'}
 HOST = '127.0.0.1'
@@ -100,6 +102,88 @@ def trip_detail(conn, key, track_id=None):
             anchors[used[k + 1]]['residual_m'] = _r(r, 1)
     out['points'] = [[_r(t, 2), _r(lat, 6), _r(lon, 6), _r(v, 1)] for t, lat, lon, v in pts]
     out['anchors'] = anchors
+    return out
+
+
+# ---------- находки и разметка ----------
+
+def _num(q, k, default=None):
+    try:
+        return float(q[k][0])
+    except (KeyError, ValueError, IndexError):
+        return default
+
+
+def findings_list(conn, q):
+    import cluster
+    sql = 'SELECT * FROM clusters WHERE confidence >= ?'
+    args = [_num(q, 'min_conf', 0.0)]
+    if q.get('cls', [''])[0]:
+        sql += ' AND cls=?'
+        args.append(q['cls'][0])
+    if q.get('status', [''])[0]:
+        sql += ' AND status=?'
+        args.append(q['status'][0])
+    rows = conn.execute(sql + ' ORDER BY confidence DESC', args).fetchall()
+    want = q.get('decision', [''])[0]
+    out = []
+    for r in rows:
+        dec = cluster.decision_for(conn, r['cls'], r['lat'], r['lon'])
+        if want == 'none' and dec is not None or want in ('accept', 'reject') and dec != want:
+            continue
+        out.append({'id': r['id'], 'cls': r['cls'], 'value': r['value'], 'lat': round(r['lat'], 7),
+                    'lon': round(r['lon'], 7), 'err_m': _r(r['err_m'], 1), 'n_trips': r['n_trips'],
+                    'n_frames': r['n_frames'], 'confidence': _r(r['confidence'], 3),
+                    'status': r['status'], 'decision': dec})
+    return out
+
+
+def finding_detail(conn, cid):
+    import cluster
+    r = conn.execute('SELECT * FROM clusters WHERE id=?', (cid,)).fetchone()
+    if r is None:
+        return None
+    objs = conn.execute('SELECT * FROM objects WHERE cluster=? ORDER BY weight DESC', (cid,)).fetchall()
+    rays = []
+    for o in objs:
+        for d in conn.execute('SELECT f.lat, f.lon FROM detections d JOIN frames f ON f.id=d.frame_id '
+                              'WHERE d.obj=? AND f.lat IS NOT NULL', (o['id'],)):
+            rays.append([round(d['lat'], 7), round(d['lon'], 7)])
+    crops = [{'det_id': d['id'], 'trip': d['trip_key'], 't': d['t'], 'conf': _r(d['conf'], 2),
+              'url': f"/crop/{d['id']}.jpg"} for d in cluster.best_detections(conn, cid)]
+    return {'id': r['id'], 'cls': r['cls'], 'value': r['value'], 'lat': r['lat'], 'lon': r['lon'],
+            'err_m': _r(r['err_m'], 1), 'n_trips': r['n_trips'], 'n_frames': r['n_frames'],
+            'confidence': _r(r['confidence'], 3), 'status': r['status'],
+            'map_ref': json.loads(r['map_ref'] or '{}'),
+            'decision': cluster.decision_for(conn, r['cls'], r['lat'], r['lon']),
+            'objects': [{'trip': o['trip_key'], 'method': o['method'], 'err_m': _r(o['err_m'], 1),
+                         'n_frames': o['n_frames'], 'weight': _r(o['weight'], 2)} for o in objs],
+            'rays': rays, 'crops': crops}
+
+
+def label_next(conn, cls=None):
+    """Следующая сработка без ответа: по очереди классов, внутри — случайно
+    (подряд идущие кадры одного светофора разметчику не нужны)."""
+    sql = ('SELECT d.id, d.cls, d.value, d.color, d.conf FROM detections d '
+           'LEFT JOIN labels l ON l.det_id=d.id WHERE l.det_id IS NULL')
+    args = []
+    if cls:
+        sql += ' AND d.cls=?'
+        args.append(cls)
+    r = conn.execute(sql + ' ORDER BY random() LIMIT 1', args).fetchone()
+    if r is None:
+        return {'done': True}
+    return {'det_id': r['id'], 'cls': r['cls'], 'value': r['value'], 'color': r['color'],
+            'conf': _r(r['conf'], 2), 'url': f"/crop/{r['id']}.jpg"}
+
+
+def label_stats(conn):
+    out = {}
+    for r in conn.execute('SELECT d.cls, l.answer, COUNT(*) n FROM labels l JOIN detections d '
+                          'ON d.id=l.det_id GROUP BY d.cls, l.answer'):
+        out.setdefault(r['cls'], {})[r['answer']] = r['n']
+    for r in conn.execute('SELECT cls, COUNT(*) n FROM detections GROUP BY cls'):
+        out.setdefault(r['cls'], {})['total'] = r['n']
     return out
 
 
@@ -201,6 +285,19 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     conn.close()
                 return self._json(d) if d else self._error(404, 'нет такой поездки')
+            if p == '/api/findings':
+                return self._with_conn(lambda c: findings_list(c, parse_qs(url.query)))
+            m = re.fullmatch(r'/api/findings/(\d+)', p)
+            if m:
+                return self._with_conn(lambda c: finding_detail(c, int(m.group(1))), notfound=True)
+            if p == '/api/label/next':
+                q = parse_qs(url.query)
+                return self._with_conn(lambda c: label_next(c, q.get('cls', [''])[0] or None))
+            if p == '/api/label/stats':
+                return self._with_conn(label_stats)
+            m = re.fullmatch(r'/crop/(\d+)\.jpg', p)
+            if m:
+                return self._crop(int(m.group(1)))
             m = re.fullmatch(r'/video/(\d+)', p)
             if m:
                 return self._video(int(m.group(1)))
@@ -231,6 +328,31 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 conn.close()
             return self._json({'clips': clips, 'tracks': tracks})
+        m = re.fullmatch(r'/api/findings/(\d+)/decision', p)
+        if m:
+            dec = body.get('decision')
+            if dec not in ('accept', 'reject', 'clear'):
+                return self._error(400, 'decision: accept | reject | clear')
+            import cluster
+            conn = self._conn()
+            try:
+                ok = cluster.decide(conn, int(m.group(1)), dec)
+            finally:
+                conn.close()
+            return self._json({'ok': ok}) if ok else self._error(404, 'нет такой находки')
+        if p == '/api/label':
+            ans = body.get('answer')
+            det = body.get('det_id')
+            if ans not in ('yes', 'no', 'skip') or not isinstance(det, int):
+                return self._error(400, 'нужны det_id и answer: yes | no | skip')
+            conn = self._conn()
+            try:
+                with conn:
+                    conn.execute('INSERT OR REPLACE INTO labels(det_id, answer, at) VALUES(?,?,?)',
+                                 (det, ans, time.time()))
+            finally:
+                conn.close()
+            return self._json({'ok': True})
         m = re.fullmatch(r'/api/trips/([0-9-]+)/process', p)
         if m:
             key = m.group(1)
@@ -248,6 +370,29 @@ class Handler(BaseHTTPRequestHandler):
             threading.Thread(target=run_job, args=(key,), daemon=True).start()
             return self._json(_jobs[key])
         return self._error(404, 'не найдено')
+
+    def _with_conn(self, fn, notfound=False):
+        conn = self._conn()
+        try:
+            res = fn(conn)
+        finally:
+            conn.close()
+        if notfound and res is None:
+            return self._error(404, 'не найдено')
+        return self._json(res)
+
+    def _crop(self, det_id):
+        """Вырезка сработки (лица и номера размыты) — по id, путь из URL не берётся."""
+        import cluster
+        conn = self._conn()
+        try:
+            path = cluster.crop_for(conn, det_id)
+        finally:
+            conn.close()
+        if not path or not os.path.isfile(path):
+            return self._error(404, 'нет вырезки')
+        with open(path, 'rb') as f:
+            self._send(200, f.read(), 'image/jpeg')
 
     def _static(self, name):
         if name not in UI_FILES:

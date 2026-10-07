@@ -31,6 +31,8 @@ REAL_SIZE_M = {'speed_limit': 0.7, 'crossing': 0.6, 'traffic_light': 0.2}
 MIN_SPREAD_DEG = 2.5
 MAX_RANGE_M = 120.0
 BEARING_SIGMA_DEG = 1.0
+LOC_ERR_BASE_M = 8.0           # ошибка точки машины при весе привязки 1…
+LOC_ERR_SPAN_M = 40.0          # …и сколько добавляется при весе 0
 TRACK_MAX_GAP_S = 3.0          # кадры дальше по времени — разные встречи…
 TRACK_MAX_GAP_STOP_M = 15.0    # …если только машина не стояла (на стоянке кадр раз в 10 с)
 
@@ -133,52 +135,85 @@ def angular_spread(angles):
 
 # ---------- связывание сработок в треки ----------
 
+# Фокус расширения: точка, из которой при езде прямо «разлетаются» объекты, —
+# центр кадра по горизонтали на линии горизонта (≈520 px исходного кадра BYD).
+FOE = (fr.SRC_W / 2, 520.0)
+
+
+def link_cost(last, o):
+    """Стоимость продолжения трека сработкой o (None — не продолжение).
+
+    При езде вперёд неподвижный объект уходит от фокуса расширения по лучу:
+    p1 − FOE ≈ k·(p0 − FOE), k = D0/D1 ≥ 1, и рамка растёт примерно в те же k.
+    Проверяется направление (угол между лучами), коэффициент и согласие
+    роста рамки с ним; на стоянке k ≈ 1 и рамка почти на месте."""
+    s0, s1 = max(last['w'], last['h']), max(o['w'], o['h'])
+    if s0 <= 0 or s1 <= 0:
+        return None
+    ratio = s1 / s0
+    if ratio < 0.55 or ratio > 2.8:
+        return None
+    p0 = (last['x'] + last['w'] / 2 - FOE[0], last['y'] + last['h'] / 2 - FOE[1])
+    p1 = (o['x'] + o['w'] / 2 - FOE[0], o['y'] + o['h'] / 2 - FOE[1])
+    r0, r1 = math.hypot(*p0), math.hypot(*p1)
+    jump = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+    if jump <= max(12.0, 1.5 * s1):
+        return jump / max(12.0, 1.5 * s1) * 0.5 + abs(math.log(ratio))
+    if r0 < 25 or r1 < 25:
+        return None
+    # отклонение от луча: поперечное смещение в пикселях
+    cross = abs(p0[0] * p1[1] - p0[1] * p1[0]) / r0
+    k = r1 / r0
+    if cross > 30 + 0.25 * r1 or k < 0.85 or k > 4.0:
+        return None
+    if abs(math.log(ratio) - math.log(k)) > 0.9:
+        return None
+    return cross / (30 + 0.25 * r1) + abs(math.log(ratio) - math.log(k))
+
+
 def link_tracks(obs):
     """obs: [{'id','t','cls','value','x','y','w','h','dist'}] по времени; dist — путь
     машины (м) к моменту кадра (для «стояли ли»). → [[obs…], …].
 
     Жадно: сработка продолжает трек того же класса, если последний кадр трека
-    недалеко по времени (или машина с тех пор почти не сдвинулась), рамка
-    сдвинулась не больше нескольких своих размеров, размер изменился не больше
-    чем вдвое и объект не перескочил через центр кадра."""
+    недалеко по времени (или машина с тех пор почти не сдвинулась) и движение
+    рамки согласно с ездой вперёд (link_cost). В одном кадре трек берёт не
+    больше одной сработки."""
     tracks, active = [], []
-    for o in sorted(obs, key=lambda o: o['t']):
-        best, best_cost = None, None
-        for tr in active:
-            last = tr[-1]
-            if last['cls'] != o['cls'] or last['t'] >= o['t']:
+    by_t = {}
+    for o in obs:
+        by_t.setdefault(o['t'], []).append(o)
+    for t in sorted(by_t):
+        frame = by_t[t]
+        pairs = []
+        for oi, o in enumerate(frame):
+            for ti, tr in enumerate(active):
+                last = tr[-1]
+                if last['cls'] != o['cls'] or last['t'] >= o['t']:
+                    continue
+                if o['cls'] == 'speed_limit' and last['value'] != o['value']:
+                    continue
+                gap = o['t'] - last['t']
+                moved = abs(o.get('dist', 0) - last.get('dist', 0))
+                if gap > TRACK_MAX_GAP_S and moved > TRACK_MAX_GAP_STOP_M:
+                    continue
+                c = link_cost(last, o)
+                if c is not None:
+                    pairs.append((c, oi, ti))
+        pairs.sort()
+        used_o, used_t = set(), set()
+        for c, oi, ti in pairs:
+            if oi in used_o or ti in used_t:
                 continue
-            if o['cls'] == 'speed_limit' and last['value'] != o['value']:
-                continue
-            gap = o['t'] - last['t']
-            moved = abs(o.get('dist', 0) - last.get('dist', 0))
-            if gap > TRACK_MAX_GAP_S and moved > TRACK_MAX_GAP_STOP_M:
-                continue
-            s0, s1 = max(last['w'], last['h']), max(o['w'], o['h'])
-            ratio = s1 / s0 if s0 > 0 else 9
-            if ratio < 0.6 or ratio > 2.2:
-                continue
-            cx0, cx1 = last['x'] + last['w'] / 2, o['x'] + o['w'] / 2
-            cy0, cy1 = last['y'] + last['h'] / 2, o['y'] + o['h'] / 2
-            lim_x = max(90.0, 4 * s1)
-            lim_y = max(60.0, 3 * s1)
-            dx, dy = abs(cx1 - cx0), abs(cy1 - cy0)
-            if dx > lim_x or dy > lim_y:
-                continue
-            mid = fr.SRC_W / 2
-            if (cx0 - mid) * (cx1 - mid) < 0 and min(abs(cx0 - mid), abs(cx1 - mid)) > 40:
-                continue
-            cost = dx / lim_x + dy / lim_y + abs(math.log(ratio))
-            if best_cost is None or cost < best_cost:
-                best, best_cost = tr, cost
-        if best is None:
-            tr = [o]
-            tracks.append(tr)
-            active.append(tr)
-        else:
-            best.append(o)
-        # трек, давно не продолжавшийся, — из активных
-        active = [tr for tr in active if o['t'] - tr[-1]['t'] <= 15]
+            used_o.add(oi)
+            used_t.add(ti)
+            active[ti].append(frame[oi])
+        for oi, o in enumerate(frame):
+            if oi not in used_o:
+                tr = [o]
+                tracks.append(tr)
+                active.append(tr)
+        active = [tr for tr in active if t - tr[-1]['t'] <= 15]
     return tracks
 
 
@@ -269,6 +304,11 @@ def build_trip(conn, key, lens=None):
         for tr in link_tracks(obs):
             loc = locate_track(tr, lens, plane) if located else None
             ws = [o['weight'] for o in tr if o['weight'] is not None]
+            if loc and ws:
+                # Ошибка точки машины (опоры, невязка перегона) сдвигает все лучи
+                # разом — триангуляция её не видит; добавляем по весу привязки.
+                w = sum(ws) / len(ws)
+                loc['err_m'] = math.hypot(loc['err_m'], LOC_ERR_BASE_M + LOC_ERR_SPAN_M * (1 - w))
             conf = sum(o['conf'] for o in tr) / len(tr) * min(1.0, len(tr) / 3)
             cur = conn.execute(
                 'INSERT INTO objects(trip_key, cls, value, color, lat, lon, err_m, n_frames, method, '

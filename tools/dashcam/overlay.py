@@ -85,7 +85,7 @@ def ocr_clip(conn, clip, log=print, path=None):
     bar = max(16, round(BAR_HEIGHT_1080 * height / 1080))
     tmp = tempfile.mkdtemp(prefix='dashcam_bar_')
     try:
-        subprocess.run([FFMPEG, '-v', 'error', '-nostdin', '-hwaccel', 'videotoolbox',
+        subprocess.run([FFMPEG, '-v', 'error', '-nostdin',
                         '-i', path or clip['path'], '-vf', f'fps=1,crop=iw:{bar}:0:0',
                         os.path.join(tmp, '%05d.png')], check=True)
         text = subprocess.run([binary, tmp], capture_output=True, text=True, check=True).stdout

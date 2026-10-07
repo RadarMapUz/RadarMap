@@ -57,3 +57,31 @@ main { display: grid; grid-template-rows: auto minmax(200px, 1fr) auto; min-widt
   body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   #side { max-height: 30vh; border-right: 0; border-bottom: 1px solid var(--line); }
 }
+
+/* ---- вкладки, находки, разметка ---- */
+#tabs { display: flex; gap: 4px; }
+#tabs button { flex: 1; }
+#tabs button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.filters { display: flex; flex-direction: column; gap: 6px; }
+.filters select { font: inherit; padding: 3px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); }
+.find { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; cursor: pointer; margin-top: 6px; }
+.find:hover, .find.sel { border-color: var(--accent); }
+.find .st { font-size: 11px; }
+.st.new { color: var(--accent); } .st.confirms { color: var(--ok); } .st.differs { color: var(--warn); }
+.dec-accept { box-shadow: inset 4px 0 0 var(--ok); } .dec-reject { opacity: .5; box-shadow: inset 4px 0 0 var(--bad); }
+#card { position: absolute; top: 8px; right: 8px; width: 330px; max-height: calc(66vh - 80px);
+  overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px; z-index: 3; grid-row: 2; }
+#card h2 { font-size: 15px; margin: 0 0 4px; }
+#card .crops { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 6px 0; }
+#card .crops img { width: 100%; border-radius: 4px; cursor: zoom-in; background: #000; }
+#card .btns { display: flex; gap: 6px; margin-top: 8px; }
+#card .btns .acc { border-color: var(--ok); color: var(--ok); }
+#card .btns .rej { border-color: var(--bad); color: var(--bad); }
+#labeler { position: absolute; inset: 0; z-index: 5; background: var(--bg); display: flex;
+  flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+#labeler img { max-width: min(90%, 640px); max-height: 60vh; min-width: 320px; image-rendering: auto;
+  border-radius: 8px; background: #000; }
+#l-q { font-size: 20px; font-weight: 600; }
+.l-btns button { font-size: 18px; padding: 8px 20px; margin: 0 6px; }

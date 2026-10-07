@@ -163,7 +163,7 @@ def extract(path, indices, out_paths, tmpdir):
         f.write(f"select='{expr}',crop={SRC_W}:{CROP_BOTTOM - CROP_TOP}:0:{CROP_TOP},"
                 f"scale={OUT_W}:{OUT_H}")
     pattern = os.path.join(tmpdir, 'f_%06d.jpg')
-    subprocess.run([FFMPEG, '-v', 'error', '-nostdin', '-y', '-hwaccel', 'videotoolbox',
+    subprocess.run([FFMPEG, '-v', 'error', '-nostdin', '-y',
                     '-i', path, '-filter_script:v', script, '-fps_mode', 'passthrough',
                     '-q:v', str(JPEG_Q), pattern], check=True)
     made = sorted(n for n in os.listdir(tmpdir) if n.startswith('f_') and n.endswith('.jpg'))

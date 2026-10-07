@@ -71,6 +71,24 @@ nonisolated enum MapMode: Equatable {
     /// Карта разворачивается по ходу движения и наклоняется.
     var followsHeading: Bool { self != .idle }
 
+    /// Слои, 3D, «весь маршрут» и спидометр — пунктами меню «…», а не кнопками.
+    /// В поездке справа остаются три: звук, ориентация, «…». Семь кругов
+    /// столбиком закрывали треть карты ровно там, где за рулём смотрят на
+    /// дорогу (docs/plan_drive_ux_2026-10-07.md, п. 4).
+    var keepsMapToolsInMenu: Bool { self != .idle }
+
+    /// Где скорость. В навигации верх отдан манёвру, и скорость со знаком
+    /// лимита уходит вниз влево, как у навигаторов; без маршрута HUD остаётся
+    /// сверху — на экране нет ничего главнее его.
+    var speedPlacement: SpeedPlacement {
+        self == .navigating ? .bottomLeading : .top
+    }
+
+    enum SpeedPlacement: Equatable {
+        case top
+        case bottomLeading
+    }
+
     /// Главный элемент экрана: на нём держится иерархия внимания, всё
     /// остальное обязано быть тише. Двух «главных» одновременно не бывает.
     var focus: Focus {
@@ -112,5 +130,54 @@ nonisolated enum TripStartPrompt: Equatable {
 
     static func prominence(startsByItself: Bool) -> TripStartPrompt {
         startsByItself ? .secondary : .primary
+    }
+}
+
+/// Экран поездки поверх режима: прибытие, итог, чип камеры.
+///
+/// Режим (MapMode) знает только «стоим / едем / ведём». Карточка «Вы на месте»
+/// и «Поездка сохранена» приходят поверх него — и раньше вставали ПОВЕРХ всего:
+/// прибытие закрывало кнопки справа, а снизу одновременно висела панель поездки
+/// со своим «стоп». Две кнопки «завершить» на одном экране — это вопрос, какая
+/// из них настоящая (docs/plan_drive_ux_2026-10-07.md, п. 6).
+nonisolated enum TripScreenLayout {
+
+    /// Видна ли карточка прибытия. В поездке — пока её не закрыли. Поездка уже
+    /// кончилась (автостоп у цели) — только если нет «Поездка сохранена»: те же
+    /// цифры дважды подряд читаются как сбой.
+    static func showsArrival(hasArrival: Bool, isTripActive: Bool,
+                             showsTripEnd: Bool) -> Bool {
+        guard hasArrival else { return false }
+        return isTripActive || !showsTripEnd
+    }
+
+    /// Панель поездки внизу — пока на её месте не стоит прибытие: у карточки
+    /// своя кнопка «Завершить поездку», и она должна быть единственной.
+    static func showsTripBar(mode: MapMode, arrivalShown: Bool) -> Bool {
+        mode.showsTripBar && !arrivalShown
+    }
+
+    /// Колонка кнопок справа. Под прибытием прячется: карточка — последний
+    /// экран поездки, и крутить карту в этот момент незачем.
+    static func showsControlColumn(arrivalShown: Bool, isAddingCamera: Bool) -> Bool {
+        !arrivalShown && !isAddingCamera
+    }
+
+    /// Чип камеры под манёвром: только на подходе или пока камера говорит.
+    /// Потеря сигнала — тоже повод: в навигации HUD сверху нет, и «нет GPS»
+    /// иначе было бы негде сказать.
+    static func showsCameraChip(distance: Double?, isAlerting: Bool,
+                                isSignalStale: Bool) -> Bool {
+        if isSignalStale || isAlerting { return true }
+        guard let distance else { return false }
+        return distance <= AppConfig.tripCameraChipMeters
+    }
+
+    /// Свежа ли сохранённая поездка для карточки «Поездка сохранена».
+    /// Отсчёт — от момента сохранения, а не от последнего фикса записи.
+    static func isTripEndFresh(savedAt: Date?, now: Date) -> Bool {
+        guard let savedAt else { return false }
+        let age = now.timeIntervalSince(savedAt)
+        return age >= 0 && age < AppConfig.tripEndCardFreshSeconds
     }
 }

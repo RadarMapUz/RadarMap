@@ -3,7 +3,7 @@
 //  RadarMap
 //
 //  Панель активного маршрута: варианты, цель, время/расстояние, камеры по пути,
-//  следующая камера в движении, «Поехали». Плюс баннер манёвра (turn-by-turn).
+//  «Поехали». Плюс баннер манёвра (turn-by-turn). Панель поездки — TripLiveBar.swift.
 //
 
 import SwiftUI
@@ -210,91 +210,6 @@ struct RoutePanel: View {
         .disabled(route.camerasOnRoute.isEmpty)
     }
 
-}
-
-/// Компактная панель поездки: максимум карты, минимум панели.
-/// С маршрутом — время прибытия и остаток; без — таймер и путь. Справа — стоп.
-struct TripLiveBar: View {
-    @Environment(AppEnvironment.self) private var env
-    let onShowCameras: () -> Void
-    let onStop: () -> Void
-
-    var body: some View {
-        let route = env.route
-        HStack(spacing: 12) {
-            if route.isActive {
-                // Прибытие: как в настоящих навигаторах — время на часах + остаток.
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(route.arrivalDate, style: .time)
-                        .font(.rounded(22, .heavy))
-                        .foregroundStyle(Theme.success)
-                        .contentTransition(.numericText())
-                    Text("\(Formatting.duration(route.remainingTime)) · \(Formatting.distance(route.remainingDistance))")
-                        .font(.rounded(12, .medium))
-                        .foregroundStyle(Theme.textSecondary)
-                        .contentTransition(.numericText())
-                }
-                if env.settings.showNextCamera, let next = route.nextCamera {
-                    Button(action: onShowCameras) {
-                        HStack(spacing: 6) {
-                            Image(systemName: next.camera.kind.symbolName)
-                                .font(.rounded(11, .bold))
-                                .foregroundStyle(next.camera.kind.glyphTint)
-                                .frame(width: 24, height: 24)
-                                .background(next.camera.kind.tint.gradient, in: Circle())
-                            Text(Formatting.distance(route.nextCameraDistance))
-                                .font(.rounded(13, .bold))
-                                .foregroundStyle(Theme.textPrimary)
-                                .contentTransition(.numericText())
-                        }
-                        .padding(.horizontal, 10).padding(.vertical, 8)
-                        .background(Theme.surface, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("Камеры на маршруте"))
-                    .accessibilityValue(Text(Formatting.distance(route.nextCameraDistance)))
-                }
-            } else {
-                // Свободная поездка без маршрута: таймер + путь.
-                VStack(alignment: .leading, spacing: 1) {
-                    if let started = env.trip.startedAt {
-                        Text(timerInterval: started...Date.distantFuture, countsDown: false)
-                            .font(.rounded(20, .heavy).monospacedDigit())
-                            .foregroundStyle(Theme.success)
-                    }
-                    // Эмодзи-камера рендерилась чёрно-белым глифом и выбивалась
-                    // из всего интерфейса — здесь тот же SF Symbol, что везде.
-                    HStack(spacing: 4) {
-                        Text(Formatting.distance(env.trip.distanceMeters))
-                            .contentTransition(.numericText())
-                        Text("·")
-                        Image(systemName: "camera.fill")
-                            .font(.rounded(10, .semibold))
-                        Text("\(env.trip.camerasPassed)")
-                            .contentTransition(.numericText())
-                    }
-                    .font(.rounded(12, .medium))
-                    .foregroundStyle(Theme.textSecondary)
-                }
-            }
-            Spacer(minLength: 8)
-            // Заряд — как на приборке: одна поездка, одни и те же цифры на
-            // любом экране, включая живую дельту «−N».
-            BatteryChip(sinceStartPercent: env.trip.startBatteryPercent)
-            // «Радар!» слева от «стоп» — в поездке это самая частая кнопка
-            // после самой остановки, и до неё палец должен доходить не глядя.
-            // Она же крупнее соседки: промах между ними стоил поездки, и
-            // разница в размере — второй признак, кроме цвета, который читается
-            // боковым зрением.
-            ReportRadarButton()
-                .padding(.trailing, 6)
-            StopTripButton(action: onStop)
-        }
-        .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
-        .transition(.move(edge: .bottom).combined(with: .opacity))
-    }
 }
 
 /// Баннер ближайшего манёвра (turn-by-turn) — крупно, читается боковым зрением.

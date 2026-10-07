@@ -65,10 +65,9 @@ struct SpeedHUDView: View {
             night: !env.settings.mapAppearance.isDaylight(at: env.location.currentCoordinate),
             alertLevel: env.location.alertLevel))
         .fixedSize(horizontal: false, vertical: true)
-        // Чип режима оповещений: видно, почему тихо (город) или голосисто (трасса).
-        .overlay(alignment: .topTrailing) {
-            if env.location.isTripActive { modeChip }
-        }
+        // Синего значка «город/трасса» в углу больше нет: его смысла с дороги
+        // никто не прочёл (docs/plan_drive_ux_2026-10-07.md, п. 5). Режим
+        // по-прежнему виден и меняется в быстрых тумблерах (долгий тап по HUD).
         .motionAnimation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
         // VoiceOver: весь HUD — одна связная фраза, а не россыпь цифр.
         .accessibilityElement(children: .ignore)
@@ -195,10 +194,8 @@ struct SpeedHUDView: View {
                                          ? Theme.danger : Theme.textPrimary)
                         .contentTransition(.numericText(value: distance))
                         .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
-                    Text(caption(for: camera))
+                    Self.caption(for: camera, location: env.location)
                         .font(.rounded(11, .medium))
-                        .foregroundStyle(env.location.isPositionCoarse
-                                         ? Theme.warning : Theme.textSecondary)
                         .lineLimit(1)
                     // Полоска приближения: заполняется к камере и «греется» —
                     // боковым зрением читается быстрее цифр.
@@ -231,12 +228,20 @@ struct SpeedHUDView: View {
     /// Значок поверх `proximityTint`: на цвете типа — его glyphTint (тёмный на
     /// светлом радаре), на сером «далеко» — контрастный фону темы.
     private func proximityGlyph(_ distance: Double, _ camera: Camera) -> Color {
-        distance <= env.location.effectiveAlertRadius * 3
-            ? camera.kind.glyphTint : Theme.background
+        Self.proximityGlyph(distance, camera, radius: env.location.effectiveAlertRadius)
     }
 
     private func proximityTint(_ distance: Double, _ camera: Camera) -> Color {
-        let radius = env.location.effectiveAlertRadius
+        Self.proximityTint(distance, camera, radius: env.location.effectiveAlertRadius)
+    }
+
+    /// Одно правило цвета на HUD и на чип камеры в навигации: камера не может
+    /// быть «далёкой» в одном месте экрана и «тревожной» в другом.
+    static func proximityGlyph(_ distance: Double, _ camera: Camera, radius: Double) -> Color {
+        distance <= radius * 3 ? camera.kind.glyphTint : Theme.background
+    }
+
+    static func proximityTint(_ distance: Double, _ camera: Camera, radius: Double) -> Color {
         if distance <= radius { return camera.kind.tint }
         if distance <= radius * 3 { return camera.kind.tint.opacity(0.5) }
         return Theme.textTertiary
@@ -244,35 +249,29 @@ struct SpeedHUDView: View {
 
     /// Подпись под расстоянием. Когда позиция грубая (кэш при запуске, слабый
     /// сигнал в помещении), честно говорим об этом: иначе цифра выглядит живой.
-    private func caption(for camera: Camera) -> String {
-        if env.location.isPositionCoarse {
-            return String(localized: "уточняем положение")
+    @ViewBuilder
+    static func caption(for camera: Camera, location: LocationService) -> some View {
+        if location.isPositionCoarse {
+            Text("уточняем положение")
+                .foregroundStyle(Theme.warning)
+        } else if location.familiarCameraIDs.contains(camera.id) {
+            // «Своя» камера: голоса о ней не будет, и человек должен видеть
+            // почему — иначе тишина читается как поломка. Коротко и с
+            // галочкой: «своя камера — без голоса» на ширине HUD обрезалось
+            // до «без голо…», то есть ровно до непонятного.
+            HStack(spacing: 3) {
+                Image(systemName: "checkmark")
+                    .fontWeight(.bold)
+                Text("без голоса")
+            }
+            .foregroundStyle(Theme.success)
+        } else if location.isDirectionalFilteringActive {
+            Text(String(format: String(localized: "%@ по курсу"), camera.kind.genitivePhrase))
+                .foregroundStyle(Theme.textSecondary)
+        } else {
+            Text(camera.kind.genitivePhrase)
+                .foregroundStyle(Theme.textSecondary)
         }
-        // «Своя» камера: голоса о ней не будет, и человек должен видеть
-        // почему — иначе тишина читается как поломка. Предупреждение при этом
-        // никуда не делось: расстояние и значок на месте.
-        if env.location.familiarCameraIDs.contains(camera.id) {
-            return String(localized: "своя камера — без голоса")
-        }
-        if env.location.isDirectionalFilteringActive {
-            return String(format: String(localized: "%@ по курсу"), camera.kind.genitivePhrase)
-        }
-        return camera.kind.genitivePhrase
-    }
-
-    /// Эффективный режим: при «Авто» — что определил детектор.
-    private var modeChip: some View {
-        let mode = env.settings.alertMode
-        let symbol = mode == .auto
-            ? (env.location.alertContext == .highway ? AlertMode.highway.symbol : AlertMode.city.symbol)
-            : mode.symbol
-        return Image(systemName: symbol)
-            .font(.rounded(10, .bold))
-            .foregroundStyle(Theme.accent)
-            .padding(6)
-            .background(Theme.surface.opacity(0.85), in: Circle())
-            .padding(6)
-            .allowsHitTesting(false)
     }
 
     private func approachBar(_ progress: Double) -> some View {

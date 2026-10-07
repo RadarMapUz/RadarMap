@@ -461,6 +461,22 @@ final class MapState {
         followsDeviceHeading = false
     }
 
+    /// «Весь маршрут»: счётчик — движку (вписывает линию маршрута сам),
+    /// карте Apple — регион сразу. Это обзор, а не слежение: карта
+    /// отпускается, «моё местоположение» вернёт к машине.
+    private(set) var overviewCommand = 0
+
+    func showRouteOverview(rect: MKMapRect) {
+        guard !rect.isNull else { return }
+        releaseOrientation()
+        overviewCommand += 1
+        let padded = rect.insetBy(dx: -rect.width * 0.18, dy: -rect.height * 0.18)
+        withMotion(.easeInOut(duration: 0.5)) {
+            position = .rect(padded)
+        }
+        updateVisible(for: MKCoordinateRegion(padded))
+    }
+
     /// Центрировать карту на пользователе и повернуть по курсу движения.
     /// `pitched` — 3D-вид навигатора: камера наклонена, смотрим вперёд по дороге.
     /// `force` — явный тап пользователя: без троттлинга и с быстрым откликом.

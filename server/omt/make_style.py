@@ -743,10 +743,45 @@ def build(base, theme="light", mode="full", tileset=None):
                        "paint": {"fill-extrusion-color": p["barrier"], "fill-extrusion-base": 0,
                                  "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 16, 0, 16.6, 1.1],
                                  "fill-extrusion-vertical-gradient": True, "fill-extrusion-opacity": 1.0}})
+    if mode == "full":
+        _driver_pois(out, p, theme)
     s["layers"] = out
     s["light"] = p["light"]
     s["name"] = f"RadarMap — {'светлая' if theme == 'light' else 'тёмная'}, {'полная' if mode == 'full' else 'только дорога'}"
     return s
+
+
+# Заправки и парковки — то, что водитель ищет на карте. Общие POI отбираются
+# по рангу и требуют имя, и заправка без названия или безымянная парковка у
+# торгового центра не попадали на карту вовсе. Отдельные слои: видны раньше
+# прочих POI (заправка с z13), заметнее, и не двоятся с общими.
+DRIVER_POI = ("fuel", "parking")
+
+
+def _driver_pois(out, p, theme):
+    for layer in out:
+        if layer.get("source-layer") == "poi" and layer["id"].startswith("poi-level"):
+            layer["filter"] = ["all", layer.get("filter", ["all"]), ["!in", "class", *DRIVER_POI]]
+    last_poi = max((k for k, l in enumerate(out) if l.get("source-layer") == "poi"), default=len(out) - 1)
+    fuel = {"id": "radar-poi-fuel", "type": "symbol", "source": "openmaptiles", "source-layer": "poi",
+            "minzoom": 13, "filter": ["all", ["==", "$type", "Point"], ["==", "class", "fuel"]],
+            "layout": {"icon-image": "fuel_11", "icon-size": ["interpolate", ["linear"], ["zoom"], 13, 1.0, 17, 1.4],
+                       "icon-allow-overlap": False, "icon-padding": 4, "symbol-sort-key": 1,
+                       "text-field": ["step", ["zoom"], "", 15, ["coalesce", ["get", "name:latin"], ["get", "name"], ""]],
+                       "text-font": ["Noto Sans Regular"], "text-size": 11, "text-offset": [0, 1.3],
+                       "text-anchor": "top", "text-optional": True, "text-max-width": 8},
+            "paint": {"text-color": p["label"], "text-halo-color": p["halo"], "text-halo-width": 1.4}}
+    # Значка «P» в спрайте нет — буква на синем ореоле, как дорожный знак;
+    # спрайт на сервере ради этого перевыпускать не нужно.
+    parking = {"id": "radar-poi-parking", "type": "symbol", "source": "openmaptiles", "source-layer": "poi",
+               "minzoom": 14.5, "filter": ["all", ["==", "$type", "Point"], ["==", "class", "parking"]],
+               "layout": {"text-field": "P", "text-font": ["Noto Sans Bold"],
+                          "text-size": ["interpolate", ["linear"], ["zoom"], 14.5, 11, 17, 15],
+                          "text-allow-overlap": False, "text-padding": 4, "symbol-sort-key": 2},
+               "paint": {"text-color": "#FFFFFF",
+                         "text-halo-color": "#2563D9" if theme == "light" else "#3B6FD6",
+                         "text-halo-width": 4.5}}
+    out[last_poi + 1:last_poi + 1] = [fuel, parking]
 
 
 def app_styles():

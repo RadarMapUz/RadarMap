@@ -32,7 +32,7 @@ nonisolated enum EngineModernStyle {
     /// Стиль новой карты. nil — ресурса нет, он битый или в выпуске нет
     /// нужного набора: тогда вызывающий остаётся на прежнем стиле.
     static func json(daylight: Bool, base: URL, release: TileRelease,
-                     houses: Bool, bundle: Bundle = .main) -> String? {
+                     houses: Bool, places: Bool = true, bundle: Bundle = .main) -> String? {
         guard var style = template(daylight: daylight, base: base, bundle: bundle),
               var sources = style["sources"] as? [String: Any],
               var layers = style["layers"] as? [[String: Any]],
@@ -61,6 +61,12 @@ nonisolated enum EngineModernStyle {
                 let sourceLayer = layer["source-layer"] as? String
                 return sourceLayer == "building" || sourceLayer == "houses"
             }
+        }
+
+        // «Места» — общие POI (кафе, банки, магазины). Заправки и парковки
+        // остаются всегда: это то, что водитель ищет на карте.
+        if !places {
+            layers.removeAll { ($0["id"] as? String)?.hasPrefix("poi-level") == true }
         }
 
         // Маршрут — над дорогой и разметкой, под подписями основы.

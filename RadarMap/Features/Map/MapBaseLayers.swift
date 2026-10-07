@@ -93,6 +93,8 @@ struct EngineBaseLayer: View {
                         northUp: map.orientation == .following,
                         zoomCommand: map.zoomCommand,
                         zoomDelta: map.lastZoomDelta,
+                        places: env.settings.mapPlaces,
+                        overviewCommand: map.overviewCommand,
                         onHeading: { map.noteMapDirection($0) },
                         onBrowse: { map.releaseToFree() },
                         onSelectCamera: onSelectCamera)

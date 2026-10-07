@@ -76,6 +76,10 @@ struct EngineMapView: UIViewRepresentable {
     /// Кнопки «+ / −»: счётчик нажатий и шаг — для свободной карты.
     var zoomCommand: Int = 0
     var zoomDelta: Double = 0
+    /// Общие POI на новой карте (тумблер «Места»).
+    var places: Bool = true
+    /// «Весь маршрут»: счётчик нажатий — вписать линию маршрута в экран.
+    var overviewCommand: Int = 0
     /// Поворот карты (градусы от севера) — компасу экрана.
     var onHeading: (Double) -> Void = { _ in }
     var onBrowse: () -> Void = {}
@@ -156,6 +160,7 @@ struct EngineMapView: UIViewRepresentable {
         private var styleReady = false
         private var lastDaylight: Bool?
         private var lastHouses: Bool?
+        private var lastPlaces: Bool?
         private var themeLayers: [[String: Any]] = []
         private var lastCameras: [Camera]?
         private var lastLimits: [Int: Int] = [:]
@@ -192,6 +197,10 @@ struct EngineMapView: UIViewRepresentable {
         private var modernBroken = false
         private var lastFPS: Int?
         private var lastZoomCommand = 0
+        private var lastOverviewCommand = 0
+        /// Первое применение модели запоминает счётчики, но не исполняет их:
+        /// иначе повторный монтаж карты вписывал бы маршрут сам по старому нажатию.
+        private var commandsSeen = false
 
         // MapLibre invokes this for every native camera gesture, including tap zoom.
         func mapView(_ mapView: MLNMapView, shouldChangeFrom oldCamera: MLNMapCamera,
@@ -358,12 +367,14 @@ struct EngineMapView: UIViewRepresentable {
             routeGeneration += 1
             lastDaylight = model.daylight
             lastHouses = model.houses
+            lastPlaces = model.places
             lastModern = model.modernStyle
             os_signpost(.event, log: performanceLog, name: "Style replacement")
             if model.modernStyle, release == nil { release = TileReleaseStore.restoredFromDisk() }
             if model.modernStyle, !modernBroken, let release {
                 if let json = EngineModernStyle.json(daylight: model.daylight, base: AppConfig.syncBaseURL,
-                                                     release: release, houses: model.houses) {
+                                                     release: release, houses: model.houses,
+                                                     places: model.places) {
                     modernLoaded = true
                     view.styleJSON = json
                     themeLayers = []
@@ -507,6 +518,10 @@ struct EngineMapView: UIViewRepresentable {
                 lastCameraModel = nil
             }
 
+            if modernLoaded, lastPlaces != model.places {
+                loadStyle(model, in: view)
+                return
+            }
             if lastDaylight != model.daylight || lastHouses != model.houses {
                 // Новая карта меняет тему перезагрузкой: у основы сотня своих
                 // цветов, и перекрашивать её по слою незачем — день и ночь
@@ -555,6 +570,25 @@ struct EngineMapView: UIViewRepresentable {
                 view.preferredFramesPerSecond = fps > 0
                     ? MLNMapViewPreferredFramesPerSecond(rawValue: fps)
                     : .default
+            }
+            // «Весь маршрут»: вписать линию с отступами под панели сверху и
+            // снизу; дальше карта свободна до «моего местоположения».
+            if !commandsSeen {
+                commandsSeen = true
+                lastOverviewCommand = model.overviewCommand
+                lastZoomCommand = model.zoomCommand
+            }
+            if model.overviewCommand != lastOverviewCommand {
+                lastOverviewCommand = model.overviewCommand
+                if let bounds = Self.bounds(model.route) {
+                    browsing = true
+                    view.setCamera(MLNMapCamera(lookingAtCenter: view.centerCoordinate,
+                                                altitude: view.camera.altitude, pitch: 0,
+                                                heading: 0), animated: false)
+                    view.setVisibleCoordinateBounds(bounds, edgePadding: UIEdgeInsets(top: 150, left: 40,
+                                                                                      bottom: 240, right: 90),
+                                                    animated: true, completionHandler: nil)
+                }
             }
             // «+ / −» на свободной карте приближают сам вид; при слежении масштаб
             // уже учтён в охвате (spanMeters).
@@ -657,6 +691,19 @@ struct EngineMapView: UIViewRepresentable {
                 return point
             }
             (view.style?.source(withIdentifier: "cameras") as? MLNShapeSource)?.shape = MLNShapeCollectionFeature(shapes: points)
+        }
+
+        /// Рамка маршрута для «Весь маршрут»; nil — линии нет.
+        static func bounds(_ route: [CLLocationCoordinate2D]) -> MLNCoordinateBounds? {
+            guard route.count >= 2 else { return nil }
+            var sw = route[0], ne = route[0]
+            for point in route {
+                sw.latitude = min(sw.latitude, point.latitude)
+                sw.longitude = min(sw.longitude, point.longitude)
+                ne.latitude = max(ne.latitude, point.latitude)
+                ne.longitude = max(ne.longitude, point.longitude)
+            }
+            return MLNCoordinateBounds(sw: sw, ne: ne)
         }
 
         /// 0 — частота по умолчанию (движок сам выбирает, плавно для жестов).

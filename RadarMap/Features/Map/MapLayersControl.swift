@@ -69,10 +69,13 @@ struct MapLayersControl: View {
 
             Rectangle().fill(Theme.stroke).frame(height: 1).padding(.vertical, 4)
 
+            // Пробки — только у Apple (своего источника нет); «Места» — на
+            // любой подложке: на новой карте прячут кафе и банки, а заправки
+            // и парковки остаются всегда.
             if base == .apple {
                 toggle("Пробки", "car.2.fill", isOn: $traffic)
-                toggle("Места", "fuelpump.fill", isOn: $places)
             }
+            toggle("Места", "fuelpump.fill", isOn: $places)
 
             if showsBuildingLayers {
                 toggle("Новая карта (бета)", "sparkles", isOn: $modern)

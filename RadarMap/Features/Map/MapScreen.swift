@@ -769,6 +769,16 @@ struct MapScreen: View {
                                      inTrip: env.location.isTripActive)
             }
             MapCompassButton(map: map)
+            // «Весь маршрут» — пока он есть: в поездке посмотреть, сколько
+            // осталось и где развилки, не останавливая ведение надолго.
+            if env.route.isActive, let polyline = env.route.polyline {
+                CircleControl(systemName: "point.topleft.down.to.point.bottomright.curvepath",
+                              tint: Theme.textPrimary, size: 42,
+                              accessibilityLabel: "Весь маршрут") {
+                    map.showRouteOverview(rect: polyline.boundingMapRect)
+                }
+                .transition(.scale.combined(with: .opacity))
+            }
             if env.settings.mapZoomButtons && !mode.showsTripBar {
                 MapZoomButtons(map: map)
                     .transition(.scale.combined(with: .opacity))
@@ -1047,15 +1057,9 @@ struct MapScreen: View {
             // Охватываем ВСЕ варианты, чтобы выбор был виден сразу.
             var rect = MKMapRect.null
             for variant in env.route.variants { rect = rect.union(variant.polyline.boundingMapRect) }
-            if !rect.isNull {
-                // Показываем маршрут целиком — это уже не слежение за точкой.
-                map.releaseOrientation()
-                let padded = rect.insetBy(dx: -rect.width * 0.18, dy: -rect.height * 0.18)
-                withMotion(.easeInOut(duration: 0.5)) {
-                    map.position = .rect(padded)
-                }
-                map.updateVisible(for: MKCoordinateRegion(padded))
-            }
+            // Показываем маршрут целиком — это уже не слежение за точкой;
+            // общая команда видна и карте Apple, и движку.
+            map.showRouteOverview(rect: rect)
         }
     }
 

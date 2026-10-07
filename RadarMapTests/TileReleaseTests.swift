@@ -180,6 +180,23 @@ final class TileReleaseTests: XCTestCase {
         XCTAssertFalse(without.contains { $0["source-layer"] as? String == "building" })
     }
 
+    func testPlacesSwitchKeepsFuelAndParking() throws {
+        let release = try release()
+        func ids(places: Bool) throws -> [String] {
+            let json = try XCTUnwrap(EngineModernStyle.json(daylight: true, base: base, release: release,
+                                                            houses: true, places: places))
+            let style = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+            return (style["layers"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
+        }
+        let with = try ids(places: true), without = try ids(places: false)
+        XCTAssertTrue(with.contains { $0.hasPrefix("poi-level") })
+        XCTAssertFalse(without.contains { $0.hasPrefix("poi-level") }, "«Места» выключены — кафе и банков нет")
+        for driver in ["radar-poi-fuel", "radar-poi-parking"] {
+            XCTAssertTrue(with.contains(driver))
+            XCTAssertTrue(without.contains(driver), "\(driver) водителю нужен всегда")
+        }
+    }
+
     func testReleaseWithoutNeededSetFallsBack() throws {
         let partial = try JSONDecoder().decode(TileRelease.self, from: Data("""
         {"bucketZoom":10,"sets":{"mvt":{"buckets":{},"ext":"mvt","path":"mvt"}},"version":1}

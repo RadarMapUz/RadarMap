@@ -70,3 +70,28 @@ nonisolated struct SpeedSmoother {
         lastAt = nil
     }
 }
+
+/// Скорость, когда новых фиксов нет.
+///
+/// На стоянке фиксы не приходят: их не пускает distanceFilter. Спидометр
+/// держал последнюю пришедшую скорость — 13 км/ч с момента торможения — и
+/// стоящая машина «ехала» (поездка владельца 07.10.2026). Догадка «наверно,
+/// стоим» тут не нужна: раз фикса нет, машина сдвинулась меньше чем на
+/// distanceFilter, значит её скорость не больше distanceFilter / прошедшее
+/// время. Это верхняя граница, а не оценка, — цифра падает ровно настолько,
+/// насколько её опровергает молчание GPS, и не ниже.
+nonisolated enum SpeedBound {
+    /// Сколько секунд после фикса граница не применяется: обычный интервал
+    /// между фиксами на ходу.
+    static let graceSeconds: TimeInterval = 1.5
+    /// Ниже — показываем 0: «ползу 2 км/ч» на стоянке читается как сбой.
+    static let floorKmh: Double = 3
+
+    static func capped(_ kmh: Double, distanceFilter: Double,
+                       secondsSinceFix: TimeInterval) -> Double {
+        guard kmh > 0, secondsSinceFix > graceSeconds, distanceFilter > 0 else { return kmh }
+        let bound = distanceFilter / secondsSinceFix * 3.6
+        let value = min(kmh, bound)
+        return value < floorKmh ? 0 : value
+    }
+}

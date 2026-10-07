@@ -34,6 +34,10 @@ final class MotionService {
     private let settings: AppSettings
 
     private(set) var isDriving = false
+    /// Телефон стоит (CoreMotion уверен в «stationary»). Для сторожа сигнала:
+    /// стоим — значит фиксов нет из-за distanceFilter, а не из-за спутников.
+    /// Без слежения за движением (ручной старт) — всегда false: «не знаю».
+    @ObservationIgnored private(set) var isStationary = false
 
     /// Колбэки — вешает AppEnvironment/RootView (старт/стоп поездки).
     @ObservationIgnored var onDrivingStart: (() -> Void)? {
@@ -65,6 +69,7 @@ final class MotionService {
     func stop() {
         guard isMonitoring else { return }
         isMonitoring = false
+        isStationary = false
         stopTask?.cancel(); stopTask = nil
         startTask?.cancel(); startTask = nil
         manager.stopActivityUpdates()
@@ -82,6 +87,7 @@ final class MotionService {
     }
 
     private func handle(_ activity: CMMotionActivity) {
+        isStationary = activity.stationary && activity.confidence != .low
         let drivingNow = activity.automotive && activity.confidence != .low
 
         if drivingNow {

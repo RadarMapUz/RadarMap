@@ -83,4 +83,23 @@ final class SpeedSmootherTests: XCTestCase {
         smoother.reset()
         XCTAssertEqual(smoother.update(rawKmh: 62, at: t0.addingTimeInterval(1)), 62)
     }
+
+    // MARK: - Без фиксов (SpeedBound)
+
+    /// Стоим у светофора: последний фикс торможения — 13 км/ч, дальше фиксов
+    /// нет (distanceFilter 6 м). Через 3 с машина проехала меньше 6 м —
+    /// скорость не больше 7,2 км/ч; через 10 с — ноль, а не вечные 13.
+    func testSilenceBoundsTheSpeed() {
+        XCTAssertEqual(SpeedBound.capped(13, distanceFilter: 6, secondsSinceFix: 1), 13, "обычный интервал")
+        XCTAssertEqual(SpeedBound.capped(13, distanceFilter: 6, secondsSinceFix: 3), 7.2, accuracy: 0.01)
+        XCTAssertEqual(SpeedBound.capped(13, distanceFilter: 6, secondsSinceFix: 10), 0)
+    }
+
+    /// На ходу граница ничего не отнимает: 60 км/ч при фильтре 25 м — фикс
+    /// раз в 1,5 с, и за 2 с молчания граница 45 км/ч не опровергает быструю
+    /// трассу сильнее, чем позволяет физика.
+    func testBoundNeverRaisesSpeed() {
+        XCTAssertEqual(SpeedBound.capped(5, distanceFilter: 30, secondsSinceFix: 2), 5)
+        XCTAssertEqual(SpeedBound.capped(0, distanceFilter: 6, secondsSinceFix: 20), 0)
+    }
 }

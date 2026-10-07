@@ -150,6 +150,7 @@ final class AppEnvironment {
         self.location.speedLimits = speedLimits
         self.location.hotspots = hotspots
         self.location.watchBridge = watchBridge
+        self.location.motion = motion     // «стоим» — сигнал не потерян
         self.location.thermal = thermal   // буст GPS приборки — только пока холодно
 
         // Пульт раздаём тем, кого он имеет право глушить. Список намеренно

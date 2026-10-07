@@ -58,6 +58,8 @@ final class LocationService: NSObject {
     /// Перегрев: буст GPS для открытой приборки разрешён только пока телефон
     /// холодный — в жару экономия важнее плавности картинки.
     @ObservationIgnored weak var thermal: ThermalService?
+    /// CoreMotion: «телефон стоит» — сторож сигнала не объявляет потерю.
+    @ObservationIgnored weak var motion: MotionService?
 
     private(set) var authorizationStatus: CLAuthorizationStatus
     private(set) var currentCoordinate: CLLocationCoordinate2D?
@@ -911,6 +913,7 @@ final class LocationService: NSObject {
                                                               longitude: good.lon),
                            speed: good.speed ?? -1, course: good.course)
             armStaleWatchdog()
+            armSpeedDecay()
         }
     }
 
@@ -955,12 +958,44 @@ final class LocationService: NSObject {
             try? await Task.sleep(for: .seconds(window))
             guard !Task.isCancelled, let self, self.fixSequence == sequence,
                   self.isTripActive || self.isForeground else { return }
+            // Стоим (CoreMotion уверен) — фиксов нет из-за distanceFilter,
+            // а не из-за спутников: «нет сигнала» у светофора — ложь.
+            if self.motion?.isStationary == true {
+                Log.location.debug("фиксов нет, но телефон стоит — сигнал не потерян")
+                return
+            }
             self.isSignalStale = true
             Log.location.notice("нет фиксов \(window, format: .fixed(precision: 1), privacy: .public) с — сигнал потерян")
         }
     }
 
     @ObservationIgnored private var staleWatchdogTask: Task<Void, Never>?
+
+    /// Спидометр без фиксов: раз в секунду скорость ограничивается сверху
+    /// тем, что опровергает молчание GPS (SpeedBound), пока не станет нулём.
+    /// Цикл живёт, только пока цифра ненулевая и фиксов нет, — на ходу его
+    /// каждый фикс перезапускает, на стоянке он гаснет за несколько секунд.
+    private func armSpeedDecay() {
+        speedDecayTask?.cancel()
+        guard speedKmh > 0 else { return }
+        let fixAt = Date()
+        speedDecayTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, let self else { return }
+                let capped = SpeedBound.capped(self.speedKmh, distanceFilter: self.manager.distanceFilter,
+                                               secondsSinceFix: Date().timeIntervalSince(fixAt))
+                // Пишем только заметное изменение: speedKmh наблюдаемый.
+                if abs(capped - self.speedKmh) >= 0.5 { self.speedKmh = capped }
+                if self.speedKmh == 0 {
+                    self.speedSmoother.reset()
+                    return
+                }
+            }
+        }
+    }
+
+    @ObservationIgnored private var speedDecayTask: Task<Void, Never>?
 
     private func handleLocation(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed, course: CLLocationDirection) {
         // Главный горячий путь приложения: всё, что происходит на GPS-точке, —

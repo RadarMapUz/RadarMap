@@ -101,6 +101,7 @@ struct EngineBaseLayer: View {
                         zoomDelta: map.lastZoomDelta,
                         offline: offlineFiles,
                         places: env.settings.mapPlaces,
+                        driving: env.location.isTripActive,
                         labelLanguage: env.settings.appLanguage.mapCode,
                         overviewCommand: map.overviewCommand,
                         onHeading: { map.noteMapDirection($0) },

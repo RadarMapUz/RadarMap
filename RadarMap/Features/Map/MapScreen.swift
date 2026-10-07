@@ -624,7 +624,8 @@ struct MapScreen: View {
             // серая карта без сети, урезанная карта в жару, отсутствие лимитов.
             // Выше всего, потому что человек должен узнать причину раньше, чем
             // упрётся в неё сам и решит, что приложение сломалось.
-            MapStatusBanner(onOpenDashboard: { showDashboard = true })
+            MapStatusBanner(onOpenDashboard: { showDashboard = true },
+                            modernMap: shownBase == .engine && env.settings.mapModernStyle)
             // Доступ к геопозиции — сразу под объявлениями сервера, а не внизу
             // поверх карты: это причина, по которой приложение не предупреждает
             // в фоне, и место ей рядом с остальными «почему не в полную силу».

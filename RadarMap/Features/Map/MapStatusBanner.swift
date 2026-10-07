@@ -22,14 +22,18 @@ struct MapStatusBanner: View {
     /// целиком локально, и предложить её честнее, чем оставить человека
     /// смотреть на серый прямоугольник вместо карты.
     var onOpenDashboard: (() -> Void)?
+    /// На экране новая карта (движок со стилем OpenMapTiles): только она
+    /// умеет рисоваться из скачанной области, и только ей есть что предложить.
+    var modernMap: Bool = false
     /// Что уже закрыли руками. В памяти сцены, а не в Storage: состояния
     /// недолгие, а лишний ключ в настройках — навсегда.
     @State private var dismissed: Set<String> = []
     @State private var isRetrying = false
+    @State private var showOfflineMaps = false
 
     private enum Kind {
         case server(RemoteConfig.Message)
-        case offline
+        case offline(OfflineNotice)
         case overheated
         case noSpeedLimits
 
@@ -37,7 +41,12 @@ struct MapStatusBanner: View {
         var id: String {
             switch self {
             case .server(let message): return "server:\(message.title)"
-            case .offline:             return "offline"
+            case .offline(let notice):
+                switch notice {
+                case .general:          return "offline"
+                case .downloadedRegion: return "offline:region"
+                case .noMap:            return "offline:none"
+                }
             case .overheated:          return "overheated"
             case .noSpeedLimits:       return "limits"
             }
@@ -52,20 +61,43 @@ struct MapStatusBanner: View {
         // на плашку глазами надо — как и на скриншоты CarPlay (-hideCameraAlert).
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("-forceOverheated") { return .overheated }
-        if arguments.contains("-forceOffline") { return .offline }
+        if arguments.contains("-forceOffline") { return .offline(offlineNotice(online: false) ?? .general) }
         if arguments.contains("-forceNoLimits") { return .noSpeedLimits }
         #endif
         if let message = env.config.banner { return .server(message) }
-        if !env.network.isOnline { return .offline }
+        if let notice = offlineNotice(online: env.network.isOnline) { return .offline(notice) }
         if env.thermal.mode.explains { return .overheated }
         if !env.speedLimits.isReady { return .noSpeedLimits }
         return nil
     }
 
+    /// Какую плашку «нет связи» показать. Координата читается только без
+    /// связи: со связью плашка не должна перерисовываться на каждом GPS-тике.
+    private func offlineNotice(online: Bool) -> OfflineNotice? {
+        guard !online else { return nil }
+        let here = modernMap ? env.location.currentCoordinate : nil
+        let files = here.flatMap { env.offlineMaps.offlineFiles(at: $0) }
+        return OfflineNotice.resolve(online: online, modernMap: modernMap,
+                                     hasRegionFiles: files != nil)
+    }
+
     var body: some View {
-        if let status, !dismissed.contains(status.id) {
-            banner(for: status)
-                .transition(.move(edge: .top).combined(with: .opacity))
+        Group {
+            if let status, !dismissed.contains(status.id) {
+                banner(for: status)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .sheet(isPresented: $showOfflineMaps) {
+            NavigationStack {
+                OfflineMapsView()
+                    .settingsPage()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Готово") { showOfflineMaps = false }
+                        }
+                    }
+            }
         }
     }
 
@@ -75,7 +107,7 @@ struct MapStatusBanner: View {
         case .server(let message):
             shell(symbol: "exclamationmark.triangle.fill", tint: Theme.warning,
                   title: message.title, body: message.body, id: status.id)
-        case .offline:
+        case .offline(.general):
             shell(symbol: "wifi.slash", tint: Theme.textSecondary,
                   title: String(localized: "Карта не загружается — нет сети"),
                   body: String(localized: "Камеры предупреждают как обычно: база хранится на телефоне"),
@@ -83,6 +115,15 @@ struct MapStatusBanner: View {
                   action: onOpenDashboard.map { open in
                       (String(localized: "Открыть приборку"), open)
                   })
+        case .offline(.downloadedRegion):
+            shell(symbol: "wifi.slash", tint: Theme.textSecondary,
+                  title: String(localized: "Нет связи — карта из скачанной области"),
+                  body: nil, id: status.id)
+        case .offline(.noMap):
+            shell(symbol: "wifi.slash", tint: Theme.textSecondary,
+                  title: String(localized: "Нет связи — карта не грузится, камеры предупреждают"),
+                  body: nil, id: status.id,
+                  action: (String(localized: "Скачать область"), { showOfflineMaps = true }))
         case .overheated:
             shell(symbol: "thermometer.high", tint: Theme.warning,
                   title: String(localized: "Телефон перегрелся"),

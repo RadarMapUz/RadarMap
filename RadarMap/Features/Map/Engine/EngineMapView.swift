@@ -80,6 +80,9 @@ struct EngineMapView: UIViewRepresentable {
     var offline: OfflineFiles?
     /// Общие POI на новой карте (тумблер «Места»).
     var places: Bool = true
+    /// Режим «в поездке»: без общих POI, номеров домов и подписей дорожек,
+    /// дома приглушены (EngineModernStyle.drivingLayers).
+    var driving: Bool = false
     /// Язык подписей новой карты («ru» / «uz»). Меняется только с языком
     /// приложения, а тот применяется после перезапуска — перезагрузка стиля
     /// ради него не нужна.
@@ -167,6 +170,7 @@ struct EngineMapView: UIViewRepresentable {
         private var lastDaylight: Bool?
         private var lastHouses: Bool?
         private var lastPlaces: Bool?
+        private var lastDriving: Bool?
         private var lastOffline: OfflineFiles?
         private var themeLayers: [[String: Any]] = []
         private var lastCameras: [Camera]?
@@ -375,6 +379,7 @@ struct EngineMapView: UIViewRepresentable {
             lastDaylight = model.daylight
             lastHouses = model.houses
             lastPlaces = model.places
+            lastDriving = model.driving
             lastOffline = model.offline
             lastModern = model.modernStyle
             os_signpost(.event, log: performanceLog, name: "Style replacement")
@@ -382,7 +387,8 @@ struct EngineMapView: UIViewRepresentable {
             if model.modernStyle, !modernBroken, let release {
                 if let json = EngineModernStyle.json(daylight: model.daylight, base: AppConfig.syncBaseURL,
                                                      release: release, houses: model.houses,
-                                                     places: model.places, offline: model.offline,
+                                                     places: model.places, driving: model.driving,
+                                                     offline: model.offline,
                                                      labelLanguage: model.labelLanguage) {
                     modernLoaded = true
                     view.styleJSON = json
@@ -527,7 +533,8 @@ struct EngineMapView: UIViewRepresentable {
                 lastCameraModel = nil
             }
 
-            if modernLoaded, lastPlaces != model.places || lastOffline != model.offline {
+            if modernLoaded, lastPlaces != model.places || lastDriving != model.driving
+                || lastOffline != model.offline {
                 loadStyle(model, in: view)
                 return
             }

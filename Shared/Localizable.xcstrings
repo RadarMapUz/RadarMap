@@ -14429,6 +14429,54 @@
           }
         }
       }
+    },
+    "Нет связи — карта из скачанной области": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет связи — карта из скачанной области"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aloqa yo‘q — xarita yuklab olingan viloyatdan"
+          }
+        }
+      }
+    },
+    "Нет связи — карта не грузится, камеры предупреждают": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет связи — карта не грузится, камеры предупреждают"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aloqa yo‘q — xarita yuklanmayapti, kameralar ogohlantiradi"
+          }
+        }
+      }
+    },
+    "Скачать область": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать область"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viloyatni yuklab olish"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

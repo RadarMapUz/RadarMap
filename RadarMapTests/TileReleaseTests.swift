@@ -210,6 +210,45 @@ final class TileReleaseTests: XCTestCase {
         }
     }
 
+    func testDrivingDropsClutterKeepsWhatDriverNeeds() throws {
+        let release = try release()
+        func layers(driving: Bool) throws -> [[String: Any]] {
+            let json = try XCTUnwrap(EngineModernStyle.json(daylight: true, base: base, release: release,
+                                                            houses: true, driving: driving))
+            let style = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+            return style["layers"] as? [[String: Any]] ?? []
+        }
+        let parked = try layers(driving: false), driving = try layers(driving: true)
+        let parkedIDs = parked.compactMap { $0["id"] as? String }
+        let drivingIDs = driving.compactMap { $0["id"] as? String }
+
+        XCTAssertTrue(parkedIDs.contains { $0.hasPrefix("poi-level") })
+        XCTAssertTrue(parkedIDs.contains("housenumber"))
+        XCTAssertFalse(drivingIDs.contains { $0.hasPrefix("poi-level") }, "в поездке кафе и банков нет")
+        for clutter in ["housenumber", "highway-name-path"] {
+            XCTAssertFalse(drivingIDs.contains(clutter), "\(clutter) за рулём не читают")
+        }
+        for needed in ["radar-poi-fuel", "radar-poi-parking", "camera-icons", "route"] {
+            XCTAssertTrue(drivingIDs.contains(needed), "\(needed) водителю нужен и в поездке")
+        }
+
+        func opacity(_ layers: [[String: Any]]) -> Double? {
+            let building = layers.first { $0["id"] as? String == "building-3d" }
+            return (building?["paint"] as? [String: Any])?["fill-extrusion-opacity"] as? Double
+        }
+        XCTAssertEqual(opacity(driving), AppConfig.engineDrivingBuildingOpacity, "дома в поездке приглушены")
+        XCTAssertNotEqual(opacity(parked), AppConfig.engineDrivingBuildingOpacity)
+    }
+
+    func testDrivingFilterIsPure() {
+        XCTAssertTrue(EngineModernStyle.hiddenWhileDriving("poi-level-1"))
+        XCTAssertTrue(EngineModernStyle.hiddenWhileDriving("housenumber"))
+        XCTAssertTrue(EngineModernStyle.hiddenWhileDriving("highway-name-path"))
+        for kept in ["radar-poi-fuel", "radar-poi-parking", "highway-name-major", "camera-icons", "route"] {
+            XCTAssertFalse(EngineModernStyle.hiddenWhileDriving(kept), kept)
+        }
+    }
+
     func testReleaseWithoutNeededSetFallsBack() throws {
         let partial = try JSONDecoder().decode(TileRelease.self, from: Data("""
         {"bucketZoom":10,"sets":{"mvt":{"buckets":{},"ext":"mvt","path":"mvt"}},"version":1}

@@ -983,4 +983,10 @@ nonisolated enum AppConfig {
     static let tileReleaseRequestTimeout: TimeInterval = 15
     /// Корзин в памяти: одна — 6–40 КБ, город с окрестностью — десяток.
     static let tileReleaseBucketsInMemory = 48
+
+    // MARK: - Новая карта: режим «в поездке»
+
+    /// Непрозрачность объёмных домов в поездке: дома остаются ориентиром,
+    /// но не спорят с дорогой и маршрутом за взгляд.
+    static let engineDrivingBuildingOpacity = 0.75
 }

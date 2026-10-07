@@ -32,7 +32,8 @@ nonisolated enum EngineModernStyle {
     /// Стиль новой карты. nil — ресурса нет, он битый или в выпуске нет
     /// нужного набора: тогда вызывающий остаётся на прежнем стиле.
     static func json(daylight: Bool, base: URL, release: TileRelease,
-                     houses: Bool, places: Bool = true, offline: OfflineFiles? = nil,
+                     houses: Bool, places: Bool = true, driving: Bool = false,
+                     offline: OfflineFiles? = nil,
                      labelLanguage: String = "ru", bundle: Bundle = .main) -> String? {
         guard var style = template(daylight: daylight, base: base, language: labelLanguage, bundle: bundle),
               var sources = style["sources"] as? [String: Any],
@@ -81,6 +82,9 @@ nonisolated enum EngineModernStyle {
             layers.removeAll { ($0["id"] as? String)?.hasPrefix("poi-level") == true }
         }
 
+        // В поездке — как у навигаторов: на ходу читают дорогу, а не вывески.
+        if driving { layers = drivingLayers(layers) }
+
         // Маршрут — над дорогой и разметкой, под подписями основы.
         let labels = layers.firstIndex {
             $0["type"] as? String == "symbol" && $0["source"] as? String == "openmaptiles"
@@ -98,6 +102,29 @@ nonisolated enum EngineModernStyle {
         guard let data = try? JSONSerialization.data(withJSONObject: style),
               let text = String(data: data, encoding: .utf8) else { return nil }
         return text
+    }
+
+    // MARK: - Режим «в поездке»
+
+    /// Слой, которого в поездке нет: общие POI (кафе, банки, магазины),
+    /// номера домов и подписи пешеходных дорожек. Заправки, парковки, подписи
+    /// улиц, камеры и маршрут — остаются: это то, что нужно за рулём.
+    static func hiddenWhileDriving(_ id: String) -> Bool {
+        id.hasPrefix("poi-level") || id == "housenumber" || id == "highway-name-path"
+    }
+
+    /// Слои стиля для поездки: лишнее убрано, объёмные дома приглушены.
+    static func drivingLayers(_ layers: [[String: Any]]) -> [[String: Any]] {
+        layers.compactMap { layer in
+            guard let id = layer["id"] as? String else { return layer }
+            if hiddenWhileDriving(id) { return nil }
+            guard id == "building-3d" else { return layer }
+            var dimmed = layer
+            var paint = dimmed["paint"] as? [String: Any] ?? [:]
+            paint["fill-extrusion-opacity"] = AppConfig.engineDrivingBuildingOpacity
+            dimmed["paint"] = paint
+            return dimmed
+        }
     }
 
     /// Шаблон из бандла с подставленным адресом сервера и языком подписей.

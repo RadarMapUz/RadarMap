@@ -150,6 +150,7 @@ struct EngineMapView: UIViewRepresentable {
     static func dismantleUIView(_ view: MLNMapView, coordinator: Coordinator) {
         coordinator.routeTask?.cancel()
         coordinator.routeGeneration += 1
+        coordinator.stopPositionGlide()
         view.delegate = nil
         (view as? EngineNativeMapView)?.onLayout = nil
     }
@@ -183,6 +184,15 @@ struct EngineMapView: UIViewRepresentable {
         fileprivate var routeGeneration = 0
         private var lastPosition: CLLocationCoordinate2D?
         private var positionHeading = 0.0
+        /// Плавный ход стрелки между фиксами — синхронно с камерой. Камера
+        /// ехала к новой точке за интервал между фиксами, а стрелка прыгала
+        /// туда сразу: она убегала вперёд, камера её догоняла, и стрелка
+        /// дёргалась по экрану (поездка 07.10.2026).
+        private var glideLink: CADisplayLink?
+        private var glideFrom: CLLocationCoordinate2D?
+        private var glideTo: CLLocationCoordinate2D?
+        private var glideStart: CFTimeInterval = 0
+        private var glideDuration: CFTimeInterval = 0
         private var cameraRegion: MKCoordinateRegion?
         private var cachedCameras: [Camera] = []
         private var cachedLimits: [Int: Int] = [:]
@@ -619,6 +629,7 @@ struct EngineMapView: UIViewRepresentable {
                 let interval = lastFollowTime.map { min(AppConfig.engineCameraDuration, max(0, now - $0)) }
                     ?? AppConfig.engineCameraDuration
                 lastFollowTime = now
+                lastFollowInterval = cameraPlaced ? interval : 0
                 os_signpost(.event, log: performanceLog, name: "Follow camera")
                 view.setCamera(camera, withDuration: cameraPlaced && !UIAccessibility.isReduceMotionEnabled ? interval : 0,
                            animationTimingFunction: CAMediaTimingFunction(name: .linear))
@@ -631,13 +642,20 @@ struct EngineMapView: UIViewRepresentable {
             let rotation = EngineMapPresentation.heading(model.courseDegrees, near: positionHeading)
             if lastPosition?.latitude != model.coordinate.latitude
                 || lastPosition?.longitude != model.coordinate.longitude || rotation != positionHeading {
-                let feature = MLNPointFeature()
-                feature.coordinate = model.coordinate
-                feature.attributes = ["rotation": rotation]
-                (view.style?.source(withIdentifier: "position") as? MLNShapeSource)?.shape = feature
-                lastPosition = model.coordinate
                 positionHeading = rotation
+                // Ход — ровно та длительность, с которой в ЭТОМ обновлении
+                // поехала камера; камера не двигалась — ставим сразу.
+                let glide = lastFollowInterval ?? 0
+                if !browsing, glide > 0, let from = displayedPosition ?? lastPosition,
+                   !UIAccessibility.isReduceMotionEnabled {
+                    startPositionGlide(from: from, to: model.coordinate, duration: glide, in: view)
+                } else {
+                    stopPositionGlide()
+                    setPosition(model.coordinate, in: view)
+                }
+                lastPosition = model.coordinate
             }
+            lastFollowInterval = nil
             updateCameras(model, in: view)
             let newRoute = !routeInitialized || lastRouteObject !== model.routeObject
             if newRoute || lastManeuverAlong != model.maneuverAlong
@@ -720,6 +738,54 @@ struct EngineMapView: UIViewRepresentable {
                 ne.longitude = max(ne.longitude, point.longitude)
             }
             return MLNCoordinateBounds(sw: sw, ne: ne)
+        }
+
+        // MARK: - Стрелка
+
+        private var lastFollowInterval: CFTimeInterval?
+        /// Где стрелка нарисована сейчас (середина хода), а не куда едет.
+        private var displayedPosition: CLLocationCoordinate2D?
+
+        private func setPosition(_ coordinate: CLLocationCoordinate2D, in view: MLNMapView) {
+            let feature = MLNPointFeature()
+            feature.coordinate = coordinate
+            feature.attributes = ["rotation": positionHeading]
+            (view.style?.source(withIdentifier: "position") as? MLNShapeSource)?.shape = feature
+            displayedPosition = coordinate
+        }
+
+        private func startPositionGlide(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
+                                        duration: CFTimeInterval, in view: MLNMapView) {
+            glideFrom = from
+            glideTo = to
+            glideStart = CACurrentMediaTime()
+            glideDuration = duration
+            if glideLink == nil {
+                let link = CADisplayLink(target: self, selector: #selector(stepPositionGlide))
+                // Та же частота, что у карты: ход стрелки не должен будить
+                // экран чаще, чем рисует сам движок (нагрев, батарея).
+                let fps = max(15, (lastFPS ?? 0) > 0 ? (lastFPS ?? 0) : AppConfig.engineFollowFPS)
+                link.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: Float(fps),
+                                                                preferred: Float(fps))
+                link.add(to: .main, forMode: .common)
+                glideLink = link
+            }
+        }
+
+        @objc private func stepPositionGlide() {
+            guard let view, let from = glideFrom, let to = glideTo else { return stopPositionGlide() }
+            let t = glideDuration > 0 ? min(1, (CACurrentMediaTime() - glideStart) / glideDuration) : 1
+            setPosition(CLLocationCoordinate2D(latitude: from.latitude + (to.latitude - from.latitude) * t,
+                                               longitude: from.longitude + (to.longitude - from.longitude) * t),
+                        in: view)
+            if t >= 1 { stopPositionGlide() }
+        }
+
+        func stopPositionGlide() {
+            glideLink?.invalidate()
+            glideLink = nil
+            glideFrom = nil
+            glideTo = nil
         }
 
         /// 0 — частота по умолчанию (движок сам выбирает, плавно для жестов).

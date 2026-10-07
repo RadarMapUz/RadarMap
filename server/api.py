@@ -43,6 +43,7 @@ import math
 import os
 import re
 import sqlite3
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -154,6 +155,13 @@ UZ_LON = (55.0, 74.0)
 # обходятся новым UUID на каждый запрос). Честные объёмы в разы ниже.
 MAX_ACTIVE_REPORTS = 500     # активных отметок всего (и потолок O(N)-скана дедупликации)
 MAX_METRICS_ROWS = 5000      # строк метрик в БД (по ~200 КБ — потолок диска)
+# Суточная метрика — десятки КБ. Диагностика (падение, зависание, CPU) несёт
+# дерево стеков и бывает за 200 КБ: при прежнем общем пороге её отбивало 400,
+# и за 30 дней на сервере не оказалось НИ ОДНОЙ — то есть вылеты и зависания
+# у людей были невидимы. Диагностик единицы в сутки, суточный кап 20 на
+# устройство и потолок строк остаются — диск это переживёт.
+METRIC_MAX_BYTES = 200_000
+DIAGNOSTIC_MAX_BYTES = 2_000_000
 MAX_DAILY_ROWS = 2000        # camera_reports/feedback суммарно в сутки
 MAX_VOTES_PER_DAY = 30       # голосов с устройства в сутки
 MAX_ID = 2**31               # верхняя граница id: больше — не наш id, а OverflowError в SQLite
@@ -694,13 +702,16 @@ class Handler(BaseHTTPRequestHandler):
     def _metrics(self):
         try:
             length = int(self.headers.get("Content-Length", 0))
-            if length <= 0 or length > 262144:
+            if length <= 0 or length > DIAGNOSTIC_MAX_BYTES + 65536:
+                sys.stderr.write(f"metrics: отказ по длине тела {length}\n")
                 return self._json(400, {"error": "bad length"})
             data = json.loads(self.rfile.read(length))
             device = as_str(data["device"])[:64]
             kind = as_str(data["kind"])[:16]
             payload = json.dumps(data["payload"])
-            if len(payload) > 200000:  # срез сделал бы JSON невалидным — отказываем целиком
+            limit = DIAGNOSTIC_MAX_BYTES if kind == "diagnostic" else METRIC_MAX_BYTES
+            if len(payload) > limit:  # срез сделал бы JSON невалидным — отказываем целиком
+                sys.stderr.write(f"metrics: {kind} {len(payload)} байт > {limit} — отказ\n")
                 return self._json(400, {"error": "payload too big"})
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             return self._json(400, {"error": "bad json"})

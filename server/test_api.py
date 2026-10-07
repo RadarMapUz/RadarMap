@@ -730,6 +730,17 @@ class APITest(unittest.TestCase):
                           {"device": "d", "kind": "metric", "payload": "x" * 250000})
         self.assertEqual(status, 400, "раньше payload молча резался в битый JSON")
 
+    def test_metrics_accepts_large_diagnostic(self):
+        # Диагностика с деревом стеков бывает за 200 КБ — раньше её отбивало 400.
+        status, _ = _call(self.port, "POST", "/api/metrics",
+                          {"device": "d", "kind": "diagnostic", "payload": "x" * 600000})
+        self.assertEqual(status, 200)
+
+    def test_metrics_diagnostic_still_has_a_ceiling(self):
+        status, _ = _call(self.port, "POST", "/api/metrics",
+                          {"device": "d", "kind": "diagnostic", "payload": "x" * 2010000})
+        self.assertEqual(status, 400)
+
     # --- обезличенная статистика ---
 
     def test_stat_roundtrip(self):

@@ -3,7 +3,7 @@
 MapLibre отвергает стиль ЦЕЛИКОМ из-за одного свойства не того типа слоя —
 экран пуст. Ровно так упал первый прототип: «line-color» у подписи реки.
 """
-import os, sys, unittest
+import json, os, sys, unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import make_style
 
@@ -118,14 +118,65 @@ class StyleTests(unittest.TestCase):
         self.assertNotIn("line-dasharray", layers["radar-centre-solid"]["paint"])
 
     def test_minor_streets_are_asphalt_not_footpaths(self):
-        # Двор цветом дорожки читался тропинкой; улица — асфальт, светлее магистрали.
+        # Вблизи двор — асфальт, как у Яндекса (снимок Навои × Фурката,
+        # 07.10.2026); белая — дорожка. Белой улица бывает только на обзоре.
         def lightness(colour):
             colour = colour.lstrip("#")
             return sum(int(colour[i:i + 2], 16) for i in (0, 2, 4)) / 3
-        for theme in make_style.PALETTES.values():
+        light, dark = make_style.PALETTES["light"], make_style.PALETTES["dark"]
+        for theme in (light, dark):
             self.assertNotEqual(theme["minor"], theme["path"])
-            low, high = sorted((lightness(theme["road"]), lightness(theme["bg"])))
-            self.assertTrue(low < lightness(theme["minor"]) < high or theme is make_style.PALETTES["dark"])
+        low, high = sorted((lightness(light["road"]), lightness(light["bg"])))
+        self.assertTrue(low < lightness(light["minor"]) < high)
+
+    def test_street_names_abbreviated_like_yandex(self):
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        field = json.dumps(layers["highway-name-major"]["layout"]["text-field"], ensure_ascii=False)
+        self.assertIn('"ул."', field)
+        self.assertIn('" улица"', field, "тип в конце имени — «Фуркат улица»")
+        # Длины — только движком: на телефоне строка меряется в байтах UTF-8.
+        self.assertIn('"index-of"', field)
+        self.assertNotIn('"slice", ["var", "n"], ["-"', field)
+        self.assertEqual(layers["highway-name-major"]["layout"]["text-transform"], "uppercase")
+
+    def test_poi_labels_coloured_by_kind(self):
+        layers = {layer["id"]: layer for layer in self.style["layers"] if layer["id"].startswith("poi-level")}
+        for layer in layers.values():
+            self.assertEqual(layer["paint"]["text-color"][0], "match", layer["id"])
+
+    def test_roads_are_lighter_than_blocks_at_night(self):
+        # Ночью двор был темнее домов и пропадал (07.10.2026).
+        def lightness(colour):
+            colour = colour.lstrip("#")
+            return sum(int(colour[i:i + 2], 16) for i in (0, 2, 4)) / 3
+        dark = make_style.PALETTES["dark"]
+        for key in ("minor", "road", "road_tertiary"):
+            self.assertGreater(lightness(dark[key]), lightness(dark["building"]), key)
+
+    def test_overview_roads_ranked_by_colour(self):
+        # Обзор: магистраль насыщеннее улицы, а не одна жёлтая сетка.
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        colour = layers["highway-primary"]["paint"]["line-color"]
+        self.assertEqual(colour[0], "interpolate")
+        self.assertEqual(colour[4][0], "match", "цвет на обзоре зависит от класса")
+
+    def test_labels_in_one_language(self):
+        # Ни одной двуязычной подписи и ни одной автотранслитерации.
+        for layer in self.style["layers"]:
+            field = json.dumps(layer.get("layout", {}).get("text-field", ""), ensure_ascii=False)
+            self.assertNotIn("name:latin", field, layer["id"])
+            self.assertNotIn("name:nonlatin", field, layer["id"])
+
+    def test_oneway_arrows_only_on_streets(self):
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        arrows = layers["radar-oneway"]
+        self.assertIn([">=", ["get", "cls"], 5], arrows["filter"], "на проспектах-дублёрах стрелки — шум")
+        self.assertEqual(arrows["layout"]["symbol-placement"], "line")
+
+    def test_lane_markings_wait_for_close_zoom(self):
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        for layer_id in ("radar-markings", "radar-markings-solid"):
+            self.assertGreaterEqual(layers[layer_id]["minzoom"], make_style.LANE_MARKINGS_FROM)
 
     def test_base_roads_stay_under_ours_as_fallback(self):
         # Нет нашего тайла (офлайн, район вне сборки) — дорога не исчезает.

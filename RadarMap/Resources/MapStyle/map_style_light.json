@@ -825,7 +825,7 @@
       "zoom"
      ],
      13,
-     "#e6e6e3",
+     "#dcd9d2",
      15,
      "#b4bbc6"
     ],
@@ -947,7 +947,22 @@
     "mapbox:group": "1444849354174.1904"
    },
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-dasharray": [
      0.5,
      0.25
@@ -1057,7 +1072,7 @@
       "zoom"
      ],
      13,
-     "#e6e6e3",
+     "#dcd9d2",
      15,
      "#b4bbc6"
     ],
@@ -1181,7 +1196,22 @@
     "mapbox:group": "1444849354174.1904"
    },
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-dasharray": [
      0.5,
      0.25
@@ -1288,7 +1318,22 @@
     "mapbox:group": "1444849354174.1904"
    },
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-dasharray": [
      0.5,
      0.25
@@ -1395,7 +1440,22 @@
     "mapbox:group": "1444849354174.1904"
    },
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-opacity": 1,
     "line-width": [
      "interpolate",
@@ -1498,7 +1558,22 @@
     "mapbox:group": "1444849354174.1904"
    },
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-dasharray": [
      0.5,
      0.25
@@ -1613,7 +1688,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -1741,7 +1848,19 @@
     "mapbox:group": "1444849354174.1904"
    },
    "paint": {
-    "line-color": "#d5dae2",
+    "line-color": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     14.5,
+     "#ffffff",
+     15.5,
+     "#d5dae2"
+    ],
     "line-opacity": [
      "interpolate",
      [
@@ -1894,7 +2013,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -2021,7 +2172,19 @@
     "mapbox:group": "1444849354174.1904"
    },
    "paint": {
-    "line-color": "#d5dae2",
+    "line-color": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     14.5,
+     "#ffffff",
+     15.5,
+     "#d5dae2"
+    ],
     "line-opacity": [
      "interpolate",
      [
@@ -2172,7 +2335,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -2314,7 +2509,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -2456,7 +2683,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -3174,7 +3433,22 @@
    },
    "minzoom": 11,
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-opacity": 1,
     "line-width": [
      "interpolate",
@@ -3282,7 +3556,22 @@
    },
    "minzoom": 13,
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-opacity": 1,
     "line-width": [
      "interpolate",
@@ -3395,7 +3684,7 @@
       "zoom"
      ],
      13,
-     "#e6e6e3",
+     "#dcd9d2",
      15,
      "#b4bbc6"
     ],
@@ -3515,7 +3804,22 @@
     "mapbox:group": "1444849345966.4436"
    },
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-opacity": 1,
     "line-width": [
      "interpolate",
@@ -3620,7 +3924,22 @@
    },
    "minzoom": 5,
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-opacity": 1,
     "line-width": [
      "interpolate",
@@ -3725,7 +4044,22 @@
    },
    "minzoom": 5,
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-opacity": 1,
     "line-width": [
      "interpolate",
@@ -3830,7 +4164,22 @@
    },
    "minzoom": 4,
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-opacity": 1,
     "line-width": [
      "interpolate",
@@ -4156,7 +4505,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -4303,7 +4684,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -4437,7 +4850,19 @@
     "mapbox:group": "1444849345966.4436"
    },
    "paint": {
-    "line-color": "#d5dae2",
+    "line-color": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     14.5,
+     "#ffffff",
+     15.5,
+     "#d5dae2"
+    ],
     "line-opacity": [
      "interpolate",
      [
@@ -4590,7 +5015,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -4738,7 +5195,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -4886,7 +5375,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -5035,7 +5556,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -5471,7 +6024,22 @@
     "mapbox:group": "1444849334699.1902"
    },
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-opacity": 1,
     "line-width": [
      "interpolate",
@@ -5576,7 +6144,22 @@
     "mapbox:group": "1444849334699.1902"
    },
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-opacity": 1,
     "line-width": [
      "interpolate",
@@ -5679,7 +6262,22 @@
     "mapbox:group": "1444849334699.1902"
    },
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-opacity": 1,
     "line-width": [
      "interpolate",
@@ -5782,7 +6380,22 @@
     "mapbox:group": "1444849334699.1902"
    },
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-opacity": 1,
     "line-width": [
      "interpolate",
@@ -5884,7 +6497,22 @@
     "mapbox:group": "1444849334699.1902"
    },
    "paint": {
-    "line-color": "#ecc44a",
+    "line-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#e0952a",
+     "trunk",
+     "#dca53a",
+     "primary",
+     "#e2bd5a",
+     "secondary",
+     "#e0cf96",
+     "#d3cfc6"
+    ],
     "line-opacity": 1,
     "line-width": [
      "interpolate",
@@ -5997,7 +6625,7 @@
       "zoom"
      ],
      13,
-     "#e6e6e3",
+     "#dcd9d2",
      15,
      "#b4bbc6"
     ],
@@ -6122,7 +6750,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -6266,7 +6926,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -6400,7 +7092,19 @@
     "mapbox:group": "1444849345966.4436"
    },
    "paint": {
-    "line-color": "#d5dae2",
+    "line-color": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     14.5,
+     "#ffffff",
+     15.5,
+     "#d5dae2"
+    ],
     "line-opacity": [
      "interpolate",
      [
@@ -6551,7 +7255,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -6693,7 +7429,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -6834,7 +7602,39 @@
       "zoom"
      ],
      13,
-     "#fff3c4",
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
+     14.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      "motorway",
+      "#ffb84d",
+      "trunk",
+      "#ffcb5c",
+      "primary",
+      "#ffe08a",
+      "secondary",
+      "#fff1bd",
+      "#ffffff"
+     ],
      15.5,
      "#b4bccb"
     ],
@@ -7841,7 +8641,7 @@
    "minzoom": 15.5,
    "paint": {
     "fill-antialias": true,
-    "fill-color": "#bfc6d1",
+    "fill-color": "#e3e6eb",
     "fill-opacity": [
      "interpolate",
      [
@@ -7875,7 +8675,7 @@
    },
    "minzoom": 16,
    "paint": {
-    "line-color": "#e6c75a",
+    "line-color": "#d0d5dd",
     "line-width": [
      "interpolate",
      [
@@ -7907,7 +8707,7 @@
    "layout": {
     "line-cap": "butt"
    },
-   "minzoom": 17,
+   "minzoom": 17.5,
    "paint": {
     "line-color": "#ffffff",
     "line-opacity": [
@@ -7918,9 +8718,9 @@
      [
       "zoom"
      ],
-     17,
+     17.5,
      0,
-     17.6,
+     18,
      0.85
     ],
     "line-width": [
@@ -8141,8 +8941,8 @@
       1.0
      ]
     ],
-    "line-opacity": 0.9,
-    "line-width": 1.4
+    "line-opacity": 0.45,
+    "line-width": 1.0
    },
    "source": "radar",
    "source-layer": "roads",
@@ -8172,7 +8972,7 @@
    "minzoom": 15,
    "paint": {
     "line-color": "#c9ced8",
-    "line-opacity": 0.65,
+    "line-opacity": 0.3,
     "line-width": [
      "interpolate",
      [
@@ -9285,9 +10085,22 @@
    "layout": {
     "line-cap": "butt"
    },
-   "minzoom": 16,
+   "minzoom": 17,
    "paint": {
     "line-color": "#ffffff",
+    "line-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     17.4,
+     1
+    ],
     "line-width": [
      "interpolate",
      [
@@ -9336,12 +10149,25 @@
    "layout": {
     "line-cap": "butt"
    },
-   "minzoom": 16,
+   "minzoom": 17,
    "paint": {
     "line-color": "#ffffff",
     "line-dasharray": [
      3,
      7
+    ],
+    "line-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     17.4,
+     1
     ],
     "line-width": [
      "interpolate",
@@ -9385,7 +10211,7 @@
    "layout": {
     "line-cap": "butt"
    },
-   "minzoom": 16,
+   "minzoom": 16.3,
    "paint": {
     "line-color": "#ffffff",
     "line-dasharray": [
@@ -10005,9 +10831,22 @@
    "layout": {
     "line-cap": "butt"
    },
-   "minzoom": 16,
+   "minzoom": 17,
    "paint": {
     "line-color": "#ffffff",
+    "line-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     17.4,
+     1
+    ],
     "line-width": [
      "interpolate",
      [
@@ -10053,12 +10892,25 @@
    "layout": {
     "line-cap": "butt"
    },
-   "minzoom": 16,
+   "minzoom": 17,
    "paint": {
     "line-color": "#ffffff",
     "line-dasharray": [
      3,
      7
+    ],
+    "line-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     0,
+     17.4,
+     1
     ],
     "line-width": [
      "interpolate",
@@ -10099,7 +10951,7 @@
    "layout": {
     "line-cap": "butt"
    },
-   "minzoom": 16,
+   "minzoom": 16.3,
    "paint": {
     "line-color": "#ffffff",
     "line-dasharray": [
@@ -10166,6 +11018,73 @@
    "source": "radar",
    "source-layer": "markings",
    "type": "line"
+  },
+  {
+   "filter": [
+    "all",
+    [
+     "has",
+     "oneway"
+    ],
+    [
+     ">=",
+     [
+      "get",
+      "cls"
+     ],
+     5
+    ],
+    [
+     "!",
+     [
+      "has",
+      "tunnel"
+     ]
+    ]
+   ],
+   "id": "radar-oneway",
+   "layout": {
+    "icon-ignore-placement": true,
+    "icon-image": "oneway",
+    "icon-padding": 2,
+    "icon-pitch-alignment": "map",
+    "icon-rotate": 90,
+    "icon-rotation-alignment": "map",
+    "icon-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0.55,
+     19,
+     1.0
+    ],
+    "symbol-placement": "line",
+    "symbol-spacing": 110
+   },
+   "minzoom": 16,
+   "paint": {
+    "icon-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0,
+     16.4,
+     0.55
+    ]
+   },
+   "source": "radar",
+   "source-layer": "roads",
+   "type": "symbol"
   },
   {
    "filter": [
@@ -11105,7 +12024,18 @@
    "layout": {
     "symbol-placement": "line",
     "symbol-spacing": 350,
-    "text-field": "{name:latin} {name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Italic"
     ],
@@ -11134,7 +12064,18 @@
    "layout": {
     "symbol-placement": "line",
     "symbol-spacing": 350,
-    "text-field": "{name:latin}\n{name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Italic"
     ],
@@ -11170,7 +12111,18 @@
    "layout": {
     "symbol-placement": "point",
     "symbol-spacing": 350,
-    "text-field": "{name:latin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Italic"
     ],
@@ -11206,7 +12158,18 @@
    "layout": {
     "symbol-placement": "point",
     "symbol-spacing": 350,
-    "text-field": "{name:latin}\n{name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Italic"
     ],
@@ -11234,6 +12197,42 @@
    },
    "source": "openmaptiles",
    "source-layer": "water_name",
+   "type": "symbol"
+  },
+  {
+   "id": "housenumber",
+   "layout": {
+    "text-field": [
+     "get",
+     "housenumber"
+    ],
+    "text-font": [
+     "Noto Sans Regular"
+    ],
+    "text-max-width": 4,
+    "text-padding": 3,
+    "text-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     17,
+     10,
+     19,
+     12
+    ]
+   },
+   "minzoom": 17,
+   "paint": {
+    "text-color": "#8a817b",
+    "text-halo-color": "#e6dcd7",
+    "text-halo-width": 1
+   },
+   "source": "openmaptiles",
+   "source-layer": "housenumber",
    "type": "symbol"
   },
   {
@@ -11275,7 +12274,18 @@
    "layout": {
     "icon-image": "{class}_11",
     "text-anchor": "top",
-    "text-field": "{name:latin}\n{name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Regular"
     ],
@@ -11290,10 +12300,82 @@
    },
    "minzoom": 16,
    "paint": {
-    "text-color": "#666",
+    "text-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "restaurant",
+      "fast_food",
+      "cafe",
+      "bar",
+      "beer",
+      "ice_cream",
+      "bakery"
+     ],
+     "#d9690a",
+     [
+      "shop",
+      "grocery",
+      "clothing_store",
+      "supermarket",
+      "department_store",
+      "mall",
+      "jewelry",
+      "electronics",
+      "furniture",
+      "hardware",
+      "mobile_phone",
+      "books",
+      "gift",
+      "alcohol_shop",
+      "convenience",
+      "shoe",
+      "florist",
+      "optician",
+      "cosmetics",
+      "bank",
+      "atm",
+      "car",
+      "car_repair",
+      "laundry",
+      "hairdresser",
+      "beauty"
+     ],
+     "#2f63c9",
+     [
+      "hospital",
+      "pharmacy",
+      "doctors",
+      "dentist",
+      "clinic",
+      "veterinary"
+     ],
+     "#c8322a",
+     [
+      "museum",
+      "theatre",
+      "cinema",
+      "art_gallery",
+      "arts_centre",
+      "library",
+      "attraction",
+      "monument",
+      "castle",
+      "college",
+      "school",
+      "university",
+      "kindergarten",
+      "place_of_worship"
+     ],
+     "#7b48c8",
+     "#3f3f42"
+    ],
     "text-halo-blur": 0.5,
     "text-halo-color": "#ffffff",
-    "text-halo-width": 1
+    "text-halo-width": 1.4
    },
    "source": "openmaptiles",
    "source-layer": "poi",
@@ -11343,7 +12425,18 @@
    "layout": {
     "icon-image": "{class}_11",
     "text-anchor": "top",
-    "text-field": "{name:latin}\n{name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Regular"
     ],
@@ -11358,10 +12451,82 @@
    },
    "minzoom": 15,
    "paint": {
-    "text-color": "#666",
+    "text-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "restaurant",
+      "fast_food",
+      "cafe",
+      "bar",
+      "beer",
+      "ice_cream",
+      "bakery"
+     ],
+     "#d9690a",
+     [
+      "shop",
+      "grocery",
+      "clothing_store",
+      "supermarket",
+      "department_store",
+      "mall",
+      "jewelry",
+      "electronics",
+      "furniture",
+      "hardware",
+      "mobile_phone",
+      "books",
+      "gift",
+      "alcohol_shop",
+      "convenience",
+      "shoe",
+      "florist",
+      "optician",
+      "cosmetics",
+      "bank",
+      "atm",
+      "car",
+      "car_repair",
+      "laundry",
+      "hairdresser",
+      "beauty"
+     ],
+     "#2f63c9",
+     [
+      "hospital",
+      "pharmacy",
+      "doctors",
+      "dentist",
+      "clinic",
+      "veterinary"
+     ],
+     "#c8322a",
+     [
+      "museum",
+      "theatre",
+      "cinema",
+      "art_gallery",
+      "arts_centre",
+      "library",
+      "attraction",
+      "monument",
+      "castle",
+      "college",
+      "school",
+      "university",
+      "kindergarten",
+      "place_of_worship"
+     ],
+     "#7b48c8",
+     "#3f3f42"
+    ],
     "text-halo-blur": 0.5,
     "text-halo-color": "#ffffff",
-    "text-halo-width": 1
+    "text-halo-width": 1.4
    },
    "source": "openmaptiles",
    "source-layer": "poi",
@@ -11410,7 +12575,18 @@
    "layout": {
     "icon-image": "{class}_11",
     "text-anchor": "top",
-    "text-field": "{name:latin}\n{name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Regular"
     ],
@@ -11425,10 +12601,82 @@
    },
    "minzoom": 14,
    "paint": {
-    "text-color": "#666",
+    "text-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "restaurant",
+      "fast_food",
+      "cafe",
+      "bar",
+      "beer",
+      "ice_cream",
+      "bakery"
+     ],
+     "#d9690a",
+     [
+      "shop",
+      "grocery",
+      "clothing_store",
+      "supermarket",
+      "department_store",
+      "mall",
+      "jewelry",
+      "electronics",
+      "furniture",
+      "hardware",
+      "mobile_phone",
+      "books",
+      "gift",
+      "alcohol_shop",
+      "convenience",
+      "shoe",
+      "florist",
+      "optician",
+      "cosmetics",
+      "bank",
+      "atm",
+      "car",
+      "car_repair",
+      "laundry",
+      "hairdresser",
+      "beauty"
+     ],
+     "#2f63c9",
+     [
+      "hospital",
+      "pharmacy",
+      "doctors",
+      "dentist",
+      "clinic",
+      "veterinary"
+     ],
+     "#c8322a",
+     [
+      "museum",
+      "theatre",
+      "cinema",
+      "art_gallery",
+      "arts_centre",
+      "library",
+      "attraction",
+      "monument",
+      "castle",
+      "college",
+      "school",
+      "university",
+      "kindergarten",
+      "place_of_worship"
+     ],
+     "#7b48c8",
+     "#3f3f42"
+    ],
     "text-halo-blur": 0.5,
     "text-halo-color": "#ffffff",
-    "text-halo-width": 1
+    "text-halo-width": 1.4
    },
    "source": "openmaptiles",
    "source-layer": "poi",
@@ -11465,7 +12713,18 @@
     "icon-optional": false,
     "text-allow-overlap": false,
     "text-anchor": "top",
-    "text-field": "{name:latin}\n{name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Regular"
     ],
@@ -11535,7 +12794,7 @@
       "coalesce",
       [
        "get",
-       "name:latin"
+       "name:ru"
       ],
       [
        "get",
@@ -11557,7 +12816,7 @@
    },
    "minzoom": 13,
    "paint": {
-    "text-color": "#4a4a4a",
+    "text-color": "#3f3f42",
     "text-halo-color": "#ffffff",
     "text-halo-width": 1.4
    },
@@ -11621,13 +12880,750 @@
    "id": "highway-name-path",
    "layout": {
     "symbol-placement": "line",
-    "symbol-spacing": 1100,
-    "text-field": "{name:latin} {name:nonlatin}",
+    "symbol-spacing": 900,
+    "text-field": [
+     "let",
+     "n",
+     [
+      "to-string",
+      [
+       "coalesce",
+       [
+        "get",
+        "name:ru"
+       ],
+       [
+        "get",
+        "name"
+       ],
+       ""
+      ]
+     ],
+     [
+      "case",
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " улица",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " улица",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " улица"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "ул.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " улица",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "улица ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "ул.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "улица "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " проспект",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " проспект",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " проспект"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "просп.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " проспект",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "проспект ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "просп.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "проспект "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " проезд",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " проезд",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " проезд"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "пр-д",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " проезд",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "проезд ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "пр-д",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "проезд "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " переулок",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " переулок",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " переулок"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "пер.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " переулок",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "переулок ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "пер.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "переулок "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " тупик",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " тупик",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " тупик"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "туп.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " тупик",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "тупик ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "туп.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "тупик "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " шоссе",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " шоссе",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " шоссе"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "ш.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " шоссе",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "шоссе ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "ш.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "шоссе "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " бульвар",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " бульвар",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " бульвар"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "бул.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " бульвар",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "бульвар ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "бул.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "бульвар "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " площадь",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " площадь",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " площадь"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "пл.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " площадь",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "площадь ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "пл.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "площадь "
+        ]
+       ]
+      ],
+      [
+       "var",
+       "n"
+      ]
+     ]
+    ],
     "text-font": [
      "Noto Sans Bold"
     ],
-    "text-letter-spacing": 0.08,
-    "text-padding": 60,
+    "text-letter-spacing": 0.1,
+    "text-padding": 50,
     "text-rotation-alignment": "map",
     "text-size": [
      "interpolate",
@@ -11640,17 +13636,17 @@
      13,
      10,
      16,
-     12,
+     11.5,
      18,
-     14.5,
+     13.5,
      20,
-     16
+     15
     ],
     "text-transform": "uppercase"
    },
    "minzoom": 15.5,
    "paint": {
-    "text-color": "#4a4a4a",
+    "text-color": "#3f3f42",
     "text-halo-blur": 0.6,
     "text-halo-color": "#ffffff",
     "text-halo-width": 2.0
@@ -11678,13 +13674,750 @@
    "id": "highway-name-minor",
    "layout": {
     "symbol-placement": "line",
-    "symbol-spacing": 1100,
-    "text-field": "{name:latin} {name:nonlatin}",
+    "symbol-spacing": 900,
+    "text-field": [
+     "let",
+     "n",
+     [
+      "to-string",
+      [
+       "coalesce",
+       [
+        "get",
+        "name:ru"
+       ],
+       [
+        "get",
+        "name"
+       ],
+       ""
+      ]
+     ],
+     [
+      "case",
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " улица",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " улица",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " улица"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "ул.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " улица",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "улица ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "ул.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "улица "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " проспект",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " проспект",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " проспект"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "просп.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " проспект",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "проспект ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "просп.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "проспект "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " проезд",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " проезд",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " проезд"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "пр-д",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " проезд",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "проезд ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "пр-д",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "проезд "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " переулок",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " переулок",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " переулок"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "пер.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " переулок",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "переулок ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "пер.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "переулок "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " тупик",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " тупик",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " тупик"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "туп.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " тупик",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "тупик ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "туп.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "тупик "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " шоссе",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " шоссе",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " шоссе"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "ш.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " шоссе",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "шоссе ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "ш.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "шоссе "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " бульвар",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " бульвар",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " бульвар"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "бул.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " бульвар",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "бульвар ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "бул.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "бульвар "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " площадь",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " площадь",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " площадь"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "пл.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " площадь",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "площадь ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "пл.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "площадь "
+        ]
+       ]
+      ],
+      [
+       "var",
+       "n"
+      ]
+     ]
+    ],
     "text-font": [
      "Noto Sans Bold"
     ],
-    "text-letter-spacing": 0.08,
-    "text-padding": 60,
+    "text-letter-spacing": 0.1,
+    "text-padding": 50,
     "text-rotation-alignment": "map",
     "text-size": [
      "interpolate",
@@ -11697,17 +14430,17 @@
      13,
      10,
      16,
-     12,
+     11.5,
      18,
-     14.5,
+     13.5,
      20,
-     16
+     15
     ],
     "text-transform": "uppercase"
    },
    "minzoom": 15,
    "paint": {
-    "text-color": "#4a4a4a",
+    "text-color": "#3f3f42",
     "text-halo-blur": 0.6,
     "text-halo-color": "#ffffff",
     "text-halo-width": 2.0
@@ -11728,13 +14461,750 @@
    "id": "highway-name-major",
    "layout": {
     "symbol-placement": "line",
-    "symbol-spacing": 1100,
-    "text-field": "{name:latin} {name:nonlatin}",
+    "symbol-spacing": 900,
+    "text-field": [
+     "let",
+     "n",
+     [
+      "to-string",
+      [
+       "coalesce",
+       [
+        "get",
+        "name:ru"
+       ],
+       [
+        "get",
+        "name"
+       ],
+       ""
+      ]
+     ],
+     [
+      "case",
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " улица",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " улица",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " улица"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "ул.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " улица",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "улица ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "ул.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "улица "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " проспект",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " проспект",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " проспект"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "просп.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " проспект",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "проспект ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "просп.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "проспект "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " проезд",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " проезд",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " проезд"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "пр-д",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " проезд",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "проезд ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "пр-д",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "проезд "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " переулок",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " переулок",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " переулок"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "пер.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " переулок",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "переулок ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "пер.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "переулок "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " тупик",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " тупик",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " тупик"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "туп.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " тупик",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "тупик ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "туп.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "тупик "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " шоссе",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " шоссе",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " шоссе"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "ш.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " шоссе",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "шоссе ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "ш.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "шоссе "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " бульвар",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " бульвар",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " бульвар"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "бул.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " бульвар",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "бульвар ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "бул.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "бульвар "
+        ]
+       ]
+      ],
+      [
+       "all",
+       [
+        ">",
+        [
+         "index-of",
+         " площадь",
+         [
+          "var",
+          "n"
+         ]
+        ],
+        0
+       ],
+       [
+        "==",
+        [
+         "+",
+         [
+          "index-of",
+          " площадь",
+          [
+           "var",
+           "n"
+          ]
+         ],
+         [
+          "length",
+          " площадь"
+         ]
+        ],
+        [
+         "length",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "concat",
+       "пл.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        0,
+        [
+         "index-of",
+         " площадь",
+         [
+          "var",
+          "n"
+         ]
+        ]
+       ]
+      ],
+      [
+       "==",
+       [
+        "index-of",
+        "площадь ",
+        [
+         "var",
+         "n"
+        ]
+       ],
+       0
+      ],
+      [
+       "concat",
+       "пл.",
+       " ",
+       [
+        "slice",
+        [
+         "var",
+         "n"
+        ],
+        [
+         "length",
+         "площадь "
+        ]
+       ]
+      ],
+      [
+       "var",
+       "n"
+      ]
+     ]
+    ],
     "text-font": [
      "Noto Sans Bold"
     ],
-    "text-letter-spacing": 0.08,
-    "text-padding": 60,
+    "text-letter-spacing": 0.1,
+    "text-padding": 50,
     "text-rotation-alignment": "map",
     "text-size": [
      "interpolate",
@@ -11747,17 +15217,17 @@
      13,
      10,
      16,
-     12,
+     11.5,
      18,
-     14.5,
+     13.5,
      20,
-     16
+     15
     ],
     "text-transform": "uppercase"
    },
    "minzoom": 12.2,
    "paint": {
-    "text-color": "#4a4a4a",
+    "text-color": "#3f3f42",
     "text-halo-blur": 0.6,
     "text-halo-color": "#ffffff",
     "text-halo-width": 2.0
@@ -11805,13 +15275,13 @@
       ]
      ]
     },
-    "symbol-spacing": 1100,
+    "symbol-spacing": 900,
     "text-field": "{ref}",
     "text-font": [
      "Noto Sans Bold"
     ],
-    "text-letter-spacing": 0.08,
-    "text-padding": 60,
+    "text-letter-spacing": 0.1,
+    "text-padding": 50,
     "text-rotation-alignment": "viewport",
     "text-size": [
      "interpolate",
@@ -11824,17 +15294,17 @@
      13,
      10,
      16,
-     12,
+     11.5,
      18,
-     14.5,
+     13.5,
      20,
-     16
+     15
     ],
     "text-transform": "uppercase"
    },
    "minzoom": 8,
    "paint": {
-    "text-color": "#4a4a4a",
+    "text-color": "#3f3f42",
     "text-halo-blur": 0.6,
     "text-halo-color": "#ffffff",
     "text-halo-width": 2.0
@@ -11884,13 +15354,13 @@
       ]
      ]
     },
-    "symbol-spacing": 1100,
+    "symbol-spacing": 900,
     "text-field": "{ref}",
     "text-font": [
      "Noto Sans Bold"
     ],
-    "text-letter-spacing": 0.08,
-    "text-padding": 60,
+    "text-letter-spacing": 0.1,
+    "text-padding": 50,
     "text-rotation-alignment": "viewport",
     "text-size": [
      "interpolate",
@@ -11903,17 +15373,17 @@
      13,
      10,
      16,
-     12,
+     11.5,
      18,
-     14.5,
+     13.5,
      20,
-     16
+     15
     ],
     "text-transform": "uppercase"
    },
    "minzoom": 7,
    "paint": {
-    "text-color": "#4a4a4a",
+    "text-color": "#3f3f42",
     "text-halo-blur": 0.6,
     "text-halo-color": "#ffffff",
     "text-halo-width": 2.0
@@ -11960,13 +15430,13 @@
       ]
      ]
     },
-    "symbol-spacing": 1100,
+    "symbol-spacing": 900,
     "text-field": "{ref}",
     "text-font": [
      "Noto Sans Bold"
     ],
-    "text-letter-spacing": 0.08,
-    "text-padding": 60,
+    "text-letter-spacing": 0.1,
+    "text-padding": 50,
     "text-rotation-alignment": "viewport",
     "text-size": [
      "interpolate",
@@ -11979,17 +15449,17 @@
      13,
      10,
      16,
-     12,
+     11.5,
      18,
-     14.5,
+     13.5,
      20,
-     16
+     15
     ],
     "text-transform": "uppercase"
    },
    "minzoom": 9,
    "paint": {
-    "text-color": "#4a4a4a",
+    "text-color": "#3f3f42",
     "text-halo-blur": 0.6,
     "text-halo-color": "#ffffff",
     "text-halo-width": 2.0
@@ -12011,7 +15481,18 @@
     "icon-image": "airport_11",
     "icon-size": 1,
     "text-anchor": "top",
-    "text-field": "{name:latin}\n{name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Regular"
     ],
@@ -12049,7 +15530,18 @@
    ],
    "id": "place-other",
    "layout": {
-    "text-field": "{name:latin}\n{name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Bold"
     ],
@@ -12091,7 +15583,18 @@
    ],
    "id": "place-village",
    "layout": {
-    "text-field": "{name:latin}\n{name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Regular"
     ],
@@ -12131,7 +15634,18 @@
    ],
    "id": "place-town",
    "layout": {
-    "text-field": "{name:latin}\n{name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Regular"
     ],
@@ -12171,7 +15685,18 @@
    ],
    "id": "place-state",
    "layout": {
-    "text-field": "{name:latin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Bold"
     ],
@@ -12221,7 +15746,18 @@
    ],
    "id": "place-city",
    "layout": {
-    "text-field": "{name:latin}\n{name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Regular"
     ],
@@ -12272,7 +15808,18 @@
     "icon-image": "star_11",
     "icon-size": 0.8,
     "text-anchor": "left",
-    "text-field": "{name:latin}\n{name:nonlatin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Regular"
     ],
@@ -12328,7 +15875,18 @@
    ],
    "id": "place-country-other",
    "layout": {
-    "text-field": "{name:latin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Italic"
     ],
@@ -12381,7 +15939,18 @@
    ],
    "id": "place-country-3",
    "layout": {
-    "text-field": "{name:latin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Bold"
     ],
@@ -12434,7 +16003,18 @@
    ],
    "id": "place-country-2",
    "layout": {
-    "text-field": "{name:latin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Bold"
     ],
@@ -12487,7 +16067,18 @@
    ],
    "id": "place-country-1",
    "layout": {
-    "text-field": "{name:latin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Bold"
     ],
@@ -12528,7 +16119,18 @@
    ],
    "id": "place-continent",
    "layout": {
-    "text-field": "{name:latin}",
+    "text-field": [
+     "coalesce",
+     [
+      "get",
+      "name:ru"
+     ],
+     [
+      "get",
+      "name"
+     ],
+     ""
+    ],
     "text-font": [
      "Noto Sans Bold"
     ],

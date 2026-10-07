@@ -45,8 +45,18 @@ PALETTES = {
         # совпадали с пешеходными дорожками: двор читался тропинкой, а рядом с
         # серыми магистралями кадр выглядел двумя разными картами (аудит
         # 28.09.2026). Белое осталось только у дорожек — их с дорогой не спутать.
-        "minor": "#d5dae2", "minor_edge": "#b4bbc6", "minor_edge_far": "#e6e6e3", "path": "#ffffff",
-        "path_edge": "#e3e1db",
+        # Мелкие улицы — тот же асфальт, светлее магистрали: так у Яндекса
+        # вблизи (снимок Навои × Фурката, 07.10.2026) — проезды дворов серые,
+        # белые полосы рядом — тротуары. Белой улица остаётся только на
+        # обзоре (minor_far, линия основы до 15-го зума).
+        "minor": "#d5dae2", "minor_far": "#ffffff", "minor_edge": "#b4bbc6", "minor_edge_far": "#dcd9d2",
+        "path": "#ffffff", "path_edge": "#e3e1db",
+        # Обзор (до 15-го): иерархия цветом, а не одной жёлтой сеткой.
+        "far_motorway": "#ffb84d", "far_motorway_edge": "#e0952a",
+        "far_trunk": "#ffcb5c", "far_trunk_edge": "#dca53a",
+        "far_primary": "#ffe08a", "far_primary_edge": "#e2bd5a",
+        "far_secondary": "#fff1bd", "far_secondary_edge": "#e0cf96",
+        "far_tertiary": "#ffffff", "far_tertiary_edge": "#d3cfc6",
         "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#e6dcd7", "building_wall": "#d3c6c0", "landuse": "#f1eeea",
         "boundary": "#c9c2d6", "building_shadow": "rgba(90,95,110,0.22)",
         "underpass": "#b9a8e8", "underpass_edge": "#8f7cc9",
@@ -60,22 +70,31 @@ PALETTES = {
         "casing": "#aab2bf",
         # Жёлтая кромка магистрали — как у Яндекса (снимок 05.10.2026).
         "kerb": "#f0c93f", "trees": "trees", "asphalt": "asphalt", "gutter": "#9aa2af",
-        "parking": "#bfc6d1", "parking_edge": "#e6c75a",
+        # Парковка — бледная площадка без жёлтой кромки: залитая асфальтом
+        # проспекта и обведённая его кромкой, она читалась дорогой (Чорсу).
+        "parking": "#e3e6eb", "parking_edge": "#d0d5dd",
         "sidewalk": "#ebe7e1", "sidewalk_edge": "#d6d0c7", "barrier": "#e9ebee",
         # Мост: светлый край-ограждение и тень под пролётом; тоннель —
         # полупрозрачный асфальт с пунктирной кромкой (как у Яндекса).
         "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#c9ced8",
         "tree_crown": "#a3d184", "tree_crown_low": "#7fb565", "tree_crown_high": "#c2e3a2", "tree_light": "#c4e4a8", "tree_trunk": "#9b8a76", "tree_edge": "#94c676",
         "tree_shadow": "rgba(60,100,40,0.28)",
-        "label": "#4a4a4a", "halo": "#ffffff", "signal": "#3b3b3b", "signal_ring": "#f5d547",
+        "label": "#3f3f42", "halo": "#ffffff", "oneway_opacity": 0.55, "housenumber": "#8a817b", "signal": "#3b3b3b", "signal_ring": "#f5d547",
     },
     "dark": {
         "bg": "#0f1216", "park": "#16241b", "wood": "#14221a", "water": "#1b3348",
         "road": "#424955", "road_trunk": "#4a5260", "road_tertiary": "#3b414c",
         "road_far": "#4b4536", "edge": "#b8923a",
-        "minor": "#262b33", "minor_edge": "#1a1e24", "minor_edge_far": "#1a1e24", "path": "#20252c",
-        "path_edge": "#1b1f25",
-        "median": "#1c2a22", "concrete": "#3a414c", "zebra_base": "#8c7a2c", "paint": "#d9dee6", "building": "#2b3038", "building_wall": "#1f242d", "landuse": "#13171d",
+        # Ночью дорога СВЕТЛЕЕ застройки: двор #262b33 был темнее домов
+        # #2b3038 и пропадал, а кварталы выступали сильнее улиц (07.10.2026).
+        "minor": "#3a404a", "minor_far": "#3a404a", "minor_edge": "#2a2f37", "minor_edge_far": "#20242b",
+        "path": "#22272e", "path_edge": "#1d2127",
+        "far_motorway": "#9a7433", "far_motorway_edge": "#6e5222",
+        "far_trunk": "#87683a", "far_trunk_edge": "#5e4a2a",
+        "far_primary": "#6b5f45", "far_primary_edge": "#4a4232",
+        "far_secondary": "#55524a", "far_secondary_edge": "#3c3a35",
+        "far_tertiary": "#474c55", "far_tertiary_edge": "#30343b",
+        "median": "#1c2a22", "concrete": "#3a414c", "zebra_base": "#8c7a2c", "paint": "#d9dee6", "building": "#1d2026", "building_wall": "#16181d", "landuse": "#13171d",
         "boundary": "#3a3f4c", "building_shadow": "rgba(0,0,0,0.45)",
         "underpass": "#5b4f8a", "underpass_edge": "#7d6fb8",
         "footbridge": "#3a404b", "footbridge_edge": "#596170", "steps": "#2a2f37",
@@ -83,12 +102,12 @@ PALETTES = {
                   "position": [1.3, 200, 35]},
         "casing": "#2b3039",
         "kerb": "#8c7033", "trees": "trees-dark", "asphalt": "asphalt-dark", "gutter": "#2f343c",
-        "parking": "#363c46", "parking_edge": "#7a6532",
+        "parking": "#2a2f37", "parking_edge": "#343a44",
         "sidewalk": "#262a31", "sidewalk_edge": "#33383f", "barrier": "#4a515c",
         "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#2a2f37",
         "tree_crown": "#22402c", "tree_crown_low": "#18301f", "tree_crown_high": "#33593e", "tree_light": "#2e5238", "tree_trunk": "#3a332b", "tree_edge": "#2e5238",
         "tree_shadow": "rgba(0,0,0,0.5)",
-        "label": "#c9ced6", "halo": "#0f1216", "signal": "#101318", "signal_ring": "#f0c64a",
+        "label": "#c9ced6", "halo": "#0f1216", "oneway_opacity": 0.7, "housenumber": "#7d838d", "signal": "#101318", "signal_ring": "#f0c64a",
     },
 }
 
@@ -103,6 +122,84 @@ ROADS_KEEP_IDS = {"background", "landcover-grass", "landcover-grass-park", "land
 # съездов, где геометрия OpenMapTiles и наша расходятся (Беруни, 05.10.2026);
 # узкая прячется под нашим полотном, а без нашего тайла дорога всё равно есть.
 FALLBACK_SHARE = 0.45
+
+# Разметка полос — с 17-го: на 16-м пунктиры многополосной улицы сливались в
+# рябь (Амира Темура, 07.10.2026). Осевая сплошная видна раньше.
+LANE_MARKINGS_FROM = 17
+
+# Имя на ОДНОМ языке. Было «{name:latin}\n{name:nonlatin}»: две строки на
+# каждый объект, а латиница русских названий — автотранслитерация
+# («Stolovaâ», «Hlebnye râdy»). По умолчанию — русское имя, иначе местное;
+# узбекская версия приложения при загрузке меняет name:ru на name:uz
+# (EngineModernStyle), а без узбекского имени остаётся местное.
+NAME = ["coalesce", ["get", "name:ru"], ["get", "name"], ""]
+
+
+# «Фуркат улица» → «ул. Фуркат», как у Яндекса. В OSM Ташкента русское имя
+# почти всегда записано с типом в конце; движок режет строку сам (index-of /
+# slice есть и на телефоне, и в превью), тайлы пересобирать не нужно.
+STREET_TYPES = (("улица", "ул."), ("проспект", "просп."), ("проезд", "пр-д"), ("переулок", "пер."),
+                ("тупик", "туп."), ("шоссе", "ш."), ("бульвар", "бул."), ("площадь", "пл."))
+
+
+def street_name():
+    """Имя улицы с сокращённым типом впереди. Узбекское имя не трогается.
+
+    Длины — только через ["length", …] самого движка: нативный MapLibre
+    считает строку в байтах UTF-8 (кириллица — два на букву), веб — в
+    символах. Длина слова, посчитанная здесь, разошлась бы с телефоном.
+    """
+    n = ["var", "n"]
+    rules = ["case"]
+    for word, short in STREET_TYPES:
+        tail = " " + word
+        at = ["index-of", tail, n]
+        rules += [["all", [">", at, 0], ["==", ["+", at, ["length", tail]], ["length", n]]],
+                  ["concat", short, " ", ["slice", n, 0, at]]]
+        head = word + " "
+        rules += [["==", ["index-of", head, n], 0],
+                  ["concat", short, " ", ["slice", n, ["length", head]]]]
+    rules.append(n)
+    # to-string: slice и index-of требуют строку, а coalesce даёт значение.
+    return ["let", "n", ["to-string", NAME], rules]
+
+
+# Цвет подписи места по виду, как у Яндекса: еда — оранжевая, магазины —
+# синие, медицина — красная, культура — фиолетовая. Серые подписи всех мест
+# одного цвета сливались в «шум» и не отвечали на вопрос «что это».
+POI_KINDS = {
+    "food": ("restaurant", "fast_food", "cafe", "bar", "beer", "ice_cream", "bakery"),
+    "shop": ("shop", "grocery", "clothing_store", "supermarket", "department_store", "mall",
+             "jewelry", "electronics", "furniture", "hardware", "mobile_phone", "books", "gift",
+             "alcohol_shop", "convenience", "shoe", "florist", "optician", "cosmetics", "bank",
+             "atm", "car", "car_repair", "laundry", "hairdresser", "beauty"),
+    "health": ("hospital", "pharmacy", "doctors", "dentist", "clinic", "veterinary"),
+    "culture": ("museum", "theatre", "cinema", "art_gallery", "arts_centre", "library",
+                "attraction", "monument", "castle", "college", "school", "university",
+                "kindergarten", "place_of_worship"),
+}
+POI_COLOURS = {
+    "light": {"food": "#d9690a", "shop": "#2f63c9", "health": "#c8322a", "culture": "#7b48c8"},
+    "dark": {"food": "#f0a24f", "shop": "#7aa5f2", "health": "#f08078", "culture": "#b694f0"},
+}
+
+
+def poi_colour(p, theme):
+    expression = ["match", ["get", "class"]]
+    for kind, classes in POI_KINDS.items():
+        expression += [list(classes), POI_COLOURS[theme][kind]]
+    expression.append(p["label"])
+    return expression
+
+
+def _far(p, part):
+    """Цвет дороги на обзоре по классу OpenMapTiles: магистраль насыщеннее,
+    улица бледнее. Одна жёлтая сетка на 13-м зуме не говорила, где кольцо."""
+    suffix = "_edge" if part == "edge" else ""
+    return ["match", ["get", "class"],
+            "motorway", p["far_motorway" + suffix], "trunk", p["far_trunk" + suffix],
+            "primary", p["far_primary" + suffix], "secondary", p["far_secondary" + suffix],
+            p["far_tertiary" + suffix]]
 
 
 def class_width(metres, extra=0.0, low=0.6, near_share=1.0):
@@ -273,13 +370,14 @@ def _base_layer(layer, p, mode):
                 paint["line-opacity"] = 0.5
         else:
             if casing:
-                paint["line-color"] = p["edge"] if major else \
+                paint["line-color"] = _far(p, "edge") if major else \
                     ["interpolate", ["linear"], ["zoom"], 13, p["minor_edge_far"], 15, p["minor_edge"]]
             else:
-                # Вдали магистраль светлая с жёлтой каймой (читается как «главная»),
-                # вблизи — асфальт, на котором видна разметка. Как у Яндекса.
-                paint["line-color"] = ["interpolate", ["linear"], ["zoom"], 13, p["road_far"], 15.5, p["road"]] \
-                    if major else p["minor"]
+                # Вдали — цвет класса (магистраль оранжевее, улица белее), вблизи —
+                # асфальт, на котором видна разметка. Как у Яндекса.
+                paint["line-color"] = ["interpolate", ["linear"], ["zoom"], 13, _far(p, "fill"),
+                                       14.5, _far(p, "fill"), 15.5, p["road"]] \
+                    if major else ["interpolate", ["linear"], ["zoom"], 14.5, p["minor_far"], 15.5, p["minor"]]
             paint["line-width"] = class_width(metres, (2.0 if major else 1.4) if casing else 0.0,
                                               near_share=1.0 if casing else FALLBACK_SHARE)
             paint["line-opacity"] = 1 if major else ["interpolate", ["linear"], ["zoom"], 12.5, 0, 13.5, 1]
@@ -298,23 +396,32 @@ def _base_layer(layer, p, mode):
         l["layout"]["line-cap"] = "butt" if i.startswith(("tunnel-path", "bridge-path")) else "round"
     elif l["type"] == "symbol" and src == "transportation_name":
         lay = l.setdefault("layout", {})
-        lay.update({"text-transform": "uppercase", "text-letter-spacing": 0.08,
+        if "ref" not in json.dumps(lay.get("text-field")):
+            lay["text-field"] = street_name()
+        # Капсом с разрядкой, как у Яндекса: «УЛ. ФУРКАТ» на самом асфальте.
+        lay.update({"text-transform": "uppercase", "text-letter-spacing": 0.1,
                     # Реже и не впритык: каждая встречная лента подписана своей
                     # строкой, и при шаге по умолчанию одно имя стояло восемь раз.
                     # Каждая лента проспекта подписана отдельно: на Зарканаре
                     # одно имя стояло шесть раз на экран (05.10.2026). Шаг и
                     # отступ — чтобы улица читалась один-два раза.
-                    "symbol-spacing": 1100, "text-padding": 60, "text-font": ["Noto Sans Bold"],
+                    "symbol-spacing": 900, "text-padding": 50, "text-font": ["Noto Sans Bold"],
                     # Крупнее вблизи: на асфальте в 11 px имя терялось.
-                    "text-size": ["interpolate", ["linear"], ["zoom"], 13, 10, 16, 12, 18, 14.5, 20, 16]})
+                    "text-size": ["interpolate", ["linear"], ["zoom"], 13, 10, 16, 11.5, 18, 13.5, 20, 15]})
         # Мягкий ореол с размытием: тонкая жёсткая обводка на сером асфальте
         # не отделяла буквы от разметки (06.10.2026).
         paint.update({"text-color": p["label"], "text-halo-color": p["halo"],
                       "text-halo-width": 2.0, "text-halo-blur": 0.6})
     elif l["type"] == "symbol":
+        lay = l.setdefault("layout", {})
+        if "name:latin" in json.dumps(lay.get("text-field", "")):
+            lay["text-field"] = NAME
         paint["text-halo-color"] = p["halo"]
         if "text-color" in paint and mode == "full" and p is PALETTES["dark"]:
             paint["text-color"] = p["label"]
+        if src == "poi" and i.startswith("poi-level"):
+            paint["text-color"] = poi_colour(p, "light" if p is PALETTES["light"] else "dark")
+            paint["text-halo-width"] = 1.4
     return l
 
 
@@ -422,11 +529,11 @@ def _layers_in_draw_order(p):
          "paint": {"line-color": p["parking_edge"],
                    "line-width": ["interpolate", ["linear"], ["zoom"], 16, 0.6, 19, 1.6]}},
         {"id": "radar-parking-stall", "type": "line", "source": "radar", "source-layer": "parking",
-         "minzoom": 17, "filter": ["==", ["get", "kind"], "stall"],
+         "minzoom": 17.5, "filter": ["==", ["get", "kind"], "stall"],
          "layout": {"line-cap": "butt"},
          "paint": {"line-color": p["paint"],
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"], 17, 0.5, 20, 1.8],
-                   "line-opacity": ["interpolate", ["linear"], ["zoom"], 17, 0, 17.6, 0.85]}},
+                   "line-opacity": ["interpolate", ["linear"], ["zoom"], 17.5, 0, 18, 0.85]}},
         {"id": "radar-median", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 15.5,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
                     ["!", ["has", "strip"]], ["!", ["has", "island"]]],
@@ -448,12 +555,14 @@ def _layers_in_draw_order(p):
          "layout": {"line-join": "round", "line-cap": "butt"},
          # Пунктир — только тонкие края по обеим сторонам (линия с зазором
          # шириной в полотно). Пунктир на всю ширину давал блоки-зебру.
-         "paint": {"line-color": p["casing"], "line-width": 1.4, "line-gap-width": measured(),
-                   "line-dasharray": [3, 2], "line-opacity": 0.9}},
+         "paint": {"line-color": p["casing"], "line-width": 1.0, "line-gap-width": measured(),
+                   "line-dasharray": [3, 2], "line-opacity": 0.45}},
         {"id": "radar-tunnel", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["has", "tunnel"]],
          "layout": {"line-join": "round", "line-cap": "butt"},
-         "paint": {"line-color": p["tunnel"], "line-width": measured(), "line-opacity": 0.65}},
+         # Едва видная полоса, как у Яндекса: плотный «призрак» тоннеля Фурката
+         # поверх перекрёстка Навои читался второй дорогой (07.10.2026).
+         "paint": {"line-color": p["tunnel"], "line-width": measured(), "line-opacity": 0.3}},
         {"id": "radar-roads-case", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7],
                                               ["!", ["has", "stub"]], ["!", ["has", "inner"]]],
@@ -573,21 +682,26 @@ def _layers_in_draw_order(p):
                    "fill-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.5, 0.18, 20, 0.28]}},
         # Сплошная перед перекрёстком (последние 25 м подхода) — без штриха.
         {"id": "radar-markings-solid", "type": "line", "source": "radar", "source-layer": "markings",
-         "minzoom": 16, "filter": ["all", ["!", ["has", "centre"]], ["has", "solid"]],
+         "minzoom": LANE_MARKINGS_FROM, "filter": ["all", ["!", ["has", "centre"]], ["has", "solid"]],
          "layout": {"line-cap": "butt"},
          "paint": {"line-color": p["paint"],
-                   "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3]}},
-        {"id": "radar-markings", "type": "line", "source": "radar", "source-layer": "markings", "minzoom": 16,
+                   "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3],
+                   "line-opacity": ["interpolate", ["linear"], ["zoom"], LANE_MARKINGS_FROM, 0,
+                                    LANE_MARKINGS_FROM + 0.4, 1]}},
+        {"id": "radar-markings", "type": "line", "source": "radar", "source-layer": "markings",
+         "minzoom": LANE_MARKINGS_FROM,
          "filter": ["all", ["!", ["has", "centre"]], ["!", ["has", "solid"]]],
          "layout": {"line-cap": "butt"},
          # Реже, как у Яндекса: частый пунктир на многополосной улице рябил.
          "paint": {"line-color": p["paint"], "line-dasharray": [3, 7],
-                   "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3]}},
+                   "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3],
+                   "line-opacity": ["interpolate", ["linear"], ["zoom"], LANE_MARKINGS_FROM, 0,
+                                    LANE_MARKINGS_FROM + 0.4, 1]}},
         # Осевая двусторонней дороги (build_mvt.centre_lines): прерывистая с
         # длинным штрихом (1.5 ПДД) или сплошная при подтверждённых 4+ полосах
         # (1.1). Штрих длиннее, чем у разделителя полос, — осевая читается осевой.
         {"id": "radar-centre-dashed", "type": "line", "source": "radar", "source-layer": "markings",
-         "minzoom": 16, "filter": ["==", ["get", "centre"], 1],
+         "minzoom": 16.3, "filter": ["==", ["get", "centre"], 1],
          "layout": {"line-cap": "butt"},
          "paint": {"line-color": p["paint"], "line-dasharray": [6, 4],
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3]}},
@@ -619,6 +733,17 @@ def _layers_in_draw_order(p):
          "paint": {"line-color": p["paint"],
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"],
                                   16.5, max(0.8, 0.45 * 2 ** 16.5 * M), 20, 0.45 * 2 ** 20 * M]}},
+        # Одностороннее движение — стрелки вдоль улицы, как у Яндекса. Только
+        # на улицах (tertiary и мельче): проспект с разделительной — это две
+        # односторонние ленты, и стрелки на каждой были бы шумом. Геометрия
+        # в тайле уже по ходу движения (build_roads разворачивает oneway=-1).
+        {"id": "radar-oneway", "type": "symbol", "source": "radar", "source-layer": "roads", "minzoom": 16,
+         "filter": ["all", ["has", "oneway"], [">=", ["get", "cls"], 5], ["!", ["has", "tunnel"]]],
+         "layout": {"symbol-placement": "line", "symbol-spacing": 110, "icon-image": "oneway",
+                    "icon-rotate": 90, "icon-rotation-alignment": "map", "icon-pitch-alignment": "map",
+                    "icon-padding": 2, "icon-ignore-placement": True,
+                    "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.55, 19, 1.0]},
+         "paint": {"icon-opacity": ["interpolate", ["linear"], ["zoom"], 16, 0, 16.4, p["oneway_opacity"]]}},
         # Стрелки полос перед стоп-линией: одна на полосу (build_mvt.lane_arrows).
         {"id": "radar-arrows", "type": "symbol", "source": "radar", "source-layer": "arrows", "minzoom": 17,
          "layout": {"icon-image": ["match", ["get", "turn"], 1, "lane-through", 2, "lane-left", 3, "lane-right",
@@ -745,6 +870,18 @@ def build(base, theme="light", mode="full", tileset=None):
                                  "fill-extrusion-vertical-gradient": True, "fill-extrusion-opacity": 1.0}})
     if mode == "full":
         _driver_pois(out, p, theme)
+        # Номера домов — как у Яндекса, вблизи и ниже всех подписей по
+        # важности: место для имени заведения важнее номера. В тайлах основы
+        # слой есть всегда, в стиле его не было.
+        first_poi = next(k for k, l in enumerate(out) if l.get("source-layer") == "poi")
+        out.insert(first_poi, {
+            "id": "housenumber", "type": "symbol", "source": "openmaptiles", "source-layer": "housenumber",
+            "minzoom": 17,
+            "layout": {"text-field": ["get", "housenumber"], "text-font": ["Noto Sans Regular"],
+                       "text-size": ["interpolate", ["linear"], ["zoom"], 17, 10, 19, 12],
+                       "text-padding": 3, "text-max-width": 4},
+            "paint": {"text-color": p["housenumber"], "text-halo-color": p["building"],
+                      "text-halo-width": 1}})
     s["layers"] = out
     s["light"] = p["light"]
     s["name"] = f"RadarMap — {'светлая' if theme == 'light' else 'тёмная'}, {'полная' if mode == 'full' else 'только дорога'}"
@@ -767,7 +904,7 @@ def _driver_pois(out, p, theme):
             "minzoom": 13, "filter": ["all", ["==", "$type", "Point"], ["==", "class", "fuel"]],
             "layout": {"icon-image": "fuel_11", "icon-size": ["interpolate", ["linear"], ["zoom"], 13, 1.0, 17, 1.4],
                        "icon-allow-overlap": False, "icon-padding": 4, "symbol-sort-key": 1,
-                       "text-field": ["step", ["zoom"], "", 15, ["coalesce", ["get", "name:latin"], ["get", "name"], ""]],
+                       "text-field": ["step", ["zoom"], "", 15, NAME],
                        "text-font": ["Noto Sans Regular"], "text-size": 11, "text-offset": [0, 1.3],
                        "text-anchor": "top", "text-optional": True, "text-max-width": 8},
             "paint": {"text-color": p["label"], "text-halo-color": p["halo"], "text-halo-width": 1.4}}

@@ -167,13 +167,7 @@ struct OfflineMapsView: View {
         return regions.sorted { $0.title(language: language) < $1.title(language: language) }
     }
 
-    static func language(_ setting: AppLanguage) -> String {
-        switch setting {
-        case .ru: return "ru"
-        case .uz: return "uz"
-        case .system: return Locale.preferredLanguages.first?.hasPrefix("uz") == true ? "uz" : "ru"
-        }
-    }
+    static func language(_ setting: AppLanguage) -> String { setting.mapCode }
 
     static func size(_ bytes: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)

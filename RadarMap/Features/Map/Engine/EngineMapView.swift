@@ -80,6 +80,10 @@ struct EngineMapView: UIViewRepresentable {
     var offline: OfflineFiles?
     /// Общие POI на новой карте (тумблер «Места»).
     var places: Bool = true
+    /// Язык подписей новой карты («ru» / «uz»). Меняется только с языком
+    /// приложения, а тот применяется после перезапуска — перезагрузка стиля
+    /// ради него не нужна.
+    var labelLanguage: String = "ru"
     /// «Весь маршрут»: счётчик нажатий — вписать линию маршрута в экран.
     var overviewCommand: Int = 0
     /// Поворот карты (градусы от севера) — компасу экрана.
@@ -378,7 +382,8 @@ struct EngineMapView: UIViewRepresentable {
             if model.modernStyle, !modernBroken, let release {
                 if let json = EngineModernStyle.json(daylight: model.daylight, base: AppConfig.syncBaseURL,
                                                      release: release, houses: model.houses,
-                                                     places: model.places, offline: model.offline) {
+                                                     places: model.places, offline: model.offline,
+                                                     labelLanguage: model.labelLanguage) {
                     modernLoaded = true
                     view.styleJSON = json
                     themeLayers = []

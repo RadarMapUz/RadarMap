@@ -404,6 +404,16 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case .uz:     return ["uz"]
         }
     }
+
+    /// Язык подписей карты и названий областей: выбранный, а у «Системного» —
+    /// по первому языку телефона (всё, что не узбекский, — русский).
+    var mapCode: String {
+        switch self {
+        case .ru: return "ru"
+        case .uz: return "uz"
+        case .system: return Locale.preferredLanguages.first?.hasPrefix("uz") == true ? "uz" : "ru"
+        }
+    }
 }
 
 @MainActor

@@ -33,8 +33,8 @@ nonisolated enum EngineModernStyle {
     /// нужного набора: тогда вызывающий остаётся на прежнем стиле.
     static func json(daylight: Bool, base: URL, release: TileRelease,
                      houses: Bool, places: Bool = true, offline: OfflineFiles? = nil,
-                     bundle: Bundle = .main) -> String? {
-        guard var style = template(daylight: daylight, base: base, bundle: bundle),
+                     labelLanguage: String = "ru", bundle: Bundle = .main) -> String? {
+        guard var style = template(daylight: daylight, base: base, language: labelLanguage, bundle: bundle),
               var sources = style["sources"] as? [String: Any],
               var layers = style["layers"] as? [[String: Any]],
               let omt = release.tilesTemplate(base: base, set: "omt"),
@@ -100,15 +100,23 @@ nonisolated enum EngineModernStyle {
         return text
     }
 
-    /// Шаблон из бандла с подставленным адресом сервера.
-    static func template(daylight: Bool, base: URL, bundle: Bundle = .main) -> [String: Any]? {
+    /// Шаблон из бандла с подставленным адресом сервера и языком подписей.
+    ///
+    /// Подписи в стиле — одно имя: `coalesce(name:ru, name)` (make_style.NAME).
+    /// Узбекская версия меняет name:ru на name:uz — без узбекского имени у
+    /// объекта остаётся местное `name`, а это в Узбекистане и есть узбекское.
+    static func template(daylight: Bool, base: URL, language: String = "ru",
+                         bundle: Bundle = .main) -> [String: Any]? {
         let name = daylight ? lightResource : darkResource
         guard let url = bundle.url(forResource: name, withExtension: "json")
                 ?? bundle.url(forResource: name, withExtension: "json", subdirectory: "MapStyle"),
               let raw = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         // Подстановка — по тексту, до разбора: плейсхолдер стоит и в шрифтах,
         // и в спрайте, и в адресах тайлов.
-        let text = raw.replacingOccurrences(of: "{{BASE}}", with: TileRelease.root(base))
+        var text = raw.replacingOccurrences(of: "{{BASE}}", with: TileRelease.root(base))
+        if language != "ru" {
+            text = text.replacingOccurrences(of: "\"name:ru\"", with: "\"name:\(language)\"")
+        }
         guard let data = text.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }

@@ -173,6 +173,19 @@ final class TileReleaseTests: XCTestCase {
         XCTAssertTrue(ids.contains("camera-icons"))
     }
 
+    func testLabelsFollowAppLanguage() throws {
+        // Подпись — одно имя на языке приложения; узбекская версия берёт
+        // name:uz, а без него — местное name (make_style.NAME).
+        let ru = try XCTUnwrap(EngineModernStyle.json(daylight: true, base: base,
+                                                      release: try release(), houses: true))
+        let uz = try XCTUnwrap(EngineModernStyle.json(daylight: true, base: base, release: try release(),
+                                                      houses: true, labelLanguage: "uz"))
+        XCTAssertTrue(ru.contains("\"name:ru\""))
+        XCTAssertFalse(uz.contains("\"name:ru\""))
+        XCTAssertTrue(uz.contains("\"name:uz\""))
+        XCTAssertFalse(ru.contains("name:latin"), "автотранслитерации в подписях нет")
+    }
+
     func testHousesSwitchRemovesBuildingLayers() throws {
         let with = try XCTUnwrap(try modernStyle(daylight: true, houses: true)["layers"] as? [[String: Any]])
         let without = try XCTUnwrap(try modernStyle(daylight: true, houses: false)["layers"] as? [[String: Any]])

@@ -1,0 +1,21 @@
+{"round":1,"key":"w16309_f_0059","verdict":"agree"}
+{"round":1,"key":"w3394_f_0089","verdict":"agree"}
+{"round":1,"key":"w6958_f_0065","verdict":"agree","note":"геометрия на повороте была смещена — исправлено уточнением с изгибом"}
+{"round":1,"key":"w6644_f_0081","verdict":"agree"}
+{"round":1,"key":"w1360_f_0089","verdict":"agree","note":"одна линия, правая сторона не размечена — осторожно, но верно"}
+{"round":1,"key":"d25745","verdict":"agree"}
+{"round":1,"key":"w14052_f_0071","verdict":"agree"}
+{"round":1,"key":"w6958_f_0039","verdict":"agree"}
+{"round":1,"key":"w7677_f_0015","verdict":"agree"}
+{"round":1,"key":"w15474_f_0087","verdict":"agree"}
+{"round":1,"key":"d31004","verdict":"agree"}
+{"round":2,"key":"d32360","verdict":"agree"}
+{"round":2,"key":"w16737_f_0039","verdict":"agree"}
+{"round":2,"key":"w5093_f_0067","verdict":"agree"}
+{"round":2,"key":"w6531_f_0037","verdict":"agree"}
+{"round":2,"key":"d31155","verdict":"agree"}
+{"round":2,"key":"w6678_f_0013","verdict":"agree"}
+{"round":2,"key":"d28481","verdict":"agree"}
+{"round":2,"key":"d21490","verdict":"agree"}
+{"round":2,"key":"w297_f_0013","verdict":"agree"}
+{"round":2,"key":"d36631","verdict":"partial","note":"у бордюра разделителя жёлтая сплошная, кандидат 2 (бордюр) лежит то ли на кромке, то ли на жёлтой — жёлтая между бордюром и линией 3 не размечена"}

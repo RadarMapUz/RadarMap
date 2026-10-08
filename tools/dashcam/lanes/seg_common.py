@@ -138,7 +138,22 @@ def image_path(lab_or_item):
     """Путь к JPEG кадра по записи разметки/отбора."""
     if lab_or_item.get("win") is not None:
         return os.path.join(WIN, str(lab_or_item["win"]), lab_or_item["name"])
-    return lab_or_item["path"]
+    if lab_or_item.get("path"):
+        return lab_or_item["path"]
+    # Разметка кадра БД пути не хранит (validate его не пропускает: путь со
+    # страницы не берём) — берём из отбора по ключу.
+    return _selection_paths()[lab_or_item["key"]]
+
+
+_paths = None
+
+
+def _selection_paths():
+    global _paths
+    if _paths is None:
+        with open(SELECTION) as f:
+            _paths = {it["key"]: it["path"] for it in json.load(f) if it.get("path")}
+    return _paths
 
 
 # ── геометрия: ломаная в кадре ↔ земля ───────────────────────────────

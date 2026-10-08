@@ -105,7 +105,10 @@ def nearest_camera(lat, lon, course, grid, r_m=NEAR_M):
 
 # ---------- правила для продукта ----------
 
-NEW_MIN_TRIPS = 2       # «новая» — всплеск в ≥ 2 поездках
+NEW_MIN_TRIPS = 2       # «новая» — всплеск в ≥ 2 поездках разных дней
+NEW_FAR_DB_M = 150.0    # …и ни одной камеры базы ближе (любого направления): ложные
+                        # всплески кучкуются у настоящих камер (видны издалека, соседние
+                        # направления), а привязка кадра ошибается на десятки метров
 NEW_CLUSTER_M = 40.0    # события ближе — одно место
 REMOVED_MIN_PASSES = 3  # «снята» — ≥ 3 дневных проезда на ходу без всплеска
 REMOVED_MIN_KMH = 15.0
@@ -129,11 +132,12 @@ def cluster_unmatched(evs, r_m=NEW_CLUSTER_M, course_tol=45.0):
 
 
 def new_camera_candidates(unmatched, min_trips=NEW_MIN_TRIPS, **kw):
-    """Устойчивый всплеск без камеры базы: кластер, подтверждённый ≥ min_trips поездками."""
+    """Устойчивый всплеск без камеры базы: кластер, подтверждённый ≥ min_trips поездками
+    в разные дни (поездка — ключ вида ГГГГ-ММ-ДД-…; без даты — сама поездка)."""
     out = []
     for c in cluster_unmatched(unmatched, **kw):
-        trips = {e['trip'] for e in c}
-        if len(trips) >= min_trips:
+        days = {e['trip'][:10] if len(e['trip']) >= 10 else e['trip'] for e in c}
+        if len(days) >= min_trips:
             out.append(c)
     return out
 

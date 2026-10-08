@@ -191,17 +191,19 @@ class RulesTest(unittest.TestCase):
         return {'trip': trip, 'lat': lat, 'lon': lon, 'course': course, 'p': p}
 
     def test_new_needs_two_trips(self):
-        one = [self.ev('a', 41.3, 69.2), self.ev('a', 41.30005, 69.2)]
+        one = [self.ev('2026-10-01-08', 41.3, 69.2), self.ev('2026-10-01-08', 41.30005, 69.2)]
         self.assertEqual(events.new_camera_candidates(one), [])
-        two = one + [self.ev('b', 41.30010, 69.2)]
+        same_day = one + [self.ev('2026-10-01-18', 41.30010, 69.2)]
+        self.assertEqual(events.new_camera_candidates(same_day), [])   # туда-обратно в один день — не повтор
+        two = one + [self.ev('2026-10-02-08', 41.30010, 69.2)]
         self.assertEqual(len(events.new_camera_candidates(two)), 1)
 
     def test_new_splits_by_place_and_course(self):
-        evs = [self.ev('a', 41.3, 69.2), self.ev('b', 41.3, 69.2, course=180),
-               self.ev('c', 41.31, 69.2), self.ev('d', 41.31, 69.2)]
+        evs = [self.ev('2026-10-01-a', 41.3, 69.2), self.ev('2026-10-02-b', 41.3, 69.2, course=180),
+               self.ev('2026-10-03-c', 41.31, 69.2), self.ev('2026-10-04-d', 41.31, 69.2)]
         c = events.new_camera_candidates(evs)
         self.assertEqual(len(c), 1)
-        self.assertEqual({e['trip'] for e in c[0]}, {'c', 'd'})
+        self.assertEqual({e['trip'] for e in c[0]}, {'2026-10-03-c', '2026-10-04-d'})
 
     def test_removed_needs_three_good_passes_without_spike(self):
         v = {'day': True, 'covered': True, 'kmh': 40, 'seen': False}
@@ -213,6 +215,20 @@ class RulesTest(unittest.TestCase):
         v = {'day': True, 'covered': True, 'kmh': 40, 'seen': False}
         bad = [dict(v, day=False), dict(v, kmh=5), dict(v, covered=False)]
         self.assertEqual(events.removed_verdict([v, v] + bad), 'unknown')
+
+
+class WebTest(unittest.TestCase):
+    def test_crop_names_whitelisted(self):
+        import camsweb
+        for bad in ('../cams.db', 'new_1.jpg/../../x', 'other_1.jpg', 'new_.jpg', '/etc/passwd'):
+            self.assertIsNone(camsweb.crop_bytes(bad))
+
+
+class HMMLoopTest(unittest.TestCase):
+    def test_loop_detection(self):
+        import hmm
+        self.assertTrue(hmm.has_loop([1, None, 2, 1]))
+        self.assertFalse(hmm.has_loop([1, 2, 3, 4, 1]))   # через 4 опознанных — уже не «туда-обратно»
 
 
 if __name__ == '__main__':

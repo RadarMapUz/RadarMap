@@ -165,7 +165,7 @@ def candidates(model, p_min, log=print):
                 continue
             if any(abs(e['t'] - t) <= 5 for t in truth):
                 continue
-            if not is_day(e['t']):
+            if not is_day(e['t']) or ctx.grid.near(e['lat'], e['lon'], events.NEW_FAR_DB_M):
                 continue
             unmatched.append({'trip': key, 'lat': e['lat'], 'lon': e['lon'], 'course': e['course'], 'p': e['p'],
                               't': e['t'], 'frame_id': e['frame_id'], 'id': e['id']})

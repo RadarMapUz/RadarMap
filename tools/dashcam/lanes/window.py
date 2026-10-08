@@ -88,7 +88,9 @@ def speed_series(trip, t_center, pos, pts):
 
 def frame_points(rgb, cam, static, mask="thr"):
     """mask: "thr" — пороговая маска (marking_masks), "model" — маска
-    обученной сегментации (marking.model_masks, seg_model.py)."""
+    обученной сегментации (marking.model_masks, seg_model.py), "hybrid" —
+    пороговая, но к каждой точке — класс модели в её пикселе (последний
+    элемент ответа; для остальных масок — None)."""
     if mask == "model":
         white, yellow, _, ghost = model_masks(rgb, return_ghost=True)
     else:
@@ -101,15 +103,19 @@ def frame_points(rgb, cam, static, mask="thr"):
     X, Z = cam.src_to_ground(u, v)
     ok = np.isfinite(X) & (Z >= Z_NEAR) & (Z < Z_LINES) & (np.abs(X) < X_LIM)
     out = (X[ok], Z[ok], yellow[ys[ok], xs[ok]])
+    mc = None
+    if mask == "hybrid":
+        from seg_model import predictor
+        mc = predictor().classes(rgb)[ys[ok], xs[ok]]
     if ghost is None:
-        return out + (np.zeros(0), np.zeros(0))
+        return out + (np.zeros(0), np.zeros(0), mc)
     gy, gx = np.nonzero(ghost[::2, ::2])
     gy, gx = gy * 2, gx * 2
     k = gy >= 360
     gu, gv = jpg_to_src(gx[k].astype(float), gy[k].astype(float))
     GX, GZ = cam.src_to_ground(gu, gv)
     g = np.isfinite(GX) & (GZ >= Z_NEAR) & (GZ < Z_LINES) & (np.abs(GX) < X_LIM)
-    return out + (GX[g], GZ[g])
+    return out + (GX[g], GZ[g], mc)
 
 
 def best_slope(X, Z):
@@ -160,8 +166,8 @@ def analyze_window(fid, trip, t_center, cam, static, stride=STRIDE, keep_debug=F
     data = []
     for i in idx:
         rgb = load_rgb(os.path.join(d, names[i]))
-        X, Z, yf, GX, GZ = frame_points(rgb, cam, static, mask)
-        data.append({"X": X, "Z": Z, "yf": yf, "s": best_slope(X, Z), "GX": GX, "GZ": GZ,
+        X, Z, yf, GX, GZ, mc = frame_points(rgb, cam, static, mask)
+        data.append({"X": X, "Z": Z, "yf": yf, "mc": mc, "s": best_slope(X, Z), "GX": GX, "GZ": GZ,
                      "rgb": rgb.astype(np.uint8)})
     # Наклонка — общая для соседних кадров: медиана по ±SLOPE_SMOOTH.
     raw_s = [f["s"] for f in data]
@@ -189,6 +195,7 @@ def analyze_window(fid, trip, t_center, cam, static, stride=STRIDE, keep_debug=F
     for t in tracks:
         ks = t["k"][::SAMPLE_EVERY] or t["k"][:1]
         widths, la_ra, contr, kinds, yel = [], [], [], [], []
+        mvotes = []          # классы модели у точек трека (только hybrid)
         profiles = [None] * len(data)
         # Продольный профиль — только по видимой части линии: край кадра
         # тоже «стоит», и обрезанная им линия иначе выглядела бы отражением.
@@ -224,6 +231,8 @@ def analyze_window(fid, trip, t_center, cam, static, stride=STRIDE, keep_debug=F
             cl, cr = side_contrast(fe, cam, x, f["s"], cells[occ] + OCC_STEP / 2)
             contr.append(min(cl, cr))
             yel.append(float(f["yf"][near].mean()))
+            if f["mc"] is not None:
+                mvotes.append(np.bincount(f["mc"][near], minlength=8))
         n_pairs, moving, static_ = motion_test(profiles, path)
         dash, stroke, gap = dash_like(profiles)
         info = {"x_ref": track_x_at(t, k_ref, cum), "life": times[t["k"][-1]] - times[t["k"][0]],
@@ -234,6 +243,9 @@ def analyze_window(fid, trip, t_center, cam, static, stride=STRIDE, keep_debug=F
                 "contrast": float(np.median(contr)) if contr else None,
                 "kinds": kinds, "yellow": bool(yel and np.mean(yel) > 0.5), "track": t}
         info["kind"], info["why"] = judge_track(info)
+        if mask == "hybrid":
+            info["model"] = model_support(mvotes)
+            info["kind"], info["why"] = judge_hybrid(info, info["kind"], info["why"])
         lines.append(info)
     for l in lines:
         if l["kind"] is not None and abs(l["x_ref"]) > FAR_X and l["why"] != "штрихи бегут" \
@@ -318,7 +330,52 @@ def analyze_window(fid, trip, t_center, cam, static, stride=STRIDE, keep_debug=F
         res["_k_ref"] = k_ref
         res["_cum"] = cum
         res["_good"] = good
+        res["_lines"] = lines      # все треки с причинами (seg_selflabel.py)
     return res
+
+
+# ── гибрид: v2 + модель ────────────────────────────────────────────────
+# Пороги выбираются на половине настройки по фолдам поездок (модель фолда
+# не видела этих поездок), не на проверке.
+HYB_VETO = 0.15          # принятая v2 линия краски, где модель видит линию реже, — долой
+HYB_RESCUE = 0.6         # отброшенная v2 линия, где модель видит линию чаще, — возвращаем
+HYB_RESCUE_WHY = ("контраст", "асфальт с одной стороны мало", "не на дороге",
+                  "обрывки, не штрихи", "заполнение")
+
+
+def model_support(votes):
+    """Голоса классов модели у точек трека → {line, curb, kind}: доля точек,
+    которые модель считает линией краски / бордюром, и её класс линии."""
+    if not votes:
+        return None
+    v = np.sum(votes, axis=0).astype(float)
+    n = v.sum()
+    if n <= 0:
+        return None
+    line = v[1] + v[2] + v[3]
+    kind = None
+    if line > 0:
+        kind = ("solid", "dashed", "double")[int(np.argmax(v[1:4]))]
+    return {"line": float(line / n), "curb": float(v[4] / n), "kind": kind}
+
+
+def judge_hybrid(l, kind, why, veto=None, rescue=None):
+    """Решение v2 по треку + опора модели → (kind, why). Модель только
+    подтверждает/снимает и возвращает отброшенное «мягкими» фильтрами;
+    «стоит в кадре» (отражение) и края v2 модель не переигрывает."""
+    veto = HYB_VETO if veto is None else veto
+    rescue = HYB_RESCUE if rescue is None else rescue
+    m = l.get("model")
+    if m is None:
+        return kind, why
+    if kind in ("solid", "dashed") and m["line"] < veto:
+        return None, f"модель: не линия ({m['line']:.2f})"
+    if kind is None and why in HYB_RESCUE_WHY and m["line"] >= rescue:
+        w = l.get("width")
+        if w is not None and LINE_W[0] <= w <= LINE_W[1]:
+            k = "dashed" if m["kind"] == "dashed" else "solid"
+            return k, f"модель: линия ({m['line']:.2f})"
+    return kind, why
 
 
 def judge_track(l):

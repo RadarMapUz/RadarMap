@@ -1,9 +1,13 @@
 """Прогон v2 по кадрам истины и счёт точности.
 
-    python3 evaluate.py [tune|test|all] [--cached] [--mask model]
+    python3 evaluate.py [tune|test|all] [--cached] [--mask model|hybrid] [--model seg_x.pt]
+                        [--trips a,b] [--tag имя]
 
 --mask model — маска разметки из обученной сегментации (seg_model.py)
-вместо пороговой; результаты — eval_<half>_model.json.
+вместо пороговой; результаты — eval_<half>_model.json. --mask hybrid —
+пороговая маска v2, но треки проверяет ещё и модель (window.judge_hybrid).
+--model — веса (иначе seg_latest.pt), --trips — только кадры этих поездок
+(выбор варианта по фолдам), --tag — суффикс файла результатов.
 
 Для каждого кадра истины — окно полного fps вокруг него (window.py),
 ответ окна сравнивается с разметкой глазами. Считаем отдельно для
@@ -92,7 +96,14 @@ def main():
     half = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "tune"
     rows = [r for r in load() if half == "all" or r["half"] == half]
     mask = sys.argv[sys.argv.index("--mask") + 1] if "--mask" in sys.argv else "thr"
-    path = os.path.join(OUT, f"eval_{half}.json" if mask == "thr" else f"eval_{half}_{mask}.json")
+    if "--model" in sys.argv:
+        os.environ["LANES_SEG_MODEL"] = os.path.abspath(sys.argv[sys.argv.index("--model") + 1])
+    if "--trips" in sys.argv:
+        keep = set(sys.argv[sys.argv.index("--trips") + 1].split(","))
+        rows = [r for r in rows if r["trip"] in keep]
+    tag = sys.argv[sys.argv.index("--tag") + 1] if "--tag" in sys.argv else None
+    name = f"eval_{half}" + ("" if mask == "thr" else f"_{mask}") + (f"_{tag}" if tag else "")
+    path = os.path.join(OUT, name + ".json")
     if "--cached" in sys.argv and os.path.exists(path):
         with open(path) as f:
             res = json.load(f)

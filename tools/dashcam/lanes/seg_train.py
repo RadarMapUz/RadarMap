@@ -1,11 +1,12 @@
 """Один запуск: размеченные кадры → маски → обучение → метрики → Core ML.
 
     python3 seg_train.py [--data labels|pseudo] [--epochs 30] [--val-trips N]
-                         [--no-coreml] [--tag имя]
+                         [--no-coreml] [--tag имя] [--hold-trips a,b]
 
 --data labels — разметка человека (labels/), pseudo — псевдоразметка v2
 (pseudo/, проверка трубы). Проверочная часть — ЦЕЛЫЕ ПОЕЗДКИ (последние N
-по алфавиту), как и в истине: соседние кадры одной поездки почти
+по алфавиту, или ровно --hold-trips — для честного выбора варианта на окнах
+настройки, которые сами есть в разметке), как и в истине: соседние кадры одной поездки почти
 одинаковы, и деление по кадрам дало бы красивую, но ложную точность.
 
 Итог в ~/RadarMapBuild/dashcam/lanes/models/:
@@ -48,9 +49,12 @@ def load_set(root, cam):
     return labs, X, Y
 
 
-def split_by_trip(labs, n_val):
+def split_by_trip(labs, n_val, hold=None):
     trips = sorted({l["trip"] for l in labs})
-    val = set(trips[-n_val:]) if len(trips) > n_val else set()
+    if hold:
+        val = set(hold)
+    else:
+        val = set(trips[-n_val:]) if len(trips) > n_val else set()
     tr = [i for i, l in enumerate(labs) if l["trip"] not in val]
     va = [i for i, l in enumerate(labs) if l["trip"] in val]
     return tr, va, sorted(val)
@@ -162,6 +166,7 @@ def main():
     ap.add_argument("--base", type=int, default=16)
     ap.add_argument("--tag", default=None)
     ap.add_argument("--no-coreml", action="store_true")
+    ap.add_argument("--hold-trips", default="", help="поездки проверки через запятую (вне обучения целиком)")
     a = ap.parse_args()
     import torch
     from torch import nn
@@ -173,7 +178,7 @@ def main():
     labs, X, Y = load_set(root, cam)
     if len(labs) < 4:
         raise SystemExit(f"мало размеченных кадров в {root}: {len(labs)}")
-    tr, va, val_trips = split_by_trip(labs, a.val_trips)
+    tr, va, val_trips = split_by_trip(labs, a.val_trips, [t for t in a.hold_trips.split(",") if t])
     print(f"кадров {len(labs)}: обучение {len(tr)}, проверка {len(va)} (поездки {val_trips}); "
           f"маски за {time.time() - t0:.0f} с; устройство {device}", flush=True)
     rng = np.random.default_rng(0)

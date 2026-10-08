@@ -195,6 +195,25 @@ class TestSelection(unittest.TestCase):
         self.assertTrue(all((i - 300) % 2 == 1 and i - 300 < 20 for i in ids))
         self.assertEqual(len({it["key"] for it in items}), len(items))
 
+    def test_near_test_trips_banned(self):
+        from seg_select import near_test
+        truth = [{"trip": "T", "half": "test"}, {"trip": "A", "half": "tune"}]
+        spans = {"T": (10000, 12000), "A": (12100, 13000), "X": (12500, 13000),
+                 "Y": (20000, 21000), "Z": (5000, 9000)}
+        self.assertEqual(near_test(spans, truth), {"X", "Z"})
+        items = select(self.windows, self.truth, self.db, per_trip=5, also_banned={"X"})
+        self.assertFalse(any(it["trip"] == "X" for it in items))
+
+    def test_extend_keeps_order_and_no_leak(self):
+        from seg_select import extend
+        old = select(self.windows, self.truth, self.db, per_trip=3)
+        new = select(self.windows, self.truth, self.db, per_trip=8)
+        ext = extend(old, new)
+        self.assertEqual(ext[:len(old)], old)
+        self.assertGreater(len(ext), len(old))
+        self.assertEqual(len({it["key"] for it in ext}), len(ext))
+        self.assertTrue(all(it["src"] == "db" and it["trip"] == "X" for it in ext[len(old):]))
+
     def test_window_frames_even_and_spaced(self):
         names = self.windows[0]["names"]
         pts = self.windows[0]["pts"]
@@ -241,6 +260,96 @@ class TestTransferAndPseudo(unittest.TestCase):
         lines = [gline("curb", -5.0), gline("dashed", -1.75), gline("dashed", 7.0), gline("curb", 4.0)]
         kept = inside_curbs(CAM, lines)
         self.assertEqual([l["cls"] for l in kept], ["curb", "dashed", "curb"])
+
+
+class TestSelfLabel(unittest.TestCase):
+    """seg_selflabel: решение-классификация кандидатов → разметка."""
+
+    def cand(self, cid, x, status="v2", kind="line", s=0.0):
+        import seg_selflabel as sl
+        c = sl.make_cand(CAM, cid, x, s, None, "", status, kind=kind)
+        self.assertIsNotNone(c)
+        return c
+
+    def item(self, key="w1_f_0001"):
+        return {"key": key, "src": "window", "trip": "t", "win": 1, "name": "f_0001.jpg", "frame_id": None}
+
+    def test_refine_follows_paint_and_refuses_sparse(self):
+        import seg_selflabel as sl
+        rng = np.random.default_rng(1)
+        Z = rng.uniform(6.5, 20, 400)
+        X = 1.9 + 0.02 * (Z - 8) + rng.normal(0, 0.03, len(Z))
+        r = sl.refine(X, Z, 1.75, 0.0)
+        self.assertIsNotNone(r)
+        (a, b, c), zmax = r
+        self.assertAlmostEqual(a, 1.9, delta=0.03)
+        self.assertAlmostEqual(b, 0.02, delta=0.01)
+        self.assertLessEqual(abs(c), sl.CURV_MAX)
+        self.assertIsNone(sl.refine(X[:10], Z[:10], 1.75, 0.0))        # точек мало
+        self.assertIsNone(sl.refine(X, Z, 1.0, 0.0))                   # коридор пуст
+        self.assertIsNone(sl.refine(X, Z, 1.75, 0.0, paint=False))     # бордюр не уточняем
+
+    def test_junk_and_classes(self):
+        import seg_selflabel as sl
+        cands = {"cands": [self.cand(1, -1.75), self.cand(2, 1.75), self.cand(3, 4.5, "rej")]}
+        dec = {"c": {"1": "dashed", "2": "solid", "3": "junk"}, "_from": "w1_f_0001"}
+        lab, synth = sl.build_label("w1_f_0001", self.item(), dec, cands, CAM)
+        self.assertEqual([l["cls"] for l in lab["lines"]], ["dashed", "solid"])
+        self.assertEqual(synth, [False, False])
+        self.assertEqual(lab["origin"], "manual")
+        self.assertIsNone(validate(lab)[1])
+        with self.assertRaises(ValueError):
+            sl.build_label("w1_f_0001", self.item(), {"c": {"1": "лужа"}, "_from": "x"}, cands, CAM)
+
+    def test_synth_offset_by_neighbour_width_or_default(self):
+        import seg_selflabel as sl
+        cands = {"cands": [self.cand(1, -1.6), self.cand(2, 1.6)]}
+        dec = {"c": {"1": "dashed", "2": "dashed"}, "synth": [{"side": "right", "cls": "dashed"}],
+               "_from": "w1"}
+        lab, synth = sl.build_label("w1_f_0001", self.item(), dec, cands, CAM)
+        self.assertEqual(synth, [False, False, True])
+        X, Z = jpg_to_ground(CAM, lab["lines"][2]["pts"])
+        ok = np.isfinite(X)
+        self.assertTrue(np.allclose(X[ok], 4.8, atol=0.05))          # 1,6 + ширина 3,2
+        self.assertEqual(lab["origin"], "transfer")
+        # Одна линия краски — смещение 3,5 м.
+        lab, _ = sl.build_label("w1_f_0001", self.item(),
+                                {"c": {"1": "solid"}, "synth": [{"side": "left", "cls": "dashed"}],
+                                 "_from": "w1"}, cands, CAM)
+        X, _ = jpg_to_ground(CAM, lab["lines"][1]["pts"])
+        self.assertTrue(np.allclose(X[np.isfinite(X)], -5.1, atol=0.05))
+        # Не больше одной досочинённой с каждой стороны.
+        with self.assertRaises(ValueError):
+            sl.build_label("w1_f_0001", self.item(),
+                           {"c": {"1": "solid"}, "synth": [{"side": "left"}, {"side": "left"}],
+                            "_from": "w1"}, cands, CAM)
+
+    def test_ghost_snaps_to_live_candidate_or_keeps_transfer(self):
+        import seg_selflabel as sl
+        ghost = self.cand(7, 2.0, "ghost")
+        live = self.cand(12, 2.25, "rej")
+        far = self.cand(13, 3.5, "rej")
+        self.assertEqual(sl.snap_ghost(ghost, [ghost, live, far], {"7": "dashed"})["id"], 12)
+        self.assertEqual(sl.snap_ghost(ghost, [ghost, far], {"7": "dashed"})["id"], 7)
+        # На этом месте уже решённая линия кадра — второй не будет.
+        self.assertIsNone(sl.snap_ghost(ghost, [ghost, live], {"7": "dashed", "12": "solid"}))
+
+    def test_frame_decision_overrides_window(self):
+        import seg_selflabel as sl
+        with tempfile.TemporaryDirectory() as d:
+            old = sl.DEC
+            sl.DEC = d
+            try:
+                with open(os.path.join(d, "w5.json"), "w") as f:
+                    json.dump({"c": {"1": "solid"}}, f)
+                self.assertEqual(sl.load_decision("w5_f_0003")["_from"], "w5")
+                with open(os.path.join(d, "w5_f_0003.json"), "w") as f:
+                    json.dump({"skip": True}, f)
+                self.assertTrue(sl.load_decision("w5_f_0003")["skip"])
+                self.assertEqual(sl.load_decision("w5_f_0005")["_from"], "w5")
+                self.assertIsNone(sl.load_decision("d42"))
+            finally:
+                sl.DEC = old
 
 
 if __name__ == "__main__":

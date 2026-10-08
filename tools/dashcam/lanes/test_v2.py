@@ -235,5 +235,38 @@ class TestVote(unittest.TestCase):
         self.assertEqual(vote(ls, 0.5)[:2], (3, 2))
 
 
+class TestHybrid(unittest.TestCase):
+    """Гибрид v2 + модель: модель снимает/возвращает, отражения не трогает."""
+
+    def votes(self, line_cls, n_line, n_other):
+        import numpy as np
+        v = np.zeros(8, int)
+        v[line_cls] = n_line
+        v[0] = n_other
+        return [v]
+
+    def test_support(self):
+        from window import model_support
+        m = model_support(self.votes(2, 30, 10))
+        self.assertAlmostEqual(m["line"], 0.75)
+        self.assertEqual(m["kind"], "dashed")
+        self.assertIsNone(model_support([]))
+
+    def test_veto_and_rescue(self):
+        from window import judge_hybrid, model_support
+        l = {"width": 0.15, "model": model_support(self.votes(1, 1, 30))}
+        self.assertIsNone(judge_hybrid(l, "dashed", "штрихи бегут")[0])
+        self.assertEqual(judge_hybrid(l, "edge", "асфальт с одной стороны")[0], "edge")
+        l = {"width": 0.15, "model": model_support(self.votes(2, 30, 5))}
+        self.assertEqual(judge_hybrid(l, None, "контраст")[0], "dashed")
+        # отражение («стоит в кадре») модель не возвращает
+        self.assertIsNone(judge_hybrid(l, None, "стоит в кадре")[0])
+        # широкое облако — не линия, даже если модель «за»
+        l["width"] = 0.6
+        self.assertIsNone(judge_hybrid(l, None, "контраст")[0])
+        # без модели — как v2
+        self.assertEqual(judge_hybrid({"model": None}, "solid", "по заполнению"), ("solid", "по заполнению"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,8 @@
 """Отбор кадров для ручной разметки сегментации — без утечки проверки.
 
     python3 seg_select.py          → ~/RadarMapBuild/dashcam/lanes/labels/selection.json
+    python3 seg_select.py --extend N   → дописать в конец отбора ещё до N кадров БД
+                                        на поездку (уже размеченное и порядок не трогаем)
 
 Проверочная половина истины (truth.json, half=test) делится ПО ПОЕЗДКАМ,
 поэтому из её поездок не берём ничего — ни окна истины, ни случайные окна
@@ -13,7 +15,8 @@
   на −1,5/−0,5/+0,5/+1,5 с от центра — через 1 с, чтобы работал перенос
   разметки с соседнего кадра по трекам. Кадр — чётный (window.py берёт
   каждый второй, предзаполнение есть только для них);
-- кадры БД (раз в ~5 м пути) поездок, которых нет в истине совсем: по
+- кадры БД (раз в ~5 м пути) поездок, которых нет в истине совсем и
+  которые не ближе часа к проверочной (near_test — та же дорога обратно): по
   PER_TRIP равномерно по времени, на ходу, днём (средняя яркость дороги).
   Треков у них нет — предзаполнение по одному кадру (v1).
 
@@ -65,14 +68,26 @@ def interleave(groups):
     return out
 
 
-def select(windows, truth, db_frames, per_trip=PER_TRIP):
+NEAR_TEST_S = 3600     # поездка, начатая/законченная ближе часа к проверочной, —
+                       # скорее всего та же дорога туда/обратно: тоже мимо
+
+
+def near_test(spans, truth, gap_s=NEAR_TEST_S):
+    """spans: {поездка: (t0, t1)} → поездки вне истины ближе gap_s к проверочной."""
+    test = [spans[t] for t in test_trips(truth) if t in spans]
+    known = {r["trip"] for r in truth}
+    return {t for t, (a, b) in spans.items() if t not in known
+            and any(max(c - b, a - d, 0) < gap_s for c, d in test)}
+
+
+def select(windows, truth, db_frames, per_trip=PER_TRIP, also_banned=()):
     """Чистая логика отбора.
 
     windows: [{"win", "trip", "names", "pts", "pos"}] — окна на диске;
     truth: строки truth.json; db_frames: {trip: [(id, t, kmh, path, luma)]}.
     → список элементов {"key", "src", "trip", "win", "name", "frame_id", "path", "round"}.
     """
-    banned = test_trips(truth)
+    banned = test_trips(truth) | set(also_banned)
     known = {r["trip"] for r in truth}
     banned_ids = {r["id"] for r in truth if r["half"] == "test"}
     # Окна: по кругам, внутри круга — поездки вперемешку.
@@ -112,6 +127,13 @@ def select(windows, truth, db_frames, per_trip=PER_TRIP):
     return out
 
 
+def extend(old, new):
+    """Дописать к отбору old кадры БД из new, которых в нём нет; старый порядок
+    (и номера в label_ui) сохраняется. Правила утечки те же: new — из select()."""
+    have = {it["key"] for it in old}
+    return old + [it for it in new if it["src"] == "db" and it["key"] not in have]
+
+
 def road_luma(path):
     from PIL import Image
     im = Image.open(path).convert("L").crop((320, 400, 960, 529)).reduce(4)
@@ -119,7 +141,10 @@ def road_luma(path):
 
 
 def main():
+    import sys
     from truth import load
+    more = int(sys.argv[sys.argv.index("--extend") + 1]) if "--extend" in sys.argv else 0
+    per_trip = PER_TRIP + more
     truth = load()
     trip_of = {r["id"]: r["trip"] for r in truth}
     con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
@@ -135,6 +160,8 @@ def main():
         names = sorted(n for n in os.listdir(os.path.join(WIN, d)) if n.startswith("f_"))
         windows.append({"win": fid, "trip": trip, "names": names, "pts": meta["pts"], "pos": meta["pos"]})
     known = {r["trip"] for r in truth}
+    spans = {t: (a, b) for t, a, b in con.execute("select trip_key, min(t), max(t) from frames group by trip_key")}
+    near = near_test(spans, truth)
     db_frames = {}
     for (trip,) in con.execute("select distinct trip_key from frames"):
         if trip in known:
@@ -144,10 +171,13 @@ def main():
         # Яркость считаем только у кандидатов (берём втрое больше нужного).
         if not rows:
             continue
-        cand = np.unique(np.linspace(0, len(rows) - 1, min(len(rows), PER_TRIP * 3)).astype(int))
+        cand = np.unique(np.linspace(0, len(rows) - 1, min(len(rows), per_trip * 3)).astype(int))
         db_frames[trip] = [(*rows[i], road_luma(rows[i][3])) for i in cand]
     con.close()
-    items = select(windows, truth, db_frames)
+    items = select(windows, truth, db_frames, per_trip, near)
+    if more:
+        with open(SELECTION) as f:
+            items = extend(json.load(f), items)
     os.makedirs(os.path.dirname(SELECTION), exist_ok=True)
     with open(SELECTION, "w") as f:
         json.dump(items, f, ensure_ascii=False, indent=1)

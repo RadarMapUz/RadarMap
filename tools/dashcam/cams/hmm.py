@@ -56,20 +56,82 @@ class EitherWayOSRM:
         return min(cands, key=lambda r: r[1]) if cands else None
 
 
-def identify(events, odo_at, idx, osrm, start_candidates=None, verify_top=VERIFY_TOP):
-    """events: [(t, p)] по времени. → dict(status, anchors=[(t, индекс камеры, conf)])."""
+# Путь по OCR-скорости к прямой между соседними настоящими камерами (поездки с
+# GPX, 08.10.2026): 1,07–1,10 почти везде — улицы города прямые. Цена anchorhmm
+# (середина 1,25·прямой, допуск 35 %) этого не знала, и при 3500 камерах любая
+# последовательность путей находила «идеальную» ложную цепочку (цена 0,03 против
+# 2,27 у настоящей).
+TORT_MID = 1.08
+TORT_SIGMA = (0.08, 30.0)
+
+
+def tight_cost(s_ab, d):
+    if s_ab > d * 1.05 + 40:
+        return None
+    return ((d - TORT_MID * s_ab) / (TORT_SIGMA[0] * d + TORT_SIGMA[1])) ** 2
+
+
+class DetourTolerantOSRM(EitherWayOSRM):
+    """Если OSRM уводит в объезд (маршрут > пути по скорости в 1,2 раза), а прямая
+    согласуется с путём (путь в 1,0–1,35 прямой), — верим прямой: камеры на оси
+    разделённой дороги OSRM садит на встречную половину, и у настоящих соседних
+    камер маршрут расходился с путём в 2–4 раза."""
+
+    def __init__(self, osrm, odo_for):
+        super().__init__(osrm)
+        self.odo_for = odo_for   # (a, b) → путь по скорости для этого перехода
+
+    def route(self, a, b, bearings=None):
+        r = super().route(a, b, bearings)
+        d = self.odo_for.get((a, b))
+        if d is None:
+            return r
+        import passes
+        line = passes.haversine(a[0], a[1], b[0], b[1])
+        if (r is None or r[1] > d * 1.2) and line <= d <= 1.35 * line + 60:
+            return [a, b], d
+        return r
+
+
+def subindex(cams, region=None, allowed=None):
+    """Индекс по части базы: регион владельца (поездки — в одном городе) или список."""
+    keep = [i for i, c in enumerate(cams) if (region is None or c.get('region') == region)
+            and (allowed is None or i in allowed)]
+    idx = anchorhmm.CamIndex([cams[i] for i in keep])
+    return idx, keep
+
+
+def identify(events, odo_at, idx, osrm, start_candidates=None, verify_top=VERIFY_TOP, tight=False,
+             detour_ok=False):
+    """events: [(t, p)] по времени. → dict(status, anchors=[(t, индекс камеры в idx, conf)]).
+    tight — цена перехода по прямой с извилистостью 1,08 (см. tight_cost);
+    detour_ok — объезд OSRM при согласной прямой не считать расхождением."""
     if len(events) < MIN_CHAIN:
         return {'status': 'too_few_events', 'anchors': [], 'events': len(events)}
     times = [e[0] for e in events]
     dists = [odo_at(b) - odo_at(a) for a, b in zip(times, times[1:])]
-    paths = anchorhmm.viterbi(dists, idx, start_candidates, top=verify_top * 4)
+    saved = anchorhmm.straight_cost
+    if tight:
+        anchorhmm.straight_cost = tight_cost
+    try:
+        paths = anchorhmm.viterbi(dists, idx, start_candidates, top=verify_top * 4)
+    finally:
+        anchorhmm.straight_cost = saved
     scored, seen = [], set()
     for cost, states in paths:
         sig = tuple(states)
         if sig in seen or sum(s is not None for s in states) < MIN_CHAIN or has_loop(states):
             continue
         seen.add(sig)
-        chain, checks = anchorhmm.verify_chain(states, dists, idx, EitherWayOSRM(osrm))
+        if detour_ok:
+            odo_for, real = {}, [(k, st) for k, st in enumerate(states) if st is not None]
+            for (k1, a), (k2, b) in zip(real, real[1:]):
+                ca, cb = idx.cams[a], idx.cams[b]
+                odo_for[((ca['lat'], ca['lon']), (cb['lat'], cb['lon']))] = sum(dists[k1:k2])
+            ro = DetourTolerantOSRM(osrm, odo_for)
+        else:
+            ro = EitherWayOSRM(osrm)
+        chain, checks = anchorhmm.verify_chain(states, dists, idx, ro)
         scored.append((chain, -cost, states, checks))
         if len(scored) >= verify_top:
             break

@@ -85,27 +85,41 @@ def nearest_accuracy(ctx, model):
     return {'matched_events': ok + wrong + none, 'correct': ok, 'wrong': wrong, 'no_camera_60m': none}
 
 
-def honest(model, p_min, oracle=False, log=print):
+def honest(model, p_min, oracle=False, log=print, only=None):
     """П.5: на поездках с GPX опоры спрятаны; события → HMM → сверка с wpt.
     oracle=True — вместо событий модели идеальные (моменты проездов из GPX)."""
     ctx = evaluate.Ctx()
     prob = evaluate.model_prob(ctx.conn, model)
-    idx = hmm.index(ctx.grid.cams)
     osrm = geo.OSRM(ctx.conn)
+    by_id = {c['id']: c for c in ctx.grid.cams}
+    idx_cache = {}
     tot = {'trips': 0, 'truth_passes': 0, 'events': 0, 'claimed': 0, 'correct': 0, 'false': 0}
     per = []
     for key in sorted(ctx.gp):
         truth = ctx.truth(key)
-        if not truth:
+        if not truth or (only and key not in only):
             continue
         odo = ctx.odo(key)
         if oracle:
             ev = [(t, 1.0) for t, _ in truth]
         else:
             ev = [(e['t'], e['p']) for e in events.events_from_series(ctx.series(key, prob), odo, p_min=p_min)]
-        res = hmm.identify(ev, odo.at, idx, osrm) if len(ev) >= hmm.MIN_CHAIN else {
+        # Район владельца — по ДРУГИМ поездкам (без утечки правды этой): самый частый
+        # регион камер из их проездов. Без этого HMM уезжал в Фергану: в плотной
+        # базе любой ряд путей находит «идеальную» цепочку где угодно.
+        regs = {}
+        for k2, tps in ctx.gp.items():
+            if k2 != key:
+                for _, cid in tps:
+                    r = by_id.get(cid, {}).get('region')
+                    regs[r] = regs.get(r, 0) + 1
+        region = max(regs, key=regs.get) if regs else None
+        if region not in idx_cache:
+            idx_cache[region] = hmm.subindex(ctx.grid.cams, region=region)[0]
+        idx = idx_cache[region]
+        res = hmm.identify(ev, odo.at, idx, osrm, tight=True) if len(ev) >= hmm.MIN_CHAIN else {
             'status': 'too_few_events', 'anchors': []}
-        claimed = [(t, ctx.grid.cams[j]['id']) for t, j, _ in res['anchors']]
+        claimed = [(t, idx.cams[j]['id']) for t, j, _ in res['anchors']]
         good = 0
         tt = [t for t, _ in truth]
         for t, cid in claimed:
@@ -250,7 +264,9 @@ if __name__ == '__main__':
         print('событий', run_events(model, p))
     elif cmd == 'honest':
         oracle = '--oracle' in sys.argv
-        rep = honest(model, p, oracle=oracle)
+        only = set(evaluate.Ctx().split()['val']) if '--val' in sys.argv else None
+        rep = honest(model, p, oracle=oracle, only=only)
+        rep['trips_scope'] = 'val' if only else 'all'
         common.save_report(common.own(), 'honest_oracle' if oracle else 'honest', rep)
         print(json.dumps({k: v for k, v in rep.items() if k != 'trips'}, ensure_ascii=False, indent=1))
     elif cmd == 'candidates':

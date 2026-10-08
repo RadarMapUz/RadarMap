@@ -224,6 +224,36 @@ class WebTest(unittest.TestCase):
             self.assertIsNone(camsweb.crop_bytes(bad))
 
 
+class HMMTightTest(unittest.TestCase):
+    def test_tight_cost_prefers_straight_city_streets(self):
+        import hmm
+        self.assertLess(hmm.tight_cost(1000, 1080), 0.01)
+        self.assertGreater(hmm.tight_cost(1000, 1400), 4 * hmm.tight_cost(1000, 1150))
+        self.assertIsNone(hmm.tight_cost(1500, 1000))          # путь короче прямой — невозможно
+
+    def test_subindex_by_region(self):
+        import hmm
+        cams = [dict(cam(1, 41.3, 69.2), region='A'), dict(cam(2, 40.4, 71.8), region='B')]
+        idx, keep = hmm.subindex(cams, region='A')
+        self.assertEqual(keep, [0])
+        self.assertEqual(idx.cams[0]['id'], 1)
+
+    def test_tight_synthetic_chain(self):
+        import hmm
+        lat0, lon0 = 41.3, 69.2
+        step = [0, 700, 1900, 2600, 4400, 5100]
+        cams = [cam(10 + i, lat0 + s / 111000, lon0) for i, s in enumerate(step)]
+        idx = hmm.index(cams)
+        k = hmm.TORT_MID
+        times = [0.0]
+        for a, b in zip(step, step[1:]):
+            times.append(times[-1] + (b - a) * k / 10)
+        odo = const_odo(36.0, 0, times[-1] + 10)
+        res = hmm.identify([(t, 1.0) for t in times], odo.at, idx, FakeOSRM(k), tight=True)
+        self.assertEqual(res['status'], 'ok')
+        self.assertTrue(all(cams[j]['id'] == 10 + times.index(t) for t, j, _ in res['anchors']))
+
+
 class HMMLoopTest(unittest.TestCase):
     def test_loop_detection(self):
         import hmm

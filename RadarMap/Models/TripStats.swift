@@ -226,10 +226,11 @@ final class TripStats {
     /// Зафиксировать прохождение камеры (скорость — в точке максимального сближения).
     func registerPass(camera: Camera, speedKmh: Double, limitKmh: Int?,
                       roadLimitKmh: Int? = nil, limitAssumed: Bool = false,
-                      courseDegrees: Double? = nil, speedAfterKmh: Double? = nil) {
+                      courseDegrees: Double? = nil, speedAfterKmh: Double? = nil,
+                      date: Date = Date()) {
         passed.append(PassedCamera(
             id: UUID(), cameraID: camera.id, typeRaw: camera.type,
-            location: camera.displayTitle, speedKmh: speedKmh, date: Date(),
+            location: camera.displayTitle, speedKmh: speedKmh, date: date,
             lat: camera.lat, lon: camera.lon, limitKmh: limitKmh,
             // Сырой лимит храним, только если он отличается от итогового:
             // повторять одно и то же число в каждой записи истории незачем.

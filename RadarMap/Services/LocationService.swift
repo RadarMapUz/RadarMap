@@ -555,7 +555,8 @@ final class LocationService: NSObject {
                               limitKmh: pass.limitKmh, roadLimitKmh: pass.roadLimitKmh,
                               limitAssumed: pass.limitAssumed,
                               courseDegrees: pass.courseDegrees,
-                              speedAfterKmh: pass.speedAfterKmh)
+                              speedAfterKmh: pass.speedAfterKmh,
+                              date: pass.date)
             onPassRecorded?(pass.limitKmh == nil ? "none"
                             : (pass.limitAssumed ? "assumed" : "tag"))
         }

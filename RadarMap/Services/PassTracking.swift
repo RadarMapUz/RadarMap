@@ -23,6 +23,8 @@ nonisolated struct PassTracking {
         /// приходит вовсе). Нужен, чтобы отличить проезд «туда» от «обратно»:
         /// на этом стоит CameraAim.
         var courseAtMin: Double = -1
+        /// Когда было максимальное сближение — это и есть момент проезда.
+        var timeAtMin = Date()
         /// Максимум скорости на отходе от камеры (зона passAfter…). Вместе с
         /// минимумом на подходе это и есть «провал скорости у камеры» —
         /// сигнал, по которому CameraAim догадывается о её направлении.
@@ -55,6 +57,12 @@ nonisolated struct PassTracking {
         let courseDegrees: Double?
         /// Скорость на отходе от камеры; nil — фиксов в зоне отхода не было.
         let speedAfterKmh: Double?
+        /// Момент проезда (максимального сближения), а не момент, когда
+        /// камеру «отпустили»: отпускают через радиус + гистерезис, то есть
+        /// на 600–800 м и 40–50 с позже. Раньше история писала время
+        /// отпускания, и привязка видео регистратора по этим проездам
+        /// уезжала на сотни метров назад (разбор видео 08.10.2026).
+        let date: Date
     }
 
     private(set) var tracked: [Int: Tracker] = [:]
@@ -79,6 +87,7 @@ nonisolated struct PassTracking {
                          roadLimit: Int?, roadLimitAssumed: Bool = false,
                          radius: CLLocationDistance,
                          course: CLLocationDirection = -1,
+                         now: Date = Date(),
                          offRoad: (Camera, CLLocationCoordinate2D) -> Bool = { _, _ in false })
         -> [Pass] {
         // Вошли в радиус камеры впереди — начинаем следить.
@@ -87,7 +96,7 @@ nonisolated struct PassTracking {
             var tracker = Tracker(camera: nearest, minDist: distance,
                                   speedAtMin: speedKmh, limitAtMin: roadLimit,
                                   limitAssumedAtMin: roadLimitAssumed,
-                                  courseAtMin: course)
+                                  courseAtMin: course, timeAtMin: now)
             if distance <= AppConfig.passZoneMeters {
                 tracker.zone.append((distance, speedKmh))
                 tracker.offRoadAtMin = offRoad(nearest, coordinate)
@@ -106,6 +115,7 @@ nonisolated struct PassTracking {
                 tracker.minDist = distance
                 tracker.speedAtMin = speedKmh
                 tracker.courseAtMin = course
+                tracker.timeAtMin = now
                 if roadLimit != nil {
                     tracker.limitAtMin = roadLimit
                     tracker.limitAssumedAtMin = roadLimitAssumed
@@ -162,6 +172,7 @@ nonisolated struct PassTracking {
                     roadLimitKmh: tracker.limitAtMin,
                     limitAssumed: tracker.limitAssumedAtMin,
                     courseDegrees: tracker.courseAtMin >= 0 ? tracker.courseAtMin : nil,
-                    speedAfterKmh: tracker.afterMaxSpeed)
+                    speedAfterKmh: tracker.afterMaxSpeed,
+                    date: tracker.timeAtMin)
     }
 }

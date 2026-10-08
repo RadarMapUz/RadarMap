@@ -40,6 +40,26 @@ final class PassAfterZoneTests: XCTestCase {
         return tick(69.2180, 90)                   // ушли за радиус + гистерезис
     }
 
+    /// Время проезда — момент наибольшего сближения, а не момент, когда
+    /// камеру отпустили за радиусом: по нему кадры видео ставятся на карту.
+    func testPassTimeIsTheTraverseNotTheRelease() {
+        var tracking = PassTracking()
+        let cam = camera
+        let t0 = Date(timeIntervalSince1970: 1_791_350_400)
+        var result: [PassTracking.Pass] = []
+        for (i, (lon, speed)) in [(69.2050, 70.0), (69.2095, 62), (69.2100, 57), (69.2111, 75),
+                                  (69.2118, 85), (69.2180, 90)].enumerated() {
+            let distance = GeoMath.fastDistance(lat, lon, cam.lat, cam.lon)
+            result += tracking.update(
+                nearest: cam, nearestDistance: distance,
+                coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                speedKmh: speed, roadLimit: 60, radius: 500, course: 90,
+                now: t0.addingTimeInterval(Double(i) * 10))
+        }
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result[0].date, t0.addingTimeInterval(20), "траверз — третий тик, не последний")
+    }
+
     /// Разгон после камеры не портит записанную скорость (её берут минимумом
     /// зоны), но сам записывается — без него направление камеры не вывести.
     func testAfterZoneSpeedIsRecordedWithoutSpoilingTheMeasurement() {

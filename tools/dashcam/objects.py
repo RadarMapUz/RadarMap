@@ -28,6 +28,7 @@ DEFAULT_CALIB = {'model': 'byd', 'f': 1123.6, 'k': 0.3, 'yaw_deg': -1.402, 'cx':
 # Реальные размеры, м: знак 3.24 Ø 0,7 (в городе 0,6–0,7), квадрат 5.19 — 0,6,
 # горящая секция светофора — светящийся круг ~0,2 (секция 0,3 с козырьком).
 REAL_SIZE_M = {'speed_limit': 0.7, 'crossing': 0.6, 'traffic_light': 0.2}
+SIGN_SIZE_M = 0.7   # прочие знаки (signmap.py): круг/ромб/треугольник типоразмера II
 MIN_SPREAD_DEG = 2.5
 MAX_RANGE_M = 120.0
 BEARING_SIGMA_DEG = 1.0
@@ -282,7 +283,7 @@ def locate_track(track, lens, plane):
     size_px = max(o['w'], o['h'])
     if size_px <= 0:
         return None
-    d = lens.local_f(o['x']) * REAL_SIZE_M[o['cls']] / size_px
+    d = lens.local_f(o['x']) * REAL_SIZE_M.get(o['cls'], SIGN_SIZE_M) / size_px
     if d > MAX_RANGE_M:
         return None
     brg = (o['course'] + lens.angle(o['x'] + o['w'] / 2, o['y'] + o['h'] / 2)) % 360

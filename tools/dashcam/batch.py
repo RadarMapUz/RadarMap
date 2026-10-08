@@ -449,16 +449,21 @@ def run(conn, keys=None, limit=None, stages=STAGES):
                     import detect
                     n = detect.detect_trip(conn, key, log=log)
                     log(f'  знаки ограничения «текст сначала»: +{detect.textscan_trip(conn, key)}')
+                    import signs
+                    log(f'  классификатор знаков: {signs.classify(conn, log=log)} вырезок')
                     set_stage(conn, key, 'detected')
                     log(f'  детекторы: {n}')
                 if 'objects' in stages:
                     import objects
                     n = objects.build_trip(conn, key)
+                    import signmap
+                    n += signmap.build_trip(conn, key)
                     set_stage(conn, key, 'objects')
                     log(f'  объекты: {n}')
                     # кластеры и покрытие — задним числом по всему разобранному
                     import cluster
                     log(f'  кластеры: {cluster.rebuild(conn, log=lambda *_: None)}')
+                    log(f'  знаки: {signmap.rebuild_finds(conn)}')
                     log(f'  покрытие: {coverage.rebuild(conn)}')
                     pinned = coverage.pinned_keys(conn)
             except DiskLow as e:
@@ -499,6 +504,9 @@ def redetect(conn, keys=None, log=log):
     import signs
     log(f'кластеры: {cluster.rebuild(conn, log=log)}')
     signs.cluster_all(conn, log=log)
+    import signmap
+    log(f'классификатор знаков: {signs.classify(conn, log=log)}')
+    signmap.build(conn, log=log)
     log(f'покрытие: {coverage.rebuild(conn)}')
 
 
@@ -546,12 +554,14 @@ def relocate(conn, keys=None, log=log):
     import coverage
     import objects
     keys = keys or [r[0] for r in conn.execute('SELECT DISTINCT trip_key FROM frames ORDER BY trip_key')]
+    import signmap
     for k in keys:
         s = geo_trip(conn, k)
-        m = objects.build_trip(conn, k)
+        m = objects.build_trip(conn, k) + signmap.build_trip(conn, k)
         log(f'{k}: {s.get("source")}, опор {s.get("anchors_used")}, кадров с местом '
             f'{s.get("located")}/{s.get("frames")}, объектов {m}')
     log(f'кластеры: {cluster.rebuild(conn, log=log)}')
+    log(f'знаки: {signmap.rebuild_finds(conn)}')
     log(f'покрытие: {coverage.rebuild(conn)}')
 
 

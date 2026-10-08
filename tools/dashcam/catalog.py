@@ -181,6 +181,29 @@ CREATE INDEX IF NOT EXISTS sign_crops_cluster ON sign_crops(cluster);
 CREATE TABLE IF NOT EXISTS sign_clusters(
   id INTEGER PRIMARY KEY, shape TEXT NOT NULL, size INTEGER, reps TEXT, label TEXT, parent INTEGER
 );
+-- Правка подписи вырезки после проверки глазами: подпись владельца ставилась
+-- на кластер целиком, и внутри бывают примеси. Исходная sign_crops.label не
+-- затирается — действующая подпись = правка, если есть, иначе подпись.
+CREATE TABLE IF NOT EXISTS sign_label_fix(
+  crop_id INTEGER PRIMARY KEY, label_orig TEXT, label TEXT NOT NULL, note TEXT, at REAL
+);
+-- Ответ классификатора знаков (signs.py classify) по вырезке.
+CREATE TABLE IF NOT EXISTS sign_pred(
+  crop_id INTEGER PRIMARY KEY, label TEXT NOT NULL, conf REAL, model TEXT, at REAL
+);
+-- Знак на карте (signmap.py): трек вырезок одного класса в поездке →
+-- триангуляция; finds — объединение по поездкам.
+CREATE TABLE IF NOT EXISTS sign_objects(
+  id INTEGER PRIMARY KEY, trip_key TEXT NOT NULL, label TEXT NOT NULL, value INTEGER,
+  lat REAL, lon REAL, err_m REAL, n_frames INTEGER, method TEXT, weight REAL, conf REAL,
+  course REAL, lateral_m REAL, side TEXT, source TEXT, crop_ids TEXT, find INTEGER
+);
+CREATE INDEX IF NOT EXISTS sign_objects_trip ON sign_objects(trip_key);
+CREATE TABLE IF NOT EXISTS sign_finds(
+  id INTEGER PRIMARY KEY, label TEXT NOT NULL, value INTEGER, lat REAL, lon REAL, err_m REAL,
+  n_trips INTEGER, n_frames INTEGER, confidence REAL, course REAL, side TEXT, human INTEGER,
+  status TEXT, map_ref TEXT
+);
 -- Сколько кадров ролика не вынуто, потому что участок уже закреплён (coverage.py).
 CREATE TABLE IF NOT EXISTS coverage_skips(clip_id INTEGER PRIMARY KEY, skipped INTEGER, total INTEGER);
 -- Рывки картинки по вертикали (кандидаты «лежачий полицейский»): t — часы регистратора.

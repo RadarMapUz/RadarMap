@@ -1,0 +1,946 @@
+{
+"reviewed": "2026-10-08",
+"note": "проверка глазами всех вырезок не-junk и всех junk (контактные листы); подпись ставилась кластером",
+"fixes": [
+{
+"crop_id": 1538,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 1575,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 1576,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 1580,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 1601,
+"from": "uturn",
+"label": "other_sign"
+},
+{
+"crop_id": 1608,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 1611,
+"from": "other_sign",
+"label": "radar_sign"
+},
+{
+"crop_id": 1627,
+"from": "crossing",
+"label": "radar_sign"
+},
+{
+"crop_id": 1630,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 1631,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 1710,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 1720,
+"from": "other_sign",
+"label": "radar_sign"
+},
+{
+"crop_id": 1723,
+"from": "other_sign",
+"label": "radar_sign"
+},
+{
+"crop_id": 1724,
+"from": "other_sign",
+"label": "radar_sign"
+},
+{
+"crop_id": 1725,
+"from": "other_sign",
+"label": "radar_sign"
+},
+{
+"crop_id": 1728,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 1732,
+"from": "keep_right",
+"label": "other_sign"
+},
+{
+"crop_id": 1734,
+"from": "crossing",
+"label": "radar_sign"
+},
+{
+"crop_id": 1747,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 1763,
+"from": "street_name",
+"label": "junk"
+},
+{
+"crop_id": 1765,
+"from": "street_name",
+"label": "junk"
+},
+{
+"crop_id": 1776,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 1777,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 1783,
+"from": "junk",
+"label": "crossing"
+},
+{
+"crop_id": 1795,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 1803,
+"from": "only_straight",
+"label": "other_sign"
+},
+{
+"crop_id": 1806,
+"from": "keep_right",
+"label": "other_sign"
+},
+{
+"crop_id": 1811,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 1841,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 1842,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 1853,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 1867,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 1901,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 1914,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 1915,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 1926,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 1928,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 1962,
+"from": "crossing",
+"label": "junk"
+},
+{
+"crop_id": 1987,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 1990,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 1991,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 1993,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 1995,
+"from": "uturn",
+"label": "junk"
+},
+{
+"crop_id": 2016,
+"from": "other_sign",
+"label": "radar_sign"
+},
+{
+"crop_id": 2017,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 2023,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2036,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2038,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 2039,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 2052,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2072,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2073,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2080,
+"from": "only_straight",
+"label": "junk"
+},
+{
+"crop_id": 2093,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 2095,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 2096,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2097,
+"from": "keep_right",
+"label": "other_sign"
+},
+{
+"crop_id": 2112,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 2113,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 2131,
+"from": "other_sign",
+"label": "radar_sign"
+},
+{
+"crop_id": 2153,
+"from": "other_sign",
+"label": "radar_sign"
+},
+{
+"crop_id": 2168,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2174,
+"from": "crossing",
+"label": "uturn"
+},
+{
+"crop_id": 2176,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2183,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2201,
+"from": "street_name",
+"label": "radar_sign"
+},
+{
+"crop_id": 2213,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 2220,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 2261,
+"from": "other_sign",
+"label": "radar_sign"
+},
+{
+"crop_id": 2266,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2280,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2281,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2284,
+"from": "keep_right",
+"label": "radar_sign"
+},
+{
+"crop_id": 2292,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 2302,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2319,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 2329,
+"from": "uturn",
+"label": "other_sign"
+},
+{
+"crop_id": 2352,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 2361,
+"from": "keep_right",
+"label": "uturn"
+},
+{
+"crop_id": 2371,
+"from": "uturn",
+"label": "junk"
+},
+{
+"crop_id": 2387,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2397,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2407,
+"from": "street_name",
+"label": "junk"
+},
+{
+"crop_id": 2408,
+"from": "uturn",
+"label": "junk"
+},
+{
+"crop_id": 2410,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2411,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2412,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2413,
+"from": "street_name",
+"label": "junk"
+},
+{
+"crop_id": 2414,
+"from": "street_name",
+"label": "junk"
+},
+{
+"crop_id": 2415,
+"from": "uturn",
+"label": "junk"
+},
+{
+"crop_id": 2450,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 2455,
+"from": "keep_right",
+"label": "other_sign"
+},
+{
+"crop_id": 2456,
+"from": "uturn",
+"label": "other_sign"
+},
+{
+"crop_id": 2457,
+"from": "uturn",
+"label": "other_sign"
+},
+{
+"crop_id": 2484,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2498,
+"from": "street_name",
+"label": "junk"
+},
+{
+"crop_id": 2513,
+"from": "junk",
+"label": "give_way"
+},
+{
+"crop_id": 2514,
+"from": "junk",
+"label": "give_way"
+},
+{
+"crop_id": 2532,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2533,
+"from": "uturn",
+"label": "other_sign"
+},
+{
+"crop_id": 2565,
+"from": "keep_right",
+"label": "other_sign"
+},
+{
+"crop_id": 2567,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 2569,
+"from": "uturn",
+"label": "only_straight"
+},
+{
+"crop_id": 2571,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 2576,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2620,
+"from": "crossing",
+"label": "junk"
+},
+{
+"crop_id": 2621,
+"from": "street_name",
+"label": "junk"
+},
+{
+"crop_id": 2622,
+"from": "street_name",
+"label": "junk"
+},
+{
+"crop_id": 2631,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2660,
+"from": "other_sign",
+"label": "radar_sign"
+},
+{
+"crop_id": 2687,
+"from": "uturn",
+"label": "crossing"
+},
+{
+"crop_id": 2709,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 2717,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2730,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2731,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2743,
+"from": "other_sign",
+"label": "radar_sign"
+},
+{
+"crop_id": 2744,
+"from": "other_sign",
+"label": "radar_sign"
+},
+{
+"crop_id": 2778,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 2779,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 2782,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 2790,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2791,
+"from": "keep_right",
+"label": "uturn"
+},
+{
+"crop_id": 2792,
+"from": "keep_right",
+"label": "uturn"
+},
+{
+"crop_id": 2801,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 2817,
+"from": "keep_right",
+"label": "other_sign"
+},
+{
+"crop_id": 2818,
+"from": "keep_right",
+"label": "other_sign"
+},
+{
+"crop_id": 2830,
+"from": "junk",
+"label": "other_sign"
+},
+{
+"crop_id": 2857,
+"from": "crossing",
+"label": "street_name"
+},
+{
+"crop_id": 2860,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 2871,
+"from": "uturn",
+"label": "other_sign"
+},
+{
+"crop_id": 2872,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 2910,
+"from": "only_straight",
+"label": "crossing"
+},
+{
+"crop_id": 2914,
+"from": "street_name",
+"label": "junk"
+},
+{
+"crop_id": 2915,
+"from": "street_name",
+"label": "junk"
+},
+{
+"crop_id": 2921,
+"from": "uturn",
+"label": "other_sign"
+},
+{
+"crop_id": 2933,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 2979,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 3024,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 3035,
+"from": "keep_right",
+"label": "uturn"
+},
+{
+"crop_id": 3046,
+"from": "main_road",
+"label": "junk"
+},
+{
+"crop_id": 3047,
+"from": "crossing",
+"label": "junk"
+},
+{
+"crop_id": 3058,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 3063,
+"from": "keep_right",
+"label": "junk"
+},
+{
+"crop_id": 3117,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3131,
+"from": "no_stopping",
+"label": "speed_limit:60"
+},
+{
+"crop_id": 3132,
+"from": "no_stopping",
+"label": "speed_limit:60"
+},
+{
+"crop_id": 3133,
+"from": "no_stopping",
+"label": "speed_limit:50"
+},
+{
+"crop_id": 3137,
+"from": "no_stopping",
+"label": "speed_limit:50"
+},
+{
+"crop_id": 3138,
+"from": "no_stopping",
+"label": "speed_limit:50"
+},
+{
+"crop_id": 3139,
+"from": "no_stopping",
+"label": "speed_limit:60"
+},
+{
+"crop_id": 3142,
+"from": "junk",
+"label": "other_sign"
+},
+{
+"crop_id": 3143,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3152,
+"from": "other_sign",
+"label": "junk"
+},
+{
+"crop_id": 3154,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3195,
+"from": "no_stopping",
+"label": "no_parking"
+},
+{
+"crop_id": 3196,
+"from": "no_stopping",
+"label": "no_parking"
+},
+{
+"crop_id": 3208,
+"from": "junk",
+"label": "speed_limit:60"
+},
+{
+"crop_id": 3226,
+"from": "junk",
+"label": "other_sign"
+},
+{
+"crop_id": 3227,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3228,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3229,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3230,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3237,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3252,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 3253,
+"from": "keep_right",
+"label": "crossing"
+},
+{
+"crop_id": 3274,
+"from": "junk",
+"label": "other_sign"
+},
+{
+"crop_id": 3279,
+"from": "junk",
+"label": "give_way"
+},
+{
+"crop_id": 3282,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3294,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3303,
+"from": "junk",
+"label": "other_sign"
+},
+{
+"crop_id": 3332,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3340,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3343,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3344,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3346,
+"from": "no_stopping",
+"label": "no_uturn"
+},
+{
+"crop_id": 3347,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3348,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3349,
+"from": "junk",
+"label": "other_sign"
+},
+{
+"crop_id": 3351,
+"from": "junk",
+"label": "other_sign"
+},
+{
+"crop_id": 3352,
+"from": "crossing",
+"label": "other_sign"
+},
+{
+"crop_id": 3353,
+"from": "no_stopping",
+"label": "other_sign"
+},
+{
+"crop_id": 3354,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3360,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3365,
+"from": "no_stopping",
+"label": "speed_limit:60"
+},
+{
+"crop_id": 3370,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3371,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3373,
+"from": "junk",
+"label": "no_stopping"
+},
+{
+"crop_id": 3375,
+"from": "junk",
+"label": "no_stopping"
+}
+]
+}

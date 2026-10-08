@@ -34,7 +34,7 @@ def build_geo(log=print):
         speed = common.speed_series(sh, key)
         odo = passes.Odo(speed)
         cw, info = common.corrected_wpts(trip, odo)
-        g = geo.build_trip_geo(trip['start'], trip['end'], speed, cw, trks, osrm)
+        g = geo.build_trip_geo(trip["start"], trip["end"], speed, cw, trks, osrm, release=False)
         frames = common.trip_frames(sh, key)
         rows = []
         for f in frames:

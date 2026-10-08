@@ -125,6 +125,19 @@ def _num(q, k, default=None):
         return default
 
 
+_existing = None
+
+
+def _ready_ids(conn):
+    """Кластеры «готово к карте» (те же пороги, что у mapready.py export).
+    Точки OSM читаются один раз на процесс — файл страны в 2 МБ."""
+    global _existing
+    import mapready
+    if _existing is None:
+        _existing = mapready.Existing()
+    return mapready.ready_ids(conn, _existing)
+
+
 def findings_list(conn, q):
     import cluster
     sql = 'SELECT * FROM clusters WHERE confidence >= ?'
@@ -132,10 +145,16 @@ def findings_list(conn, q):
     if q.get('cls', [''])[0]:
         sql += ' AND cls=?'
         args.append(q['cls'][0])
-    if q.get('status', [''])[0]:
+    st = q.get('status', [''])[0]
+    ready = None
+    if st == 'ready':                       # «готово к карте» — mapready.ready_reasons
+        ready = _ready_ids(conn)
+    elif st:
         sql += ' AND status=?'
-        args.append(q['status'][0])
+        args.append(st)
     rows = conn.execute(sql + ' ORDER BY confidence DESC', args).fetchall()
+    if ready is not None:
+        rows = [r for r in rows if r['id'] in ready]
     want = q.get('decision', [''])[0]
     out = []
     for r in rows:

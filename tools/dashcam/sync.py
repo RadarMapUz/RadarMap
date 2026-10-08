@@ -126,12 +126,16 @@ def find_offset(ocr_points, track_points, window=WINDOW_SECONDS, step=REFINE_STE
 
 
 def anchored_model(conn, key, track, offset=0.0):
-    """Модель старой поездки: форма трека + опоры + скорость из кадра (в часах телефона)."""
+    """Модель старой поездки: форма трека + опоры + скорость из кадра (в часах телефона).
+    Опоры — на исправленный момент проезда (passtime: время wpt — «отпускание»
+    камеры, ~740 м пути после неё)."""
     import catalog
     import locate
+    import passtime
     speed = [(t + offset, v) for t, v in clean_ocr(catalog.ocr_series(conn, key))]
-    return locate.AnchoredTrack(catalog.track_shape(conn, track['id']),
-                                catalog.track_waypoints(conn, track['id']), speed)
+    anchors = [a[:4] for a in passtime.correct(catalog.track_waypoints(conn, track['id']),
+                                                passtime.Odo(speed))]
+    return locate.AnchoredTrack(catalog.track_shape(conn, track['id']), anchors, speed)
 
 
 def anchors_quality(summary):

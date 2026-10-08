@@ -15,6 +15,7 @@ import cluster
 import detect
 import frames
 import geo
+import gpx
 import objects
 import selfcam
 
@@ -153,7 +154,7 @@ class RouteFromAnchorsTest(unittest.TestCase):
         anchors = [(1000 + 50 * i, *at(500 * i, 0), f'камера {i}') for i in range(4)]
         speed = [(t, speed_kmh) for t in range(990, 1170)]
         o = geo.OSRM(self.conn, fetch=FakeFetch(detour, fail), min_interval=0)
-        return geo.build_trip_geo(995, 1160, speed, anchors, [], o), o
+        return geo.build_trip_geo(995, 1160, speed, anchors, [], o, release=False), o
 
     def test_osrm_reconstruction_reliable(self):
         g, _ = self.trip(detour=10)
@@ -195,6 +196,56 @@ class RouteFromAnchorsTest(unittest.TestCase):
         self.assertIsNotNone(m)
         w = [(100, *at(0, 0), 'a'), (100, *at(50, 0), 'b'), (101, *at(2, 0), 'c'), (130, *at(300, 0), 'd')]
         self.assertEqual([x[3] for x in geo.anchors_for(w, 90, 140)], ['a', 'd'])
+
+
+class ReleaseLagTest(unittest.TestCase):
+    """Время wpt — «отпускание» камеры (радиус 600 + гистерезис 120 м после неё),
+    а не проезд: опора по сырому времени тянет привязку назад по маршруту."""
+
+    def setUp(self):
+        import passtime
+        self.pt = passtime
+        self.conn = catalog.connect(':memory:')
+        # прямая на восток, 10 м/с с 0 по 400 с; камеры через 1000 м: проезд в 50, 150, 250 с
+        self.speed = [(t, 36.0) for t in range(0, 401)]
+        self.lag = passtime.release_path_m(36.0) / 10.0           # ≈ 74 с
+        self.wpts = [(50 + 100 * i + self.lag, *at(500 + 1000 * i, 0), f'камера {i}, 36 км/ч')
+                     for i in range(3)]
+        self.trk = [{'name': 'RadarMap 2026-10-08T090000', 't': 0.0,
+                     'shape': [at(0, 0), at(4000, 0)]}]
+
+    def geo(self, release):
+        o = geo.OSRM(self.conn, fetch=FakeFetch(), min_interval=0)
+        return geo.build_trip_geo(0, 400, self.speed, self.wpts, self.trk, o, release=release)
+
+    def test_pass_anchors_rewind_release_path(self):
+        a = geo.pass_anchors(self.wpts, 0, 400, self.speed)
+        self.assertEqual([x[3] for x in a], [w[3] for w in self.wpts])
+        for x, w in zip(a, self.wpts):
+            self.assertAlmostEqual(w[0] - x[0], self.lag, places=3)
+
+    def test_corrected_geo_puts_car_at_camera_at_pass_time(self):
+        g = self.geo(release=True)
+        for i in range(3):
+            lat, lon = g.locate(50 + 100 * i)[:2]
+            self.assertLess(gpx.haversine(lat, lon, *at(500 + 1000 * i, 0)), 2.0)
+
+    def test_raw_wpt_time_lags_by_release_path(self):
+        g = self.geo(release=False)
+        lat, lon = g.locate(150)[:2]                               # настоящий проезд камеры 1
+        # сырая опора ставит камеру на 74 с позже → в момент проезда машина «за 740 м до неё»
+        self.assertAlmostEqual(gpx.haversine(lat, lon, *at(1500, 0)), self.lag * 10, delta=5)
+
+    def test_wpt_without_video_for_rewind_is_dropped(self):
+        short = [(t, v) for t, v in self.speed if t >= 100]        # видео с 100 с: отмотка первой не влезает
+        a = geo.pass_anchors(self.wpts, 0, 400, short)
+        self.assertEqual([x[3] for x in a], [w[3] for w in self.wpts[1:]])
+
+    def test_loo_measures_at_pass_time(self):
+        o = geo.OSRM(self.conn, fetch=FakeFetch(), min_interval=0)
+        res = geo.leave_one_out(0, 400, self.speed, self.wpts, self.trk, o)
+        self.assertEqual(len(res), 1)
+        self.assertLess(res[0][1], 2.0)
 
 
 class LensTriangulationTest(unittest.TestCase):

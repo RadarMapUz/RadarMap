@@ -1,7 +1,11 @@
 """Привязка поездки к месту для пакетного разбора: опоры + форма + скорость.
 
 Опоры — проезды камер (wpt из выгрузки «все поездки»): время телефона и
-место. Форма маршрута:
+место. Время wpt — момент, когда приложение «отпустило» камеру (~740 м пути
+после неё), поэтому опора ставится не на время wpt, а на исправленный момент
+проезда (passtime.pass_time: путь по OCR-скорости отматывается назад на
+радиус оповещения + гистерезис). До 08.10.2026 этого не было, и вся привязка
+кадров была сдвинута назад по маршруту на ~740 м. Форма маршрута:
 
 - **trk** — у поездки есть линия из GPX (точки без времени, упрощённая) —
   как в M1 (locate.AnchoredTrack);
@@ -26,6 +30,7 @@ from datetime import datetime, timedelta, timezone
 
 import gpx
 import locate
+import passtime
 
 OSRM_URL = ('https://soulmed.uz/radarmap/osrm/route/v1/driving/'
             '{lon1:.6f},{lat1:.6f};{lon2:.6f},{lat2:.6f}?overview=full&geometries=geojson')
@@ -94,6 +99,18 @@ def anchors_for(wpts, t0, t1, slack=ANCHOR_SLACK):
             continue
         out.append(w)
     return out
+
+
+def pass_anchors(wpts, t0, t1, speed_pts, radius=passtime.ALERT_RADIUS_M):
+    """Опоры поездки с ИСПРАВЛЕННЫМ временем: [(t_проезда, lat, lon, name)].
+
+    wpt берутся по своему времени в окне поездки (как anchors_for), время
+    каждого заменяется моментом проезда (passtime.pass_time); wpt, для которого
+    его не восстановить (отмотка выходит за видео или в скорости дыра), опорой
+    не становится. Затем — та же чистка порядка и дублей, что у anchors_for."""
+    odo = passtime.Odo(speed_pts)
+    fixed = [a[:4] for a in passtime.correct(anchors_for(wpts, t0, t1), odo, radius)]
+    return anchors_for(fixed, t0, t1)
 
 
 def trks_for(trks, t0, t1):
@@ -270,10 +287,13 @@ def build_segments(model, failed=()):
     return segs
 
 
-def build_trip_geo(t0, t1, speed_pts, wpts, trks, osrm):
+def build_trip_geo(t0, t1, speed_pts, wpts, trks, osrm, release=True):
     """speed_pts: [(t телефона, км/ч)] — скорость из кадра; wpts/trks — load_all_trips.
+    release=True — время wpt есть момент «отпускания» камеры (так пишет
+    приложение), опоры ставятся на исправленный момент проезда (pass_anchors);
+    False — wpts уже несут время проезда (синтетика, исправленные заранее).
     → TripGeo (model None — опор нет, привязать нечем)."""
-    anchors = anchors_for(wpts, t0, t1)
+    anchors = pass_anchors(wpts, t0, t1, speed_pts) if release else anchors_for(wpts, t0, t1)
     my_trks = trks_for(trks, t0, t1)
     if my_trks and anchors:
         shape = [p for tr in sorted(my_trks, key=lambda x: x['t']) for p in tr['shape']]
@@ -300,16 +320,16 @@ def build_trip_geo(t0, t1, speed_pts, wpts, trks, osrm):
     return TripGeo('osrm', model, build_segments(model, failed), edge_ok=False)
 
 
-def leave_one_out(t0, t1, speed_pts, wpts, trks, osrm):
+def leave_one_out(t0, t1, speed_pts, wpts, trks, osrm, release=True):
     """Точность привязки на камерах фиксации: каждая внутренняя опора по очереди
-    выбрасывается, модель строится без неё, и позиция в её момент сравнивается
-    с координатой камеры. → [(имя, ошибка м, вдоль/поперёк не различаем)]."""
-    anchors = anchors_for(wpts, t0, t1)
+    выбрасывается, модель строится без неё, и позиция в её момент проезда
+    сравнивается с координатой камеры. → [(имя, ошибка м, источник, вес)]."""
+    anchors = pass_anchors(wpts, t0, t1, speed_pts) if release else anchors_for(wpts, t0, t1)
     out = []
     for k in range(1, len(anchors) - 1):
         a = anchors[k]
-        rest = [w for w in wpts if w is not a and not (w[0] == a[0] and w[1] == a[1])]
-        g = build_trip_geo(t0, t1, speed_pts, rest, trks, osrm)
+        rest = anchors[:k] + anchors[k + 1:]
+        g = build_trip_geo(t0, t1, speed_pts, rest, trks, osrm, release=False)
         p = g.locate(a[0])
         if p is None:
             continue

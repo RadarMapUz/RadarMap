@@ -7,6 +7,8 @@
     python3 batch.py run [--trips K1,K2] [--limit N] [--stages ingest,geo,detect,objects]
     python3 batch.py cluster                       — объединение по поездкам + сверка
     python3 batch.py status
+    python3 batch.py relocate [--trips K1,K2]      — привязка кадров заново (поправка времени
+                                                     wpt) → объекты → кластеры → покрытие
 
 Ролик с карты копируется во временную папку, разбирается (OCR полосы,
 кадры по пути) и удаляется: на диске остаются только кадры детекторов.
@@ -535,6 +537,24 @@ def relimit(conn, log=log):
     log(f'кластеры: {cluster.rebuild(conn, log=log)}')
 
 
+def relocate(conn, keys=None, log=log):
+    """Привязка поменялась (08.10.2026: время wpt — «отпускание» камеры, а не
+    проезд, см. passtime) — пересчитать место всех кадров и рывков, затем
+    триангуляцию объектов, кластеры со сверкой и покрытие. Детекторы и кадры
+    не трогаются: сработки — пиксели, от места не зависят."""
+    import cluster
+    import coverage
+    import objects
+    keys = keys or [r[0] for r in conn.execute('SELECT DISTINCT trip_key FROM frames ORDER BY trip_key')]
+    for k in keys:
+        s = geo_trip(conn, k)
+        m = objects.build_trip(conn, k)
+        log(f'{k}: {s.get("source")}, опор {s.get("anchors_used")}, кадров с местом '
+            f'{s.get("located")}/{s.get("frames")}, объектов {m}')
+    log(f'кластеры: {cluster.rebuild(conn, log=log)}')
+    log(f'покрытие: {coverage.rebuild(conn)}')
+
+
 def backfill_jolts(conn, log=log):
     """Рывки для роликов, разобранных до появления детектора рывков: копия с
     карты → профиль строк → удалить (кадры не трогаются)."""
@@ -642,6 +662,8 @@ def main(argv=None):
     sub.add_parser('backfill-jolts')
     sub.add_parser('relimit')
     sub.add_parser('summary')
+    p = sub.add_parser('relocate')
+    p.add_argument('--trips')
     a = ap.parse_args(argv)
     conn = catalog.connect()
     if a.cmd == 'register':
@@ -664,6 +686,8 @@ def main(argv=None):
         relimit(conn)
     elif a.cmd == 'backfill-jolts':
         backfill_jolts(conn)
+    elif a.cmd == 'relocate':
+        relocate(conn, a.trips.split(',') if a.trips else None)
     elif a.cmd == 'summary':
         import json
         print(json.dumps(summary(conn), ensure_ascii=False, indent=1))

@@ -113,3 +113,13 @@ final class CarPlayEngineTests: XCTestCase {
     }
     #endif
 }
+
+/// Третья зона дока (прибытие) — по ширине экрана, решается без раскладки.
+final class CarPlayDockZonesTests: XCTestCase {
+    func testRouteZoneFitsOnUsualAndWideScreensOnly() {
+        XCTAssertFalse(CarPlayOverlay.fitsRoute(hudWidth: 0), "до первого замера — две зоны")
+        XCTAssertFalse(CarPlayOverlay.fitsRoute(hudWidth: 560), "узкий экран — без прибытия")
+        XCTAssertTrue(CarPlayOverlay.fitsRoute(hudWidth: 760))
+        XCTAssertTrue(CarPlayOverlay.fitsRoute(hudWidth: 1800), "широкий: док упирается в потолок острова")
+    }
+}

@@ -20,6 +20,10 @@ struct CarPlayOverlay: View {
     /// Свой баннер манёвра. Выключен, пока манёвр рисует сама машина
     /// (навигационная сессия CarPlay).
     var showsManeuver = true
+    /// Ширина HUD. Меняется только со сменой экрана, а не тиком: решение
+    /// «влезает ли третья зона» раньше принимал ViewThatFits, раскладывая обе
+    /// версии дока на КАЖДЫЙ фикс (perf-аудит 07.10, п. 12).
+    @State private var width: CGFloat = 0
 
     // MARK: - Раскладка
 
@@ -58,6 +62,7 @@ struct CarPlayOverlay: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .safeAreaPadding()
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .motionAnimation(.spring(duration: 0.35), value: env.location.isApproachingCamera)
         .motionAnimation(.spring(duration: 0.35), value: env.route.isActive)
         // HUD — только показывает: жесты карты (тап, панорама, щипок) должны
@@ -73,11 +78,10 @@ struct CarPlayOverlay: View {
     private var dock: some View {
         // Экраны в машинах разные — от узких 800×480 до широких. Прибытие
         // отваливается первым: без него панель остаётся полезной, а вот резать
-        // скорость и камеру нельзя.
-        ViewThatFits(in: .horizontal) {
-            dockRow(showRoute: true)
-            dockRow(showRoute: false)
-        }
+        // скорость и камеру нельзя. И его нет, пока идёт навигационная сессия:
+        // время в пути тогда показывает сама машина под карточкой манёвра.
+        dockRow(showRoute: showsManeuver
+                && Self.fitsRoute(hudWidth: width))
         .padding(.horizontal, 18)
         .frame(maxWidth: .infinity)
         .frame(height: AppConfig.carPlayDockHeight)
@@ -104,6 +108,13 @@ struct CarPlayOverlay: View {
         .frame(maxWidth: AppConfig.carPlayDockMaxWidth)
         .frame(maxWidth: .infinity)
         .motionAnimation(.easeOut(duration: 0.3), value: env.location.alertLevel)
+    }
+
+    /// Влезает ли третья зона (прибытие): ширина дока — ширина HUD без его
+    /// отступов, но не шире потолка острова; минус внутренние поля.
+    static func fitsRoute(hudWidth: CGFloat) -> Bool {
+        let dock = min(hudWidth - 28, AppConfig.carPlayDockMaxWidth) - 36
+        return dock >= AppConfig.carPlayDockThreeZoneWidth
     }
 
     /// Три зоны: скорость — камера — прибытие.

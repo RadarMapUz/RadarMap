@@ -14813,6 +14813,22 @@
           }
         }
       }
+    },
+    "своя карта": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "своя карта"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘z xaritamiz"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

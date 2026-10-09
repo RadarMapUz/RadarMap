@@ -978,6 +978,10 @@ nonisolated enum AppConfig {
     static let searchRegionMeters = 60_000.0
     /// Клетка адресов без GPS и без «Дома» — Ташкент.
     static let searchFallbackCenter = CLLocationCoordinate2D(latitude: 41.3111, longitude: 69.2797)
+    /// Поиск в машине: строк всего и из них своих адресов. Длинный список за
+    /// рулём не листают — первые строки обязаны быть лучшими.
+    static let carPlaySearchLimit = 10
+    static let carPlaySearchOwnLimit = 5
     static let engineManeuverHighlightMeters = 35.0
     /// Частота обновления геометрии маршрута; курсор обновляется на каждом фиксе.
     static let engineRouteProgressStep = 15.0

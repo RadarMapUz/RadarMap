@@ -31,6 +31,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Навигационная сессия CarPlay: манёвр, время в пути, полосы, камеры
     /// поверх чужого приложения.
     private lazy var guidance = CarPlayGuidance(model: model)
+    /// Поиск адреса в машине: тот же порядок источников, что на телефоне.
+    private lazy var search = CarPlaySearch { [weak self] place in self?.route(to: place) }
     /// Чей сейчас экран машины. Переподключение (штатное «моргание» провода
     /// при запуске двигателя) может доставить didDisconnect СТАРОЙ сцены уже
     /// ПОСЛЕ didConnect новой — и старая, уходя, глобально гасила GPS и опрос
@@ -625,6 +627,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             buttons.append(placeButton(slot: slot))
         }
 
+        // Поиск — третьей плиткой, сразу за Домом и Работой: адрес, которого
+        // нет в недавних, раньше можно было задать только на телефоне.
+        buttons.append(gridButton(symbol: "magnifyingglass",
+                                  titles: [String(localized: "Поиск")]) { [weak self] in
+            self?.presentSearch()
+        })
+
         // Дом и Работа уже стоят своими плитками выше — в «недавних» они
         // дублируются и съедают места из восьми, которые есть у сетки.
         // Сравниваем по координате, а не по названию: одно и то же место
@@ -650,6 +659,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         interfaceController?.pushTemplate(grid, animated: true) { _, error in
             if let error {
                 Log.carplay.error("pushTemplate(куда): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    private func presentSearch() {
+        interfaceController?.pushTemplate(search.makeTemplate(), animated: true) { _, error in
+            if let error {
+                Log.carplay.error("pushTemplate(поиск): \(error.localizedDescription, privacy: .public)")
             }
         }
     }

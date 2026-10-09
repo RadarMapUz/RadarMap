@@ -296,6 +296,50 @@ struct ManeuverBanner: View {
     }
 }
 
+/// Ограничение полос на перекрёстке, который проезжаем прямо: «через 200 м —
+/// из левых рядов» и короткий ряд стрелок. Меньше баннера манёвра: это не
+/// команда, а предупреждение не оказаться в ряду «только направо».
+struct LaneNoticeBanner: View {
+    let lanes: [LaneHint]
+    let distance: CLLocationDistance
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(Formatting.distance(distance))
+                    .font(.rounded(15, .semibold).monospacedDigit())
+                    .foregroundStyle(Theme.textPrimary)
+                    .contentTransition(.numericText())
+                    .motionAnimation(.easeOut(duration: 0.3), value: Int(distance / 10))
+                Text(LaneAdvice.phrase(lanes) ?? String(localized: "Ряд для проезда прямо"))
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: 0)
+            HStack(spacing: 2) {
+                ForEach(Array(lanes.enumerated()), id: \.offset) { index, lane in
+                    Image(systemName: lane.primaryArrow(for: .straight).symbolName)
+                        .font(.rounded(16, lane.isValid ? .heavy : .regular))
+                        .foregroundStyle(lane.isValid ? Theme.background : Theme.textTertiary)
+                        .frame(width: 26, height: 28)
+                        .background(lane.isValid ? Theme.accent : .clear,
+                                    in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .accessibilityLabel(Text("Полоса \(index + 1)"))
+                        .accessibilityValue(lane.isValid ? Text("Подходит для манёвра") : Text("Не подходит для манёвра"))
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .liftPanel()
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+}
+
 /// Список камер вдоль маршрута — по порядку следования.
 struct RouteCamerasSheet: View {
     @Environment(AppEnvironment.self) private var env

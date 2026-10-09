@@ -52,6 +52,8 @@ final class RouteService {
         /// Чем вариант хорош на фоне остальных (RouteChoice). У единственного
         /// варианта и после перестроения — пусто: сравнивать не с чем.
         var assessment: RouteChoice.Assessment = .none
+        /// Ограничения полос на проездах прямо (только OSRM).
+        var laneNotices: [LaneNotice] = []
 
         var etaText: String { Formatting.duration(travelTime) }
         var distanceText: String { Formatting.distance(distance) }
@@ -81,6 +83,10 @@ final class RouteService {
     private(set) var nextCameraDistance: CLLocationDistance = 0
     private(set) var nextStep: RouteStep?
     private(set) var nextStepDistance: CLLocationDistance = 0
+    /// Ближайшее ограничение полос на проезде прямо — до следующего манёвра и
+    /// не дальше laneNoticeMeters.
+    private(set) var laneNotice: LaneNotice?
+    private(set) var laneNoticeDistance: CLLocationDistance = 0
     /// Пройденный кусок маршрута (рисуется тусклым поверх линии).
     private(set) var traveledPolyline: MKPolyline?
 
@@ -324,6 +330,8 @@ final class RouteService {
         nextCameraDistance = 0
         nextStep = nil
         nextStepDistance = 0
+        laneNotice = nil
+        laneNoticeDistance = 0
         traveledPolyline = nil
         lastSplitAlong = -1
         offRouteTicks = 0
@@ -422,7 +430,10 @@ final class RouteService {
 
     private func updateManeuvers(variant: Variant, along: CLLocationDistance, announce: Bool) {
         // Первый манёвр впереди (с запасом 15 м, чтобы не «перескакивал» на повороте).
-        guard let index = variant.steps.firstIndex(where: { $0.distanceAlong > along + 15 }) else {
+        let index = variant.steps.firstIndex(where: { $0.distanceAlong > along + 15 })
+        updateLaneNotice(variant: variant, along: along,
+                         before: index.map { variant.steps[$0].distanceAlong } ?? .infinity)
+        guard let index else {
             nextStep = nil
             return
         }
@@ -454,6 +465,20 @@ final class RouteService {
         }
     }
 
+    /// Ограничение полос впереди: до манёвра (его ряд — в баннере манёвра) и
+    /// не дальше laneNoticeMeters. Присваиваем только смену: свойство
+    /// наблюдаемое, а тик — раз в секунду.
+    private func updateLaneNotice(variant: Variant, along: CLLocationDistance,
+                                  before maneuver: CLLocationDistance) {
+        let notice = variant.laneNotices.first { notice in
+            notice.distanceAlong > along + 15
+                && notice.distanceAlong < maneuver - AppConfig.laneNoticeBeforeManeuverMeters
+                && notice.distanceAlong - along <= AppConfig.laneNoticeMeters
+        }
+        if notice != laneNotice { laneNotice = notice }
+        laneNoticeDistance = notice.map { $0.distanceAlong - along } ?? 0
+    }
+
     /// Заблаговременная фраза манёвра + в какой ряд встать («…на Беруни.
     /// Из двух левых рядов.»). Только для ранних объявлений: на «сейчас»
     /// перестраиваться уже поздно, и лишние слова там мешают.
@@ -469,6 +494,7 @@ final class RouteService {
         let distance: CLLocationDistance
         let travelTime: TimeInterval
         let steps: [RouteStep]
+        var laneNotices: [LaneNotice] = []
     }
 
     private func calculate(from source: CLLocationCoordinate2D,
@@ -555,15 +581,16 @@ final class RouteService {
                 MKMapPoint(CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]))
             }
             var steps: [RouteStep] = []
+            var notices: [LaneNotice] = []
             var along: CLLocationDistance = 0
             for step in route.legs.first?.steps ?? [] {
-                if let built = Self.maneuverStep(step, at: along, language: language) {
-                    steps.append(built)
-                }
+                let built = Self.maneuverStep(step, at: along, language: language)
+                if let built { steps.append(built) }
+                notices += Self.laneNotices(step, at: along, isManeuver: built != nil)
                 along += step.distance
             }
             return BuiltVariant(points: points, distance: route.distance,
-                                travelTime: route.duration, steps: steps)
+                                travelTime: route.duration, steps: steps, laneNotices: notices)
         }
     }
 
@@ -593,9 +620,13 @@ final class RouteService {
             let type: String
             let modifier: String?
             let exit: Int?
+            /// [lon, lat] точки манёвра — начало шага.
+            var location: [Double]? = nil
         }
         struct Intersection: Decodable {
             let lanes: [Lane]?
+            /// [lon, lat] перекрёстка.
+            var location: [Double]? = nil
         }
         struct Lane: Decodable {
             let valid: Bool?
@@ -695,6 +726,35 @@ final class RouteService {
     /// рендера, а выдуманная стрелка — как указание, которого никто не давал.
     nonisolated static func lanes(of step: OSRMResponse.Step) -> [LaneHint] {
         guard let lanes = step.intersections?.first?.lanes, !lanes.isEmpty else { return [] }
+        return hints(lanes)
+    }
+
+    /// Ограничения полос на перекрёстках, которые шаг проезжает ПРЯМО.
+    ///
+    /// Первый перекрёсток шага-манёвра — сам манёвр (его полосы уже в
+    /// RouteStep); у шага без манёвра («new name», «continue») он тоже проезд.
+    /// Берётся только ряд, где есть и подходящие, и неподходящие полосы: «все
+    /// годятся» — сказать нечего. Положение — от точки начала шага по прямой:
+    /// внутри шага дорога почти прямая, а подсказке полос хватает и такого.
+    nonisolated static func laneNotices(_ step: OSRMResponse.Step, at along: CLLocationDistance,
+                                        isManeuver: Bool) -> [LaneNotice] {
+        guard let intersections = step.intersections,
+              let start = step.maneuver.location, start.count == 2 else { return [] }
+        var out: [LaneNotice] = []
+        for (index, intersection) in intersections.enumerated() {
+            if index == 0, isManeuver { continue }
+            guard let lanes = intersection.lanes, !lanes.isEmpty,
+                  let point = intersection.location, point.count == 2 else { continue }
+            let row = hints(lanes)
+            guard row.contains(where: \.isValid), row.contains(where: { !$0.isValid }) else { continue }
+            let offset = min(step.distance,
+                             GeoMath.fastDistance(start[1], start[0], point[1], point[0]))
+            out.append(LaneNotice(distanceAlong: along + offset, lanes: row))
+        }
+        return out
+    }
+
+    nonisolated private static func hints(_ lanes: [OSRMResponse.Lane]) -> [LaneHint] {
         let hints = lanes.compactMap { lane -> LaneHint? in
             let arrows = (lane.indications ?? []).compactMap(LaneArrow.fromOSRM)
             guard !arrows.isEmpty else { return nil }
@@ -751,7 +811,8 @@ final class RouteService {
                     travelTime: variant.travelTime,
                     cameras: variantCameras[index],
                     steps: variant.steps,
-                    assessment: verdict.assessments[index])
+                    assessment: verdict.assessments[index],
+                    laneNotices: variant.laneNotices)
         }
         selectedID = verdict.recommended
         destinationName = name

@@ -969,6 +969,11 @@ nonisolated enum AppConfig {
     /// скорости ряд появляется за laneRowHighwayMeters, а не за 600 м.
     static let laneHighwaySpeedKmh = 70.0
     static let laneRowHighwayMeters = 1000.0
+    /// Ограничение полос на проезде прямо («правый — только направо»)
+    /// показывается за столько метров и не ближе этого к манёвру — там ряд
+    /// показывает баннер манёвра.
+    static let laneNoticeMeters = 400.0
+    static let laneNoticeBeforeManeuverMeters = 30.0
 
     // MARK: - Поиск
 

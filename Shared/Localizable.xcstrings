@@ -14829,6 +14829,22 @@
           }
         }
       }
+    },
+    "Ряд для проезда прямо": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ряд для проезда прямо"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To‘g‘ri yurish uchun qator"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

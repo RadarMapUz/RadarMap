@@ -148,6 +148,15 @@ nonisolated struct LaneHint: Equatable, Sendable {
     }
 }
 
+/// Ограничение полос на перекрёстке, который маршрут проезжает ПРЯМО: «крайний
+/// правый — только направо». Манёвра здесь нет, и раньше такие ряды
+/// выбрасывались, а водитель в правом ряду узнавал о нём у самой стоп-линии.
+nonisolated struct LaneNotice: Equatable, Sendable {
+    /// Где перекрёсток, метры от старта.
+    let distanceAlong: CLLocationDistance
+    let lanes: [LaneHint]
+}
+
 /// Манёвр на маршруте («через 300 м — направо»).
 nonisolated struct RouteStep: Equatable, Sendable {
     /// Где манёвр, метры от старта.

@@ -89,6 +89,14 @@ struct EngineMapView: UIViewRepresentable {
     var labelLanguage: String = "ru"
     /// «Весь маршрут»: счётчик нажатий — вписать линию маршрута в экран.
     var overviewCommand: Int = 0
+    /// Сдвиг карты командой, а не пальцем: в машине касания до вида не
+    /// доходят, панораму присылает шаблон CarPlay (перетаскивание, стрелки
+    /// крутилки). Счётчик и сдвиг содержимого в точках экрана.
+    var panCommand: Int = 0
+    var panTranslation: CGSize = .zero
+    /// Кнопка атрибуции не нажимается там, где нет касаний (экран машины):
+    /// ссылку на OSM тогда показывает вызывающий — текстом.
+    var hidesAttribution: Bool = false
     /// Поворот карты (градусы от севера) — компасу экрана.
     var onHeading: (Double) -> Void = { _ in }
     var onBrowse: () -> Void = {}
@@ -119,6 +127,7 @@ struct EngineMapView: UIViewRepresentable {
         view.logoView.isHidden = true
         // Ссылка на источник данных обязана остаться: тайлы построены по OSM.
         view.attributionButtonPosition = .bottomLeft
+        view.attributionButton.isHidden = hidesAttribution
         view.delegate = context.coordinator
         let selection = UITapGestureRecognizer(target: context.coordinator,
                                                 action: #selector(Coordinator.selectCamera(_:)))
@@ -219,6 +228,7 @@ struct EngineMapView: UIViewRepresentable {
         private var lastFPS: Int?
         private var lastZoomCommand = 0
         private var lastOverviewCommand = 0
+        private var lastPanCommand = 0
         /// Первое применение модели запоминает счётчики, но не исполняет их:
         /// иначе повторный монтаж карты вписывал бы маршрут сам по старому нажатию.
         private var commandsSeen = false
@@ -603,6 +613,7 @@ struct EngineMapView: UIViewRepresentable {
                 commandsSeen = true
                 lastOverviewCommand = model.overviewCommand
                 lastZoomCommand = model.zoomCommand
+                lastPanCommand = model.panCommand
             }
             if model.overviewCommand != lastOverviewCommand {
                 lastOverviewCommand = model.overviewCommand
@@ -623,6 +634,19 @@ struct EngineMapView: UIViewRepresentable {
                 if browsing {
                     view.setZoomLevel(min(19, max(5, view.zoomLevel + model.zoomDelta)), animated: true)
                 }
+            }
+            // Панорама командой: содержимое едет вслед за пальцем — центр
+            // карты уходит в обратную сторону. Это осмотр, как и жест.
+            if model.panCommand != lastPanCommand {
+                lastPanCommand = model.panCommand
+                if !browsing {
+                    browsing = true
+                    model.onBrowse()
+                }
+                stopPositionGlide()
+                let target = CGPoint(x: view.bounds.midX - model.panTranslation.width,
+                                     y: view.bounds.midY - model.panTranslation.height)
+                view.setCenter(view.convert(target, toCoordinateFrom: view), animated: false)
             }
             if !browsing && changed {
                 let now = CACurrentMediaTime()
@@ -761,7 +785,12 @@ struct EngineMapView: UIViewRepresentable {
             glideStart = CACurrentMediaTime()
             glideDuration = duration
             if glideLink == nil {
-                let link = CADisplayLink(target: self, selector: #selector(stepPositionGlide))
+                // Такт — от экрана, на котором карта. В машине это экран
+                // магнитолы, а экран телефона спит в кармане: связка с ним
+                // не тикала, и стрелка стояла, пока камера уезжала.
+                let link = view.window?.screen.displayLink(withTarget: self,
+                                                           selector: #selector(stepPositionGlide))
+                    ?? CADisplayLink(target: self, selector: #selector(stepPositionGlide))
                 // Та же частота, что у карты: ход стрелки не должен будить
                 // экран чаще, чем рисует сам движок (нагрев, батарея).
                 let fps = max(15, (lastFPS ?? 0) > 0 ? (lastFPS ?? 0) : AppConfig.engineFollowFPS)

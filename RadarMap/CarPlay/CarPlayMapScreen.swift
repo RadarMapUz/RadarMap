@@ -45,6 +45,21 @@ final class CarPlayMapModel {
     var recenterRequests = 0
     var zoomInRequests = 0
     var zoomOutRequests = 0
+    /// Карта на движке: панорама от шаблона (счётчик и сдвиг содержимого в
+    /// точках), «+/−» при слежении — сдвиг автозума вдвое за нажатие (как на
+    /// телефоне), «+/−» на свободной карте — шаг уровня.
+    var panCommand = 0
+    var panTranslation = CGSize.zero
+    var zoomBias = 0.0
+    var zoomCommand = 0
+    var zoomDelta = 0.0
+    /// День или ночь на экране машины — ОДНО значение на карту и HUD.
+    /// Раньше HUD брал тему окна машины, а подложка — солнце, и первый кадр
+    /// всегда был тёмным. Ставит делегат сцены ещё до первого кадра.
+    var isDaylight = false
+    /// Тема машины (датчик света, фары): в «Авто» она старше солнца — она
+    /// знает про тоннель и пасмурный вечер, а таблица восходов не знает.
+    @ObservationIgnored var carIsDark: Bool?
     /// Едет ли карта за машиной. Пишет координатор карты (система сама снимает
     /// слежение, как только водитель тронул карту пальцем или крутилкой),
     /// читает значок кнопки «к себе»: залитый — следим, контурный — стоим.
@@ -91,6 +106,58 @@ final class CarPlayMapModel {
         #endif
     }
 
+    /// Рисует ли карту движок (наша карта), а не MapKit. Та же настройка
+    /// подложки, что на телефоне: выключатель один на оба экрана.
+    static func usesEngine(_ settings: AppSettings) -> Bool {
+        #if canImport(MapLibre)
+        settings.mapBase == .engine
+        #else
+        false
+        #endif
+    }
+
+    /// Сдвиг карты на столько точек экрана (содержимое едет за пальцем).
+    func pan(by translation: CGSize) {
+        guard translation != .zero else { return }
+        panTranslation = translation
+        panCommand &+= 1
+        if isFollowing { isFollowing = false }
+    }
+
+    /// «+ / −». При слежении меняется автозум (масштаб по скорости остаётся,
+    /// сдвигается его уровень), на свободной карте — сам вид.
+    func zoom(in zoomIn: Bool, engine: Bool) {
+        guard engine else {
+            if zoomIn { zoomInRequests += 1 } else { zoomOutRequests += 1 }
+            return
+        }
+        if isFollowing {
+            zoomBias = min(AppConfig.carPlayZoomBiasLimit,
+                           max(-AppConfig.carPlayZoomBiasLimit, zoomBias + (zoomIn ? 1 : -1)))
+        } else {
+            zoomDelta = zoomIn ? 1 : -1
+            zoomCommand &+= 1
+        }
+    }
+
+    /// «К себе»: карта снова едет за машиной.
+    func recenter() {
+        recenterRequests += 1
+        if !isFollowing { isFollowing = true }
+    }
+
+    /// Пересчитать день/ночь. Ручной выбор старше всего; в «Авто» — машина,
+    /// а без её ответа — солнце в точке водителя.
+    func refreshDaylight(appearance: MapAppearance, coordinate: CLLocationCoordinate2D?) {
+        let day: Bool
+        if appearance == .auto, let carIsDark {
+            day = !carIsDark
+        } else {
+            day = appearance.isDaylight(at: coordinate)
+        }
+        if day != isDaylight { isDaylight = day }
+    }
+
     /// Тумблер с кнопки шаблона: выбор запоминается между поездками.
     func toggleView() {
         showsSketch.toggle()
@@ -110,15 +177,13 @@ final class CarPlayMapModel {
 struct CarPlayMapScreen: View {
     @Environment(AppEnvironment.self) private var env
     let model: CarPlayMapModel
-    /// День/ночь для подложки карты. @State, а не computed: чтение
-    /// currentCoordinate в body пересобирало бы всё дерево с картой на каждый
-    /// GPS-тик, а ответ солнца меняется дважды в сутки.
-    @State private var isDaylight = false
 
     var body: some View {
         ZStack {
             if model.showsSketch {
                 CarPlaySketchView(sketch: model.sketch)
+            } else if CarPlayMapModel.usesEngine(env.settings) {
+                engineMap
             } else {
                 CarPlayMapView(model: model,
                                repository: env.cameras,
@@ -128,7 +193,7 @@ struct CarPlayMapScreen: View {
                                thermal: env.thermal,
                                filter: env.settings.filter,
                                showsTraffic: env.settings.mapTraffic,
-                               isDaylight: isDaylight)
+                               isDaylight: model.isDaylight)
                     .ignoresSafeArea()
             }
 
@@ -145,6 +210,9 @@ struct CarPlayMapScreen: View {
             // CarPlayOverlay.
             MobilePassDriver()
         }
+        // Тема HUD — та же, что у подложки, из одной точки (model.isDaylight):
+        // токены Theme адаптивные и иначе брали бы тему окна машины.
+        .environment(\.colorScheme, model.isDaylight ? .light : .dark)
         // Жара: схема сама, пока водитель не выбрал режим кнопкой. Проверка и
         // на подключении тоже — в машину можно сесть с уже горячим телефоном.
         .onAppear { model.autoSwitch(for: env.thermal.mode) }
@@ -157,32 +225,28 @@ struct CarPlayMapScreen: View {
         // базы, машина стояла на месте, нового фикса distanceFilter не давал —
         // и док показывал «Чисто» до первого движения.
         .onChange(of: env.cameras.revision) { env.location.refreshMonitoring() }
-        // День/ночь подложки: раз в минуту, вне body. Чтение координаты внутри
-        // .task не отслеживается SwiftUI, а минутный шаг на границе восхода —
-        // незаметная цена против пересборки дерева карты каждым фиксом.
-        // Пока экран машины жив, одна арифметика NOAA в минуту — копейки.
+        // День/ночь: раз в минуту, вне body. Чтение координаты внутри .task
+        // не отслеживается SwiftUI, а минутный шаг на границе восхода —
+        // незаметная цена против пересборки дерева карты каждым фиксом. Тема
+        // машины приходит сразу (contentStyleDidChange в делегате).
         .task {
             while !Task.isCancelled {
-                isDaylight = Self.daylight(appearance: env.settings.mapAppearance,
-                                           coordinate: env.location.currentCoordinate)
+                model.refreshDaylight(appearance: env.settings.mapAppearance,
+                                      coordinate: env.location.currentCoordinate)
                 try? await Task.sleep(for: .seconds(60))
             }
         }
         // Настройку водитель мог сменить на телефоне посреди поездки — минуты
         // не ждём.
         .onChange(of: env.settings.mapAppearance) { _, appearance in
-            isDaylight = Self.daylight(appearance: appearance,
-                                       coordinate: env.location.currentCoordinate)
+            model.refreshDaylight(appearance: appearance,
+                                  coordinate: env.location.currentCoordinate)
         }
     }
 
-    /// Светлая подложка карты — по той же настройке, что на телефоне, и по
-    /// тому же солнцу. Правило «Авто» считает восход и закат в точке водителя,
-    /// а не по часам: в декабре в 18:30 уже темно, и белая карта слепит.
-    private static func daylight(appearance: MapAppearance,
-                                 coordinate: CLLocationCoordinate2D?) -> Bool {
-        // Решение переехало в MapAppearance: его спрашивает и схема приборки,
-        // а две копии одного правила разошлись бы молча.
-        appearance.isDaylight(at: coordinate)
+    @ViewBuilder private var engineMap: some View {
+        #if canImport(MapLibre)
+        CarPlayEngineLayer(model: model)
+        #endif
     }
 }

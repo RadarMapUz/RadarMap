@@ -15069,6 +15069,150 @@
           }
         }
       }
+    },
+    "Маршрут домой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут домой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga yo‘nalish"
+          }
+        }
+      }
+    },
+    "Маршрут на работу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут на работу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga yo‘nalish"
+          }
+        }
+      }
+    },
+    "Строит маршрут домой и включает оповещения о камерах.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Строит маршрут домой и включает оповещения о камерах."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga yo‘nalish tuzadi va kameralar haqida ogohlantirishni yoqadi."
+          }
+        }
+      }
+    },
+    "Строит маршрут на работу и включает оповещения о камерах.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Строит маршрут на работу и включает оповещения о камерах."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga yo‘nalish tuzadi va kameralar haqida ogohlantirishni yoqadi."
+          }
+        }
+      }
+    },
+    "Не знаю, где дом. Задайте его в RadarMap — или поездите, я выучу сам.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не знаю, где дом. Задайте его в RadarMap — или поездите, я выучу сам."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uy qayerdaligini bilmayman. Uni RadarMap’da belgilang — yoki yuring, o‘zim o‘rganaman."
+          }
+        }
+      }
+    },
+    "Не знаю, где работа. Задайте её в RadarMap — или поездите, я выучу сам.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не знаю, где работа. Задайте её в RadarMap — или поездите, я выучу сам."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ish qayerdaligini bilmayman. Uni RadarMap’da belgilang — yoki yuring, o‘zim o‘rganaman."
+          }
+        }
+      }
+    },
+    "Маршрут не построился — попробуйте позже.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут не построился — попробуйте позже."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘nalish tuzilmadi — keyinroq urinib ko‘ring."
+          }
+        }
+      }
+    },
+    "Едем домой: %@, камер на пути — %lld.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Едем домой: %@, камер на пути — %lld."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga ketyapmiz: %@, yo‘lda kameralar — %lld."
+          }
+        }
+      }
+    },
+    "Едем на работу: %@, камер на пути — %lld.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Едем на работу: %@, камер на пути — %lld."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga ketyapmiz: %@, yo‘lda kameralar — %lld."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

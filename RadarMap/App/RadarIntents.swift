@@ -60,6 +60,65 @@ struct EndTripIntent: AppIntent {
     }
 }
 
+/// «Поехали домой» / «На работу» голосом: руки на руле, в том числе в машине
+/// с CarPlay, где набирать адрес за рулём нельзя вовсе.
+///
+/// Адрес — заданный руками, а без него выученный по поездкам: то же правило,
+/// что у строки «Домой» на главном экране (ручной выбор старше догадки).
+@MainActor
+private func routeBySiri(_ slot: PlaceSlot) async -> IntentDialog {
+    let env = AppEnvironment.shared
+    // Процесс мог подняться в фоне (Siri) — без этого ни лимитов, ни
+    // выученных мест (refreshLearnedPlaces внутри).
+    env.startDrivingServices()
+    guard env.location.authorizationStatus == .authorizedAlways else {
+        return IntentDialog("Нет доступа к геолокации. Откройте RadarMap и разрешите «Всегда».")
+    }
+    let manual = env.settings.place(for: slot)
+    let learned = env.learnedPlaces.first { $0.kind.rawValue == slot.rawValue }
+    guard let destination = manual?.coordinate ?? learned?.coordinate else {
+        return slot == .home
+            ? IntentDialog("Не знаю, где дом. Задайте его в RadarMap — или поездите, я выучу сам.")
+            : IntentDialog("Не знаю, где работа. Задайте её в RadarMap — или поездите, я выучу сам.")
+    }
+    let title = manual?.title ?? slot.name
+    guard let from = await env.location.awaitPreciseCoordinate() else {
+        return IntentDialog("Не вижу геопозицию — попробуйте ещё раз.")
+    }
+    await env.route.build(from: from, to: destination, name: title,
+                          cameras: env.cameras.cameras, alternatives: false)
+    guard env.route.isActive else {
+        return IntentDialog("Маршрут не построился — попробуйте позже.")
+    }
+    env.settings.addRecent(title: title, lat: destination.latitude, lon: destination.longitude)
+    if !env.location.isTripActive { env.location.startTrip() }
+    let time = Formatting.duration(env.route.remainingTime)
+    let cameras = env.route.camerasOnRoute.count
+    return slot == .home
+        ? IntentDialog("Едем домой: \(time), камер на пути — \(cameras).")
+        : IntentDialog("Едем на работу: \(time), камер на пути — \(cameras).")
+}
+
+struct RouteHomeIntent: AppIntent {
+    static let title: LocalizedStringResource = "Маршрут домой"
+    static let description = IntentDescription("Строит маршрут домой и включает оповещения о камерах.")
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: await routeBySiri(.home))
+    }
+}
+
+struct RouteWorkIntent: AppIntent {
+    static let title: LocalizedStringResource = "Маршрут на работу"
+    static let description = IntentDescription("Строит маршрут на работу и включает оповещения о камерах.")
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: await routeBySiri(.work))
+    }
+}
+
 /// Общая работа всех голосовых отметок.
 ///
 /// Раньше голосом можно было поставить только радар, и это делало Siri
@@ -170,6 +229,26 @@ struct RadarShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Завершить поездку",
             systemImageName: "flag.checkered"
+        )
+        AppShortcut(
+            intent: RouteHomeIntent(),
+            phrases: [
+                "Поехали домой в \(.applicationName)",
+                "Домой в \(.applicationName)",
+                "Take me home in \(.applicationName)",
+            ],
+            shortTitle: "Домой",
+            systemImageName: "house.fill"
+        )
+        AppShortcut(
+            intent: RouteWorkIntent(),
+            phrases: [
+                "Поехали на работу в \(.applicationName)",
+                "На работу в \(.applicationName)",
+                "Take me to work in \(.applicationName)",
+            ],
+            shortTitle: "На работу",
+            systemImageName: "briefcase.fill"
         )
         AppShortcut(
             intent: ReportRadarIntent(),

@@ -28,6 +28,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     var interfaceController: CPInterfaceController?
     private var mapTemplate: CPMapTemplate?
     private let model = CarPlayMapModel()
+    /// Навигационная сессия CarPlay: манёвр, время в пути, полосы, камеры
+    /// поверх чужого приложения.
+    private lazy var guidance = CarPlayGuidance(model: model)
     /// Чей сейчас экран машины. Переподключение (штатное «моргание» провода
     /// при запуске двигателя) может доставить didDisconnect СТАРОЙ сцены уже
     /// ПОСЛЕ didConnect новой — и старая, уходя, глобально гасила GPS и опрос
@@ -73,6 +76,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // кнопка, которую нужно искать, за рулём бесполезна.
         template.automaticallyHidesNavigationBar = false
         mapTemplate = template
+        guidance.attach(to: template)
         Log.carplay.notice("CarPlay подключён")
         interfaceController.setRootTemplate(template, animated: true) { [weak self] _, error in
             if let error {
@@ -110,6 +114,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         Log.carplay.notice("CarPlay отключён")
         self.interfaceController = nil
         mapTemplate = nil
+        guidance.detach()
         session += 1   // гасим подписки syncTemplate этой сессии
         toastTask?.cancel()
         toastTask = nil
@@ -292,6 +297,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         syncTemplate()
     }
 
+    // MARK: - Системные баннеры, когда на экране машины не мы
+
+    /// Манёвр и камера доходят до водителя и поверх музыки или звонка:
+    /// ради этого сессия и заведена.
+    func mapTemplate(_ mapTemplate: CPMapTemplate,
+                     shouldShowNotificationFor maneuver: CPManeuver) -> Bool { true }
+
+    func mapTemplate(_ mapTemplate: CPMapTemplate,
+                     shouldUpdateNotificationFor maneuver: CPManeuver,
+                     with travelEstimates: CPTravelEstimates) -> Bool { true }
+
+    func mapTemplate(_ mapTemplate: CPMapTemplate,
+                     shouldShowNotificationFor navigationAlert: CPNavigationAlert) -> Bool { true }
+
     // MARK: - Уход с экрана машины
 
     /// Наше приложение ушло с экрана машины (водитель открыл другое), но
@@ -306,11 +325,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Только владелец: события устаревшей сцены не должны гасить буст живой.
         guard Self.activeDelegate === self else { return }
         AppEnvironment.shared.location.setCarPlaySketchVisible(false)
+        guidance.isOnScreen = false
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
         // Стали видимым экраном машины — значит, мы и владелец.
         Self.activeDelegate = self
+        guidance.isOnScreen = true
         // Вернулись на экран машины — схема снова имеет смысл, но только если
         // она и выбрана: в режиме карты частые фиксы ей не нужны.
         AppEnvironment.shared.location.setCarPlaySketchVisible(model.showsSketch)

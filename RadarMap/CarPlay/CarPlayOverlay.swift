@@ -17,13 +17,16 @@ import MapKit
 
 struct CarPlayOverlay: View {
     @Environment(AppEnvironment.self) private var env
+    /// Свой баннер манёвра. Выключен, пока манёвр рисует сама машина
+    /// (навигационная сессия CarPlay).
+    var showsManeuver = true
 
     // MARK: - Раскладка
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 10) {
-                if let step = env.route.nextStep {
+                if showsManeuver, let step = env.route.nextStep {
                     maneuverBanner(step: step, distance: env.route.nextStepDistance)
                 }
                 Spacer(minLength: 0)

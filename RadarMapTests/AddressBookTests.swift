@@ -151,6 +151,17 @@ final class AddressBookTests: XCTestCase {
         XCTAssertEqual(AddressBook.fold("Ko'kcha"), AddressBook.fold("Кукча"))
     }
 
+    func testStreetWithUzbekOIsFoundBothWays() {
+        // Русский «Кукча» и латиница без апострофа «Kokcha» — один «Koʻkcha»;
+        // и пока апостроф не набран («Ko»), улица не пропадает из списка.
+        let point = CLLocationCoordinate2D(latitude: 41.3, longitude: 69.25)
+        let book = AddressBook(addresses: [Address(street: "Ko\u{02BB}kcha ko'chasi", house: "1", point: point)])
+        XCTAssertFalse(book.lookup("Кукча", near: nil).isEmpty)
+        XCTAssertFalse(book.lookup("Kokcha", near: nil).isEmpty)
+        XCTAssertFalse(book.lookup("Ko", near: nil).isEmpty)
+        XCTAssertFalse(book.lookup("Ko\u{2018}k", near: nil).isEmpty)
+    }
+
     func testIyEndingMeetsRussianSpelling() {
         XCTAssertEqual(AddressBook.fold("Navoiy"), AddressBook.fold("Навои"))
         XCTAssertEqual(AddressBook.fold("Beruniy"), AddressBook.fold("Беруни"))

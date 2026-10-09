@@ -83,7 +83,7 @@ nonisolated struct AddressBook: Sendable {
             let name = addresses[start].street
             var end = start + 1
             while end < addresses.count, addresses[end].street == name { end += 1 }
-            streets.append(Street(name: name, tokens: Self.tokens(name), houses: start..<end,
+            streets.append(Street(name: name, tokens: Self.streetTokens(name), houses: start..<end,
                                   houseKeys: addresses[start..<end].map { Self.houseKey($0.house) }))
             start = end
         }
@@ -148,7 +148,12 @@ nonisolated struct AddressBook: Sendable {
     ///   Проверено на живом файле: без него «Чиланзар» не находится вовсе, а
     ///   с ним число лишних попаданий не растёт;
     /// — `-iy` на конце слова — `-i`: «Navoiy» — «Навои», «Beruniy» — «Беруни».
-    static func fold(_ text: String) -> String {
+    ///
+    /// `uzbekU: false` — «oʻ» как «о» без апострофа: так пишет тот, кто
+    /// набирает латиницей без апострофа («Kokcha»), и так выглядит слово,
+    /// пока апостроф ещё не набран. Название из данных хранится в обоих видах
+    /// (streetTokens), запрос — как набран.
+    static func fold(_ text: String, uzbekU: Bool = true) -> String {
         var out = ""
         out.reserveCapacity(text.count)
         var previous: Character?
@@ -156,7 +161,7 @@ nonisolated struct AddressBook: Sendable {
             if apostrophes.contains(character) {
                 // «oʻ» — отдельная буква, по-русски «у»; прочие апострофы
                 // («gʻ», «ko'cha» с ошибкой) просто исчезают.
-                if previous == "o" { out.removeLast(); out += "u" }
+                if previous == "o", uzbekU { out.removeLast(); out += "u" }
                 previous = nil
                 continue
             }
@@ -248,9 +253,16 @@ nonisolated struct AddressBook: Sendable {
         "praspekt", "pr", "shah",
     ]
 
-    static func tokens(_ text: String) -> [String] {
-        fold(text).split(separator: " ").map(String.init)
+    static func tokens(_ text: String, uzbekU: Bool = true) -> [String] {
+        fold(text, uzbekU: uzbekU).split(separator: " ").map(String.init)
             .filter { !$0.isEmpty && !noise.contains($0) }
+    }
+
+    /// Слова названия улицы в обоих видах «oʻ» (см. fold): «Koʻkcha»
+    /// находится и по «Кукча», и по «Kokcha».
+    static func streetTokens(_ name: String) -> [String] {
+        var seen = Swift.Set<String>()
+        return (tokens(name) + tokens(name, uzbekU: false)).filter { seen.insert($0).inserted }
     }
 
     /// Улицы, подходящие под слова запроса (каждое слово начинает какое-нибудь

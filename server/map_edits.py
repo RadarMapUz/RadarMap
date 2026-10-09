@@ -1563,17 +1563,35 @@ _FOLD = {
 }
 
 
-def fold(text):
-    """Слово к сравнимому виду: кириллица → латиница, q→k, x→h, o→a, zh→j."""
+# Апострофы узбекской латиницы. «oʻ» — отдельная буква, по-русски «у»
+# («Oʻzbekiston» — «Узбекистан», «Koʻkcha» — «Кукча»); то же правило в
+# приложении (AddressBook.fold). Остальные апострофы просто исчезают.
+_APOSTROPHES = "'\u2018\u2019\u02bb\u02bc`\u00b4\u02b9"
+
+
+def fold(text, uzbek_u=True):
+    """Слово к сравнимому виду: кириллица → латиница, q→k, x→h, o→a, zh→j.
+
+    uzbek_u=False — «oʻ» как «о» без апострофа: так пишет тот, кто набирает
+    латиницей без апострофа («Kokcha»), и так выглядит слово, пока апостроф ещё
+    не набран. Название из данных сравнивается в обоих видах (folds)."""
     out = []
-    for char in (text or "").lower():
+    lowered = (text or "").lower()
+    for apostrophe in _APOSTROPHES:
+        lowered = lowered.replace("o" + apostrophe, "u" if uzbek_u else "o")
+    for char in lowered:
         out.append(_FOLD.get(char, char))
     word = "".join(out)
     for was, now in (("zh", "j"), ("kh", "h"), ("ts", "s"), ("yo", "e"),
                      ("q", "k"), ("x", "h"), ("w", "v"), ("o", "a"),
-                     ("y", "i"), ("ʻ", ""), ("'", ""), ("`", ""), ("’", "")):
+                     ("y", "i")) + tuple((a, "") for a in _APOSTROPHES):
         word = word.replace(was, now)
     return "".join(ch for ch in word if ch.isalnum())
+
+
+def folds(text):
+    """Оба вида названия: с «oʻ» как «у» и как «о» (см. fold)."""
+    return {fold(text), fold(text, uzbek_u=False)}
 
 
 ADDRESS_DEGREES = 0.5
@@ -1603,7 +1621,7 @@ def search_addresses(tiles_dir, text, near=None, limit=8):
         except (OSError, ValueError):
             continue
         for street in payload.get("streets") or []:
-            if wanted not in fold(street.get("n", "")):
+            if not any(wanted in variant for variant in folds(street.get("n", ""))):
                 continue
             numbers = street.get("h") or []
             flat = street.get("p") or []

@@ -14845,6 +14845,230 @@
           }
         }
       }
+    },
+    "АЗС": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "АЗС"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AYOQSH"
+          }
+        }
+      }
+    },
+    "Парковка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Парковка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avtoturargoh"
+          }
+        }
+      }
+    },
+    "Мойка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мойка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avtoyuvish"
+          }
+        }
+      }
+    },
+    "Автосервис": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Автосервис"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avtoservis"
+          }
+        }
+      }
+    },
+    "Шиномонтаж": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Шиномонтаж"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shinomontaj"
+          }
+        }
+      }
+    },
+    "Зарядка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зарядка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quvvatlash"
+          }
+        }
+      }
+    },
+    "Еда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Еда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovqat"
+          }
+        }
+      }
+    },
+    "Аптека": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Аптека"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dorixona"
+          }
+        }
+      }
+    },
+    "Банкомат": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Банкомат"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bankomat"
+          }
+        }
+      }
+    },
+    "Супермаркет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Супермаркет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supermarket"
+          }
+        }
+      }
+    },
+    "%@ рядом не нашлось": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ рядом не нашлось"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yaqin atrofda %@ topilmadi"
+          }
+        }
+      }
+    },
+    "По данным Apple": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По данным Apple"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple ma’lumotlari bo‘yicha"
+          }
+        }
+      }
+    },
+    "Места · без сети": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Места · без сети"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joylar · internetsiz"
+          }
+        }
+      }
+    },
+    "Без сети ищу только по своей карте.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без сети ищу только по своей карте."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Internetsiz faqat o‘z xaritamiz bo‘yicha qidiraman."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

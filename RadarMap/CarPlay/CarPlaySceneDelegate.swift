@@ -664,6 +664,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                                   titles: [String(localized: "Поиск")]) { [weak self] in
             self?.presentSearch()
         })
+        // АЗС — частый вопрос в дороге, и ответ на него — одна плитка.
+        buttons.append(gridButton(symbol: Venue.Kind.fuel.symbol,
+                                  titles: [Venue.Kind.fuel.title]) { [weak self] in
+            self?.presentNearest(.fuel)
+        })
 
         // Дом и Работа уже стоят своими плитками выше — в «недавних» они
         // дублируются и съедают места из восьми, которые есть у сетки.
@@ -690,6 +695,32 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         interfaceController?.pushTemplate(grid, animated: true) { _, error in
             if let error {
                 Log.carplay.error("pushTemplate(куда): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Ближайшие заведения вида списком: тап — маршрут.
+    private func presentNearest(_ kind: Venue.Kind) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let found = await search.nearest(kind)
+            guard !found.isEmpty else {
+                return showAlert(title: String(format: String(localized: "%@ рядом не нашлось"), kind.title),
+                                 message: String(localized: "Без сети ищу только по своей карте."))
+            }
+            let items = found.map { place, detail -> CPListItem in
+                let item = CPListItem(text: place.title, detailText: detail)
+                item.handler = { [weak self] _, completion in
+                    self?.route(to: place)
+                    completion()
+                }
+                return item
+            }
+            let list = CPListTemplate(title: kind.title, sections: [CPListSection(items: items)])
+            interfaceController?.pushTemplate(list, animated: true) { _, error in
+                if let error {
+                    Log.carplay.error("pushTemplate(\(kind.title, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+                }
             }
         }
     }

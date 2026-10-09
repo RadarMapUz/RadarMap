@@ -28,6 +28,8 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
     /// флаг «уже спрашивали» оставался — свои адреса пропадали до конца
     /// подключения. Не загрузилось — следующий запрос попробует снова.
     private var bookTask: Task<AddressBook?, Never>?
+    /// Заведения клетки (АЗС, парковки) — тем же порядком загрузки.
+    private var venues: VenueBook?
     private var task: Task<Void, Never>?
     /// Ответ шаблону на текущий запрос. CarPlay требует ответить на каждый, и
     /// ровно один раз: заменённый запрос получает пустой список сразу.
@@ -46,6 +48,22 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
 
     init(onPick: @escaping (SavedPlace) -> Void) {
         self.onPick = onPick
+    }
+
+    /// Ближайшие заведения вида — для плитки «АЗС» в «Куда». Свой индекс, а
+    /// без него (клетка не опубликована) — Apple, если есть связь.
+    func nearest(_ kind: Venue.Kind) async -> [(SavedPlace, String)] {
+        let near = env.location.currentCoordinate
+        if book == nil || venues == nil { _ = await loadBook(near: near).value }
+        let own = venues?.nearest(kind, to: near, limit: AppConfig.carPlaySearchLimit) ?? []
+        if !own.isEmpty {
+            return own.map { venue in
+                (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
+                 Self.detail(near: near, point: venue.point, offline: true))
+            }
+        }
+        guard env.network.isOnline else { return [] }
+        return await apple(kind.title, near: near)
     }
 
     func makeTemplate() -> CPSearchTemplate {
@@ -84,6 +102,7 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
             guard let self else { return nil }
             let loaded = await self.env.roads.addressBook(for: center)
             self.book = loaded
+            if self.venues == nil { self.venues = await self.env.roads.venueBook(for: center) }
             if loaded == nil { self.bookTask = nil }
             return loaded
         }
@@ -105,7 +124,14 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
             if let load { _ = await load.value }
             guard !Task.isCancelled else { return }
             let language = self.env.settings.appLanguage.mapCode
-            var places: [(SavedPlace, String)] = (self.book?.lookup(query, near: near,
+            // Заведения — первыми: «азс» за рулём значит «ближайшая заправка».
+            var places: [(SavedPlace, String)] = (self.venues?.search(query, near: near,
+                                                                      limit: AppConfig.carPlaySearchOwnLimit) ?? [])
+                .map { venue in
+                    (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
+                     Self.detail(near: near, point: venue.point, offline: true))
+                }
+            places += (self.book?.lookup(query, near: near,
                                                                     limit: AppConfig.carPlaySearchOwnLimit) ?? [])
                 .map { address in
                     let street = StreetName.display(address.street, language: language)

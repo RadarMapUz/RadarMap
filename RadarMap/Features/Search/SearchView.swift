@@ -34,6 +34,8 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
             answered = false
             completer.queryFragment = query
             mine = book?.lookup(query, near: near) ?? []
+            places = venues?.search(query, near: near) ?? []
+            if !query.isEmpty { category = nil }
         }
     }
 
@@ -51,6 +53,17 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
     /// парковки и в тоннеле, где сетевого поиска просто нет.
     private(set) var mine: [Address] = []
     private var book: AddressBook?
+    /// Свои заведения клетки (АЗС, парковки…) и найденные в них по запросу.
+    private var venues: VenueBook?
+    private(set) var places: [Venue] = []
+
+    /// Выбранная плитка категории и её ответ: свой индекс, а пока клетка не
+    /// опубликована или пуста — Apple (`categoryFromApple`).
+    private(set) var category: Venue.Kind?
+    private(set) var categoryResults: [Venue] = []
+    private(set) var categoryFromApple = false
+    private(set) var categoryLoading = false
+    private var categoryTask: Task<Void, Never>?
     private var bookAsked = false
 
     /// Завершитель ответил на текущий запрос. Без этого флага пустой список
@@ -117,8 +130,58 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
                                                   latitudinalMeters: AppConfig.searchRegionMeters,
                                                   longitudinalMeters: AppConfig.searchRegionMeters)
         }
-        book = await roads.addressBook(for: coordinate ?? fallback ?? AppConfig.searchFallbackCenter)
+        let cell = coordinate ?? fallback ?? AppConfig.searchFallbackCenter
+        book = await roads.addressBook(for: cell)
+        venues = await roads.venueBook(for: cell)
         mine = book?.lookup(query, near: near) ?? []
+        places = venues?.search(query, near: near) ?? []
+    }
+
+    /// Плитка категории: ближайшие такого вида. Повторный тап — свернуть.
+    func pick(_ kind: Venue.Kind) {
+        categoryTask?.cancel()
+        guard category != kind else {
+            category = nil
+            categoryResults = []
+            return
+        }
+        category = kind
+        let own = venues?.nearest(kind, to: near) ?? []
+        categoryResults = own
+        categoryFromApple = false
+        guard own.isEmpty else { return }
+        // Своего ответа нет (клетка ещё не опубликована) — Apple, и честно
+        // подписано, откуда ответ.
+        categoryLoading = true
+        categoryTask = Task { [weak self] in
+            guard let self else { return }
+            let found = await self.apple(kind)
+            guard !Task.isCancelled, self.category == kind else { return }
+            self.categoryResults = found
+            self.categoryFromApple = true
+            self.categoryLoading = false
+        }
+    }
+
+    private func apple(_ kind: Venue.Kind) async -> [Venue] {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = kind.title
+        if let near {
+            request.region = MKCoordinateRegion(center: near, latitudinalMeters: AppConfig.searchRegionMeters,
+                                                longitudinalMeters: AppConfig.searchRegionMeters)
+        }
+        do {
+            let items = try await MKLocalSearch(request: request).start().mapItems
+            let found = items.map { Venue(kind: kind, name: $0.name ?? "", point: $0.placemark.coordinate) }
+            guard let near else { return found }
+            return found.sorted {
+                GeoMath.fastDistance(near.latitude, near.longitude, $0.point.latitude, $0.point.longitude)
+                    < GeoMath.fastDistance(near.latitude, near.longitude, $1.point.latitude, $1.point.longitude)
+            }
+        } catch {
+            Log.app.error("категория у Apple: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
     }
 
     func resolve(_ completion: MKLocalSearchCompletion) async -> CLLocationCoordinate2D? {
@@ -157,8 +220,12 @@ struct SearchView: View {
                     assignBanner(slot)
                 } else {
                     placesSection
-                    if model.query.isEmpty { recentsSection }
+                    if model.query.isEmpty {
+                        categoriesSection
+                        recentsSection
+                    }
                 }
+                placesFoundSection
                 mineSection
                 resultsSection
             }
@@ -255,6 +322,110 @@ struct SearchView: View {
                 } label: {
                     Label("Удалить", systemImage: "trash")
                 }
+            }
+        }
+    }
+
+    // MARK: - Категории и заведения
+
+    /// Плитки «АЗС, Парковка, Мойка…» — то, что ищут из машины. Ответ — сразу
+    /// под плитками: ближайшие, со своего индекса и без сети.
+    @ViewBuilder private var categoriesSection: some View {
+        Section {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 8)], spacing: 8) {
+                ForEach(Venue.Kind.quick, id: \.self) { kind in
+                    Button { model.pick(kind) } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: kind.symbol)
+                                .font(.rounded(17, .bold))
+                            Text(kind.title)
+                                .font(.rounded(11, .semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .foregroundStyle(model.category == kind ? Theme.background : Theme.textPrimary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(model.category == kind ? AnyShapeStyle(Theme.accent.gradient)
+                                                           : AnyShapeStyle(Theme.screenBackground),
+                                    in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(model.category == kind ? .isSelected : [])
+                }
+            }
+            .padding(.vertical, 4)
+            if let kind = model.category {
+                if model.categoryLoading {
+                    ProgressView().frame(maxWidth: .infinity)
+                } else if model.categoryResults.isEmpty {
+                    Text(String(format: String(localized: "%@ рядом не нашлось"), kind.title))
+                        .font(.rounded(13))
+                        .foregroundStyle(Theme.textSecondary)
+                } else {
+                    ForEach(model.categoryResults.prefix(AppConfig.searchCategoryLimit)) { venue in
+                        venueRow(venue)
+                    }
+                }
+            }
+        } header: {
+            Text("Рядом")
+        } footer: {
+            if model.category != nil, !model.categoryResults.isEmpty {
+                Text(model.categoryFromApple ? "По данным Apple" : "Из своей карты · без сети")
+            }
+        }
+        .listRowBackground(Theme.surface)
+    }
+
+    /// Заведения по запросу («Лукойл», «заправка») — своя карта, без сети.
+    @ViewBuilder private var placesFoundSection: some View {
+        if !model.places.isEmpty, assigning == nil {
+            Section {
+                ForEach(model.places) { venueRow($0) }
+            } header: {
+                Text("Места · без сети")
+            }
+            .listRowBackground(Theme.surface)
+        }
+    }
+
+    private func venueRow(_ venue: Venue) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                onSelect?(venue.point, venue.title)
+                dismiss()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: venue.kind.symbol)
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(width: 24)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(venue.title)
+                            .font(.rounded(15, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                        if let distance = model.distance(to: venue.point) {
+                            Text(Formatting.distance(distance))
+                                .font(.rounded(12))
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let onRoute {
+                Button {
+                    onRoute(venue.point, venue.title)
+                    dismiss()
+                } label: {
+                    Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
+                        .font(.rounded(24))
+                        .foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Маршрут сюда"))
             }
         }
     }
@@ -413,7 +584,7 @@ struct SearchView: View {
                 }
             }
             .listRowBackground(Theme.surface)
-        } else if !model.query.isEmpty, model.answered, model.mine.isEmpty {
+        } else if !model.query.isEmpty, model.answered, model.mine.isEmpty, model.places.isEmpty {
             // Пустой список без единого слова читается как зависшее
             // приложение: человек ждёт результата, которого уже не будет.
             Section {

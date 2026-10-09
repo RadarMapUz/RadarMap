@@ -52,3 +52,16 @@ final class LaneAdviceTests: XCTestCase {
         XCTAssertGreaterThan(AppConfig.laneRowHighwayMeters, AppConfig.engineManeuverApproachMeters)
     }
 }
+
+final class LaneVoiceTests: XCTestCase {
+    func testEarlyCallSaysWhichRowsWhenItIsClear() {
+        let lanes = [LaneHint(arrows: [.left], isValid: true), LaneHint(arrows: [.straight], isValid: false)]
+        XCTAssertEqual(RouteService.withLanes("Через 300 метров — поверните налево", lanes),
+                       "Через 300 метров — поверните налево. " + String(localized: "Из левого ряда"))
+    }
+
+    func testNoLanesNoExtraWords() {
+        XCTAssertEqual(RouteService.withLanes("Через 300 метров — поверните налево", []),
+                       "Через 300 метров — поверните налево")
+    }
+}

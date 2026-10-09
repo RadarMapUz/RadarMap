@@ -438,18 +438,28 @@ final class RouteService {
             onManeuver?(step.text)
         } else if distance < 280, stage > 1 {
             announcedStage[index] = 1
-            onManeuver?(String(format: String(localized: "Через %lld метров — %@"),
-                               Int((distance / 50).rounded() * 50), step.text))
+            onManeuver?(Self.withLanes(String(format: String(localized: "Через %lld метров — %@"),
+                                              Int((distance / 50).rounded() * 50), step.text),
+                                       step.lanes))
         } else if distance < 850, stage > 2, step.kind?.deservesEarlyCall ?? true {
             announcedStage[index] = 2
-            onManeuver?(String(format: String(localized: "Через %lld метров — %@"),
-                               Int((distance / 100).rounded() * 100), step.text))
+            onManeuver?(Self.withLanes(String(format: String(localized: "Через %lld метров — %@"),
+                                              Int((distance / 100).rounded() * 100), step.text),
+                                       step.lanes))
         }
         // Считаем манёвр один раз — при первом объявлении. Хранимые ступени
         // это 0…2, поэтому «было 3» означает «до сих пор не объявляли».
         if stage == 3, announcedStage[index] != nil {
             onManeuverSpoken?(step.kind?.rawValue ?? "unknown")
         }
+    }
+
+    /// Заблаговременная фраза манёвра + в какой ряд встать («…на Беруни.
+    /// Из двух левых рядов.»). Только для ранних объявлений: на «сейчас»
+    /// перестраиваться уже поздно, и лишние слова там мешают.
+    nonisolated static func withLanes(_ phrase: String, _ lanes: [LaneHint]) -> String {
+        guard let advice = LaneAdvice.phrase(lanes) else { return phrase }
+        return phrase + ". " + advice
     }
 
     // MARK: - Движки

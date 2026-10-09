@@ -23,6 +23,8 @@ import SwiftUI
 struct CarPlayEngineLayer: View {
     @Environment(AppEnvironment.self) private var env
     let model: CarPlayMapModel
+    /// Плитка приборной панели: без дока внизу, «я» — по своей доле высоты.
+    var compact = false
 
     var body: some View {
         // Без своей позиции карты нет: центр «где-то в Ташкенте» выдал бы
@@ -57,7 +59,7 @@ struct CarPlayEngineLayer: View {
             courseDegrees: env.location.displayCourse,
             spanMeters: (span * pow(2, -model.zoomBias) / AppConfig.engineSpanStep).rounded()
                 * AppConfig.engineSpanStep,
-            anchorY: Self.meY(size: size, safe: safe),
+            anchorY: compact ? AppConfig.carPlayDashboardMeY : Self.meY(size: size, safe: safe),
             pitchDegrees: pitch,
             daylight: model.isDaylight,
             houses: env.settings.mapHouses,

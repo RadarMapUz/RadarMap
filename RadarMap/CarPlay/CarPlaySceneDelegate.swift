@@ -340,6 +340,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         guidance.isOnScreen = false
     }
 
+    /// На экране машины другое приложение или приборная панель — карту
+    /// выгружаем (model.isOnScreen); вернулись — поднимаем заново.
+    func sceneDidEnterBackground(_ scene: UIScene) {
+        guard Self.activeDelegate === self else { return }
+        model.isOnScreen = false
+    }
+
+    func sceneWillEnterForeground(_ scene: UIScene) {
+        model.isOnScreen = true
+    }
+
     func sceneDidBecomeActive(_ scene: UIScene) {
         // Стали видимым экраном машины — значит, мы и владелец.
         Self.activeDelegate = self

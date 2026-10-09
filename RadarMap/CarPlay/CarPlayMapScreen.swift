@@ -63,6 +63,10 @@ final class CarPlayMapModel {
     /// Манёвр показывает сама машина (навигационная сессия): свой баннер
     /// манёвра тогда не рисуем — два одинаковых поворота на одном экране.
     var hasSystemGuidance = false
+    /// Экран машины показывает нас. В фоне (на экране другое приложение или
+    /// приборная панель) карта на движке выгружается: картинку никто не видит,
+    /// а рисует и греется телефон. Ставит делегат сцены.
+    var isOnScreen = true
     /// Едет ли карта за машиной. Пишет координатор карты (система сама снимает
     /// слежение, как только водитель тронул карту пальцем или крутилкой),
     /// читает значок кнопки «к себе»: залитый — следим, контурный — стоим.
@@ -186,7 +190,7 @@ struct CarPlayMapScreen: View {
             if model.showsSketch {
                 CarPlaySketchView(sketch: model.sketch)
             } else if CarPlayMapModel.usesEngine(env.settings) {
-                engineMap
+                if model.isOnScreen { engineMap } else { Theme.background.ignoresSafeArea() }
             } else {
                 CarPlayMapView(model: model,
                                repository: env.cameras,

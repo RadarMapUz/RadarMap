@@ -13,12 +13,15 @@ import CoreLocation
 struct MapPoint: Identifiable, Equatable {
     let id = UUID()
     let coordinate: CLLocationCoordinate2D
+    /// Название из поиска; у точки долгого нажатия его нет.
+    var title: String? = nil
 
     static func == (lhs: MapPoint, rhs: MapPoint) -> Bool { lhs.id == rhs.id }
 }
 
 /// Бар действий для точки: маршрут / передвижной радар / своя камера.
 struct MapPointBar: View {
+    var title: String? = nil
     /// nil — геопозиции нет, маршрут строить не из чего.
     let onRoute: (() -> Void)?
     let onRadar: () -> Void
@@ -28,9 +31,13 @@ struct MapPointBar: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack {
-                Label("Точка на карте", systemImage: "mappin.and.ellipse")
-                    .font(.rounded(14, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
+                Label {
+                    if let title { Text(title).lineLimit(1) } else { Text("Точка на карте") }
+                } icon: {
+                    Image(systemName: "mappin.and.ellipse")
+                }
+                .font(.rounded(14, .semibold))
+                .foregroundStyle(Theme.textPrimary)
                 Spacer()
                 Button(action: onCancel) {
                     Image(systemName: "xmark.circle.fill")

@@ -33,7 +33,7 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
         didSet {
             answered = false
             completer.queryFragment = query
-            mine = book?.search(query, near: near) ?? []
+            mine = book?.lookup(query, near: near) ?? []
         }
     }
 
@@ -60,6 +60,22 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
 
     private let completer = MKLocalSearchCompleter()
 
+    /// Идёт разворот адреса Apple в координату. Второй тап в это время
+    /// ничего не делает: раньше двойной тап строил два маршрута.
+    private(set) var isResolving = false
+
+    func resolveOnce(_ completion: MKLocalSearchCompletion) async -> CLLocationCoordinate2D? {
+        guard !isResolving else { return nil }
+        isResolving = true
+        defer { isResolving = false }
+        return await resolve(completion)
+    }
+
+    /// Расстояние от машины — подпись строки результата.
+    func distance(to point: CLLocationCoordinate2D) -> CLLocationDistance? {
+        near.map { GeoMath.fastDistance($0.latitude, $0.longitude, point.latitude, point.longitude) }
+    }
+
     override init() {
         super.init()
         completer.delegate = self
@@ -84,20 +100,36 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
 
     /// Забрать файл адресов города. Один раз за показ экрана: город не
     /// меняется, пока человек набирает запрос.
+    ///
+    /// Без GPS — клетка дома, а без дома — Ташкента: свой поиск обязан
+    /// работать и в подвале парковки, где спутников нет, а раньше без
+    /// координаты он не загружался вовсе.
     func loadBook(from roads: RoadNetworkService,
-                  at coordinate: CLLocationCoordinate2D?) async {
-        guard !bookAsked, let coordinate else { return }
+                  at coordinate: CLLocationCoordinate2D?,
+                  fallback: CLLocationCoordinate2D?) async {
+        guard !bookAsked else { return }
         bookAsked = true
         near = coordinate
-        book = await roads.addressBook(for: coordinate)
-        mine = book?.search(query, near: near) ?? []
+        if let coordinate {
+            // Apple без региона ищет по всему миру: «Навои» находился бы в
+            // Самарканде раньше, чем в Ташкенте.
+            completer.region = MKCoordinateRegion(center: coordinate,
+                                                  latitudinalMeters: AppConfig.searchRegionMeters,
+                                                  longitudinalMeters: AppConfig.searchRegionMeters)
+        }
+        book = await roads.addressBook(for: coordinate ?? fallback ?? AppConfig.searchFallbackCenter)
+        mine = book?.lookup(query, near: near) ?? []
     }
 
     func resolve(_ completion: MKLocalSearchCompletion) async -> CLLocationCoordinate2D? {
         let request = MKLocalSearch.Request(completion: completion)
-        // Поиск/сеть подвели — вернём nil, UI покажет пустой результат.
-        guard let response = try? await MKLocalSearch(request: request).start() else { return nil }
-        return response.mapItems.first?.placemark.coordinate
+        do {
+            return try await MKLocalSearch(request: request).start().mapItems.first?.placemark.coordinate
+        } catch {
+            // UI скажет «не удалось открыть адрес»; причина — в лог, а не в никуда.
+            Log.app.error("адрес не развернулся: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 }
 
@@ -108,7 +140,8 @@ struct SearchView: View {
     /// Адрес не удалось развернуть в координату — тап отработал вхолостую, и
     /// об этом надо сказать: молчание здесь неотличимо от сломанной кнопки.
     @State private var resolveFailed = false
-    var onSelect: ((CLLocationCoordinate2D) -> Void)? = nil
+    /// Выбор места: точка и её название (для точки на карте).
+    var onSelect: ((CLLocationCoordinate2D, String) -> Void)? = nil
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
     /// Открытие сразу в режиме «выбрать адрес для Дом/Работа» (из Настроек).
     var initialAssign: PlaceSlot? = nil
@@ -146,7 +179,8 @@ struct SearchView: View {
         .onAppear { assigning = initialAssign }
         .task {
             await model.loadBook(from: env.roads,
-                                 at: env.location.currentCoordinate)
+                                 at: env.location.currentCoordinate,
+                                 fallback: env.settings.place(for: .home)?.coordinate)
         }
         .alert("Не удалось открыть адрес", isPresented: $resolveFailed) {
             Button("Понятно", role: .cancel) { }
@@ -179,7 +213,7 @@ struct SearchView: View {
                 if let onRoute {
                     onRoute(place.coordinate, slot.name)
                 } else {
-                    onSelect?(place.coordinate)
+                    onSelect?(place.coordinate, slot.name)
                 }
                 dismiss()
             } else {
@@ -266,7 +300,7 @@ struct SearchView: View {
                         if let onRoute {
                             onRoute(place.coordinate, place.title)
                         } else {
-                            onSelect?(place.coordinate)
+                            onSelect?(place.coordinate, place.title)
                         }
                         dismiss()
                     } label: {
@@ -307,7 +341,7 @@ struct SearchView: View {
     @ViewBuilder private var mineSection: some View {
         if !model.mine.isEmpty {
             Section {
-                ForEach(model.mine, id: \.title) { address in
+                ForEach(model.mine) { address in
                     mineRow(address)
                 }
             } header: {
@@ -317,32 +351,47 @@ struct SearchView: View {
         }
     }
 
+    /// Название в языке приложения: в OSM 72 % улиц Ташкента записаны
+    /// латиницей («Alisher Navoiy ko'chasi»), а человек искал «Навои».
+    private func title(_ address: Address) -> String {
+        let street = StreetName.display(address.street, language: env.settings.appLanguage.mapCode)
+        return address.house.isEmpty ? street : "\(street), \(address.house)"
+    }
+
     private func mineRow(_ address: Address) -> some View {
-        HStack(spacing: 10) {
+        let title = title(address)
+        return HStack(spacing: 10) {
             Button {
                 if let slot = assigning {
-                    assign(slot, coordinate: address.point, title: address.title)
+                    assign(slot, coordinate: address.point, title: title)
                 } else {
-                    onSelect?(address.point)
+                    onSelect?(address.point, title)
                     dismiss()
                 }
             } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: "house.fill")
+                    Image(systemName: address.isStreet ? "road.lanes" : "house.fill")
                         .font(.rounded(13, .semibold))
                         .foregroundStyle(Theme.textSecondary)
                         .frame(width: 24)
-                    Text(address.title)
-                        .font(.rounded(15, .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(title)
+                            .font(.rounded(15, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                        if let distance = model.distance(to: address.point) {
+                            Text(Formatting.distance(distance))
+                                .font(.rounded(12))
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if let onRoute, assigning == nil {
                 Button {
-                    onRoute(address.point, address.title)
+                    onRoute(address.point, title)
                     dismiss()
                 } label: {
                     Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
@@ -393,14 +442,14 @@ struct SearchView: View {
         HStack(spacing: 10) {
             Button {
                 Task {
-                    guard let coordinate = await model.resolve(result) else {
-                        resolveFailed = true
+                    guard let coordinate = await model.resolveOnce(result) else {
+                        if !model.isResolving { resolveFailed = true }
                         return
                     }
                     if let slot = assigning {
                         assign(slot, coordinate: coordinate, title: result.title)
                     } else {
-                        onSelect?(coordinate)
+                        onSelect?(coordinate, result.title)
                         dismiss()
                     }
                 }
@@ -422,10 +471,10 @@ struct SearchView: View {
                 // Построить маршрут прямо из поиска — самый короткий путь к цели.
                 Button {
                     Task {
-                        if let coordinate = await model.resolve(result) {
+                        if let coordinate = await model.resolveOnce(result) {
                             onRoute(coordinate, result.title)
                             dismiss()
-                        } else {
+                        } else if !model.isResolving {
                             resolveFailed = true
                         }
                     }

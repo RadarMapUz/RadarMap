@@ -969,6 +969,15 @@ nonisolated enum AppConfig {
     /// скорости ряд появляется за laneRowHighwayMeters, а не за 600 м.
     static let laneHighwaySpeedKmh = 70.0
     static let laneRowHighwayMeters = 1000.0
+
+    // MARK: - Поиск
+
+    /// Один и тот же адрес ближе этого — один дом (точка и контур в OSM).
+    static let addressDuplicateMeters = 40.0
+    /// Регион поиска Apple вокруг машины: без него Apple ищет по всему миру.
+    static let searchRegionMeters = 60_000.0
+    /// Клетка адресов без GPS и без «Дома» — Ташкент.
+    static let searchFallbackCenter = CLLocationCoordinate2D(latitude: 41.3111, longitude: 69.2797)
     static let engineManeuverHighlightMeters = 35.0
     /// Частота обновления геометрии маршрута; курсор обновляется на каждом фиксе.
     static let engineRouteProgressStep = 15.0

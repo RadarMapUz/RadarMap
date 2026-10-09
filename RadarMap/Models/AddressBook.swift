@@ -22,13 +22,22 @@
 import CoreLocation
 import Foundation
 
-nonisolated struct Address: Sendable, Equatable {
+nonisolated struct Address: Sendable, Equatable, Identifiable {
     let street: String
     let house: String
     let point: CLLocationCoordinate2D
 
-    /// Как показать человеку: «Навои, 12».
-    var title: String { "\(street), \(house)" }
+    /// Как показать человеку: «Навои, 12». Без номера — улица целиком.
+    var title: String { house.isEmpty ? street : "\(street), \(house)" }
+
+    /// Строка списка: одинаковые адреса бывают в разных районах («Мустакиллик,
+    /// 5» есть не один), поэтому одного названия для id мало.
+    var id: String {
+        String(format: "%@|%.5f|%.5f", title, point.latitude, point.longitude)
+    }
+
+    /// Это вся улица, а не дом (ответ на запрос без номера).
+    var isStreet: Bool { house.isEmpty }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.street == rhs.street && lhs.house == rhs.house
@@ -52,6 +61,34 @@ nonisolated struct AddressBook: Sendable {
     }
 
     let addresses: [Address]
+
+    /// Улица и её дома (подряд в `addresses`). Слова названия сведены ОДИН
+    /// раз: раньше каждая буква запроса сводила название заново для каждого
+    /// дома — 115 тысяч раз вместо трёх тысяч, на главном потоке.
+    struct Street: Sendable {
+        let name: String
+        let tokens: [String]
+        let houses: Range<Int>
+        /// Номера в сравнимом виде (houseKey) — по одному на дом.
+        let houseKeys: [String]
+    }
+
+    let streets: [Street]
+
+    init(addresses: [Address]) {
+        self.addresses = addresses
+        var streets: [Street] = []
+        var start = 0
+        while start < addresses.count {
+            let name = addresses[start].street
+            var end = start + 1
+            while end < addresses.count, addresses[end].street == name { end += 1 }
+            streets.append(Street(name: name, tokens: Self.tokens(name), houses: start..<end,
+                                  houseKeys: addresses[start..<end].map { Self.houseKey($0.house) }))
+            start = end
+        }
+        self.streets = streets
+    }
 
     /// Разобрать файл клетки. nil — файл не наш или битый: ответ «адресов
     /// нет» честнее, чем половина списка.
@@ -99,22 +136,36 @@ nonisolated struct AddressBook: Sendable {
     ///
     /// Поэтому всё сводится к одной «слабой латинице»:
     /// — кириллица переводится в латиницу;
+    /// — `oʻ` и `ў` — это русское «у» («Oʻzbekiston» — «Узбекистан»,
+    ///   «Koʻkcha» — «Кукча»), а остальные апострофы просто склеивают слово
+    ///   («Ulugʻbek» — «Улугбек»). До 10.10.2026 апостроф рвал слово надвое,
+    ///   и «Улугбек» не находил «Mirzo Ulugʻbek» вовсе;
     /// — `q`→`k`, `x`→`h`, `w`→`v`, `zh`→`j`: узбекская латиница и русская
     ///   транслитерация расходятся ровно в этих буквах («Мустакиллик» против
     ///   «Mustaqillik»);
     /// — `o`→`a`: систематическое расхождение узбекского и русского написания
     ///   («Chilonzor» против «Чиланзар», «Toshkent» против «Ташкент»).
     ///   Проверено на живом файле: без него «Чиланзар» не находится вовсе, а
-    ///   с ним число лишних попаданий не растёт.
+    ///   с ним число лишних попаданий не растёт;
+    /// — `-iy` на конце слова — `-i`: «Navoiy» — «Навои», «Beruniy» — «Беруни».
     static func fold(_ text: String) -> String {
         var out = ""
         out.reserveCapacity(text.count)
+        var previous: Character?
         for character in text.lowercased() {
+            if apostrophes.contains(character) {
+                // «oʻ» — отдельная буква, по-русски «у»; прочие апострофы
+                // («gʻ», «ko'cha» с ошибкой) просто исчезают.
+                if previous == "o" { out.removeLast(); out += "u" }
+                previous = nil
+                continue
+            }
             if let latin = cyrillic[character] {
                 out += latin
             } else {
                 out.append(character)
             }
+            previous = character
         }
         out = out.replacingOccurrences(of: "zh", with: "j")
         var loose = ""
@@ -133,8 +184,15 @@ nonisolated struct AddressBook: Sendable {
                 }
             }
         }
-        return loose.split(separator: " ").joined(separator: " ")
+        return loose.split(separator: " ").map { word in
+            word.count > 3 && word.hasSuffix("iy") ? String(word.dropLast()) : String(word)
+        }.joined(separator: " ")
     }
+
+    /// Все апострофы, которыми пишут узбекскую латиницу: прямой, типографские,
+    /// модификаторы (ʻ — официальный, U+02BB) и обратный штрих с клавиатуры.
+    private static let apostrophes: Swift.Set<Character> = ["'", "\u{2018}", "\u{2019}", "\u{02BB}",
+                                                            "\u{02BC}", "`", "\u{00B4}", "\u{02B9}"]
 
     private static let cyrillic: [Character: String] = [
         "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo",
@@ -142,8 +200,39 @@ nonisolated struct AddressBook: Sendable {
         "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
         "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sh",
         "ъ": "", "ы": "i", "ь": "", "э": "e", "ю": "yu", "я": "ya",
-        "ў": "o", "қ": "k", "ғ": "g", "ҳ": "h", "ә": "a",
+        "ў": "u", "қ": "k", "ғ": "g", "ҳ": "h", "ә": "a",
     ]
+
+    /// Номер дома в сравнимом виде: «12/1», «12-1», «12 / 1» — одно; буква
+    /// корпуса кириллицей и латиницей — одна («12А» и «12a»).
+    static func houseKey(_ text: String) -> String {
+        var out = ""
+        for character in text.lowercased() {
+            if character.isNumber { out.append(character) }
+            else if character == "/" || character == "-" { out.append("/") }
+            else if let latin = cyrillic[character], latin.count == 1 { out += latin }
+            else if character.isLetter { out.append(character) }
+        }
+        return out
+    }
+
+    /// Разделить запрос на улицу и номер дома.
+    ///
+    /// Номер — последний кусок, начинающийся с цифры, вместе с корпусом через
+    /// дробь: «Навои 12/1», «Навои 12 а», «Навои, д.12», «Navoiy uy 12».
+    /// Разбирается по ИСХОДНОЙ строке: приведение превращало «/» в пробел, и
+    /// «12/1» становилось улицей «12» и домом «1».
+    static func splitHouse(_ query: String) -> (street: String, house: String?) {
+        let pattern = #"^(.*?)[\s,]+(?:(?:д|дом|uy|d|№)\.?\s*)?(\d+\s*[\p{L}]?(?:\s*[/-]\s*\d+\s*[\p{L}]?)?)\s*$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+              let match = regex.firstMatch(in: query, range: NSRange(query.startIndex..., in: query)),
+              let streetRange = Range(match.range(at: 1), in: query),
+              let houseRange = Range(match.range(at: 2), in: query) else { return (query, nil) }
+        let street = String(query[streetRange])
+        // Запрос из одних цифр — это улица («1-й проезд»), а не номер.
+        guard !tokens(street).isEmpty else { return (query, nil) }
+        return (street, houseKey(String(query[houseRange])))
+    }
 
     /// Слова, которые не сужают поиск.
     ///
@@ -152,9 +241,11 @@ nonisolated struct AddressBook: Sendable {
     /// «улица Навои» не находит «Alisher Navoiy ko'chasi», потому что слова
     /// «улица» в нём нет.
     static let noise: Swift.Set<String> = [
-        "ulitsa", "ul", "kachasi", "kacha", "kuchasi", "street", "st",
+        "ulitsa", "ul", "kachasi", "kacha", "kuchasi", "kucha", "street", "st",
         "praezd", "pereulak", "per", "shasse", "tupik", "massiv", "mahalla",
-        "mfy", "tar", "yuli", "yali", "dam", "tashkent", "tashkent",
+        "mfy", "tar", "yuli", "yali", "dam", "tashkent",
+        // «Amir Temur shoh ko'chasi» — это «проспект Амира Темура».
+        "praspekt", "pr", "shah",
     ]
 
     static func tokens(_ text: String) -> [String] {
@@ -162,60 +253,97 @@ nonisolated struct AddressBook: Sendable {
             .filter { !$0.isEmpty && !noise.contains($0) }
     }
 
-    /// Найти по строке «улица номер».
+    /// Улицы, подходящие под слова запроса (каждое слово начинает какое-нибудь
+    /// слово названия; порядок и лишние слова в данных не решают).
+    private func matchingStreets(_ want: [String]) -> [Street] {
+        streets.filter { street in
+            want.allSatisfy { word in street.tokens.contains { $0.hasPrefix(word) } }
+        }
+    }
+
+    /// Найти дома по строке «улица номер».
     ///
-    /// Номер отделяем сами и по последнему слову: человек пишет «Навои 12», а
-    /// не выбирает поля. Слово считается номером, если начинается с цифры, —
-    /// «12», «12/1», «12а» подходят, «Навои» нет.
+    /// Номер отделяем сами (splitHouse): человек пишет «Навои 12», а не
+    /// выбирает поля. Без номера — все дома подходящих улиц.
     func search(_ query: String, near: CLLocationCoordinate2D?,
                 limit: Int = 12) -> [Address] {
-        let folded = Self.fold(query)
-        guard folded.count >= 2 else { return [] }
-        var words = folded.split(separator: " ").map(String.init)
-        var house: String?
-        if let last = words.last, last.first?.isNumber == true, words.count > 1 {
-            house = last
-            words.removeLast()
-        }
-        let want = words.filter { !Self.noise.contains($0) }
+        guard Self.fold(query).count >= 2 else { return [] }
+        let (streetPart, house) = Self.splitHouse(query)
+        let want = Self.tokens(streetPart)
         guard !want.isEmpty else { return [] }
 
-        var found = addresses.filter { address in
-            // Каждое слово запроса обязано начать какое-нибудь слово улицы.
-            // Не подстрока целиком: человек пишет «Шота Руставели», а в OSM
-            // это «Shota Rustaveli 1-berk ko'chasi» — порядок и лишние слова
-            // не должны решать.
-            let street = Self.tokens(address.street)
-            guard want.allSatisfy({ word in
-                street.contains { $0.hasPrefix(word) }
-            }) else { return false }
-            guard let house else { return true }
-            return Self.fold(address.house).hasPrefix(house)
-        }
-        // Точное совпадение номера — выше похожего: «12» до «12/1».
-        if let house {
-            found.sort { left, right in
-                let leftExact = Self.fold(left.house) == house
-                let rightExact = Self.fold(right.house) == house
-                if leftExact != rightExact { return leftExact }
-                return false
+        // (адрес, номер совпал точно, расстояние до машины)
+        var found: [(address: Address, exact: Bool, distance: Double)] = []
+        for street in matchingStreets(want) {
+            for (offset, index) in street.houses.enumerated() {
+                let key = street.houseKeys[offset]
+                if let house, !key.hasPrefix(house) { continue }
+                let address = addresses[index]
+                let distance = near.map {
+                    GeoMath.fastDistance($0.latitude, $0.longitude,
+                                         address.point.latitude, address.point.longitude)
+                } ?? 0
+                found.append((address, house.map { key == $0 } ?? false, distance))
             }
         }
-        // Ближнее — выше дальнего. Одинаковых адресов в городе много (улица
+        // Точное совпадение номера — выше похожего («12» до «12/1»); затем
+        // ближнее выше дальнего: одинаковых адресов в городе много (улица
         // «Мустакиллик» есть в каждом районе), и без этого первым покажется
-        // случайный.
-        if let near {
-            let origin = CLLocation(latitude: near.latitude, longitude: near.longitude)
-            found.sort { left, right in
-                let leftExact = house.map { Self.fold(left.house) == $0 } ?? false
-                let rightExact = house.map { Self.fold(right.house) == $0 } ?? false
-                if leftExact != rightExact { return leftExact }
-                return origin.distance(from: CLLocation(latitude: left.point.latitude,
-                                                        longitude: left.point.longitude))
-                    < origin.distance(from: CLLocation(latitude: right.point.latitude,
-                                                       longitude: right.point.longitude))
-            }
+        // случайный. Порядок файла — последний ключ, чтобы ответ не прыгал.
+        found.sort { left, right in
+            if left.exact != right.exact { return left.exact }
+            return left.distance < right.distance
         }
-        return Array(found.prefix(limit))
+        return Self.distinct(found.map(\.address), limit: limit)
+    }
+
+    /// Ответ для экрана поиска: с номером — дома, без номера — УЛИЦЫ.
+    ///
+    /// На «Навои» раньше приходили двенадцать домов одной улицы, а самой
+    /// улицы в ответе не было. Улица — одна строка, точка — её дом, ближайший
+    /// к машине (без машины — средний): маршрут «на Навои» ведёт туда, где
+    /// улица ближе, а не в её случайный конец.
+    func lookup(_ query: String, near: CLLocationCoordinate2D?, limit: Int = 12) -> [Address] {
+        guard Self.fold(query).count >= 2 else { return [] }
+        let (streetPart, house) = Self.splitHouse(query)
+        if house != nil { return search(query, near: near, limit: limit) }
+        let want = Self.tokens(streetPart)
+        guard !want.isEmpty else { return [] }
+        var found: [(address: Address, distance: Double)] = []
+        for street in matchingStreets(want) where !street.houses.isEmpty {
+            var best = street.houses.lowerBound + street.houses.count / 2
+            var bestDistance = 0.0
+            if let near {
+                bestDistance = .infinity
+                for index in street.houses {
+                    let point = addresses[index].point
+                    let distance = GeoMath.fastDistance(near.latitude, near.longitude,
+                                                        point.latitude, point.longitude)
+                    if distance < bestDistance { best = index; bestDistance = distance }
+                }
+            }
+            found.append((Address(street: street.name, house: "", point: addresses[best].point),
+                          bestDistance))
+        }
+        found.sort { $0.distance < $1.distance }
+        return Array(found.prefix(limit).map(\.address))
+    }
+
+    /// Один адрес — одна строка. В OSM дом бывает и точкой, и контуром, и
+    /// оба приезжают с тем же номером в паре метров: в списке это два
+    /// одинаковых ряда (и два одинаковых id у ForEach).
+    static func distinct(_ addresses: [Address], limit: Int) -> [Address] {
+        var out: [Address] = []
+        for address in addresses {
+            let twin = out.contains { other in
+                other.title == address.title
+                    && GeoMath.fastDistance(other.point.latitude, other.point.longitude,
+                                            address.point.latitude, address.point.longitude)
+                        < AppConfig.addressDuplicateMeters
+            }
+            if !twin { out.append(address) }
+            if out.count >= limit { break }
+        }
+        return out
     }
 }

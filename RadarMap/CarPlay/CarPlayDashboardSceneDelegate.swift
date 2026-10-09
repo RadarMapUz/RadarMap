@@ -37,6 +37,15 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         model.carIsDark = window.traitCollection.userInterfaceStyle == .dark
         model.refreshDaylight(appearance: env.settings.mapAppearance,
                               coordinate: env.location.currentCoordinate)
+        // Тема машины меняется на ходу (фары, тоннель). У панели нет
+        // contentStyleDidChange, как у основной сцены, — слушаем трейт окна:
+        // иначе в «Авто» панель, подключённая днём, оставалась белой всю ночь.
+        window.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (window: UIWindow, _: UITraitCollection) in
+            guard let self else { return }
+            self.model.carIsDark = window.traitCollection.userInterfaceStyle == .dark
+            self.model.refreshDaylight(appearance: self.env.settings.mapAppearance,
+                                       coordinate: self.env.location.currentCoordinate)
+        }
         let host = UIHostingController(rootView: CarPlayDashboardView(model: model).environment(env))
         host.view.backgroundColor = UIColor(Theme.background)
         window.rootViewController = host

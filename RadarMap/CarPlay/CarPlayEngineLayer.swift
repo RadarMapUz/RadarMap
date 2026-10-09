@@ -35,6 +35,7 @@ struct CarPlayEngineLayer: View {
                     .ignoresSafeArea()
                     .overlay(alignment: .bottomTrailing) { attribution }
             }
+            .onAppear(perform: adopt)
         } else {
             SketchPalette.ground.ignoresSafeArea()
         }
@@ -88,10 +89,16 @@ struct CarPlayEngineLayer: View {
             // дорожек — экран машины читают боковым зрением.
             driving: true,
             labelLanguage: env.settings.appLanguage.mapCode,
-            panCommand: model.panCommand,
-            panTranslation: model.panTranslation,
+            panTotal: model.panTotal,
             hidesAttribution: true,
             onBrowse: { if model.isFollowing { model.isFollowing = false } })
+    }
+
+    /// Новая карта (вернулись из музыки, из схемы) стартует со слежения —
+    /// модель обязана сказать то же: иначе после давней панорамы «+/−» шли
+    /// в «свободную карту», которой нет, а «к себе» показывал «не следим».
+    private func adopt() {
+        if !model.isFollowing { model.isFollowing = true }
     }
 
     /// Ссылка на данные обязана быть на экране (тайлы построены по OSM), а

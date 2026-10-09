@@ -62,10 +62,11 @@ final class CarPlayEngineTests: XCTestCase {
 
     func testPanReleasesFollowingAndRecenterReturnsIt() {
         let model = model()
-        let command = model.panCommand
+        let before = model.panTotal
         model.pan(by: CGSize(width: 30, height: -12))
-        XCTAssertEqual(model.panCommand, command + 1)
-        XCTAssertEqual(model.panTranslation, CGSize(width: 30, height: -12))
+        model.pan(by: CGSize(width: 5, height: 2))
+        XCTAssertEqual(model.panTotal, CGSize(width: before.width + 35, height: before.height - 10),
+                       "шаги копятся: два шага между кадрами оба доезжают")
         XCTAssertFalse(model.isFollowing)
         let recenter = model.recenterRequests
         model.recenter()
@@ -75,9 +76,9 @@ final class CarPlayEngineTests: XCTestCase {
 
     func testZeroPanIsNotAGesture() {
         let model = model()
-        let command = model.panCommand
+        let before = model.panTotal
         model.pan(by: .zero)
-        XCTAssertEqual(model.panCommand, command)
+        XCTAssertEqual(model.panTotal, before)
         XCTAssertTrue(model.isFollowing, "пустой сдвиг не уводит карту в осмотр")
     }
 

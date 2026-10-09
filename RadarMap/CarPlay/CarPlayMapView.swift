@@ -39,7 +39,7 @@ struct CarPlayMapView: UIViewRepresentable {
         context.coordinator.recenterHandled = model.recenterRequests
         context.coordinator.zoomInHandled = model.zoomInRequests
         context.coordinator.zoomOutHandled = model.zoomOutRequests
-        context.coordinator.panHandled = model.panCommand
+        context.coordinator.panHandled = model.panTotal
         // Тёмная карта днём под солнцем за стеклом машины не читается вовсе —
         // это худший экран из всех, что приложение показывает. Настройка вида
         // (тёмная / светлая / по солнцу) в приложении есть с самого начала, но
@@ -115,11 +115,13 @@ struct CarPlayMapView: UIViewRepresentable {
         }
         // Панорама от шаблона (касаний в окне машины нет): содержимое едет за
         // пальцем, слежение снимается — как от жеста.
-        if model.panCommand != coordinator.panHandled {
-            coordinator.panHandled = model.panCommand
+        if model.panTotal != coordinator.panHandled {
+            let step = CGSize(width: model.panTotal.width - coordinator.panHandled.width,
+                              height: model.panTotal.height - coordinator.panHandled.height)
+            coordinator.panHandled = model.panTotal
             map.setUserTrackingMode(.none, animated: false)
-            let target = CGPoint(x: map.bounds.midX - model.panTranslation.width,
-                                 y: map.bounds.midY - model.panTranslation.height)
+            let target = CGPoint(x: map.bounds.midX - step.width,
+                                 y: map.bounds.midY - step.height)
             map.setCenter(map.convert(target, toCoordinateFrom: map), animated: false)
         }
 
@@ -203,7 +205,7 @@ struct CarPlayMapView: UIViewRepresentable {
         var recenterHandled = 0
         var zoomInHandled = 0
         var zoomOutHandled = 0
-        var panHandled = 0
+        var panHandled = CGSize.zero
         var cameraCountSeen = -1
         var tripActiveSeen = false
         var thermalModeSeen = PerformanceMode.full

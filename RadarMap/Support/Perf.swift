@@ -206,6 +206,14 @@ nonisolated enum HitchWatch {
     }
 
     private static let tally = OSAllocatedUnfairLock(initialState: Tally())
+    /// Считать ли фризы в итог сессии. Сторож тикает и в фоне, но приложение
+    /// там могут приостановить, и пауза процесса по настенным часам выглядела
+    /// бы фризом до 30 с. Считаем только пока экран машины наш.
+    private static let counting = OSAllocatedUnfairLock(initialState: false)
+
+    static func setCounting(_ on: Bool) {
+        counting.withLock { $0 = on }
+    }
 
     /// Забрать накопленное и обнулить.
     static func drain() -> Tally {
@@ -242,7 +250,7 @@ nonisolated enum HitchWatch {
                 _ = sem.wait(timeout: .now() + giveUpAfter)
                 let lag = CFAbsoluteTimeGetCurrent() - sentAt
                 if lag > threshold {
-                    record(lagMilliseconds: Int(lag * 1000))
+                    if counting.withLock({ $0 }) { record(lagMilliseconds: Int(lag * 1000)) }
                     let stage = MainWork.last.description
                     Log.app.fault("фриз main \(Int(lag * 1000), privacy: .public) мс на «\(stage, privacy: .public)»")
                 }

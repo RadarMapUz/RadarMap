@@ -48,8 +48,8 @@ final class CarPlayMapModel {
     /// Карта на движке: панорама от шаблона (счётчик и сдвиг содержимого в
     /// точках), «+/−» при слежении — сдвиг автозума вдвое за нажатие (как на
     /// телефоне), «+/−» на свободной карте — шаг уровня.
-    var panCommand = 0
-    var panTranslation = CGSize.zero
+    /// Сумма всех сдвигов панорамы (точки экрана) — карта берёт разницу.
+    var panTotal = CGSize.zero
     var zoomBias = 0.0
     var zoomCommand = 0
     var zoomDelta = 0.0
@@ -126,8 +126,8 @@ final class CarPlayMapModel {
     /// Сдвиг карты на столько точек экрана (содержимое едет за пальцем).
     func pan(by translation: CGSize) {
         guard translation != .zero else { return }
-        panTranslation = translation
-        panCommand &+= 1
+        panTotal = CGSize(width: panTotal.width + translation.width,
+                          height: panTotal.height + translation.height)
         if isFollowing { isFollowing = false }
     }
 

@@ -112,7 +112,10 @@ nonisolated struct UsageStats: Codable, Equatable, Sendable {
 
     /// Пустой отчёт слать незачем: приложение просто не открывали.
     var isEmpty: Bool {
+        // День с одной лишь сессией машины (зависло — поездка не началась) —
+        // как раз тот, ради которого счётчики CarPlay заведены.
         trips == 0 && alerts == 0 && passes == 0 && reports == 0 && screens.isEmpty
+            && (carPlay?.isEmpty ?? true)
     }
 
     static func today(calendar: Calendar = .current, now: Date = Date()) -> String {

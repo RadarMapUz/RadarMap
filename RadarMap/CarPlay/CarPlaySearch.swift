@@ -23,8 +23,24 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
     /// Выбранное место: название и точка.
     private let onPick: (SavedPlace) -> Void
     private var book: AddressBook?
-    private var bookAsked = false
+    /// Загрузка файла адресов — ОДНА на все запросы и отдельной задачей: новая
+    /// буква отменяет поиск, и раньше вместе с ним отменялась и загрузка, а
+    /// флаг «уже спрашивали» оставался — свои адреса пропадали до конца
+    /// подключения. Не загрузилось — следующий запрос попробует снова.
+    private var bookTask: Task<AddressBook?, Never>?
     private var task: Task<Void, Never>?
+    /// Ответ шаблону на текущий запрос. CarPlay требует ответить на каждый, и
+    /// ровно один раз: заменённый запрос получает пустой список сразу.
+    private var reply: Reply?
+
+    private final class Reply {
+        private var send: (([CPListItem]) -> Void)?
+        init(_ send: @escaping ([CPListItem]) -> Void) { self.send = send }
+        func callAsFunction(_ items: [CPListItem]) {
+            send?(items)
+            send = nil
+        }
+    }
 
     private var env: AppEnvironment { .shared }
 
@@ -61,18 +77,33 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
 
     // MARK: - Поиск
 
+    private func loadBook(near: CLLocationCoordinate2D?) -> Task<AddressBook?, Never> {
+        if let bookTask { return bookTask }
+        let center = near ?? env.settings.place(for: .home)?.coordinate ?? AppConfig.searchFallbackCenter
+        let task = Task { [weak self] () -> AddressBook? in
+            guard let self else { return nil }
+            let loaded = await self.env.roads.addressBook(for: center)
+            self.book = loaded
+            if loaded == nil { self.bookTask = nil }
+            return loaded
+        }
+        bookTask = task
+        return task
+    }
+
     private func search(_ text: String, completion: @escaping ([CPListItem]) -> Void) {
         task?.cancel()
+        reply?([])
+        let reply = Reply(completion)
+        self.reply = reply
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.count >= 2 else { return completion([]) }
+        guard query.count >= 2 else { return reply([]) }
         let near = env.location.currentCoordinate
+        let load = book == nil ? loadBook(near: near) : nil
         task = Task { [weak self] in
-            guard let self else { return completion([]) }
-            if !self.bookAsked {
-                self.bookAsked = true
-                self.book = await self.env.roads.addressBook(
-                    for: near ?? self.env.settings.place(for: .home)?.coordinate ?? AppConfig.searchFallbackCenter)
-            }
+            guard let self else { return reply([]) }
+            if let load { _ = await load.value }
+            guard !Task.isCancelled else { return }
             let language = self.env.settings.appLanguage.mapCode
             var places: [(SavedPlace, String)] = (self.book?.lookup(query, near: near,
                                                                     limit: AppConfig.carPlaySearchOwnLimit) ?? [])
@@ -88,7 +119,7 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
                 places += await self.apple(query, near: near)
             }
             guard !Task.isCancelled else { return }
-            completion(places.prefix(AppConfig.carPlaySearchLimit).map { place, detail in
+            reply(places.prefix(AppConfig.carPlaySearchLimit).map { place, detail in
                 let item = CPListItem(text: place.title, detailText: detail)
                 item.userInfo = place
                 return item

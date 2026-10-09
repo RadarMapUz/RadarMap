@@ -218,6 +218,10 @@ struct ManeuverBanner: View {
     let distance: CLLocationDistance
     /// Скорость — только для того, когда показать ряд полос (на трассе раньше).
     var speedKmh: Double = 0
+    /// Манёвр, для которого ряд полос уже показан: дальше он не прячется.
+    /// Порог зависит от скорости, и на 68–72 км/ч между 600 и 1000 м ряд
+    /// мигал бы — появился, исчез, появился.
+    @State private var lanesShownFor: CLLocationDistance?
     /// Цвет манёвра — акцент темы (был нефритовый на тёмно-зелёной плашке,
     /// вшитый под тёмный интерфейс; днём он читался бы бледным пятном).
     private let jade = Theme.accent
@@ -248,7 +252,7 @@ struct ManeuverBanner: View {
         .padding(14)
         if !step.lanes.isEmpty, step.lanes.count <= 8,
            step.lanes.contains(where: \.isValid),
-           distance <= LaneAdvice.showDistance(speedKmh: speedKmh) {
+           lanesShownFor == step.distanceAlong || distance <= LaneAdvice.showDistance(speedKmh: speedKmh) {
             Divider().overlay(Theme.stroke)
             // Как у Amap: ряд полос — сама дорога, полосы разделены
             // разметкой, нужные — залиты акцентом, и над рядом словами,
@@ -293,6 +297,9 @@ struct ManeuverBanner: View {
         .liftPanel()
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
         .transition(.move(edge: .top).combined(with: .opacity))
+        .onChange(of: distance <= LaneAdvice.showDistance(speedKmh: speedKmh), initial: true) { _, near in
+            if near { lanesShownFor = step.distanceAlong }
+        }
     }
 }
 

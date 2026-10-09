@@ -91,9 +91,10 @@ struct EngineMapView: UIViewRepresentable {
     var overviewCommand: Int = 0
     /// Сдвиг карты командой, а не пальцем: в машине касания до вида не
     /// доходят, панораму присылает шаблон CarPlay (перетаскивание, стрелки
-    /// крутилки). Счётчик и сдвиг содержимого в точках экрана.
-    var panCommand: Int = 0
-    var panTranslation: CGSize = .zero
+    /// крутилки). Сумма ВСЕХ сдвигов содержимого в точках экрана: карта берёт
+    /// разницу с прошлой суммой, поэтому два шага, пришедшие между кадрами,
+    /// оба доезжают (последний не затирает первый).
+    var panTotal: CGSize = .zero
     /// Кнопка атрибуции не нажимается там, где нет касаний (экран машины):
     /// ссылку на OSM тогда показывает вызывающий — текстом.
     var hidesAttribution: Bool = false
@@ -228,7 +229,7 @@ struct EngineMapView: UIViewRepresentable {
         private var lastFPS: Int?
         private var lastZoomCommand = 0
         private var lastOverviewCommand = 0
-        private var lastPanCommand = 0
+        private var lastPanTotal = CGSize.zero
         /// Первое применение модели запоминает счётчики, но не исполняет их:
         /// иначе повторный монтаж карты вписывал бы маршрут сам по старому нажатию.
         private var commandsSeen = false
@@ -613,7 +614,7 @@ struct EngineMapView: UIViewRepresentable {
                 commandsSeen = true
                 lastOverviewCommand = model.overviewCommand
                 lastZoomCommand = model.zoomCommand
-                lastPanCommand = model.panCommand
+                lastPanTotal = model.panTotal
             }
             if model.overviewCommand != lastOverviewCommand {
                 lastOverviewCommand = model.overviewCommand
@@ -637,15 +638,17 @@ struct EngineMapView: UIViewRepresentable {
             }
             // Панорама командой: содержимое едет вслед за пальцем — центр
             // карты уходит в обратную сторону. Это осмотр, как и жест.
-            if model.panCommand != lastPanCommand {
-                lastPanCommand = model.panCommand
+            if model.panTotal != lastPanTotal {
+                let step = CGSize(width: model.panTotal.width - lastPanTotal.width,
+                                  height: model.panTotal.height - lastPanTotal.height)
+                lastPanTotal = model.panTotal
                 if !browsing {
                     browsing = true
                     model.onBrowse()
                 }
                 stopPositionGlide()
-                let target = CGPoint(x: view.bounds.midX - model.panTranslation.width,
-                                     y: view.bounds.midY - model.panTranslation.height)
+                let target = CGPoint(x: view.bounds.midX - step.width,
+                                     y: view.bounds.midY - step.height)
                 view.setCenter(view.convert(target, toCoordinateFrom: view), animated: false)
             }
             if !browsing && changed {

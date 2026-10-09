@@ -60,6 +60,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         HitchWatch.start()
         // Фризы ДО машины к ней не относятся: счёт сессии — с нуля.
         _ = HitchWatch.drain()
+        HitchWatch.setCounting(true)
         connectedAt = Date()
         // Режим меняет не только кнопка, но и автоматика жары — из вью.
         // Кнопки шаблона обязаны пойти следом в обоих случаях.
@@ -83,11 +84,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // кнопка, которую нужно искать, за рулём бесполезна.
         template.automaticallyHidesNavigationBar = false
         mapTemplate = template
-        guidance.attach(to: template)
         Log.carplay.notice("CarPlay подключён")
         interfaceController.setRootTemplate(template, animated: true) { [weak self] _, error in
             if let error {
                 Log.carplay.error("setRootTemplate: \(error.localizedDescription, privacy: .public)")
+            } else if let self, self.mapTemplate === template {
+                // Сессия — только на шаблоне, который уже на экране: начатая
+                // на летящем корне могла пропасть, а свой баннер манёвра при
+                // этом уже спрятан (hasSystemGuidance) — водитель без манёвра.
+                self.guidance.attach(to: template)
             }
             // Алерт о разрешении — ПОСЛЕ установки корня: presentTemplate
             // поверх летящей корневой транзакции CarPlay отклоняет, и раньше
@@ -138,6 +143,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                                          hitches: HitchWatch.drain())
             self.connectedAt = nil
         }
+        HitchWatch.setCounting(false)
         // Вышли из машины: телефон мог всё это время быть в фоне, события
         // scenePhase не будет — снимаем «передний план» сами. И флаг схемы
         // тоже: onDisappear у вью внутри сносимого CPWindow не гарантирован,
@@ -345,10 +351,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     func sceneDidEnterBackground(_ scene: UIScene) {
         guard Self.activeDelegate === self else { return }
         model.isOnScreen = false
+        // В фоне приложение могут приостановить, и сторож записал бы паузу
+        // процесса как фриз — счёт только пока экран машины наш.
+        HitchWatch.setCounting(false)
     }
 
     func sceneWillEnterForeground(_ scene: UIScene) {
         model.isOnScreen = true
+        HitchWatch.setCounting(true)
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {

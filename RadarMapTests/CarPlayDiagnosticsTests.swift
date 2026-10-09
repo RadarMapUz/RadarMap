@@ -20,6 +20,14 @@ final class CarPlayDiagnosticsTests: XCTestCase {
         XCTAssertEqual(HitchWatch.drain(), HitchWatch.Tally(), "забрали — обнулилось")
     }
 
+    func testDayWithOnlyACarSessionIsNotEmpty() {
+        // Зависло — поездка не началась: ровно этот день и нужен.
+        var stats = UsageStats(day: "2026-10-10")
+        XCTAssertTrue(stats.isEmpty)
+        stats.carPlay = ["sessions": 1, "minutes": 12, "longHitches": 3]
+        XCTAssertFalse(stats.isEmpty)
+    }
+
     func testOldStatsFileWithoutCarPlayStillReads() throws {
         // Файл прежней сборки: поля carPlay в нём нет, и терять из-за этого
         // сутки счётчиков нельзя.

@@ -965,6 +965,10 @@ nonisolated enum AppConfig {
     static let engineOverviewSpan = 1_400.0
     static let engineCloseSpan = 420.0
     static let engineManeuverApproachMeters = 600.0
+    /// Ряд полос на трассе — раньше (LaneAdvice.showDistance): быстрее этой
+    /// скорости ряд появляется за laneRowHighwayMeters, а не за 600 м.
+    static let laneHighwaySpeedKmh = 70.0
+    static let laneRowHighwayMeters = 1000.0
     static let engineManeuverHighlightMeters = 35.0
     /// Частота обновления геометрии маршрута; курсор обновляется на каждом фиксе.
     static let engineRouteProgressStep = 15.0

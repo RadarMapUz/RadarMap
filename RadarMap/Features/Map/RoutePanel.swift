@@ -216,6 +216,8 @@ struct RoutePanel: View {
 struct ManeuverBanner: View {
     let step: RouteStep
     let distance: CLLocationDistance
+    /// Скорость — только для того, когда показать ряд полос (на трассе раньше).
+    var speedKmh: Double = 0
     /// Цвет манёвра — акцент темы (был нефритовый на тёмно-зелёной плашке,
     /// вшитый под тёмный интерфейс; днём он читался бы бледным пятном).
     private let jade = Theme.accent
@@ -245,22 +247,46 @@ struct ManeuverBanner: View {
         }
         .padding(14)
         if !step.lanes.isEmpty, step.lanes.count <= 8,
-           step.lanes.contains(where: \.isValid), distance <= AppConfig.engineManeuverApproachMeters {
+           step.lanes.contains(where: \.isValid),
+           distance <= LaneAdvice.showDistance(speedKmh: speedKmh) {
             Divider().overlay(Theme.stroke)
-            HStack(spacing: 4) {
-                ForEach(Array(step.lanes.enumerated()), id: \.offset) { index, lane in
-                    Image(systemName: lane.primaryArrow(for: step.kind).symbolName)
-                        .font(.rounded(20, lane.isValid ? .bold : .regular))
-                        .foregroundStyle(lane.isValid ? jade : Theme.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .background(lane.isValid ? jade.opacity(0.12) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 8))
-                        .accessibilityLabel(Text("Полоса \(index + 1)"))
-                        .accessibilityValue(lane.isValid ? Text("Подходит для манёвра") : Text("Не подходит для манёвра"))
+            // Как у Amap: ряд полос — сама дорога, полосы разделены
+            // разметкой, нужные — залиты акцентом, и над рядом словами,
+            // в какой ряд встать: считать стрелки на ходу — лишний взгляд.
+            VStack(spacing: 6) {
+                if let advice = LaneAdvice.phrase(step.lanes) {
+                    Text(advice)
+                        .font(.rounded(14, .semibold))
+                        .foregroundStyle(jade)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                HStack(spacing: 0) {
+                    ForEach(Array(step.lanes.enumerated()), id: \.offset) { index, lane in
+                        if index > 0 {
+                            Rectangle()
+                                .fill(Theme.textTertiary.opacity(0.5))
+                                .frame(width: 1.5)
+                                .padding(.vertical, 6)
+                        }
+                        Image(systemName: lane.primaryArrow(for: step.kind).symbolName)
+                            .font(.rounded(24, lane.isValid ? .heavy : .regular))
+                            .foregroundStyle(lane.isValid ? Theme.background : Theme.textTertiary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background(lane.isValid ? jade : .clear,
+                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .padding(.horizontal, 3)
+                            .accessibilityLabel(Text("Полоса \(index + 1)"))
+                            .accessibilityValue(lane.isValid ? Text("Подходит для манёвра") : Text("Не подходит для манёвра"))
+                    }
+                }
+                .padding(4)
+                .background(Theme.textPrimary.opacity(0.06),
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
-            .padding(8)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .accessibilityElement(children: .contain)
         }
         }
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))

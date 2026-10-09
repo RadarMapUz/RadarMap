@@ -315,7 +315,7 @@ final class CarPlayGuidance {
         guard !isOnScreen else { return }
         let far = Formatting.distance(distance)
         let alert = CPNavigationAlert(
-            titleVariants: [String(format: String(localized: "%@ через %@"), camera.kind.shortName, far),
+            titleVariants: [String(format: String(localized: "%1$@ через %2$@"), camera.kind.shortName, far),
                             camera.kind.shortName],
             subtitleVariants: [camera.kind.displayName],
             image: Self.symbol(camera.kind.symbolName, pointSize: 30),

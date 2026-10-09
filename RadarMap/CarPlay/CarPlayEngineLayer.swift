@@ -95,7 +95,7 @@ struct CarPlayEngineLayer: View {
     /// Ссылка на данные обязана быть на экране (тайлы построены по OSM), а
     /// нажать кнопку атрибуции в машине нельзя — поэтому текстом.
     private var attribution: some View {
-        Text("© OpenStreetMap")
+        Text(verbatim: "© OpenStreetMap")
             .font(.rounded(10, .medium))
             .foregroundStyle(Theme.textTertiary)
             .padding(.horizontal, 6).padding(.vertical, 2)

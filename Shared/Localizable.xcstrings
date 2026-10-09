@@ -14605,6 +14605,214 @@
           }
         }
       }
+    },
+    "Из любого ряда, кроме правого": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из любого ряда, кроме правого"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘ngdan boshqa istalgan qatordan"
+          }
+        }
+      }
+    },
+    "Из любого ряда, кроме левого": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из любого ряда, кроме левого"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapdan boshqa istalgan qatordan"
+          }
+        }
+      }
+    },
+    "Из левого ряда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из левого ряда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chap qatordan"
+          }
+        }
+      }
+    },
+    "Из двух левых рядов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из двух левых рядов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapdagi ikki qatordan"
+          }
+        }
+      }
+    },
+    "Из трёх левых рядов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из трёх левых рядов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chapdagi uch qatordan"
+          }
+        }
+      }
+    },
+    "Из левых рядов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из левых рядов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chap qatorlardan"
+          }
+        }
+      }
+    },
+    "Из правого ряда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из правого ряда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘ng qatordan"
+          }
+        }
+      }
+    },
+    "Из двух правых рядов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из двух правых рядов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘ngdagi ikki qatordan"
+          }
+        }
+      }
+    },
+    "Из трёх правых рядов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из трёх правых рядов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘ngdagi uch qatordan"
+          }
+        }
+      }
+    },
+    "Из правых рядов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из правых рядов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘ng qatorlardan"
+          }
+        }
+      }
+    },
+    "Из среднего ряда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из среднего ряда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘rta qatordan"
+          }
+        }
+      }
+    },
+    "Из средних рядов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из средних рядов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘rta qatorlardan"
+          }
+        }
+      }
+    },
+    "%1$@ через %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ через %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ — %2$@ dan keyin"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

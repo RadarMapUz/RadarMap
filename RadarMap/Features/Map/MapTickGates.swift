@@ -77,7 +77,8 @@ struct ManeuverBannerGate: View {
                                    hasRoute: env.route.isActive)
         ZStack {
             if mode.showsManeuver, let step = env.route.nextStep {
-                ManeuverBanner(step: step, distance: env.route.nextStepDistance)
+                ManeuverBanner(step: step, distance: env.route.nextStepDistance,
+                               speedKmh: env.location.speedKmh)
             }
         }
         .motionAnimation(.spring(duration: 0.3), value: env.route.nextStep?.distanceAlong)

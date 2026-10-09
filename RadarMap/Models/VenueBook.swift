@@ -66,7 +66,7 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
             case .food:        return ["кафе", "ресторан", "еда", "kafe", "restoran", "ovqat", "oshxona"]
             case .pharmacy:    return ["аптека", "dorixona", "apteka"]
             case .atm:         return ["банкомат", "банк", "bankomat", "bank"]
-            case .supermarket: return ["супермаркет", "магазин", "supermarket", "do'kon", "korzinka", "makro"]
+            case .supermarket: return ["супермаркет", "магазин", "supermarket", "do'kon"]
             }
         }
 
@@ -160,12 +160,60 @@ nonisolated struct VenueBook: Sendable {
     }
 
     /// Вид, если запрос — слово вида («заправка», «мойка»).
+    ///
+    /// Сначала точное слово во ВСЕХ видах, потом начало слова: «СТО» —
+    /// автосервис, хотя оно же начало «стоянки», и первый по порядку вид
+    /// (парковка) забирал его. Бренды («Корзинка») в слова вида не входят:
+    /// их ищут по имени, а не списком всех супермаркетов.
     static func kind(for query: String) -> Venue.Kind? {
         let folded = AddressBook.fold(query)
         guard folded.count >= 3 else { return nil }
+        if let exact = Venue.Kind.allCases.first(where: { kind in
+            kind.searchWords.contains { AddressBook.fold($0) == folded }
+        }) { return exact }
         return Venue.Kind.allCases.first { kind in
-            kind.searchWords.contains { AddressBook.fold($0).hasPrefix(folded) || folded == AddressBook.fold($0) }
+            kind.searchWords.contains { AddressBook.fold($0).hasPrefix(folded) }
         }
+    }
+
+    /// Как спросить Apple о виде: категорией POI, где она есть (не зависит
+    /// от языка — «AYOQSH» Apple не поймёт), иначе словом по-русски.
+    static func appleQuery(_ kind: Venue.Kind) -> (categories: [MKPointOfInterestCategory], words: String) {
+        switch kind {
+        case .fuel:        return ([.gasStation], "АЗС")
+        case .parking:     return ([.parking], "парковка")
+        case .carWash:     return ([], "автомойка")
+        case .carRepair:   return ([.automotiveRepair], "автосервис")
+        case .tyres:       return ([], "шиномонтаж")
+        case .charging:    return ([.evCharger], "зарядная станция")
+        case .food:        return ([.restaurant, .cafe], "кафе")
+        case .pharmacy:    return ([.pharmacy], "аптека")
+        case .atm:         return ([.atm, .bank], "банкомат")
+        case .supermarket: return ([.foodMarket], "супермаркет")
+        }
+    }
+
+    /// Поиск Apple по виду вокруг точки — общий для телефона и машины.
+    static func apple(_ kind: Venue.Kind, near: CLLocationCoordinate2D?) async throws -> [Venue] {
+        let (categories, words) = appleQuery(kind)
+        let items: [MKMapItem]
+        if let near, !categories.isEmpty {
+            let request = MKLocalPointsOfInterestRequest(center: near, radius: AppConfig.appleCategoryRadiusMeters)
+            request.pointOfInterestFilter = MKPointOfInterestFilter(including: categories)
+            items = try await MKLocalSearch(request: request).start().mapItems
+        } else {
+            let request = MKLocalSearch.Request()
+            request.naturalLanguageQuery = words
+            request.resultTypes = .pointOfInterest
+            if let near {
+                request.region = MKCoordinateRegion(center: near, latitudinalMeters: AppConfig.searchRegionMeters,
+                                                    longitudinalMeters: AppConfig.searchRegionMeters)
+            }
+            items = try await MKLocalSearch(request: request).start().mapItems
+        }
+        let found = items.map { Venue(kind: kind, name: $0.name ?? "", point: $0.placemark.coordinate) }
+        guard let near else { return found }
+        return found.sorted { distance(near, $0.point) < distance(near, $1.point) }
     }
 
     /// Поиск: слово вида — ближайшие этого вида; иначе — по имени (каждое

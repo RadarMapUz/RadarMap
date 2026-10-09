@@ -23,13 +23,16 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
     /// Выбранное место: название и точка.
     private let onPick: (SavedPlace) -> Void
     private var book: AddressBook?
-    /// Загрузка файла адресов — ОДНА на все запросы и отдельной задачей: новая
-    /// буква отменяет поиск, и раньше вместе с ним отменялась и загрузка, а
-    /// флаг «уже спрашивали» оставался — свои адреса пропадали до конца
-    /// подключения. Не загрузилось — следующий запрос попробует снова.
-    private var bookTask: Task<AddressBook?, Never>?
-    /// Заведения клетки (АЗС, парковки) — тем же порядком загрузки.
     private var venues: VenueBook?
+    /// Клетка, для которой загружены адреса и заведения. Подключение длится
+    /// часами: выехали из Ташкента в Самарканд — нужна клетка Самарканда, а
+    /// не ташкентские АЗС «в 310 км».
+    private var loadedCell: String?
+    /// Загрузка клетки — ОДНА на все запросы и отдельной задачей: новая буква
+    /// отменяет поиск, и раньше вместе с ним отменялась и загрузка. Адреса и
+    /// заведения — каждый своим ответом: не загрузилось одно — следующий
+    /// запрос дозагрузит именно его.
+    private var loadTask: Task<Void, Never>?
     private var task: Task<Void, Never>?
     /// Ответ шаблону на текущий запрос. CarPlay требует ответить на каждый, и
     /// ровно один раз: заменённый запрос получает пустой список сразу.
@@ -54,11 +57,14 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
     /// без него (клетка не опубликована) — Apple, если есть связь.
     func nearest(_ kind: Venue.Kind) async -> [(SavedPlace, String)] {
         let near = env.location.currentCoordinate
-        if book == nil || venues == nil { _ = await loadBook(near: near).value }
+        await ensureLoaded(near: near)
         // С маршрутом — то, что встретится по пути, а не ближайшее вообще.
+        // Проекция на линию — не для main: маршрут бывает междугородним.
         if let route = env.route.selected, let venues {
-            let along = venues.alongRoute(kind, points: route.points, progress: env.route.progressAlong,
-                                          limit: AppConfig.carPlaySearchLimit)
+            let points = route.points, progress = env.route.progressAlong
+            let along = await Task.detached(priority: .userInitiated) {
+                venues.alongRoute(kind, points: points, progress: progress, limit: AppConfig.carPlaySearchLimit)
+            }.value
             if !along.isEmpty {
                 return along.map { venue, ahead in
                     (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
@@ -74,7 +80,17 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
             }
         }
         guard env.network.isOnline else { return [] }
-        return await apple(kind.title, near: near)
+        // Apple — категорией POI, а не словом: «AYOQSH» на узбекском Apple
+        // не поймёт.
+        do {
+            return try await VenueBook.apple(kind, near: near).prefix(AppConfig.carPlaySearchLimit).map { venue in
+                (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
+                 Self.detail(near: near, point: venue.point, offline: false))
+            }
+        } catch {
+            Log.carplay.error("категория у Apple в машине: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
     }
 
     func makeTemplate() -> CPSearchTemplate {
@@ -106,19 +122,27 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
 
     // MARK: - Поиск
 
-    private func loadBook(near: CLLocationCoordinate2D?) -> Task<AddressBook?, Never> {
-        if let bookTask { return bookTask }
+    /// Адреса и заведения клетки, где машина сейчас (без позиции — дом или
+    /// Ташкент). Ждать её — `await ensureLoaded(near:)`.
+    private func ensureLoaded(near: CLLocationCoordinate2D?) async {
         let center = near ?? env.settings.place(for: .home)?.coordinate ?? AppConfig.searchFallbackCenter
-        let task = Task { [weak self] () -> AddressBook? in
-            guard let self else { return nil }
-            let loaded = await self.env.roads.addressBook(for: center)
-            self.book = loaded
-            if self.venues == nil { self.venues = await self.env.roads.venueBook(for: center) }
-            if loaded == nil { self.bookTask = nil }
-            return loaded
+        let cell = AddressBook.key(for: center)
+        if cell != loadedCell {
+            loadedCell = cell
+            book = nil
+            venues = nil
+            loadTask = nil
         }
-        bookTask = task
-        return task
+        guard book == nil || venues == nil else { return }
+        if loadTask == nil {
+            loadTask = Task { [weak self] in
+                guard let self else { return }
+                if self.book == nil { self.book = await self.env.roads.addressBook(for: center) }
+                if self.venues == nil { self.venues = await self.env.roads.venueBook(for: center) }
+                if self.loadedCell == cell { self.loadTask = nil }
+            }
+        }
+        await loadTask?.value
     }
 
     private func search(_ text: String, completion: @escaping ([CPListItem]) -> Void) {
@@ -129,10 +153,9 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard query.count >= 2 else { return reply([]) }
         let near = env.location.currentCoordinate
-        let load = book == nil ? loadBook(near: near) : nil
         task = Task { [weak self] in
             guard let self else { return reply([]) }
-            if let load { _ = await load.value }
+            await self.ensureLoaded(near: near)
             guard !Task.isCancelled else { return }
             let language = self.env.settings.appLanguage.mapCode
             // Заведения — первыми: «азс» за рулём значит «ближайшая заправка».

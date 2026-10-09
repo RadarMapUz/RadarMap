@@ -108,7 +108,7 @@ final class TripStats {
 
     /// Пока история не приехала, писать её на диск нельзя: запись, сделанная
     /// в этом окне, затёрла бы файл огрызком.
-    @ObservationIgnored private var isLoaded = false
+    @ObservationIgnored private(set) var isLoaded = false
 
     var camerasPassed: Int { passed.count }
 

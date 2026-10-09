@@ -994,6 +994,11 @@ nonisolated enum AppConfig {
     /// «По пути»: заведение не дальше этого от линии маршрута — заезд без
     /// крюка (съезд на дублёр, другая сторона проспекта).
     static let venueRouteCorridorMeters = 300.0
+    /// Siri с холодного старта ждёт историю поездок (выученные Дом/Работа)
+    /// не дольше стольких шагов по 0,1 с.
+    static let siriHistoryWaitSteps = 20
+    /// Радиус поиска Apple по категории (АЗС, парковки), м.
+    static let appleCategoryRadiusMeters = 10_000.0
     static let engineManeuverHighlightMeters = 35.0
     /// Частота обновления геометрии маршрута; курсор обновляется на каждом фиксе.
     static let engineRouteProgressStep = 15.0

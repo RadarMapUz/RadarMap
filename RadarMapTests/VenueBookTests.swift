@@ -51,6 +51,21 @@ final class VenueBookTests: XCTestCase {
         XCTAssertEqual(book().search("азс", near: nil).count, 2)
     }
 
+    func testExactKindWordBeatsAPrefixOfAnotherKind() {
+        // «СТО» — автосервис, хотя оно же начало «стоянки» (парковка раньше).
+        XCTAssertEqual(VenueBook.kind(for: "СТО"), .carRepair)
+        XCTAssertEqual(VenueBook.kind(for: "стоян"), .parking)
+        // Бренд — это имя, а не вид: «Корзинка» не превращается в «все супермаркеты».
+        XCTAssertNil(VenueBook.kind(for: "Корзинка"))
+    }
+
+    func testAppleIsAskedByCategoryWhereThereIsOne() {
+        XCTAssertEqual(VenueBook.appleQuery(.fuel).categories, [.gasStation],
+                       "категория не зависит от языка — «AYOQSH» Apple не поймёт")
+        XCTAssertTrue(VenueBook.appleQuery(.tyres).categories.isEmpty)
+        XCTAssertFalse(VenueBook.appleQuery(.tyres).words.isEmpty)
+    }
+
     func testNameSearchAcrossAlphabets() {
         XCTAssertEqual(book().search("lukoil", near: nil).first?.name, "Lukoil")
         XCTAssertEqual(book().search("Uzbekneftegaz", near: nil).first?.name, "Узбекнефтегаз")

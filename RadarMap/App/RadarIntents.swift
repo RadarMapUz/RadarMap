@@ -74,6 +74,12 @@ private func routeBySiri(_ slot: PlaceSlot) async -> IntentDialog {
     guard env.location.authorizationStatus == .authorizedAlways else {
         return IntentDialog("Нет доступа к геолокации. Откройте RadarMap и разрешите «Всегда».")
     }
+    // Холодный старт из Siri: история поездок едет с диска отдельной задачей,
+    // а выученные места считаются по ней (onHistoryLoaded). Без ожидания
+    // водитель без ручного адреса всегда слышал «не знаю, где дом».
+    for _ in 0..<AppConfig.siriHistoryWaitSteps where !env.trip.isLoaded {
+        try? await Task.sleep(for: .milliseconds(100))
+    }
     let manual = env.settings.place(for: slot)
     let learned = env.learnedPlaces.first { $0.kind.rawValue == slot.rawValue }
     guard let destination = manual?.coordinate ?? learned?.coordinate else {
@@ -82,16 +88,23 @@ private func routeBySiri(_ slot: PlaceSlot) async -> IntentDialog {
             : IntentDialog("Не знаю, где работа. Задайте её в RadarMap — или поездите, я выучу сам.")
     }
     let title = manual?.title ?? slot.name
+    // Поездка — ДО ожидания точки: в тихом фоне GPS даёт один фикс по
+    // запросу, и забракованный фильтром он оставлял нас без позиции. В
+    // поездке GPS непрерывный — точная точка приходит за секунды.
+    if !env.location.isTripActive { env.location.startTrip() }
     guard let from = await env.location.awaitPreciseCoordinate() else {
         return IntentDialog("Не вижу геопозицию — попробуйте ещё раз.")
     }
     await env.route.build(from: from, to: destination, name: title,
                           cameras: env.cameras.cameras, alternatives: false)
-    guard env.route.isActive else {
+    // Не построился — RouteService оставляет ПРЕЖНИЙ маршрут: «есть ли
+    // маршрут» отвечало бы цифрами старой цели. Сверяем, что он — наш.
+    guard env.route.errorMessage == nil, let built = env.route.destinationCoordinate,
+          GeoMath.fastDistance(built.latitude, built.longitude,
+                               destination.latitude, destination.longitude) < 50 else {
         return IntentDialog("Маршрут не построился — попробуйте позже.")
     }
     env.settings.addRecent(title: title, lat: destination.latitude, lon: destination.longitude)
-    if !env.location.isTripActive { env.location.startTrip() }
     let time = Formatting.duration(env.route.remainingTime)
     let cameras = env.route.camerasOnRoute.count
     return slot == .home

@@ -35,7 +35,10 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
             completer.queryFragment = query
             mine = book?.lookup(query, near: near) ?? []
             places = venues?.search(query, near: near) ?? []
-            if !query.isEmpty { category = nil }
+            if !query.isEmpty, category != nil {
+                cancelCategory()
+                category = nil
+            }
         }
     }
 
@@ -142,59 +145,62 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
     /// Плитка категории: ближайшие такого вида, а с маршрутом — по пути.
     /// Повторный тап — свернуть.
     func pick(_ kind: Venue.Kind, route: (points: [MKMapPoint], progress: Double)? = nil) {
-        categoryTask?.cancel()
-        categoryAhead = [:]
+        cancelCategory()
         guard category != kind else {
             category = nil
             categoryResults = []
             return
         }
         category = kind
-        if let route, let venues {
-            let along = venues.alongRoute(kind, points: route.points, progress: route.progress)
+        categoryResults = []
+        categoryLoading = true
+        let venues = venues, near = near
+        categoryTask = Task { [weak self] in
+            // «По пути» — проекция каждого заведения на линию маршрута: на
+            // междугороднем маршруте это десятки миллионов операций, не для main.
+            var along: [(venue: Venue, ahead: Double)] = []
+            if let route, let venues {
+                along = await Task.detached(priority: .userInitiated) {
+                    venues.alongRoute(kind, points: route.points, progress: route.progress)
+                }.value
+            }
+            guard let self, !Task.isCancelled, self.category == kind else { return }
+            defer { self.categoryLoading = false }
             if !along.isEmpty {
-                categoryResults = along.map(\.venue)
-                categoryAhead = Dictionary(uniqueKeysWithValues: along.map { ($0.venue.id, $0.ahead) })
-                categoryFromApple = false
+                self.categoryResults = along.map(\.venue)
+                self.categoryAhead = Dictionary(uniqueKeysWithValues: along.map { ($0.venue.id, $0.ahead) })
+                self.categoryFromApple = false
                 return
             }
-        }
-        let own = venues?.nearest(kind, to: near) ?? []
-        categoryResults = own
-        categoryFromApple = false
-        guard own.isEmpty else { return }
-        // Своего ответа нет (клетка ещё не опубликована) — Apple, и честно
-        // подписано, откуда ответ.
-        categoryLoading = true
-        categoryTask = Task { [weak self] in
-            guard let self else { return }
-            let found = await self.apple(kind)
+            let own = venues?.nearest(kind, to: near) ?? []
+            if !own.isEmpty {
+                self.categoryResults = own
+                self.categoryFromApple = false
+                return
+            }
+            // Своего ответа нет (клетка ещё не опубликована) — Apple, и честно
+            // подписано, откуда ответ.
+            let found: [Venue]
+            do {
+                found = try await VenueBook.apple(kind, near: near)
+            } catch {
+                Log.app.error("категория у Apple: \(error.localizedDescription, privacy: .public)")
+                found = []
+            }
             guard !Task.isCancelled, self.category == kind else { return }
             self.categoryResults = found
             self.categoryFromApple = true
-            self.categoryLoading = false
         }
     }
 
-    private func apple(_ kind: Venue.Kind) async -> [Venue] {
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = kind.title
-        if let near {
-            request.region = MKCoordinateRegion(center: near, latitudinalMeters: AppConfig.searchRegionMeters,
-                                                longitudinalMeters: AppConfig.searchRegionMeters)
-        }
-        do {
-            let items = try await MKLocalSearch(request: request).start().mapItems
-            let found = items.map { Venue(kind: kind, name: $0.name ?? "", point: $0.placemark.coordinate) }
-            guard let near else { return found }
-            return found.sorted {
-                GeoMath.fastDistance(near.latitude, near.longitude, $0.point.latitude, $0.point.longitude)
-                    < GeoMath.fastDistance(near.latitude, near.longitude, $1.point.latitude, $1.point.longitude)
-            }
-        } catch {
-            Log.app.error("категория у Apple: \(error.localizedDescription, privacy: .public)")
-            return []
-        }
+    /// Отменить ответ плитки. Индикатор гасится здесь же: отменённая задача
+    /// до своего конца не доходит, и раньше он оставался крутиться вместо
+    /// ответа следующей плитки.
+    private func cancelCategory() {
+        categoryTask?.cancel()
+        categoryTask = nil
+        categoryLoading = false
+        categoryAhead = [:]
     }
 
     func resolve(_ completion: MKLocalSearchCompletion) async -> CLLocationCoordinate2D? {

@@ -991,6 +991,9 @@ nonisolated enum AppConfig {
     static let carPlaySearchOwnLimit = 5
     /// Сколько ближайших показывает плитка категории («АЗС»).
     static let searchCategoryLimit = 8
+    /// «По пути»: заведение не дальше этого от линии маршрута — заезд без
+    /// крюка (съезд на дублёр, другая сторона проспекта).
+    static let venueRouteCorridorMeters = 300.0
     static let engineManeuverHighlightMeters = 35.0
     /// Частота обновления геометрии маршрута; курсор обновляется на каждом фиксе.
     static let engineRouteProgressStep = 15.0

@@ -15213,6 +15213,22 @@
           }
         }
       }
+    },
+    "через %@ по пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "через %@ по пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yo‘lda %@ dan keyin"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

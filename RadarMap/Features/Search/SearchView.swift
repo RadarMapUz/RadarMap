@@ -63,6 +63,8 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
     private(set) var categoryResults: [Venue] = []
     private(set) var categoryFromApple = false
     private(set) var categoryLoading = false
+    /// Ответ «по пути»: сколько ехать до заведения вдоль маршрута (по id).
+    private(set) var categoryAhead: [String: Double] = [:]
     private var categoryTask: Task<Void, Never>?
     private var bookAsked = false
 
@@ -137,15 +139,26 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
         places = venues?.search(query, near: near) ?? []
     }
 
-    /// Плитка категории: ближайшие такого вида. Повторный тап — свернуть.
-    func pick(_ kind: Venue.Kind) {
+    /// Плитка категории: ближайшие такого вида, а с маршрутом — по пути.
+    /// Повторный тап — свернуть.
+    func pick(_ kind: Venue.Kind, route: (points: [MKMapPoint], progress: Double)? = nil) {
         categoryTask?.cancel()
+        categoryAhead = [:]
         guard category != kind else {
             category = nil
             categoryResults = []
             return
         }
         category = kind
+        if let route, let venues {
+            let along = venues.alongRoute(kind, points: route.points, progress: route.progress)
+            if !along.isEmpty {
+                categoryResults = along.map(\.venue)
+                categoryAhead = Dictionary(uniqueKeysWithValues: along.map { ($0.venue.id, $0.ahead) })
+                categoryFromApple = false
+                return
+            }
+        }
         let own = venues?.nearest(kind, to: near) ?? []
         categoryResults = own
         categoryFromApple = false
@@ -334,7 +347,9 @@ struct SearchView: View {
         Section {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 8)], spacing: 8) {
                 ForEach(Venue.Kind.quick, id: \.self) { kind in
-                    Button { model.pick(kind) } label: {
+                    Button {
+                        model.pick(kind, route: env.route.selected.map { ($0.points, env.route.progressAlong) })
+                    } label: {
                         VStack(spacing: 4) {
                             Image(systemName: kind.symbol)
                                 .font(.rounded(17, .bold))
@@ -406,7 +421,11 @@ struct SearchView: View {
                             .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.textPrimary)
                             .lineLimit(1)
-                        if let distance = model.distance(to: venue.point) {
+                        if let ahead = model.categoryAhead[venue.id] {
+                            Text(String(format: String(localized: "через %@ по пути"), Formatting.distance(ahead)))
+                                .font(.rounded(12))
+                                .foregroundStyle(Theme.accent)
+                        } else if let distance = model.distance(to: venue.point) {
                             Text(Formatting.distance(distance))
                                 .font(.rounded(12))
                                 .foregroundStyle(Theme.textSecondary)

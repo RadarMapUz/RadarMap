@@ -55,6 +55,17 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
     func nearest(_ kind: Venue.Kind) async -> [(SavedPlace, String)] {
         let near = env.location.currentCoordinate
         if book == nil || venues == nil { _ = await loadBook(near: near).value }
+        // С маршрутом — то, что встретится по пути, а не ближайшее вообще.
+        if let route = env.route.selected, let venues {
+            let along = venues.alongRoute(kind, points: route.points, progress: env.route.progressAlong,
+                                          limit: AppConfig.carPlaySearchLimit)
+            if !along.isEmpty {
+                return along.map { venue, ahead in
+                    (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
+                     String(format: String(localized: "через %@ по пути"), Formatting.distance(ahead)))
+                }
+            }
+        }
         let own = venues?.nearest(kind, to: near, limit: AppConfig.carPlaySearchLimit) ?? []
         if !own.isEmpty {
             return own.map { venue in

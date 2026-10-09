@@ -14,6 +14,7 @@
 
 import CoreLocation
 import Foundation
+import MapKit
 
 nonisolated struct Venue: Sendable, Equatable, Identifiable {
     /// Коды — контракт с сервером (VENUE_KINDS). Незнакомый код пропускается:
@@ -131,6 +132,31 @@ nonisolated struct VenueBook: Sendable {
         guard let near else { return Array(ofKind.prefix(limit)) }
         return Array(ofKind.map { ($0, Self.distance(near, $0.point)) }
             .sorted { $0.1 < $1.1 }.prefix(limit).map(\.0))
+    }
+
+    /// Заведения вида ПО ПУТИ: не дальше `corridor` от линии маршрута и
+    /// впереди текущего места, по порядку следования. С маршрутом «ближайшая
+    /// АЗС» бывает позади или за рекой, а нужна та, что встретится на пути.
+    func alongRoute(_ kind: Venue.Kind, points: [MKMapPoint], progress: Double,
+                    corridor: Double = AppConfig.venueRouteCorridorMeters,
+                    limit: Int = 8) -> [(venue: Venue, ahead: Double)] {
+        guard points.count >= 2 else { return [] }
+        var cum = [Double](repeating: 0, count: points.count)
+        for i in 1..<points.count { cum[i] = cum[i - 1] + points[i - 1].distance(to: points[i]) }
+        var rect = MKMapRect.null
+        for point in points { rect = rect.union(MKMapRect(origin: point, size: MKMapSize(width: 0, height: 0))) }
+        let pad = corridor * MKMapPointsPerMeterAtLatitude(points[0].coordinate.latitude)
+        rect = rect.insetBy(dx: -pad, dy: -pad)
+        var found: [(venue: Venue, ahead: Double)] = []
+        for venue in venues where venue.kind == kind {
+            let point = MKMapPoint(venue.point)
+            guard rect.contains(point) else { continue }
+            var hint = 0
+            let (along, deviation) = RouteService.project(point, onto: points, cum: cum, hint: &hint)
+            guard deviation <= corridor, along > progress else { continue }
+            found.append((venue, along - progress))
+        }
+        return Array(found.sorted { $0.ahead < $1.ahead }.prefix(limit))
     }
 
     /// Вид, если запрос — слово вида («заправка», «мойка»).

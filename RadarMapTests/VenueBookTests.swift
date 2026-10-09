@@ -7,6 +7,7 @@
 //
 
 import CoreLocation
+import MapKit
 import XCTest
 @testable import RadarMap
 
@@ -54,6 +55,22 @@ final class VenueBookTests: XCTestCase {
         XCTAssertEqual(book().search("lukoil", near: nil).first?.name, "Lukoil")
         XCTAssertEqual(book().search("Uzbekneftegaz", near: nil).first?.name, "Узбекнефтегаз")
         XCTAssertTrue(book().search("Х", near: nil).isEmpty, "одна буква — не запрос")
+    }
+
+    func testAlongRouteKeepsOnlyWhatIsAheadAndNearTheLine() {
+        // Маршрут на север: (41.30, 69.25) → (41.32, 69.25).
+        let route = [MKMapPoint(CLLocationCoordinate2D(latitude: 41.30, longitude: 69.25)),
+                     MKMapPoint(CLLocationCoordinate2D(latitude: 41.32, longitude: 69.25))]
+        let book = VenueBook(venues: [
+            Venue(kind: .fuel, name: "у дороги", point: CLLocationCoordinate2D(latitude: 41.305, longitude: 69.2505)),
+            Venue(kind: .fuel, name: "позади", point: CLLocationCoordinate2D(latitude: 41.299, longitude: 69.25)),
+            Venue(kind: .fuel, name: "за рекой", point: CLLocationCoordinate2D(latitude: 41.31, longitude: 69.26)),
+            Venue(kind: .parking, name: "", point: CLLocationCoordinate2D(latitude: 41.306, longitude: 69.25)),
+        ])
+        let found = book.alongRoute(.fuel, points: route, progress: 0)
+        XCTAssertEqual(found.map(\.venue.name), ["у дороги"])
+        XCTAssertEqual(found.first?.ahead ?? 0, 556, accuracy: 15)
+        XCTAssertTrue(book.alongRoute(.fuel, points: route, progress: 700).isEmpty, "проехали — уже позади")
     }
 
     func testCellKeyIsTheAddressCellWithItsOwnLetter() {

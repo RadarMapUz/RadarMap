@@ -121,6 +121,19 @@ final class UsageStatsService {
 
     func noteManeuver(_ kind: String) { note { $0.maneuvers[kind, default: 0] += 1 } }
 
+    /// Итог сессии экрана машины: длительность и фризы главного потока.
+    func noteCarPlaySession(minutes: Int, hitches: HitchWatch.Tally) {
+        note { stats in
+            var car = stats.carPlay ?? [:]
+            car["sessions", default: 0] += 1
+            car["minutes", default: 0] += max(0, minutes)
+            car["hitches", default: 0] += hitches.count
+            car["longHitches", default: 0] += hitches.long
+            car["maxHitchMs"] = max(car["maxHitchMs"] ?? 0, hitches.maxMilliseconds)
+            stats.carPlay = car
+        }
+    }
+
     func noteTripDropped(_ reason: String) { note { $0.tripsDropped[reason, default: 0] += 1 } }
     func noteReport() { note { $0.reports += 1 } }
     func noteScreen(_ name: String) { note { $0.screens[name, default: 0] += 1 } }
@@ -231,6 +244,8 @@ final class UsageStatsService {
             "alertRecall": stats.alertRecall,
             "memoryWarnings": ["count": stats.memoryWarnings],
             "voiced": stats.voiced,
+            // Экран машины: сессии, минуты и фризы главного потока.
+            "carPlay": stats.carPlay ?? [:],
         ]
         return await api.postAccepted("api/stat", json: payload)
     }

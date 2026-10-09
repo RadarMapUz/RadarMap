@@ -26,6 +26,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     nonisolated deinit {}
 
     var interfaceController: CPInterfaceController?
+    /// Начало сессии экрана машины — для суточной статистики (минуты).
+    private var connectedAt: Date?
     private var mapTemplate: CPMapTemplate?
     private let model = CarPlayMapModel()
     /// Навигационная сессия CarPlay: манёвр, время в пути, полосы, камеры
@@ -56,6 +58,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // запуска; здесь он нужен ИМЕННО в релизе — жалоба «экран машины стоит»
         // приходит из TestFlight, а прибора под неё до сих пор не существовало.
         HitchWatch.start()
+        // Фризы ДО машины к ней не относятся: счёт сессии — с нуля.
+        _ = HitchWatch.drain()
+        connectedAt = Date()
         // Режим меняет не только кнопка, но и автоматика жары — из вью.
         // Кнопки шаблона обязаны пойти следом в обоих случаях.
         if model.onViewModeChanged == nil {
@@ -128,6 +133,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             return
         }
         Self.activeDelegate = nil
+        if let connectedAt {
+            env.usage.noteCarPlaySession(minutes: Int(Date().timeIntervalSince(connectedAt) / 60),
+                                         hitches: HitchWatch.drain())
+            self.connectedAt = nil
+        }
         // Вышли из машины: телефон мог всё это время быть в фоне, события
         // scenePhase не будет — снимаем «передний план» сами. И флаг схемы
         // тоже: onDisappear у вью внутри сносимого CPWindow не гарантирован,

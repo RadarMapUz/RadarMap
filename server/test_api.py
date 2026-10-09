@@ -780,6 +780,20 @@ class APITest(unittest.TestCase):
         self.assertEqual(quality["alertRecall"]["warned"], 47)
         self.assertEqual(quality["maneuvers"]["right"], 4)
 
+    def test_stat_stores_carplay_session_counters(self):
+        """Экран машины: сессии, минуты, фризы. Жалоба «на CarPlay км/ч не
+        работает» приходит из машины, где лог не прочесть."""
+        _call(self.port, "POST", "/api/stat", {
+            "device": "d3", "day": "2026-10-10",
+            "carPlay": {"sessions": 1, "minutes": 34, "hitches": 2, "longHitches": 1,
+                        "maxHitchMs": 1800}})
+        conn = sqlite3.connect(api.DB_PATH)
+        row = conn.execute("SELECT quality FROM usage_stats WHERE device='d3'").fetchone()
+        conn.close()
+        quality = json.loads(row[0])
+        self.assertEqual(quality["carPlay"]["minutes"], 34)
+        self.assertEqual(quality["carPlay"]["maxHitchMs"], 1800)
+
     def test_stat_quality_is_counters_and_nothing_else(self):
         """Та же дисциплина, что у screens: значение проходит через clamp_int,
         ключ обрезается. Координате или времени тут не во что попасть."""

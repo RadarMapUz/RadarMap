@@ -195,6 +195,34 @@ nonisolated enum HitchWatch {
 
     private static let running = OSAllocatedUnfairLock(initialState: false)
 
+    /// Сколько фризов было с последнего `drain()`: всего (> 250 мс), длинных
+    /// (> 1 с — экран машины «стоит») и самый долгий. Лог читается только с
+    /// телефона в руках, а жалоба «км/ч не работает» приходит из машины —
+    /// эти три числа уходят в суточную статистику (поле `carPlay`).
+    nonisolated struct Tally: Equatable, Sendable {
+        var count = 0
+        var long = 0
+        var maxMilliseconds = 0
+    }
+
+    private static let tally = OSAllocatedUnfairLock(initialState: Tally())
+
+    /// Забрать накопленное и обнулить.
+    static func drain() -> Tally {
+        tally.withLock { current in
+            defer { current = Tally() }
+            return current
+        }
+    }
+
+    static func record(lagMilliseconds: Int) {
+        tally.withLock { current in
+            current.count += 1
+            if lagMilliseconds >= 1000 { current.long += 1 }
+            current.maxMilliseconds = max(current.maxMilliseconds, lagMilliseconds)
+        }
+    }
+
     /// Идемпотентен: сцена CarPlay может подключиться дважды за процесс
     /// (штатное «моргание» провода при запуске двигателя), а второй сторож
     /// удвоил бы пинги и не сказал ничего нового.
@@ -214,6 +242,7 @@ nonisolated enum HitchWatch {
                 _ = sem.wait(timeout: .now() + giveUpAfter)
                 let lag = CFAbsoluteTimeGetCurrent() - sentAt
                 if lag > threshold {
+                    record(lagMilliseconds: Int(lag * 1000))
                     let stage = MainWork.last.description
                     Log.app.fault("фриз main \(Int(lag * 1000), privacy: .public) мс на «\(stage, privacy: .public)»")
                 }

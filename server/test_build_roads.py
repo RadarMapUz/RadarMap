@@ -2023,6 +2023,16 @@ class DrawnPointTests(unittest.TestCase):
         self.assertEqual(len(pts), 1)
         self.assertEqual(pts[0][0], build_roads.POINT_TRAFFIC_LIGHT)
 
+    def test_hand_placed_light_is_confirmed_and_keeps_it_on_the_road(self):
+        # Пометка «поставил человек» доживает до тайлов: посадка на ось
+        # пересчитывает азимут и ширину, но не стирает старшие биты.
+        pts = build_roads.drawn_points([self.mark(build_roads.POINT_TRAFFIC_LIGHT)])
+        self.assertTrue(pts[0][1] & build_roads.PFLAG_CONFIRMED)
+        street = (4, build_roads.with_lanes(0, 4), [(69.250, 41.300), (69.250, 41.310)], "")
+        snapped, _dropped = build_roads.snap_points(pts, [street])
+        self.assertTrue(snapped[0][1] & build_roads.PFLAG_CONFIRMED)
+        self.assertLess(build_roads.PFLAG_CONFIRMED, 1 << 53, "число JSON без потери точности")
+
     def test_unknown_kind_is_refused(self):
         self.assertEqual(build_roads.drawn_points([self.mark(99)]), [])
 

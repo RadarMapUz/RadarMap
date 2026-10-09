@@ -2895,6 +2895,11 @@ PFLAG_WIDTH_MASK = 0x3F
 # Выше восьми стрелок полос: совместимо со старым JSON и точностью double.
 PFLAG_PAINTED = 1 << 45
 PFLAG_ONEWAY = 1 << 46
+# Объект поставил человек — правка панели (туда же идут находки видео
+# регистратора, принятые владельцем). Ему сборка верит больше, чем выводу из
+# OSM: подтверждённый светофор рисуется всегда, без правила «три светофора у
+# узла» (build_mvt.place_confirmed). Телефон бит не читает.
+PFLAG_CONFIRMED = 1 << 47
 
 
 def point_flags(azimuth_degrees, width_meters):
@@ -3128,7 +3133,8 @@ DRAWN_POINT_KINDS = {POINT_TRAFFIC_LIGHT, POINT_SPEED_BUMP, POINT_STOP_LINE,
 
 
 def drawn_points(edits):
-    """Обстановка из правок панели → точки, как из OSM."""
+    """Обстановка из правок панели → точки, как из OSM, с пометкой
+    PFLAG_CONFIRMED: всё, что пришло из правок, поставил человек."""
     out = []
     for edit in edits:
         # Направления полос из конструктора — ряд стрелок, как turn:lanes OSM:
@@ -3141,7 +3147,7 @@ def drawn_points(edits):
                     spot = (float(geom[0]), float(geom[1]))
                 except (TypeError, ValueError):
                     continue
-                out.append((POINT_LANE_ARROWS, pack_turns(0, turns), [spot]))
+                out.append((POINT_LANE_ARROWS, pack_turns(0, turns) | PFLAG_CONFIRMED, [spot]))
             continue
         if edit.get("kind") != "point":
             continue
@@ -3161,7 +3167,7 @@ def drawn_points(edits):
         turns = props.get("turns")
         if kind == POINT_LANE_ARROWS and isinstance(turns, list):
             flags = pack_turns(0, [t for t in turns if isinstance(t, int)])
-        out.append((kind, flags, [spot]))
+        out.append((kind, flags | PFLAG_CONFIRMED, [spot]))
     return out
 
 
@@ -5717,6 +5723,12 @@ def main():
     # Детальная карта сохраняет каждый подъезд; обзорная схема по-прежнему
     # получает один ориентир на перекрёсток. Не теряем данные до кодирования.
     mvt_points, _ = snap_points(raw_points, roads) if args.mvt else ([], 0)
+    # Подтверждённый светофор, не нашедший улицы в POINT_SNAP_METERS, на карту
+    # не попадёт ни по какому правилу — об этом надо сказать, а не молчать.
+    confirmed_lights = sum(1 for p in raw_points
+                           if p[0] == POINT_TRAFFIC_LIGHT and p[1] & PFLAG_CONFIRMED)
+    confirmed_snapped = sum(1 for p in mvt_points
+                            if p[0] == POINT_TRAFFIC_LIGHT and p[1] & PFLAG_CONFIRMED)
     junction_count, clustered_count = len(at_junctions), len(clustered)
     del at_junctions, clustered
     # Дальний набор: только светофоры. Стоп-знак и лежачий на охвате района —
@@ -5829,6 +5841,10 @@ def main():
             print(f"        разметка: {len(painted)} черт, без ширины {widthless}")
         print(f"        на костяке района: {len(far_points)} светофоров "
               f"(вне костяка {far_dropped})")
+        if confirmed_lights and args.mvt:
+            print(f"        светофоров от человека: {confirmed_lights}, на улице "
+                  f"{confirmed_snapped}, дальше {POINT_SNAP_METERS:g} м от улицы "
+                  f"{confirmed_lights - confirmed_snapped}")
     print("классы:", classes.most_common(10))
     bridges = sum(n for f, n in flag_counts.items() if f & FLAG_BRIDGE)
     tunnels = sum(n for f, n in flag_counts.items() if f & FLAG_TUNNEL)

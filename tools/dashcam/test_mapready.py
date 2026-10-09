@@ -47,7 +47,23 @@ class ReadyRulesTest(unittest.TestCase):
         self.assertEqual(mapready.ready_reasons(clus(), None, decision='accept'), [])
 
 
+    def test_accepted_by_human_passes_every_threshold(self):
+        # Одна поездка, плохая точность, в OSM уже есть — человек видел кадр.
+        weak = clus(n_trips=1, err_m=30.0, confidence=0.3, status='confirms')
+        self.assertEqual(mapready.ready_reasons(weak, 5.0, decision='accept'), [])
+        self.assertEqual(mapready.ready_reasons(clus(cls='speed_bump', n_trips=1), None, 'accept'), [])
+        self.assertTrue(mapready.ready_reasons(clus(cls='speed_limit'), None, decision='accept'))
+
+
 class MergeTest(unittest.TestCase):
+    def test_accepted_lights_of_one_junction_stay_apart(self):
+        # Два подхода одного перекрёстка в 30 м — два светофора, а не дубль.
+        out = mapready.merge_ready([clus(id=1, east=0, decision='accept'),
+                                    clus(id=2, east=30, decision='accept'),
+                                    clus(id=3, east=36, decision='accept')])
+        self.assertEqual(sorted(c['id'] for c in out), [1, 2])
+
+
     def test_duplicates_merge_into_most_confident(self):
         cs = [clus(id=1, confidence=0.8, east=0), clus(id=2, confidence=0.99, east=39),
               clus(id=3, confidence=0.9, east=200), clus(id=4, cls='crossing', east=5)]
@@ -77,6 +93,14 @@ class OsmChangeTest(unittest.TestCase):
         tags = {t.get('k'): t.get('v') for t in nodes[0].findall('tag')}
         self.assertEqual(tags, {'highway': 'traffic_signals', 'crossing': 'traffic_signals'})
         self.assertAlmostEqual(float(nodes[0].get('lat')), LAT0)
+
+    def test_confirmation_of_an_existing_object_is_not_a_new_node(self):
+        d = self.draft()
+        d['dashcam']['gap_m'] = 8.0
+        far = self.draft()
+        far['dashcam']['gap_m'] = 80.0
+        _, n = mapready.osm_change([d, far])
+        self.assertEqual(n, 1)
 
     def test_ambiguous_and_off_road_not_exported(self):
         _, n = mapready.osm_change([self.draft(snap='ambiguous'), self.draft(snap='off_road')])

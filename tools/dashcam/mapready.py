@@ -51,6 +51,9 @@ UI = 'http://127.0.0.1:8780'
 # сюда не входят: лимит — свойство дороги, а не точка, и меняется только
 # человеком (review_limits.csv). Неровности — по рывку, без кадра объекта.
 READY_CLASSES = ('traffic_light', 'crossing')
+# Принятое человеком на странице разбора (по кадру) — ещё и лежачие: на кадре
+# видно сам бугор и знак, а не только рывок.
+ACCEPTED_CLASSES = READY_CLASSES + ('speed_bump',)
 # Видели хотя бы в двух РАЗНЫХ поездках. Одна поездка — это одна привязка:
 # ошибка опор сдвигает все её кадры разом, и триангуляция этого не видит.
 # Вторая поездка — независимая привязка и независимый взгляд детектора
@@ -87,15 +90,24 @@ CROSSING_SIGNAL_M = 30.0
 LIMIT_NEAR_M = 30.0
 LIMIT_COURSE_DEG = 30.0
 
-POINT_CODE = {'traffic_light': 1, 'crossing': 5}   # map_edits.POINT_NAMES
-OSM_TAGS = {'traffic_light': {'highway': 'traffic_signals'}, 'crossing': {'highway': 'crossing'}}
-CLS_RU = {'traffic_light': 'светофор', 'crossing': 'пешеходный переход', 'speed_limit': 'знак ограничения'}
+POINT_CODE = {'traffic_light': 1, 'crossing': 5, 'speed_bump': 2}   # map_edits.POINT_NAMES
+OSM_TAGS = {'traffic_light': {'highway': 'traffic_signals'}, 'crossing': {'highway': 'crossing'},
+            'speed_bump': {'traffic_calming': 'bump'}}
+CLS_RU = {'traffic_light': 'светофор', 'crossing': 'пешеходный переход', 'speed_limit': 'знак ограничения',
+          'speed_bump': 'лежачий полицейский'}
 
 
 def ready_reasons(c, gap_m, decision=None):
     """Почему кластер НЕ готов (пусто — готов). c: dict кластера; gap_m —
     расстояние до ближайшего существующего объекта того же класса (None — нет
-    в пределах поиска); decision — решение человека на странице."""
+    в пределах поиска); decision — решение человека на странице.
+
+    «Принято» человеком — готово при любых порогах автоматики: они отвечают на
+    вопрос «можно ли верить без человека», а он уже посмотрел кадр. Из 84
+    светофоров, принятых владельцем 08.10.2026, пороги пропускали 4 — остальные
+    видели в одной поездке, и на карту они не попадали никак."""
+    if decision == 'accept':
+        return [] if c['cls'] in ACCEPTED_CLASSES else ['класс не предлагается точкой']
     out = []
     if c['cls'] not in READY_CLASSES:
         out.append('класс не предлагается точкой')
@@ -165,20 +177,27 @@ def evaluate(conn, existing=None):
     existing = existing or Existing()
     out = []
     for c in cluster_rows(conn):
-        if c['cls'] not in READY_CLASSES:
+        if c['cls'] not in ACCEPTED_CLASSES:
             continue
-        dec = cluster.decision_for(conn, c['cls'], c['lat'], c['lon'])
-        out.append((c, ready_reasons(c, existing.gap(c['cls'], c['lat'], c['lon']), dec)))
+        c['decision'] = cluster.decision_for(conn, c['cls'], c['lat'], c['lon'])
+        c['gap_m'] = existing.gap(c['cls'], c['lat'], c['lon'])
+        out.append((c, ready_reasons(c, c['gap_m'], c['decision'])))
     return out
 
 
 def merge_ready(clusters, merge_m=MERGE_READY_M):
     """Готовые одного класса ближе merge_m (по месту находки, до магнита) — один
-    объект: остаётся самый уверенный, остальные — в его 'merged'."""
+    объект: остаётся самый уверенный, остальные — в его 'merged'.
+
+    Принятые человеком сливаются только в радиусе его же решения
+    (cluster.DECISION_M): каждое «принять» — светофор, который он видел, и
+    50 м сольют светофоры разных подходов одного перекрёстка."""
     out = []
     for c in sorted(clusters, key=lambda x: -(x['confidence'] or 0)):
         twin = next((o for o in out if o['cls'] == c['cls'] and
-                     gpx.haversine(o['lat'], o['lon'], c['lat'], c['lon']) < merge_m), None)
+                     gpx.haversine(o['lat'], o['lon'], c['lat'], c['lon']) <
+                     (cluster.DECISION_M if 'accept' in (o.get('decision'), c.get('decision'))
+                      else merge_m)), None)
         if twin is None:
             out.append(dict(c, merged=[]))
         else:
@@ -253,7 +272,7 @@ def crossing_kind(conn, c, existing):
 def make_draft(conn, c, snap, existing):
     trips, best = cluster_evidence(conn, c['id'])
     props = {'point': POINT_CODE[c['cls']], **OSM_TAGS[c['cls']], 'source': 'dashcam',
-             'survey:date': max(trip_date(k) for k in trips), 'confidence': round(c['confidence'], 2),
+             'survey:date': max(trip_date(k) for k in trips), 'confidence': round(c['confidence'] or 0, 2),
              'trips': len(trips), 'frames': c['n_frames']}
     if c['cls'] == 'crossing':
         kind = crossing_kind(conn, c, existing)
@@ -268,7 +287,10 @@ def make_draft(conn, c, snap, existing):
     frame = best[0] if best else None
     note = (f"Видео регистратора: {CLS_RU[c['cls']]}, {len(trips)} поездки "
             f"({', '.join(trip_date(k) for k in trips)}), кадров {c['n_frames']}, "
-            f"уверенность {c['confidence']:.0%}, точность места ±{c['err_m']:.0f} м.")
+            f"уверенность {c['confidence'] or 0:.0%}"
+            + (f", точность места ±{c['err_m']:.0f} м." if c['err_m'] is not None else '.'))
+    if c.get('decision') == 'accept':
+        note += ' Принято человеком по кадру.'
     if frame:
         note += f" Кадр: {UI}/frame/{frame['frame_id']}.jpg (вырезка {UI}/crop/{frame['id']}.jpg)."
     if snap['status'] == 'ambiguous':
@@ -288,7 +310,9 @@ def make_draft(conn, c, snap, existing):
         # только для человека и для проверки — панель их не читает
         'dashcam': {'cluster_id': c['id'], 'cls': c['cls'], 'snap': snap['status'],
                     'snap_candidates': snap['candidates'], 'snap_m': snap.get('snap_m'),
-                    'err_m': round(c['err_m'], 1), 'trips': trips,
+                    'err_m': round(c['err_m'], 1) if c['err_m'] is not None else None, 'trips': trips,
+                    'decision': c.get('decision'),
+                    'gap_m': round(c['gap_m'], 1) if c.get('gap_m') is not None else None,
                     'osm_crossing_m': round(xing, 1) if xing is not None else None,
                     'frame_id': frame['frame_id'] if frame else None,
                     'frame_path': frame['path'] if frame else None,
@@ -330,12 +354,18 @@ def osm_change(drafts):
     только линии. В OSM уходят только теги объекта (highway, crossing);
     source/survey:date — тегами пакета правок при загрузке, а уверенность и
     число поездок — наше внутреннее, OSM их не ждёт. Неоднозначные и вне дорог
-    не выгружаются."""
+    не выгружаются, как и принятое человеком рядом с таким же объектом
+    (gap_m < MIN_GAP_EXISTING_M): это подтверждение, а не новый узел — в
+    черновики панели оно идёт, чтобы сборка нарисовала его при любом числе
+    светофоров у узла."""
     lines = ['<?xml version="1.0" encoding="UTF-8"?>',
              '<osmChange version="0.6" generator="RadarMap dashcam">', '  <create>']
     n = 0
     for d in drafts:
         if d['dashcam']['snap'] in ('ambiguous', 'off_road'):
+            continue
+        gap = d['dashcam'].get('gap_m')
+        if gap is not None and gap < MIN_GAP_EXISTING_M:
             continue
         n += 1
         lon, lat = d['geom']
@@ -433,7 +463,7 @@ wpt, см. `tools/dashcam/passtime.py`).
 | Файл | Что | Сколько |
 |---|---|---|
 | `drafts.json` | черновики конструктора (`kind: "point"`), формат `POST /api/edit` панели | {n_drafts} ({by_cls}) |
-| `changes.osc` | те же точки для JOSM (osmChange), кроме неоднозначных | {n_osc} |
+| `changes.osc` | те же точки для JOSM (osmChange), кроме неоднозначных и подтверждений уже существующих | {n_osc} |
 | `review_limits.csv` | знаки ограничения, расходящиеся с лимитами OSM — **на проверку** | {n_limits} |
 
 Посадка магнитом (`map_edits.snap` к тайлам `{tiles}`): {snap_stats}.
@@ -444,6 +474,11 @@ wpt, см. `tools/dashcam/passtime.py`).
 статус «новое», ≥ {min_trips} разных поездки, точность места ≤ {max_err:g} м,
 уверенность ≥ {min_conf}, не ближе {gap:g} м к такому же объекту OSM или наших
 тайлов; готовые одного класса ближе {merge:g} м слиты в одну.
+
+**Принятое человеком** на странице разбора («принять» по кадру) — готово
+всегда, без этих порогов: их {n_accepted}. Принятое рядом с таким же объектом
+OSM — подтверждение: в черновики идёт (сборка рисует подтверждённый человеком
+светофор при любом числе светофоров у узла), в `changes.osc` — нет.
 
 ## Как проверить
 
@@ -525,11 +560,12 @@ def export(out_dir=OUT_DIR, tiles_dir=TILES_DIR, conn=None, log=print):
     for d in drafts:
         by_cls[d['dashcam']['cls']] = by_cls.get(d['dashcam']['cls'], 0) + 1
         snaps[d['dashcam']['snap']] = snaps.get(d['dashcam']['snap'], 0) + 1
-    summary = {'drafts': len(drafts), 'by_cls': by_cls, 'snap': snaps, 'osc_nodes': n_osc,
-               'review_limits': len(lim)}
+    n_accepted = sum(1 for d in drafts if d['dashcam'].get('decision') == 'accept')
+    summary = {'drafts': len(drafts), 'accepted': n_accepted, 'by_cls': by_cls, 'snap': snaps,
+               'osc_nodes': n_osc, 'review_limits': len(lim)}
     with open(os.path.join(out_dir, 'README.md'), 'w') as f:
         f.write(README.format(
-            when=time.strftime('%d.%m.%Y %H:%M'), n_drafts=len(drafts),
+            when=time.strftime('%d.%m.%Y %H:%M'), n_drafts=len(drafts), n_accepted=n_accepted,
             by_cls=', '.join(f'{CLS_RU[k]} {v}' for k, v in sorted(by_cls.items())) or 'нет',
             n_osc=n_osc, n_limits=len(lim), tiles=tiles_dir,
             snap_stats=', '.join(f'{k} {v}' for k, v in sorted(snaps.items())) or 'нет',

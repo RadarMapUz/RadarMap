@@ -667,6 +667,75 @@ class JunctionLightTests(unittest.TestCase):
         signals = [self.facing(x, y) for x, y in ((-40, 2), (40, -2))]
         self.assertIsNone(self.lights(signals))
 
+    def confirmed(self, x, y):
+        kind, flags, spot = self.facing(x, y)
+        return (kind, flags | build_roads.PFLAG_CONFIRMED, spot)
+
+    def found(self, signals):
+        grid = build_mvt._signal_grid(signals)
+        return build_mvt.junction_light_zone(self.box, grid, None, build_mvt.confirmed_signals(signals))
+
+    def test_one_light_seen_by_a_human_makes_the_junction_regulated(self):
+        # Видео регистратора: одна поездка — один подход, в OSM светофоров нет.
+        found = self.found([self.confirmed(0, -30)])
+        self.assertIsNotNone(found)
+        lights = build_mvt.approach_lights(*found)
+        self.assertEqual(len(lights), 1)
+        self.assertLess(lights[0][1], 41.3219, "значок на южном подходе, откуда светофор")
+
+    def test_the_same_single_light_from_osm_is_still_not_enough(self):
+        self.assertIsNone(self.found([self.facing(0, -30)]))
+
+    def test_light_in_the_very_centre_belongs_to_the_junction(self):
+        # Узел OSM светофором на самом перекрёстке: «на центр» у него нет
+        # направления, и улица восток–запад не повод его отбросить.
+        centre = (1, build_roads.point_flags(90, 12), [self.m(0, 0)])
+        signals = [self.facing(0, -40), self.facing(0, 40), centre]
+        self.assertIsNotNone(self.found(signals))
+
+    def test_junction_with_lights_only_in_the_centre_gets_one_icon(self):
+        found = self.found([(1, build_roads.point_flags(90, 12) | build_roads.PFLAG_CONFIRMED,
+                             [self.m(0, 0)])])
+        lights = build_mvt.approach_lights(*found)
+        self.assertEqual(len(lights), 1)
+        self.assertLess(math.hypot((lights[0][0] - 69.2428) * self.kx, (lights[0][1] - 41.3219) * 111_320), 1)
+
+    def test_confirmed_light_already_at_its_junction_is_not_drawn_twice(self):
+        signals = [self.confirmed(0, -30)]
+        found = self.found(signals)
+        junctions, loose = build_mvt.place_confirmed([found], build_mvt.confirmed_signals(signals))
+        self.assertEqual(loose, [])
+        self.assertEqual(len(junctions[0][1]), 1)
+
+    def test_confirmed_light_left_out_joins_the_nearest_junction(self):
+        # Подход «смотрит» мимо центра (светофор сел на поперечную улицу) —
+        # в светофоры узла он не вошёл, но значок встаёт у этого узла.
+        signals = [self.facing(x, y) for x, y in ((48, 8), (-48, -8), (8, -48), (-8, 48))]
+        found = self.found(signals)
+        stray = self.m(30, -30)
+        junctions, loose = build_mvt.place_confirmed([found], {stray})
+        self.assertEqual(loose, [])
+        self.assertIn(stray, junctions[0][1])
+        self.assertEqual(len(build_mvt.approach_lights(*junctions[0])), 5)
+
+    def test_mid_block_pair_is_one_icon_and_far_lights_stay_apart(self):
+        # Светофоры пешеходного перехода по одному на направление — один значок;
+        # переход за 300 м — свой.
+        pair = {self.m(0, 200), self.m(0, 220), self.m(0, 520)}
+        junctions, loose = build_mvt.place_confirmed([], pair)
+        self.assertEqual(junctions, [])
+        self.assertEqual(len(loose), 2)
+        north = sorted((lat - 41.3219) * 111_320 for _lon, lat in loose)
+        self.assertAlmostEqual(north[0], 210, delta=0.5)
+        self.assertAlmostEqual(north[1], 520, delta=0.5)
+
+    def test_light_far_from_any_junction_keeps_its_own_icon(self):
+        found = self.found([self.facing(x, y) for x, y in ((48, 8), (-48, -8), (8, -48), (-8, 48))])
+        far = self.m(0, 150)
+        junctions, loose = build_mvt.place_confirmed([found], {far})
+        self.assertEqual(loose, [far])
+        self.assertNotIn(far, junctions[0][1])
+
     def test_neighbour_centre_of_the_same_junction_is_a_duplicate(self):
         spots = ((-50, 3), (-35, -3), (-20, 4), (20, -4), (35, 3), (50, -3))
         grid = build_mvt._signal_grid([self.facing(x, y) for x, y in spots])

@@ -21,7 +21,7 @@ from build_roads import (AREA_DIVIDER, FLAG_LANES_INFERRED, AREA_FILLET, AREA_HO
                          clip_ring,
                          FLAG_BRIDGE,
                          FLAG_LANES_TAGGED, FLAG_ONEWAY, FLAG_TUNNEL,
-                         PFLAG_PAINTED, PFLAG_ONEWAY, point_azimuth, point_width,
+                         PFLAG_CONFIRMED, PFLAG_PAINTED, PFLAG_ONEWAY, point_azimuth, point_width,
                          SURFACE_CLASS_MASK, SURFACE_CLASS_SHIFT, lanes_of,
                          road_width_meters, POINT_LANE_ARROWS, MAX_ARROW_LANES,
                          unpack_turns)
@@ -1790,6 +1790,8 @@ WAFFLE_FACING_DEGREES = 40.0
 # у такого узла всё равно ставятся — вокруг его центра (junction_light_zone).
 WAFFLE_MIN_COMPACTNESS = 0.4
 _SIGNAL_CELL = 0.002   # ~200 м
+# Ближе этого к центру — светофор стоит в самом узле (см. _faces).
+LIGHT_AT_CENTRE_METERS = 2.0
 
 
 def _signal_grid(points):
@@ -1808,7 +1810,14 @@ def _faces(lon, lat, bearing, cx, cy):
     if bearing is None:
         return True
     kx = 111_320 * math.cos(math.radians(lat))
-    to_centre = math.degrees(math.atan2((cx - lon) * kx, (cy - lat) * 111_320)) % 360
+    dx, dy = (cx - lon) * kx, (cy - lat) * 111_320
+    # Светофор в самом центре (узел OSM на перекрёстке, правка, посаженная
+    # магнитом в узел) — светофор этого узла. Направления «на центр» у него
+    # нет: atan2(0, 0) давал «север», и такой светофор принимался или
+    # отбрасывался по тому, как легла улица.
+    if math.hypot(dx, dy) < LIGHT_AT_CENTRE_METERS:
+        return True
+    to_centre = math.degrees(math.atan2(dx, dy)) % 360
     # Ось, а не направление: у двусторонней дороги азимут точки идёт по
     # направлению линии в OSM и может смотреть «от» центра.
     diff = abs((bearing - to_centre + 180) % 360 - 180)
@@ -1933,6 +1942,10 @@ def approach_lights(zone, signals):
                 break
         else:
             groups.append([ray])
+    if not groups:
+        # Все светофоры узла — в самом центре (подтверждённый человеком узел
+        # без подходов): подход неизвестен, но узел регулируемый — один значок.
+        return [(cx, cy)]
     out = []
     for group in groups:
         ux, uy = sum(r[1] for r in group), sum(r[2] for r in group)
@@ -1991,18 +2004,22 @@ def _centre_ring(cx, cy, radius):
             for i in range(JUNCTION_RING_SIDES)]
 
 
-def junction_light_zone(box, grid, centres=None):
+def junction_light_zone(box, grid, centres=None, confirmed=frozenset()):
     """Зона значков светофоров узла и его светофоры: (зона, [(lon, lat)]) или None.
 
     Компактная оболочка — как раньше (waffle_zone). Не прошла компактность или
     вырождена, но своих, смотрящих в центр светофоров не меньше
     WAFFLE_MIN_SIGNALS, — узел всё равно регулируемый: зона — кольцо вокруг
     центра узла.
+
+    confirmed — светофоры, поставленные человеком (PFLAG_CONFIRMED). Порог в
+    три светофора защищает от случайной выборки точек OSM; человек, видевший
+    светофор на кадре, — не случайная выборка: одного такого хватает.
     """
     if not grid:
         return None
     signals = _junction_signals(box, grid, centres)
-    if len(signals) < WAFFLE_MIN_SIGNALS:
+    if len(signals) < WAFFLE_MIN_SIGNALS and not any(s in confirmed for s in signals):
         return None
     zone = waffle_zone(box, grid, centres)
     if zone is None:
@@ -2068,6 +2085,70 @@ class WaffleSet:
                         return None
         self._grid[cell].append((ring, centre))
         return centre
+
+
+def confirmed_signals(points):
+    """Светофоры, поставленные человеком: {(lon, lat)} — те же кортежи, что в
+    сетке _signal_grid, поэтому их можно искать среди светофоров узла."""
+    return {tuple(point[2][0]) for point in points
+            if point[0] == 1 and point[1] & PFLAG_CONFIRMED}
+
+
+# Подтверждённый светофор посреди квартала (пешеходного перехода) — значок на
+# нём самом. Пара светофоров одного перехода (по одному на направление, 10–30 м
+# друг от друга, и находки видео дают их парой) — один значок, а не два.
+LOOSE_LIGHT_MERGE_METERS = 30.0
+
+
+def place_confirmed(junctions, confirmed):
+    """Подтверждённые человеком светофоры → значки, всегда.
+
+    junctions — регулируемые узлы [(зона, [(lon, lat)])], прошедшие
+    junction_light_zone и WaffleSet. До 10.10.2026 значок вставал только у узла
+    с тремя светофорами, смотрящими в центр: из 84 светофоров, отмеченных
+    владельцем по видео регистратора, значок получили 17 — у остальных в OSM
+    светофоров нет вовсе, и одна поездка видит один подход.
+
+    Светофор, вошедший в светофоры узла, уже нарисован его подходом. Не
+    вошедший (центр признан дублем соседнего, подход «смотрит» мимо центра)
+    отдаётся ближайшему узлу в WAFFLE_SIGNAL_REACH_METERS — значок встаёт на
+    его подходе. Узла рядом нет — значок на самом светофоре.
+
+    → (узлы с добавленными светофорами, [(lon, lat)] отдельных значков).
+    """
+    out = [(zone, list(lights)) for zone, lights in junctions]
+    used = {spot for _zone, lights in out for spot in lights}
+    grid = defaultdict(list)
+    for index, (zone, _lights) in enumerate(out):
+        cx, cy = waffle_centre(zone)
+        grid[(int(cx / _SIGNAL_CELL), int(cy / _SIGNAL_CELL))].append((index, cx, cy))
+    loose = []
+    # Порядок — сортировкой: тайлы не должны меняться от порядка строк.
+    for lon, lat in sorted(set(confirmed) - used):
+        kx = 111_320 * math.cos(math.radians(lat))
+        best, best_distance = None, WAFFLE_SIGNAL_REACH_METERS
+        cell = (int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))
+        for gx in range(cell[0] - 1, cell[0] + 2):
+            for gy in range(cell[1] - 1, cell[1] + 2):
+                for index, cx, cy in grid.get((gx, gy), ()):
+                    distance = math.hypot((cx - lon) * kx, (cy - lat) * 111_320)
+                    if distance <= best_distance:
+                        best, best_distance = index, distance
+        if best is None:
+            loose.append((lon, lat))
+        else:
+            out[best][1].append((lon, lat))
+    groups = []
+    for lon, lat in loose:
+        kx = 111_320 * math.cos(math.radians(lat))
+        for group in groups:
+            if math.hypot((group[0][0] - lon) * kx, (group[0][1] - lat) * 111_320) \
+                    <= LOOSE_LIGHT_MERGE_METERS:
+                group.append((lon, lat))
+                break
+        else:
+            groups.append([(lon, lat)])
+    return out, [(sum(p[0] for p in g) / len(g), sum(p[1] for p in g) / len(g)) for g in groups]
 
 
 def _has_signal(shape, grid):
@@ -2426,15 +2507,27 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # (Беруни × Сакичмон, 05.10.2026), и светофоры там не появлялись.
         candidates = boxes + crossing_cores(roads)
         centres = box_centres(candidates)
+        confirmed = confirmed_signals(points)
         waffles = WaffleSet()
+        junctions = []
         for box in candidates:
-            found = junction_light_zone(box, signals, centres)
-            centre = waffles.add(found[0]) if found else None
-            if centre:
-                # Жёлтой сетки нет (у Яндекса её нет): зона только решает,
-                # регулируемый ли перекрёсток и где его центр.
-                for light in approach_lights(*found):
-                    _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [light], {"kind": KIND_APPROACH_LIGHT})
+            found = junction_light_zone(box, signals, centres, confirmed)
+            if found and waffles.add(found[0]):
+                junctions.append(found)
+        # Светофор, поставленный человеком, рисуется всегда: у своего узла или
+        # отдельным значком (place_confirmed).
+        junctions, loose = place_confirmed(junctions, confirmed)
+        for zone, lights in junctions:
+            # Жёлтой сетки нет (у Яндекса её нет): зона только решает,
+            # регулируемый ли перекрёсток и где его центр.
+            for light in approach_lights(zone, lights):
+                _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [light], {"kind": KIND_APPROACH_LIGHT})
+        for light in loose:
+            _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [light], {"kind": KIND_APPROACH_LIGHT})
+        if confirmed:
+            at_junctions = len({spot for _zone, lights in junctions for spot in lights} & confirmed)
+            print(f"MVT светофоры от человека: {len(confirmed)} — у узлов {at_junctions}, "
+                  f"остальные {len(confirmed) - at_junctions} — отдельными значками: {len(loose)}")
         # Зебры — подогнанные к подходам (fit_zebras): и линии переходов, и
         # размеченные узлы, одним слоем.
         for line, _marked in fitted_zebras:

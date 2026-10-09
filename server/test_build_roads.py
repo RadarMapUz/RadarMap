@@ -3516,3 +3516,63 @@ class SimplifyToleranceTests(unittest.TestCase):
                for t in range(20)]
         kept = build_roads.simplify(arc, build_roads.SIMPLIFY_METERS / 111_320.0)
         self.assertGreaterEqual(len(kept), 6, "поворот срезали в хорду")
+
+
+class VenueTests(unittest.TestCase):
+    """Заведения для поиска: АЗС, парковки, мойки — своя клетка «v»."""
+
+    def write(self, features):
+        handle = tempfile.NamedTemporaryFile("w", suffix=".geojsonl", delete=False, encoding="utf-8")
+        for feature in features:
+            handle.write("\x1e" + json.dumps(feature, ensure_ascii=False) + "\n")
+        handle.close()
+        self.addCleanup(os.remove, handle.name)
+        return handle.name
+
+    @staticmethod
+    def point(lon, lat, **tags):
+        return {"type": "Feature", "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": tags}
+
+    def test_kinds_are_a_contract(self):
+        self.assertEqual(build_roads.venue_kind({"amenity": "fuel"}), 1)
+        self.assertEqual(build_roads.venue_kind({"amenity": "parking"}), 2)
+        self.assertEqual(build_roads.venue_kind({"shop": "tyres"}), 5)
+        self.assertEqual(build_roads.venue_kind({"amenity": "cafe"}), 7)
+        self.assertIsNone(build_roads.venue_kind({"amenity": "bench"}))
+
+    def test_russian_name_first_then_name_then_brand(self):
+        path = self.write([
+            self.point(69.25, 41.30, amenity="fuel", name="Uzbekneftegaz", **{"name:ru": "Узбекнефтегаз"}),
+            self.point(69.26, 41.30, amenity="fuel", brand="Lukoil"),
+            self.point(69.27, 41.30, amenity="parking"),
+            self.point(69.28, 41.30, amenity="bench", name="лавка"),
+        ])
+        rows = build_roads.collect_venues(path)
+        self.assertEqual([(r[0], r[1]) for r in rows],
+                         [(1, "Узбекнефтегаз"), (1, "Lukoil"), (2, "")])
+
+    def test_point_and_outline_of_one_station_are_one_record(self):
+        rows = [(1, "Lukoil", 69.25, 41.30), (1, "Lukoil", 69.25005, 41.30002), (1, "Lukoil", 69.30, 41.30)]
+        cells = build_roads.venues_by_cell(rows)
+        self.assertEqual(sum(len(c["venues"]) for c in cells.values()), 2)
+
+    def test_cells_are_deterministic_and_keyed_like_addresses(self):
+        rows = [(2, "", 69.27, 41.31), (1, "A", 69.25, 41.30)]
+        a = build_roads.venues_by_cell(rows)
+        b = build_roads.venues_by_cell(list(reversed(rows)))
+        self.assertEqual(json.dumps(a, sort_keys=True), json.dumps(b, sort_keys=True))
+        self.assertEqual(list(a), [build_roads.address_key(41.30, 69.25)])
+        self.assertEqual(a[build_roads.address_key(41.30, 69.25)]["venues"][0], [1, "A", 4130000, 6925000])
+
+    def test_written_and_signed_by_the_same_index(self):
+        work = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, work)
+        road = (4, 0, [(69.25, 41.30), (69.26, 41.30)], "")
+        venues = build_roads.venues_by_cell([(1, "A", 69.25, 41.30)])
+        _index, index_v2 = build_roads.write_tiles([road], work, venues=venues)
+        key = build_roads.address_key(41.30, 69.25) + "_v"
+        self.assertIn(key, index_v2)
+        with open(os.path.join(work, f"road2_{key}.json"), "rb") as handle:
+            blob = handle.read()
+        self.assertEqual(index_v2[key]["sha256"], hashlib.sha256(blob).hexdigest())

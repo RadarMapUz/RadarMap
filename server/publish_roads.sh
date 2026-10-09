@@ -90,7 +90,7 @@ else
       args=''
       for pair in areas:areas.geojsonl points:points.geojsonl \
                   houses:houses.geojsonl addresses:addresses.geojsonl \
-                  places:places.geojsonl edits:edits.json; do
+                  places:places.geojsonl venues:venues.geojsonl edits:edits.json; do
           key=\${pair%%:*}; file=\${pair#*:}
           [ -s \"\$file\" ] && args=\"\$args --\$key \$file\"
       done

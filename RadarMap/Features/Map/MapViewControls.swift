@@ -109,6 +109,7 @@ struct MapMuteButton: View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             env.settings.setMuted(!muted)
+            if !muted { env.alerts.hush() }   // тишина сразу, а не после фразы
         } label: {
             Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                 .font(.rounded(17, .semibold))

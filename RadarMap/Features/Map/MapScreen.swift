@@ -113,7 +113,6 @@ struct MapScreen: View {
             // Следование за GPS: единственный подписчик locationTick.
             LocationFollowDriver(map: map, isCovered: showDashboard,
                                  drivesAppleCamera: shownBase == .apple)
-            MobilePassDriver()
         }
         .mapScope(mapScope)
         .fullScreenCover(isPresented: $showDashboard) { DashboardView() }
@@ -222,9 +221,10 @@ struct MapScreen: View {
         .onChange(of: env.location.nearestCamera?.id) { _, _ in
             dismissedApproachID = nil   // новая ближайшая камера — снова показываем предупреждение
         }
-        // Проезд чужой передвижной отметки живёт в MobilePassDriver
-        // (MapTickGates): onChange(locationTick) прямо здесь делал весь body
-        // зависимым от тика — второй подписчик в обход правила изоляторов.
+        // Проезд чужой передвижной отметки отслеживает MobileCameraService на
+        // каждом фиксе (LocationService.onAcceptedFix) — не вью: вью без
+        // экрана не живёт, а onChange(locationTick) прямо здесь делал бы весь
+        // body зависимым от тика.
         .onChange(of: env.location.isTripActive) { _, active in
             // Карта сама встаёт «по ходу движения» на старте и возвращается на
             // север после — но только если человек не выбирал ориентацию сам.

@@ -117,6 +117,14 @@ final class LocationService: NSObject {
                                                "LocationService.onAlertFired") }
     }
 
+    /// Каждый ПРИНЯТЫЙ фикс (после LocationFilter). Для наблюдателей, которым
+    /// нужна позиция и с погашенным экраном: раньше они висели на вью карты
+    /// (`onChange(locationTick)`), а вью без экрана не живёт.
+    @ObservationIgnored var onAcceptedFix: ((CLLocationCoordinate2D) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onAcceptedFix,
+                                               "LocationService.onAcceptedFix") }
+    }
+
     @ObservationIgnored var onTripStateChanged: ((Bool) -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onTripStateChanged,
                                                "LocationService.onTripStateChanged") }
@@ -1029,6 +1037,7 @@ final class LocationService: NSObject {
         if speedKmh >= 3 { lastMovementAt = Date() }
         currentCourse = course
         locationTick &+= 1
+        onAcceptedFix?(coordinate)
         if currentCourse >= 0 { lastTrustedCourse = currentCourse }
         retileIfNeeded(around: coordinate)
         recomputeNearest(from: coordinate)

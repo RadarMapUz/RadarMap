@@ -167,19 +167,6 @@ struct ReportRefineGate: View {
 /// Проезд чужой передвижной отметки → вопрос «ещё стоял?». Тик читается
 /// здесь: onChange(locationTick) прямо в MapScreen был второй независимой
 /// подпиской body на тик — с ним тишина follow ничего не давала.
-struct MobilePassDriver: View {
-    @Environment(AppEnvironment.self) private var env
-
-    var body: some View {
-        Color.clear
-            .allowsHitTesting(false)
-            .onChange(of: env.location.locationTick) {
-                guard let coordinate = env.location.currentCoordinate else { return }
-                withMotion { env.mobile.trackPasses(from: coordinate) }
-            }
-    }
-}
-
 
 
 struct LocationFollowDriver: View {

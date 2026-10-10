@@ -207,6 +207,11 @@ nonisolated enum AppConfig {
     static let mapColumnSlotHeight: CGFloat = 56
     static let mapColumnSpacing: CGFloat = 12
 
+    /// Сколько живёт вопрос «радар ещё стоял?», если его никто не увидел
+    /// (экран погашен). Пять минут — дольше это вопрос о прошлом, на который
+    /// честно не ответить.
+    static let mobileConfirmMaxAgeSeconds: TimeInterval = 300
+
     /// Ниже этой высоты приборка — «короткий экран» (iPhone SE и подобные,
     /// 667 pt): цифры мельче, схема сжимается первой (DashboardView).
     static let dashCompactHeight: CGFloat = 720

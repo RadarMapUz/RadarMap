@@ -125,4 +125,46 @@ final class ManeuverTests: XCTestCase {
         let lane = LaneHint(arrows: [.slightLeft, .straight], isValid: true)
         XCTAssertEqual(lane.primaryArrow(for: nil), .slightLeft)
     }
+
+    // MARK: - Остановка по пути
+
+    /// Прибытие на промежуточной точке — «заезд», а не «вы прибыли»: иначе
+    /// голос у заправки объявлял бы конец маршрута, и водитель решал бы, что
+    /// цель потерялась.
+    func testStopArrivalIsNotFinalArrival() {
+        let arrive = RouteService.OSRMResponse.Step(
+            distance: 0, name: "",
+            maneuver: RouteService.OSRMResponse.Maneuver(type: "arrive", modifier: nil, exit: nil))
+        let final = RouteService.maneuverStep(arrive, at: 900, language: "ru")
+        let stop = RouteService.maneuverStep(arrive, at: 900, language: "ru", stopName: "АЗС")
+        XCTAssertEqual(final?.icon, "flag.checkered")
+        XCTAssertEqual(stop?.icon, "mappin.circle.fill")
+        XCTAssertTrue(stop?.text.contains("АЗС") == true)
+        XCTAssertNotEqual(stop?.text, final?.text)
+    }
+
+    // MARK: - Ступени голоса манёвра
+
+    /// Далеко — только манёврам, которым нужна ранняя фраза; ступень — одна.
+    func testVoiceStageFar() {
+        XCTAssertNil(RouteService.voiceStage(distance: 900, spoken: 3, earlyCall: true))
+        XCTAssertEqual(RouteService.voiceStage(distance: 800, spoken: 3, earlyCall: true), 2)
+        XCTAssertNil(RouteService.voiceStage(distance: 800, spoken: 3, earlyCall: false))
+        XCTAssertNil(RouteService.voiceStage(distance: 800, spoken: 2, earlyCall: true),
+                     "дальняя фраза уже сказана — повторять нечего")
+    }
+
+    func testVoiceStageNearAndNow() {
+        XCTAssertEqual(RouteService.voiceStage(distance: 200, spoken: 2, earlyCall: true), 1)
+        XCTAssertNil(RouteService.voiceStage(distance: 200, spoken: 1, earlyCall: true))
+        XCTAssertEqual(RouteService.voiceStage(distance: 30, spoken: 1, earlyCall: true), 0)
+        XCTAssertNil(RouteService.voiceStage(distance: 30, spoken: 0, earlyCall: true))
+    }
+
+    /// Въехали в маршрут уже у поворота: сразу «сейчас», пропущенные дальние
+    /// ступени не догоняем.
+    func testVoiceStageSkipsMissedEarlierStages() {
+        XCTAssertEqual(RouteService.voiceStage(distance: 30, spoken: 3, earlyCall: true), 0)
+        XCTAssertEqual(RouteService.voiceStage(distance: 200, spoken: 3, earlyCall: false), 1)
+    }
 }

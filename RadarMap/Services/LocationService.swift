@@ -62,7 +62,17 @@ final class LocationService: NSObject {
     @ObservationIgnored weak var motion: MotionService?
 
     private(set) var authorizationStatus: CLAuthorizationStatus
-    private(set) var currentCoordinate: CLLocationCoordinate2D?
+    private(set) var currentCoordinate: CLLocationCoordinate2D? {
+        didSet {
+            let has = currentCoordinate != nil
+            if has != hasLocation { hasLocation = has }
+        }
+    }
+    /// «Позиция известна» — меняется только на переходе nil ↔ есть. Для вью,
+    /// которым нужен сам факт (кнопка «маршрут сюда» есть или нет): чтение
+    /// `currentCoordinate` в body подписывало весь экран с картой на каждый
+    /// фикс — раз в секунду пересборка ради ответа, который не менялся.
+    private(set) var hasLocation = false
     private(set) var speedKmh: Double = 0
     /// Последний ДОСТОВЕРНЫЙ курс. Живёт дольше самого курса намеренно.
     ///

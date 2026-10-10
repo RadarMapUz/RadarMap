@@ -54,6 +54,8 @@ final class RouteService {
         var assessment: RouteChoice.Assessment = .none
         /// Ограничения полос на проездах прямо (только OSRM).
         var laneNotices: [LaneNotice] = []
+        /// Где по линии остановка по пути (конец первого плеча). nil — без заезда.
+        var stopAlong: CLLocationDistance?
 
         var etaText: String { Formatting.duration(travelTime) }
         var distanceText: String { Formatting.distance(distance) }
@@ -68,6 +70,19 @@ final class RouteService {
     private(set) var selectedID = 0
     private(set) var destinationName: String = ""
     private(set) var destinationCoordinate: CLLocationCoordinate2D?
+
+    /// Остановка по пути — АЗС, кафе — между машиной и целью.
+    ///
+    /// Раньше «АЗС по пути» из поиска строила НОВЫЙ маршрут до заправки, и
+    /// цель поездки терялась: после заправки водитель вводил её заново. Теперь
+    /// цель остаётся, маршрут идёт через остановку (OSRM принимает
+    /// промежуточные точки), перестроение до остановки помнит о ней, после —
+    /// ведёт прямо к цели.
+    struct Stop {
+        let coordinate: CLLocationCoordinate2D
+        let name: String
+    }
+    private(set) var stop: Stop?
     private(set) var isBuilding = false
     private(set) var errorMessage: String?
 
@@ -275,8 +290,10 @@ final class RouteService {
         let gen = generation
 
         lastArrival = nil   // новый маршрут — карточка прошлого прибытия неактуальна
+        stop = nil          // новая цель — остановка прежнего маршрута не её
         do {
-            let built = try await calculate(from: source, to: destination, alternatives: alternatives)
+            let built = try await calculate(from: source, via: nil, to: destination,
+                                            alternatives: alternatives)
             guard gen == generation else { return }   // пока считали — маршрут сбросили/заменили
             await apply(built, name: name, destination: destination,
                         cameras: cameras, gen: gen, history: personalHistory?())
@@ -284,6 +301,39 @@ final class RouteService {
             errorMessage = String(localized: "Нет связи с сервером маршрутов — проверьте интернет")
         } catch {
             errorMessage = String(localized: "Маршрут не найден")
+        }
+    }
+
+    /// Заехать по пути: та же цель, маршрут через `coordinate`.
+    ///
+    /// Без альтернатив и только своим OSRM: MKDirections промежуточных точек
+    /// не знает, а сравнивать варианты заезда незачем — точку человек уже
+    /// выбрал сам. Не вышло — старый маршрут остаётся как был, с сообщением.
+    func addStop(_ coordinate: CLLocationCoordinate2D, name: String,
+                 from source: CLLocationCoordinate2D, cameras: [Camera]) async {
+        guard isActive, let destination = destinationCoordinate else { return }
+        guard isRoutingEnabled else {
+            errorMessage = String(localized: "Маршруты временно недоступны — мы уже чиним")
+            return
+        }
+        isBuilding = true
+        errorMessage = nil
+        defer { isBuilding = false }
+        generation += 1
+        let gen = generation
+        let destinationName = self.destinationName
+        let newStop = Stop(coordinate: coordinate, name: name)
+        do {
+            let built = try await calculate(from: source, via: newStop, to: destination,
+                                            alternatives: false)
+            guard gen == generation else { return }
+            stop = newStop
+            await apply(built, name: destinationName, destination: destination,
+                        cameras: cameras, gen: gen, history: nil)
+        } catch RouteError.serverUnreachable {
+            errorMessage = String(localized: "Нет связи с сервером маршрутов — проверьте интернет")
+        } catch {
+            errorMessage = String(localized: "Не удалось заехать по пути — маршрут прежний")
         }
     }
 
@@ -299,6 +349,7 @@ final class RouteService {
         selectedID = 0
         destinationName = ""
         destinationCoordinate = nil
+        stop = nil
         errorMessage = nil
         selectedCumulative = []
         rerouteFailures = 0
@@ -312,7 +363,8 @@ final class RouteService {
         let destinationDistance = coordinate.map {
             MKMapPoint($0).distance(to: MKMapPoint(destination))
         } ?? .greatestFiniteMagnitude
-        if remainingDistance < 400 || destinationDistance < 400 {
+        if remainingDistance < AppConfig.arrivalOnTripEndMeters
+            || destinationDistance < AppConfig.arrivalOnTripEndMeters {
             arrive()
         }
     }
@@ -370,9 +422,17 @@ final class RouteService {
         // GPS-точка не попала в малый радиус — маршрут всё равно выполнен).
         let destinationDistance = point.distance(to: MKMapPoint(destination))
         if destinationDistance <= AppConfig.arrivalRadiusMeters
-            || (variant.distance - along < 80 && destinationDistance < 250) {
+            || (variant.distance - along < AppConfig.arrivalPassedRemainingMeters
+                && destinationDistance < AppConfig.arrivalPassedRadiusMeters) {
             arrive()
             return
+        }
+
+        // Остановка по пути пройдена — дальше перестроение ведёт прямо к цели.
+        if let current = stop,
+           point.distance(to: MKMapPoint(current.coordinate)) <= AppConfig.routeStopReachedMeters
+            || variant.stopAlong.map({ along > $0 + AppConfig.routeStopPassedMeters }) == true {
+            stop = nil
         }
 
         // Пройденный кусок для тусклой отрисовки. Шаг крупный намеренно: эту
@@ -384,7 +444,9 @@ final class RouteService {
         }
 
         // Следующая камера впереди по маршруту.
-        if let cam = variant.cameras.first(where: { $0.distanceAlong > along - 30 }) {
+        if let cam = variant.cameras.first(where: {
+            $0.distanceAlong > along - AppConfig.routeCameraBehindSlackMeters
+        }) {
             nextCamera = cam
             nextCameraDistance = max(0, cam.distanceAlong - along)
         } else {
@@ -412,10 +474,12 @@ final class RouteService {
         isRebuilding = true
         let name = destinationName
         let gen = generation
+        let via = stop   // ещё не заехали — объезд всё равно через остановку
         Task {
             defer { isRebuilding = false }
             // Перестраиваем без альтернатив — быстрее, и в движении выбор не нужен.
-            guard let built = try? await calculate(from: coordinate, to: destination, alternatives: false) else {
+            guard let built = try? await calculate(from: coordinate, via: via, to: destination,
+                                                   alternatives: false) else {
                 rerouteFailures += 1
                 Log.route.error("перестроение маршрута не удалось (\(self.rerouteFailures, privacy: .public)-й раз) — остаёмся на старой линии")
                 return
@@ -429,8 +493,10 @@ final class RouteService {
     }
 
     private func updateManeuvers(variant: Variant, along: CLLocationDistance, announce: Bool) {
-        // Первый манёвр впереди (с запасом 15 м, чтобы не «перескакивал» на повороте).
-        let index = variant.steps.firstIndex(where: { $0.distanceAlong > along + 15 })
+        // Первый манёвр впереди (с запасом, чтобы не «перескакивал» на повороте).
+        let index = variant.steps.firstIndex(where: {
+            $0.distanceAlong > along + AppConfig.maneuverAheadSlackMeters
+        })
         updateLaneNotice(variant: variant, along: along,
                          before: index.map { variant.steps[$0].distanceAlong } ?? .infinity)
         guard let index else {
@@ -444,25 +510,42 @@ final class RouteService {
 
         guard announce else { return }
         let stage = announcedStage[index] ?? 3
-        if distance < 45, stage > 0 {
+        switch Self.voiceStage(distance: distance, spoken: stage,
+                               earlyCall: step.kind?.deservesEarlyCall ?? true) {
+        case 0?:
             announcedStage[index] = 0
             onManeuver?(step.text)
-        } else if distance < 280, stage > 1 {
+        case 1?:
             announcedStage[index] = 1
             onManeuver?(Self.withLanes(String(format: String(localized: "Через %lld метров — %@"),
                                               Int((distance / 50).rounded() * 50), step.text),
                                        step.lanes))
-        } else if distance < 850, stage > 2, step.kind?.deservesEarlyCall ?? true {
+        case 2?:
             announcedStage[index] = 2
             onManeuver?(Self.withLanes(String(format: String(localized: "Через %lld метров — %@"),
                                               Int((distance / 100).rounded() * 100), step.text),
                                        step.lanes))
+        default:
+            break
         }
         // Считаем манёвр один раз — при первом объявлении. Хранимые ступени
         // это 0…2, поэтому «было 3» означает «до сих пор не объявляли».
         if stage == 3, announcedStage[index] != nil {
             onManeuverSpoken?(step.kind?.rawValue ?? "unknown")
         }
+    }
+
+    /// Какую ступень голоса манёвра пора произнести: 2 — далеко («через 800
+    /// метров»), 1 — близко, 0 — сама команда; nil — молчать. `spoken` — уже
+    /// произнесённая ступень (3 — ещё ни одной). Ступень произносится один
+    /// раз и только «вниз»: проскочив дальнюю (въехали в маршрут уже у
+    /// поворота), сразу говорим ближнюю, а не догоняем пропущенную.
+    nonisolated static func voiceStage(distance: CLLocationDistance, spoken: Int,
+                                       earlyCall: Bool) -> Int? {
+        if distance < AppConfig.maneuverNowCallMeters, spoken > 0 { return 0 }
+        if distance < AppConfig.maneuverNearCallMeters, spoken > 1 { return 1 }
+        if distance < AppConfig.maneuverFarCallMeters, spoken > 2, earlyCall { return 2 }
+        return nil
     }
 
     /// Ограничение полос впереди: до манёвра (его ряд — в баннере манёвра) и
@@ -495,15 +578,19 @@ final class RouteService {
         let travelTime: TimeInterval
         let steps: [RouteStep]
         var laneNotices: [LaneNotice] = []
+        var stopAlong: CLLocationDistance?
     }
 
     private func calculate(from source: CLLocationCoordinate2D,
+                           via stop: Stop?,
                            to destination: CLLocationCoordinate2D,
                            alternatives: Bool) async throws -> [BuiltVariant] {
         // Сбой Apple-роутинга — штатный путь: ниже падаем на собственный OSRM.
-        if let apple = try? await appleRoute(from: source, to: destination, alternatives: alternatives),
+        // С остановкой — сразу OSRM: промежуточных точек MKDirections не знает.
+        if stop == nil,
+           let apple = try? await appleRoute(from: source, to: destination, alternatives: alternatives),
            !apple.isEmpty { return apple }
-        return try await osrmRoute(from: source, to: destination, alternatives: alternatives)
+        return try await osrmRoute(from: source, via: stop, to: destination, alternatives: alternatives)
     }
 
     private func appleRoute(from source: CLLocationCoordinate2D,
@@ -533,13 +620,15 @@ final class RouteService {
     }
 
     private func osrmRoute(from source: CLLocationCoordinate2D,
+                           via stop: Stop?,
                            to destination: CLLocationCoordinate2D,
                            alternatives: Bool) async throws -> [BuiltVariant] {
+        let path = ([source] + (stop.map { [$0.coordinate] } ?? []) + [destination])
+            .map { String(format: "%.6f,%.6f", $0.longitude, $0.latitude) }
+            .joined(separator: ";")
         var components = URLComponents(url: AppConfig.osrmBaseURL
             .appendingPathComponent("route/v1/driving")
-            .appendingPathComponent(String(format: "%.6f,%.6f;%.6f,%.6f",
-                                           source.longitude, source.latitude,
-                                           destination.longitude, destination.latitude)),
+            .appendingPathComponent(path),
             resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "overview", value: "full"),
@@ -553,7 +642,7 @@ final class RouteService {
         let data: Data
         let response: URLResponse
         do {
-            var request = URLRequest(url: components.url!, timeoutInterval: 12)
+            var request = URLRequest(url: components.url!, timeoutInterval: AppConfig.osrmTimeoutSeconds)
             request.cachePolicy = .reloadIgnoringLocalCacheData
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
@@ -566,16 +655,37 @@ final class RouteService {
             throw RouteError.serverUnreachable
         }
 
-        guard let response = try? JSONDecoder().decode(OSRMResponse.self, from: data),
-              response.code == "Ok", let routes = response.routes, !routes.isEmpty
-        else {
-            Log.route.error("OSRM: пустой или нечитаемый ответ")
-            throw RouteError.noRoute
-        }
-
         // Один язык на весь ответ: фраза баннера и голос получают одно имя.
         let language = streetNameLanguage?() ?? "ru"
-        return routes.prefix(3).compactMap { route -> BuiltVariant? in
+        guard let parsed = await Self.parseOSRM(data, language: language, stopName: stop?.name) else {
+            throw RouteError.noRoute
+        }
+        return parsed
+    }
+
+    /// Разбор ответа OSRM — ВНЕ главного потока. Междугородний ответ — это
+    /// мегабайты GeoJSON (десятки тысяч точек на каждый из трёх вариантов), и
+    /// разбор на главном шёл ровно в момент перестроения на ходу: съехал с
+    /// маршрута — и карта с голосом замирали на разборе. nil — ответ пуст или
+    /// не читается (причина — в журнале).
+    ///
+    /// Плечи (`legs`) идут подряд: с остановкой по пути их два, и манёвры
+    /// второго считаются от начала маршрута, а прибытие первого — это заезд.
+    @concurrent
+    private nonisolated static func parseOSRM(_ data: Data, language: String,
+                                              stopName: String?) async -> [BuiltVariant]? {
+        let response: OSRMResponse
+        do {
+            response = try JSONDecoder().decode(OSRMResponse.self, from: data)
+        } catch {
+            Log.route.error("OSRM: ответ не разобран — \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+        guard response.code == "Ok", let routes = response.routes, !routes.isEmpty else {
+            Log.route.error("OSRM: код \(response.code, privacy: .public), маршрутов нет")
+            return nil
+        }
+        let variants = routes.prefix(3).compactMap { route -> BuiltVariant? in
             guard route.geometry.coordinates.count >= 2 else { return nil }
             let points = route.geometry.coordinates.map {
                 MKMapPoint(CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]))
@@ -583,31 +693,41 @@ final class RouteService {
             var steps: [RouteStep] = []
             var notices: [LaneNotice] = []
             var along: CLLocationDistance = 0
-            for step in route.legs.first?.steps ?? [] {
-                let built = Self.maneuverStep(step, at: along, language: language)
-                if let built { steps.append(built) }
-                notices += Self.laneNotices(step, at: along, isManeuver: built != nil)
-                along += step.distance
+            var stopAlong: CLLocationDistance?
+            for (legIndex, leg) in route.legs.enumerated() {
+                let isLast = legIndex == route.legs.count - 1
+                for step in leg.steps {
+                    let built = maneuverStep(step, at: along, language: language,
+                                             stopName: isLast ? nil : stopName)
+                    if let built { steps.append(built) }
+                    notices += laneNotices(step, at: along, isManeuver: built != nil)
+                    along += step.distance
+                }
+                if !isLast, stopAlong == nil { stopAlong = along }
             }
             return BuiltVariant(points: points, distance: route.distance,
-                                travelTime: route.duration, steps: steps, laneNotices: notices)
+                                travelTime: route.duration, steps: steps, laneNotices: notices,
+                                stopAlong: stopAlong)
         }
+        return variants.isEmpty ? nil : variants
     }
 
-    struct OSRMResponse: Decodable {
+    /// nonisolated: разбирается в фоне (parseOSRM) — изоляция главным потоком
+    /// сделала бы и соответствие Decodable главнопоточным.
+    nonisolated struct OSRMResponse: Decodable {
         let code: String
         let routes: [Route]?
-        struct Route: Decodable {
+        nonisolated struct Route: Decodable {
             let distance: Double
             let duration: Double
             let geometry: Geometry
             let legs: [Leg]
         }
-        struct Geometry: Decodable {
+        nonisolated struct Geometry: Decodable {
             let coordinates: [[Double]]   // GeoJSON: [lon, lat]
         }
-        struct Leg: Decodable { let steps: [Step] }
-        struct Step: Decodable {
+        nonisolated struct Leg: Decodable { let steps: [Step] }
+        nonisolated struct Step: Decodable {
             let distance: Double
             let name: String
             let maneuver: Maneuver
@@ -616,19 +736,19 @@ final class RouteService {
             /// memberwise-инициализатор, которым пользуются тесты.
             var intersections: [Intersection]? = nil
         }
-        struct Maneuver: Decodable {
+        nonisolated struct Maneuver: Decodable {
             let type: String
             let modifier: String?
             let exit: Int?
             /// [lon, lat] точки манёвра — начало шага.
             var location: [Double]? = nil
         }
-        struct Intersection: Decodable {
+        nonisolated struct Intersection: Decodable {
             let lanes: [Lane]?
             /// [lon, lat] перекрёстка.
             var location: [Double]? = nil
         }
-        struct Lane: Decodable {
+        nonisolated struct Lane: Decodable {
             let valid: Bool?
             let indications: [String]?
         }
@@ -637,9 +757,12 @@ final class RouteService {
     /// OSRM-манёвр → человеческая фраза + иконка. nil — шаг не озвучиваем (смена названия улицы и т.п.).
     /// `language` — язык приложения («ru»/«uz»): имя улицы во фразе приводится
     /// к нему (StreetName), и ту же фразу произносит голос (onManeuver).
+    /// `stopName` — прибытие этого шага не к цели, а к остановке по пути:
+    /// «заезд: АЗС Лукойл» вместо «вы прибыли».
     nonisolated static func maneuverStep(_ step: OSRMResponse.Step,
                                          at along: CLLocationDistance,
-                                         language: String) -> RouteStep? {
+                                         language: String,
+                                         stopName: String? = nil) -> RouteStep? {
         let m = step.maneuver
         var text: String?
         var icon = "arrow.up"
@@ -692,7 +815,11 @@ final class RouteService {
             text = String(format: String(localized: "на кольце %lld-й съезд"), exit)
             icon = "arrow.triangle.2.circlepath"
         case "arrive":
-            text = String(localized: "вы прибыли"); icon = "flag.checkered"
+            if let stopName {
+                text = String(format: String(localized: "заезд: %@"), stopName); icon = "mappin.circle.fill"
+            } else {
+                text = String(localized: "вы прибыли"); icon = "flag.checkered"
+            }
         default:
             break   // depart, new name и прочее не озвучиваем
         }
@@ -812,7 +939,8 @@ final class RouteService {
                     cameras: variantCameras[index],
                     steps: variant.steps,
                     assessment: verdict.assessments[index],
-                    laneNotices: variant.laneNotices)
+                    laneNotices: variant.laneNotices,
+                    stopAlong: variant.stopAlong)
         }
         selectedID = verdict.recommended
         destinationName = name

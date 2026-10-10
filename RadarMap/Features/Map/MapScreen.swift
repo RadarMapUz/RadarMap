@@ -162,7 +162,7 @@ struct MapScreen: View {
         }
         .sheet(item: $map.selectedCamera) { camera in
             CameraDetailSheet(camera: camera,
-                              onRoute: env.location.currentCoordinate == nil ? nil : {
+                              onRoute: !env.location.hasLocation ? nil : {
                                   buildRoute(to: camera.coordinate, name: camera.displayTitle)
                               })
         }
@@ -181,7 +181,7 @@ struct MapScreen: View {
                                map.pressedPoint = MapPoint(coordinate: coordinate, title: title)
                            }
                        },
-                       onRoute: env.location.currentCoordinate == nil ? nil
+                       onRoute: !env.location.hasLocation ? nil
                            : { coord, name in buildRoute(to: coord, name: name) })
         }
         .sheet(isPresented: $showRouteCameras) {
@@ -189,14 +189,14 @@ struct MapScreen: View {
         }
         .sheet(isPresented: $map.showSettings) { SettingsView() }
         .sheet(isPresented: $map.showStats) {
-            TripStatsSheet(onRoute: env.location.currentCoordinate == nil ? nil : { coord, name in
+            TripStatsSheet(onRoute: !env.location.hasLocation ? nil : { coord, name in
                 buildRoute(to: coord, name: name)
             })
         }
         // Деталка из карточки «Поездка сохранена» — без захода в Итоги.
         .sheet(item: $tripEndDetail) { record in
             TripDetailSheet(record: record,
-                            onRoute: env.location.currentCoordinate == nil ? nil : { coord, name in
+                            onRoute: !env.location.hasLocation ? nil : { coord, name in
                 buildRoute(to: coord, name: name)
             })
         }
@@ -978,7 +978,7 @@ struct MapScreen: View {
             } else if let point = map.pressedPoint {
                 MapPointBar(
                     title: point.title,
-                    onRoute: env.location.currentCoordinate == nil ? nil : {
+                    onRoute: !env.location.hasLocation ? nil : {
                         buildRoute(to: point.coordinate, name: point.title ?? String(localized: "Точка на карте"))
                         withMotion { map.pressedPoint = nil }
                     },

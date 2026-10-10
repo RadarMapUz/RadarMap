@@ -737,6 +737,36 @@ nonisolated enum AppConfig {
     static let rerouteCooldownSeconds: TimeInterval = 20
     /// Радиус прибытия: ближе этого до финиша — маршрут выполнен.
     static let arrivalRadiusMeters: CLLocationDistance = 60
+    /// «Проехали финиш по линии»: осталось меньше этого по маршруту И до
+    /// цели не дальше `arrivalPassedRadiusMeters` — парковка чуть в стороне,
+    /// фикс не попал в малый радиус, а маршрут выполнен.
+    static let arrivalPassedRemainingMeters: CLLocationDistance = 80
+    static let arrivalPassedRadiusMeters: CLLocationDistance = 250
+    /// Поездку закончили у цели (не доехав до радиуса) — маршрут убираем,
+    /// если до цели или по линии осталось меньше этого.
+    static let arrivalOnTripEndMeters: CLLocationDistance = 400
+
+    /// Ступени голоса манёвра: «через 800 метров» (далеко), «через 250»
+    /// (близко), сама команда (сейчас). Далёкая — только манёврам, которым
+    /// она нужна (ManeuverKind.deservesEarlyCall).
+    static let maneuverFarCallMeters: CLLocationDistance = 850
+    static let maneuverNearCallMeters: CLLocationDistance = 280
+    static let maneuverNowCallMeters: CLLocationDistance = 45
+    /// Манёвр «впереди», если до него больше этого: иначе на самом повороте
+    /// баннер перескакивал бы на следующий раньше, чем машина повернула.
+    static let maneuverAheadSlackMeters: CLLocationDistance = 15
+    /// Камера маршрута остаётся «следующей», пока не отстала на столько:
+    /// фикс у самой камеры может лечь на пару десятков метров за ней.
+    static let routeCameraBehindSlackMeters: CLLocationDistance = 30
+    /// Таймаут запроса к своему OSRM: дольше — «сервер недоступен».
+    static let osrmTimeoutSeconds: TimeInterval = 12
+
+    /// Остановка по пути (АЗС, кафе) считается пройденной ближе этого — дальше
+    /// перестроение ведёт прямо к цели, без заезда.
+    static let routeStopReachedMeters: CLLocationDistance = 80
+    /// …или если по линии уже уехали за неё дальше этого (заехали с другой
+    /// стороны, фикс у самой точки пропустили).
+    static let routeStopPassedMeters: CLLocationDistance = 150
 
     // MARK: - Выбор варианта по своим поездкам (RouteChoice)
 

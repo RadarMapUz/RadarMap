@@ -37,7 +37,7 @@ struct CarPlayEngineLayer: View {
             }
             .onAppear(perform: adopt)
         } else {
-            SketchPalette.ground.ignoresSafeArea()
+            Theme.background.ignoresSafeArea()
         }
     }
 
@@ -121,10 +121,10 @@ struct CarPlayEngineLayer: View {
     /// поэтому доля считается от полной высоты с safe area.
     static func meY(size: CGSize, safe: EdgeInsets) -> Double {
         let full = size.height + safe.top + safe.bottom
-        guard full > 0 else { return RoadSketch.meY }
+        guard full > 0 else { return AppConfig.mapMeY }
         let top = safe.top + 12
         let bottom = full - safe.bottom - AppConfig.carPlayDockReserve - 12
-        guard bottom > top else { return RoadSketch.meY }
+        guard bottom > top else { return AppConfig.mapMeY }
         return Double((top + (bottom - top) * AppConfig.carPlayMeShare) / full)
     }
 }

@@ -65,6 +65,10 @@ final class CarPlayMapModel {
     /// приборная панель) карта на движке выгружается: картинку никто не видит,
     /// а рисует и греется телефон. Ставит делегат сцены.
     var isOnScreen = true
+    /// Последний тик GPS, на который экран машины действительно перерисовался.
+    /// Пишет вью (onChange тика), читает сторож застывания в делегате: тики
+    /// идут, а это число стоит — дерево интерфейса в окне машины мертво.
+    @ObservationIgnored var lastRenderedTick = 0
     /// Едет ли карта за машиной. Пишет координатор карты (система сама снимает
     /// слежение, как только водитель тронул карту пальцем или крутилкой),
     /// читает значок кнопки «к себе»: залитый — следим, контурный — стоим.
@@ -92,6 +96,7 @@ final class CarPlayMapModel {
         panTotal = CGSize(width: panTotal.width + translation.width,
                           height: panTotal.height + translation.height)
         if isFollowing { isFollowing = false }
+        scheduleReturn()
     }
 
     /// «+ / −». При слежении меняется автозум (масштаб по скорости остаётся,
@@ -107,6 +112,7 @@ final class CarPlayMapModel {
         } else {
             zoomDelta = zoomIn ? 1 : -1
             zoomCommand &+= 1
+            scheduleReturn()
         }
     }
 
@@ -114,6 +120,40 @@ final class CarPlayMapModel {
     func recenter() {
         recenterRequests += 1
         if !isFollowing { isFollowing = true }
+        returnTask?.cancel()
+        returnTask = nil
+    }
+
+    /// Щипок: масштаб текущего вида на свободной карте, сдвиг автозума при
+    /// слежении. Накопленный масштаб жеста превращается в шаги уровня, когда
+    /// набирает удвоение — иначе каждый кадр жеста дёргал бы камеру.
+    func pinch(scale: Double) {
+        guard scale > 0 else { return }
+        pinchAccumulated *= scale
+        while pinchAccumulated >= 2 { pinchAccumulated /= 2; zoom(in: true, engine: true) }
+        while pinchAccumulated <= 0.5 { pinchAccumulated *= 2; zoom(in: false, engine: true) }
+    }
+    @ObservationIgnored private var pinchAccumulated = 1.0
+
+    /// Автовозврат к слежению: водитель отпанорамировал и забыл — карта не
+    /// должна стоять, пока он едет. Таймер взводится каждым сдвигом и гасится
+    /// «к себе»; тревога камеры возвращает карту сразу (returnOnAlert).
+    @ObservationIgnored private var returnTask: Task<Void, Never>?
+
+    private func scheduleReturn() {
+        returnTask?.cancel()
+        returnTask = Task { @MainActor [weak self] in
+            await Task.pause(seconds: AppConfig.carPlayFollowReturnSeconds)
+            guard !Task.isCancelled, let self, !isFollowing else { return }
+            Log.carplay.notice("карта: возврат к слежению по бездействию")
+            recenter()
+        }
+    }
+
+    /// Камера впереди — карта обязана ехать за машиной, где бы её ни оставили.
+    func returnOnAlert() {
+        guard !isFollowing else { return }
+        recenter()
     }
 
     /// Пересчитать день/ночь. Ручной выбор старше всего; в «Авто» — машина,
@@ -137,7 +177,7 @@ struct CarPlayMapScreen: View {
         ZStack {
             if CarPlayMapModel.usesEngine(env.settings) {
                 if model.isOnScreen { engineMap } else { Theme.background.ignoresSafeArea() }
-            } else {
+            } else if model.isOnScreen {
                 CarPlayMapView(model: model,
                                repository: env.cameras,
                                route: env.route,
@@ -148,12 +188,18 @@ struct CarPlayMapScreen: View {
                                showsTraffic: env.settings.mapTraffic,
                                isDaylight: model.isDaylight)
                     .ignoresSafeArea()
+            } else {
+                Theme.background.ignoresSafeArea()
             }
 
             // HUD — отдельная вью-изолятор (см. CarPlayOverlay): пер-тиковые
             // скорость/дистанции читаются там, и тик пересобирает маленький
-            // HUD, а не это дерево с UIViewRepresentable карты.
-            CarPlayOverlay(showsManeuver: !model.hasSystemGuidance)
+            // HUD, а не это дерево с UIViewRepresentable карты. В фоне его
+            // нет вовсе — та же экономия, что 41c4297 дал телефону: живые
+            // цифры не держатся в дереве, которое никто не видит.
+            if model.isOnScreen {
+                CarPlayOverlay(showsManeuver: !model.hasSystemGuidance)
+            }
 
             // «Радар ещё стоял?» после реального проезда: наблюдение — в
             // MobileCameraService на каждом фиксе (не во вью), сам вопрос в
@@ -170,6 +216,13 @@ struct CarPlayMapScreen: View {
         .onChange(of: model.isOnScreen) { _, shown in
             Log.carplay.notice("экран машины перерисован: на экране \(shown, privacy: .public)")
         }
+        // Отметка живости для сторожа застывания (см. CarPlaySceneDelegate):
+        // onChange срабатывает только у живого дерева.
+        .onChange(of: env.location.locationTick) { _, tick in model.lastRenderedTick = tick }
+        // Камера впереди — карта возвращается к машине, где бы её ни оставили.
+        .onChange(of: env.location.isApproachingCamera) { _, approaching in
+            if approaching { model.returnOnAlert() }
+        }
         // База камер докодировалась/обновилась — пересчитать «что рядом» СРАЗУ.
         // Раньше эта подписка жила только в телефонном MapScreen: при холодном
         // запуске из машины (телефон в кармане) первый фикс приходил раньше
@@ -184,7 +237,7 @@ struct CarPlayMapScreen: View {
             while !Task.isCancelled {
                 model.refreshDaylight(appearance: env.settings.mapAppearance,
                                       coordinate: env.location.currentCoordinate)
-                try? await Task.sleep(for: .seconds(60))
+                await Task.pause(seconds: AppConfig.carPlayDaylightRefresh)
             }
         }
         // Настройку водитель мог сменить на телефоне посреди поездки — минуты

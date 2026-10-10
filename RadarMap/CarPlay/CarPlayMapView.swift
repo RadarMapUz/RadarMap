@@ -79,11 +79,11 @@ struct CarPlayMapView: UIViewRepresentable {
         // выше и тут же затирался этим умолчанием — «тот же масштаб при
         // возврате из схемы» не работал ни разу.
         let center = location.currentCoordinate
-            ?? CLLocationCoordinate2D(latitude: 41.3111, longitude: 69.2797)
+            ?? AppConfig.searchFallbackCenter
         map.setRegion(model.lastRegion
                       ?? MKCoordinateRegion(center: center,
-                                            latitudinalMeters: 2600,
-                                            longitudinalMeters: 2600),
+                                            latitudinalMeters: AppConfig.carPlayAppleStartSpanMeters,
+                                            longitudinalMeters: AppConfig.carPlayAppleStartSpanMeters),
                       animated: false)
         // Слежение — ПОСЛЕ региона, и это не стиль. Любая программная
         // установка региона сбрасывает userTrackingMode в .none. Стояло
@@ -262,8 +262,10 @@ struct CarPlayMapView: UIViewRepresentable {
 
         func zoom(_ map: MKMapView, factor: Double) {
             var region = map.region
-            region.span.latitudeDelta = min(max(region.span.latitudeDelta * factor, 0.002), 4)
-            region.span.longitudeDelta = min(max(region.span.longitudeDelta * factor, 0.002), 4)
+            region.span.latitudeDelta = min(max(region.span.latitudeDelta * factor,
+                                                AppConfig.carPlayAppleMinDelta), AppConfig.carPlayAppleMaxDelta)
+            region.span.longitudeDelta = min(max(region.span.longitudeDelta * factor,
+                                                 AppConfig.carPlayAppleMinDelta), AppConfig.carPlayAppleMaxDelta)
             // setRegion снимает слежение — на экране это выглядело так: нажал
             // «+», и карта перестала ехать за машиной. Зум меняет масштаб, а
             // не решение следовать: если следили — возвращаем.

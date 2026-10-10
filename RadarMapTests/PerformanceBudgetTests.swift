@@ -342,57 +342,6 @@ final class PerformanceBudgetTests: XCTestCase {
 
     // MARK: - Лента «что впереди» на экране машины
 
-    /// Лента пересчитывается КАЖДЫЙ тик — иначе её число расходится с доком, а
-    /// два разных расстояния до одной камеры на одном экране хуже отсутствия
-    /// ленты. Значит, тик обязан быть дешёвым.
-    ///
-    /// Дорогое здесь одно: гейт «наша ли дорога» (LocationGates считает
-    /// геометрию дороги камеры). Поэтому он спрашивается ПОСЛЕ дешёвого отсева
-    /// по направлению и дальности — тест ловит возврат порядка, при котором
-    /// геометрия считалась бы для всей окрестности.
-    func testAheadRibbonBudget() {
-        let me = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.28)
-        // Полторы сотни камер окрестности — столько отдаёт грид-индекс на
-        // радиус ленты в плотном центре.
-        let nearby: [Camera] = (0..<150).map { index in
-            let bearing = Double(index % 36) * 10
-            let metres = 100 + Double(index % 25) * 80
-            let point = GeoMath.destination(from: me, bearing: bearing, distanceMeters: metres)
-            return Camera(id: index, region: "", city: "", location: "К\(index)",
-                          lat: point.latitude, lon: point.longitude,
-                          type: "Стационар камера", violations: [], needsReview: nil)
-        }
-
-        let clock = ContinuousClock()
-        var total: Duration = .zero
-        var gateCalls = 0
-        var produced = 0
-        // Минута езды: шестьдесят тиков.
-        for tick in 0..<60 {
-            let began = clock.now
-            let items = CarPlayAhead.items(cameras: nearby, from: me,
-                                            course: Double(tick % 360),
-                                            targetID: nil) { _ in
-                gateCalls += 1
-                return true
-            }
-            produced += CarPlayAhead.spread(items, minGap: 0.12).count
-            total += clock.now - began
-        }
-
-        XCTAssertLessThan(total, .milliseconds(50),
-                          "лента подорожала: \(total) на 60 тиков")
-        // Гейт — самая дорогая часть; он обязан спрашиваться только про то, что
-        // прошло дешёвый отсев. Половина окрестности всегда позади, часть за
-        // радиусом: больше трети на тик означает, что отсев сломался.
-        // Ранний выход после набранной строки: было 77 вызовов на тик (гейт
-        // спрашивался про всю окрестность впереди), стало единицы. Потолок в
-        // десять на тик ловит возврат прежнего порядка.
-        XCTAssertLessThan(gateCalls, 60 * 10,
-                          "гейт зовут слишком часто: \(gateCalls) раз за 60 тиков")
-        XCTAssertGreaterThan(produced, 0, "лента ничего не собрала — замер бессмысленный")
-    }
-
     /// «Мы на мелкой улице?» — единственная НОВАЯ работа на тике открытой
     /// приборки (решает, показывать ли дворы). Радиус пробы 60 м, но сеть
     /// отдаёт кольцо ячеек целиком — тест ловит возврат обхода всей

@@ -55,7 +55,7 @@ extension CarPlaySceneDelegate {
         // или теперь он про другую отметку — снять. Оставленный, он принимал
         // бы «Нет» за отметку, о которой не спрашивал, и держал бы экран
         // занятым для всех следующих диалогов.
-        if let shown = confirmAlert, interfaceController?.presentedTemplate === shown,
+        if let shown = confirmAlert, shownTemplate === shown,
            env.mobile.pendingConfirm?.id != confirmAlertID {
             confirmAlert = nil
             confirmAlertID = nil
@@ -74,7 +74,7 @@ extension CarPlaySceneDelegate {
         // Занято другим диалогом (тост, «Нет доступа») — не пытаемся: второй
         // presentTemplate поверх показанного CarPlay отклоняет. Наблюдение
         // выше перепокажет вопрос при следующей смене состояния.
-        guard interfaceController?.presentedTemplate == nil else { return }
+        guard shownTemplate == nil else { return }
         let id = camera.id
         func answer(_ value: Bool?) -> (CPAlertAction) -> Void {
             { [weak self] _ in
@@ -106,11 +106,14 @@ extension CarPlaySceneDelegate {
 
     // MARK: - Всплывающие сообщения
 
-    func popToMap() {
+    func popToMap(then: (@MainActor () -> Void)? = nil) {
+        // Диалог поверх летящего возврата к карте CarPlay отклоняет — всё,
+        // что нужно показать после, ждёт completion.
         interfaceController?.popToRootTemplate(animated: true) { _, error in
             if let error {
                 Log.carplay.error("popToRootTemplate: \(error.localizedDescription, privacy: .public)")
             }
+            Task { @MainActor in then?() }
         }
     }
 
@@ -152,9 +155,9 @@ extension CarPlaySceneDelegate {
         // закрывал любой диалог, успевший встать следом, — включая вопрос
         // «ещё на месте?», требующий ответа.
         toastTask = Task { @MainActor [weak self, weak alert] in
-            try? await Task.sleep(for: .seconds(2.5))
+            await Task.pause(seconds: AppConfig.carPlayToastSeconds)
             guard !Task.isCancelled, let self, let alert,
-                  self.interfaceController?.presentedTemplate === alert else { return }
+                  self.shownTemplate === alert else { return }
             self.dismissTopTemplate()
         }
     }

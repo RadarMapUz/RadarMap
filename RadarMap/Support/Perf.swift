@@ -19,7 +19,7 @@
 //     `uz.radarmap.ios`, категорию `perf`.
 //  3. Проехать маршрут в симуляторе (Features → Location → City Run) или
 //     записать реальную поездку на устройстве.
-//  4. Интервалы `handleLocation`, `cameraLayer`, `sketchRefresh`,
+//  4. Интервалы `handleLocation`, `cameraLayer`,
 //     `ratingScreen`, `mapBody` покажут длительность каждого и их частоту.
 //
 //  Стоимость самого замера
@@ -45,11 +45,6 @@ nonisolated enum Perf {
     enum Name {
         static let handleLocation: StaticString = "handleLocation"
         static let cameraLayer: StaticString = "cameraLayer"
-        static let sketchRefresh: StaticString = "sketchRefresh"
-        /// Растеризация схемы. Бюджет-тест сторожит ЧАСТОТУ пересборок, но не
-        /// их цену, а полотно и лента бьют именно по цене — мерить её можно
-        /// только на устройстве, дорожкой приборов.
-        static let sketchRaster: StaticString = "sketchRaster"
         static let ratingScreen: StaticString = "ratingScreen"
         static let mapBody: StaticString = "mapBody"
     }

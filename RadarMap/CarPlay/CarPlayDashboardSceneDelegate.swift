@@ -32,6 +32,10 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
     func templateApplicationDashboardScene(_ scene: CPTemplateApplicationDashboardScene,
                                            didConnect dashboardController: CPDashboardController,
                                            to window: UIWindow) {
+        // Плитку на главном экране CarPlay система отдаёт тому навигатору,
+        // который последним вёл маршрут (CPNavigationSession): пока из машины
+        // не построен ни один маршрут, эта сцена не создаётся вовсе — и в
+        // журнале её нет, а на экране стоит чужая карта.
         Log.carplay.notice("CarPlay: приборная панель подключена")
         controller = dashboardController
         model.carIsDark = window.traitCollection.userInterfaceStyle == .dark
@@ -106,7 +110,13 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
 
     private func route(to place: SavedPlace) {
         Task { @MainActor [weak self] in
-            guard let self, let from = await env.location.awaitPreciseCoordinate() else { return }
+            guard let self else { return }
+            guard let from = await env.location.awaitPreciseCoordinate() else {
+                // Без точного фикса маршрута нет — и панель должна сказать
+                // хотя бы журналу: тап «Домой» без ответа читается как поломка.
+                Log.carplay.error("маршрут с приборной панели: нет точного фикса")
+                return
+            }
             await env.route.build(from: from, to: place.coordinate, name: place.title,
                                   cameras: env.cameras.cameras, alternatives: false)
             env.settings.addRecent(title: place.title, lat: place.lat, lon: place.lon)
@@ -141,7 +151,7 @@ struct CarPlayDashboardView: View {
             while !Task.isCancelled {
                 model.refreshDaylight(appearance: env.settings.mapAppearance,
                                       coordinate: env.location.currentCoordinate)
-                try? await Task.sleep(for: .seconds(60))
+                await Task.pause(seconds: AppConfig.carPlayDaylightRefresh)
             }
         }
     }

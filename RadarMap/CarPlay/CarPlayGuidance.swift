@@ -144,6 +144,20 @@ final class CarPlayGuidance {
         observe()
     }
 
+    /// Навигацию забрала система: сессии нет, и для ЭТОЙ цели её не
+    /// перезапускаем — иначе шаблон и система дрались бы за экран до конца
+    /// маршрута. Новый маршрут (другая цель) начнёт сессию заново.
+    func systemCancelled() {
+        session = nil
+        trip = nil
+        maneuver = nil
+        maneuverStep = nil
+        laneGuidances = []
+        cancelledDestination = tripDestination
+        model.hasSystemGuidance = false
+    }
+    private var cancelledDestination: CLLocationCoordinate2D?
+
     /// Машина отключилась: сессия уходит вместе с шаблоном, держать нечего.
     func detach() {
         generation &+= 1
@@ -190,7 +204,10 @@ final class CarPlayGuidance {
         }
         let route = env.route
         if route.isActive, let destination = route.destinationCoordinate {
-            if session == nil || tripDestination.map({ !Self.same($0, destination) }) ?? true {
+            let cancelledHere = cancelledDestination.map { Self.same($0, destination) } ?? false
+            if !cancelledHere,
+               session == nil || tripDestination.map({ !Self.same($0, destination) }) ?? true {
+                cancelledDestination = nil
                 start(on: template, to: destination)
             }
             updateManeuver()
@@ -198,7 +215,8 @@ final class CarPlayGuidance {
         } else if let session {
             // Маршрут снят: доехали — «завершить», иначе — «отменить».
             // Разница видна водителю: CarPlay по-разному прощается с поездкой.
-            if let arrival = route.lastArrival, Date().timeIntervalSince(arrival.at) < 10 {
+            if let arrival = route.lastArrival,
+               Date().timeIntervalSince(arrival.at) < AppConfig.carPlayArrivalFreshSeconds {
                 session.finishTrip()
             } else {
                 session.cancelTrip()
@@ -373,6 +391,7 @@ final class CarPlayGuidance {
     }
 
     private static func same(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Bool {
-        GeoMath.fastDistance(a.latitude, a.longitude, b.latitude, b.longitude) < 30
+        GeoMath.fastDistance(a.latitude, a.longitude, b.latitude, b.longitude)
+            < AppConfig.carPlaySameDestinationMeters
     }
 }

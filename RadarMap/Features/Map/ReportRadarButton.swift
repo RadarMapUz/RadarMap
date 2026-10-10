@@ -34,9 +34,6 @@ import SwiftUI
 
 struct ReportRadarButton: View {
     @Environment(AppEnvironment.self) private var env
-    /// Компактный — в строке поездки рядом с другими кнопками; крупный — на
-    /// приборке, где палец ищет кнопку не глядя.
-    var isLarge = false
 
     @State private var isSending = false
     @State private var flash: Flash?
@@ -61,21 +58,20 @@ struct ReportRadarButton: View {
     /// Палец ушёл ниже старта на столько — это «передумал».
     private static let dragToCancel: CGFloat = 44
     private static let holdToOpen: Duration = .milliseconds(280)
+    /// Сторона кнопки; веер встаёт ровно над ней.
+    private static let buttonSide: CGFloat = 56
 
     private var kinds: [ReportKind] { ReportKind.offered }
 
     var body: some View {
-        Group {
-            if isLarge { largeLabel } else { compactLabel }
-        }
+        compactLabel
         .scaleEffect(fan == nil ? 1 : 0.96)
         .contentShape(Rectangle())
         .gesture(fanGesture)
         // В панели поездки кнопка стоит у правого края экрана (TripLiveBar),
         // и веер, центрованный по ней, уходил строками за край — «Передвижной
-        // р…». Компактной кнопке веер раскрывается влево от правого края; на
-        // приборке кнопка во всю ширину, там по центру.
-        .overlay(alignment: isLarge ? .bottom : .bottomTrailing) { fanOverlay }
+        // р…». Поэтому веер раскрывается влево от правого края кнопки.
+        .overlay(alignment: .bottomTrailing) { fanOverlay }
         .allowsHitTesting(!isSending)
         .motionAnimation(.easeOut(duration: 0.25), value: flash)
         .motionAnimation(.easeOut(duration: 0.2), value: isSending)
@@ -150,15 +146,15 @@ struct ReportRadarButton: View {
 
     @ViewBuilder private var fanOverlay: some View {
         if let fan {
-            VStack(alignment: isLarge ? .center : .trailing, spacing: Self.rowPitch - Self.rowHeight) {
+            VStack(alignment: .trailing, spacing: Self.rowPitch - Self.rowHeight) {
                 ForEach(Array(kinds.enumerated()).reversed(), id: \.offset) { index, kind in
                     fanRow(kind, isActive: index == fan.index && !fan.isCancelling)
                 }
             }
             .fixedSize()
-            .offset(y: -((isLarge ? 62 : 56) + 12))
+            .offset(y: -(Self.buttonSide + 12))
             .allowsHitTesting(false)
-            .transition(.scale(scale: 0.9, anchor: isLarge ? .bottom : .bottomTrailing).combined(with: .opacity))
+            .transition(.scale(scale: 0.9, anchor: .bottomTrailing).combined(with: .opacity))
         }
     }
 
@@ -189,38 +185,8 @@ struct ReportRadarButton: View {
         .shadow(color: .black.opacity(isActive ? 0.3 : 0.15), radius: isActive ? 10 : 4, y: 3)
     }
 
-    /// Приборка: капсула во всю ширину. Тап делается вслепую, и промахнуться
-    /// мимо полосы на весь экран сложнее, чем мимо квадрата по центру.
-    /// Стиль — тот же «премиальный» язык, что у «Начать поездку» на карте:
-    /// градиент со световой кромкой сверху и двойная тень, один вид на всё.
-    private var largeLabel: some View {
-        HStack(spacing: 10) {
-            if isSending {
-                ProgressView().controlSize(.regular).tint(foreground)
-            } else {
-                Image(systemName: symbol)
-                    .font(.system(size: 22, weight: .bold))
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            Text(fan?.isCancelling == true ? "Отмена" : "Радар")
-                .font(.rounded(21, .heavy))
-                .contentTransition(.numericText())
-        }
-        .foregroundStyle(foreground)
-        .frame(maxWidth: .infinity)
-        .frame(height: 62)
-        .background(
-            LinearGradient(colors: [background.opacity(0.98), background.opacity(0.72)],
-                           startPoint: .top, endPoint: .bottom), in: Capsule())
-        .overlay(Capsule().strokeBorder(
-            Theme.edgeAccent, lineWidth: 1))
-        // Свечение вместо рамки: кнопка должна находиться боковым зрением
-        // на чёрном экране, не крича громче предупреждения о камере.
-        .shadow(color: background.opacity(0.35), radius: 14, y: 5)
-        .liftAccent()
-    }
-
-    /// Строка маршрута: компактный квадрат в ряду других кнопок.
+    /// Строка поездки: квадрат в ряду других кнопок. Крупная капсула во всю
+    /// ширину жила на приборке и ушла вместе со спидометром.
     private var compactLabel: some View {
         ZStack {
             RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous)
@@ -234,7 +200,7 @@ struct ReportRadarButton: View {
             }
         }
         // Крупнее «стопа» рядом: по ней бьют вслепую и чаще всего.
-        .frame(width: 56, height: 56)
+        .frame(width: Self.buttonSide, height: Self.buttonSide)
     }
 
     private var symbol: String {

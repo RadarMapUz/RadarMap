@@ -27,19 +27,18 @@ nonisolated enum GPSTiers {
         var speedKmh: Double
         /// Секунд с последнего движения (скорость ≥ 3 км/ч).
         var idleSeconds: TimeInterval
-        /// Приборка телефона или схема CarPlay на экране.
+        /// Схема CarPlay на экране (телефонной приборки больше нет).
         var sketchVisible: Bool
         var isForeground: Bool
         /// Телефон холодный (PerformanceMode == .full).
         var thermalIsFull: Bool
     }
 
-    /// «Стоим»: скорость ниже порога дольше выдержки. Одна дефиниция на тир
-    /// GPS и на стояночное затемнение приборки — двум копиям правила нельзя
-    /// разъехаться.
-    static func isStanding(speedKmh: Double, idleSeconds: TimeInterval,
-                           idleAfter: TimeInterval = AppConfig.gpsIdleAfterSeconds) -> Bool {
-        speedKmh < AppConfig.gpsStandstillSpeedKmh && idleSeconds > idleAfter
+    /// «Стоим»: скорость ниже порога дольше выдержки. Второй потребитель —
+    /// стояночное затемнение приборки — ушёл вместе со спидометром, поэтому
+    /// выдержка одна, GPS-ная.
+    static func isStanding(speedKmh: Double, idleSeconds: TimeInterval) -> Bool {
+        speedKmh < AppConfig.gpsStandstillSpeedKmh && idleSeconds > AppConfig.gpsIdleAfterSeconds
     }
 
     /// Тир точности: 0 — финал (Best/6 м), 1 — подъезд (10 м/15 м),

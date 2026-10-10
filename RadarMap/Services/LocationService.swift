@@ -55,8 +55,8 @@ final class LocationService: NSObject {
     /// О каких точках уже сказали в этой поездке. Живёт только в памяти:
     /// повторяться нельзя внутри поездки, а завтра то же место — снова новость.
     @ObservationIgnored private var voicedHotspots: Set<Int64> = []
-    /// Перегрев: буст GPS для открытой приборки разрешён только пока телефон
-    /// холодный — в жару экономия важнее плавности картинки.
+    /// Перегрев: буст GPS для схемы на экране CarPlay разрешён только пока
+    /// телефон холодный — в жару экономия важнее плавности картинки.
     @ObservationIgnored weak var thermal: ThermalService?
     /// CoreMotion: «телефон стоит» — сторож сигнала не объявляет потерю.
     @ObservationIgnored weak var motion: MotionService?
@@ -74,18 +74,6 @@ final class LocationService: NSObject {
     /// фикс — раз в секунду пересборка ради ответа, который не менялся.
     private(set) var hasLocation = false
     private(set) var speedKmh: Double = 0
-    /// Последний ДОСТОВЕРНЫЙ курс. Живёт дольше самого курса намеренно.
-    ///
-    /// `currentCourse` становится −1 на каждой остановке: на светофоре, в
-    /// пробке, при потере сигнала. От него зависят стрелка на камеру, слово
-    /// стороной и вся схема дороги — то есть на красном свете панель гасла
-    /// целиком и загоралась заново на трогании. Мигание на каждом светофоре
-    /// водитель читает как поломку.
-    ///
-    /// Стоя мы никуда не повернули, поэтому прошлый курс — честное описание
-    /// того, как машина стоит. Схема продолжает рисоваться, но приглушённо:
-    /// «это последнее, что мы знали», а не «это происходит сейчас».
-    private(set) var lastTrustedCourse: CLLocationDegrees = -1
 
     /// GPS-курс движения (0–360°, −1 = недостоверен: стоим или нет сигнала).
     private(set) var currentCourse: CLLocationDegrees = -1
@@ -691,7 +679,7 @@ final class LocationService: NSObject {
             nearestTargetMeters: nearest,
             speedKmh: speedKmh,
             idleSeconds: Date().timeIntervalSince(lastMovementAt),
-            sketchVisible: isDashboardVisible || isCarPlaySketchVisible,
+            sketchVisible: isCarPlaySketchVisible,
             isForeground: isForeground,
             thermalIsFull: (thermal?.mode ?? .full) == .full),
                                  lowPower: isLowPowerMode)
@@ -710,21 +698,13 @@ final class LocationService: NSObject {
         }
     }
 
-    /// Приборка на экране (см. буст в tuneAdaptiveAccuracy).
-    @ObservationIgnored private var isDashboardVisible = false
-    /// Схема на экране CarPlay — тот же буст, что у приборки телефона.
+    /// Схема на экране CarPlay (см. буст в tuneAdaptiveAccuracy). Телефонной
+    /// приборки со своим бустом больше нет — спидометр убран из приложения.
     @ObservationIgnored private var isCarPlaySketchVisible = false
 
-    /// Открытие/закрытие приборки: пересматриваем тир GPS сразу, не дожидаясь
-    /// следующего фикса — на стоящем в пробке телефоне он может прийти нескоро.
-    func setDashboardVisible(_ visible: Bool) {
-        guard isDashboardVisible != visible else { return }
-        isDashboardVisible = visible
-        accuracyTier = -1
-        tuneAdaptiveAccuracy()
-    }
-
-    /// Схема CarPlay показана/скрыта: та же немедленная переоценка тира.
+    /// Схема CarPlay показана/скрыта: пересматриваем тир GPS сразу, не
+    /// дожидаясь следующего фикса — на стоящем в пробке телефоне он может
+    /// прийти нескоро.
     func setCarPlaySketchVisible(_ visible: Bool) {
         guard isCarPlaySketchVisible != visible else { return }
         isCarPlaySketchVisible = visible
@@ -878,8 +858,6 @@ final class LocationService: NSObject {
     @ObservationIgnored private var lastMovementAt = Date()
     /// Последняя точка, по которой считали прогресс маршрута (гейт стоянки).
     @ObservationIgnored private var lastRouteProgressCoordinate: CLLocationCoordinate2D?
-    /// Долгая стоянка (>dashboardDimIdleSeconds): приборка гасит яркость.
-    private(set) var isStandingStill = false
 
     /// Единственная точка входа фиксов: сначала гейт качества, потом обработка.
     /// Отброшенный фикс не двигает ни трек, ни алерты, ни спидометр.
@@ -1048,7 +1026,6 @@ final class LocationService: NSObject {
         currentCourse = course
         locationTick &+= 1
         onAcceptedFix?(coordinate)
-        if currentCourse >= 0 { lastTrustedCourse = currentCourse }
         retileIfNeeded(around: coordinate)
         recomputeNearest(from: coordinate)
         recomputeDirection()
@@ -1143,13 +1120,6 @@ final class LocationService: NSObject {
                 displayCourse = snap.course
             }
             tuneAdaptiveAccuracy()
-            // Долгая стоянка (стояночное затемнение приборки): пишем только
-            // на смене — наблюдатели не будятся каждым тиком.
-            let standing = GPSTiers.isStanding(
-                speedKmh: speedKmh,
-                idleSeconds: Date().timeIntervalSince(lastMovementAt),
-                idleAfter: AppConfig.dashboardDimIdleSeconds)
-            if standing != isStandingStill { isStandingStill = standing }
             // Умный режим: детектор города/трассы (дёшево — пара сравнений).
             contextDetector.update(roadLimitKmh: speedLimits?.certainLimit,
                                    camerasWithin3km: cameraDensity3km,
@@ -1217,18 +1187,6 @@ final class LocationService: NSObject {
         LocationGates.isFilteringActive(gateSituation(at: currentCoordinate ?? .init()))
     }
 
-    /// Направление на камеру для ЭКРАНА: живое, а если курс пропал (светофор,
-    /// пробка) — по последнему достоверному. Гейты оповещений этим НЕ
-    /// пользуются: глушить камеру по устаревшему курсу нельзя, а нарисовать
-    /// стрелку — можно, стоя мы никуда не повернули.
-    var displayBearingToNearest: Double? {
-        if let live = relativeBearingToNearest { return live }
-        guard lastTrustedCourse >= 0, let camera = nearestCamera,
-              let coordinate = currentCoordinate else { return nil }
-        let bearing = GeoMath.bearing(from: coordinate, to: camera.coordinate)
-        return (bearing - lastTrustedCourse + 360).truncatingRemainder(dividingBy: 360)
-    }
-
     /// Камера «наша». Вся политика — в `LocationGates` (чистый модуль со своими
     /// тестами); сервис отвечает только за то, что гейт вообще не может знать
     /// сам: лежит ли камера на построенном маршруте.
@@ -1271,25 +1229,6 @@ final class LocationService: NSObject {
     var nearestDirection: CameraDirection? {
         relativeBearingToNearest.map { CameraDirection.classify(relativeBearing: $0) }
     }
-
-    /// Одно слово стороны — для приборки: «прямо» / «справа» / «слева».
-    ///
-    /// Отдельно от голосовой фразы намеренно: в речи нужен оборот («впереди
-    /// справа»), на экране, который читают боковым зрением, — одно слово.
-    /// `nil` только если курса не было ни разу. На остановке берётся последний
-    /// достоверный: стоя мы никуда не повернули, и слово остаётся правдой —
-    /// а мигание на каждом светофоре читается как поломка.
-    var nearestSideWord: String? {
-        guard let bearing = displayBearingToNearest else { return nil }
-        switch CameraDirection.classify(relativeBearing: bearing) {
-        case .right, .behindRight: return String(localized: "справа")
-        case .left, .behindLeft:   return String(localized: "слева")
-        case .ahead:               return String(localized: "прямо")
-        }
-    }
-
-    /// Камера на построенном маршруте — самый сильный ответ на «какая именно».
-    func isOnActiveRoute(_ camera: Camera) -> Bool { isCameraOnRoute(camera) }
 
     /// Тот же гейт «камера на нашей дороге», которым отбирается ближайшая для
     /// HUD и голоса, — наружу для экранов, перечисляющих камеры впереди.

@@ -15,9 +15,8 @@ struct MapScreen: View {
     @State private var map = MapState()
     @State private var dismissedApproachID: Int?
     @State private var showRouteCameras = false
-    // Умные кнопки: в поездке через 5 с бездействия интерфейс прячется, тап по карте возвращает.
-    /// Режим «Спидометр» — тап по HUD (телефон в держателе).
-    @State private var showDashboard = false
+    /// «Мои места» из нижнего бара: Дом, Работа, недавние — маршрут в один тап.
+    @State private var showMyPlaces = false
     /// Экранная модель своей схемы. Живёт всегда, а считается только когда
     /// схема действительно на экране: пустая модель не стоит ничего.
     /// Поля вида (отступы панелей и якорь машины) — их читает наша карта.
@@ -33,16 +32,13 @@ struct MapScreen: View {
     /// число — читает, и писать его на каждый пиксель высоты панели значило
     /// бы пересобирать весь экран с картой (Perf.mapBody).
     @State private var columnSlots: Int?
-    /// Спидометр закрыли руками в этой поездке — до её конца не навязываемся.
-    /// Флаг живёт здесь, а не в настройках: это решение «сейчас», не «всегда».
-    @State private var dashboardDismissedInTrip = false
     /// Разовая подсказка о жесте (см. OneTimeHints): максимум одна за запуск.
     @State private var activeHint: OneTimeHints.Hint?
     @State private var hintConsumedThisLaunch = false
-    /// «Спидометр тратит меньше» — когда поездка началась на карте, батарея
-    /// тает и зарядки нет.
+    /// «Батарея садится — погасите экран»: поездка началась, заряд тает, а
+    /// зарядки нет.
     @State private var showBatterySaverHint = false
-    /// Быстрые тумблеры оповещений (долгий тап по HUD).
+    /// Быстрые тумблеры оповещений (тап по HUD).
     @State private var showQuickToggles = false
     /// Итог только что завершённой поездки («Поездка сохранена») и деталка из него.
     @State private var tripEndRecord: TripRecord?
@@ -104,18 +100,12 @@ struct MapScreen: View {
             // Превышение у камеры: свечение по краям. Отдельная вью: условие
             // читает скорость и дистанцию, меняющиеся каждый тик GPS, — в body
             // MapScreen это чтение пересобирало весь экран с картой ежесекундно.
-            // Под приборкой не монтируем: у неё своя кромка, а пульсирующий
-            // blur во весь экран крутился бы невидимым под крышкой.
-            if !showDashboard {
-                OverspeedVignetteGate()
-            }
+            OverspeedVignetteGate()
 
             // Следование за GPS: единственный подписчик locationTick.
-            LocationFollowDriver(map: map, isCovered: showDashboard,
-                                 drivesAppleCamera: shownBase == .apple)
+            LocationFollowDriver(map: map, drivesAppleCamera: shownBase == .apple)
         }
         .mapScope(mapScope)
-        .fullScreenCover(isPresented: $showDashboard) { DashboardView() }
         .task {
             map.configure(env.cameras, speedLimits: env.speedLimits, thermal: env.thermal,
                           hotspots: env.hotspots)
@@ -189,6 +179,18 @@ struct MapScreen: View {
         .sheet(isPresented: $showRouteCameras) {
             RouteCamerasSheet(onSelect: { map.focus(on: $0) })
         }
+        .sheet(isPresented: $showMyPlaces) {
+            // Те же два пути, что у поиска: с геопозицией — маршрут, без неё —
+            // точка на карте с её панелью, а не мёртвая строка.
+            MyPlacesSheet(onRoute: !env.location.hasLocation ? nil
+                              : { coord, name in buildRoute(to: coord, name: name) },
+                          onShow: { coordinate, title in
+                              map.move(to: coordinate)
+                              withMotion(.spring(duration: 0.3)) {
+                                  map.pressedPoint = MapPoint(coordinate: coordinate, title: title)
+                              }
+                          })
+        }
         .sheet(isPresented: $map.showSettings) { SettingsView() }
         .sheet(isPresented: $map.showStats) {
             TripStatsSheet(onRoute: !env.location.hasLocation ? nil : { coord, name in
@@ -218,7 +220,7 @@ struct MapScreen: View {
             map.showSearch = false
             map.showSettings = false
             showRouteCameras = false
-            showDashboard = false
+            showMyPlaces = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 map.showStats = true
             }
@@ -245,41 +247,15 @@ struct MapScreen: View {
             }
             if active {
                 withMotion { tripEndRecord = nil }   // поехали снова — старый итог не актуален
-                // Поездка = спидометр: он строился ради батареи (чёрный OLED и
-                // растр вместо тайлов с двумя сотнями маркеров), но был
-                // секретным экраном за тапом по HUD. Открываем сами — если
-                // пользователь не отключил это в настройках И если накрывать
-                // нечем.
-                //
-                // Вторая половина условия — вот в чём дело. Спидометр это
-                // fullScreenCover: открываясь сам, он накрывает ВЕСЬ режим
-                // движения. Пока карту рисовала Apple, потеря была небольшой.
-                // Но человек, выбравший свою схему или движок, выбрал именно
-                // КАРТУ ЗА РУЛЁМ — и накрывать её крышкой значит отменять его
-                // выбор ровно в тот момент, когда он должен сработать.
-                //
-                // Это и есть корень жалобы «переключил, а ничего не
-                // изменилось»: схема требовала одновременно поездки и
-                // закрытого спидометра, а поездка сама его открывала.
-                if env.settings.dashboardAutoOpens, env.settings.mapBase == .apple {
-                    showDashboard = true
-                } else {
-                    // Спидометр не откроется сам — самое время для подсказок:
-                    // про жёлтую кнопку (она видна только в поездке) и про
-                    // экономию, если батарея тает без зарядки.
-                    maybeShowHint()
-                    maybeSuggestDashboardForBattery()
-                }
+                // Старт поездки — время для подсказок: про жёлтую кнопку (она
+                // видна только в поездке) и про экран, если батарея тает без
+                // зарядки. Спидометра, который открывался здесь сам и накрывал
+                // карту, больше нет — карта за рулём остаётся картой.
+                maybeShowHint()
+                maybeSuggestScreenOffForBattery()
             } else {
-                dashboardDismissedInTrip = false   // новая поездка — с чистого листа
-                showDashboard = false              // поездка кончилась — спидометр не нужен
                 maybeShowTripEnd()
             }
-        }
-        // Закрыли спидометр руками во время поездки — запоминаем и до её конца
-        // не открываем сами: автопереход не должен спорить с человеком.
-        .onChange(of: showDashboard) { _, shown in
-            if !shown, env.location.isTripActive { dashboardDismissedInTrip = true }
         }
     }
 
@@ -291,23 +267,17 @@ struct MapScreen: View {
     }
 
     @ViewBuilder private var approachOverlay: some View {
-        // Под приборкой не монтируем вовсе: она показывает камеру сама, а
-        // полноэкранный алерт с вечным пульсом рисовался и диффился невидимым.
-        if showDashboard {
+        #if DEBUG
+        // -hideCameraAlert: снимаем чистые кадры turn-by-turn (алерт камеры
+        // полноэкранный и перекрывает баннер манёвра).
+        if ProcessInfo.processInfo.arguments.contains("-hideCameraAlert") {
             EmptyView()
         } else {
-            #if DEBUG
-            // -hideCameraAlert: снимаем чистые кадры turn-by-turn (алерт камеры
-            // полноэкранный и перекрывает баннер манёвра).
-            if ProcessInfo.processInfo.arguments.contains("-hideCameraAlert") {
-                EmptyView()
-            } else {
-                ApproachOverlayGate(dismissedID: $dismissedApproachID)
-            }
-            #else
             ApproachOverlayGate(dismissedID: $dismissedApproachID)
-            #endif
         }
+        #else
+        ApproachOverlayGate(dismissedID: $dismissedApproachID)
+        #endif
     }
 
     // MARK: - Карта
@@ -348,7 +318,7 @@ struct MapScreen: View {
         MapBase.resolved(chosen: env.settings.mapBase,
                          isAddingCamera: map.isAddingCamera,
                          hasPressedPoint: map.pressedPoint != nil,
-                         engineAvailable: !showDashboard && Self.engineAvailable)
+                         engineAvailable: Self.engineAvailable)
     }
 
     /// Есть ли в сборке движок. Пакета может не быть — тогда его нет и в
@@ -371,19 +341,13 @@ struct MapScreen: View {
     /// включённая своя карта пересобирала весь экран раз в секунду.
     @ViewBuilder
     private func baseLayer(scheme: ColorScheme) -> some View {
-        // Под приборкой карты нет ВОВСЕ. Раньше движок здесь уступал место
-        // карте Apple: невидимая под полноэкранной приборкой, она всё равно
-        // монтировалась и грузила тайлы, а при закрытии приборки движок
-        // собирался заново. Поле показывает GPU в часах при минутах на экране
-        // (docs/perf_audit_2026-10-07.md) — под закрытым экраном не рисуем ничего.
-        //
-        // То же в фоне (свёрнуто, экран погашен): вью карты оставалась
+        // В фоне (свёрнуто, экран погашен) карты нет ВОВСЕ: вью карты оставалась
         // смонтированной, движок держал память GPU и тайлов, а body и
         // updateUIView крутились на каждом фиксе — в поездке часами. Фоновая
         // поездка живёт ради предупреждений, и пик памяти в 700+ МБ (jetsam,
         // docs/crash_carplay_memory.md) — ровно то, за что iOS её убивает.
         // `.inactive` (шторка, пункт управления) карту не трогает: это секунды.
-        if showDashboard || scenePhase == .background {
+        if scenePhase == .background {
             Theme.background.ignoresSafeArea()
         } else {
             mapBase(scheme: scheme)
@@ -575,7 +539,7 @@ struct MapScreen: View {
     /// Решение «какую» — чистый OneTimeHints; здесь только Storage и таймер.
     private func maybeShowHint() {
         guard Storage.bool(.hasCompletedOnboarding), !hintConsumedThisLaunch,
-              activeHint == nil, !map.isAddingCamera, !showDashboard else { return }
+              activeHint == nil, !map.isAddingCamera else { return }
         var shown: Set<OneTimeHints.Hint> = []
         if Storage.bool(.hintTogglesShown) { shown.insert(.toggles) }
         if Storage.bool(.hintRadarShown) { shown.insert(.radar) }
@@ -597,11 +561,15 @@ struct MapScreen: View {
         }
     }
 
-    /// «Спидометр тратит меньше»: поездка началась на карте (автопереход
-    /// выключен), зарядки нет, батарея ниже трети. Мониторинг батареи
-    /// включается на один замер и тут же гасится — держать его постоянно ради
-    /// подсказки было бы иронией на тему экономии.
-    private func maybeSuggestDashboardForBattery() {
+    /// «Батарея садится — погасите экран»: поездка началась, зарядки нет,
+    /// батарея ниже трети. Раньше здесь звали в спидометр; его нет, а честный
+    /// совет один — экран и есть главный потребитель, и гасить его можно:
+    /// при доступе «Всегда» предупреждения звучат и с погашенным экраном. Без
+    /// «Всегда» это было бы неправдой, поэтому совет только с ним.
+    /// Мониторинг батареи включается на один замер и тут же гасится — держать
+    /// его постоянно ради подсказки было бы иронией на тему экономии.
+    private func maybeSuggestScreenOffForBattery() {
+        guard env.location.authorizationStatus == .authorizedAlways else { return }
         let battery = BatteryProbe.snapshot()
         guard let percent = battery.percent, percent < 30, !battery.isCharging else { return }
         withMotion(.spring(duration: 0.3)) { showBatterySaverHint = true }
@@ -656,13 +624,12 @@ struct MapScreen: View {
             // серая карта без сети, урезанная карта в жару, отсутствие лимитов.
             // Выше всего, потому что человек должен узнать причину раньше, чем
             // упрётся в неё сам и решит, что приложение сломалось.
-            MapStatusBanner(onOpenDashboard: { showDashboard = true },
-                            modernMap: shownBase == .engine && env.settings.mapModernStyle)
+            MapStatusBanner(modernMap: shownBase == .engine && env.settings.mapModernStyle)
             // Доступ к геопозиции — сразу под объявлениями сервера, а не внизу
             // поверх карты: это причина, по которой приложение не предупреждает
             // в фоне, и место ей рядом с остальными «почему не в полную силу».
             permissionBanner
-            // Тап по HUD — «Спидометр»; долгий тап — быстрые тумблеры оповещений.
+            // Тап по HUD — быстрые тумблеры оповещений (долгий тап — тоже).
             // HUD сверху всегда компактный: в покое главное «куда поедем», а в
             // поездке без маршрута полноразмерная карточка занимала пятую часть
             // экрана ради двух чисел. В навигации его здесь нет вовсе.
@@ -674,7 +641,7 @@ struct MapScreen: View {
                 HintChip(text: hint.text)
             }
             if showBatterySaverHint {
-                HintChip(text: String(localized: "Спидометр тратит меньше — тап по скорости"),
+                HintChip(text: String(localized: "Батарея садится — погасите экран, о камерах скажу голосом"),
                          tint: Theme.success)
             }
             // «Я в такси»: приложение молчит осознанно — человек должен видеть,
@@ -734,23 +701,28 @@ struct MapScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    /// Входы HUD: тап — «Спидометр», долгий тап — быстрые тумблеры. Одни и те
-    /// же у HUD сверху и у скорости внизу слева в навигации — жест не должен
-    /// зависеть от того, где сейчас стоит цифра.
+    /// Вход HUD — быстрые тумблеры (звук, вибро, голос). Один и тот же у HUD
+    /// сверху и у скорости внизу слева в навигации — жест не должен зависеть
+    /// от того, где сейчас стоит цифра.
+    ///
+    /// Тап раньше открывал спидометр, а тумблеры жили за долгим тапом, о
+    /// котором рассказывала отдельная подсказка. Спидометр убран, и тап
+    /// достался тому, ради чего к HUD тянутся на ходу, — «хватит болтать».
+    /// Долгий тап оставлен с тем же действием: рука, привыкшая к нему, не
+    /// должна наткнуться на пустоту.
     private func hudGestures(_ content: some View) -> some View {
         content
-            .onTapGesture { showDashboard = true }
-            .onLongPressGesture(minimumDuration: 0.4) {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                withMotion(.spring(duration: 0.3)) { showQuickToggles.toggle() }
-            }
-            // Жесты для VoiceOver не существуют — даём оба входа действиями.
+            .onTapGesture { toggleQuickToggles() }
+            .onLongPressGesture(minimumDuration: 0.4) { toggleQuickToggles() }
+            // Жестов для VoiceOver не существует — вход даём действием.
             .accessibilityAddTraits(.isButton)
-            .accessibilityHint(Text("Открывает спидометр"))
-            .accessibilityAction(named: Text("Спидометр")) { showDashboard = true }
-            .accessibilityAction(named: Text("Быстрые тумблеры")) {
-                withMotion(.spring(duration: 0.3)) { showQuickToggles.toggle() }
-            }
+            .accessibilityHint(Text("Открывает быстрые тумблеры"))
+            .accessibilityAction { toggleQuickToggles() }
+    }
+
+    private func toggleQuickToggles() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withMotion(.spring(duration: 0.3)) { showQuickToggles.toggle() }
     }
 
     /// Баннер пассажирского режима: молчание — осознанное, выход — один тап.
@@ -800,7 +772,7 @@ struct MapScreen: View {
     }
 
     /// В поездке — три кнопки: звук, ориентация, «…». Слои, 3D, «весь
-    /// маршрут» и спидометр — пунктами меню. Семь кругов столбиком закрывали
+    /// маршрут» и разделы приложения — пунктами меню. Семь кругов столбиком закрывали
     /// треть карты справа, а на ходу из них нажимают звук и «к машине»
     /// (docs/plan_drive_ux_2026-10-07.md, п. 4). Компас — только когда карту
     /// повернули руками.
@@ -1043,14 +1015,12 @@ struct MapScreen: View {
                 // двадцать секунд и уходит сам, ничего не отправляя. Пока на
                 // экране предупреждение о камере, вопрос ждёт: камера важнее,
                 // а под оверлеем плашка сгорала невидимой.
-                // Ждёт и под предупреждением о камере, и под приборкой: там
-                // вопрос рисует она сама, а два живых таймера — двойной ответ.
                 // Условие «накрыто» — в гейте: isApproachingCamera читает
                 // пер-тиковые дистанцию и скорость (см. MapTickGates).
-                MobileConfirmGate(dashboardShown: showDashboard)
+                MobileConfirmGate()
                 // «Что это было?» — уточнение типа сразу после «Радар!»:
                 // тот же гейт-паттерн и то же место над панелью поездки.
-                ReportRefineGate(dashboardShown: showDashboard)
+                ReportRefineGate()
                 // Итог поездки — сразу после стопа, в момент, когда цифры
                 // интереснее всего (см. maybeShowTripEnd про условия показа).
                 if let record = tripEndRecord {
@@ -1306,21 +1276,16 @@ struct MapScreen: View {
     private var actionBar: some View {
         HStack(spacing: 4) {
             actionButton("Поиск", "magnifyingglass") { map.showSearch = true }
-            // «Спидометр» вместо «Рядом», и это замена дубликата на спрятанное.
+            // «Мои места» — на месте спидометра, который владелец попросил
+            // убрать («мне кажется не нужен»). Дорога домой или на работу —
+            // самое частое, что навигатор делает одним тапом; у Яндекса и
+            // Amap «Мои места» живут ровно здесь. Раньше Дом и Работа были
+            // строкой внутри «Поиска», то есть в двух тапах и под клавиатурой.
             //
-            // «Рядом» — список камер поблизости, открытый с экрана, который
-            // ЭТИ ЖЕ камеры уже показывает на карте, с расстоянием до
-            // ближайшей в HUD и карточкой по тапу. Один и тот же ответ на один
-            // и тот же вопрос, только текстом и без географии.
-            //
-            // Спидометр, наоборот, до сих пор открывался единственным способом
-            // — тапом по цифре скорости, — и о нём приходилось РАССКАЗЫВАТЬ:
-            // ради него заведена разовая подсказка (OneTimeHints.dashboard).
-            // Контрол, которому нужен всплывающий ярлык, стоит не на том
-            // месте. Жест остаётся, подсказка становится не нужна.
-            actionButton("Спидометр", "gauge.open.with.lines.needle.33percent") {
-                showDashboard = true
-            }
+            // «Рядом» сюда не вернулся по прежней причине: список камер
+            // поблизости открывался с экрана, который эти же камеры уже
+            // показывает на карте, — он живёт в «Ещё».
+            actionButton("Мои места", "star.fill") { showMyPlaces = true }
             actionButton("Итоги", "chart.bar.fill") { map.showStats = true }
             Menu {
                 moreActionItems
@@ -1346,8 +1311,8 @@ struct MapScreen: View {
         Button { map.showSearch = true } label: {
             Label("Поиск", systemImage: "magnifyingglass")
         }
-        Button { showDashboard = true } label: {
-            Label("Спидометр", systemImage: "gauge.open.with.lines.needle.33percent")
+        Button { showMyPlaces = true } label: {
+            Label("Мои места", systemImage: "star.fill")
         }
         Button { map.showStats = true } label: {
             Label("Итоги", systemImage: "chart.bar.fill")
@@ -1502,9 +1467,7 @@ struct MapScreen: View {
         if args.contains("-demoHistoryOld") { env.trip.seedDemoHistory(shiftDays: 14) }
         if args.contains("-showStats") { map.showStats = true }
         if args.contains("-showSettings") { map.showSettings = true }
-        // Приборку на симуляторе иначе не снять: её открывают тапом по HUD,
-        // а он перекрыт кнопкой поездки в скриншот-прогонах.
-        if args.contains("-showDashboard") { showDashboard = true }
+        if args.contains("-showMyPlaces") { showMyPlaces = true }
         if args.contains("-showCameraDetail") {
             Task {
                 await Task.pause(seconds: 1.5)

@@ -335,6 +335,22 @@
         }
       }
     },
+    "%@ на карте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ на карте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ xaritada"
+          }
+        }
+      }
+    },
     "%@ от старта": {
       "localizations": {
         "ru": {
@@ -592,22 +608,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "marshrutda %lld ta kamera"
-          }
-        }
-      }
-    },
-    "%lld километров в час": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld километров в час"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "soatiga %lld kilometr"
           }
         }
       }
@@ -1156,6 +1156,22 @@
         }
       }
     },
+    "«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Экран тревоги тёмный всегда.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Экран тревоги тёмный всегда."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Avto» — kunduzi panellar va xarita och rangda (quyoshda to‘q rang yaltiraydi), kechasi grafit rangda. Ogohlantirish ekrani doim to‘q rangda."
+          }
+        }
+      }
+    },
     "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.": {
       "localizations": {
         "ru": {
@@ -1184,22 +1200,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "«Aqlli» — safar faqat o‘z mashinangizda o‘zi yonadi (CarPlay yoki tanish magnitola), boshqa mashinada avval «rulda siz?» deb so‘raydi. «Avto» — har doim o‘zi. «Qo‘lda» — faqat tugma bilan, harakat kuzatuvi butunlay o‘chiq. Yo‘l-yo‘lakay kirish (do‘kon, zapravka) yangi safarga aylanmaydi — shu safar ichidagi to‘xtash bo‘lib qoladi. Safar davomida ekran navigatorlardek o‘chmaydi."
-          }
-        }
-      }
-    },
-    "«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов. Спидометр — самый экономный экран: чёрный фон и схема вместо карты; закрыли его руками — до конца поездки не откроется сам.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов. Спидометр — самый экономный экран: чёрный фон и схема вместо карты; закрыли его руками — до конца поездки не откроется сам."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Aqlli» — safar faqat o‘z mashinangizda o‘zi yonadi (CarPlay yoki tanish magnitola), boshqa mashinada avval «rulda siz?» deb so‘raydi. «Avto» — har doim o‘zi. «Qo‘lda» — faqat tugma bilan, harakat kuzatuvi butunlay o‘chiq. Yo‘l-yo‘lakay kirish (do‘kon, zapravka) yangi safarga aylanmaydi — shu safar ichidagi to‘xtash bo‘lib qoladi. Safar davomida ekran navigatorlardek o‘chmaydi. Spidometr — eng tejamkor ekran: xarita o‘rniga qora fon va sxema; uni qo‘lda yopsangiz — safar oxirigacha o‘zi ochilmaydi."
           }
         }
       }
@@ -1444,6 +1444,22 @@
         }
       }
     },
+    "Батарея садится — погасите экран, о камерах скажу голосом": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Батарея садится — погасите экран, о камерах скажу голосом"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batareya tugayapti — ekranni o‘chiring, kameralar haqida ovoz bilan aytaman"
+          }
+        }
+      }
+    },
     "Без камер и превышений": {
       "localizations": {
         "ru": {
@@ -1600,22 +1616,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "O‘tgan davrdagidan ko‘proq"
-          }
-        }
-      }
-    },
-    "Быстрые тумблеры": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Быстрые тумблеры"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tezkor sozlagichlar"
           }
         }
       }
@@ -1895,22 +1895,6 @@
         }
       }
     },
-    "Вернуться к карте": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вернуться к карте"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Xaritaga qaytish"
-          }
-        }
-      }
-    },
     "Версия": {
       "extractionState": "manual",
       "localizations": {
@@ -2052,6 +2036,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aniqni yoqish"
+          }
+        }
+      }
+    },
+    "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Батарея). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Батарея). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safardan tashqari — deyarli hech narsa: ilova faqat kameralar yonida uyg‘onadi. Safarda GPS doim ishlaydi, lekin kameralardan uzoqda aniqlik o‘zi pasayadi (Sozlamalar → Batareya). Eng ko‘p ekran sarflaydi: xaritaga qarash shart bo‘lmasa, uni o‘chiring — «Doim» ruxsati bo‘lsa, ilova kameralar haqida o‘chgan ekranda ham ovoz bilan ogohlantiradi."
           }
         }
       }
@@ -2496,6 +2496,22 @@
         }
       }
     },
+    "Выбрать на карте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбрать на карте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xaritada tanlash"
+          }
+        }
+      }
+    },
     "Выезд на встречную полосу": {
       "localizations": {
         "ru": {
@@ -2524,6 +2540,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "O'chirilgan"
+          }
+        }
+      }
+    },
+    "Выучено по поездкам — адрес не задан": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выучено по поездкам — адрес не задан"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlaringizdan o‘rganildi — manzil belgilanmagan"
           }
         }
       }
@@ -3127,22 +3159,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qo‘shildi: %1$lld safar, %2$lld kun"
-          }
-        }
-      }
-    },
-    "Долгий тап по скорости — быстрые переключатели": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Долгий тап по скорости — быстрые переключатели"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tezlikka uzoq bosish — tezkor tugmalar"
           }
         }
       }
@@ -4244,6 +4260,22 @@
         }
       }
     },
+    "Ищу адрес…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ищу адрес…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzil qidirilmoqda…"
+          }
+        }
+      }
+    },
     "Каждая камера с известным лимитом, пройденная без штрафной скорости, — несостоявшийся минимальный штраф в 1 БРВ. Складываем такие проезды. Это оценка, а не гарантия: повторность и допуски конкретных камер мы знать не можем.": {
       "localizations": {
         "ru": {
@@ -5073,6 +5105,22 @@
         }
       }
     },
+    "Маршрут в один тап — кнопкой «Мои места» на карте или из «Поиска». Адрес можно найти словами или показать на карте.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут в один тап — кнопкой «Мои места» на карте или из «Поиска». Адрес можно найти словами или показать на карте."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir bosishda marshrut — xaritadagi «Mening joylarim» tugmasi yoki «Qidiruv»dan. Manzilni so‘z bilan qidirish yoki xaritada ko‘rsatish mumkin."
+          }
+        }
+      }
+    },
     "Маршрут и скорость": {
       "localizations": {
         "ru": {
@@ -5491,22 +5539,6 @@
         }
       }
     },
-    "Нажмите, чтобы вернуться к карте": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Нажмите, чтобы вернуться к карте"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Xaritaga qaytish uchun bosing"
-          }
-        }
-      }
-    },
     "Нажмите, чтобы скрыть": {
       "localizations": {
         "ru": {
@@ -5551,6 +5583,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "«%@» uchun manzilni qidirib tanlang"
+          }
+        }
+      }
+    },
+    "Найти адрес": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Найти адрес"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzilni qidirish"
           }
         }
       }
@@ -6654,18 +6702,18 @@
         }
       }
     },
-    "Открывает спидометр": {
+    "Открывает быстрые тумблеры": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Открывает спидометр"
+            "value": "Открывает быстрые тумблеры"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Spidometrni ochadi"
+            "value": "Tezkor sozlagichlarni ochadi"
           }
         }
       }
@@ -6730,39 +6778,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tafsilotlarni ochish"
-          }
-        }
-      }
-    },
-    "Открыть приборку": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Открыть приборку"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Asboblar panelini ochish"
-          }
-        }
-      }
-    },
-    "Открыть спидометр": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Открыть спидометр"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Spidometrni ochish"
           }
         }
       }
@@ -9845,54 +9860,6 @@
         }
       }
     },
-    "Спидометр": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Спидометр"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Spidometr"
-          }
-        }
-      }
-    },
-    "Спидометр при старте поездки": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Спидометр при старте поездки"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Safar boshlanganda spidometr"
-          }
-        }
-      }
-    },
-    "Спидометр тратит меньше — тап по скорости": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Спидометр тратит меньше — тап по скорости"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Spidometr kamroq quvvat oladi — tezlikka bosing"
-          }
-        }
-      }
-    },
     "Список по каждой камере МВД не публикует — показываем возможности типа": {
       "localizations": {
         "ru": {
@@ -10168,18 +10135,18 @@
         }
       }
     },
-    "Тап по скорости — спидометр во весь экран": {
+    "Тап по скорости — быстрые переключатели": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Тап по скорости — спидометр во весь экран"
+            "value": "Тап по скорости — быстрые переключатели"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tezlikka bosish — butun ekran spidometri"
+            "value": "Tezlikka bosish — tezkor tugmalar"
           }
         }
       }
@@ -11084,6 +11051,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jarimalar va cheklovlar"
+          }
+        }
+      }
+    },
+    "Экран в поездке не засыпает, как у навигаторов. Выключите — и он погаснет по таймеру iOS; о камерах приложение предупредит голосом и с погашенным экраном, при доступе «Всегда».": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Экран в поездке не засыпает, как у навигаторов. Выключите — и он погаснет по таймеру iOS; о камерах приложение предупредит голосом и с погашенным экраном, при доступе «Всегда»."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarda ekran navigatorlardagidek o‘chmaydi. O‘chirsangiz, iOS taymeri bo‘yicha o‘chadi; «Doim» ruxsati bo‘lsa, ilova kameralar haqida o‘chgan ekranda ham ovoz bilan ogohlantiradi."
           }
         }
       }
@@ -12101,22 +12084,6 @@
         }
       }
     },
-    "координата приблизительная": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "координата приблизительная"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "koordinata taxminiy"
-          }
-        }
-      }
-    },
     "коснитесь графика": {
       "localizations": {
         "ru": {
@@ -12369,22 +12336,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "odatda ertalab"
-          }
-        }
-      }
-    },
-    "ограничение %lld": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ограничение %lld"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "cheklov %lld"
           }
         }
       }
@@ -13674,22 +13625,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mavzu"
-          }
-        }
-      }
-    },
-    "«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Приборка и экран тревоги тёмные всегда.\n\nЧем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Приборка и экран тревоги тёмные всегда.\n\nЧем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Avto» — kunduzi yorug‘ panellar va xarita (quyoshda qorong‘i ekran yaltiraydi), kechasi grafit rang. Spidometr va ogohlantirish ekrani har doim qorong‘i.\n\nXaritani nima chizadi — Apple, o‘z sxemamiz yoki dvijok — xaritadagi qatlamlar tugmasi bilan tanlanadi: natija o‘sha yerda ko‘rinadi va almashtirish darhol ishlaydi."
           }
         }
       }
@@ -15358,38 +15293,6 @@
         }
       }
     },
-    "Спидометр — самый экономный экран: чёрный фон и схема вместо карты. Закрыли руками — до конца поездки сам не откроется.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Спидометр — самый экономный экран: чёрный фон и схема вместо карты. Закрыли руками — до конца поездки сам не откроется."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Spidometr — eng tejamkor ekran: qora fon va xarita o‘rniga sxema. Qo‘lda yopsangiz — safar oxirigacha o‘zi ochilmaydi."
-          }
-        }
-      }
-    },
-    "«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Приборка и экран тревоги тёмные всегда.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Приборка и экран тревоги тёмные всегда."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Avto» — kunduzi panellar va xarita och rangda (quyoshda to‘q rang yaltiraydi), kechasi grafit rangda. Spidometr va ogohlantirish ekrani doim to‘q rangda."
-          }
-        }
-      }
-    },
     "Чем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу.": {
       "localizations": {
         "ru": {
@@ -16874,22 +16777,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Batareya qancha sarflanadi?"
-          }
-        }
-      }
-    },
-    "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно; самый экономный экран — Спидометр: чёрный фон и схема вместо карты.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно; самый экономный экран — Спидометр: чёрный фон и схема вместо карты."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Safardan tashqari — deyarli hech narsa: ilova faqat kameralar yonida uyg‘onadi. Safarda GPS doim ishlaydi; eng tejamkor ekran — Spidometr: qora fon va xarita o‘rniga sxema."
           }
         }
       }

@@ -137,6 +137,83 @@ final class AddressBookTests: XCTestCase {
         XCTAssertTrue(book().search("Navoiy", near: nil).count >= 3)
     }
 
+    // MARK: - Апострофы, «oʻ» и окончание «-iy» (10.10.2026)
+
+    func testApostropheJoinsTheWordInsteadOfSplittingIt() {
+        // «Улугбек» не находил «Mirzo Ulugʻbek»: апостроф рвал слово надвое.
+        XCTAssertEqual(AddressBook.fold("Mirzo Ulug\u{02BB}bek"), AddressBook.fold("Мирзо Улугбек"))
+        XCTAssertEqual(AddressBook.fold("G'afur G\u{2018}ulom"), AddressBook.fold("Гафур Гулом"))
+    }
+
+    func testUzbekOWithApostropheIsRussianU() {
+        XCTAssertEqual(AddressBook.fold("O\u{02BB}zbekiston"), AddressBook.fold("Узбекистан"))
+        XCTAssertEqual(AddressBook.fold("Ўзбекистон"), AddressBook.fold("Узбекистан"))
+        XCTAssertEqual(AddressBook.fold("Ko'kcha"), AddressBook.fold("Кукча"))
+    }
+
+    func testStreetWithUzbekOIsFoundBothWays() {
+        // Русский «Кукча» и латиница без апострофа «Kokcha» — один «Koʻkcha»;
+        // и пока апостроф не набран («Ko»), улица не пропадает из списка.
+        let point = CLLocationCoordinate2D(latitude: 41.3, longitude: 69.25)
+        let book = AddressBook(addresses: [Address(street: "Ko\u{02BB}kcha ko'chasi", house: "1", point: point)])
+        XCTAssertFalse(book.lookup("Кукча", near: nil).isEmpty)
+        XCTAssertFalse(book.lookup("Kokcha", near: nil).isEmpty)
+        XCTAssertFalse(book.lookup("Ko", near: nil).isEmpty)
+        XCTAssertFalse(book.lookup("Ko\u{2018}k", near: nil).isEmpty)
+    }
+
+    func testIyEndingMeetsRussianSpelling() {
+        XCTAssertEqual(AddressBook.fold("Navoiy"), AddressBook.fold("Навои"))
+        XCTAssertEqual(AddressBook.fold("Beruniy"), AddressBook.fold("Беруни"))
+        XCTAssertFalse(book().search("Navoiy 12", near: nil).isEmpty)
+    }
+
+    // MARK: - Номер дома
+
+    func testHouseWithSlashIsOneNumber() {
+        // «/» превращался в пробел: «12/1» становилось улицей «12» и домом «1».
+        XCTAssertEqual(AddressBook.splitHouse("Навои 12/1").house, "12/1")
+        XCTAssertEqual(book().search("Навои 12/1", near: nil).first?.house, "12/1")
+        XCTAssertEqual(AddressBook.splitHouse("Navoiy 12-1").house, "12/1")
+    }
+
+    func testHouseWordsAndLettersAreUnderstood() {
+        XCTAssertEqual(AddressBook.splitHouse("Navoiy, д.12").street, "Navoiy")
+        XCTAssertEqual(AddressBook.splitHouse("Navoiy, д.12").house, "12")
+        XCTAssertEqual(AddressBook.splitHouse("Navoiy uy 14").house, "14")
+        XCTAssertEqual(AddressBook.splitHouse("Навои 12 А").house, "12a", "буква корпуса — одна в обоих алфавитах")
+        XCTAssertNil(AddressBook.splitHouse("12").house, "одни цифры — это улица, а не номер")
+        XCTAssertNil(AddressBook.splitHouse("Навои").house)
+    }
+
+    // MARK: - Улица целиком и дубли
+
+    func testQueryWithoutHouseAnswersWithTheStreet() {
+        // «Навои» давал двенадцать домов одной улицы и ни одной улицы.
+        let found = book().lookup("Навои", near: nil)
+        XCTAssertEqual(found.count, 1)
+        XCTAssertTrue(found.first?.isStreet ?? false)
+        XCTAssertEqual(found.first?.title, "Alisher Navoiy ko'chasi")
+    }
+
+    func testStreetPointIsTheHouseNearestToTheCar() {
+        let near = CLLocationCoordinate2D(latitude: 41.302, longitude: 69.25)
+        XCTAssertEqual(book().lookup("Navoiy", near: near).first?.point.latitude ?? 0, 41.302, accuracy: 1e-6)
+    }
+
+    func testQueryWithHouseStillAnswersWithHouses() {
+        XCTAssertEqual(book().lookup("Navoiy 14", near: nil).first?.house, "14")
+    }
+
+    func testPointAndOutlineOfOneHouseAreOneRow() {
+        let a = Address(street: "Navoiy", house: "12", point: CLLocationCoordinate2D(latitude: 41.3, longitude: 69.25))
+        let b = Address(street: "Navoiy", house: "12", point: CLLocationCoordinate2D(latitude: 41.30005, longitude: 69.25))
+        let far = Address(street: "Navoiy", house: "12", point: CLLocationCoordinate2D(latitude: 41.35, longitude: 69.25))
+        let rows = AddressBook.distinct([a, b, far], limit: 10)
+        XCTAssertEqual(rows.count, 2, "тот же дом в 6 м — одна строка; одноимённый в другом районе — своя")
+        XCTAssertNotEqual(rows[0].id, rows[1].id)
+    }
+
     // MARK: - Клетка
 
     func testCellKeyMatchesTheServer() {

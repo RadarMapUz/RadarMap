@@ -168,7 +168,15 @@ struct MapScreen: View {
         .sheet(isPresented: $map.showSearch) {
             // Без геопозиции кнопки маршрута прячем, как в соседних шитах:
             // мёртвая кнопка, молча закрывающая поиск, хуже её отсутствия.
-            SearchView(onSelect: { map.move(to: $0) },
+            // Выбранное место — точкой на карте с её панелью («Маршрут сюда»,
+            // «Радар здесь»): раньше карта только сдвигалась, и что выбрано,
+            // оставалось угадывать.
+            SearchView(onSelect: { coordinate, title in
+                           map.move(to: coordinate)
+                           withMotion(.spring(duration: 0.3)) {
+                               map.pressedPoint = MapPoint(coordinate: coordinate, title: title)
+                           }
+                       },
                        onRoute: env.location.currentCoordinate == nil ? nil
                            : { coord, name in buildRoute(to: coord, name: name) })
         }
@@ -934,8 +942,9 @@ struct MapScreen: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else if let point = map.pressedPoint {
                 MapPointBar(
+                    title: point.title,
                     onRoute: env.location.currentCoordinate == nil ? nil : {
-                        buildRoute(to: point.coordinate, name: String(localized: "Точка на карте"))
+                        buildRoute(to: point.coordinate, name: point.title ?? String(localized: "Точка на карте"))
                         withMotion { map.pressedPoint = nil }
                     },
                     onRadar: {

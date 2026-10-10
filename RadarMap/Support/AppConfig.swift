@@ -856,6 +856,9 @@ nonisolated enum AppConfig {
     /// молча выбирает версию БЕЗ прибытия — на маршруте время в пути исчезало
     /// бы вообще, и виновата была бы ширина панели.
     static let carPlayDockMaxWidth: CGFloat = 736
+    /// Сколько просят три зоны дока (скорость, камера, прибытие) без полей.
+    /// Уже — прибытие уходит, скорость и камера остаются.
+    static let carPlayDockThreeZoneWidth: CGFloat = 570
 
     /// Сколько панель занимает снизу НА САМОМ ДЕЛЕ: своя высота плюс нижний
     /// отступ HUD. Отдельно от carPlayDockBottomInset, который решает другую
@@ -872,6 +875,30 @@ nonisolated enum AppConfig {
     /// Шаг обновления «пройденной» части маршрута: перекладывать оверлей на
     /// каждый фикс GPS — лишняя работа рендера, глазу хватает и таких шагов.
     static let carPlayTraveledStepMeters: CLLocationDistance = 25
+
+    // MARK: - CarPlay: карта на движке
+
+    /// «+ / −» при слежении сдвигают автозум вдвое за нажатие — не больше
+    /// стольких шагов в каждую сторону: дальше машина уже не видна или не
+    /// видно, куда едем.
+    static let carPlayZoomBiasLimit: Double = 2
+    /// Где стоит «я» по высоте свободного поля карты (между верхней кромкой и
+    /// приборной панелью): ниже середины — впереди дороги видно больше, чем
+    /// позади, как на телефоне.
+    static let carPlayMeShare: Double = 0.7
+    /// Шаг панорамы стрелками крутилки, точки: на головных устройствах без
+    /// сенсора до соседнего квартала иначе щёлкать полминуты.
+    static let carPlayPanStep: CGFloat = 120
+    /// «Я» в плитке приборной панели: дока там нет, только маленький прибор.
+    static let carPlayDashboardMeY = 0.62
+    /// Оценки манёвра и поездки уходят в машину сообщениями: не реже раза в
+    /// столько секунд (на стоянке цифра всё равно должна жить) и не чаще, чем
+    /// сменится видимое число — шаг в метрах вблизи, 5 % вдали.
+    static let carPlayEstimateMaxInterval: TimeInterval = 5
+    static let carPlayEstimateMinStepMeters: Double = 10
+    /// Сколько держится системный баннер о камере, когда на экране машины не
+    /// мы (музыка, звонок): хватит прочитать «Камера через 400 м» и не мешать.
+    static let carPlayCameraAlertSeconds: TimeInterval = 8
 
     // MARK: - CarPlay: лента «что впереди»
 
@@ -940,6 +967,38 @@ nonisolated enum AppConfig {
     static let engineOverviewSpan = 1_400.0
     static let engineCloseSpan = 420.0
     static let engineManeuverApproachMeters = 600.0
+    /// Ряд полос на трассе — раньше (LaneAdvice.showDistance): быстрее этой
+    /// скорости ряд появляется за laneRowHighwayMeters, а не за 600 м.
+    static let laneHighwaySpeedKmh = 70.0
+    static let laneRowHighwayMeters = 1000.0
+    /// Ограничение полос на проезде прямо («правый — только направо»)
+    /// показывается за столько метров и не ближе этого к манёвру — там ряд
+    /// показывает баннер манёвра.
+    static let laneNoticeMeters = 400.0
+    static let laneNoticeBeforeManeuverMeters = 30.0
+
+    // MARK: - Поиск
+
+    /// Один и тот же адрес ближе этого — один дом (точка и контур в OSM).
+    static let addressDuplicateMeters = 40.0
+    /// Регион поиска Apple вокруг машины: без него Apple ищет по всему миру.
+    static let searchRegionMeters = 60_000.0
+    /// Клетка адресов без GPS и без «Дома» — Ташкент.
+    static let searchFallbackCenter = CLLocationCoordinate2D(latitude: 41.3111, longitude: 69.2797)
+    /// Поиск в машине: строк всего и из них своих адресов. Длинный список за
+    /// рулём не листают — первые строки обязаны быть лучшими.
+    static let carPlaySearchLimit = 10
+    static let carPlaySearchOwnLimit = 5
+    /// Сколько ближайших показывает плитка категории («АЗС»).
+    static let searchCategoryLimit = 8
+    /// «По пути»: заведение не дальше этого от линии маршрута — заезд без
+    /// крюка (съезд на дублёр, другая сторона проспекта).
+    static let venueRouteCorridorMeters = 300.0
+    /// Siri с холодного старта ждёт историю поездок (выученные Дом/Работа)
+    /// не дольше стольких шагов по 0,1 с.
+    static let siriHistoryWaitSteps = 20
+    /// Радиус поиска Apple по категории (АЗС, парковки), м.
+    static let appleCategoryRadiusMeters = 10_000.0
     static let engineManeuverHighlightMeters = 35.0
     /// Частота обновления геометрии маршрута; курсор обновляется на каждом фиксе.
     static let engineRouteProgressStep = 15.0

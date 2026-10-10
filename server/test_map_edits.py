@@ -963,6 +963,12 @@ class OwnSearchTests(unittest.TestCase):
         near = map_edits.search_addresses(self.dir, "ko", near=(41.32, 69.29))
         self.assertEqual(near[0]["street"], "Navoiy ko'chasi")
 
+    def test_uzbek_o_with_apostrophe_is_russian_u(self):
+        # «Oʻzbekiston» — «Узбекистан»: «oʻ» по-русски «у», а не «а».
+        self.assertEqual(map_edits.fold("O\u02bbzbekiston"), map_edits.fold("Узбекистан"))
+        self.assertEqual(map_edits.fold("Ko'kcha"), map_edits.fold("Кукча"))
+        self.assertEqual(map_edits.fold("G\u2018afur"), map_edits.fold("Гафур"))
+
     def test_the_same_address_is_not_listed_twice(self):
         # В OSM адрес висит и точкой, и на контуре дома — в списке из восьми
         # строк два одинаковых адреса это две строки впустую.

@@ -190,6 +190,17 @@ osmium export places.osm.pbf -f geojsonseq \
     --geometry-types=point,polygon -o places.geojsonl --overwrite
 echo "    мест в экстракте: $(wc -l < places.geojsonl)"
 
+# Заведения для поиска: АЗС, парковки, мойки, шиномонтаж, зарядки, еда,
+# аптеки, банкоматы, супермаркеты (build_roads.VENUE_KINDS). Узлы и контуры:
+# АЗС и парковки в OSM чаще рисуют площадью.
+osmium tags-filter uzbekistan.osm.pbf \
+    nwa/amenity=fuel,parking,car_wash,charging_station,restaurant,cafe,fast_food,pharmacy,atm,bank \
+    nwa/shop=car_repair,tyres,supermarket \
+    -o venues.osm.pbf --overwrite
+osmium export venues.osm.pbf -f geojsonseq \
+    --geometry-types=point,polygon -o venues.geojsonl --overwrite
+echo "    заведений в экстракте: $(wc -l < venues.geojsonl)"
+
 # Правки конструктора. Снимок, а не приращение: сборка накладывает состояние
 # целиком, и «отменить правку» значит собрать тайлы без этой строки.
 #
@@ -240,7 +251,7 @@ fi
 
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
     --points points.geojsonl --houses houses.geojsonl \
-    --places places.geojsonl --trees trees.geojsonl \
+    --places places.geojsonl --trees trees.geojsonl --venues venues.geojsonl \
     --addresses addresses.geojsonl --edits "$EDITS" $SURFACE --mvt \
     --tiles "$CANDIDATE"
 
@@ -266,7 +277,7 @@ rm -rf "$CANDIDATE.check" && mkdir -p "$CANDIDATE.check"
 # сборкой и не написанное другой, остановило бы конвейер на ровном месте.
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
     --points points.geojsonl --houses houses.geojsonl \
-    --places places.geojsonl --trees trees.geojsonl \
+    --places places.geojsonl --trees trees.geojsonl --venues venues.geojsonl \
     --addresses addresses.geojsonl --edits "$EDITS" $SURFACE --mvt \
     --tiles "$CANDIDATE.check" >/dev/null
 if ! diff -rq "$CANDIDATE" "$CANDIDATE.check" >/dev/null; then

@@ -26,8 +26,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     nonisolated deinit {}
 
     var interfaceController: CPInterfaceController?
+    /// Начало сессии экрана машины — для суточной статистики (минуты).
+    private var connectedAt: Date?
     private var mapTemplate: CPMapTemplate?
     private let model = CarPlayMapModel()
+    /// Навигационная сессия CarPlay: манёвр, время в пути, полосы, камеры
+    /// поверх чужого приложения.
+    private lazy var guidance = CarPlayGuidance(model: model)
+    /// Поиск адреса в машине: тот же порядок источников, что на телефоне.
+    private lazy var search = CarPlaySearch { [weak self] place in self?.route(to: place) }
     /// Чей сейчас экран машины. Переподключение (штатное «моргание» провода
     /// при запуске двигателя) может доставить didDisconnect СТАРОЙ сцены уже
     /// ПОСЛЕ didConnect новой — и старая, уходя, глобально гасила GPS и опрос
@@ -51,12 +58,21 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // запуска; здесь он нужен ИМЕННО в релизе — жалоба «экран машины стоит»
         // приходит из TestFlight, а прибора под неё до сих пор не существовало.
         HitchWatch.start()
+        // Фризы ДО машины к ней не относятся: счёт сессии — с нуля.
+        _ = HitchWatch.drain()
+        HitchWatch.setCounting(true)
+        connectedAt = Date()
         // Режим меняет не только кнопка, но и автоматика жары — из вью.
         // Кнопки шаблона обязаны пойти следом в обоих случаях.
         if model.onViewModeChanged == nil {
             model.onViewModeChanged = { [weak self] in self?.syncTemplate() }
         }
 
+        // День/ночь — ДО первого кадра: тема машины (датчик света) в «Авто»
+        // старше солнца, и первый кадр раньше всегда был тёмным.
+        model.carIsDark = scene.contentStyle == .dark
+        model.refreshDaylight(appearance: env.settings.mapAppearance,
+                              coordinate: env.location.currentCoordinate)
         let host = UIHostingController(rootView: CarPlayMapScreen(model: model)
             .environment(env))
         host.view.backgroundColor = UIColor(Theme.background)
@@ -72,6 +88,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         interfaceController.setRootTemplate(template, animated: true) { [weak self] _, error in
             if let error {
                 Log.carplay.error("setRootTemplate: \(error.localizedDescription, privacy: .public)")
+            } else if let self, self.mapTemplate === template {
+                // Сессия — только на шаблоне, который уже на экране: начатая
+                // на летящем корне могла пропасть, а свой баннер манёвра при
+                // этом уже спрятан (hasSystemGuidance) — водитель без манёвра.
+                self.guidance.attach(to: template)
             }
             // Алерт о разрешении — ПОСЛЕ установки корня: presentTemplate
             // поверх летящей корневой транзакции CarPlay отклоняет, и раньше
@@ -93,6 +114,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // и поездка из машины писалась без лимитов — без рейтинга и штрафов.
         env.startDrivingServices()
         session += 1
+        sentBar = nil
+        sentMapButtons = nil
         syncTemplate()
         observePendingConfirm()
     }
@@ -103,6 +126,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         Log.carplay.notice("CarPlay отключён")
         self.interfaceController = nil
         mapTemplate = nil
+        guidance.detach()
         session += 1   // гасим подписки syncTemplate этой сессии
         toastTask?.cancel()
         toastTask = nil
@@ -114,6 +138,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             return
         }
         Self.activeDelegate = nil
+        if let connectedAt {
+            env.usage.noteCarPlaySession(minutes: Int(Date().timeIntervalSince(connectedAt) / 60),
+                                         hitches: HitchWatch.drain())
+            self.connectedAt = nil
+        }
+        HitchWatch.setCounting(false)
         // Вышли из машины: телефон мог всё это время быть в фоне, события
         // scenePhase не будет — снимаем «передний план» сами. И флаг схемы
         // тоже: onDisappear у вью внутри сносимого CPWindow не гарантирован,
@@ -128,6 +158,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         if Storage.bool(.carPlayMuted) { unmute() }
     }
 
+    /// Машина сменила тему (включились фары, въехали в тоннель).
+    func contentStyleDidChange(_ contentStyle: UIUserInterfaceStyle) {
+        model.carIsDark = contentStyle == .dark
+        model.refreshDaylight(appearance: env.settings.mapAppearance,
+                              coordinate: env.location.currentCoordinate)
+    }
+
     // MARK: - Сборка шаблона
 
     /// Поколение подписки syncTemplate: живой остаётся только ПОСЛЕДНЯЯ.
@@ -135,6 +172,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// каждый тап «Схема/Карта» добавлял по две вечно перевзводящиеся: после
     /// N тапов любое изменение состояния пересобирало шаблон N раз подряд.
     private var syncGeneration = 0
+
+    /// Что сейчас отправлено в магнитолу. Кнопки — не память, а сообщения на
+    /// головное устройство: каждое присваивание заменяет их там целиком, и
+    /// тап, пришедшийся на замену, теряется. Наблюдение будит пересборку на
+    /// любое касание отслеживаемого (а MapKit дёргал слежение на каждом «+»),
+    /// поэтому отправляем только реально изменившееся.
+    private var sentBar: [Bool]?
+    private var sentMapButtons: [Bool]?
 
     /// Открыт ли сейчас осмотр схемы. Кнопка обязана знать: при
     /// `automaticallyHidesNavigationBar = false` CarPlay своей «Готово» не
@@ -159,19 +204,26 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             let routeActive = env.route.isActive
             let muted = isMuted   // читает оба тумблера — оба и отслеживаем
             let sketchShown = model.showsSketch
-            _ = model.isFollowing   // значок «к себе» зависит от слежения
 
-            mapTemplate.leadingNavigationBarButtons = [tripButton(active: tripActive),
-                                                       viewButton(sketchShown: sketchShown)]
-            mapTemplate.trailingNavigationBarButtons = [destinationsButton(routeActive: routeActive),
-                                                       reportButton]
-            // В режиме схемы зум и «к себе» бессмысленны: охват и центр схема
-            // выбирает сама по дистанции до камеры. Оставляем только звук.
+            let following = model.isFollowing
+
+            let bar = [tripActive, routeActive, sketchShown]
+            if bar != sentBar {
+                sentBar = bar
+                mapTemplate.leadingNavigationBarButtons = [tripButton(active: tripActive),
+                                                           viewButton(sketchShown: sketchShown)]
+                mapTemplate.trailingNavigationBarButtons = [destinationsButton(routeActive: routeActive),
+                                                           reportButton]
+            }
             // В режиме схемы зум и «к себе» отдаёт сам шаблон, когда открыт
             // осмотр; своя кнопка тут нужна одна — вход в него.
-            mapTemplate.mapButtons = sketchShown
-                ? [soundButton(muted: muted), panButton]
-                : [soundButton(muted: muted), zoomInButton, zoomOutButton, recenterButton]
+            let buttons = [muted, sketchShown, following, isPanning]
+            if buttons != sentMapButtons {
+                sentMapButtons = buttons
+                mapTemplate.mapButtons = sketchShown
+                    ? [soundButton(muted: muted), panButton]
+                    : [soundButton(muted: muted), zoomInButton, zoomOutButton, recenterButton]
+            }
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, self.session == session,
@@ -192,19 +244,41 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     ///
     /// Модель осмотра общая с телефоном (SketchState), и это принципиально:
     /// правило возврата — по бездействию и по тревоге — обязано быть одним.
+    ///
+    /// Сдвиг жеста приходит НАКОПЛЕННЫМ от его начала (как у
+    /// UIPanGestureRecognizer), а схема и карта двигаются приращениями: без
+    /// разницы с прошлым вызовом осмотр разгонялся — каждый кадр жеста
+    /// добавлял весь путь пальца заново.
+    private var panSoFar = CGPoint.zero
+
     func mapTemplateDidBeginPanGesture(_ mapTemplate: CPMapTemplate) {
-        model.sketch.beginInspect()
+        panSoFar = .zero
+        if model.showsSketch { model.sketch.beginInspect() }
     }
 
     func mapTemplate(_ mapTemplate: CPMapTemplate,
                      didUpdatePanGestureWithTranslation translation: CGPoint,
                      velocity: CGPoint) {
-        model.sketch.pan(by: CGSize(width: translation.x, height: translation.y))
+        let step = CGSize(width: translation.x - panSoFar.x, height: translation.y - panSoFar.y)
+        panSoFar = translation
+        pan(by: step)
     }
 
     func mapTemplateDidEndPanGesture(_ mapTemplate: CPMapTemplate,
                                      velocity: CGPoint) {
-        model.sketch.endInspect()
+        panSoFar = .zero
+        if model.showsSketch { model.sketch.endInspect() }
+    }
+
+    /// Панорама туда, где она видна: схема — своим осмотром, карта (движок
+    /// или MapKit) — командой. Раньше всё уходило в схему, и в режиме карты
+    /// жест двигал невидимое.
+    private func pan(by step: CGSize) {
+        if model.showsSketch {
+            model.sketch.pan(by: step)
+        } else {
+            model.pan(by: step)
+        }
     }
 
     /// Кнопки-стрелки на головных устройствах без сенсора: там панорамируют
@@ -212,12 +286,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// придётся щёлкать полминуты.
     func mapTemplate(_ mapTemplate: CPMapTemplate,
                      panWith direction: CPMapTemplate.PanDirection) {
-        let step: CGFloat = 120
+        let step = AppConfig.carPlayPanStep
         var translation = CGSize.zero
         if direction.contains(.left)  { translation.width += step }
         if direction.contains(.right) { translation.width -= step }
         if direction.contains(.up)    { translation.height += step }
         if direction.contains(.down)  { translation.height -= step }
+        guard model.showsSketch else { return model.pan(by: translation) }
         model.sketch.beginInspect()
         model.sketch.pan(by: translation)
         model.sketch.endInspect()
@@ -240,6 +315,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         syncTemplate()
     }
 
+    // MARK: - Системные баннеры, когда на экране машины не мы
+
+    /// Манёвр и камера доходят до водителя и поверх музыки или звонка:
+    /// ради этого сессия и заведена.
+    func mapTemplate(_ mapTemplate: CPMapTemplate,
+                     shouldShowNotificationFor maneuver: CPManeuver) -> Bool { true }
+
+    func mapTemplate(_ mapTemplate: CPMapTemplate,
+                     shouldUpdateNotificationFor maneuver: CPManeuver,
+                     with travelEstimates: CPTravelEstimates) -> Bool { true }
+
+    func mapTemplate(_ mapTemplate: CPMapTemplate,
+                     shouldShowNotificationFor navigationAlert: CPNavigationAlert) -> Bool { true }
+
     // MARK: - Уход с экрана машины
 
     /// Наше приложение ушло с экрана машины (водитель открыл другое), но
@@ -254,11 +343,28 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Только владелец: события устаревшей сцены не должны гасить буст живой.
         guard Self.activeDelegate === self else { return }
         AppEnvironment.shared.location.setCarPlaySketchVisible(false)
+        guidance.isOnScreen = false
+    }
+
+    /// На экране машины другое приложение или приборная панель — карту
+    /// выгружаем (model.isOnScreen); вернулись — поднимаем заново.
+    func sceneDidEnterBackground(_ scene: UIScene) {
+        guard Self.activeDelegate === self else { return }
+        model.isOnScreen = false
+        // В фоне приложение могут приостановить, и сторож записал бы паузу
+        // процесса как фриз — счёт только пока экран машины наш.
+        HitchWatch.setCounting(false)
+    }
+
+    func sceneWillEnterForeground(_ scene: UIScene) {
+        model.isOnScreen = true
+        HitchWatch.setCounting(true)
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
         // Стали видимым экраном машины — значит, мы и владелец.
         Self.activeDelegate = self
+        guidance.isOnScreen = true
         // Вернулись на экран машины — схема снова имеет смысл, но только если
         // она и выбрана: в режиме карты частые фиксы ей не нужны.
         AppEnvironment.shared.location.setCarPlaySketchVisible(model.showsSketch)
@@ -390,7 +496,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// карта стоит. Раньше значок был один на оба случая, и единственный способ
     /// понять, следит ли карта, был подождать и посмотреть, уехала ли метка.
     private var recenterButton: CPMapButton {
-        let button = CPMapButton { [model] _ in model.recenterRequests += 1 }
+        let button = CPMapButton { [model] _ in model.recenter() }
         button.image = buttonImage(model.isFollowing ? "location.fill" : "location")
         return button
     }
@@ -421,13 +527,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private var zoomInButton: CPMapButton {
-        let button = CPMapButton { [model] _ in model.zoomInRequests += 1 }
+        let button = CPMapButton { [model] _ in
+            model.zoom(in: true, engine: CarPlayMapModel.usesEngine(AppEnvironment.shared.settings))
+        }
         button.image = buttonImage("plus")
         return button
     }
 
     private var zoomOutButton: CPMapButton {
-        let button = CPMapButton { [model] _ in model.zoomOutRequests += 1 }
+        let button = CPMapButton { [model] _ in
+            model.zoom(in: false, engine: CarPlayMapModel.usesEngine(AppEnvironment.shared.settings))
+        }
         button.image = buttonImage("minus")
         return button
     }
@@ -548,6 +658,18 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             buttons.append(placeButton(slot: slot))
         }
 
+        // Поиск — третьей плиткой, сразу за Домом и Работой: адрес, которого
+        // нет в недавних, раньше можно было задать только на телефоне.
+        buttons.append(gridButton(symbol: "magnifyingglass",
+                                  titles: [String(localized: "Поиск")]) { [weak self] in
+            self?.presentSearch()
+        })
+        // АЗС — частый вопрос в дороге, и ответ на него — одна плитка.
+        buttons.append(gridButton(symbol: Venue.Kind.fuel.symbol,
+                                  titles: [Venue.Kind.fuel.title]) { [weak self] in
+            self?.presentNearest(.fuel)
+        })
+
         // Дом и Работа уже стоят своими плитками выше — в «недавних» они
         // дублируются и съедают места из восьми, которые есть у сетки.
         // Сравниваем по координате, а не по названию: одно и то же место
@@ -573,6 +695,40 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         interfaceController?.pushTemplate(grid, animated: true) { _, error in
             if let error {
                 Log.carplay.error("pushTemplate(куда): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Ближайшие заведения вида списком: тап — маршрут.
+    private func presentNearest(_ kind: Venue.Kind) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let found = await search.nearest(kind)
+            guard !found.isEmpty else {
+                return showAlert(title: String(format: String(localized: "%@ рядом не нашлось"), kind.title),
+                                 message: String(localized: "Без сети ищу только по своей карте."))
+            }
+            let items = found.map { place, detail -> CPListItem in
+                let item = CPListItem(text: place.title, detailText: detail)
+                item.handler = { [weak self] _, completion in
+                    self?.route(to: place)
+                    completion()
+                }
+                return item
+            }
+            let list = CPListTemplate(title: kind.title, sections: [CPListSection(items: items)])
+            interfaceController?.pushTemplate(list, animated: true) { _, error in
+                if let error {
+                    Log.carplay.error("pushTemplate(\(kind.title, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+                }
+            }
+        }
+    }
+
+    private func presentSearch() {
+        interfaceController?.pushTemplate(search.makeTemplate(), animated: true) { _, error in
+            if let error {
+                Log.carplay.error("pushTemplate(поиск): \(error.localizedDescription, privacy: .public)")
             }
         }
     }

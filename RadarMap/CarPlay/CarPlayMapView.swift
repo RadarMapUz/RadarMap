@@ -34,6 +34,12 @@ struct CarPlayMapView: UIViewRepresentable {
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
         map.delegate = context.coordinator
+        // Счётчики команд — с текущих значений модели: карта создаётся заново
+        // после схемы и движка, и нажатия, сделанные там, здесь не повторяются.
+        context.coordinator.recenterHandled = model.recenterRequests
+        context.coordinator.zoomInHandled = model.zoomInRequests
+        context.coordinator.zoomOutHandled = model.zoomOutRequests
+        context.coordinator.panHandled = model.panTotal
         // Тёмная карта днём под солнцем за стеклом машины не читается вовсе —
         // это худший экран из всех, что приложение показывает. Настройка вида
         // (тёмная / светлая / по солнцу) в приложении есть с самого начала, но
@@ -106,6 +112,17 @@ struct CarPlayMapView: UIViewRepresentable {
         if model.zoomOutRequests != coordinator.zoomOutHandled {
             coordinator.zoomOutHandled = model.zoomOutRequests
             coordinator.zoom(map, factor: 2.0)
+        }
+        // Панорама от шаблона (касаний в окне машины нет): содержимое едет за
+        // пальцем, слежение снимается — как от жеста.
+        if model.panTotal != coordinator.panHandled {
+            let step = CGSize(width: model.panTotal.width - coordinator.panHandled.width,
+                              height: model.panTotal.height - coordinator.panHandled.height)
+            coordinator.panHandled = model.panTotal
+            map.setUserTrackingMode(.none, animated: false)
+            let target = CGPoint(x: map.bounds.midX - step.width,
+                                 y: map.bounds.midY - step.height)
+            map.setCenter(map.convert(target, toCoordinateFrom: map), animated: false)
         }
 
         // В поездке карта разворачивается по ходу движения — так навигатор
@@ -188,6 +205,7 @@ struct CarPlayMapView: UIViewRepresentable {
         var recenterHandled = 0
         var zoomInHandled = 0
         var zoomOutHandled = 0
+        var panHandled = CGSize.zero
         var cameraCountSeen = -1
         var tripActiveSeen = false
         var thermalModeSeen = PerformanceMode.full

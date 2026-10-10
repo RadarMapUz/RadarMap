@@ -454,18 +454,29 @@ final class RoadNetworkService {
     /// поиск после него уходит к Apple, а не показывает неполный город как
     /// полный.
     func addressBook(for coordinate: CLLocationCoordinate2D) async -> AddressBook? {
-        let key = AddressBook.key(for: coordinate)
+        await cellFile(key: AddressBook.key(for: coordinate), what: "адреса", decode: AddressBook.decode)
+    }
+
+    /// Заведения клетки (АЗС, парковки…) — тем же путём, что адреса.
+    func venueBook(for coordinate: CLLocationCoordinate2D) async -> VenueBook? {
+        await cellFile(key: VenueBook.key(for: coordinate), what: "заведения", decode: VenueBook.decode)
+    }
+
+    /// Файл крупной клетки из подписанного индекса: с диска, если sha сошёлся,
+    /// иначе с сервера (только со связью) — и на диск. Не сошёлся sha или
+    /// формат — клетка помечается битой до следующего индекса.
+    private func cellFile<T: Sendable>(key: String, what: StaticString,
+                                       decode: @escaping @Sendable (Data) -> T?) async -> T? {
         guard indexVersion >= RoadTiles.formatVersionV2,
               let expected = index?.tiles[key], !broken.contains(key)
         else { return nil }
 
         let fileURL = directory.appendingPathComponent(
             RoadTiles.fileName(key: key, version: indexVersion))
-        if let fromDisk = await Task.detached(priority: .utility, operation: {
-            () -> AddressBook? in
+        if let fromDisk = await Task.detached(priority: .utility, operation: { () -> T? in
             guard let data = try? Data(contentsOf: fileURL),
                   RoadTiles.sha256Hex(of: data) == expected.sha256 else { return nil }
-            return AddressBook.decode(data)
+            return decode(data)
         }).value {
             return fromDisk
         }
@@ -475,21 +486,21 @@ final class RoadNetworkService {
                 "roads/" + RoadTiles.fileName(key: key, version: indexVersion))
         else { return nil }
         let directory = self.directory
-        let decoded = await Task.detached(priority: .utility) { () -> AddressBook? in
+        let decoded = await Task.detached(priority: .utility) { () -> T? in
             guard RoadTiles.sha256Hex(of: data) == expected.sha256,
-                  let book = AddressBook.decode(data) else { return nil }
+                  let book = decode(data) else { return nil }
             do {
                 try FileManager.default.createDirectory(
                     at: directory, withIntermediateDirectories: true)
                 try data.write(to: fileURL, options: .atomic)
             } catch {
-                Log.route.error("адреса не записались: \(error.localizedDescription, privacy: .public)")
+                Log.route.error("\(what, privacy: .public) не записались: \(error.localizedDescription, privacy: .public)")
             }
             return book
         }.value
         if decoded == nil {
             broken.insert(key)
-            Log.route.error("адреса \(key, privacy: .public) не сошлись по sha или формату — отброшены")
+            Log.route.error("\(what, privacy: .public) \(key, privacy: .public) не сошлись по sha или формату — отброшены")
         }
         return decoded
     }

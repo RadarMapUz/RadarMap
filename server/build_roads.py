@@ -1330,6 +1330,90 @@ def feature_center(geometry):
     return (min(lons) + max(lons)) / 2, (min(lats) + max(lats)) / 2
 
 
+# --- Заведения для поиска: АЗС, парковки, мойки ---------------------------
+#
+# «АЗС рядом» — первый вопрос водителя к поиску, и Apple в Узбекистане на него
+# почти не отвечает. Свой индекс — тот же приём, что у адресов: подписанная
+# клетка 0,5° (набор «v»), лежит на телефоне и работает без сети.
+#
+# Коды — контракт с клиентом (Venue.Kind). Значения не переставляются.
+SET_VENUES = "v"
+VENUE_KINDS = (
+    (1, "amenity", {"fuel"}),
+    (2, "amenity", {"parking"}),
+    (3, "amenity", {"car_wash"}),
+    (4, "shop", {"car_repair"}),
+    (5, "shop", {"tyres"}),
+    (6, "amenity", {"charging_station"}),
+    (7, "amenity", {"restaurant", "cafe", "fast_food"}),
+    (8, "amenity", {"pharmacy"}),
+    (9, "amenity", {"atm", "bank"}),
+    (10, "shop", {"supermarket"}),
+)
+# Одно заведение точкой и контуром в паре метров — одна запись.
+VENUE_DUPLICATE_METERS = 30.0
+
+
+def venue_kind(properties):
+    """Код вида заведения или None — не наше."""
+    for code, key, values in VENUE_KINDS:
+        if properties.get(key) in values:
+            return code
+    return None
+
+
+def collect_venues(source_path):
+    """geojsonl заведений → [(код, имя, lon, lat)].
+
+    Имя — по-русски, иначе как есть, иначе бренд; без имени (парковки чаще
+    всего безымянны) — пустое: клиент подпишет видом. Контур — серединой рамки.
+    """
+    out = []
+    if not source_path or not os.path.exists(source_path):
+        return out
+    with open(source_path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.lstrip("\x1e").strip()
+            if not line:
+                continue
+            try:
+                feature = json.loads(line)
+            except ValueError:
+                continue
+            properties = feature.get("properties") or {}
+            code = venue_kind(properties)
+            if code is None:
+                continue
+            spot = feature_center(feature.get("geometry") or {})
+            if spot is None:
+                continue
+            name = (properties.get("name:ru") or properties.get("name")
+                    or properties.get("brand") or "").strip()
+            out.append((code, name, spot[0], spot[1]))
+    return out
+
+
+def venues_by_cell(rows):
+    """Заведения → {ключ клетки: полезная нагрузка файла}.
+
+    Запись — [код, имя, lat, lon] целыми 1e-5°. Порядок — сортировкой, а не
+    порядком строк экстракта: иначе sha256 файла менялся бы от перестановки, и
+    телефоны перекачивали бы то, в чём не изменилось ничего.
+    """
+    cells = {}
+    kept = defaultdict(list)   # (код, имя) → уже взятые точки
+    for code, name, lon, lat in sorted(rows, key=lambda r: (r[0], r[1], r[3], r[2])):
+        # Расстоянием, а не округлением в ячейку: два конца одного здания по
+        # разные стороны границы ячейки остались бы двумя АЗС.
+        if any(meters_between((lon, lat), other) < VENUE_DUPLICATE_METERS
+               for other in kept[(code, name)]):
+            continue
+        kept[(code, name)].append((lon, lat))
+        cells.setdefault(address_key(lat, lon), []).append(
+            [code, name, round(lat * SCALE), round(lon * SCALE)])
+    return {key: {"version": 1, "venues": rows} for key, rows in cells.items()}
+
+
 def addresses_by_cell(rows):
     """Адреса → {ключ клетки: полезная нагрузка файла}.
 
@@ -5449,7 +5533,7 @@ def build_road_surface(roads):
 
 def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
                 far_points=(), far=None, addresses=None, houses=None,
-                surface=True, places=(), islands=()):
+                surface=True, places=(), islands=(), venues=None):
     """Разложить дороги по тайлам и собрать индексы v1 и v2.
 
     Дорога, задевшая несколько тайлов, попадает в каждый целиком: дубль на
@@ -5597,6 +5681,15 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
             handle.write(blob)
         index_v2[composite] = {"sha256": hashlib.sha256(blob).hexdigest(),
                                "bytes": len(blob)}
+    # Заведения — тем же путём, что адреса: клетка 0,5°, тот же подписанный индекс.
+    for key, payload in sorted((venues or {}).items()):
+        blob = json.dumps(payload, separators=(",", ":"),
+                          ensure_ascii=False).encode()
+        composite = f"{key}_{SET_VENUES}"
+        with open(os.path.join(target_dir, f"road2_{composite}.json"), "wb") as handle:
+            handle.write(blob)
+        index_v2[composite] = {"sha256": hashlib.sha256(blob).hexdigest(),
+                               "bytes": len(blob)}
 
     # Байты индекса подписывает владелец (publish_roads.sh): подпись индекса
     # накрывает все тайлы разом через их sha256.
@@ -5627,6 +5720,8 @@ def main():
                         help="geojsonl зданий (необязателен)")
     parser.add_argument("--addresses", dest="addresses", default=None,
                         help="geojsonl объектов с addr:street (необязателен)")
+    parser.add_argument("--venues", dest="venues", default=None,
+                        help="geojsonl заведений: АЗС, парковки, мойки (необязателен)")
     parser.add_argument("--places", dest="places", default=None,
                         help="geojsonl населённых пунктов (необязателен)")
     parser.add_argument("--trees", dest="trees", default=None,
@@ -5755,9 +5850,15 @@ def main():
     islands = collect_islands(args.areas, args.tolerance / 111_320.0) + drawn_islands(edits)
     if islands:
         print(f"островков из OSM: {len(islands)}")
+    venue_rows = collect_venues(args.venues)
+    venues = venues_by_cell(venue_rows)
     index, index_v2 = write_tiles(roads, args.tiles_dir, args.grid, areas, points,
                                   far_points, far, addresses, houses,
-                                  args.surface, places, islands)
+                                  args.surface, places, islands, venues)
+    if venue_rows:
+        kinds = Counter(row[0] for row in venue_rows)
+        print(f"заведения: {len(venue_rows)} (по видам {dict(sorted(kinds.items()))}), "
+              f"клеток {len(venues)}")
 
     if places:
         ranks = Counter(place[0] for place in places)

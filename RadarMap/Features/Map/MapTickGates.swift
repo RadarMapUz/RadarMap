@@ -76,8 +76,16 @@ struct ManeuverBannerGate: View {
         let mode = MapMode.current(isTripActive: env.location.isTripActive,
                                    hasRoute: env.route.isActive)
         ZStack {
-            if mode.showsManeuver, let step = env.route.nextStep {
-                ManeuverBanner(step: step, distance: env.route.nextStepDistance)
+            if mode.showsManeuver {
+                VStack(spacing: 8) {
+                    if let step = env.route.nextStep {
+                        ManeuverBanner(step: step, distance: env.route.nextStepDistance,
+                                       speedKmh: env.location.speedKmh)
+                    }
+                    if let notice = env.route.laneNotice {
+                        LaneNoticeBanner(lanes: notice.lanes, distance: env.route.laneNoticeDistance)
+                    }
+                }
             }
         }
         .motionAnimation(.spring(duration: 0.3), value: env.route.nextStep?.distanceAlong)

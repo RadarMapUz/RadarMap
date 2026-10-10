@@ -33,7 +33,12 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
         didSet {
             answered = false
             completer.queryFragment = query
-            mine = book?.search(query, near: near) ?? []
+            mine = book?.lookup(query, near: near) ?? []
+            places = venues?.search(query, near: near) ?? []
+            if !query.isEmpty, category != nil {
+                cancelCategory()
+                category = nil
+            }
         }
     }
 
@@ -51,6 +56,19 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
     /// парковки и в тоннеле, где сетевого поиска просто нет.
     private(set) var mine: [Address] = []
     private var book: AddressBook?
+    /// Свои заведения клетки (АЗС, парковки…) и найденные в них по запросу.
+    private var venues: VenueBook?
+    private(set) var places: [Venue] = []
+
+    /// Выбранная плитка категории и её ответ: свой индекс, а пока клетка не
+    /// опубликована или пуста — Apple (`categoryFromApple`).
+    private(set) var category: Venue.Kind?
+    private(set) var categoryResults: [Venue] = []
+    private(set) var categoryFromApple = false
+    private(set) var categoryLoading = false
+    /// Ответ «по пути»: сколько ехать до заведения вдоль маршрута (по id).
+    private(set) var categoryAhead: [String: Double] = [:]
+    private var categoryTask: Task<Void, Never>?
     private var bookAsked = false
 
     /// Завершитель ответил на текущий запрос. Без этого флага пустой список
@@ -59,6 +77,22 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
     private(set) var answered = false
 
     private let completer = MKLocalSearchCompleter()
+
+    /// Идёт разворот адреса Apple в координату. Второй тап в это время
+    /// ничего не делает: раньше двойной тап строил два маршрута.
+    private(set) var isResolving = false
+
+    func resolveOnce(_ completion: MKLocalSearchCompletion) async -> CLLocationCoordinate2D? {
+        guard !isResolving else { return nil }
+        isResolving = true
+        defer { isResolving = false }
+        return await resolve(completion)
+    }
+
+    /// Расстояние от машины — подпись строки результата.
+    func distance(to point: CLLocationCoordinate2D) -> CLLocationDistance? {
+        near.map { GeoMath.fastDistance($0.latitude, $0.longitude, point.latitude, point.longitude) }
+    }
 
     override init() {
         super.init()
@@ -84,20 +118,100 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
 
     /// Забрать файл адресов города. Один раз за показ экрана: город не
     /// меняется, пока человек набирает запрос.
+    ///
+    /// Без GPS — клетка дома, а без дома — Ташкента: свой поиск обязан
+    /// работать и в подвале парковки, где спутников нет, а раньше без
+    /// координаты он не загружался вовсе.
     func loadBook(from roads: RoadNetworkService,
-                  at coordinate: CLLocationCoordinate2D?) async {
-        guard !bookAsked, let coordinate else { return }
+                  at coordinate: CLLocationCoordinate2D?,
+                  fallback: CLLocationCoordinate2D?) async {
+        guard !bookAsked else { return }
         bookAsked = true
         near = coordinate
-        book = await roads.addressBook(for: coordinate)
-        mine = book?.search(query, near: near) ?? []
+        if let coordinate {
+            // Apple без региона ищет по всему миру: «Навои» находился бы в
+            // Самарканде раньше, чем в Ташкенте.
+            completer.region = MKCoordinateRegion(center: coordinate,
+                                                  latitudinalMeters: AppConfig.searchRegionMeters,
+                                                  longitudinalMeters: AppConfig.searchRegionMeters)
+        }
+        let cell = coordinate ?? fallback ?? AppConfig.searchFallbackCenter
+        book = await roads.addressBook(for: cell)
+        venues = await roads.venueBook(for: cell)
+        mine = book?.lookup(query, near: near) ?? []
+        places = venues?.search(query, near: near) ?? []
+    }
+
+    /// Плитка категории: ближайшие такого вида, а с маршрутом — по пути.
+    /// Повторный тап — свернуть.
+    func pick(_ kind: Venue.Kind, route: (points: [MKMapPoint], progress: Double)? = nil) {
+        cancelCategory()
+        guard category != kind else {
+            category = nil
+            categoryResults = []
+            return
+        }
+        category = kind
+        categoryResults = []
+        categoryLoading = true
+        let venues = venues, near = near
+        categoryTask = Task { [weak self] in
+            // «По пути» — проекция каждого заведения на линию маршрута: на
+            // междугороднем маршруте это десятки миллионов операций, не для main.
+            var along: [(venue: Venue, ahead: Double)] = []
+            if let route, let venues {
+                along = await Task.detached(priority: .userInitiated) {
+                    venues.alongRoute(kind, points: route.points, progress: route.progress)
+                }.value
+            }
+            guard let self, !Task.isCancelled, self.category == kind else { return }
+            defer { self.categoryLoading = false }
+            if !along.isEmpty {
+                self.categoryResults = along.map(\.venue)
+                self.categoryAhead = Dictionary(uniqueKeysWithValues: along.map { ($0.venue.id, $0.ahead) })
+                self.categoryFromApple = false
+                return
+            }
+            let own = venues?.nearest(kind, to: near) ?? []
+            if !own.isEmpty {
+                self.categoryResults = own
+                self.categoryFromApple = false
+                return
+            }
+            // Своего ответа нет (клетка ещё не опубликована) — Apple, и честно
+            // подписано, откуда ответ.
+            let found: [Venue]
+            do {
+                found = try await VenueBook.apple(kind, near: near)
+            } catch {
+                Log.app.error("категория у Apple: \(error.localizedDescription, privacy: .public)")
+                found = []
+            }
+            guard !Task.isCancelled, self.category == kind else { return }
+            self.categoryResults = found
+            self.categoryFromApple = true
+        }
+    }
+
+    /// Отменить ответ плитки. Индикатор гасится здесь же: отменённая задача
+    /// до своего конца не доходит, и раньше он оставался крутиться вместо
+    /// ответа следующей плитки.
+    private func cancelCategory() {
+        categoryTask?.cancel()
+        categoryTask = nil
+        categoryLoading = false
+        categoryAhead = [:]
     }
 
     func resolve(_ completion: MKLocalSearchCompletion) async -> CLLocationCoordinate2D? {
         let request = MKLocalSearch.Request(completion: completion)
-        // Поиск/сеть подвели — вернём nil, UI покажет пустой результат.
-        guard let response = try? await MKLocalSearch(request: request).start() else { return nil }
-        return response.mapItems.first?.placemark.coordinate
+        do {
+            return try await MKLocalSearch(request: request).start().mapItems.first?.placemark.coordinate
+        } catch {
+            // UI скажет «не удалось открыть адрес»; причина — в лог, а не в никуда.
+            Log.app.error("адрес не развернулся: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 }
 
@@ -108,7 +222,8 @@ struct SearchView: View {
     /// Адрес не удалось развернуть в координату — тап отработал вхолостую, и
     /// об этом надо сказать: молчание здесь неотличимо от сломанной кнопки.
     @State private var resolveFailed = false
-    var onSelect: ((CLLocationCoordinate2D) -> Void)? = nil
+    /// Выбор места: точка и её название (для точки на карте).
+    var onSelect: ((CLLocationCoordinate2D, String) -> Void)? = nil
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
     /// Открытие сразу в режиме «выбрать адрес для Дом/Работа» (из Настроек).
     var initialAssign: PlaceSlot? = nil
@@ -124,8 +239,12 @@ struct SearchView: View {
                     assignBanner(slot)
                 } else {
                     placesSection
-                    if model.query.isEmpty { recentsSection }
+                    if model.query.isEmpty {
+                        categoriesSection
+                        recentsSection
+                    }
                 }
+                placesFoundSection
                 mineSection
                 resultsSection
             }
@@ -146,7 +265,8 @@ struct SearchView: View {
         .onAppear { assigning = initialAssign }
         .task {
             await model.loadBook(from: env.roads,
-                                 at: env.location.currentCoordinate)
+                                 at: env.location.currentCoordinate,
+                                 fallback: env.settings.place(for: .home)?.coordinate)
         }
         .alert("Не удалось открыть адрес", isPresented: $resolveFailed) {
             Button("Понятно", role: .cancel) { }
@@ -179,7 +299,7 @@ struct SearchView: View {
                 if let onRoute {
                     onRoute(place.coordinate, slot.name)
                 } else {
-                    onSelect?(place.coordinate)
+                    onSelect?(place.coordinate, slot.name)
                 }
                 dismiss()
             } else {
@@ -225,6 +345,116 @@ struct SearchView: View {
         }
     }
 
+    // MARK: - Категории и заведения
+
+    /// Плитки «АЗС, Парковка, Мойка…» — то, что ищут из машины. Ответ — сразу
+    /// под плитками: ближайшие, со своего индекса и без сети.
+    @ViewBuilder private var categoriesSection: some View {
+        Section {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 8)], spacing: 8) {
+                ForEach(Venue.Kind.quick, id: \.self) { kind in
+                    Button {
+                        model.pick(kind, route: env.route.selected.map { ($0.points, env.route.progressAlong) })
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: kind.symbol)
+                                .font(.rounded(17, .bold))
+                            Text(kind.title)
+                                .font(.rounded(11, .semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        .foregroundStyle(model.category == kind ? Theme.background : Theme.textPrimary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(model.category == kind ? AnyShapeStyle(Theme.accent.gradient)
+                                                           : AnyShapeStyle(Theme.screenBackground),
+                                    in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(model.category == kind ? .isSelected : [])
+                }
+            }
+            .padding(.vertical, 4)
+            if let kind = model.category {
+                if model.categoryLoading {
+                    ProgressView().frame(maxWidth: .infinity)
+                } else if model.categoryResults.isEmpty {
+                    Text(String(format: String(localized: "%@ рядом не нашлось"), kind.title))
+                        .font(.rounded(13))
+                        .foregroundStyle(Theme.textSecondary)
+                } else {
+                    ForEach(model.categoryResults.prefix(AppConfig.searchCategoryLimit)) { venue in
+                        venueRow(venue)
+                    }
+                }
+            }
+        } header: {
+            Text("Рядом")
+        } footer: {
+            if model.category != nil, !model.categoryResults.isEmpty {
+                Text(model.categoryFromApple ? "По данным Apple" : "Из своей карты · без сети")
+            }
+        }
+        .listRowBackground(Theme.surface)
+    }
+
+    /// Заведения по запросу («Лукойл», «заправка») — своя карта, без сети.
+    @ViewBuilder private var placesFoundSection: some View {
+        if !model.places.isEmpty, assigning == nil {
+            Section {
+                ForEach(model.places) { venueRow($0) }
+            } header: {
+                Text("Места · без сети")
+            }
+            .listRowBackground(Theme.surface)
+        }
+    }
+
+    private func venueRow(_ venue: Venue) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                onSelect?(venue.point, venue.title)
+                dismiss()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: venue.kind.symbol)
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(width: 24)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(venue.title)
+                            .font(.rounded(15, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                        if let ahead = model.categoryAhead[venue.id] {
+                            Text(String(format: String(localized: "через %@ по пути"), Formatting.distance(ahead)))
+                                .font(.rounded(12))
+                                .foregroundStyle(Theme.accent)
+                        } else if let distance = model.distance(to: venue.point) {
+                            Text(Formatting.distance(distance))
+                                .font(.rounded(12))
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let onRoute {
+                Button {
+                    onRoute(venue.point, venue.title)
+                    dismiss()
+                } label: {
+                    Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
+                        .font(.rounded(24))
+                        .foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Маршрут сюда"))
+            }
+        }
+    }
+
     private func assignBanner(_ slot: PlaceSlot) -> some View {
         Section {
             HStack(spacing: 12) {
@@ -266,7 +496,7 @@ struct SearchView: View {
                         if let onRoute {
                             onRoute(place.coordinate, place.title)
                         } else {
-                            onSelect?(place.coordinate)
+                            onSelect?(place.coordinate, place.title)
                         }
                         dismiss()
                     } label: {
@@ -307,7 +537,7 @@ struct SearchView: View {
     @ViewBuilder private var mineSection: some View {
         if !model.mine.isEmpty {
             Section {
-                ForEach(model.mine, id: \.title) { address in
+                ForEach(model.mine) { address in
                     mineRow(address)
                 }
             } header: {
@@ -317,32 +547,47 @@ struct SearchView: View {
         }
     }
 
+    /// Название в языке приложения: в OSM 72 % улиц Ташкента записаны
+    /// латиницей («Alisher Navoiy ko'chasi»), а человек искал «Навои».
+    private func title(_ address: Address) -> String {
+        let street = StreetName.display(address.street, language: env.settings.appLanguage.mapCode)
+        return address.house.isEmpty ? street : "\(street), \(address.house)"
+    }
+
     private func mineRow(_ address: Address) -> some View {
-        HStack(spacing: 10) {
+        let title = title(address)
+        return HStack(spacing: 10) {
             Button {
                 if let slot = assigning {
-                    assign(slot, coordinate: address.point, title: address.title)
+                    assign(slot, coordinate: address.point, title: title)
                 } else {
-                    onSelect?(address.point)
+                    onSelect?(address.point, title)
                     dismiss()
                 }
             } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: "house.fill")
+                    Image(systemName: address.isStreet ? "road.lanes" : "house.fill")
                         .font(.rounded(13, .semibold))
                         .foregroundStyle(Theme.textSecondary)
                         .frame(width: 24)
-                    Text(address.title)
-                        .font(.rounded(15, .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(title)
+                            .font(.rounded(15, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                        if let distance = model.distance(to: address.point) {
+                            Text(Formatting.distance(distance))
+                                .font(.rounded(12))
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if let onRoute, assigning == nil {
                 Button {
-                    onRoute(address.point, address.title)
+                    onRoute(address.point, title)
                     dismiss()
                 } label: {
                     Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
@@ -364,7 +609,7 @@ struct SearchView: View {
                 }
             }
             .listRowBackground(Theme.surface)
-        } else if !model.query.isEmpty, model.answered, model.mine.isEmpty {
+        } else if !model.query.isEmpty, model.answered, model.mine.isEmpty, model.places.isEmpty {
             // Пустой список без единого слова читается как зависшее
             // приложение: человек ждёт результата, которого уже не будет.
             Section {
@@ -393,14 +638,14 @@ struct SearchView: View {
         HStack(spacing: 10) {
             Button {
                 Task {
-                    guard let coordinate = await model.resolve(result) else {
-                        resolveFailed = true
+                    guard let coordinate = await model.resolveOnce(result) else {
+                        if !model.isResolving { resolveFailed = true }
                         return
                     }
                     if let slot = assigning {
                         assign(slot, coordinate: coordinate, title: result.title)
                     } else {
-                        onSelect?(coordinate)
+                        onSelect?(coordinate, result.title)
                         dismiss()
                     }
                 }
@@ -422,10 +667,10 @@ struct SearchView: View {
                 // Построить маршрут прямо из поиска — самый короткий путь к цели.
                 Button {
                     Task {
-                        if let coordinate = await model.resolve(result) {
+                        if let coordinate = await model.resolveOnce(result) {
                             onRoute(coordinate, result.title)
                             dismiss()
-                        } else {
+                        } else if !model.isResolving {
                             resolveFailed = true
                         }
                     }

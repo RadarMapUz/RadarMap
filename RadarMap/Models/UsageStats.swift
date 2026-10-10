@@ -100,9 +100,22 @@ nonisolated struct UsageStats: Codable, Equatable, Sendable {
     /// «вылетает» перестаёт быть ощущением.
     var memoryWarnings = 0
 
+    /// Экран машины за сутки: `sessions`, `minutes`, фризы главного потока
+    /// (`hitches` > 250 мс, `longHitches` > 1 с, `maxHitchMs`). Жалоба «на
+    /// CarPlay км/ч и кнопки не работают» приходит из машины, где лог не
+    /// прочесть; эти суммы отвечают, был ли это фриз телефона.
+    ///
+    /// Опционал — не небрежность: синтезированный Codable требует каждый
+    /// необязательный ключ, и файл статистики, записанный прежней сборкой, без
+    /// этого поля не прочитался бы — сутки счётчиков пропали бы при обновлении.
+    var carPlay: [String: Int]?
+
     /// Пустой отчёт слать незачем: приложение просто не открывали.
     var isEmpty: Bool {
+        // День с одной лишь сессией машины (зависло — поездка не началась) —
+        // как раз тот, ради которого счётчики CarPlay заведены.
         trips == 0 && alerts == 0 && passes == 0 && reports == 0 && screens.isEmpty
+            && (carPlay?.isEmpty ?? true)
     }
 
     static func today(calendar: Calendar = .current, now: Date = Date()) -> String {

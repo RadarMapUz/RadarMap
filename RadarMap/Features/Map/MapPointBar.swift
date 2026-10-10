@@ -52,8 +52,12 @@ struct MapPointBar: View {
                     action("Маршрут сюда", "arrow.triangle.turn.up.right.circle.fill",
                            tint: Theme.accent, action: onRoute)
                 }
+                // Янтарь радара — заливка, а не краска текста: #F2B200 на
+                // светлой панели читался 1,9:1. Значок — на кружке цвета
+                // типа (как маркер на карте), подпись — обычным текстом.
                 action("Радар здесь", "dot.radiowaves.left.and.right",
-                       tint: Theme.Types.radar, action: onRadar)
+                       tint: Theme.textPrimary, chip: Theme.Types.radar,
+                       glyph: Theme.Types.darkGlyph, action: onRadar)
                 action("Своя камера", "plus.viewfinder",
                        tint: Theme.textPrimary, action: onOwnCamera)
             }
@@ -63,11 +67,21 @@ struct MapPointBar: View {
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
+    /// `chip` — заливка кружка под значком (тогда значок — `glyph`), для
+    /// цветов, которые нельзя ставить текстом. Без неё значок в цвет `tint`.
+    /// Ячейка значка одной высоты в обоих случаях, иначе кнопки ряда разной
+    /// высоты.
     private func action(_ title: LocalizedStringKey, _ icon: String, tint: Color,
+                        chip: Color? = nil, glyph: Color = .white,
                         action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Image(systemName: icon).font(.rounded(18, .semibold))
+                if let chip {
+                    TypeChipGlyph(symbol: icon, fill: chip, glyph: glyph)
+                } else {
+                    Image(systemName: icon).font(.rounded(18, .semibold))
+                        .frame(height: TypeChipGlyph.side)
+                }
                 Text(title)
                     .font(.rounded(10, .medium))
                     .lineLimit(1)
@@ -108,14 +122,19 @@ struct ReportPickerBar: View {
                     Button {
                         onPick(kind)
                     } label: {
+                        // Цвет типа — заливкой кружка, не краской подписи:
+                        // янтарная тренога текстом на светлой панели давала
+                        // 1,9:1. Кружок с глифом — тот же язык, что маркер
+                        // на карте; подпись — обычный текст.
                         VStack(spacing: 4) {
-                            Image(systemName: kind.symbol).font(.rounded(18, .semibold))
+                            TypeChipGlyph(symbol: kind.symbol, fill: kind.cameraType.tint,
+                                          glyph: kind.cameraType.glyphTint)
                             Text(kind.title)
                                 .font(.rounded(10, .medium))
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
                         }
-                        .foregroundStyle(kind.cameraType.tint)
+                        .foregroundStyle(Theme.textPrimary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                         .background(Theme.surface.opacity(0.6),
@@ -128,5 +147,23 @@ struct ReportPickerBar: View {
         .padding(12)
         .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerLarge))
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+}
+
+/// Значок типа на кружке цвета типа — как маркер камеры на карте. Цвета типов
+/// подобраны как ЗАЛИВКИ (глиф на них ≥ 4,6:1), а не как текст: светлый
+/// янтарь радара текстом на светлой панели нечитаем.
+private struct TypeChipGlyph: View {
+    static let side: CGFloat = 26
+    let symbol: String
+    let fill: Color
+    let glyph: Color
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.rounded(13, .bold))
+            .foregroundStyle(glyph)
+            .frame(width: Self.side, height: Self.side)
+            .background(fill, in: Circle())
     }
 }

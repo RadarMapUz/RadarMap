@@ -94,9 +94,15 @@ struct PeriodMapSheet: View {
             ForEach(data.markers) { marker in
                 Annotation("", coordinate: marker.coordinate, anchor: .center) {
                     markerDot(marker, isSelected: selected?.id == marker.id)
+                        // Кружок от 20 pt, а палец — 44: мишень растёт, рисунок
+                        // нет. И это кнопка (открывает карточку) — VoiceOver
+                        // должен так её и назвать, а не читать как картинку.
+                        .tapTarget()
                         .onTapGesture {
                             selected = selected?.id == marker.id ? nil : marker
                         }
+                        .accessibilityAddTraits(selected?.id == marker.id
+                                                ? [.isButton, .isSelected] : .isButton)
                 }
                 .annotationTitles(.hidden)
             }

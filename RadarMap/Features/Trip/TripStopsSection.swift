@@ -87,10 +87,17 @@ struct TripStopsSection: View {
                     .font(.rounded(17, .bold))
                     .foregroundStyle(Theme.textPrimary)
                 Spacer()
-                Button("Разделить здесь") { splitCandidate = stop }
-                    .font(.rounded(15, .semibold))
-                    .foregroundStyle(Theme.accent)
-                    .buttonStyle(PressableStyle())
+                Button {
+                    splitCandidate = stop
+                } label: {
+                    // Мишень внутри label: модификаторы снаружи кнопки область
+                    // касания не растят, и строка в 15 pt оставалась ~20 pt.
+                    Text("Разделить здесь")
+                        .font(.rounded(15, .semibold))
+                        .foregroundStyle(Theme.accent)
+                        .tapTarget()
+                }
+                .buttonStyle(PressableStyle())
             }
             Text(subtitle(for: stop))
                 .font(.rounded(15))

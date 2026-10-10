@@ -59,21 +59,23 @@ struct OnboardingView: View {
     // MARK: - Страница 1: герой
 
     private var heroPage: some View {
-        VStack(spacing: 0) {
-            Spacer()
-            RadarHero(active: page == 0)
-                .frame(width: 170, height: 170)
-                .padding(.bottom, 28)
-            Text("RadarMap")
-                .font(.rounded(34, .bold))
-                .foregroundStyle(Theme.textPrimary)
-            Text("Все камеры и радары Узбекистана из официальных данных. База обновляется сама.")
-                .font(.rounded(15))
-                .foregroundStyle(Theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 36)
-                .padding(.top, 10)
-            Spacer()
+        scrollingPage {
+            VStack(spacing: 0) {
+                Spacer()
+                RadarHero(active: page == 0)
+                    .frame(width: 170, height: 170)
+                    .padding(.bottom, 28)
+                Text("RadarMap")
+                    .font(.rounded(34, .bold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("Все камеры и радары Узбекистана из официальных данных. База обновляется сама.")
+                    .font(.rounded(15))
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 36)
+                    .padding(.top, 10)
+                Spacer()
+            }
         }
     }
 
@@ -159,89 +161,109 @@ struct OnboardingView: View {
     // MARK: - Страница 5: разрешения
 
     private var permissionsPage: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 24)
-            Image(systemName: "checkmark.shield.fill")
-                .font(.rounded(44, .bold))
-                .foregroundStyle(Theme.accent)
-                .shadow(color: Theme.accent.opacity(0.5), radius: 14)
-                .padding(.bottom, 18)
-            Text("Два разрешения — и в путь")
-                .font(.rounded(24, .bold))
-                .foregroundStyle(Theme.textPrimary)
-                .padding(.bottom, 20)
+        scrollingPage {
+            VStack(spacing: 0) {
+                Spacer(minLength: 24)
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.rounded(44, .bold))
+                    .foregroundStyle(Theme.accent)
+                    .shadow(color: Theme.accent.opacity(0.5), radius: 14)
+                    .padding(.bottom, 18)
+                Text("Два разрешения — и в путь")
+                    .font(.rounded(24, .bold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .padding(.bottom, 20)
 
-            VStack(spacing: 12) {
-                permissionRow(
-                    icon: "location.fill",
-                    title: "Геолокация «Всегда»",
-                    subtitle: "Предупреждаем о камерах, даже когда телефон в кармане, а приложение свёрнуто.",
-                    state: locationState,
-                    action: { env.location.bootstrap() }
-                )
-                permissionRow(
-                    icon: "bell.badge.fill",
-                    title: "Уведомления",
-                    subtitle: "Звук и баннер при приближении к камере.",
-                    state: notificationsState,
-                    action: { env.notifications.requestAuthorization() }
-                )
+                VStack(spacing: 12) {
+                    permissionRow(
+                        icon: "location.fill",
+                        title: "Геолокация «Всегда»",
+                        subtitle: "Предупреждаем о камерах, даже когда телефон в кармане, а приложение свёрнуто.",
+                        state: locationState,
+                        action: { env.location.bootstrap() }
+                    )
+                    permissionRow(
+                        icon: "bell.badge.fill",
+                        title: "Уведомления",
+                        subtitle: "Звук и баннер при приближении к камере.",
+                        state: notificationsState,
+                        action: { env.notifications.requestAuthorization() }
+                    )
+                }
+                .padding(.horizontal, 20)
+
+                // Прайминг приватности: объясняем ДО системного диалога — больше доверия
+                // и согласий, App Review видит обоснование фоновой геолокации.
+                Label("Маршруты и местоположение обрабатываются только на этом iPhone — на сервер не уходят.",
+                      systemImage: "lock.shield.fill")
+                    .font(.rounded(12, .medium))
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.leading)
+                    .padding(.horizontal, 28)
+                    .padding(.top, 14)
+                Spacer(minLength: 24)
             }
-            .padding(.horizontal, 20)
-
-            // Прайминг приватности: объясняем ДО системного диалога — больше доверия
-            // и согласий, App Review видит обоснование фоновой геолокации.
-            Label("Маршруты и местоположение обрабатываются только на этом iPhone — на сервер не уходят.",
-                  systemImage: "lock.shield.fill")
-                .font(.rounded(12, .medium))
-                .foregroundStyle(Theme.textSecondary)
-                .multilineTextAlignment(.leading)
-                .padding(.horizontal, 28)
-                .padding(.top, 14)
-            Spacer(minLength: 24)
         }
     }
 
     // MARK: - Компоненты
 
+    /// Страница, которая прокручивается, когда не влезает. На SE с крупным
+    /// шрифтом четыре строки фич и две карточки разрешений обрезались снизу,
+    /// а прокрутить было нечем — текст про «Всегда» просто пропадал.
+    /// Высота не меньше экрана: пока всё влезает, Spacer'ы страницы
+    /// по-прежнему центрируют её, и вид не меняется. «Далее» снаружи —
+    /// закреплена под страницами и не уезжает вместе с текстом.
+    private func scrollingPage(@ViewBuilder _ content: () -> some View) -> some View {
+        GeometryReader { proxy in
+            ScrollView {
+                content()
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+    }
+
     private func featurePage(icon: String, title: LocalizedStringKey,
                              rows: [(String, LocalizedStringKey)]) -> some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 20)
-            ZStack {
-                Circle().fill(Theme.accent.opacity(0.10)).frame(width: 116, height: 116)
-                Circle().stroke(Theme.accent.opacity(0.3), lineWidth: 1.5).frame(width: 116, height: 116)
-                Image(systemName: icon)
-                    .font(.rounded(42, .bold))
-                    .foregroundStyle(Theme.accent)
-                    .shadow(color: Theme.accent.opacity(0.55), radius: 12)
-            }
-            .padding(.bottom, 22)
-
-            Text(title)
-                .font(.rounded(24, .bold))
-                .foregroundStyle(Theme.textPrimary)
+        scrollingPage {
+            VStack(spacing: 0) {
+                Spacer(minLength: 20)
+                ZStack {
+                    Circle().fill(Theme.accent.opacity(0.10)).frame(width: 116, height: 116)
+                    Circle().stroke(Theme.accent.opacity(0.3), lineWidth: 1.5).frame(width: 116, height: 116)
+                    Image(systemName: icon)
+                        .font(.rounded(42, .bold))
+                        .foregroundStyle(Theme.accent)
+                        .shadow(color: Theme.accent.opacity(0.55), radius: 12)
+                }
                 .padding(.bottom, 22)
 
-            VStack(spacing: 14) {
-                ForEach(rows, id: \.0) { icon, text in
-                    HStack(spacing: 14) {
-                        Image(systemName: icon)
-                            .font(.rounded(16, .semibold))
-                            .foregroundStyle(Theme.accent)
-                            .frame(width: 40, height: 40)
-                            .background(Theme.accent.opacity(0.10),
-                                        in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                        Text(text)
-                            .font(.rounded(14, .medium))
-                            .foregroundStyle(Theme.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 0)
+                Text(title)
+                    .font(.rounded(24, .bold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .padding(.bottom, 22)
+
+                VStack(spacing: 14) {
+                    ForEach(rows, id: \.0) { icon, text in
+                        HStack(spacing: 14) {
+                            Image(systemName: icon)
+                                .font(.rounded(16, .semibold))
+                                .foregroundStyle(Theme.accent)
+                                .frame(width: 40, height: 40)
+                                .background(Theme.accent.opacity(0.10),
+                                            in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                            Text(text)
+                                .font(.rounded(14, .medium))
+                                .foregroundStyle(Theme.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }
                     }
                 }
+                .padding(.horizontal, 28)
+                Spacer(minLength: 20)
             }
-            .padding(.horizontal, 28)
-            Spacer(minLength: 20)
         }
     }
 

@@ -16573,6 +16573,54 @@
           }
         }
       }
+    },
+    "Объединить с предыдущей поездкой?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Объединить с предыдущей поездкой?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldingi safar bilan birlashtirasizmi?"
+          }
+        }
+      }
+    },
+    "Удалить сообщение?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить сообщение?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xabarni o‘chirasizmi?"
+          }
+        }
+      }
+    },
+    "Продолжить писать": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Продолжить писать"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yozishda davom etish"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

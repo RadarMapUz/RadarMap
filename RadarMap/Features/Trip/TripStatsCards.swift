@@ -197,9 +197,12 @@ struct AlertRecallCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(title: String(localized: "Предупреждения")) {
                     Button(action: onExplain) {
+                        // Голый значок — ~18 pt мишени; растим область касания,
+                        // не глиф.
                         Image(systemName: "info.circle")
                             .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.textTertiary)
+                            .tapTarget()
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(String(localized: "Как считаем охват"))

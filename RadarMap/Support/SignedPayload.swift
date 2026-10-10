@@ -3,7 +3,8 @@
 //  RadarMap
 //
 //  Конверт для всего, что приходит с сервера и применяется без участия
-//  пользователя: пульт (config.json) и правки базы камер (overrides.json).
+//  пользователя: пульт (config.json), правки базы камер (overrides.json),
+//  индексы дорожных тайлов и лимитов скорости (speed_limits_index.json).
 //
 //  Полезная нагрузка — base64 ТОЧНЫХ байтов, по которым считана подпись.
 //  Подписывать сам JSON нельзя: любая перекодировка по дороге (другой порядок
@@ -25,13 +26,36 @@ nonisolated struct SignedPayload<Value: Decodable & Sendable>: Codable, Sendable
     let payload: String
     let sig: String?
 
+    /// Почему конверт отвергнут. Только для журнала: решение у всех причин
+    /// одно — не применять. Но «подпись не сошлась» (чужие руки) и «JSON не
+    /// по контракту» (наша ошибка публикации) чинятся по-разному, и в логе
+    /// их надо различать (лимиты скорости пишут причину, LimitsTrust).
+    nonisolated enum Failure: Error, Equatable, Sendable {
+        /// payload — не base64: конверт битый ещё до подписи.
+        case payloadNotBase64
+        /// Подписи нет, она не base64 или не сходится с ключом.
+        case signature
+        /// Подпись верна, но байты не разбираются в `Value`.
+        case json
+    }
+
+    /// То же, что `verified`, но с причиной отказа. Порядок проверок тот же
+    /// и единственный: подпись ДО разбора JSON.
+    func verify(publicKeyB64: String = AppConfig.otaPublicKeyB64) -> Result<Value, Failure> {
+        guard let data = Data(base64Encoded: payload) else { return .failure(.payloadNotBase64) }
+        guard OTASignature.isValid(data: data, signatureB64: sig, publicKeyB64: publicKeyB64)
+        else { return .failure(.signature) }
+        do {
+            return .success(try JSONDecoder().decode(Value.self, from: data))
+        } catch {
+            return .failure(.json)
+        }
+    }
+
     /// Разобрать и проверить. `nil` на любой неисправности: вызывающий обязан
     /// взять значения по умолчанию, а не пытаться спасти часть данных.
     func verified(publicKeyB64: String = AppConfig.otaPublicKeyB64) -> Value? {
-        guard let data = Data(base64Encoded: payload),
-              OTASignature.isValid(data: data, signatureB64: sig, publicKeyB64: publicKeyB64),
-              let value = try? JSONDecoder().decode(Value.self, from: data)
-        else { return nil }
+        guard case .success(let value) = verify(publicKeyB64: publicKeyB64) else { return nil }
         return value
     }
 }

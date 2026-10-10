@@ -52,14 +52,10 @@ struct AddCameraBar: View {
                 }
 
                 HStack(spacing: 12) {
-                    Button(action: onCancel) {
-                        Text("Отмена")
-                            .font(.rounded(16, .semibold))
-                            .foregroundStyle(Theme.textSecondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-                    }
+                    // Общая вторая кнопка: самодельная была ниже соседней
+                    // PrimaryButton, другого кегля и серым текстом — пара
+                    // не читалась парой.
+                    SecondaryButton(title: "Отмена", action: onCancel)
                     PrimaryButton(title: kind == .mobile ? "Радар здесь!" : "Добавить здесь",
                                   systemImage: "plus",
                                   tint: kind == .mobile ? Theme.Types.mobile : Theme.accentFill) {

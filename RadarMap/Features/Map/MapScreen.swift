@@ -113,7 +113,6 @@ struct MapScreen: View {
             // Следование за GPS: единственный подписчик locationTick.
             LocationFollowDriver(map: map, isCovered: showDashboard,
                                  drivesAppleCamera: shownBase == .apple)
-            MobilePassDriver()
         }
         .mapScope(mapScope)
         .fullScreenCover(isPresented: $showDashboard) { DashboardView() }
@@ -163,7 +162,7 @@ struct MapScreen: View {
         }
         .sheet(item: $map.selectedCamera) { camera in
             CameraDetailSheet(camera: camera,
-                              onRoute: env.location.currentCoordinate == nil ? nil : {
+                              onRoute: !env.location.hasLocation ? nil : {
                                   buildRoute(to: camera.coordinate, name: camera.displayTitle)
                               })
         }
@@ -182,30 +181,35 @@ struct MapScreen: View {
                                map.pressedPoint = MapPoint(coordinate: coordinate, title: title)
                            }
                        },
-                       onRoute: env.location.currentCoordinate == nil ? nil
-                           : { coord, name in buildRoute(to: coord, name: name) })
+                       onRoute: !env.location.hasLocation ? nil
+                           : { coord, name in buildRoute(to: coord, name: name) },
+                       onAddStop: !env.location.hasLocation || !env.route.isActive ? nil
+                           : { coord, name in addStop(coord, name: name) })
         }
         .sheet(isPresented: $showRouteCameras) {
             RouteCamerasSheet(onSelect: { map.focus(on: $0) })
         }
         .sheet(isPresented: $map.showSettings) { SettingsView() }
         .sheet(isPresented: $map.showStats) {
-            TripStatsSheet(onRoute: env.location.currentCoordinate == nil ? nil : { coord, name in
+            TripStatsSheet(onRoute: !env.location.hasLocation ? nil : { coord, name in
                 buildRoute(to: coord, name: name)
             })
         }
         // Деталка из карточки «Поездка сохранена» — без захода в Итоги.
         .sheet(item: $tripEndDetail) { record in
             TripDetailSheet(record: record,
-                            onRoute: env.location.currentCoordinate == nil ? nil : { coord, name in
+                            onRoute: !env.location.hasLocation ? nil : { coord, name in
                 buildRoute(to: coord, name: name)
             })
         }
         .overlay { loadErrorOverlay }
         .overlay { approachOverlay }
-        // Пуш «Итоги поездки» и другие диплинки на статистику ведут сюда.
+        // Пуш «Итоги поездки» и другие диплинки на статистику ведут сюда:
+        // radarmap://trip — пуш и виджет недели на локскрине,
+        // radarmap://stats — домашний виджет километров.
         .onOpenURL { url in
-            guard url.scheme == "radarmap", url.host() == "trip" else { return }
+            guard url.scheme == "radarmap",
+                  url.host() == "trip" || url.host() == "stats" else { return }
             // Поверх может быть другой шит — вторая презентация молча не
             // проходит, а «истинный» showStats делал кнопку Итогов мёртвой.
             // Закрываем всё своё и открываем Итоги после паузы на анимацию.
@@ -222,9 +226,10 @@ struct MapScreen: View {
         .onChange(of: env.location.nearestCamera?.id) { _, _ in
             dismissedApproachID = nil   // новая ближайшая камера — снова показываем предупреждение
         }
-        // Проезд чужой передвижной отметки живёт в MobilePassDriver
-        // (MapTickGates): onChange(locationTick) прямо здесь делал весь body
-        // зависимым от тика — второй подписчик в обход правила изоляторов.
+        // Проезд чужой передвижной отметки отслеживает MobileCameraService на
+        // каждом фиксе (LocationService.onAcceptedFix) — не вью: вью без
+        // экрана не живёт, а onChange(locationTick) прямо здесь делал бы весь
+        // body зависимым от тика.
         .onChange(of: env.location.isTripActive) { _, active in
             // Карта сама встаёт «по ходу движения» на старте и возвращается на
             // север после — но только если человек не выбирал ориентацию сам.
@@ -371,7 +376,14 @@ struct MapScreen: View {
         // монтировалась и грузила тайлы, а при закрытии приборки движок
         // собирался заново. Поле показывает GPU в часах при минутах на экране
         // (docs/perf_audit_2026-10-07.md) — под закрытым экраном не рисуем ничего.
-        if showDashboard {
+        //
+        // То же в фоне (свёрнуто, экран погашен): вью карты оставалась
+        // смонтированной, движок держал память GPU и тайлов, а body и
+        // updateUIView крутились на каждом фиксе — в поездке часами. Фоновая
+        // поездка живёт ради предупреждений, и пик памяти в 700+ МБ (jetsam,
+        // docs/crash_carplay_memory.md) — ровно то, за что iOS её убивает.
+        // `.inactive` (шторка, пункт управления) карту не трогает: это секунды.
+        if showDashboard || scenePhase == .background {
             Theme.background.ignoresSafeArea()
         } else {
             mapBase(scheme: scheme)
@@ -978,7 +990,7 @@ struct MapScreen: View {
             } else if let point = map.pressedPoint {
                 MapPointBar(
                     title: point.title,
-                    onRoute: env.location.currentCoordinate == nil ? nil : {
+                    onRoute: !env.location.hasLocation ? nil : {
                         buildRoute(to: point.coordinate, name: point.title ?? String(localized: "Точка на карте"))
                         withMotion { map.pressedPoint = nil }
                     },
@@ -1214,6 +1226,18 @@ struct MapScreen: View {
     }
 
     /// Построить авто-маршрут от текущей позиции и показать все варианты целиком.
+    /// Заезд по пути (АЗС, кафе из плитки категории): цель остаётся прежней.
+    private func addStop(_ coordinate: CLLocationCoordinate2D, name: String) {
+        Task {
+            guard let from = await env.location.awaitPreciseCoordinate() else {
+                env.route.reportNoFix()
+                return
+            }
+            await env.route.addStop(coordinate, name: name, from: from,
+                                    cameras: env.cameras.cameras)
+        }
+    }
+
     private func buildRoute(to coordinate: CLLocationCoordinate2D, name: String) {
         Task {
             // Только от ЖИВОЙ точки. Раньше здесь стоял currentCoordinate без

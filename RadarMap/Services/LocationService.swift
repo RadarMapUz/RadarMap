@@ -62,7 +62,17 @@ final class LocationService: NSObject {
     @ObservationIgnored weak var motion: MotionService?
 
     private(set) var authorizationStatus: CLAuthorizationStatus
-    private(set) var currentCoordinate: CLLocationCoordinate2D?
+    private(set) var currentCoordinate: CLLocationCoordinate2D? {
+        didSet {
+            let has = currentCoordinate != nil
+            if has != hasLocation { hasLocation = has }
+        }
+    }
+    /// «Позиция известна» — меняется только на переходе nil ↔ есть. Для вью,
+    /// которым нужен сам факт (кнопка «маршрут сюда» есть или нет): чтение
+    /// `currentCoordinate` в body подписывало весь экран с картой на каждый
+    /// фикс — раз в секунду пересборка ради ответа, который не менялся.
+    private(set) var hasLocation = false
     private(set) var speedKmh: Double = 0
     /// Последний ДОСТОВЕРНЫЙ курс. Живёт дольше самого курса намеренно.
     ///
@@ -115,6 +125,14 @@ final class LocationService: NSObject {
     @ObservationIgnored var onAlertFired: (() -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onAlertFired,
                                                "LocationService.onAlertFired") }
+    }
+
+    /// Каждый ПРИНЯТЫЙ фикс (после LocationFilter). Для наблюдателей, которым
+    /// нужна позиция и с погашенным экраном: раньше они висели на вью карты
+    /// (`onChange(locationTick)`), а вью без экрана не живёт.
+    @ObservationIgnored var onAcceptedFix: ((CLLocationCoordinate2D) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onAcceptedFix,
+                                               "LocationService.onAcceptedFix") }
     }
 
     @ObservationIgnored var onTripStateChanged: ((Bool) -> Void)? {
@@ -1029,6 +1047,7 @@ final class LocationService: NSObject {
         if speedKmh >= 3 { lastMovementAt = Date() }
         currentCourse = course
         locationTick &+= 1
+        onAcceptedFix?(coordinate)
         if currentCourse >= 0 { lastTrustedCourse = currentCourse }
         retileIfNeeded(around: coordinate)
         recomputeNearest(from: coordinate)

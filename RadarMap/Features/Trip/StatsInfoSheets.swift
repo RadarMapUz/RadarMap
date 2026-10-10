@@ -193,77 +193,83 @@ struct AchievementInfoSheet: View {
     @State private var shareSubject: ShareSubjectBox?
 
     var body: some View {
-        VStack(spacing: 14) {
-            ZStack {
+        // Прокрутка обязательна: в фиксированные 320 pt длинное описание на
+        // узбекском и крупный шрифт не влезали, а кнопка «Поделиться»
+        // уезжала под край без способа до неё добраться.
+        ScrollView {
+            VStack(spacing: 14) {
+                ZStack {
+                    if badge.earned {
+                        Circle().fill(Theme.accentFill.gradient)
+                            .shadow(color: Theme.accent.opacity(0.5), radius: 12)
+                    } else {
+                        Circle().fill(Theme.surface)
+                        Circle()
+                            .trim(from: 0, to: badge.fraction)
+                            .stroke(Theme.accent.opacity(0.6),
+                                    style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                            .padding(2)
+                    }
+                    Image(systemName: badge.icon)
+                        .font(.rounded(30, .semibold))
+                        .foregroundStyle(badge.earned ? Theme.onAccentFill : Theme.textTertiary)
+                }
+                .frame(width: 84, height: 84)
+                .padding(.top, 26)
+
+                Text(badge.title)
+                    .font(.rounded(19, .bold))
+                    .foregroundStyle(Theme.textPrimary)
+
+                Text(badge.detail)
+                    .font(.rounded(15))
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+
                 if badge.earned {
-                    Circle().fill(Theme.accent.gradient)
-                        .shadow(color: Theme.accent.opacity(0.5), radius: 12)
+                    Label("Получено!", systemImage: "checkmark.seal.fill")
+                        .font(.rounded(14, .bold))
+                        .foregroundStyle(Theme.success)
+                        .padding(.top, 2)
+                    // Делиться можно только взятой планкой: «осталось 170 км»
+                    // никому не интересно, а полоса прогресса наружу читается
+                    // как жалоба, а не как достижение.
+                    Button {
+                        shareSubject = ShareSubjectBox(
+                            subject: .achievement(badge, lifetime: env.trip.lifetime))
+                    } label: {
+                        Label("Поделиться", systemImage: "square.and.arrow.up")
+                            .font(.rounded(15, .semibold))
+                            .foregroundStyle(Theme.accent)
+                            .padding(.horizontal, 18).padding(.vertical, 10)
+                            .background(Theme.accent.opacity(0.12), in: Capsule())
+                    }
+                    .buttonStyle(PressableStyle())
+                    .padding(.top, 4)
                 } else {
-                    Circle().fill(Theme.surface)
-                    Circle()
-                        .trim(from: 0, to: badge.fraction)
-                        .stroke(Theme.accent.opacity(0.6),
-                                style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .padding(2)
-                }
-                Image(systemName: badge.icon)
-                    .font(.rounded(30, .semibold))
-                    .foregroundStyle(badge.earned ? Theme.background : Theme.textTertiary)
-            }
-            .frame(width: 84, height: 84)
-            .padding(.top, 26)
-
-            Text(badge.title)
-                .font(.rounded(19, .bold))
-                .foregroundStyle(Theme.textPrimary)
-
-            Text(badge.detail)
-                .font(.rounded(15))
-                .foregroundStyle(Theme.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 28)
-
-            if badge.earned {
-                Label("Получено!", systemImage: "checkmark.seal.fill")
-                    .font(.rounded(14, .bold))
-                    .foregroundStyle(Theme.success)
+                    VStack(spacing: 6) {
+                        ProgressView(value: badge.fraction)
+                            .tint(Theme.accent)
+                            .padding(.horizontal, 40)
+                        Text(String(format: String(localized: "%@ из %@"),
+                                    Self.count(badge.progress), Self.count(badge.target)))
+                            .font(.rounded(15, .semibold).monospacedDigit())
+                            .foregroundStyle(Theme.textTertiary)
+                    }
                     .padding(.top, 2)
-                // Делиться можно только взятой планкой: «осталось 170 км»
-                // никому не интересно, а полоса прогресса наружу читается
-                // как жалоба, а не как достижение.
-                Button {
-                    shareSubject = ShareSubjectBox(
-                        subject: .achievement(badge, lifetime: env.trip.lifetime))
-                } label: {
-                    Label("Поделиться", systemImage: "square.and.arrow.up")
-                        .font(.rounded(15, .semibold))
-                        .foregroundStyle(Theme.accent)
-                        .padding(.horizontal, 18).padding(.vertical, 10)
-                        .background(Theme.accent.opacity(0.12), in: Capsule())
                 }
-                .buttonStyle(PressableStyle())
-                .padding(.top, 4)
-            } else {
-                VStack(spacing: 6) {
-                    ProgressView(value: badge.fraction)
-                        .tint(Theme.accent)
-                        .padding(.horizontal, 40)
-                    Text(String(format: String(localized: "%@ из %@"),
-                                Self.count(badge.progress), Self.count(badge.target)))
-                        .font(.rounded(15, .semibold).monospacedDigit())
-                        .foregroundStyle(Theme.textTertiary)
-                }
-                .padding(.top, 2)
             }
-            Spacer(minLength: 12)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 12)
         }
-        .frame(maxWidth: .infinity)
+        .scrollBounceBehavior(.basedOnSize)
         .background(Theme.screenBackground)
         .sheet(item: $shareSubject) { box in
             SharePreviewSheet(subject: box.subject)
         }
-        .presentationDetents([.height(320), .medium])
+        .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
 

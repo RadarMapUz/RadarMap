@@ -144,11 +144,19 @@ private struct RadarStatsView: View {
                                     title: String(localized: "Готов к поездке"),
                                     detail: String(localized: "Начнём считать километры"))
             case .few, .full:
-                switch family {
-                case .systemMedium: medium
-                case .systemLarge: large
-                default: small
+                Group {
+                    switch family {
+                    case .systemMedium: medium
+                    case .systemLarge: large
+                    default: small
+                    }
                 }
+                // Тап по цифрам ведёт к ним же — в Итоги. Без ссылки виджет
+                // просто открывал карту, и за неделей приходилось идти
+                // вторым тапом. Пустое и нерабочее состояния ссылку не
+                // получают: там нечего смотреть, а «Готов к поездке» зовёт
+                // на карту, не в пустые Итоги.
+                .widgetURL(URL(string: "radarmap://stats"))
             }
         }
     }

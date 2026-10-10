@@ -209,6 +209,7 @@ final class MobileCameraService {
         confirmations = [:]
         passTracks = [:]
         pendingConfirm = nil
+        pendingConfirmAt = nil
         // Отпечаток обязан уйти вместе со списком: иначе на включении
         // краудсорса сервер честно ответит 304 («у тебя уже это есть»), а у нас
         // пусто — и карта осталась бы без чужих отметок до первого изменения
@@ -687,17 +688,34 @@ final class MobileCameraService {
     /// Точка, о которой уместно спросить прямо сейчас. nil — спрашивать нечего.
     /// Ставится, только когда водитель прошёл вплотную и уже отъехал.
     private(set) var pendingConfirm: Camera?
+    /// Когда вопрос задан. Таймер «двадцать секунд и уйти» живёт в плашке, а
+    /// плашки с погашенным экраном нет — без своего срока вопрос всплыл бы
+    /// через час, про радар, мимо которого давно проехали, и до ответа
+    /// заслонял бы все следующие.
+    @ObservationIgnored private var pendingConfirmAt: Date?
 
     @ObservationIgnored private var passTracks: [Int: MobilePassWatch.Track] = [:]
 
     /// Тик положения: обновить наблюдение за передвижными точками.
-    /// Дёргается с карты — там же, где показывается вопрос.
-    func trackPasses(from coordinate: CLLocationCoordinate2D) {
+    ///
+    /// Зовётся на каждом принятом фиксе из LocationService (AppEnvironment),
+    /// а НЕ с карты. С карты (MobilePassDriver) наблюдение жило только при
+    /// включённом экране: в поездке с телефоном в кармане или под CarPlay без
+    /// карты на телефоне проезд мимо треноги не замечался вовсе, и вопрос
+    /// «радар ещё стоял?» — то, что держит данные свежими, — не задавался.
+    func trackPasses(from coordinate: CLLocationCoordinate2D, now: Date = Date()) {
+        if pendingConfirm != nil, let at = pendingConfirmAt,
+           now.timeIntervalSince(at) > AppConfig.mobileConfirmMaxAgeSeconds {
+            // Молчание ничего не отправляет — как и «Пропустить».
+            pendingConfirm = nil
+            pendingConfirmAt = nil
+        }
         guard isEnabled, pendingConfirm == nil else { return }
         guard let askID = MobilePassWatch.update(tracks: &passTracks,
                                                  mobileCameras: reports,
                                                  from: coordinate) else { return }
         pendingConfirm = reports.first { $0.id == askID }
+        pendingConfirmAt = pendingConfirm == nil ? nil : now
     }
 
     /// Ответили. `nil` — закрыли/промолчали: не шлём ничего, потому что
@@ -705,6 +723,7 @@ final class MobileCameraService {
     func answerConfirm(stillThere: Bool?) {
         guard let camera = pendingConfirm else { return }
         pendingConfirm = nil
+        pendingConfirmAt = nil
         guard let stillThere else { return }
         // origin="pass" — голос после реального проезда: сервер хранит пометку,
         // модератор в админке отличает его от тапа в карточке с дивана.

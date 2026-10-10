@@ -207,6 +207,11 @@ nonisolated enum AppConfig {
     static let mapColumnSlotHeight: CGFloat = 56
     static let mapColumnSpacing: CGFloat = 12
 
+    /// Сколько живёт вопрос «радар ещё стоял?», если его никто не увидел
+    /// (экран погашен). Пять минут — дольше это вопрос о прошлом, на который
+    /// честно не ответить.
+    static let mobileConfirmMaxAgeSeconds: TimeInterval = 300
+
     /// Ниже этой высоты приборка — «короткий экран» (iPhone SE и подобные,
     /// 667 pt): цифры мельче, схема сжимается первой (DashboardView).
     static let dashCompactHeight: CGFloat = 720
@@ -520,11 +525,14 @@ nonisolated enum AppConfig {
     /// Страница проекта: поддержка, политика конфиденциальности, контакты.
     /// Она же Support URL в App Store Connect.
     static let projectPageURL = URL(string: "https://soulmed.uz/radarmap/")!
+    /// Политика конфиденциальности — прямой ссылкой из Настроек, а не через
+    /// подвал страницы проекта (App Review ищет её в два касания, не в три).
+    static let privacyPolicyURL = URL(string: "https://soulmed.uz/radarmap/privacy.html")!
 
-    /// Правдоподобный диапазон дорожного лимита. База лимитов — единственные
-    /// данные, которые применяются молча и БЕЗ подписи (см. SpeedLimitService),
-    /// поэтому у неё есть хотя бы этот забор: за ним заведомо испорченные
-    /// значения, а не редкая дорога.
+    /// Правдоподобный диапазон дорожного лимита. Второй забор после подписи
+    /// (LimitsTrust): подпись говорит, что файл собрал владелец, но не что OSM
+    /// прав, — а на переходный период, пока подписанного индекса нет, это и
+    /// вовсе единственная защита неподписанного файла.
     /// Правдоподобный лимит. Нижняя граница — 20: во дворах бывает, а «5» и
     /// «10» в OSM означают парковочный проезд или мусор, но не дорогу. В
     /// границах Ташкента таких сегментов 322, и любой из них, попав под
@@ -533,6 +541,27 @@ nonisolated enum AppConfig {
     /// Комментарий у фильтра в SpeedLimitService всё это время говорил
     /// «минимум 20» — константа ему противоречила.
     nonisolated static let plausibleSpeedLimits = 20...150
+
+    /// Подписанный индекс лимитов: sha256 и размер каждого файла под подписью
+    /// владельца (server/publish_limits.sh). Лимиты говорят голосом и считают
+    /// штрафы — класс доверия тот же, что у базы камер и пульта (правило 19).
+    static let speedLimitsIndexPath = "speed_limits_index.json"
+
+    /// Принимать ли НЕподписанные лимиты, пока подписанного индекса не видели
+    /// ни разу (переходный путь LimitsTrust.decide). Нужен ровно на переход:
+    /// владелец ещё не опубликовал индекс, и обновление приложения не вправе
+    /// оставить людей без лимитов. Храповик и так закрывает старый путь
+    /// навсегда, как только телефон увидит настоящий подписанный индекс; этот
+    /// флаг закрывает его и для тех, кто индекса ещё не застал.
+    /// ВЫКЛЮЧИТЬ (false), когда владелец опубликует подписанный индекс
+    /// (bash server/publish_limits.sh) и /status покажет «подпись: подписаны».
+    nonisolated static let speedLimitsAcceptUnsigned = true
+
+    /// Потолок размера файла лимитов по подписанному индексу. Боевой файл —
+    /// 3,4 МБ (формат 2 чуть больше); индекс, обещающий больше чем вдесятеро,
+    /// — ошибка публикации, и качать такое в память телефона по мобильной
+    /// сети незачем: отвергаем до скачивания.
+    nonisolated static let speedLimitsMaxBytes = 40 * 1024 * 1024
 
     /// Насколько дальше может лежать дорога БОЛЬШЕГО класса, чтобы всё равно
     /// считаться нашей.
@@ -732,6 +761,36 @@ nonisolated enum AppConfig {
     static let rerouteCooldownSeconds: TimeInterval = 20
     /// Радиус прибытия: ближе этого до финиша — маршрут выполнен.
     static let arrivalRadiusMeters: CLLocationDistance = 60
+    /// «Проехали финиш по линии»: осталось меньше этого по маршруту И до
+    /// цели не дальше `arrivalPassedRadiusMeters` — парковка чуть в стороне,
+    /// фикс не попал в малый радиус, а маршрут выполнен.
+    static let arrivalPassedRemainingMeters: CLLocationDistance = 80
+    static let arrivalPassedRadiusMeters: CLLocationDistance = 250
+    /// Поездку закончили у цели (не доехав до радиуса) — маршрут убираем,
+    /// если до цели или по линии осталось меньше этого.
+    static let arrivalOnTripEndMeters: CLLocationDistance = 400
+
+    /// Ступени голоса манёвра: «через 800 метров» (далеко), «через 250»
+    /// (близко), сама команда (сейчас). Далёкая — только манёврам, которым
+    /// она нужна (ManeuverKind.deservesEarlyCall).
+    static let maneuverFarCallMeters: CLLocationDistance = 850
+    static let maneuverNearCallMeters: CLLocationDistance = 280
+    static let maneuverNowCallMeters: CLLocationDistance = 45
+    /// Манёвр «впереди», если до него больше этого: иначе на самом повороте
+    /// баннер перескакивал бы на следующий раньше, чем машина повернула.
+    static let maneuverAheadSlackMeters: CLLocationDistance = 15
+    /// Камера маршрута остаётся «следующей», пока не отстала на столько:
+    /// фикс у самой камеры может лечь на пару десятков метров за ней.
+    static let routeCameraBehindSlackMeters: CLLocationDistance = 30
+    /// Таймаут запроса к своему OSRM: дольше — «сервер недоступен».
+    static let osrmTimeoutSeconds: TimeInterval = 12
+
+    /// Остановка по пути (АЗС, кафе) считается пройденной ближе этого — дальше
+    /// перестроение ведёт прямо к цели, без заезда.
+    static let routeStopReachedMeters: CLLocationDistance = 80
+    /// …или если по линии уже уехали за неё дальше этого (заехали с другой
+    /// стороны, фикс у самой точки пропустили).
+    static let routeStopPassedMeters: CLLocationDistance = 150
 
     // MARK: - Выбор варианта по своим поездкам (RouteChoice)
 
@@ -1022,6 +1081,10 @@ nonisolated enum AppConfig {
     static let engineCameraDuration = 0.8
 
     // MARK: - Карта на движке: кадры и нагрев (docs/perf_audit_2026-10-07.md)
+
+    /// Сколько готовых стилей новой карты держать в памяти (EngineModernStyle):
+    /// день/ночь × в поездке/нет — четыре; больше — сброс, а не рост.
+    static let engineStyleCacheLimit = 4
 
     /// Кадров в секунду при ведении за машиной. Камера движется раз в фикс
     /// (~1 Гц) плавной анимацией; полная частота экрана (60–120) рисовала то же

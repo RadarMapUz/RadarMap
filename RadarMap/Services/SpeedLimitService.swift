@@ -5,6 +5,9 @@
 //  Лимиты скорости дорог (maxspeed из OpenStreetMap, готовит наш сервер).
 //  Определяет лимит дороги, по которой едем (позиция + курс), и следит за превышением.
 //  База ~3 МБ обновляется раз в неделю и не трогает главный поток при загрузке.
+//  Доверие — как у базы камер (правило 19): подписанный индекс с sha файла,
+//  проверка на каждой загрузке и храповик перехода (LimitsManifest.swift,
+//  диск и проверка байтов — SpeedLimitCache.swift).
 //  Матчинг на GPS-тике стоит ~0,1 мс в плотном центре (замерено
 //  PerformanceBudgetTests на сети по статистике боевого файла) — это
 //  по-прежнему самая дорогая арифметика тика, и трогать её надо с замером.
@@ -82,9 +85,23 @@ final class SpeedLimitService {
     @ObservationIgnored private var lastWarnAt: Date = .distantPast
     @ObservationIgnored private var started = false
 
+    /// Откуда взят действующий индекс. Нужен храповику: увидев подписанный
+    /// индекс, телефон обязан снять индекс из НЕподписанных данных, даже если
+    /// новый файл скачать не удалось. И он же экономит 3,4 МБ: тот же sha,
+    /// что уже работает, второй раз не качается.
+    @ObservationIgnored private var indexSource: SpeedLimitCache.Source?
+
     private var fileURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("speed_limits.json")
+    }
+    /// Проверенный конверт индекса — рядом с файлом, который он описывает.
+    /// Хранится КОНВЕРТОМ, а не разобранным: подпись и sha перепроверяются
+    /// на каждой загрузке (Documents виден бэкапу и файловому менеджеру и
+    /// ничем не надёжнее сети).
+    private var manifestURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("speed_limits_index.json")
     }
 
     init(settings: AppSettings) {
@@ -146,14 +163,18 @@ final class SpeedLimitService {
         }
     }
 
+    /// Кэш с диска — по тем же правилам доверия, что ответ сервера
+    /// (SpeedLimitCache.load): подпись индекса и sha файла на каждом чтении.
     private func loadLocal() async {
-        let url = fileURL
-        guard FileManager.default.fileExists(atPath: url.path) else { return }
-        index = await Task.detached(priority: .utility) {
-            (try? Data(contentsOf: url)).flatMap(LimitIndex.build)
+        let dataURL = fileURL, manifestURL = self.manifestURL
+        let ratchet = Storage.bool(.speedLimitsSignedSeen)
+        let cached = await Task.detached(priority: .utility) {
+            SpeedLimitCache.load(dataURL: dataURL, manifestURL: manifestURL, ratchetSet: ratchet)
         }.value
-        if index == nil {
-            Log.route.error("кэш лимитов есть на диске, но не прочитался")
+        if cached.sawSignedIndex { markSignedSeen() }
+        if let built = cached.index {
+            index = built
+            indexSource = cached.source
         }
     }
 
@@ -171,35 +192,105 @@ final class SpeedLimitService {
 
         isDownloading = true
         defer { isDownloading = false }
-        // Недельная фоновая проверка: сбой сети не критичен, попробуем в следующий раз.
-        // Формат 2 несёт класс дороги и потому предпочтителен. Формат 1
-        // остаётся на сервере для уже установленных сборок, а нам служит
-        // запасным, пока новый файл не выложен: сборка лимитов запускается
-        // раз в месяц вручную.
-        let data: Data
-        if let v2 = try? await api.getData("speed_limits_v2.json",
-                                           cachePolicy: .reloadIgnoringLocalCacheData) {
-            data = v2
-        } else if let v1 = try? await api.getData("speed_limits.json",
-                                                  cachePolicy: .reloadIgnoringLocalCacheData) {
-            data = v1
-        } else {
+        // Недельная фоновая проверка: сбой сети не критичен, попробуем в
+        // следующий раз. Подписанный индекс — первым; что значит его
+        // отсутствие, решает храповик (LimitsTrust.decide), а не этот вызов.
+        let indexData = await fetch(AppConfig.speedLimitsIndexPath)
+        let state = LimitsTrust.indexState(indexData)
+        if case .invalid(let why) = state {
+            Log.route.error("индекс лимитов отвергнут: \(why.logDescription, privacy: .public)")
+        }
+        switch LimitsTrust.decide(signedIndex: state,
+                                  ratchetSet: Storage.bool(.speedLimitsSignedSeen)) {
+        case .useSigned(let manifest):
+            markSignedSeen()
+            guard let indexData else { return }   // .valid без байтов не бывает
+            await applySigned(manifest, envelope: indexData)
+        case .useLegacy:
+            await refreshLegacy()
+        case .keepVerified:
+            Log.route.notice("лимиты: подписанного индекса нет — держим проверенное")
+            dropUnverifiedIfRatcheted()
+        }
+    }
+
+    /// Подписанный путь: файл по имени из индекса, sha и размер против него,
+    /// и только потом — в память и на диск.
+    private func applySigned(_ manifest: LimitsManifest, envelope: Data) async {
+        // schemaProblem() уже гарантировал, что файл понятного формата есть.
+        guard let file = manifest.preferredFile() else { return }
+        // Тот же файл уже проверен и работает — 3,4 МБ второй раз не качаем:
+        // индекс спрашивается раз в неделю, а данные меняются раз в месяц.
+        if index != nil, indexSource == .signed(sha256: file.sha256) {
+            Storage.set(Date().timeIntervalSince1970, for: .speedLimitsLastCheck)
             return
         }
+        guard let data = await fetch(file.name) else {
+            // Сеть: попробуем при следующем запуске. Непроверенное не держим.
+            dropUnverifiedIfRatcheted()
+            return
+        }
+        let dataURL = fileURL, manifestURL = self.manifestURL
+        let outcome = await Task.detached(priority: .utility) {
+            SpeedLimitCache.acceptSigned(data, file: file, envelope: envelope,
+                                         dataURL: dataURL, manifestURL: manifestURL)
+        }.value
+        switch outcome {
+        case .success(let built):
+            index = built
+            indexSource = .signed(sha256: file.sha256)
+            Storage.set(Date().timeIntervalSince1970, for: .speedLimitsLastCheck)
+            Log.route.notice("лимиты: принят подписанный набор \(file.name, privacy: .public)")
+        case .failure(let why):
+            Log.route.error("файл лимитов \(file.name, privacy: .public) отвергнут: \(why.logDescription, privacy: .public)")
+            dropUnverifiedIfRatcheted()
+        }
+    }
+
+    /// Старый неподписанный путь — только на переход, до храповика.
+    /// Формат 2 несёт класс дороги и потому предпочтителен. Формат 1 остаётся
+    /// на сервере для уже установленных сборок, а нам служит запасным.
+    private func refreshLegacy() async {
+        var payload = await fetch("speed_limits_v2.json")
+        if payload == nil { payload = await fetch("speed_limits.json") }
+        guard let data = payload else { return }
 
         let url = fileURL
-        let built = await Task.detached(priority: .utility) { () -> LimitIndex? in
-            guard let index = LimitIndex.build(from: data) else { return nil }
-            do { try data.write(to: url, options: .atomic) } catch {
-                // Индекс уже в памяти — без кэша просто перекачаем через неделю.
-                Log.route.error("кэш лимитов не записался: \(error.localizedDescription, privacy: .public)")
-            }
-            return index
+        let built = await Task.detached(priority: .utility) {
+            SpeedLimitCache.acceptLegacy(data, dataURL: url)
         }.value
-        if let built {
-            index = built
-            Storage.set(Date().timeIntervalSince1970, for: .speedLimitsLastCheck)
-        }
+        // Пока качали, храповик мог встать (другой вызов увидел подпись):
+        // тогда этот результат уже не вправе стать действующим.
+        guard let built, LimitsTrust.allowsLegacy(ratchetSet: Storage.bool(.speedLimitsSignedSeen))
+        else { return }
+        index = built
+        indexSource = .legacy
+        Storage.set(Date().timeIntervalSince1970, for: .speedLimitsLastCheck)
+    }
+
+    /// Храповик: подписанный индекс увиден — неподписанный путь закрыт навсегда.
+    private func markSignedSeen() {
+        guard !Storage.bool(.speedLimitsSignedSeen) else { return }
+        Storage.set(true, for: .speedLimitsSignedSeen)
+        Log.route.notice("лимиты: увиден подписанный индекс — неподписанный путь закрыт навсегда")
+    }
+
+    /// Индекс из неподписанных данных после храповика не живёт: не удалось
+    /// взять подписанный — лучше честная плашка «нет лимитов» с кнопкой
+    /// повтора, чем голос и штрафы по непроверенным цифрам.
+    private func dropUnverifiedIfRatcheted() {
+        guard indexSource == .legacy,
+              !LimitsTrust.allowsLegacy(ratchetSet: Storage.bool(.speedLimitsSignedSeen))
+        else { return }
+        index = nil
+        indexSource = nil
+        Log.route.error("лимиты: неподписанный индекс снят, подписанный не получен — живём без лимитов")
+    }
+
+    /// GET без кэша. nil — «нет»: сбой сети и статуса APIClient уже записал
+    /// в журнал сам (transport/checkStatus), здесь важен только факт.
+    private func fetch(_ path: String) async -> Data? {
+        try? await api.getData(path, cachePolicy: .reloadIgnoringLocalCacheData)
     }
 
     // MARK: - Тик (вызывается LocationService на каждой GPS-точке)
@@ -406,14 +497,15 @@ struct LimitIndex: Sendable, RoadNetworkSource {
         var grid: [Int: [Int32]] = [:]
 
         for entry in raw {
-            // Границы значения — единственная защита этого файла: он
-            // приезжает по HTTP без подписи, в отличие от базы камер, пульта,
-            // правок модератора и дорожных тайлов. Подписать его — работа на
-            // стороне владельца (см. server/HTTPS.md); пока же явно отвергаем
-            // невозможные лимиты: в Узбекистане минимум 20 (дворы), максимум
-            // 110–130, и «5» с «300» означают испорченные данные, а не дорогу.
-            // Отвергаем СЕГМЕНТ, а не файл: один битый лимит не должен
-            // выключить двадцать тысяч честных.
+            // Границы значения — второй забор после подписи. Подписанный
+            // индекс (LimitsTrust, server/publish_limits.sh) гарантирует, что
+            // файл собрал владелец, но не что OSM прав; а на переходный путь,
+            // пока подписанного индекса телефон не видел, этот забор — вообще
+            // единственная защита: файл приходит по HTTPS, но без подписи.
+            // Явно отвергаем невозможные лимиты: в Узбекистане минимум 20
+            // (дворы), максимум 110–130, и «5» с «300» означают испорченные
+            // данные, а не дорогу. Отвергаем СЕГМЕНТ, а не файл: один битый
+            // лимит не должен выключить двадцать тысяч честных.
             // Форматов ДВА. Первый — [limit, geometry], он остаётся на бою для
             // уже установленных приложений. Второй — [limit, cls, geometry]:
             // без класса дороги лимит это половина ответа, потому что отличить

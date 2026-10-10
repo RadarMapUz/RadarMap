@@ -223,7 +223,11 @@ struct TripStatsSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
                 if !trip.history.isEmpty {
-                    ToolbarItemGroup(placement: .cancellationAction) {
+                    // Справа, рядом с «Готово», — как в деталке поездки. Слева
+                    // (cancellationAction) «Поделиться» стояло на месте кнопки
+                    // отмены, и один и тот же жест на двух экранах жил в
+                    // разных углах.
+                    ToolbarItemGroup(placement: .primaryAction) {
                         Menu {
                             Button("Очистить историю", systemImage: "trash", role: .destructive) {
                                 confirmsClear = true
@@ -359,12 +363,15 @@ struct TripStatsSheet: View {
                 } label: {
                     Text(item.title)
                         .font(.rounded(15, .semibold))
-                        .foregroundStyle(selected ? Theme.background : Theme.textSecondary)
+                        // Белое на accentFill: ночной accent светлый (он бывает
+                        // текстом), и графитовый Theme.background на нём был
+                        // текстом цвета фона, а не контрастной подписью.
+                        .foregroundStyle(selected ? Theme.onAccentFill : Theme.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
                         .background {
                             if selected {
-                                Capsule().fill(Theme.accent.gradient)
+                                Capsule().fill(Theme.accentFill.gradient)
                                     .matchedGeometryEffect(id: "periodPill", in: periodPill)
                             }
                         }
@@ -401,9 +408,10 @@ struct TripStatsSheet: View {
             Image(systemName: symbol)
                 .font(.rounded(15, .bold))
                 .foregroundStyle(enabled ? Theme.accent : Theme.textTertiary.opacity(0.4))
-                // Голая стрелка, мишень прежняя: капсулы-подложки делали из
-                // строки периода третий ряд «кнопочной» мебели подряд.
-                .frame(width: 36, height: 32)
+                // Голая стрелка: капсулы-подложки делали из строки периода
+                // третий ряд «кнопочной» мебели подряд. Мишень — полные 44 pt:
+                // при 36×32 соседний период пролистывался мимо пальца.
+                .frame(width: Theme.controlSize, height: Theme.controlSize)
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
@@ -886,9 +894,12 @@ struct TripStatsSheet: View {
                 Button {
                     withMotion(.snappy(duration: 0.3)) { clearMapSelection() }
                 } label: {
+                    // 11 pt подписи — это ~15 pt в высоту; мишень дотягиваем
+                    // до 44 внутри label, иначе область касания не растёт.
                     Label("Все поездки", systemImage: "xmark.circle.fill")
                         .font(.rounded(11, .semibold))
                         .foregroundStyle(Theme.textSecondary)
+                        .tapTarget()
                 }
                 .buttonStyle(PressableStyle())
                 Spacer(minLength: 0)
@@ -902,6 +913,7 @@ struct TripStatsSheet: View {
                             .font(.rounded(9, .bold))
                     }
                     .foregroundStyle(Theme.accent)
+                    .tapTarget()
                 }
                 .buttonStyle(PressableStyle())
             }
@@ -928,6 +940,7 @@ struct TripStatsSheet: View {
                             .font(.rounded(9, .bold))
                     }
                     .foregroundStyle(Theme.accent)
+                    .tapTarget()
                 }
                 .buttonStyle(PressableStyle())
             }
@@ -1251,10 +1264,12 @@ struct TripStatsSheet: View {
                 } label: {
                     Text("Объединить")
                         .font(.rounded(15, .semibold))
-                        .foregroundStyle(Theme.background)
+                        .foregroundStyle(Theme.onAccentFill)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(Theme.accent.gradient, in: Capsule())
+                        // 15 pt + 2×10 давали ~40 pt — мимо мишени пальца.
+                        .frame(minHeight: Theme.controlSize)
+                        .background(Theme.accentFill.gradient, in: Capsule())
                         .contentShape(Capsule())
                 }
                 .buttonStyle(PressableStyle())
@@ -1267,6 +1282,7 @@ struct TripStatsSheet: View {
                         .foregroundStyle(Theme.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
+                        .frame(minHeight: Theme.controlSize)
                         .background(Theme.surface, in: Capsule())
                         .contentShape(Capsule())
                 }
@@ -1327,7 +1343,8 @@ struct TripStatsSheet: View {
                         .font(.rounded(10, .bold))
                 }
                 .foregroundStyle(Theme.accent)
-                .frame(maxWidth: .infinity)
+                // Строка 15 pt — около 20 pt в высоту; мишень — полные 44.
+                .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressableStyle())

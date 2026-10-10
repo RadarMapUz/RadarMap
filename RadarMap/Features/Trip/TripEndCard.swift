@@ -26,6 +26,7 @@ struct TripEndCard: View {
     var onDismiss: () -> Void
 
     @State private var shareSubject: ShareSubjectBox?
+    @State private var confirmsMerge = false
 
     var body: some View {
         VStack(spacing: 14) {
@@ -81,10 +82,11 @@ struct TripEndCard: View {
                         Image(systemName: "chevron.right")
                             .font(.rounded(11, .bold))
                     }
-                    .foregroundStyle(Theme.background)
+                    // Белое на accentFill — пара токенов для текста на синем.
+                    .foregroundStyle(Theme.onAccentFill)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
-                    .background(Theme.accent.gradient, in: Capsule())
+                    .background(Theme.accentFill.gradient, in: Capsule())
                     .contentShape(Capsule())
                 }
                 .buttonStyle(PressableStyle())
@@ -112,6 +114,11 @@ struct TripEndCard: View {
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .sheet(item: $shareSubject) { box in
             SharePreviewSheet(subject: box.subject)
+        }
+        .confirmationDialog("Объединить с предыдущей поездкой?",
+                            isPresented: $confirmsMerge, titleVisibility: .visible) {
+            Button("Объединить") { merge() }
+            Button("Отмена", role: .cancel) {}
         }
     }
 
@@ -185,13 +192,13 @@ struct TripEndCard: View {
         return previous
     }
 
+    /// Склейка — через подтверждение. Строка стоит вплотную над «Подробнее»,
+    /// и тап, промахнувшийся на пару пунктов, молча сливал две поездки в одну:
+    /// карточка тут же подменялась склеенной записью, а вернуть всё назад
+    /// можно было только разделением в деталке.
     private func mergeRow(previous: TripRecord) -> some View {
         Button {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            withMotion(.snappy(duration: 0.35)) {
-                env.trip.mergeWithPrevious(id: record.id)
-                onMerged()
-            }
+            confirmsMerge = true
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "arrow.triangle.merge")
@@ -219,6 +226,14 @@ struct TripEndCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func merge() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withMotion(.snappy(duration: 0.35)) {
+            env.trip.mergeWithPrevious(id: record.id)
+            onMerged()
+        }
     }
 
     // MARK: - Метрики

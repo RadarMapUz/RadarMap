@@ -106,6 +106,8 @@ final class RoadNetworkService {
     /// тайл стоила бы девяносто девять пересборок на одну окрестность.
     @ObservationIgnored private var lastSnapshotAt = Date.distantPast
     @ObservationIgnored private var snapshotKeys: Set<String> = []
+    /// Номер последней заказанной сборки сети: применяется только её ответ.
+    @ObservationIgnored private var networkGeneration = 0
     @ObservationIgnored private var started = false
     /// Где проверяли покрытие в прошлый раз (гейт ensureCoverage).
     @ObservationIgnored private var lastEnsureAt: CLLocationCoordinate2D?
@@ -628,14 +630,26 @@ final class RoadNetworkService {
             .compactMap { loaded[$0] }
         let farTiles = isV2 ? keys.filter { $0.hasSuffix(farSuffix) }.compactMap { loaded[$0] }
                             : []
-        areas = keys.compactMap { loadedAreas[$0] }.flatMap { $0 }
-        points = keys.compactMap { loadedPoints[$0] }.flatMap { $0 }
-        farPoints = keys.compactMap { loadedPointsFar[$0] }.flatMap { $0 }
-        places = keys.compactMap { loadedPlaces[$0] }.flatMap { $0 }
+        let newAreas = keys.compactMap { loadedAreas[$0] }.flatMap { $0 }
+        let newPoints = keys.compactMap { loadedPoints[$0] }.flatMap { $0 }
+        let newFarPoints = keys.compactMap { loadedPointsFar[$0] }.flatMap { $0 }
+        let newPlaces = keys.compactMap { loadedPlaces[$0] }.flatMap { $0 }
+        // Поколение: сборка идёт в фоне, и две подряд (машина пересекла край
+        // клетки дважды) могли закончиться в обратном порядке — поздний ответ
+        // по старым клеткам затирал свежую сеть. И кварталы с точками
+        // применяются ВМЕСТЕ с сетью, а не до неё: иначе на время сборки
+        // схема рисовала новые дома поверх старых дорог.
+        networkGeneration &+= 1
+        let generation = networkGeneration
         Task.detached(priority: .utility) { [nearTiles, farTiles] in
             let near = TileRoadNetwork.build(nearTiles)
             let far = farTiles.isEmpty ? nil : TileRoadNetwork.build(farTiles)
             await MainActor.run {
+                guard self.networkGeneration == generation else { return }
+                self.areas = newAreas
+                self.points = newPoints
+                self.farPoints = newFarPoints
+                self.places = newPlaces
                 self.network = CachedRoadNetwork(near)
                 if let far {
                     self.farNetwork = CachedRoadNetwork(far)

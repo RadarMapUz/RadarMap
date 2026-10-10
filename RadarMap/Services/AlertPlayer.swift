@@ -164,6 +164,15 @@ final class AlertPlayer: NSObject {
         }
     }
 
+    /// Замолчать СЕЙЧАС: оборвать фразу и сигнал на полуслове. Выключенный звук
+    /// гасит только следующие оповещения, а водитель, нажавший «без звука» у
+    /// камеры, хочет тишины немедленно, а не после конца фразы.
+    func hush() {
+        synthesizer.stopSpeaking(at: .immediate)
+        player?.stop()
+        deactivateSoon()
+    }
+
     /// Кэш голоса по языку: AVSpeechSynthesisVoice(language:) — тоже поход к
     /// речевому демону, а язык меняется только сменой языка приложения.
     private static var voiceCache: [String: AVSpeechSynthesisVoice] = [:]

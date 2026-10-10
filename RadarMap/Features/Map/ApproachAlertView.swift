@@ -4,10 +4,18 @@
 //
 //  Полноэкранное предупреждение при приближении к камере — крупно, читается боковым зрением.
 //
+//  Внизу — две кнопки: «без звука» и «Радар!». Окно закрывает собой всю карту
+//  вместе с колонкой и панелью поездки, а тап в любом месте его скрывает —
+//  то есть ровно в те секунды, когда хочется заглушить голос или отметить
+//  стоящую рядом треногу, обе кнопки были недоступны, и тап, адресованный
+//  им, просто закрывал окно. Кнопки получают касание сами; мимо них — как
+//  раньше, «скрыть».
+//
 
 import SwiftUI
 
 struct ApproachAlertView: View {
+    @Environment(AppEnvironment.self) private var env
     let camera: Camera
     let distance: Double
     let speedKmh: Double
@@ -85,22 +93,55 @@ struct ApproachAlertView: View {
                 }
 
                 Spacer()
+            }
+            // VoiceOver: сведения — одна фраза + действие «скрыть»; кнопки ниже
+            // остаются отдельными элементами.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilitySummary)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint(Text("Нажмите, чтобы скрыть"))
+            .accessibilityAction { onDismiss() }
 
+            VStack(spacing: 12) {
+                Spacer()
+                HStack(spacing: 12) {
+                    muteButton
+                    ReportRadarButton()
+                }
+                .padding(.horizontal, 24)
                 Text("Нажмите, чтобы скрыть")
                     .font(.rounded(12))
                     .foregroundStyle(Theme.textTertiary)
                     .padding(.bottom, 20)
+                    .accessibilityHidden(true)
             }
         }
         .contentShape(Rectangle())
         .onTapGesture { onDismiss() }
         .onAppear { pulse = true }
         .transition(.opacity.combined(with: .scale(scale: 1.05)))
-        // VoiceOver: алерт — одна фраза + кнопка-жест «скрыть».
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilitySummary)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityHint(Text("Нажмите, чтобы скрыть"))
+    }
+
+    /// «Без звука» во всю оставшуюся ширину: голос и сигнал обрываются сразу
+    /// (AlertPlayer.hush), вибрация и само окно остаются — камера не исчезает,
+    /// она молчит, как и у кнопки звука на карте.
+    private var muteButton: some View {
+        let muted = env.settings.isMuted
+        return Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            env.settings.setMuted(!muted)
+            if !muted { env.alerts.hush() }
+        } label: {
+            Label(muted ? "Включить звук" : "Без звука",
+                  systemImage: muted ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                .font(.rounded(17, .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .frame(maxWidth: .infinity, minHeight: 56)
+                .background(.ultraThinMaterial,
+                            in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
+        }
+        .buttonStyle(PressableStyle())
     }
 
     /// «Радар через 220 метров, прямо. Скорость 47 км/ч» — для VoiceOver.

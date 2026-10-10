@@ -16573,6 +16573,454 @@
           }
         }
       }
+    },
+    "Объединить с предыдущей поездкой?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Объединить с предыдущей поездкой?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldingi safar bilan birlashtirasizmi?"
+          }
+        }
+      }
+    },
+    "Удалить сообщение?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить сообщение?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xabarni o‘chirasizmi?"
+          }
+        }
+      }
+    },
+    "Продолжить писать": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Продолжить писать"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yozishda davom etish"
+          }
+        }
+      }
+    },
+    "Без звука": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без звука"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovozsiz"
+          }
+        }
+      }
+    },
+    "Включить звук": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включить звук"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovozni yoqish"
+          }
+        }
+      }
+    },
+    "Не удалось заехать по пути — маршрут прежний": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось заехать по пути — маршрут прежний"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘l-yo‘lakay kirib o‘tib bo‘lmadi — marshrut avvalgidek"
+          }
+        }
+      }
+    },
+    "заезд: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "заезд: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kirib o‘tish: %@"
+          }
+        }
+      }
+    },
+    "Заехать по пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заехать по пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘l-yo‘lakay kirib o‘tish"
+          }
+        }
+      }
+    },
+    "Не удалось заехать по пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось заехать по пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘l-yo‘lakay kirib o‘tib bo‘lmadi"
+          }
+        }
+      }
+    },
+    "через %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "через %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ orqali"
+          }
+        }
+      }
+    },
+    "Политика конфиденциальности": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Политика конфиденциальности"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maxfiylik siyosati"
+          }
+        }
+      }
+    },
+    "Что уходит на сервер и что остаётся только на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что уходит на сервер и что остаётся только на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serverga nima yuboriladi va nima faqat telefonda qoladi."
+          }
+        }
+      }
+    },
+    "Помощь": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Помощь"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yordam"
+          }
+        }
+      }
+    },
+    "Не нашли ответа — напишите нам: Настройки → Написать разработчику.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не нашли ответа — напишите нам: Настройки → Написать разработчику."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Javob topmadingizmi — bizga yozing: Sozlamalar → Dasturchiga yozish."
+          }
+        }
+      }
+    },
+    "Почему приложение не сказало о камере?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Почему приложение не сказало о камере?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nega ilova kamera haqida aytmadi?"
+          }
+        }
+      }
+    },
+    "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила о камере» у этого проезда в Итогах, мы разберём случай.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила о камере» у этого проезда в Итогах, мы разберём случай."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovozni tekshiring — xaritadagi karnay tugmasi. Tez-tez tezlikni oshirmay o‘tadigan kameralaringiz haqida ilova ataylab jim turadi: xaritada ularda yashil belgi bor (Sozlamalar → Ilova o‘rganadi). Yashirilgan kamerani Sozlamalar → Kameralar bazasi → Yashirilgan kameralar bo‘limida qaytarish mumkin. Hech biri to‘g‘ri kelmasa — Natijalardagi shu o‘tish yonidagi «Kamera haqida ogohlantirmadi» tugmasini bosing, holatni ko‘rib chiqamiz."
+          }
+        }
+      }
+    },
+    "Зачем доступ к геопозиции «Всегда»?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зачем доступ к геопозиции «Всегда»?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geolokatsiyaga «Doim» ruxsati nima uchun kerak?"
+          }
+        }
+      }
+    },
+    "Без него iOS не даёт предупреждать о камерах, когда приложение свёрнуто или экран погашен, и поездка не начинается сама. Фоновая геопозиция обрабатывается только на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без него iOS не даёт предупреждать о камерах, когда приложение свёрнуто или экран погашен, и поездка не начинается сама. Фоновая геопозиция обрабатывается только на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usiz iOS ilova yig‘ilgan yoki ekran o‘chiq bo‘lganda kameralar haqida ogohlantirishga ruxsat bermaydi va safar o‘zi boshlanmaydi. Fondagi joylashuv faqat telefonda qayta ishlanadi."
+          }
+        }
+      }
+    },
+    "Сколько тратится батареи?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сколько тратится батареи?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batareya qancha sarflanadi?"
+          }
+        }
+      }
+    },
+    "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно; самый экономный экран — Спидометр: чёрный фон и схема вместо карты.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно; самый экономный экран — Спидометр: чёрный фон и схема вместо карты."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safardan tashqari — deyarli hech narsa: ilova faqat kameralar yonida uyg‘onadi. Safarda GPS doim ishlaydi; eng tejamkor ekran — Spidometr: qora fon va xarita o‘rniga sxema."
+          }
+        }
+      }
+    },
+    "Что значат полупрозрачные отметки с «?»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что значат полупрозрачные отметки с «?»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«?» belgili yarim shaffof belgilar nimani anglatadi"
+          }
+        }
+      }
+    },
+    "Это отметки водителей, которые ещё никто не подтвердил. Приложение предупреждает и о них, но говорит, что это отметка водителей. Подтвердить или опровергнуть можно в карточке отметки или ответом на вопрос «радар ещё стоял?» после проезда.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это отметки водителей, которые ещё никто не подтвердил. Приложение предупреждает и о них, но говорит, что это отметка водителей. Подтвердить или опровергнуть можно в карточке отметки или ответом на вопрос «радар ещё стоял?» после проезда."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bular hali hech kim tasdiqlamagan haydovchilar belgilari. Ilova ular haqida ham ogohlantiradi, lekin bu haydovchilar belgisi ekanini aytadi. Tasdiqlash yoki rad etish mumkin — belgi kartochkasida yoki o‘tgandan keyin «radar hali turibdimi?» savoliga javob berib."
+          }
+        }
+      }
+    },
+    "Камеры уже нет или она стоит не там": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры уже нет или она стоит не там"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera endi yo‘q yoki boshqa joyda turibdi"
+          }
+        }
+      }
+    },
+    "Откройте карточку камеры и нажмите «Камеры больше нет» или «Неверное место». Модератор проверит и поправит базу для всех. До проверки камера продолжает предупреждать — так безопаснее.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Откройте карточку камеры и нажмите «Камеры больше нет» или «Неверное место». Модератор проверит и поправит базу для всех. До проверки камера продолжает предупреждать — так безопаснее."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera kartochkasini oching va «Kamera endi yo‘q» yoki «Joyi noto‘g‘ri» tugmasini bosing. Moderator tekshirib, bazani hamma uchun tuzatadi. Tekshiruvgacha kamera ogohlantirishda davom etadi — bu xavfsizroq."
+          }
+        }
+      }
+    },
+    "Как перенести поездки на новый телефон?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как перенести поездки на новый телефон?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlarni yangi telefonga qanday ko‘chirish mumkin?"
+          }
+        }
+      }
+    },
+    "Настройки → Мои данные → «Сохранить копию», затем на новом телефоне — «Восстановить из файла». История хранится только на телефоне, на сервер мы её не отправляем.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки → Мои данные → «Сохранить копию», затем на новом телефоне — «Восстановить из файла». История хранится только на телефоне, на сервер мы её не отправляем."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sozlamalar → Mening ma’lumotlarim → «Nusxani saqlash», so‘ng yangi telefonda — «Fayldan tiklash». Tarix faqat telefonda saqlanadi, biz uni serverga yubormaymiz."
+          }
+        }
+      }
+    },
+    "Почему маршрут не строится без интернета?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Почему маршрут не строится без интернета?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nega internetsiz marshrut qurilmaydi?"
+          }
+        }
+      }
+    },
+    "Маршрут считает наш сервер. Без связи карта скачанной области и предупреждения о камерах работают, а новый маршрут — нет.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут считает наш сервер. Без связи карта скачанной области и предупреждения о камерах работают, а новый маршрут — нет."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrutni bizning serverimiz hisoblaydi. Aloqasiz yuklab olingan hudud xaritasi va kameralar haqidagi ogohlantirishlar ishlaydi, yangi marshrut esa — yo‘q."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

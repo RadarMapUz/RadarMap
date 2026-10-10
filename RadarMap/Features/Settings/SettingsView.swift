@@ -67,6 +67,7 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    link(.help) { HelpSettingsPage() }
                     Button {
                         showFeedback = true
                     } label: {
@@ -131,7 +132,7 @@ enum SettingsItem {
     case map, offline, places
     case learning, battery, privacy
     case database, backup, language
-    case feedback, project, version
+    case help, feedback, project, version
 
     var title: LocalizedStringKey {
         switch self {
@@ -148,6 +149,7 @@ enum SettingsItem {
         case .database: return "База камер"
         case .backup:   return "Мои данные"
         case .language: return "Язык"
+        case .help:     return "Помощь"
         case .feedback: return "Написать разработчику"
         case .project:  return "Страница проекта"
         case .version:  return "Версия"
@@ -169,6 +171,7 @@ enum SettingsItem {
         case .database: return "camera.fill"
         case .backup:   return "externaldrive.fill"
         case .language: return "globe"
+        case .help:     return "questionmark.circle.fill"
         case .feedback: return "envelope.fill"
         case .project:  return "safari.fill"
         case .version:  return "info.circle.fill"
@@ -192,6 +195,7 @@ enum SettingsItem {
         case .database: return Color(uiColor: .systemGray)
         case .backup:   return Color(uiColor: .systemIndigo)
         case .language: return Color(uiColor: .systemBlue)
+        case .help:     return Color(uiColor: .systemOrange)
         case .feedback: return Color(uiColor: .systemBlue)
         case .project:  return Color(uiColor: .systemCyan)
         case .version:  return Color(uiColor: .systemGray)

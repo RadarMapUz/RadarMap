@@ -483,10 +483,47 @@ def check_hotspots(ctx):
                   "зон: %d · опубликованы %s назад" % (zones, days(age)), meaning)
 
 
+def signed_limits(ctx, cron_v2):
+    """Подписанный набор лимитов (speed_limits_index.json) — путём телефона.
+
+    (состояние, фраза). Индекс → подпись → файл формата 2 по имени из индекса
+    → sha и размер против индекса: ровно то, что делает LimitsTrust.
+
+    404 — WARN, а не BAD: пока владелец не подписал первый индекс, приложение
+    живёт на старом неподписанном пути (храповик в LimitsTrust), и это
+    незаконченный шаг, а не авария. Отставание от крона — тоже WARN: крон
+    обновляет файлы для старых сборок раз в месяц, а сборки с подписью видят
+    новый месяц только после publish_limits.sh. Без этой строки подписанный
+    набор старел бы молча — приложение fail closed держит прошлый.
+    """
+    got = ctx.fetch("speed_limits_index.json")
+    if got.code == 404:
+        return WARN, "подписанного индекса нет → publish_limits.sh"
+    if not got.ok:
+        return BAD, "индекс: %s" % (got.error or got.code)
+    payload, why = open_envelope(got.body, ctx.verify)
+    if payload is None:
+        return BAD, "индекс: " + why
+    try:
+        entry = {f["format"]: f for f in json.loads(payload)["files"]}[2]
+        name, sha, size = entry["name"], entry["sha256"], entry["bytes"]
+    except (ValueError, KeyError, TypeError):
+        return BAD, "индекс не по контракту (нет файла формата 2)"
+    data = ctx.fetch(name)
+    if not data.ok:
+        return BAD, "%s: %s — телефоны с подписью без обновления" % (name, data.error or data.code)
+    if hashlib.sha256(data.body).hexdigest() != sha or len(data.body) != size:
+        return BAD, "%s не сходится с подписью — телефоны отвергнут" % name
+    if cron_v2 is not None and hashlib.sha256(cron_v2).hexdigest() != sha:
+        return WARN, "новая сборка крона ждёт подписи → publish_limits.sh"
+    return OK, "подписаны" + (" (%s)" % why if why else "")
+
+
 def check_limits(ctx):
     meaning = ("Лимиты скорости устарели: на переставленных знаках предупреждение о "
                "превышении идёт по старому лимиту.")
     problems, versions = [], []
+    cron_v2 = None
     for path in ("speed_limits.json", "speed_limits_v2.json"):
         got = ctx.fetch(path)
         if not got.ok:
@@ -498,12 +535,16 @@ def check_limits(ctx):
             versions.append(json.loads(got.body)["version"])
         except (ValueError, KeyError):
             problems.append("%s не читается" % path)
+        if path == "speed_limits_v2.json":
+            cron_v2 = got.body
     age = (ctx.now - min(versions)) / DAY if versions else None
     if versions:
         ctx.published["limits"] = int(max(versions))
         ctx.published_age["limits"] = (ctx.now - max(versions)) / DAY
     state = BAD if problems else grade_age(age, LIMITS["limits_warn_days"], LIMITS["limits_bad_days"])
-    summary = "v1 и v2 · собраны %s назад" % days(age)
+    signed_state, signed_note = signed_limits(ctx, cron_v2)
+    state = worst(state, signed_state)
+    summary = "v1 и v2 · собраны %s назад · подпись: %s" % (days(age), signed_note)
     if problems:
         summary += " · " + "; ".join(problems)
     return result("limits", "Лимиты скорости", state, summary, meaning)

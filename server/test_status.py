@@ -49,6 +49,19 @@ class FakeWeb:
         return st.Fetched(code, zipped if gzip_ok else plain, headers, ms=5)
 
 
+def sign_limits(web):
+    """Подписанный набор поверх текущего speed_limits_v2.json — как его
+    выкладывает publish_limits.sh: копия под именем с sha и индекс к ней."""
+    body = web.files["speed_limits_v2.json"][1]
+    sha = hashlib.sha256(body).hexdigest()
+    name = "limits/speed_limits_v2.%s.json" % sha[:16]
+    web.put(name, body)
+    web.put("speed_limits_index.json", envelope({
+        "format": 1, "version": 1, "built": 1,
+        "files": [{"format": 2, "name": name, "sha256": sha, "bytes": len(body)}]}))
+    return name
+
+
 def healthy_web():
     web = FakeWeb()
     web.put("api/health", b'{"ok": true}')
@@ -63,6 +76,7 @@ def healthy_web():
     web.put("hotspots.json", envelope({"spots": [{}, {}]}), age_days=3)
     for path in ("speed_limits.json", "speed_limits_v2.json"):
         web.put(path, json.dumps({"version": NOW - 10 * DAY, "segments": []}).encode())
+    sign_limits(web)
     tile = b'{"roads":[]}'
     sha = hashlib.sha256(tile).hexdigest()
     web.put("roads_index_v2.json", envelope({"version": 2, "tiles": {"a": {"sha256": sha}}}), age_days=2)
@@ -139,6 +153,39 @@ class SilentDeathTests(Base):
             for path in ("speed_limits.json", "speed_limits_v2.json"):
                 self.web.put(path, json.dumps({"version": NOW - age * DAY}).encode())
             self.assertEqual(st.check_limits(self.ctx())["state"], state, age)
+
+    def test_unsigned_limits_ask_the_owner(self):
+        # Переход: индекса ещё нет. Не авария (приложение живёт на старом
+        # пути), но незаконченный шаг — и пульт обязан назвать команду.
+        del self.web.files["speed_limits_index.json"]
+        result = st.check_limits(self.ctx())
+        self.assertEqual(result["state"], st.WARN)
+        self.assertIn("publish_limits.sh", result["summary"])
+
+    def test_signed_set_behind_the_cron_asks_for_a_signature(self):
+        # Крон переписал месяц, владелец ещё не подписал: телефоны с подписью
+        # держат прошлый набор, и стареть молча он не должен.
+        fresh = json.dumps({"version": NOW - DAY, "segments": [[60, [1, 2, 3, 4]]]}).encode()
+        self.web.put("speed_limits_v2.json", fresh)
+        result = st.check_limits(self.ctx())
+        self.assertEqual(result["state"], st.WARN)
+        self.assertIn("ждёт подписи", result["summary"])
+
+    def test_signed_file_swapped_on_server_is_red(self):
+        name = sign_limits(self.web)
+        self.web.put(name, b'{"version":1,"segments":[[20,[1,2,3,4]]]}')
+        result = st.check_limits(self.ctx())
+        self.assertEqual(result["state"], st.BAD)
+        self.assertIn("не сходится с подписью", result["summary"])
+
+    def test_signed_file_missing_is_red(self):
+        del self.web.files[sign_limits(self.web)]
+        self.assertEqual(st.check_limits(self.ctx())["state"], st.BAD)
+
+    def test_limits_index_with_foreign_signature_is_red(self):
+        result = st.check_limits(self.ctx(verify=lambda data, sig: False))
+        self.assertEqual(result["state"], st.BAD)
+        self.assertIn("подпись", result["summary"])
 
     def test_never_published_hotspots_are_red(self):
         del self.web.files["hotspots.json"]

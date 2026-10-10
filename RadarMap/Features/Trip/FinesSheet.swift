@@ -243,7 +243,10 @@ struct FinesSheet: View {
                 .foregroundStyle(tint)
                 .padding(.horizontal, 11).padding(.vertical, 7)
                 .background(tint.opacity(0.12), in: Capsule())
-                .contentShape(Capsule())
+                // Капсула ~34 pt остаётся прежней на глаз, а мишень — 44:
+                // «Пришёл» и «Не пришёл» стоят рядом, и промах ставит деньгам
+                // не ту судьбу.
+                .tapTarget()
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }

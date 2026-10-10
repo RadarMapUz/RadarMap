@@ -219,6 +219,11 @@ final class AppEnvironment {
         // Голос о камерах — отдельно от срабатываний: жалоба «он говорит»
         // была про фразы, а счётчик до сих пор считал баннеры.
         location.onCameraSpoken = { [weak usage] grade in usage?.noteCameraSpoken(grade) }
+        // «Радар ещё стоял?» — наблюдение за проездом мимо передвижных точек
+        // на каждом фиксе, и с погашенным экраном тоже (MobileCameraService).
+        location.onAcceptedFix = { [weak mobile] coordinate in
+            withMotion { mobile?.trackPasses(from: coordinate) }
+        }
         route.onManeuverSpoken = { [weak usage] kind in usage?.noteManeuver(kind) }
         trip.onTripDropped = { [weak usage] reason in usage?.noteTripDropped(reason) }
         trip.recordsTimedTrack = settings.recordTimedTrack

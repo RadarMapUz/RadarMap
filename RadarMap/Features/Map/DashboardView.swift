@@ -40,6 +40,15 @@ struct DashboardView: View {
             // скорость и камера — по центру; всё, что нажимается (стоп,
             // «Радар»), — внизу, под большим пальцем. Мелкие чипы статуса
             // (жара, заряд вне поездки) — тонкой строкой над направлениями.
+            //
+            // На коротком экране (iPhone SE, 667 pt — телефон владельца) всё
+            // это в полный рост не помещалось: схема 200, цифра 148 pt, камера
+            // 56 pt, «Радар» 62 — около 830–880 pt, и стопка вылезала за оба
+            // края вместе с «Радар» и «Стоп». Теперь на низком экране цифры
+            // мельче, а схема — единственная гибкая часть: она сжимается
+            // первой (layoutPriority) и отдаёт место скорости, камере и кнопкам.
+            GeometryReader { geometry in
+            let compact = geometry.size.height < AppConfig.dashCompactHeight
             VStack(spacing: 0) {
                 statusChips
                     .padding(.horizontal, 28)
@@ -53,23 +62,26 @@ struct DashboardView: View {
                 // Схема «где камера»: чертим сами, без карты и без сети.
                 // Приборка — режим «телефон в держателе», она обязана быть
                 // самым дешёвым экраном приложения, а не самым дорогим.
-                DashSketch(sketch: sketch, dimmed: isParkedDim)
+                DashSketch(sketch: sketch, dimmed: isParkedDim, compact: compact)
+                    .layoutPriority(-1)
 
-                Spacer(minLength: 14)
+                Spacer(minLength: compact ? 8 : 14)
+                    .layoutPriority(-2)
 
-                VStack(spacing: 18) {
-                    DashSpeedHero()
+                VStack(spacing: compact ? 10 : 18) {
+                    DashSpeedHero(compact: compact)
                         .opacity(isParkedDim ? 0.4 : 1)
 
                     // Ближайшая камера: дистанция крупно, цвет греется по
                     // уровню тревоги. НЕ гаснет на стоянке никогда: камера —
                     // то, ради чего приложение существует.
-                    DashCameraBlock()
+                    DashCameraBlock(compact: compact)
                 }
 
-                Spacer(minLength: 14)
+                Spacer(minLength: compact ? 8 : 14)
+                    .layoutPriority(-2)
 
-                VStack(spacing: 12) {
+                VStack(spacing: compact ? 8 : 12) {
                     // «Радар ещё стоял?» — приборка перекрывает карту целиком, и
                     // вопрос, нарисованный там, сгорал под ней невидимым: водитель
                     // в держателе не видел его НИКОГДА. Здесь своя копия; на карте
@@ -86,15 +98,27 @@ struct DashboardView: View {
                     // Кнопка «Радар!» — во всю ширину: тап делается вслепую, и
                     // промахнуться мимо широкой капсулы сложнее, чем мимо квадрата.
                     ReportRadarButton(isLarge: true)
+                }
+                // Касание мимо кнопок этой зоны НЕ закрывает приборку: тап
+                // по экрану — «к карте», и промах мимо «Да»/«Нет» или «Радар»
+                // выбрасывал водителя из приборки посреди ответа. Кнопки
+                // внутри своё касание получают как раньше.
+                .contentShape(Rectangle())
+                .onTapGesture {}
+                .padding(.horizontal, 28)
+                .opacity(isParkedDim ? 0.4 : 1)
 
+                // Подсказка — на коротком экране её место нужнее кнопкам.
+                if !compact {
                     Text("Нажмите, чтобы вернуться к карте")
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textTertiary)
-                        .padding(.top, 2)
+                        .padding(.top, 14)
+                        .opacity(isParkedDim ? 0.4 : 1)
                 }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 12)
-                .opacity(isParkedDim ? 0.4 : 1)
+            }
+            .padding(.bottom, 12)
+            .frame(width: geometry.size.width, height: geometry.size.height)
             }
             // Стояночное затемнение (как у Waze): стоим >30 с без тревоги —
             // белые пиксели гаснут до 40%, на OLED это настоящие ватты.
@@ -308,12 +332,15 @@ private struct DashSketch: View {
     @Environment(AppEnvironment.self) private var env
     let sketch: SketchState
     let dimmed: Bool
+    var compact = false
 
     var body: some View {
         if let scene = sketch.scene, !scene.isEmpty {
+            // Гибкая высота: до 200 (на SE — до 130), а когда места нет —
+            // меньше, вплоть до нуля. Скорость, камера и кнопки важнее.
             RoadSketchView(scene: scene, state: sketch, tint: DashRules.alertColor(env),
                            trim: env.thermal.mode.sketchTrim)
-                .frame(height: 200)
+                .frame(minHeight: 0, maxHeight: compact ? 130 : 200)
                 .padding(.horizontal, 28)
                 .padding(.top, 6)
                 .opacity(min(sketchIsStale ? 0.45 : 1, dimmed ? 0.4 : 1))
@@ -331,6 +358,8 @@ private struct DashSketch: View {
 
 private struct DashSpeedHero: View {
     @Environment(AppEnvironment.self) private var env
+    /// Низкий экран (SE): цифра 112 вместо 148, знак 66 вместо 84.
+    var compact = false
 
     var body: some View { speedHero }
 
@@ -339,13 +368,15 @@ private struct DashSpeedHero: View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 22) {
                 Text("\(Int(env.location.speedKmh.rounded()))")
-                    .font(.system(size: 148, weight: .heavy, design: .rounded))
+                    .font(.system(size: compact ? 112 : 148, weight: .heavy, design: .rounded))
                     .monospacedDigit()
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
                     .foregroundStyle(DashRules.speedColor(env))
                     .contentTransition(.numericText())
                     .motionAnimation(.snappy(duration: 0.3), value: Int(env.location.speedKmh))
                 if let limit = env.speedLimits.currentLimit {
-                    SpeedLimitSign(limit: limit, diameter: 84)
+                    SpeedLimitSign(limit: limit, diameter: compact ? 66 : 84)
                         .scaleEffect(env.speedLimits.isOverspeeding ? 1.08 : 1)
                         // Шесть качков и стоп: «пока превышаешь» на трассе —
                         // это десятки минут, а вечная анимация на экране
@@ -362,7 +393,7 @@ private struct DashSpeedHero: View {
                 .foregroundStyle(Theme.textTertiary)
                 // Шрифт в 148 pt оставляет под цифрами пустой свес строки —
                 // подтягиваем подпись под сами цифры, а не под строку.
-                .padding(.top, -26)
+                .padding(.top, compact ? -20 : -26)
         }
         // Одна фраза вместо россыпи цифр — но только на этом блоке, а не на
         // всей приборке: кнопки внутри неё обязаны остаться кнопками.
@@ -386,6 +417,8 @@ private struct DashSpeedHero: View {
 
 private struct DashCameraBlock: View {
     @Environment(AppEnvironment.self) private var env
+    /// Низкий экран (SE): дистанция 44 вместо 56, отступы меньше.
+    var compact = false
 
     var body: some View {
         if let camera = env.location.nearestCamera,
@@ -433,8 +466,10 @@ private struct DashCameraBlock: View {
                     }
                 }
                 Text(Formatting.distance(distance))
-                    .font(.system(size: 56, weight: .heavy, design: .rounded))
+                    .font(.system(size: compact ? 44 : 56, weight: .heavy, design: .rounded))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .foregroundStyle(DashRules.alertColor(env))
                     .contentTransition(.numericText())
                     .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
@@ -482,7 +517,7 @@ private struct DashCameraBlock: View {
                 approachBar(distance: distance)
             }
         }
-        .padding(.vertical, 18)
+        .padding(.vertical, compact ? 12 : 18)
         .frame(maxWidth: .infinity)
         .background(DashRules.alertColor(env).opacity(0.10),
                     in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))

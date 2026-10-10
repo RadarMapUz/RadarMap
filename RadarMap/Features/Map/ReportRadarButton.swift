@@ -435,8 +435,8 @@ struct MobileConfirmBar: View {
                     .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                 Spacer(minLength: 4)
-                answer(title: String(localized: "Да"), tint: Theme.success, value: true)
-                answer(title: String(localized: "Нет"), tint: Theme.danger, value: false)
+                answer(title: String(localized: "Да"), tint: Theme.successFill, value: true)
+                answer(title: String(localized: "Нет"), tint: Theme.dangerFill, value: false)
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background(.ultraThinMaterial,
@@ -470,7 +470,7 @@ struct MobileConfirmBar: View {
                 .foregroundStyle(.white)
                 // 44 pt — минимум Apple для пальца; за рулём это не педантизм.
                 .frame(width: 62, height: 44)
-                .background(tint.gradient,
+                .background(tint,
                             in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
         .buttonStyle(.plain)

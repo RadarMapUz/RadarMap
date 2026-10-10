@@ -47,6 +47,9 @@ struct TripStatsSheet: View {
     /// Каскадное появление секций при открытии (одноразовое).
     @State private var appeared = false
     @State private var shareSubject: ShareSubjectBox?
+    /// «Очистить историю» стирает все поездки разом и безвозвратно — только
+    /// после вопроса. Раньше хватало одного касания в меню «Ещё».
+    @State private var confirmsClear = false
     @State private var showRatingInfo = false
     @State private var showFinesInfo = false
     /// Расшифровка охвата предупреждений: что именно считается промахом.
@@ -210,13 +213,20 @@ struct TripStatsSheet: View {
             .background(Theme.screenBackground)
             .navigationTitle("Итоги")
             .navigationBarTitleDisplayMode(.inline)
+            .confirmationDialog("Удалить все поездки?", isPresented: $confirmsClear,
+                                titleVisibility: .visible) {
+                Button("Удалить все поездки", role: .destructive) { trip.clearHistory() }
+                Button("Отмена", role: .cancel) {}
+            } message: {
+                Text("История, рейтинг и итоги за все периоды сотрутся с телефона. Вернуть их будет нельзя.")
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
                 if !trip.history.isEmpty {
                     ToolbarItemGroup(placement: .cancellationAction) {
                         Menu {
                             Button("Очистить историю", systemImage: "trash", role: .destructive) {
-                                trip.clearHistory()
+                                confirmsClear = true
                             }
                         } label: { Image(systemName: "ellipsis.circle") }
                             .accessibilityLabel(Text("Ещё"))

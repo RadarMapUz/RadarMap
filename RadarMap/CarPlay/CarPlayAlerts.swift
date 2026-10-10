@@ -64,14 +64,17 @@ extension CarPlaySceneDelegate {
                 self?.dismissTopTemplate()
             }
         }
+        let yes = CPAlertAction(title: String(localized: "Да"), style: .default, handler: answer(true))
+        let no = CPAlertAction(title: String(localized: "Нет"), style: .destructive, handler: answer(false))
+        let skip = CPAlertAction(title: String(localized: "Пропустить"), style: .cancel, handler: answer(Bool?.none))
+        // Сверх `maximumActionCount` CarPlay оставляет ПОСЛЕДНИЕ добавленные
+        // кнопки: на машине, где их две, «Да» из трёх пропадала первой, и
+        // ответить «радар стоит» было нечем. «Пропустить» — только там, где
+        // влезает третья.
         let alert = CPAlertTemplate(
             titleVariants: [String(format: String(localized: "%@ ещё на месте?"), camera.kind.displayName),
                             String(localized: "Ещё на месте?")],
-            actions: [
-                CPAlertAction(title: String(localized: "Да"), style: .default, handler: answer(true)),
-                CPAlertAction(title: String(localized: "Нет"), style: .destructive, handler: answer(false)),
-                CPAlertAction(title: String(localized: "Пропустить"), style: .cancel, handler: answer(Bool?.none)),
-            ])
+            actions: CPAlertTemplate.maximumActionCount >= 3 ? [yes, no, skip] : [yes, no])
         interfaceController?.presentTemplate(alert, animated: true) { _, error in
             if let error {
                 Log.carplay.error("presentTemplate(подтверждение): \(error.localizedDescription, privacy: .public)")

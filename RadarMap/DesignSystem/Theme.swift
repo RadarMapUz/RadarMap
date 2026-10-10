@@ -91,6 +91,13 @@ enum Theme {
     /// Вторая строка на синей заливке (улица под расстоянием) — 4,8:1 / 5,0:1.
     static let onAccentFillSecondary = adaptive(0xEAF0FD, 0xEEF3FD)
 
+    /// Заливки состояний под БЕЛЫМ текстом — по той же причине, что
+    /// `accentFill`: ночные `danger`/`success` светлые (они бывают текстом на
+    /// графите), и белое на них читалось 2,2–2,6:1 — «Стоп», «Завершить
+    /// поездку», «Да»/«Нет» на приборке. Белый на заливке ≥ 4,9:1 в обеих темах.
+    static let dangerFill = adaptive(0xC62828, 0xD0362C)
+    static let successFill = adaptive(0x177A41, 0x1A7F45)
+
     /// Линия маршрута — одна на движке, карте Apple и схеме. Движок берёт
     /// её же hex строкой (EngineMapStyle.routeLayers): правя здесь, правь там.
     static let route = adaptive(0x2A6FF0, 0x5B9BFF)

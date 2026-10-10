@@ -398,6 +398,26 @@ final class CameraStore: CameraRepository {
         persist()
     }
 
+    /// Вернуть все скрытые разом — в том числе те, чьих точек уже нет в
+    /// наборе (передвижная истекла, камеру убрал модератор).
+    func unhideAll() {
+        guard !hiddenIDs.isEmpty else { return }
+        hiddenIDs.removeAll()
+        dataChanged()
+        persist()
+    }
+
+    /// Скрытые пользователем камеры — для списка в настройках. Скрытая камера
+    /// молчит, поэтому вернуть её должно быть так же просто, как скрыть: до
+    /// этого списка `unhide` не звал ни один экран, и скрытие было навсегда.
+    var hiddenCameras: [Camera] {
+        guard !hiddenIDs.isEmpty else { return [] }
+        let base = CameraOverrideEngine.apply(overrides, to: bundled).cameras
+        return (base + custom + mobile)
+            .filter { hiddenIDs.contains($0.id) }
+            .sorted { $0.id < $1.id }
+    }
+
     // MARK: - Хранение
 
     private struct UserData: Codable {

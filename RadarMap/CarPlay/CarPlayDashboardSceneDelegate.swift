@@ -70,16 +70,36 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         model.isOnScreen = false
     }
 
-    /// Ярлыки «Домой» / «На работу» — когда маршрута нет. С маршрутом панель
-    /// показывает карточку манёвра сама, и ярлыки ей не нужны.
+    /// Ярлыки «Дом» / «Работа». С маршрутом панель показывает карточку
+    /// манёвра сама.
+    ///
+    /// Раньше незаданный слот просто пропадал, и на главном экране машины у
+    /// нас не было ни одной кнопки — рядом с плиткой Amap, где «Home not set»
+    /// стоит всегда и ведёт к настройке. Теперь три состояния: адрес задан —
+    /// маршрут; не задан, но выучен по поездкам (FrequentPlaces) — маршрут к
+    /// выученному; ничего — «не задан», касание открывает поиск в машине, и
+    /// выбранное место становится этим слотом.
     private func syncShortcuts() {
         guard let controller else { return }
         controller.shortcutButtons = PlaceSlot.allCases.compactMap { slot in
-            guard let place = env.settings.place(for: slot),
-                  let image = UIImage(systemName: slot.symbol) else { return nil }
-            return CPDashboardButton(titleVariants: [slot.name], subtitleVariants: [place.title],
-                                     image: image) { [weak self] _ in
-                self?.route(to: place)
+            guard let image = UIImage(systemName: slot.symbol) else { return nil }
+            if let place = env.settings.place(for: slot) {
+                return CPDashboardButton(titleVariants: [slot.name], subtitleVariants: [place.title],
+                                         image: image) { [weak self] _ in
+                    self?.route(to: place)
+                }
+            }
+            if let learned = env.learnedPlaces.first(where: { $0.kind.rawValue == slot.rawValue }) {
+                let place = SavedPlace(title: slot.name, lat: learned.lat, lon: learned.lon)
+                return CPDashboardButton(titleVariants: [slot.name],
+                                         subtitleVariants: [String(localized: "по вашим поездкам")],
+                                         image: image) { [weak self] _ in
+                    self?.route(to: place)
+                }
+            }
+            return CPDashboardButton(titleVariants: [slot.name], subtitleVariants: [slot.notSetTitle],
+                                     image: image) { _ in
+                CarPlaySceneDelegate.presentAssignWhenReady(slot)
             }
         }
     }

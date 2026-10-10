@@ -55,6 +55,13 @@ enum PlaceSlot: String, CaseIterable, Identifiable {
         case .work: return "briefcase.fill"
         }
     }
+    /// Подпись пустого слота — с родом слова: «Дом · не задан», «Работа · не задана».
+    var notSetTitle: String {
+        switch self {
+        case .home: return String(localized: "не задан")
+        case .work: return String(localized: "не задана")
+        }
+    }
 }
 
 /// Режим оповещений. «Авто» сам различает контекст: в городе камер сотни —

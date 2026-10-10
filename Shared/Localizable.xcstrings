@@ -16924,6 +16924,54 @@
           }
         }
       }
+    },
+    "не задан": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "не задан"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "belgilanmagan"
+          }
+        }
+      }
+    },
+    "не задана": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "не задана"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "belgilanmagan"
+          }
+        }
+      }
+    },
+    "по вашим поездкам": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "по вашим поездкам"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "safarlaringiz bo‘yicha"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

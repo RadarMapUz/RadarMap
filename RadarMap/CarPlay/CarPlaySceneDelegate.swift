@@ -741,6 +741,42 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
     }
 
+    /// Поиск для слота Дом/Работа: выбранное место сохраняется в слот и к
+    /// нему сразу строится маршрут. Делегат шаблона поиска слабый — держим
+    /// объект, пока шаблон на экране.
+    private var assignSearch: CarPlaySearch?
+
+    func presentAssign(_ slot: PlaceSlot) {
+        let search = CarPlaySearch { [weak self] place in
+            guard let self else { return }
+            env.settings.setPlace(place, for: slot)
+            assignSearch = nil
+            route(to: place)
+        }
+        assignSearch = search
+        interfaceController?.pushTemplate(search.makeTemplate(), animated: true) { _, error in
+            if let error {
+                Log.carplay.error("pushTemplate(поиск для слота): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Вход с приборной панели: касание её кнопки запускает основную сцену
+    /// CarPlay, но обработчик кнопки приходит раньше, чем сцена подключилась.
+    /// Ждём её коротко и открываем поиск для слота.
+    static func presentAssignWhenReady(_ slot: PlaceSlot) {
+        Task { @MainActor in
+            for _ in 0..<20 {
+                if let delegate = activeDelegate, delegate.interfaceController != nil {
+                    delegate.presentAssign(slot)
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+            Log.carplay.notice("слот \(slot.rawValue, privacy: .public): основная сцена не подключилась вовремя")
+        }
+    }
+
     private func presentSearch() {
         interfaceController?.pushTemplate(search.makeTemplate(), animated: true) { _, error in
             if let error {

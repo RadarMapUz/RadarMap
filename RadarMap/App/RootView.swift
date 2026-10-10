@@ -19,6 +19,9 @@ struct RootView: View {
     /// Скриншот-автоматизация: CarPlay-экран на телефоне (симулятор не даёт
     /// открыть CarPlay-дисплей без ручного клика по меню).
     @State private var carPlayPreview = ProcessInfo.processInfo.arguments.contains("-carplayPreview")
+    /// Одна модель на весь показ: созданная в теле, она пересоздавалась бы
+    /// каждой пересборкой и теряла бы и сдвиг, и масштаб.
+    @State private var carPlayPreviewModel = CarPlayMapModel()
     #endif
 
     var body: some View {
@@ -71,9 +74,39 @@ struct RootView: View {
         }
         #if DEBUG
         .fullScreenCover(isPresented: $carPlayPreview) {
-            CarPlayMapScreen(model: CarPlayMapModel())
-                .environment(env)
-                .background(Theme.background)
+            // Экран машины в настоящем размере (800×480, с `-carplayWide` —
+            // широкий 1280×480): раскладку HUD видно такой, какой её увидит
+            // машина, а не растянутой на портретный экран. На портретном
+            // телефоне кадр повёрнут на 90° — так он вдвое крупнее, и
+            // скриншот достаточно повернуть обратно.
+            GeometryReader { geometry in
+                let wide = ProcessInfo.processInfo.arguments.contains("-carplayWide")
+                let size = CGSize(width: wide ? 1280 : 800, height: 480)
+                let portrait = geometry.size.height > geometry.size.width
+                let room = portrait
+                    ? CGSize(width: geometry.size.height, height: geometry.size.width)
+                    : geometry.size
+                let scale = min(room.width / size.width, room.height / size.height)
+                CarPlayMapScreen(model: carPlayPreviewModel)
+                    .environment(env)
+                    .frame(width: size.width, height: size.height)
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .scaleEffect(scale)
+                    .rotationEffect(portrait ? .degrees(90) : .zero)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+            }
+            .ignoresSafeArea()
+            .background(Color.black)
+            // Команды шаблона машины без машины: -carplayPan шлёт сдвиг
+            // стрелкой, как CPMapTemplate, — видно, едет ли карта.
+            .task {
+                guard ProcessInfo.processInfo.arguments.contains("-carplayPan") else { return }
+                await Task.pause(seconds: 8)
+                for _ in 0..<4 {
+                    carPlayPreviewModel.pan(by: CGSize(width: -AppConfig.carPlayPanStep, height: 0))
+                    await Task.pause(seconds: 1.5)
+                }
+            }
         }
         #endif
         // Тема по солнцу: закат не ждёт перезапуска. Раз в пять минут — дешёвый

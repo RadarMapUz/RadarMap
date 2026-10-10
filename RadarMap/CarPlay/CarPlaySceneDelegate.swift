@@ -93,6 +93,16 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             if let error {
                 Log.carplay.error("setRootTemplate: \(error.localizedDescription, privacy: .public)")
             } else if let self, self.mapTemplate === template {
+                // Кнопки бара — ЗАНОВО, когда шаблон уже на экране. Первая
+                // отправка уходит в didConnect, до того как машина показала
+                // корень, и на iOS 26+ теряется; а отправка «только при смене»
+                // (sentBar) больше её не повторяла — в CarPlay Simulator с 2.2.1
+                // верхний бар («Поездка», «Схема», «Куда», «Радар») был пуст, и
+                // из машины нельзя было ни построить маршрут, ни отметить радар.
+                // Кнопки карты жили, потому что шаблон перечитывает их сам.
+                self.sentBar = nil
+                self.sentMapButtons = nil
+                self.syncTemplate()
                 // Сессия — только на шаблоне, который уже на экране: начатая
                 // на летящем корне могла пропасть, а свой баннер манёвра при
                 // этом уже спрятан (hasSystemGuidance) — водитель без манёвра.
@@ -214,6 +224,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             let bar = [tripActive, routeActive, sketchShown]
             if bar != sentBar {
                 sentBar = bar
+                Log.carplay.notice("бар шаблона: поездка=\(tripActive), маршрут=\(routeActive), схема=\(sketchShown)")
                 mapTemplate.leadingNavigationBarButtons = [tripButton(active: tripActive),
                                                            viewButton(sketchShown: sketchShown)]
                 mapTemplate.trailingNavigationBarButtons = [destinationsButton(routeActive: routeActive),

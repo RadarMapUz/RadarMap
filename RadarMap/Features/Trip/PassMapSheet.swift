@@ -416,7 +416,8 @@ struct PassDetailView: View {
                                            startPoint: .top, endPoint: .bottom),
                             in: Capsule())
                 .overlay(Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1))
-                .contentShape(Capsule())
+                // Капсула ~36 pt на глаз прежняя, мишень — 44 pt.
+                .tapTarget()
         }
         .buttonStyle(PressableStyle())
     }
@@ -535,6 +536,9 @@ struct PassDetailView: View {
                     }
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.warning)
+                    // Строка 14 pt — ~18 pt мишени, а это и есть та самая
+                    // жалоба, ради которой карточка существует.
+                    .tapTarget()
                 }
                 .buttonStyle(.plain)
                 .disabled(isSendingMissed)

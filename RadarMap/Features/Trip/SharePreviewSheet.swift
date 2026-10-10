@@ -101,10 +101,14 @@ struct SharePreviewSheet: View {
                 } label: {
                     Label(item.title, systemImage: item.symbol)
                         .font(.rounded(14, .semibold))
-                        .foregroundStyle(selected ? Theme.background : Theme.textSecondary)
+                        // Выбранный формат — синяя заливка с белым: состояние,
+                        // а не действие. Действие на экране одно — жёлтое
+                        // «Поделиться» ниже; раньше обе плашки были одного
+                        // синего, и выбор формата читался второй главной кнопкой.
+                        .foregroundStyle(selected ? Theme.onAccentFill : Theme.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 11)
-                        .background(selected ? AnyShapeStyle(Theme.accent.gradient)
+                        .background(selected ? AnyShapeStyle(Theme.accentFill.gradient)
                                              : AnyShapeStyle(Theme.surface),
                                     in: Capsule())
                         .contentShape(Capsule())
@@ -115,20 +119,14 @@ struct SharePreviewSheet: View {
         }
     }
 
+    /// Единственное главное действие экрана — общий жёлтый `PrimaryButton`,
+    /// а не самодельная синяя капсула того же цвета, что выбранный формат.
     private var shareButton: some View {
-        Button {
+        PrimaryButton(title: "Поделиться", systemImage: "square.and.arrow.up") {
             guard let image else { return }
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             payload = ShareImagePayload(image: image)
-        } label: {
-            Label("Поделиться", systemImage: "square.and.arrow.up")
-                .font(.rounded(16, .bold))
-                .foregroundStyle(Theme.background)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(Theme.accent.gradient, in: Capsule())
         }
-        .buttonStyle(PressableStyle())
         .disabled(image == nil)
         .opacity(image == nil ? 0.5 : 1)
     }

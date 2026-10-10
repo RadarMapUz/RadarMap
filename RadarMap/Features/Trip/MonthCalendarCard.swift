@@ -25,6 +25,8 @@ struct MonthCalendarCard: View {
     var onSelectDay: (Date) -> Void
 
     private let calendar = Calendar.current
+    /// Видимый зазор между клетками; кладётся полями внутрь клетки.
+    private static let cellGap: CGFloat = 5
 
     var body: some View {
         let byDay = dayIndex
@@ -32,9 +34,13 @@ struct MonthCalendarCard: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(String(localized: "Календарь месяца"))
             weekdayHeader
-            VStack(spacing: 5) {
+            // Зазоры между клетками — не spacing, а поля внутри каждой клетки
+            // (cellGap): на глаз сетка та же, а мишень дня занимает весь шаг
+            // сетки — ~43×39 pt на SE вместо 38×34. До 44 по высоте не
+            // дотянуть, не залезая в соседнюю неделю: шаг строки 39 pt.
+            VStack(spacing: 0) {
                 ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
-                    HStack(spacing: 5) {
+                    HStack(spacing: 0) {
                         ForEach(Array(week.enumerated()), id: \.offset) { _, day in
                             cell(day, byDay: byDay)
                         }
@@ -61,7 +67,8 @@ struct MonthCalendarCard: View {
     private var weekdayHeader: some View {
         let symbols = calendar.veryShortWeekdaySymbols
         let ordered = (0..<7).map { symbols[($0 + calendar.firstWeekday - 1) % 7] }
-        return HStack(spacing: 5) {
+        // Без spacing — как у клеток: колонки обязаны совпасть по центрам.
+        return HStack(spacing: 0) {
             ForEach(Array(ordered.enumerated()), id: \.offset) { _, symbol in
                 Text(symbol)
                     .font(.rounded(10, .semibold))
@@ -106,6 +113,7 @@ struct MonthCalendarCard: View {
                                 .stroke(Theme.accent, lineWidth: 1.5)
                         }
                     }
+                    .padding(Self.cellGap / 2)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -116,6 +124,7 @@ struct MonthCalendarCard: View {
         } else {
             // День соседнего месяца — пустое место, не клетка.
             Color.clear.frame(maxWidth: .infinity).frame(height: 34)
+                .padding(Self.cellGap / 2)
         }
     }
 

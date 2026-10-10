@@ -309,10 +309,12 @@ struct SearchView: View {
             HStack(spacing: 12) {
                 Image(systemName: slot.symbol)
                     .font(.rounded(15, .bold))
-                    .foregroundStyle(place == nil ? Theme.textSecondary : Theme.background)
+                    // Белое на accentFill: Theme.background ночью графитовый,
+                    // и на светлом ночном accent значок читался цветом фона.
+                    .foregroundStyle(place == nil ? Theme.textSecondary : Theme.onAccentFill)
                     .frame(width: 36, height: 36)
                     .background(place == nil ? AnyShapeStyle(Theme.stroke)
-                                             : AnyShapeStyle(Theme.accent.gradient), in: Circle())
+                                             : AnyShapeStyle(Theme.accentFill.gradient), in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text(slot.name)
                         .font(.rounded(15, .semibold))
@@ -364,10 +366,10 @@ struct SearchView: View {
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.8)
                         }
-                        .foregroundStyle(model.category == kind ? Theme.background : Theme.textPrimary)
+                        .foregroundStyle(model.category == kind ? Theme.onAccentFill : Theme.textPrimary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
-                        .background(model.category == kind ? AnyShapeStyle(Theme.accent.gradient)
+                        .background(model.category == kind ? AnyShapeStyle(Theme.accentFill.gradient)
                                                            : AnyShapeStyle(Theme.screenBackground),
                                     in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
                     }
@@ -461,17 +463,26 @@ struct SearchView: View {
             HStack(spacing: 12) {
                 Image(systemName: slot.symbol)
                     .font(.rounded(15, .bold))
-                    .foregroundStyle(Theme.background)
+                    .foregroundStyle(Theme.onAccentFill)
                     .frame(width: 36, height: 36)
-                    .background(Theme.accent.gradient, in: Circle())
+                    .background(Theme.accentFill.gradient, in: Circle())
                 Text(String(format: String(localized: "Найдите и выберите адрес для «%@»"), slot.name))
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                 Spacer(minLength: 8)
                 if initialAssign == nil {
-                    Button("Отмена") { assigning = nil }
-                        .font(.rounded(13, .semibold))
-                        .foregroundStyle(Theme.accent)
+                    // .borderless обязателен: кнопка со стилем по умолчанию в
+                    // строке List забирает касание всей строки, и тап по
+                    // подсказке «Найдите и выберите адрес» тоже отменял выбор.
+                    Button {
+                        assigning = nil
+                    } label: {
+                        Text("Отмена")
+                            .font(.rounded(13, .semibold))
+                            .foregroundStyle(Theme.accent)
+                            .tapTarget()
+                    }
+                    .buttonStyle(.borderless)
                 }
             }
             if env.location.currentCoordinate != nil {

@@ -203,9 +203,12 @@ struct MapScreen: View {
         }
         .overlay { loadErrorOverlay }
         .overlay { approachOverlay }
-        // Пуш «Итоги поездки» и другие диплинки на статистику ведут сюда.
+        // Пуш «Итоги поездки» и другие диплинки на статистику ведут сюда:
+        // radarmap://trip — пуш и виджет недели на локскрине,
+        // radarmap://stats — домашний виджет километров.
         .onOpenURL { url in
-            guard url.scheme == "radarmap", url.host() == "trip" else { return }
+            guard url.scheme == "radarmap",
+                  url.host() == "trip" || url.host() == "stats" else { return }
             // Поверх может быть другой шит — вторая презентация молча не
             // проходит, а «истинный» showStats делал кнопку Итогов мёртвой.
             // Закрываем всё своё и открываем Итоги после паузы на анимацию.

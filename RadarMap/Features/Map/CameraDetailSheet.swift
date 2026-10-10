@@ -61,10 +61,14 @@ struct CameraDetailSheet: View {
                     if camera.isApproximate { approximateBanner }
                     addressBlock
                     aimBlock
-                    violationsBlock
+                    // Действия — выше справки: на SE в детенте .medium список
+                    // «Что умеет такой комплекс» уводил «Маршрут сюда» и
+                    // жалобы под край, и шит открывался без единой кнопки.
+                    // Возможности типа — справка, её можно и долистать.
                     routeButton
                     openInMapsButton
                     actionsBlock
+                    violationsBlock
                 }
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)

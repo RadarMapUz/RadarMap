@@ -905,12 +905,14 @@ private struct AllContributionsView: View {
                     } label: {
                         Text(item.title)
                             .font(.rounded(15, .semibold))
-                            .foregroundStyle(selected ? Theme.background : Theme.textSecondary)
+                            // Белое на accentFill: ночью accent светлый, и
+                            // графитовый Theme.background на нём не читался.
+                            .foregroundStyle(selected ? Theme.onAccentFill : Theme.textSecondary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 7)
                             .background {
                                 if selected {
-                                    Capsule().fill(Theme.accent.gradient)
+                                    Capsule().fill(Theme.accentFill.gradient)
                                         .matchedGeometryEffect(id: "sortPill", in: sortPill)
                                 }
                             }

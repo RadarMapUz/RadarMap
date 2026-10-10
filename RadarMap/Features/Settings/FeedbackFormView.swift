@@ -16,7 +16,13 @@ struct FeedbackFormView: View {
     @State private var message = ""
     @State private var contact = ""
     @State private var state: SendState = .idle
+    @State private var confirmsDiscard = false
     @FocusState private var messageFocused: Bool
+
+    /// Есть набранный и ещё не отправленный текст — его нельзя терять молча.
+    private var hasDraft: Bool {
+        state == .idle && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
         NavigationStack {
@@ -34,11 +40,22 @@ struct FeedbackFormView: View {
             .navigationTitle("Написать разработчику")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // «Закрыть» и смахивание вниз выбрасывали набранное сообщение
+                // без вопроса — а это часто пять минут описания бага. С текстом
+                // лист закрывается только через подтверждение.
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Закрыть") { dismiss() }
+                    Button("Отмена") {
+                        if hasDraft { confirmsDiscard = true } else { dismiss() }
+                    }
                 }
             }
+            .confirmationDialog("Удалить сообщение?", isPresented: $confirmsDiscard,
+                                titleVisibility: .visible) {
+                Button("Удалить", role: .destructive) { dismiss() }
+                Button("Продолжить писать", role: .cancel) {}
+            }
         }
+        .interactiveDismissDisabled(hasDraft)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }

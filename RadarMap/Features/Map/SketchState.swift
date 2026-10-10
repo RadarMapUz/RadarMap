@@ -285,7 +285,7 @@ final class SketchState {
     @ObservationIgnored private var minorsVisible = false
     @ObservationIgnored private var minorFlipTicks = 0
 
-    /// Тик GPS: дёргается из DashboardView по locationTick. `now` — параметр
+    /// Тик GPS: дёргается из CarPlaySketchView по locationTick. `now` — параметр
     /// (не Date() внутри): ритм анимации детерминирован в тестах.
     func refresh(_ env: AppEnvironment, now: Date = Date()) {
         // Схема на приборке — единственное, что считается на каждом тике ради

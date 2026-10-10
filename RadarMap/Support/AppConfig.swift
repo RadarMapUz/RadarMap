@@ -71,10 +71,6 @@ nonisolated enum AppConfig {
     /// проезда 80 м плюс запас — очередь ползком у самой камеры пишет проезд
     /// с полной точностью, как и раньше.
     nonisolated static let gpsStandstillNearCameraMeters: CLLocationDistance = 150
-    /// Стояночное затемнение приборки: столько секунд без движения — контент
-    /// гаснет до ~40% (OLED: тёмные пиксели — настоящие ватты). Выдержка
-    /// больше GPS-ной нарочно: гаснуть на каждом коротком светофоре — мигать.
-    nonisolated static let dashboardDimIdleSeconds: TimeInterval = 30
 
     // MARK: - Умный режим оповещений (город/трасса) — пороги детектора.
     // nonisolated: читаются из чистого AlertPolicy (и его тестов) без прыжка на main.
@@ -211,10 +207,6 @@ nonisolated enum AppConfig {
     /// (экран погашен). Пять минут — дольше это вопрос о прошлом, на который
     /// честно не ответить.
     static let mobileConfirmMaxAgeSeconds: TimeInterval = 300
-
-    /// Ниже этой высоты приборка — «короткий экран» (iPhone SE и подобные,
-    /// 667 pt): цифры мельче, схема сжимается первой (DashboardView).
-    static let dashCompactHeight: CGFloat = 720
 
     // MARK: - Карта проездов (Итоги)
 
@@ -1060,6 +1052,19 @@ nonisolated enum AppConfig {
     static let carPlaySearchOwnLimit = 5
     /// Сколько ближайших показывает плитка категории («АЗС»).
     static let searchCategoryLimit = 8
+
+    // MARK: - Мои места: выбор точки на карте
+
+    /// Охват карты при открытии, м: видны дома и подъезды, а не район —
+    /// булавку ставят на свой двор, а не на свой город.
+    static let placePickerSpanMeters = 600.0
+    /// Дом из своего индекса ближе этого к булавке — его адрес и подписываем.
+    /// Точка дома в OSM стоит в центре здания, а палец ставят во двор или к
+    /// подъезду: 30–50 м — обычное дело. Дальше — уже соседний дом.
+    static let placePickerAddressMeters = 60.0
+    /// Пауза после остановки карты перед поиском адреса, с: двигают карту
+    /// рывками, и геокодер Apple не любит очередь запросов.
+    static let placePickerLookupDelay = 0.35
     /// «По пути»: заведение не дальше этого от линии маршрута — заезд без
     /// крюка (съезд на дублёр, другая сторона проспекта).
     static let venueRouteCorridorMeters = 300.0

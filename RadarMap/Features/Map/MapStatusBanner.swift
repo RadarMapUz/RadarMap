@@ -18,10 +18,6 @@ import SwiftUI
 
 struct MapStatusBanner: View {
     @Environment(AppEnvironment.self) private var env
-    /// Открыть приборку. Без сети она — единственный экран, который рисуется
-    /// целиком локально, и предложить её честнее, чем оставить человека
-    /// смотреть на серый прямоугольник вместо карты.
-    var onOpenDashboard: (() -> Void)?
     /// На экране новая карта (движок со стилем OpenMapTiles): только она
     /// умеет рисоваться из скачанной области, и только ей есть что предложить.
     var modernMap: Bool = false
@@ -108,13 +104,14 @@ struct MapStatusBanner: View {
             shell(symbol: "exclamationmark.triangle.fill", tint: Theme.warning,
                   title: message.title, body: message.body, id: status.id)
         case .offline(.general):
+            // Кнопки здесь нет намеренно. Раньше стояла «Открыть приборку» —
+            // спидометр рисовался без сети целиком, — но он убран, а другого
+            // экрана, который честно заменил бы серую карту, у этой подложки
+            // нет. Главное плашка и так говорит: камеры предупреждают.
             shell(symbol: "wifi.slash", tint: Theme.textSecondary,
                   title: String(localized: "Карта не загружается — нет сети"),
                   body: String(localized: "Камеры предупреждают как обычно: база хранится на телефоне"),
-                  id: status.id,
-                  action: onOpenDashboard.map { open in
-                      (String(localized: "Открыть приборку"), open)
-                  })
+                  id: status.id)
         case .offline(.downloadedRegion):
             shell(symbol: "wifi.slash", tint: Theme.textSecondary,
                   title: String(localized: "Нет связи — карта из скачанной области"),

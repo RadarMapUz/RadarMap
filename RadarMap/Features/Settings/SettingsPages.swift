@@ -199,11 +199,10 @@ struct TripSettingsPage: View {
                             UIApplication.shared.isIdleTimerDisabled = keepOn
                         }
                     }
-                Toggle("Спидометр при старте поездки", isOn: $settings.dashboardAutoOpens)
             } header: {
                 Text("Экран")
             } footer: {
-                Text("Спидометр — самый экономный экран: чёрный фон и схема вместо карты. Закрыли руками — до конца поездки сам не откроется.")
+                Text("Экран в поездке не засыпает, как у навигаторов. Выключите — и он погаснет по таймеру iOS; о камерах приложение предупредит голосом и с погашенным экраном, при доступе «Всегда».")
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -260,7 +259,7 @@ struct MapSettingsPage: View {
                     ForEach(MapAppearance.allCases) { Text($0.title).tag($0) }
                 }
             } footer: {
-                Text("«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Приборка и экран тревоги тёмные всегда.")
+                Text("«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Экран тревоги тёмный всегда.")
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -294,6 +293,8 @@ struct MapSettingsPage: View {
 struct PlacesSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
     @State private var assignSlot: PlaceSlot?
+    /// «Выбрать на карте» — тот же экран, что у «Моих мест» в баре.
+    @State private var pickSlot: PlaceSlot?
 
     var body: some View {
         Form {
@@ -302,13 +303,16 @@ struct PlacesSettingsPage: View {
                     placeRow(slot)
                 }
             } footer: {
-                Text("Маршрут в один тап из «Поиска» — домой или на работу.")
+                Text("Маршрут в один тап — кнопкой «Мои места» на карте или из «Поиска». Адрес можно найти словами или показать на карте.")
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .settingsPage("Мои места")
         .sheet(item: $assignSlot) { slot in
             SearchView(initialAssign: slot)
+        }
+        .fullScreenCover(item: $pickSlot) { slot in
+            PlacePickerMap(slot: slot, start: .init(for: slot, env: env))
         }
     }
 
@@ -328,10 +332,12 @@ struct PlacesSettingsPage: View {
                 }
             }
             Spacer()
-            Button(place == nil ? String(localized: "Задать") : String(localized: "Изменить")) { assignSlot = slot }
-                .font(.rounded(13, .semibold))
-                .foregroundStyle(Theme.accent)
-                .buttonStyle(.borderless)
+            // Два пути вместо одного: раньше «Задать» вело только в поиск, а
+            // дом без номера в OSM словами не находится («там выбор по карте
+            // нет»).
+            PlaceAssignMenu(onSearch: { assignSlot = slot }, onMap: { pickSlot = slot }) {
+                PlaceAssignLabel(isSet: place != nil)
+            }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if place != nil {
@@ -462,7 +468,7 @@ struct HelpSettingsPage: View {
         Item(question: "Зачем доступ к геопозиции «Всегда»?",
              answer: "Без него iOS не даёт предупреждать о камерах, когда приложение свёрнуто или экран погашен, и поездка не начинается сама. Фоновая геопозиция обрабатывается только на телефоне."),
         Item(question: "Сколько тратится батареи?",
-             answer: "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно; самый экономный экран — Спидометр: чёрный фон и схема вместо карты."),
+             answer: "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Батарея). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном."),
         Item(question: "Что значат полупрозрачные отметки с «?»",
              answer: "Это отметки водителей, которые ещё никто не подтвердил. Приложение предупреждает и о них, но говорит, что это отметка водителей. Подтвердить или опровергнуть можно в карточке отметки или ответом на вопрос «радар ещё стоял?» после проезда."),
         Item(question: "Камеры уже нет или она стоит не там",

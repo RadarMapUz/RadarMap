@@ -134,9 +134,9 @@ enum OverspeedVoice: String, CaseIterable, Identifiable {
     case always
     /// Только когда впереди ПО НАШЕЙ ДОРОГЕ камера в радиусе оповещения:
     /// штраф реален — фраза заслужена. Вне камер молчим, превышение видно
-    /// цветом скорости и кромкой приборки.
+    /// цветом скорости на HUD.
     case nearCameras
-    /// Никогда: только цвет и кромка.
+    /// Никогда: только цвет (у камеры — ещё и красная кромка экрана).
     case off
 
     var id: String { rawValue }
@@ -507,11 +507,6 @@ final class AppSettings {
     var hapticsEnabled: Bool { didSet { store.set(hapticsEnabled, forKey: Keys.haptics) } }
     /// Не гасить экран в активной поездке (телефон в держателе — как у навигаторов).
     var keepScreenOn: Bool { didSet { store.set(keepScreenOn, forKey: Keys.keepScreenOn) } }
-    /// Открывать спидометр при старте поездки. Спидометр — самый дешёвый экран
-    /// приложения (чёрный OLED + растр вместо тайлов и двухсот маркеров), и он
-    /// строился ради батареи — но был секретным: попасть на него можно было,
-    /// только зная про тап по HUD. Ручное закрытие уважается до конца поездки.
-    var dashboardAutoOpens: Bool { didSet { store.set(dashboardAutoOpens, forKey: Keys.dashboardAuto) } }
     /// Подсказка «Домой / На работу» на главном экране по выученному
     /// распорядку. Выключается целиком — обучение молчит вместе с ней.
     var destinationSuggestions: Bool { didSet { store.set(destinationSuggestions, forKey: Keys.destinationHints) } }
@@ -642,7 +637,6 @@ final class AppSettings {
         static let haptics = "hapticsEnabled"
         static let mapAppearance = "mapAppearance"
         static let keepScreenOn = "keepScreenOn"
-        static let dashboardAuto = "dashboardAutoOpens"
         static let destinationHints = "destinationSuggestions"
         static let smartSilence = "smartSilence"
         static let tripodHints = "tripodHints"
@@ -690,7 +684,6 @@ final class AppSettings {
             Keys.digest: true,
             Keys.haptics: true,
             Keys.keepScreenOn: true,
-            Keys.dashboardAuto: true,
             Keys.destinationHints: true,
             Keys.smartSilence: true,
             Keys.tripodHints: true,
@@ -736,7 +729,6 @@ final class AppSettings {
         adaptiveGPS = store.bool(forKey: Keys.adaptive)
         showNextCamera = store.bool(forKey: Keys.nextCamera)
         keepScreenOn = store.bool(forKey: Keys.keepScreenOn)
-        dashboardAutoOpens = store.bool(forKey: Keys.dashboardAuto)
         destinationSuggestions = store.bool(forKey: Keys.destinationHints)
         smartSilence = store.bool(forKey: Keys.smartSilence)
         tripodHints = store.bool(forKey: Keys.tripodHints)

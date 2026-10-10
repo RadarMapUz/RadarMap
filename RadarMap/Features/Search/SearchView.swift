@@ -232,6 +232,12 @@ struct SearchView: View {
     var initialAssign: PlaceSlot? = nil
 
     @State private var assigning: PlaceSlot? = nil
+    /// «Выбрать на карте» для назначаемого места — когда адрес словами не
+    /// находится (дом без номера в OSM, новый квартал).
+    @State private var pickSlot: PlaceSlot?
+    /// Точку на карте подтвердили «Готово» — после закрытия карты завершаем
+    /// назначение так же, как выбором адреса из списка.
+    @State private var pickedOnMap = false
 
     var body: some View {
         @Bindable var model = model
@@ -270,6 +276,10 @@ struct SearchView: View {
             await model.loadBook(from: env.roads,
                                  at: env.location.currentCoordinate,
                                  fallback: env.settings.place(for: .home)?.coordinate)
+        }
+        .fullScreenCover(item: $pickSlot, onDismiss: finishMapPick) { slot in
+            PlacePickerMap(slot: slot, start: .init(for: slot, env: env),
+                           onSaved: { pickedOnMap = true })
         }
         .alert("Не удалось открыть адрес", isPresented: $resolveFailed) {
             Button("Понятно", role: .cancel) { }
@@ -511,6 +521,13 @@ struct SearchView: View {
                         .foregroundStyle(Theme.accent)
                 }
             }
+            Button {
+                pickSlot = slot
+            } label: {
+                Label("Выбрать на карте", systemImage: "map")
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(Theme.accent)
+            }
         }
         .listRowBackground(Theme.surface)
     }
@@ -728,6 +745,20 @@ struct SearchView: View {
             dismiss()          // пришли из Настроек — адрес выбран, закрываем
         } else {
             assigning = nil    // остаёмся в поиске: строка «Дом/Работа» уже заполнена
+        }
+    }
+
+    /// Карта закрылась: если точку подтвердили — назначение завершено (место
+    /// сохранила сама карта), закрываемся или возвращаемся к поиску так же,
+    /// как после выбора адреса. «Отмена» на карте оставляет выбор открытым.
+    private func finishMapPick() {
+        guard pickedOnMap else { return }
+        pickedOnMap = false
+        model.query = ""
+        if initialAssign != nil {
+            dismiss()
+        } else {
+            assigning = nil
         }
     }
 

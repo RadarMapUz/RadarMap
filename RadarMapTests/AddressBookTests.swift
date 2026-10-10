@@ -232,4 +232,34 @@ final class AddressBookTests: XCTestCase {
                                                         longitude: -0.25)),
             "179_359_a")
     }
+
+    // MARK: - Что под булавкой («Выбрать на карте»)
+
+    func testNearestHouseUnderThePin() {
+        // ~14 м от «12/1» и ~100 м от «12» — подпись берётся у ближнего дома.
+        let found = book().nearest(to: CLLocationCoordinate2D(latitude: 41.3009, longitude: 69.2501),
+                                   within: 60)
+        XCTAssertEqual(found?.house, "12/1")
+        XCTAssertEqual(found?.street, "Alisher Navoiy ko'chasi")
+    }
+
+    func testFarFromEveryHouseIsNoAddress() {
+        // Посреди пустыря в трёхстах метрах от домов адрес соседнего квартала
+        // был бы враньём, которое осталось бы в «Моих местах» навсегда.
+        XCTAssertNil(book().nearest(to: CLLocationCoordinate2D(latitude: 41.3053, longitude: 69.25),
+                                    within: 60))
+    }
+
+    func testNearestLooksAcrossStreets() {
+        // Ближайший — на другой улице: улица файла ничего не решает.
+        let found = book().nearest(to: CLLocationCoordinate2D(latitude: 41.3102, longitude: 69.2799),
+                                   within: 60)
+        XCTAssertEqual(found?.street, "Amir Temur shoh ko'chasi")
+        XCTAssertEqual(found?.house, "1")
+    }
+
+    func testEmptyBookHasNoNearest() {
+        XCTAssertNil(AddressBook(addresses: []).nearest(
+            to: CLLocationCoordinate2D(latitude: 41.30, longitude: 69.25), within: 60))
+    }
 }

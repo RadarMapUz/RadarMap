@@ -69,17 +69,12 @@ final class GPSTiersTests: XCTestCase {
                        "подъезд бустом не трогается — он и так точный")
     }
 
-    /// Одна дефиниция «стою» на тир GPS и стояночное затемнение приборки.
-    func testIsStandingSharedDefinition() {
+    /// «Стою» — скорость ниже порога дольше GPS-ной выдержки. Затемнение
+    /// приборки со своей, более длинной выдержкой ушло вместе со спидометром.
+    func testIsStandingDefinition() {
         XCTAssertTrue(GPSTiers.isStanding(speedKmh: 0, idleSeconds: 25))
         XCTAssertFalse(GPSTiers.isStanding(speedKmh: 0, idleSeconds: 15))
         XCTAssertFalse(GPSTiers.isStanding(speedKmh: 10, idleSeconds: 100))
-        // Затемнение ждёт дольше GPS (30 с против 20): гаснуть на каждом
-        // коротком светофоре — мигать.
-        XCTAssertFalse(GPSTiers.isStanding(speedKmh: 0, idleSeconds: 25,
-                                           idleAfter: AppConfig.dashboardDimIdleSeconds))
-        XCTAssertTrue(GPSTiers.isStanding(speedKmh: 0, idleSeconds: 35,
-                                          idleAfter: AppConfig.dashboardDimIdleSeconds))
     }
 
 

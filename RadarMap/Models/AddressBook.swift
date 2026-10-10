@@ -341,6 +341,31 @@ nonisolated struct AddressBook: Sendable {
         return Array(found.prefix(limit).map(\.address))
     }
 
+    /// Ближайший дом к точке — подпись под булавкой «Выбрать на карте».
+    ///
+    /// Поиск по имени тут не помогает: человек показал место пальцем, и
+    /// вопрос обратный — «что здесь». Не ближе `maxMeters` — nil: адрес
+    /// соседнего квартала под булавкой хуже честного «Точка на карте», а в
+    /// «Моих местах» он остался бы навсегда.
+    ///
+    /// Перебор, а не индекс: в клетке города ~10–20 тысяч домов — доли
+    /// миллисекунды, а вызов бывает раз на остановку карты, не на кадр.
+    func nearest(to point: CLLocationCoordinate2D, within maxMeters: Double) -> Address? {
+        var best: Address?
+        var bestDistance = maxMeters
+        for address in addresses {
+            let distance = GeoMath.fastDistance(point.latitude, point.longitude,
+                                                address.point.latitude, address.point.longitude)
+            // Строгое «меньше»: из двух равноудалённых побеждает первый по
+            // файлу — подпись не прыгает между соседями от вызова к вызову.
+            if distance < bestDistance {
+                best = address
+                bestDistance = distance
+            }
+        }
+        return best
+    }
+
     /// Один адрес — одна строка. В OSM дом бывает и точкой, и контуром, и
     /// оба приезжают с тем же номером в паре метров: в списке это два
     /// одинаковых ряда (и два одинаковых id у ForEach).

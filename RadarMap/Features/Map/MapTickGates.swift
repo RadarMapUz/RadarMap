@@ -146,10 +146,9 @@ struct DrivingHintChip: View {
 /// подпиской на каждый метр.
 struct MobileConfirmGate: View {
     @Environment(AppEnvironment.self) private var env
-    var dashboardShown: Bool
 
     var body: some View {
-        MobileConfirmBar(isCovered: env.location.isApproachingCamera || dashboardShown)
+        MobileConfirmBar(isCovered: env.location.isApproachingCamera)
             .onAppear { env.mobile.expireStaleConfirm() }
     }
 }
@@ -158,10 +157,9 @@ struct MobileConfirmGate: View {
 /// пер-тиковую isApproachingCamera читает гейт, а не body MapScreen.
 struct ReportRefineGate: View {
     @Environment(AppEnvironment.self) private var env
-    var dashboardShown: Bool
 
     var body: some View {
-        ReportRefineBar(isCovered: env.location.isApproachingCamera || dashboardShown)
+        ReportRefineBar(isCovered: env.location.isApproachingCamera)
     }
 }
 
@@ -170,12 +168,6 @@ struct ReportRefineGate: View {
 struct LocationFollowDriver: View {
     @Environment(AppEnvironment.self) private var env
     let map: MapState
-    /// Карта накрыта приборкой: fullScreenCover прячет её только зрительно,
-    /// а follow продолжал каждый тик анимировать камеру и грузить тайлы под
-    /// крышкой — замер дал столько же CPU, сколько у открытой карты, и вся
-    /// экономия приборки сводилась к яркости пикселей. На паузе не следим;
-    /// снятие крышки догоняет позицию первым же тиком.
-    var isCovered = false
     /// Камера карты Apple на экране. Когда подложка — движок, у него своё
     /// ведение; follow здесь двигал невидимую карту Apple и пересобирал её
     /// аннотации каждый тик (docs/perf_audit_2026-10-07.md).
@@ -185,7 +177,6 @@ struct LocationFollowDriver: View {
         Color.clear
             .allowsHitTesting(false)
             .onChange(of: env.location.locationTick) { _, _ in
-                guard !isCovered else { return }
                 // Прогресс маршрута (прибытие/манёвры) тикает в LocationService —
                 // здесь только следование карты за курсом. Вне поездки поворот
                 // по компасу телефона делает сам MapKit (.userLocation

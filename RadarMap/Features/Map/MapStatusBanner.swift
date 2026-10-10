@@ -152,23 +152,29 @@ struct MapStatusBanner: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: symbol)
                 .foregroundStyle(tint)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.rounded(19, .semibold))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                 if let body, !body.isEmpty {
                     Text(body)
-                        .font(.caption)
+                        .font(.rounded(12))
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let (label, perform) = action {
+                    // Кнопка, а не подпись: была `.caption` без рамки, ~16 pt
+                    // в высоту — промах за рулём значит второй взгляд.
                     Button(isRetrying ? String(localized: "Загружаю…") : label, action: perform)
-                        .font(.caption.weight(.semibold))
+                        .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: Theme.controlSize)
+                        .background(Theme.accent.opacity(0.12), in: Capsule())
+                        .contentShape(Capsule())
                         .disabled(isRetrying)
-                        .padding(.top, 2)
+                        .padding(.top, 4)
                 }
             }
             Spacer(minLength: 0)
@@ -176,7 +182,7 @@ struct MapStatusBanner: View {
                 withMotion(.easeOut(duration: 0.2)) { _ = dismissed.insert(id) }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.rounded(12, .bold))
                     .foregroundStyle(Theme.textTertiary)
                     .tapTarget()         // палец за рулём крупнее крестика
             }
@@ -184,9 +190,9 @@ struct MapStatusBanner: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium))
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: Theme.cornerMedium)
+            RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
                 .stroke(tint.opacity(0.35), lineWidth: 1)
         )
     }

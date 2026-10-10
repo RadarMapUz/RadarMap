@@ -28,14 +28,11 @@ struct MapCompassButton: View {
             } label: {
                 ZStack {
                     Image(systemName: "location.north.fill")
-                        .font(.rounded(15, .bold))
+                        .font(.rounded(17, .bold))
                         .foregroundStyle(Theme.danger)
                         .rotationEffect(.degrees(-map.displayedDirection))
                 }
-                .frame(width: 42, height: 42)
-                .background(Theme.surface, in: Circle())
-                .overlay(Circle().strokeBorder(Theme.edgeControl, lineWidth: 1))
-                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+                .controlCircle()
             }
             .buttonStyle(PressableStyle())
             .tapTarget()
@@ -61,10 +58,7 @@ struct Map3DToggle: View {
             Text(on ? "3D" : "2D")
                 .font(.rounded(15, .heavy))
                 .foregroundStyle(on ? Theme.accent : Theme.textPrimary)
-                .frame(width: 42, height: 42)
-                .background(Theme.surface, in: Circle())
-                .overlay(Circle().strokeBorder(Theme.edgeControl, lineWidth: 1))
-                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+                .controlCircle()
         }
         .buttonStyle(PressableStyle())
         .tapTarget()
@@ -97,7 +91,7 @@ struct MapZoomButtons: View {
             Image(systemName: symbol)
                 .font(.rounded(17, .bold))
                 .foregroundStyle(Theme.textPrimary)
-                .frame(width: 42, height: 44)
+                .frame(width: Theme.controlSize, height: Theme.controlSize)
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle())
@@ -117,12 +111,9 @@ struct MapMuteButton: View {
             env.settings.setMuted(!muted)
         } label: {
             Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                .font(.rounded(15, .bold))
+                .font(.rounded(17, .semibold))
                 .foregroundStyle(muted ? Theme.danger : Theme.textPrimary)
-                .frame(width: 42, height: 42)
-                .background(Theme.surface, in: Circle())
-                .overlay(Circle().strokeBorder(Theme.edgeControl, lineWidth: 1))
-                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+                .controlCircle()
         }
         .buttonStyle(PressableStyle())
         .tapTarget()

@@ -49,11 +49,14 @@ struct OfflineOfferCard: View {
                     env.offlineMaps.download(region)
                     answer()
                 } label: {
+                    // Синяя, не жёлтая: жёлтая на экране одна — главное действие
+                    // («Начать поездку» рядом). Высота — мишень 44.
                     Text("Скачать")
-                        .font(.rounded(13, .bold))
-                        .foregroundStyle(Theme.onAction)
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(Theme.action, in: Capsule())
+                        .font(.rounded(15, .bold))
+                        .foregroundStyle(Theme.onAccentFill)
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: Theme.controlSize)
+                        .background(Theme.accentFill, in: Capsule())
                 }
                 .buttonStyle(PressableStyle())
             }

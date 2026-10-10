@@ -356,8 +356,10 @@ nonisolated enum SketchPalette {
     /// Лента маршрута в три слоя: тёмная кайма отделяет её от полотна,
     /// цветное тело — это «куда я еду», светлая жила внутри даёт объём.
     /// Ровно те же три слоя, что у карты машины (см. CarPlayMapView).
-    static let routeCasing = Color(red: 0.02, green: 0.10, blue: 0.06)
-    static let routeBody = Theme.success
+    static let routeCasing = Color(red: 0.03, green: 0.07, blue: 0.18)
+    /// Один синий маршрут на всех картах (Theme.route). Был зелёный
+    /// `success` — «в лимите» и «твой путь» красились одним цветом.
+    static let routeBody = Theme.route
     static let routeCore = Color.white.opacity(0.26)
 
     /// Пройденное гасим: оно уже не решение, а память.
@@ -367,10 +369,11 @@ nonisolated enum SketchPalette {
 
     // MARK: - Манёвр
 
-    /// Стрелка манёвра. Белая кайма — как на дорожном знаке: она отделяет
-    /// стрелку от любого фона, включая саму ленту маршрута под ней.
-    static let maneuverCasing = Color.white.opacity(0.92)
-    static let maneuverBody = Theme.accent
+    /// Стрелка манёвра: белая с тёмно-синей каймой, как у Amap. Синей
+    /// стрелке на синей теперь ленте не отделиться — белая читается на
+    /// ленте, а кайма отделяет её от светлой земли днём.
+    static let maneuverCasing = Color(red: 0.03, green: 0.07, blue: 0.18).opacity(0.92)
+    static let maneuverBody = Color.white
 
     // MARK: - Ручные объекты
 

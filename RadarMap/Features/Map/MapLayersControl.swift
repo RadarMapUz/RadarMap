@@ -38,19 +38,30 @@ struct MapLayersControl: View {
     var available: [MapBase]
     /// Легенда типов камер — только там, где эти маркеры и рисуются.
     var showsLegend: Bool
+    /// Сколько панели можно занять по высоте — до нижних панелей экрана.
+    /// Не влезает — листается, а не уезжает под них.
+    var maxPanelHeight: CGFloat = .infinity
 
     @State private var isExpanded = false
     @State private var collapseTask: Task<Void, Never>?
+    /// Настоящая высота содержимого панели — мерится внутри ScrollView.
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 10) {
-            if isExpanded { panel }
-            CircleControl(systemName: base.symbol,
-                          tint: isExpanded ? Theme.accent : Theme.textPrimary,
-                          size: 44,
-                          accessibilityLabel: "Слои карты") {
-                isExpanded.toggle()
-                postpone()
+        // Панель открывается СБОКУ от кнопки, поверх карты, и в вёрстке
+        // колонки не участвует. Раньше она вставала в колонку над кнопкой —
+        // 208×~350 pt — и сталкивала вниз все кнопки под собой, на маленьком
+        // iPhone за край экрана и под нижние панели.
+        CircleControl(systemName: base.symbol,
+                      tint: isExpanded ? Theme.accent : Theme.textPrimary,
+                      accessibilityLabel: "Слои карты") {
+            isExpanded.toggle()
+            postpone()
+        }
+        .overlay(alignment: .topTrailing) {
+            if isExpanded {
+                panel
+                    .offset(x: -(Theme.controlSize + 10))
             }
         }
         .motionAnimation(.spring(duration: 0.32, bounce: 0.16), value: isExpanded)
@@ -58,6 +69,23 @@ struct MapLayersControl: View {
     }
 
     private var panel: some View {
+        ScrollView {
+            panelContent
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(width: 208,
+               height: contentHeight > 0 ? min(contentHeight, max(maxPanelHeight, Theme.controlSize)) : nil)
+        .background(Theme.background.opacity(0.42),
+                    in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
+        .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerPanel))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
+            .strokeBorder(Theme.edgePanel, lineWidth: 1))
+        .liftPanel()
+        .transition(.scale(scale: 0.86, anchor: .topTrailing).combined(with: .opacity))
+    }
+
+    private var panelContent: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Карта")
                 .font(.rounded(11, .semibold))
@@ -97,13 +125,6 @@ struct MapLayersControl: View {
         }
         .padding(12)
         .frame(width: 208, alignment: .leading)
-        .background(Theme.background.opacity(0.42),
-                    in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
-        .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerPanel))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
-            .strokeBorder(Theme.edgePanel, lineWidth: 1))
-        .liftPanel()
-        .transition(.scale(scale: 0.86, anchor: .bottomTrailing).combined(with: .opacity))
     }
 
     /// Строка подложки. Выбранная обведена акцентом: за рулём это читается
@@ -137,9 +158,9 @@ struct MapLayersControl: View {
                         .foregroundStyle(Theme.accent)
                 }
             }
-            // Мишень до 44 пунктов: строка остаётся тонкой, растёт только
-            // область касания — отсюда padding ДО contentShape.
-            .padding(.vertical, 8)
+            // Мишень 44 пункта: строка остаётся тонкой, растёт только
+            // область касания — отсюда высота ДО contentShape.
+            .frame(minHeight: Theme.controlSize)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -167,7 +188,7 @@ struct MapLayersControl: View {
                     .font(.rounded(14))
                     .foregroundStyle(isOn.wrappedValue ? Theme.accent : Theme.textTertiary)
             }
-            .padding(.vertical, 10)
+            .frame(minHeight: Theme.controlSize)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -491,14 +491,14 @@ struct CarPlayMapView: UIViewRepresentable {
                 renderer.strokeColor = UIColor.white.withAlphaComponent(0.28)
                 renderer.lineWidth = 4
             } else if polyline === routeCasing {
-                renderer.strokeColor = UIColor(Theme.background).withAlphaComponent(0.92)
+                renderer.strokeColor = UIColor(Theme.routeCasing).withAlphaComponent(0.92)
                 renderer.lineWidth = 18
             } else if polyline === traveledLine {
                 // Пройденное гасим: оно уже не решение, а память.
                 renderer.strokeColor = UIColor.white.withAlphaComponent(0.20)
                 renderer.lineWidth = 12
             } else {
-                renderer.strokeColor = UIColor(Theme.accent)
+                renderer.strokeColor = UIColor(Theme.route)
                 renderer.lineWidth = 12
             }
             return renderer

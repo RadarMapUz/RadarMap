@@ -113,8 +113,7 @@ struct QuickTogglesBar: View {
                 Spacer()
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
             .background(Theme.surface, in: Capsule())
         }
         .buttonStyle(PressableStyle())
@@ -130,11 +129,10 @@ struct QuickTogglesBar: View {
                 Image(systemName: mode.symbol).font(.rounded(11, .semibold))
                 Text(mode.title).font(.rounded(12, .semibold))
             }
-            .foregroundStyle(selected ? Theme.background : Theme.textSecondary)
+            .foregroundStyle(selected ? Theme.onAccentFill : Theme.textSecondary)
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity)
-            .background(selected ? AnyShapeStyle(Theme.accent.gradient)
+            .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
+            .background(selected ? AnyShapeStyle(Theme.accentFill)
                                  : AnyShapeStyle(Theme.surface), in: Capsule())
         }
         .buttonStyle(PressableStyle())
@@ -147,11 +145,10 @@ struct QuickTogglesBar: View {
                 Image(systemName: mode.symbol).font(.rounded(11, .semibold))
                 Text(mode.title).font(.rounded(12, .semibold))
             }
-            .foregroundStyle(selected ? Theme.background : Theme.textSecondary)
+            .foregroundStyle(selected ? Theme.onAccentFill : Theme.textSecondary)
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity)
-            .background(selected ? AnyShapeStyle(Theme.accent.gradient)
+            .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
+            .background(selected ? AnyShapeStyle(Theme.accentFill)
                                  : AnyShapeStyle(Theme.surface), in: Capsule())
         }
         .buttonStyle(PressableStyle())

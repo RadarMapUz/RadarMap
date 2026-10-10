@@ -427,7 +427,7 @@ struct MapScreen: View {
             UserAnnotation()
 
             // Маршрут: сперва тусклые альтернативы, поверх — выбранный вариант
-            // (тёмная подложка + неоновая линия, читается на любом фоне).
+            // (кайма + синяя линия Theme.route — тот же цвет, что на движке и в машине).
             if !env.location.isTripActive {
                 ForEach(env.route.variants) { variant in
                     if variant.id != env.route.selectedID {
@@ -439,11 +439,10 @@ struct MapScreen: View {
             }
             if let polyline = env.route.polyline {
                 MapPolyline(polyline)
-                    .stroke(Theme.background.opacity(0.85),
+                    .stroke(Theme.routeCasing.opacity(0.9),
                             style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
                 MapPolyline(polyline)
-                    .stroke(LinearGradient(colors: [Theme.accent, Theme.Types.intelligent],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                    .stroke(Theme.route,
                             style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
                 // Пройденная часть тускнеет — видно, сколько осталось.
                 if env.location.isTripActive, let traveled = env.route.traveledPolyline {
@@ -755,7 +754,7 @@ struct MapScreen: View {
             }
             .foregroundStyle(Theme.textSecondary)
             .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .frame(minHeight: Theme.controlSize)
             .backport.glassEffect(.regular, in: .capsule)
         }
         .buttonStyle(PressableStyle())
@@ -788,9 +787,14 @@ struct MapScreen: View {
     /// (docs/plan_drive_ux_2026-10-07.md, п. 4). Компас — только когда карту
     /// повернули руками.
     @ViewBuilder private var tripControls: some View {
+        let extras = TripScreenLayout.columnExtras(
+            available: columnRoom, fixed: 3,
+            candidates: map.isRotated ? [(.compass, 1)] : [])
         MapMuteButton()
         orientationControl
-        MapCompassButton(map: map)
+        if extras.contains(.compass) {
+            MapCompassButton(map: map)
+        }
         // Семь функций, до которых в поездке было не добраться.
         //
         // Поиск, «Рядом», «Итоги», «Добавить камеру» и Настройки живут в
@@ -815,37 +819,53 @@ struct MapScreen: View {
 
     /// Покой: как было — слои, 3D, ориентация, компас, весь маршрут, масштаб, звук.
     @ViewBuilder private var idleControls: some View {
+        // Обязательные — «к себе» и звук; остальное по важности, пока есть
+        // место до нижних панелей (TripScreenLayout.columnExtras).
+        let extras = TripScreenLayout.columnExtras(
+            available: columnRoom, fixed: 2,
+            candidates: [(.layers, 1)]
+                + (map.isRotated ? [(.compass, 1)] : [])
+                + (env.route.isActive ? [(.overview, 1)] : [])
+                + [(.threeD, 1)]
+                + (env.settings.mapZoomButtons ? [(.zoom, 2)] : []))
         // Слои карты — первой в колонке.
         //
         // Подложка лежала в десятом разделе настроек и включалась только
         // после старта поездки; пробки и места жили в отдельной панели,
         // которой в поездке не бывало вовсе. Теперь это одна панель; в
         // поездке та же панель — подменю «…» (mapLayersMenu).
-        MapLayersControl(base: setting(\.mapBase),
-                         traffic: setting(\.mapTraffic),
-                         places: setting(\.mapPlaces),
-                         houses: setting(\.mapHouses),
-                         sidewalks: setting(\.mapSidewalks),
-                         modern: setting(\.mapModernStyle),
-                         showsBuildingLayers: shownBase != .apple,
-                         available: Self.availableBases,
-                         showsLegend: shownBase == .apple)
+        if extras.contains(.layers) {
+            MapLayersControl(base: setting(\.mapBase),
+                             traffic: setting(\.mapTraffic),
+                             places: setting(\.mapPlaces),
+                             houses: setting(\.mapHouses),
+                             sidewalks: setting(\.mapSidewalks),
+                             modern: setting(\.mapModernStyle),
+                             showsBuildingLayers: shownBase != .apple,
+                             available: Self.availableBases,
+                             showsLegend: shownBase == .apple,
+                             maxPanelHeight: columnRoom > 0 ? columnRoom : .infinity)
+        }
         // Вид карты, как у навигаторов: 2D/3D, «моё местоположение»
         // (1-й тап — к машине, 2-й — по ходу движения), компас — только
         // когда карта повёрнута, звук.
-        Map3DToggle(map: map)
+        if extras.contains(.threeD) {
+            Map3DToggle(map: map)
+        }
         orientationControl
-        MapCompassButton(map: map)
+        if extras.contains(.compass) {
+            MapCompassButton(map: map)
+        }
         // «Весь маршрут» — пока он есть: посмотреть его целиком до старта.
-        if env.route.isActive, let polyline = env.route.polyline {
+        if extras.contains(.overview), env.route.isActive, let polyline = env.route.polyline {
             CircleControl(systemName: "point.topleft.down.to.point.bottomright.curvepath",
-                          tint: Theme.textPrimary, size: 42,
+                          tint: Theme.textPrimary,
                           accessibilityLabel: "Весь маршрут") {
                 map.showRouteOverview(rect: polyline.boundingMapRect)
             }
             .transition(.scale.combined(with: .opacity))
         }
-        if env.settings.mapZoomButtons {
+        if extras.contains(.zoom) {
             MapZoomButtons(map: map)
                 .transition(.scale.combined(with: .opacity))
         }
@@ -853,6 +873,14 @@ struct MapScreen: View {
         // Жёлтой кнопки «Радар здесь» здесь БОЛЬШЕ НЕТ: в поездке их было
         // две с разным поведением, осталась та, что в панели поездки
         // (отправка одним тапом с последующим уточнением).
+    }
+
+    /// Просвет для колонки справа: от нижнего края верхних панелей до
+    /// верхнего края нижних (обе кромки уже мерятся для схемы). 0 — ещё не
+    /// измерено.
+    private var columnRoom: CGFloat {
+        guard topPanelEdge > 0, bottomPanelEdge > topPanelEdge else { return 0 }
+        return bottomPanelEdge - topPanelEdge
     }
 
     private var orientationControl: some View {
@@ -1052,11 +1080,17 @@ struct MapScreen: View {
                         isProbablyDriving: env.location.isProbablyDriving,
                         showsQuickDestinations: mode.showsQuickDestinations) {
                     case .routeError(let error):
-                        Text(error)
-                            .font(.rounded(12, .medium)).foregroundStyle(Theme.danger)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(.ultraThinMaterial, in: Capsule())
-                            .onTapGesture { env.route.clear() }
+                        // Тап убирает ошибку — значит, это кнопка, и мишень у
+                        // неё 44 pt (была капсула ~28 pt под onTapGesture).
+                        Button { env.route.clear() } label: {
+                            Text(error)
+                                .font(.rounded(12, .medium)).foregroundStyle(Theme.danger)
+                                .padding(.horizontal, 14)
+                                .frame(minHeight: Theme.controlSize)
+                                .background(.ultraThinMaterial, in: Capsule())
+                        }
+                        .buttonStyle(PressableStyle())
+                        .accessibilityHint(Text("Убрать сообщение"))
                     case .building:
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
@@ -1087,6 +1121,17 @@ struct MapScreen: View {
                     actionBar
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+            }
+            // Точка на карте или выбор типа отметки в ПОЕЗДКЕ — над панелью
+            // поездки, а не вместо неё. Раньше долгий тап по карте на ходу
+            // убирал «Радар!» и «Стоп», пока панель точки не закроют, —
+            // ровно те кнопки, которые за рулём ищут вслепую.
+            if !map.isAddingCamera, map.pressedPoint != nil || reportPoint != nil,
+               TripScreenLayout.showsTripBar(mode: mode, arrivalShown: arrivalShown) {
+                TripLiveBar(
+                    onShowCameras: { showRouteCameras = true },
+                    onStop: { toggleTrip() }
+                )
             }
         }
     }
@@ -1204,36 +1249,18 @@ struct MapScreen: View {
             }
             .foregroundStyle(Theme.textSecondary)
             .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .frame(minHeight: Theme.controlSize)
             .background(Theme.surface, in: Capsule())
         }
         .buttonStyle(PressableStyle())
     }
 
-    /// CTA: градиент со световой кромкой сверху и двойной тенью — премиальный
-    /// объём, высота 52 в линию с кругами Дом/Работа. Остаётся тем, у кого
-    /// автостарт выключен: без нажатия поездки не будет вовсе.
+    /// CTA для тех, у кого автостарт выключен: без нажатия поездки не будет
+    /// вовсе. Та же главная кнопка, что «Поехали» и «Отправить» — жёлтая
+    /// PrimaryButton; был зелёный градиент-капсула, третий облик одной роли.
     private var tripButtonPrimary: some View {
-        Button {
-            toggleTrip()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "play.fill")
-                Text("Начать поездку")
-            }
-            .font(.rounded(16, .bold))
-            .foregroundStyle(Theme.background)
-            .frame(maxWidth: .infinity)
-            .frame(height: 52)
-            .background(
-                LinearGradient(colors: [Theme.success.opacity(0.98), Theme.success.opacity(0.72)],
-                               startPoint: .top, endPoint: .bottom), in: Capsule())
-            .overlay(Capsule().strokeBorder(
-                Theme.edgeAccent, lineWidth: 1))
-        }
-        .buttonStyle(PressableStyle())
-        .shadow(color: Theme.success.opacity(0.35), radius: 14, y: 5)
-        .liftAccent()
+        PrimaryButton(title: "Начать поездку", systemImage: "play.fill") { toggleTrip() }
+            .liftAccent()
     }
 
     /// Док действий: стекло со световой кромкой и глубокая тень — в одном
@@ -1343,12 +1370,17 @@ struct MapScreen: View {
                 Text(banner.message).font(.rounded(12)).foregroundStyle(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
+                // Мишень 44 pt: была голая подпись 12 pt (~16 pt в высоту).
                 Button(banner.button, action: banner.action)
-                    .font(.rounded(12, .semibold)).foregroundStyle(Theme.accent)
+                    .font(.rounded(15, .semibold)).foregroundStyle(Theme.accent)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: Theme.controlSize)
+                    .background(Theme.accent.opacity(0.12), in: Capsule())
+                    .contentShape(Capsule())
             }
             .padding(12)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
         }
     }
 

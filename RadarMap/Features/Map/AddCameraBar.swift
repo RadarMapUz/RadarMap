@@ -62,7 +62,7 @@ struct AddCameraBar: View {
                     }
                     PrimaryButton(title: kind == .mobile ? "Радар здесь!" : "Добавить здесь",
                                   systemImage: "plus",
-                                  tint: kind == .mobile ? Theme.Types.mobile : Theme.accent) {
+                                  tint: kind == .mobile ? Theme.Types.mobile : Theme.accentFill) {
                         onAdd(kind, name)
                     }
                 }

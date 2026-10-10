@@ -448,6 +448,7 @@ struct SearchView: View {
                     Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
                         .font(.rounded(24))
                         .foregroundStyle(Theme.accent)
+                        .tapTarget()
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Маршрут сюда"))
@@ -593,8 +594,10 @@ struct SearchView: View {
                     Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
                         .font(.rounded(24))
                         .foregroundStyle(Theme.accent)
+                        .tapTarget()
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(Text("Маршрут сюда"))
             }
         }
     }
@@ -676,8 +679,9 @@ struct SearchView: View {
                     }
                 } label: {
                     Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
-                        .font(.rounded(26))
+                        .font(.rounded(24))
                         .foregroundStyle(Theme.accent)
+                        .tapTarget()
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Маршрут сюда"))

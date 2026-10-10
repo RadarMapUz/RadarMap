@@ -135,7 +135,7 @@ struct LabeledDivider: View {
 struct CircleControl: View {
     let systemName: String
     var tint: Color = Theme.textPrimary
-    var size: CGFloat = 46
+    var size: CGFloat = Theme.controlSize
     /// Что читает VoiceOver (иконка без текста сама по себе нема).
     var accessibilityLabel: LocalizedStringKey = ""
     let action: () -> Void
@@ -158,21 +158,28 @@ struct CircleControl: View {
 struct CircleControlFace: View {
     let systemName: String
     var tint: Color = Theme.textPrimary
-    var size: CGFloat = 46
+    var size: CGFloat = Theme.controlSize
 
     var body: some View {
         Image(systemName: systemName)
-            .font(.rounded(size > 48 ? 19 : 17, .semibold))
+            .font(.rounded(17, .semibold))
             .foregroundStyle(tint)
-            .frame(width: size, height: size)
-            // Та же тёмная подложка: кнопки поверх карты обязаны читаться и
-            // на светлом фоне — иначе белая иконка на белом стекле пропадает.
-            .background(Theme.background.opacity(0.42), in: Circle())
-            .backport.glassEffect(.interactive(isEnabled: true), in: .circle)
-            // Тонкая световая кромка сверху — стекло ловит свет, как у системных кнопок.
-            .overlay(Circle().strokeBorder(
-                Theme.edgeControl, lineWidth: 1))
-            .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+            .controlCircle(size: size)
+    }
+}
+
+extension View {
+    /// Подложка круглой кнопки поверх карты — одна на всю колонку.
+    ///
+    /// Сплошная поверхность, а не стекло: на солнечной карте стекло с белой
+    /// иконкой тонуло, и рядом стояли два облика одной роли (стеклянные
+    /// слои/ориентация и сплошные «3D»/звук/компас). Теперь любой круг в
+    /// колонке — этот модификатор, и третьего облика не появится.
+    func controlCircle(size: CGFloat = Theme.controlSize) -> some View {
+        frame(width: size, height: size)
+            .background(Theme.surface, in: Circle())
+            .overlay(Circle().strokeBorder(Theme.edgeControl, lineWidth: 1))
+            .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
     }
 }
 
@@ -227,7 +234,9 @@ struct PressableStyle: ButtonStyle {
     }
 }
 
-/// Основная акцентная кнопка (CTA).
+/// Основная акцентная кнопка (CTA). Жёлтая — ОДНА на экран: «Поехали»,
+/// «Начать поездку», «Отправить». Второе действие рядом — `SecondaryButton`:
+/// две жёлтые подряд (карточка камеры) не говорят, какая главная.
 struct PrimaryButton: View {
     let title: LocalizedStringKey
     var systemImage: String? = nil
@@ -247,7 +256,37 @@ struct PrimaryButton: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(tint, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         }
+        .buttonStyle(PressableStyle())
+    }
+}
+
+/// Второе действие рядом с главным: та же форма и высота, что у
+/// `PrimaryButton`, но без заливки — белая карточка с синим текстом
+/// (5,4:1 днём). Форма одна, громкость разная: глаз сразу видит, какая
+/// кнопка главная, и обе нажимаются одинаково уверенно.
+struct SecondaryButton: View {
+    let title: LocalizedStringKey
+    var systemImage: String? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if let systemImage { Image(systemName: systemImage) }
+                Text(title)
+            }
+            .font(.rounded(17, .semibold))
+            .foregroundStyle(Theme.accent)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
+                .stroke(Theme.stroke, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        }
+        .buttonStyle(PressableStyle())
     }
 }
 

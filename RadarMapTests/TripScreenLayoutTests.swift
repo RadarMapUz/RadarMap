@@ -26,6 +26,55 @@ final class TripScreenLayoutTests: XCTestCase {
         XCTAssertEqual(MapMode.navigating.speedPlacement, .bottomLeading)
     }
 
+    // MARK: - Колонка справа: сколько кнопок помещается
+
+    private let idleCandidates: [(TripScreenLayout.ColumnExtra, Int)] =
+        [(.layers, 1), (.overview, 1), (.threeD, 1), (.zoom, 2)]
+
+    /// Первый кадр, кромки ещё не измерены: показать всё, а не пустую колонку.
+    func testUnmeasuredRoomShowsEverything() {
+        let shown = TripScreenLayout.columnExtras(available: 0, fixed: 2, candidates: idleCandidates)
+        XCTAssertEqual(shown, [.layers, .overview, .threeD, .zoom])
+    }
+
+    /// Большой экран: всё влезает.
+    func testTallRoomShowsEverything() {
+        let shown = TripScreenLayout.columnExtras(available: 600, fixed: 2, candidates: idleCandidates)
+        XCTAssertEqual(shown, [.layers, .overview, .threeD, .zoom])
+    }
+
+    /// SE в покое с маршрутом: прежде зум и звук уходили под карточку
+    /// маршрута. Теперь лишнее уходит по важности — зум первым (он и щипком).
+    func testSmallRoomDropsTheLeastNeededFirst() {
+        // 250 pt — четыре места по 56: два обязательных и ещё два.
+        let shown = TripScreenLayout.columnExtras(available: 250, fixed: 2, candidates: idleCandidates)
+        XCTAssertEqual(shown, [.layers, .overview])
+        XCTAssertFalse(shown.contains(.zoom), "зум уходит первым")
+    }
+
+    /// Обязательные не прячутся: если места нет даже на них — нет только
+    /// необязательных, сама колонка остаётся.
+    func testNoRoomShowsOnlyTheRequired() {
+        let shown = TripScreenLayout.columnExtras(available: 90, fixed: 2, candidates: idleCandidates)
+        XCTAssertTrue(shown.isEmpty)
+    }
+
+    /// Зуму нужно два места: при одном свободном он не встаёт, а кнопка в
+    /// одно место после него — встаёт.
+    func testTwoSlotButtonDoesNotBlockSmallerOnes() {
+        let shown = TripScreenLayout.columnExtras(available: 180, fixed: 2,
+                                                  candidates: [(.zoom, 2), (.threeD, 1)])
+        XCTAssertEqual(shown, [.threeD])
+    }
+
+    /// В поездке компас — единственная необязательная кнопка.
+    func testTripCompassNeedsItsOwnSlot() {
+        XCTAssertEqual(TripScreenLayout.columnExtras(available: 220, fixed: 3,
+                                                     candidates: [(.compass, 1)]), [.compass])
+        XCTAssertTrue(TripScreenLayout.columnExtras(available: 200, fixed: 3,
+                                                    candidates: [(.compass, 1)]).isEmpty)
+    }
+
     // MARK: - Прибытие
 
     /// Карточка прибытия стоит ВМЕСТО панели поездки: одна кнопка «завершить».

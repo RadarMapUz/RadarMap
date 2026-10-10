@@ -225,6 +225,9 @@ struct SearchView: View {
     /// Выбор места: точка и её название (для точки на карте).
     var onSelect: ((CLLocationCoordinate2D, String) -> Void)? = nil
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
+    /// Заезд по пути: место из плитки категории, найденное впереди по
+    /// маршруту, становится остановкой, а цель остаётся. nil — маршрута нет.
+    var onAddStop: ((CLLocationCoordinate2D, String) -> Void)? = nil
     /// Открытие сразу в режиме «выбрать адрес для Дом/Работа» (из Настроек).
     var initialAssign: PlaceSlot? = nil
 
@@ -442,7 +445,21 @@ struct SearchView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if let onRoute {
+            if let onAddStop, model.categoryAhead[venue.id] != nil {
+                // Впереди по маршруту — заезд, а не новая цель: раньше эта
+                // кнопка строила маршрут до заправки, и цель поездки терялась.
+                Button {
+                    onAddStop(venue.point, venue.title)
+                    dismiss()
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.rounded(24))
+                        .foregroundStyle(Theme.accent)
+                        .tapTarget()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Заехать по пути"))
+            } else if let onRoute {
                 Button {
                     onRoute(venue.point, venue.title)
                     dismiss()
@@ -485,7 +502,7 @@ struct SearchView: View {
                     .buttonStyle(.borderless)
                 }
             }
-            if env.location.currentCoordinate != nil {
+            if env.location.hasLocation {
                 Button {
                     assignCurrentLocation(slot)
                 } label: {

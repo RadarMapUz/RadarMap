@@ -182,7 +182,9 @@ struct MapScreen: View {
                            }
                        },
                        onRoute: !env.location.hasLocation ? nil
-                           : { coord, name in buildRoute(to: coord, name: name) })
+                           : { coord, name in buildRoute(to: coord, name: name) },
+                       onAddStop: !env.location.hasLocation || !env.route.isActive ? nil
+                           : { coord, name in addStop(coord, name: name) })
         }
         .sheet(isPresented: $showRouteCameras) {
             RouteCamerasSheet(onSelect: { map.focus(on: $0) })
@@ -374,7 +376,14 @@ struct MapScreen: View {
         // монтировалась и грузила тайлы, а при закрытии приборки движок
         // собирался заново. Поле показывает GPU в часах при минутах на экране
         // (docs/perf_audit_2026-10-07.md) — под закрытым экраном не рисуем ничего.
-        if showDashboard {
+        //
+        // То же в фоне (свёрнуто, экран погашен): вью карты оставалась
+        // смонтированной, движок держал память GPU и тайлов, а body и
+        // updateUIView крутились на каждом фиксе — в поездке часами. Фоновая
+        // поездка живёт ради предупреждений, и пик памяти в 700+ МБ (jetsam,
+        // docs/crash_carplay_memory.md) — ровно то, за что iOS её убивает.
+        // `.inactive` (шторка, пункт управления) карту не трогает: это секунды.
+        if showDashboard || scenePhase == .background {
             Theme.background.ignoresSafeArea()
         } else {
             mapBase(scheme: scheme)
@@ -1217,6 +1226,18 @@ struct MapScreen: View {
     }
 
     /// Построить авто-маршрут от текущей позиции и показать все варианты целиком.
+    /// Заезд по пути (АЗС, кафе из плитки категории): цель остаётся прежней.
+    private func addStop(_ coordinate: CLLocationCoordinate2D, name: String) {
+        Task {
+            guard let from = await env.location.awaitPreciseCoordinate() else {
+                env.route.reportNoFix()
+                return
+            }
+            await env.route.addStop(coordinate, name: name, from: from,
+                                    cameras: env.cameras.cameras)
+        }
+    }
+
     private func buildRoute(to coordinate: CLLocationCoordinate2D, name: String) {
         Task {
             // Только от ЖИВОЙ точки. Раньше здесь стоял currentCoordinate без

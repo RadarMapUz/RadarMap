@@ -16621,6 +16621,118 @@
           }
         }
       }
+    },
+    "Без звука": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без звука"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovozsiz"
+          }
+        }
+      }
+    },
+    "Включить звук": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включить звук"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovozni yoqish"
+          }
+        }
+      }
+    },
+    "Не удалось заехать по пути — маршрут прежний": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось заехать по пути — маршрут прежний"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘l-yo‘lakay kirib o‘tib bo‘lmadi — marshrut avvalgidek"
+          }
+        }
+      }
+    },
+    "заезд: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "заезд: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kirib o‘tish: %@"
+          }
+        }
+      }
+    },
+    "Заехать по пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заехать по пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘l-yo‘lakay kirib o‘tish"
+          }
+        }
+      }
+    },
+    "Не удалось заехать по пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось заехать по пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘l-yo‘lakay kirib o‘tib bo‘lmadi"
+          }
+        }
+      }
+    },
+    "через %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "через %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ orqali"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

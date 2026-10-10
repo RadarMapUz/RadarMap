@@ -55,7 +55,9 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
 
     /// Ближайшие заведения вида — для плитки «АЗС» в «Куда». Свой индекс, а
     /// без него (клетка не опубликована) — Apple, если есть связь.
-    func nearest(_ kind: Venue.Kind) async -> [(SavedPlace, String)] {
+    /// `alongRoute` — найдено впереди по маршруту: такое место выбирают как
+    /// остановку по пути, а не как новую цель.
+    func nearest(_ kind: Venue.Kind) async -> [(place: SavedPlace, detail: String, alongRoute: Bool)] {
         let near = env.location.currentCoordinate
         await ensureLoaded(near: near)
         // С маршрутом — то, что встретится по пути, а не ближайшее вообще.
@@ -68,7 +70,8 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
             if !along.isEmpty {
                 return along.map { venue, ahead in
                     (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
-                     String(format: String(localized: "через %@ по пути"), Formatting.distance(ahead)))
+                     String(format: String(localized: "через %@ по пути"), Formatting.distance(ahead)),
+                     true)
                 }
             }
         }
@@ -76,7 +79,7 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         if !own.isEmpty {
             return own.map { venue in
                 (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
-                 Self.detail(near: near, point: venue.point, offline: true))
+                 Self.detail(near: near, point: venue.point, offline: true), false)
             }
         }
         guard env.network.isOnline else { return [] }
@@ -85,7 +88,7 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         do {
             return try await VenueBook.apple(kind, near: near).prefix(AppConfig.carPlaySearchLimit).map { venue in
                 (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
-                 Self.detail(near: near, point: venue.point, offline: false))
+                 Self.detail(near: near, point: venue.point, offline: false), false)
             }
         } catch {
             Log.carplay.error("категория у Apple в машине: \(error.localizedDescription, privacy: .public)")

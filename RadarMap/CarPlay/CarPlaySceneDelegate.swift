@@ -708,10 +708,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 return showAlert(title: String(format: String(localized: "%@ рядом не нашлось"), kind.title),
                                  message: String(localized: "Без сети ищу только по своей карте."))
             }
-            let items = found.map { place, detail -> CPListItem in
+            let items = found.map { place, detail, alongRoute -> CPListItem in
                 let item = CPListItem(text: place.title, detailText: detail)
                 item.handler = { [weak self] _, completion in
-                    self?.route(to: place)
+                    // Найдено впереди по маршруту — заезд, цель остаётся.
+                    if alongRoute { self?.addStop(place) } else { self?.route(to: place) }
                     completion()
                 }
                 return item
@@ -781,6 +782,25 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             if !env.location.isTripActive { env.location.startTrip() }
             if let error = env.route.errorMessage {
                 showAlert(title: String(localized: "Маршрут не построен"), message: error)
+            }
+        }
+    }
+
+    /// Заезд по пути: маршрут к той же цели через `place`. Не вышло — прежний
+    /// маршрут остаётся, и машина говорит почему.
+    private func addStop(_ place: SavedPlace) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let from = await env.location.awaitPreciseCoordinate() else {
+                showAlert(title: String(localized: "Ждём спутники"),
+                          message: String(localized: "Положение ещё не определено — попробуйте через несколько секунд."))
+                return
+            }
+            popToMap()
+            await env.route.addStop(place.coordinate, name: place.title,
+                                    from: from, cameras: env.cameras.cameras)
+            if let error = env.route.errorMessage {
+                showAlert(title: String(localized: "Не удалось заехать по пути"), message: error)
             }
         }
     }

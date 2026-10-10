@@ -46,6 +46,15 @@ struct RoutePanel: View {
                                 .font(.rounded(16, .bold))
                                 .foregroundStyle(Theme.textPrimary)
                                 .lineLimit(1)
+                            // Заезд по пути — видно, что цель та же, а линия
+                            // идёт через остановку.
+                            if let stop = route.stop {
+                                Label(String(format: String(localized: "через %@"), stop.name),
+                                      systemImage: "mappin.circle.fill")
+                                    .font(.rounded(12, .semibold))
+                                    .foregroundStyle(Theme.accent)
+                                    .lineLimit(1)
+                            }
                             Text("\(route.etaText) · \(route.distanceText)")
                                 .font(.rounded(13, .medium))
                                 .foregroundStyle(Theme.textSecondary)

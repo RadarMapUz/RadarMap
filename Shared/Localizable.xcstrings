@@ -15229,6 +15229,22 @@
           }
         }
       }
+    },
+    "Убрать сообщение": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Убрать сообщение"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xabarni yopish"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

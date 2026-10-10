@@ -28,6 +28,11 @@ struct MapScreen: View {
     /// Меряют сами панели; схема переводит их в доли своей высоты.
     @State private var topPanelEdge: CGFloat = 0
     @State private var bottomPanelEdge: CGFloat = 0
+    /// Сколько кнопок помещается в колонку справа (TripScreenLayout.columnSlots).
+    /// Отдельно от кромок и только при смене: кромки body не читает, а это
+    /// число — читает, и писать его на каждый пиксель высоты панели значило
+    /// бы пересобирать весь экран с картой (Perf.mapBody).
+    @State private var columnSlots: Int?
     /// Спидометр закрыли руками в этой поездке — до её конца не навязываемся.
     /// Флаг живёт здесь, а не в настройках: это решение «сейчас», не «всегда».
     @State private var dashboardDismissedInTrip = false
@@ -697,6 +702,7 @@ struct MapScreen: View {
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: {
                     topPanelEdge = $0 + 8
                     applySketchInsets()
+                    updateColumnSlots()
                 }
             // Кнопки навигации — сразу под HUD справа. Не прячутся по таймеру
             // (см. controlColumn), но уходят под карточкой прибытия: это
@@ -788,7 +794,7 @@ struct MapScreen: View {
     /// повернули руками.
     @ViewBuilder private var tripControls: some View {
         let extras = TripScreenLayout.columnExtras(
-            available: columnRoom, fixed: 3,
+            slots: columnSlots, fixed: 3,
             candidates: map.isRotated ? [(.compass, 1)] : [])
         MapMuteButton()
         orientationControl
@@ -819,12 +825,12 @@ struct MapScreen: View {
 
     /// Покой: как было — слои, 3D, ориентация, компас, весь маршрут, масштаб, звук.
     @ViewBuilder private var idleControls: some View {
-        // Обязательные — «к себе» и звук; остальное по важности, пока есть
-        // место до нижних панелей (TripScreenLayout.columnExtras).
+        // Обязательные — слои, «к себе» и звук (слои в покое — единственный
+        // вход в смену подложки); остальное по важности, пока есть место до
+        // нижних панелей (TripScreenLayout.columnExtras).
         let extras = TripScreenLayout.columnExtras(
-            available: columnRoom, fixed: 2,
-            candidates: [(.layers, 1)]
-                + (map.isRotated ? [(.compass, 1)] : [])
+            slots: columnSlots, fixed: 3,
+            candidates: (map.isRotated ? [(.compass, 1)] : [])
                 + (env.route.isActive ? [(.overview, 1)] : [])
                 + [(.threeD, 1)]
                 + (env.settings.mapZoomButtons ? [(.zoom, 2)] : []))
@@ -834,18 +840,18 @@ struct MapScreen: View {
         // после старта поездки; пробки и места жили в отдельной панели,
         // которой в поездке не бывало вовсе. Теперь это одна панель; в
         // поездке та же панель — подменю «…» (mapLayersMenu).
-        if extras.contains(.layers) {
-            MapLayersControl(base: setting(\.mapBase),
-                             traffic: setting(\.mapTraffic),
-                             places: setting(\.mapPlaces),
-                             houses: setting(\.mapHouses),
-                             sidewalks: setting(\.mapSidewalks),
-                             modern: setting(\.mapModernStyle),
-                             showsBuildingLayers: shownBase != .apple,
-                             available: Self.availableBases,
-                             showsLegend: shownBase == .apple,
-                             maxPanelHeight: columnRoom > 0 ? columnRoom : .infinity)
-        }
+        MapLayersControl(base: setting(\.mapBase),
+                         traffic: setting(\.mapTraffic),
+                         places: setting(\.mapPlaces),
+                         houses: setting(\.mapHouses),
+                         sidewalks: setting(\.mapSidewalks),
+                         modern: setting(\.mapModernStyle),
+                         showsBuildingLayers: shownBase != .apple,
+                         available: Self.availableBases,
+                         showsLegend: shownBase == .apple,
+                         maxPanelHeight: columnSlots.map {
+                             CGFloat($0) * AppConfig.mapColumnSlotHeight - AppConfig.mapColumnSpacing
+                         } ?? .infinity)
         // Вид карты, как у навигаторов: 2D/3D, «моё местоположение»
         // (1-й тап — к машине, 2-й — по ходу движения), компас — только
         // когда карта повёрнута, звук.
@@ -876,11 +882,12 @@ struct MapScreen: View {
     }
 
     /// Просвет для колонки справа: от нижнего края верхних панелей до
-    /// верхнего края нижних (обе кромки уже мерятся для схемы). 0 — ещё не
-    /// измерено.
-    private var columnRoom: CGFloat {
-        guard topPanelEdge > 0, bottomPanelEdge > topPanelEdge else { return 0 }
-        return bottomPanelEdge - topPanelEdge
+    /// верхнего края нижних (обе кромки уже мерятся для схемы). Пишет число
+    /// мест только при его смене — см. `columnSlots`.
+    private func updateColumnSlots() {
+        let measured = topPanelEdge > 0 && bottomPanelEdge > 0
+        let slots = TripScreenLayout.columnSlots(room: measured ? bottomPanelEdge - topPanelEdge : nil)
+        if slots != columnSlots { columnSlots = slots }
     }
 
     private var orientationControl: some View {
@@ -1054,12 +1061,10 @@ struct MapScreen: View {
                         withMotion(.spring(duration: 0.3)) { env.route.dismissArrival() }
                     })
                 } else if TripScreenLayout.showsTripBar(mode: mode, arrivalShown: arrivalShown) {
-                    // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
-                    // максимум экрана отдан карте, и она не прячется вместе с кнопками.
-                    TripLiveBar(
-                        onShowCameras: { showRouteCameras = true },
-                        onStop: { toggleTrip() }
-                    )
+                    // Панель поездки — ниже, после всей цепочки: одна на все
+                    // ветки (см. там). Здесь ветка лишь занимает её место,
+                    // чтобы маршрут и подсказки не встали вместо неё.
+                    EmptyView()
                 } else if mode.showsRoutePanel, env.route.isActive {
                     RoutePanel(
                         onShowCameras: { showRouteCameras = true },
@@ -1122,11 +1127,16 @@ struct MapScreen: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            // Точка на карте или выбор типа отметки в ПОЕЗДКЕ — над панелью
-            // поездки, а не вместо неё. Раньше долгий тап по карте на ходу
-            // убирал «Радар!» и «Стоп», пока панель точки не закроют, —
-            // ровно те кнопки, которые за рулём ищут вслепую.
-            if !map.isAddingCamera, map.pressedPoint != nil || reportPoint != nil,
+            // В поездке: компактная строка (прибытие · остаток · камера · стоп) —
+            // максимум экрана отдан карте, и она не прячется вместе с кнопками.
+            //
+            // ОДНА на все ветки и всегда последним ребёнком стопки. Точка на
+            // карте или выбор типа отметки встают НАД ней: раньше долгий тап
+            // на ходу убирал «Радар!» и «Стоп», а когда панель вернули второй
+            // копией в другой ветке, SwiftUI считал их разными видами — на
+            // 0,3 с анимации на экране было две панели и сбрасывался
+            // взведённый «Стоп».
+            if !map.isAddingCamera,
                TripScreenLayout.showsTripBar(mode: mode, arrivalShown: arrivalShown) {
                 TripLiveBar(
                     onShowCameras: { showRouteCameras = true },
@@ -1153,6 +1163,7 @@ struct MapScreen: View {
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
                     bottomPanelEdge = $0 - 8
                     applySketchInsets()
+                    updateColumnSlots()
                 }
         }
         .padding(.horizontal, 16)
@@ -1371,12 +1382,17 @@ struct MapScreen: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
                 // Мишень 44 pt: была голая подпись 12 pt (~16 pt в высоту).
-                Button(banner.button, action: banner.action)
-                    .font(.rounded(15, .semibold)).foregroundStyle(Theme.accent)
-                    .padding(.horizontal, 14)
-                    .frame(minHeight: Theme.controlSize)
-                    .background(Theme.accent.opacity(0.12), in: Capsule())
-                    .contentShape(Capsule())
+                // Оформление — ВНУТРИ кнопки: нажимается её метка, и капсула
+                // снаружи была бы 44 pt только на вид.
+                Button(action: banner.action) {
+                    Text(banner.button)
+                        .font(.rounded(15, .semibold)).foregroundStyle(Theme.accent)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: Theme.controlSize)
+                        .background(Theme.accent.opacity(0.12), in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(PressableStyle())
             }
             .padding(12)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))

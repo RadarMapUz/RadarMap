@@ -166,15 +166,18 @@ struct MapStatusBanner: View {
                 if let (label, perform) = action {
                     // Кнопка, а не подпись: была `.caption` без рамки, ~16 pt
                     // в высоту — промах за рулём значит второй взгляд.
-                    Button(isRetrying ? String(localized: "Загружаю…") : label, action: perform)
-                        .font(.rounded(15, .semibold))
-                        .foregroundStyle(Theme.accent)
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: Theme.controlSize)
-                        .background(Theme.accent.opacity(0.12), in: Capsule())
-                        .contentShape(Capsule())
-                        .disabled(isRetrying)
-                        .padding(.top, 4)
+                    Button(action: perform) {
+                        Text(isRetrying ? String(localized: "Загружаю…") : label)
+                            .font(.rounded(15, .semibold))
+                            .foregroundStyle(Theme.accent)
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: Theme.controlSize)
+                            .background(Theme.accent.opacity(0.12), in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(PressableStyle())
+                    .disabled(isRetrying)
+                    .padding(.top, 4)
                 }
             }
             Spacer(minLength: 0)

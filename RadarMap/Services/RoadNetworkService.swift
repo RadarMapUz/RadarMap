@@ -109,6 +109,8 @@ final class RoadNetworkService {
     /// Номер последней заказанной сборки сети: применяется только её ответ.
     @ObservationIgnored private var networkGeneration = 0
     @ObservationIgnored private var started = false
+    /// Когда индекс последний раз перепроверялся из-за несошедшегося тайла.
+    @ObservationIgnored private var staleIndexCheckAt: Date?
     /// Где проверяли покрытие в прошлый раз (гейт ensureCoverage).
     @ObservationIgnored private var lastEnsureAt: CLLocationCoordinate2D?
     /// Один клиент на сервис: новый APIClient — это новый URLSession без
@@ -191,14 +193,35 @@ final class RoadNetworkService {
         indexVersion = RoadTiles.formatVersionV2
     }
 
-    private func refreshIndexIfNeeded() async {
+    /// Перепроверять ли индекс после тайла, не сошедшегося с ним по sha.
+    ///
+    /// Несошедшийся тайл почти всегда значит, что набор перевыложен, а у
+    /// телефона индекс прошлой публикации: подпись индекса верна, хэши в нём
+    /// старые. Ждать плановой проверки — значит несколько дней показывать
+    /// пустую схему. Подменённый тайл при этом так и остаётся битым: свежий
+    /// индекс его не оправдает, а повтор не чаще `interval`.
+    nonisolated static func shouldRecheckIndex(lastCheck: Date?, now: Date,
+                                               interval: TimeInterval = AppConfig.roadsStaleIndexRecheck) -> Bool {
+        guard let lastCheck else { return true }
+        return now.timeIntervalSince(lastCheck) >= interval
+    }
+
+    private func recheckIndexAfterStaleTile() async {
+        let now = Date()
+        guard Self.shouldRecheckIndex(lastCheck: staleIndexCheckAt, now: now) else { return }
+        staleIndexCheckAt = now
+        Log.route.notice("тайл дорог не сошёлся с индексом — перепроверяю индекс")
+        await refreshIndexIfNeeded(force: true)
+    }
+
+    private func refreshIndexIfNeeded(force: Bool = false) async {
         // Трое суток, а не семь. Публикация недельная, и при недельной же
         // проверке телефон в худшем случае ждал свежие дороги почти две
         // недели: разминулись на день — жди следующий круг. Трое суток режут
         // ожидание вдвое, а стоят одного маленького подписанного JSON.
         let lastCheck = Storage.double(.roadsIndexLastCheck)
         let deadline = Date().timeIntervalSince1970 - 3 * 24 * 3600
-        guard index == nil || lastCheck < deadline else { return }
+        guard force || index == nil || lastCheck < deadline else { return }
 
         // Недельная фоновая проверка: сбой сети не критичен, попробуем позже.
         // Новый формат спрашиваем первым; сервер отдаёт оба, пока в проде есть
@@ -421,9 +444,11 @@ final class RoadNetworkService {
             return
         }
         let directory = self.directory
-        let decoded = await Task.detached(priority: .utility) { () -> Decoded? in
-            guard RoadTiles.sha256Hex(of: data) == expected.sha256,
-                  let value = Self.decode(data, as: set) else { return nil }
+        // Причина отказа нужна: sha — признак устаревшего индекса (лечится
+        // его перепроверкой), формат — битый файл (не лечится ничем).
+        let (decoded, shaMatches) = await Task.detached(priority: .utility) { () -> (Decoded?, Bool) in
+            guard RoadTiles.sha256Hex(of: data) == expected.sha256 else { return (nil, false) }
+            guard let value = Self.decode(data, as: set) else { return (nil, true) }
             do {
                 try FileManager.default.createDirectory(at: directory,
                                                         withIntermediateDirectories: true)
@@ -431,11 +456,12 @@ final class RoadNetworkService {
             } catch {
                 Log.route.error("тайл дорог не записался: \(error.localizedDescription, privacy: .public)")
             }
-            return value
+            return (value, true)
         }.value
         guard let decoded else {
             broken.insert(key)
-            Log.route.error("тайл дорог \(key, privacy: .public) не сошёлся по sha или формату — отброшен")
+            Log.route.error("тайл дорог \(key, privacy: .public) не сошёлся по \(shaMatches ? "формату" : "sha", privacy: .public) — отброшен")
+            if !shaMatches { Task { await recheckIndexAfterStaleTile() } }
             return
         }
         downloading.remove(key)
@@ -488,9 +514,9 @@ final class RoadNetworkService {
                 "roads/" + RoadTiles.fileName(key: key, version: indexVersion))
         else { return nil }
         let directory = self.directory
-        let decoded = await Task.detached(priority: .utility) { () -> T? in
-            guard RoadTiles.sha256Hex(of: data) == expected.sha256,
-                  let book = decode(data) else { return nil }
+        let (decoded, shaMatches) = await Task.detached(priority: .utility) { () -> (T?, Bool) in
+            guard RoadTiles.sha256Hex(of: data) == expected.sha256 else { return (nil, false) }
+            guard let book = decode(data) else { return (nil, true) }
             do {
                 try FileManager.default.createDirectory(
                     at: directory, withIntermediateDirectories: true)
@@ -498,11 +524,13 @@ final class RoadNetworkService {
             } catch {
                 Log.route.error("\(what, privacy: .public) не записались: \(error.localizedDescription, privacy: .public)")
             }
-            return book
+            return (book, true)
         }.value
         if decoded == nil {
             broken.insert(key)
-            Log.route.error("\(what, privacy: .public) \(key, privacy: .public) не сошлись по sha или формату — отброшены")
+            Log.route.error("\(what, privacy: .public) \(key, privacy: .public) не сошлись по \(shaMatches ? "формату" : "sha", privacy: .public) — отброшены")
+            // Тот же признак перевыложенного набора, что у тайлов дорог.
+            if !shaMatches { Task { await recheckIndexAfterStaleTile() } }
         }
         return decoded
     }

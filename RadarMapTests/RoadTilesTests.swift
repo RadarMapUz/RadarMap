@@ -244,4 +244,24 @@ final class RoadTilesTests: XCTestCase {
         XCTAssertEqual(RoadTiles.setKey("2626_4985", .yards), "2626_4985_y")
         XCTAssertEqual(RoadTiles.setKey("2626_4985", .far), "2626_4985_f")
     }
+
+    // MARK: - Устаревший индекс
+
+    /// Тайл не сошёлся по sha — первый раз индекс перепроверяется сразу:
+    /// набор перевыложен, а ждать плановой проверки — дни пустой схемы.
+    func testStaleTileRechecksIndexAtOnce() {
+        XCTAssertTrue(RoadNetworkService.shouldRecheckIndex(lastCheck: nil, now: Date()))
+    }
+
+    /// Но не на каждом тике: подменённый на сервере тайл свежий индекс не
+    /// оправдает, и без паузы он превращал бы приборку в поток запросов.
+    func testStaleTileRecheckIsThrottled() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let interval = AppConfig.roadsStaleIndexRecheck
+        XCTAssertFalse(RoadNetworkService.shouldRecheckIndex(
+            lastCheck: now.addingTimeInterval(-interval + 1), now: now))
+        XCTAssertTrue(RoadNetworkService.shouldRecheckIndex(
+            lastCheck: now.addingTimeInterval(-interval), now: now))
+        XCTAssertGreaterThan(interval, 0, "нулевая пауза — запрос индекса на каждый тайл")
+    }
 }

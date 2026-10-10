@@ -56,6 +56,9 @@ struct RoadSketchView: View {
     /// — это «приложение сломалось», а не «сейчас догрузится». Признак нужен
     /// самый тихий: не плашка на пол-экрана, а строка у линейки масштаба.
     var loading: Int = 0
+    /// Значок «я» (настройка «Значок на карте»). Тот же, что у движка и карты
+    /// Apple: подложка меняет картинку мира, но не самого водителя.
+    var cursorStyle: CursorStyle = .arrow
 
     var body: some View {
         GeometryReader { geometry in
@@ -110,7 +113,7 @@ struct RoadSketchView: View {
                         .position(x: cursor.point.x,
                                   y: cursor.point.y - 78 * strokeScale)
                         .allowsHitTesting(false)
-                    MeCursor(scale: strokeScale)
+                    MeCursor(scale: strokeScale, style: cursorStyle)
                         .frame(width: 34 * strokeScale, height: 40 * strokeScale)
                         .position(cursor.point)
                 }
@@ -530,54 +533,10 @@ struct RoadSketchView: View {
     }
 }
 
-// MARK: - Курсор «я»
-
-/// Курсор машины: всегда строго вверх — схема повёрнута по ходу движения,
-/// поэтому «вверх» и есть «куда я еду». Экранным слоем, а не в растре: мир
-/// вращается, курсор — никогда.
-///
-/// Объём даётся тремя тонами одного цвета и посадкой на тень, а не рисованной
-/// перспективой: плоский треугольник читался указателем на чертеже, а не
-/// машиной на дороге. Всё статично — ни одного пересчёта на тик.
-/// Курсор машины. Не приватный: его рисуют ДВА рендера — своя схема и карта
-/// на движке, — и рисовать «я» по-разному в двух подложках значило бы менять
-/// вместе с подложкой самый важный предмет на экране.
-struct MeCursor: View {
-    var scale: CGFloat = 1
-
-    var body: some View {
-        ZStack {
-            // Тень: курсор садится НА полотно, а не висит над ним.
-            Ellipse()
-                .fill(.black.opacity(0.45))
-                .frame(width: 26 * scale, height: 9 * scale)
-                .blur(radius: 4 * scale)
-                .offset(y: 15 * scale)
-            // Основание: тот же силуэт чуть ниже и темнее — даёт толщину.
-            MeCursorShape()
-                .fill(SketchPalette.meBase)
-                .offset(y: 2.5 * scale)
-            MeCursorShape()
-                .fill(LinearGradient(colors: [SketchPalette.meTop,
-                                              SketchPalette.meBody],
-                                     startPoint: .top, endPoint: .bottom))
-            // Боковое освещение: левая грань светлее, правая уходит в тень.
-            // Градиентом, а не половиной фигуры под маской: жёсткая граница по
-            // оси делила курсор надвое и читалась не конусом, а сложенным
-            // веером — ровно та ошибка, ради которой этот слой и рисуется.
-            MeCursorShape()
-                .fill(LinearGradient(stops: [
-                    .init(color: .white.opacity(0.32), location: 0),
-                    .init(color: .white.opacity(0.04), location: 0.45),
-                    .init(color: .black.opacity(0.26), location: 1),
-                ], startPoint: .leading, endPoint: .trailing))
-            MeCursorShape()
-                .stroke(.white.opacity(0.85), lineWidth: 1.2 * scale)
-        }
-        .compositingGroup()
-        .shadow(color: SketchPalette.meBody.opacity(0.55), radius: 6 * scale)
-    }
-}
+// MARK: - Вокруг курсора «я»
+//
+// Сам курсор (стрелка и выбираемые значки) — в MeCursor.swift: его рисуют
+// схема, движок и карта Apple, и жить внутри одного из рендеров ему незачем.
 
 /// Конус обзора впереди курсора.
 ///
@@ -704,25 +663,6 @@ private struct MeAway: View {
                 .rotationEffect(.degrees(angle + 90))
         }
         .shadow(color: SketchPalette.meBody.opacity(0.5), radius: 4 * scale)
-    }
-}
-
-/// Силуэт курсора: остриё вверху, выпуклое книзу основание — конус, увиденный
-/// чуть сверху. Выпуклое, а не плоское: плоский низ читается треугольником.
-private struct MeCursorShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let cx = rect.midX
-        // Уже рамки и выше: развал во всю ширину при основании на трёх
-        // четвертях высоты давал приземистый треугольник с широкой юбкой.
-        let half = rect.width * 0.40
-        let shoulder = rect.minY + rect.height * 0.88
-        var path = Path()
-        path.move(to: CGPoint(x: cx, y: rect.minY))
-        path.addLine(to: CGPoint(x: cx + half, y: shoulder))
-        path.addQuadCurve(to: CGPoint(x: cx - half, y: shoulder),
-                          control: CGPoint(x: cx, y: rect.minY + rect.height * 1.06))
-        path.closeSubpath()
-        return path
     }
 }
 

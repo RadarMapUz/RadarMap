@@ -89,6 +89,7 @@ struct CarPlayEngineLayer: View {
             // дорожек — экран машины читают боковым зрением.
             driving: true,
             labelLanguage: env.settings.appLanguage.mapCode,
+            cursorStyle: env.settings.cursorStyle,
             panTotal: model.panTotal,
             hidesAttribution: true,
             onBrowse: { if model.isFollowing { model.isFollowing = false } })

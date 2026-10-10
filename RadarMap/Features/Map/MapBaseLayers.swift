@@ -103,6 +103,7 @@ struct EngineBaseLayer: View {
                         places: env.settings.mapPlaces,
                         driving: env.location.isTripActive,
                         labelLanguage: env.settings.appLanguage.mapCode,
+                        cursorStyle: env.settings.cursorStyle,
                         overviewCommand: map.overviewCommand,
                         onHeading: { map.noteMapDirection($0) },
                         onBrowse: { map.releaseToFree() },

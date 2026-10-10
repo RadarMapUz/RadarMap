@@ -264,6 +264,15 @@ struct MapSettingsPage: View {
             }
 
             Section {
+                CursorStylePicker(selection: $settings.cursorStyle)
+            } header: {
+                Text("Значок на карте")
+            } footer: {
+                Text("Так вы выглядите на карте — на телефоне и в CarPlay. Значок поворачивается по ходу движения.")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section {
                 Picker("Тип камер", selection: $settings.filter) {
                     ForEach(CameraFilter.allCases) { Text($0.title).tag($0) }
                 }

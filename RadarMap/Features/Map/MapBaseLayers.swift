@@ -26,6 +26,7 @@ import SwiftUI
 /// панелей (MapFrameState), наклон уходит в ноль, когда камера в охвате.
 struct EngineBaseLayer: View {
     var onSelectCamera: (Camera) -> Void = { _ in }
+    var onLongPress: (CLLocationCoordinate2D) -> Void = { _ in }
     @Environment(AppEnvironment.self) private var env
     let state: MapFrameState
     /// Общий вид главного экрана: ориентация, 3D, масштаб кнопками — одни на
@@ -103,9 +104,16 @@ struct EngineBaseLayer: View {
                         labelLanguage: env.settings.appLanguage.mapCode,
                         cursorStyle: env.settings.cursorStyle,
                         overviewCommand: map.overviewCommand,
+                        destination: env.route.destinationCoordinate,
+                        pressedPoint: map.pressedPoint?.coordinate,
+                        hotspots: env.settings.tripodHints ? map.visibleHotspots.map(\.coordinate) : [],
+                        centerCommand: map.centerCommand,
+                        centerTarget: map.centerTarget,
                         onHeading: { map.noteMapDirection($0) },
                         onBrowse: { map.releaseToFree() },
-                        onSelectCamera: onSelectCamera)
+                        onSelectCamera: onSelectCamera,
+                        onLongPress: onLongPress,
+                        onRegion: { map.updateVisible(for: $0) })
                     if browsing {
                         VStack {
                             Spacer()

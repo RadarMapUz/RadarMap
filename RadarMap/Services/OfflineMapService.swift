@@ -119,16 +119,30 @@ final class OfflineMapService {
     }
 
     /// Файлы для карты без связи: точка внутри скачанного региона, оба файла на месте.
+    ///
+    /// Ответ по региону кэшируется: без сети карта машины спрашивала это на
+    /// КАЖДЫЙ тик GPS, и каждый раз — два stat() на главном потоке. Кэш
+    /// сбрасывается при любой смене установленного (download/remove).
     func offlineFiles(at coordinate: CLLocationCoordinate2D) -> OfflineFiles? {
-        guard let region = catalog?.region(containing: coordinate),
-              let have = installed[region.id],
-              let omt = have.files["omt"], let mvt = have.files["mvt"] else { return nil }
-        let omtURL = Self.directory.appendingPathComponent(omt)
-        let mvtURL = Self.directory.appendingPathComponent(mvt)
-        guard FileManager.default.fileExists(atPath: omtURL.path),
-              FileManager.default.fileExists(atPath: mvtURL.path) else { return nil }
-        return OfflineFiles(omt: omtURL, mvt: mvtURL)
+        guard let region = catalog?.region(containing: coordinate) else { return nil }
+        if let cached = offlineFilesCache[region.id] { return cached }
+        let files: OfflineFiles?
+        if let have = installed[region.id],
+           let omt = have.files["omt"], let mvt = have.files["mvt"] {
+            let omtURL = Self.directory.appendingPathComponent(omt)
+            let mvtURL = Self.directory.appendingPathComponent(mvt)
+            files = FileManager.default.fileExists(atPath: omtURL.path)
+                && FileManager.default.fileExists(atPath: mvtURL.path)
+                ? OfflineFiles(omt: omtURL, mvt: mvtURL) : nil
+        } else {
+            files = nil
+        }
+        offlineFilesCache[region.id] = .some(files)
+        return files
     }
+    /// Регион → файлы (или честное «нет»). Optional внутри Optional: «нет»
+    /// тоже кэшируется, иначе регион без файлов проверялся бы на каждый тик.
+    @ObservationIgnored private var offlineFilesCache: [String: OfflineFiles?] = [:]
 
     // MARK: - Загрузка
 
@@ -173,6 +187,7 @@ final class OfflineMapService {
                 guard let self else { return }
                 let old = self.installed[region.id]
                 self.installed[region.id] = Installed(version: catalog.version, files: saved)
+                self.offlineFilesCache[region.id] = nil
                 _ = JSONFile.save(self.installed, to: Self.manifestURL, log: Log.network)
                 // Прежняя версия — только после того, как новая на месте.
                 for name in old?.files.values ?? [:].values where !saved.values.contains(name) {
@@ -204,6 +219,7 @@ final class OfflineMapService {
         cancel(region)
         errors[region.id] = nil
         guard let have = installed.removeValue(forKey: region.id) else { return }
+        offlineFilesCache[region.id] = nil
         for name in have.files.values {
             try? FileManager.default.removeItem(at: Self.directory.appendingPathComponent(name))
         }

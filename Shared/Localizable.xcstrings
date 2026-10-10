@@ -17068,6 +17068,22 @@
           }
         }
       }
+    },
+    "Карта недоступна в этой сборке": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта недоступна в этой сборке"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu versiyada xarita mavjud emas"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -34,30 +34,22 @@ final class CarPlayEngineTests: XCTestCase {
     func testZoomWhileFollowingShiftsAutoZoomWithinLimits() {
         let model = model()
         let command = model.zoomCommand
-        model.zoom(in: true, engine: true)
+        model.zoom(in: true)
         XCTAssertEqual(model.zoomBias, 1)
         XCTAssertEqual(model.zoomCommand, command, "при слежении вид не двигается — меняется автозум")
-        for _ in 0..<10 { model.zoom(in: true, engine: true) }
+        for _ in 0..<10 { model.zoom(in: true) }
         XCTAssertEqual(model.zoomBias, AppConfig.carPlayZoomBiasLimit)
-        for _ in 0..<20 { model.zoom(in: false, engine: true) }
+        for _ in 0..<20 { model.zoom(in: false) }
         XCTAssertEqual(model.zoomBias, -AppConfig.carPlayZoomBiasLimit)
     }
 
     func testZoomOnFreeMapMovesTheView() {
         let model = model(following: false)
         let command = model.zoomCommand
-        model.zoom(in: false, engine: true)
+        model.zoom(in: false)
         XCTAssertEqual(model.zoomCommand, command + 1)
         XCTAssertEqual(model.zoomDelta, -1)
         XCTAssertEqual(model.zoomBias, 0)
-    }
-
-    func testZoomWithoutEngineGoesToMapKitCounters() {
-        let model = model()
-        let zoomIn = model.zoomInRequests, bias = model.zoomBias
-        model.zoom(in: true, engine: false)
-        XCTAssertEqual(model.zoomInRequests, zoomIn + 1)
-        XCTAssertEqual(model.zoomBias, bias)
     }
 
     func testPanReleasesFollowingAndRecenterReturnsIt() {

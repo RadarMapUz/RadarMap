@@ -976,6 +976,10 @@ nonisolated enum AppConfig {
     static let carPlayDaylightRefresh: TimeInterval = 60
     /// Где стоит «я» по высоте вида: ниже середины, впереди видно больше.
     static let mapMeY: Double = 0.78
+    /// Долгий тап по карте — точка с баром действий.
+    static let mapLongPressSeconds: TimeInterval = 0.45
+    /// Зум, к которому карта подъезжает по команде «в точку» (крестик камеры).
+    static let mapCenterZoom = 16.0
     /// Через столько секунд без касаний отпанорамированная карта в машине
     /// сама возвращается к слежению: водитель смотрел в сторону и забыл.
     static let carPlayFollowReturnSeconds: TimeInterval = 20

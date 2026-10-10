@@ -135,9 +135,11 @@ struct CarPlayDashboardView: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            if model.isOnScreen, CarPlayMapModel.usesEngine(env.settings) {
+            if model.isOnScreen {
                 #if canImport(MapLibre)
                 CarPlayEngineLayer(model: model, compact: true)
+                #else
+                Theme.background.ignoresSafeArea()
                 #endif
             } else {
                 Theme.background.ignoresSafeArea()

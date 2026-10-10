@@ -119,7 +119,7 @@ struct EngineMapStyleTests {
         let json = EngineMapStyle.json(daylight: true, base: base, tilesReady: false)
         let object = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
         let sources = try #require(object["sources"] as? [String: Any])
-        #expect(Set(sources.keys) == Set(["cameras", "route", "position", "traveled", "maneuver"]))
+        #expect(Set(sources.keys) == Set(["cameras", "route", "position", "traveled", "maneuver", "marks", "hotspots"]))
         for layer in layers(object) {
             if let source = layer["source"] as? String { #expect(sources[source] != nil) }
         }
@@ -215,6 +215,14 @@ struct EngineMapStyleTests {
         if turn.count == 2 {
             #expect(abs(MKMapPoint(turn[0]).distance(to: MKMapPoint(turn[1])) - 70) < 0.1)
         }
+    }
+
+    @Test("Камера рисуется всегда: подписи карты не вправе её вытеснить")
+    func cameraIconsNeverHidden() throws {
+        let icons = try #require(layers(style()).first { $0["id"] as? String == "camera-icons" })
+        let layout = icons["layout"] as? [String: Any]
+        #expect(layout?["icon-allow-overlap"] as? Bool == true)
+        #expect(layout?["icon-ignore-placement"] as? Bool == true)
     }
 
     @Test("Разметка берётся из готового слоя, светофоры без онлайн-фаз")

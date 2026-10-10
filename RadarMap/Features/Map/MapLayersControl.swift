@@ -21,23 +21,12 @@
 import SwiftUI
 
 struct MapLayersControl: View {
-    @Binding var base: MapBase
-    @Binding var traffic: Bool
     @Binding var places: Bool
     /// Дома и тротуары своей схемы. Отдельными тумблерами, а не «подробнее»
     /// одной ручкой: платят за них по-разному (дома — 78 МБ из 347 по стране,
     /// тротуары — один), и нужны они разным людям.
     @Binding var houses: Bool
     @Binding var sidewalks: Bool
-    /// Новая карта (бета) — основа OpenMapTiles вместо прежнего стиля движка.
-    @Binding var modern: Bool
-    /// Тумблеры застройки показываются там, где они что-то меняют: на карте
-    /// Apple ни домов наших, ни тротуаров нет.
-    var showsBuildingLayers: Bool
-    /// Какие подложки есть в этой сборке (движка может не быть).
-    var available: [MapBase]
-    /// Легенда типов камер — только там, где эти маркеры и рисуются.
-    var showsLegend: Bool
     /// Сколько панели можно занять по высоте — до нижних панелей экрана.
     /// Не влезает — листается, а не уезжает под них.
     var maxPanelHeight: CGFloat = .infinity
@@ -52,7 +41,7 @@ struct MapLayersControl: View {
         // колонки не участвует. Раньше она вставала в колонку над кнопкой —
         // 208×~350 pt — и сталкивала вниз все кнопки под собой, на маленьком
         // iPhone за край экрана и под нижние панели.
-        CircleControl(systemName: base.symbol,
+        CircleControl(systemName: "square.3.layers.3d",
                       tint: isExpanded ? Theme.accent : Theme.textPrimary,
                       accessibilityLabel: "Слои карты") {
             isExpanded.toggle()
@@ -91,81 +80,13 @@ struct MapLayersControl: View {
                 .font(.rounded(11, .semibold))
                 .foregroundStyle(Theme.textTertiary)
                 .padding(.bottom, 2)
-            ForEach(available) { option in
-                baseRow(option)
-            }
-
-            Rectangle().fill(Theme.stroke).frame(height: 1).padding(.vertical, 4)
-
-            // Пробки — только у Apple (своего источника нет); «Места» — на
-            // любой подложке: на новой карте прячут кафе и банки, а заправки
-            // и парковки остаются всегда.
-            if base == .apple {
-                toggle("Пробки", "car.2.fill", isOn: $traffic)
-            }
+            // «Места» прячут кафе и банки, заправки и парковки остаются всегда.
             toggle("Места", "fuelpump.fill", isOn: $places)
-
-            if showsBuildingLayers {
-                toggle("Новая карта (бета)", "sparkles", isOn: $modern)
-                toggle("Дома", "building.2.fill", isOn: $houses)
-                // Тротуары рисует и движок (SketchPalette.sidewalkTone в стиле),
-                // так что тумблер больше не привязан к снятой подложке.
-                toggle("Тротуары", "figure.walk", isOn: $sidewalks)
-            }
-
-            if showsLegend {
-                Rectangle().fill(Theme.stroke).frame(height: 1).padding(.vertical, 4)
-                LegendChip(color: Theme.Types.camera, symbol: "camera.fill", text: "Камера")
-                LegendChip(color: Theme.Types.radar, symbol: "speedometer", text: "Радар")
-                LegendChip(color: Theme.Types.intelligent, symbol: "camera.metering.matrix",
-                           text: "Интеллект.")
-                LegendChip(color: Theme.Types.mobile, symbol: "dot.radiowaves.left.and.right",
-                           text: "Передвижной")
-            }
+            toggle("Дома", "building.2.fill", isOn: $houses)
+            toggle("Тротуары", "figure.walk", isOn: $sidewalks)
         }
         .padding(12)
         .frame(width: 208, alignment: .leading)
-    }
-
-    /// Строка подложки. Выбранная обведена акцентом: за рулём это читается
-    /// быстрее подписи и не заставляет сравнивать три значка между собой.
-    private func baseRow(_ option: MapBase) -> some View {
-        Button {
-            if option != base {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                base = option
-            }
-            // Панель НЕ закрывается на выборе, и это не мелочь: подложки
-            // сравнивают на одном и том же месте, переключая туда-сюда. Панель,
-            // захлопывающаяся после каждого выбора, требует двух тапов на
-            // каждое сравнение. Закроется сама.
-            postpone()
-        } label: {
-            HStack(spacing: 9) {
-                Image(systemName: option.symbol)
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(option == base ? Theme.accent : Theme.textSecondary)
-                    .frame(width: 26, height: 26)
-                    .background(option == base ? Theme.accent.opacity(0.14) : .clear,
-                                in: Circle())
-                Text(option.title)
-                    .font(.rounded(13, option == base ? .semibold : .medium))
-                    .foregroundStyle(Theme.textPrimary)
-                Spacer(minLength: 6)
-                if option == base {
-                    Image(systemName: "checkmark")
-                        .font(.rounded(12, .bold))
-                        .foregroundStyle(Theme.accent)
-                }
-            }
-            // Мишень 44 пункта: строка остаётся тонкой, растёт только
-            // область касания — отсюда высота ДО contentShape.
-            .frame(minHeight: Theme.controlSize)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(option.title))
-        .accessibilityAddTraits(option == base ? [.isSelected, .isButton] : .isButton)
     }
 
     private func toggle(_ title: LocalizedStringKey, _ icon: String,

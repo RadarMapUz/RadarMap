@@ -629,7 +629,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private var zoomInButton: CPMapButton {
         let button = CPMapButton { [model] _ in
-            model.zoom(in: true, engine: CarPlayMapModel.usesEngine(AppEnvironment.shared.settings))
+            model.zoom(in: true)
         }
         button.image = buttonImage("plus")
         return button
@@ -637,7 +637,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private var zoomOutButton: CPMapButton {
         let button = CPMapButton { [model] _ in
-            model.zoom(in: false, engine: CarPlayMapModel.usesEngine(AppEnvironment.shared.settings))
+            model.zoom(in: false)
         }
         button.image = buttonImage("minus")
         return button

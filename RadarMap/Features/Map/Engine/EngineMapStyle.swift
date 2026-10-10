@@ -100,6 +100,8 @@ nonisolated enum EngineMapStyle {
                 "traveled": ["type": "geojson", "data": emptyCollection],
                 "maneuver": ["type": "geojson", "data": emptyCollection],
                 "position": ["type": "geojson", "data": emptyCollection],
+                "marks": ["type": "geojson", "data": emptyCollection],
+                "hotspots": ["type": "geojson", "data": emptyCollection],
             ],
             "layers": layers(ground: ground, casing: casing, label: label,
                              halo: halo,
@@ -115,6 +117,8 @@ nonisolated enum EngineMapStyle {
                 "traveled": ["type": "geojson", "data": emptyCollection],
                 "maneuver": ["type": "geojson", "data": emptyCollection],
                 "position": ["type": "geojson", "data": emptyCollection],
+                "marks": ["type": "geojson", "data": emptyCollection],
+                "hotspots": ["type": "geojson", "data": emptyCollection],
             ]
             let all = style["layers"] as? [[String: Any]] ?? []
             style["layers"] = all.filter {
@@ -327,6 +331,18 @@ nonisolated enum EngineMapStyle {
     /// Камеры и «я» — над всем, в обоих стилях.
     static func markerLayers(label: String, halo: String) -> [[String: Any]] {
         var out: [[String: Any]] = []
+        // Память о треногах — НЕ камеры и рисуются не как камеры: мягкая зона
+        // без значка и без клина. Только на близком зуме: на обзорном это шум
+        // поверх настоящих точек, а решение сбросить скорость принимают вблизи.
+        out.append([
+            "id": "hotspot-zone", "type": "fill", "source": "hotspots", "minzoom": 13,
+            "paint": ["fill-color": typeHex(.tripod), "fill-opacity": 0.10],
+        ])
+        out.append([
+            "id": "hotspot-edge", "type": "line", "source": "hotspots", "minzoom": 13,
+            "paint": ["line-color": typeHex(.tripod), "line-opacity": 0.5,
+                      "line-width": 1.5, "line-dasharray": [3, 3]],
+        ])
         // Ореол только у текущей тревоги; обычные камеры молчат.
         out.append([
             "id": "camera-halo", "type": "circle", "source": "cameras",
@@ -346,11 +362,16 @@ nonisolated enum EngineMapStyle {
                       "circle-stroke-width": ["case", ["get", "alert"], 3, 1.8],
                       "circle-stroke-color": "#FFFFFF"],
         ])
+        // Камера рисуется ВСЕГДА. Раньше значок участвовал в раскладке
+        // подписей (icon-allow-overlap=false): подпись улицы или заведения,
+        // поставленная раньше, вытесняла его — и при приближении карты радар
+        // исчезал ровно там, где на него смотрят (владелец, 11.10). Промолчать
+        // о камере хуже лишней подписи, и правило то же, что у оповещений.
         out.append([
             "id": "camera-icons", "type": "symbol", "source": "cameras",
             "minzoom": 14.5,
             "layout": ["icon-image": ["get", "icon"],
-                       "icon-allow-overlap": false, "icon-padding": 7,
+                       "icon-allow-overlap": true, "icon-ignore-placement": true,
                        "symbol-sort-key": ["case", ["get", "alert"], 0, 1]],
             "paint": ["icon-opacity": ["case", ["get", "unconfirmed"], 0.55, 1]],
         ])
@@ -364,6 +385,12 @@ nonisolated enum EngineMapStyle {
                        "symbol-sort-key": ["case", ["get", "alert"], 0, 1]],
             "paint": ["text-color": label, "text-halo-color": halo,
                       "text-halo-width": 2],
+        ])
+        // Флаг цели и точка долгого тапа — поверх камер, но под «я».
+        out.append([
+            "id": "marks", "type": "symbol", "source": "marks",
+            "layout": ["icon-image": ["get", "icon"], "icon-allow-overlap": true,
+                       "icon-ignore-placement": true, "icon-pitch-alignment": "viewport"],
         ])
         out.append([
             "id": "user-location", "type": "symbol", "source": "position",

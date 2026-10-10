@@ -48,7 +48,6 @@ struct MapScreen: View {
     @State private var reportPoint: MapPoint?
     /// Область карты для системных контролов MapKit. Своих в ней не осталось
     /// (компас убран), но scope нужен `Map(scope:)`.
-    @Namespace private var mapScope
 
     /// Что нужно водителю прямо сейчас: правила видимости — в MapMode,
     /// а не россыпью условий по вёрстке (см. MapMode.swift).
@@ -113,10 +112,9 @@ struct MapScreen: View {
                 OverspeedVignetteGate()
 
                 // Следование за GPS: единственный подписчик locationTick.
-                LocationFollowDriver(map: map, drivesAppleCamera: shownBase == .apple)
+                LocationFollowDriver(map: map, drivesAppleCamera: false)
             }
         }
-        .mapScope(mapScope)
         .task {
             map.configure(env.cameras, speedLimits: env.speedLimits, thermal: env.thermal,
                           hotspots: env.hotspots)
@@ -322,18 +320,6 @@ struct MapScreen: View {
 
     /// Подложка экрана: своя схема или карта Apple.
     ///
-    /// Отдельным свойством, а не `if` внутри стопки: тело MapScreen и без
-    /// того на пределе — компилятор перестал его выводить за разумное время,
-    /// как только развилка встала прямо в ZStack.
-    /// Что рисует карту прямо сейчас. Решает ВЫБОР ЧЕЛОВЕКА, а не режим:
-    /// правило целиком в `MapBase.resolved` и покрыто тестами.
-    private var shownBase: MapBase {
-        MapBase.resolved(chosen: env.settings.mapBase,
-                         isAddingCamera: map.isAddingCamera,
-                         hasPressedPoint: map.pressedPoint != nil,
-                         engineAvailable: Self.engineAvailable)
-    }
-
     /// Есть ли в сборке движок. Пакета может не быть — тогда его нет и в
     /// списке подложек, а не «есть, но молча не работает».
     static var engineAvailable: Bool {
@@ -342,10 +328,6 @@ struct MapScreen: View {
         #else
         return false
         #endif
-    }
-
-    static var availableBases: [MapBase] {
-        MapBase.allCases.filter { $0 != .engine || engineAvailable }
     }
 
     /// Подложка. Сам этот кусок body НЕ читает ничего, что пишется на тике:
@@ -369,192 +351,24 @@ struct MapScreen: View {
 
     @ViewBuilder
     private func mapBase(scheme: ColorScheme) -> some View {
-        switch shownBase {
-        case .engine:
-            #if canImport(MapLibre)
-            // Карту рисует движок. Панели поверх — те же: они про скорость и
-            // камеры, а не про подложку.
-            EngineBaseLayer(onSelectCamera: { map.select($0) }, state: frame, map: map).ignoresSafeArea()
-            #else
-            mapLayer.ignoresSafeArea().environment(\.colorScheme, scheme)
-            #endif
-        case .apple:
-            mapLayer
-                .ignoresSafeArea()
-                .environment(\.colorScheme, scheme)
+        #if canImport(MapLibre)
+        // Карту рисует движок — единственная подложка с 11.10 (карта Apple и
+        // схема убраны по слову владельца). Панели поверх — те же: они про
+        // скорость и камеры, а не про подложку.
+        EngineBaseLayer(onSelectCamera: { map.select($0) },
+                        onLongPress: { selectPoint(at: $0) },
+                        state: frame, map: map)
+            .ignoresSafeArea()
+        #else
+        // Без пакета движка карты нет вовсе: это сборочный выключатель, а не
+        // режим приложения. Предупреждения о камерах работают и без неё.
+        ZStack {
+            Theme.background.ignoresSafeArea()
+            Text("Карта недоступна в этой сборке")
+                .font(.rounded(15, .semibold))
+                .foregroundStyle(Theme.textSecondary)
         }
-    }
-
-    private var mapLayer: some View {
-        MapReader { proxy in
-            mapContent
-                // Долгий тап → точка с баром действий. Sequenced-хак: LongPress
-                // не отдаёт координату, добираем её нулевым DragGesture.
-                .simultaneousGesture(
-                    LongPressGesture(minimumDuration: 0.45)
-                        .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .local))
-                        .onEnded { value in
-                            guard case .second(true, let drag) = value,
-                                  let location = drag?.location,
-                                  let coordinate = proxy.convert(location, from: .local) else { return }
-                            selectPoint(at: coordinate)
-                        }
-                )
-        }
-    }
-
-    /// Места на подложке. Полностью стерильная карта мертва: ни заправки, ни
-    /// больницы — то есть ровно того, ради чего карту и открывают.
-    ///
-    /// Раньше в поездке места гасились ПРИНУДИТЕЛЬНО, независимо от тумблера,
-    /// а рядом подписывалось «в поездке места скрыты». Это тот же порок, что и
-    /// подложка, включавшаяся только после старта поездки: настройка есть,
-    /// человек её тронул, а приложение решило за него. Заправка нужна как раз
-    /// в дороге — тумблер значит ровно то, что на нём написано.
-    private var pointsOfInterest: PointOfInterestCategories {
-        guard env.settings.mapPlaces else { return .excludingAll }
-        return .including([.gasStation, .parking, .hospital, .pharmacy, .police])
-    }
-
-    private var mapContent: some View {
-        Map(position: $map.position, scope: mapScope) {
-            // Значок «я» — по выбору в настройках. Стрелка здесь — системная
-            // точка с кругом точности (см. AppleUserCursor); выбранный значок
-            // рисуется своей вью, которая сама читает курс на каждом тике.
-            let cursorStyle = env.settings.cursorStyle
-            if cursorStyle == .arrow {
-                UserAnnotation()
-            } else {
-                UserAnnotation { user in
-                    AppleUserCursor(location: env.location, map: map, style: cursorStyle,
-                                    deviceHeading: user.heading?.trueHeading)
-                }
-            }
-
-            // Маршрут: сперва тусклые альтернативы, поверх — выбранный вариант
-            // (кайма + синяя линия Theme.route — тот же цвет, что на движке и в машине).
-            if !env.location.isTripActive {
-                ForEach(env.route.variants) { variant in
-                    if variant.id != env.route.selectedID {
-                        MapPolyline(variant.polyline)
-                            .stroke(Theme.textTertiary,
-                                    style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-                    }
-                }
-            }
-            if let polyline = env.route.polyline {
-                MapPolyline(polyline)
-                    .stroke(Theme.routeCasing.opacity(0.9),
-                            style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
-                MapPolyline(polyline)
-                    .stroke(Theme.route,
-                            style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
-                // Пройденная часть тускнеет — видно, сколько осталось.
-                if env.location.isTripActive, let traveled = env.route.traveledPolyline {
-                    MapPolyline(traveled)
-                        .stroke(Theme.textTertiary.opacity(0.7),
-                                style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
-                }
-            }
-            if let dest = env.route.destinationCoordinate {
-                Annotation(env.route.destinationName, coordinate: dest, anchor: .center) {
-                    Image(systemName: "flag.checkered")
-                        .font(.rounded(14, .bold))
-                        .foregroundStyle(Theme.background)
-                        .frame(width: 32, height: 32)
-                        .background(Theme.accent.gradient, in: Circle())
-                        .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 2))
-                }
-                .annotationTitles(.hidden)
-            }
-
-            // Память о треногах — НЕ камеры и рисуются не как камеры: мягкая
-            // зона без значка и без клина. Кружок-камера здесь означал бы «тут
-            // прибор», а прибора может не быть — есть привычка его ставить.
-            // Только на близком зуме: на обзорном это шум поверх настоящих
-            // точек, а решение сбросить скорость принимают вблизи.
-            if env.settings.tripodHints, !map.isDotZoom {
-                ForEach(map.visibleHotspots, id: \.key) { spot in
-                    MapCircle(center: spot.coordinate, radius: AppConfig.hotspotZoneRadiusMeters)
-                        .foregroundStyle(Theme.Types.radar.opacity(0.10))
-                        .stroke(Theme.Types.radar.opacity(0.5),
-                                style: StrokeStyle(lineWidth: 1.5, dash: [5, 5]))
-                }
-            }
-
-            // Важность считается один раз на пересборку: id цели и камеры
-            // маршрута меняются редко, точка отсчёта троттлится по 300 м.
-            // Набор камер маршрута берём готовым: собирать его здесь значило
-            // строить Set заново на каждую пересборку слоя.
-            let targetID = env.location.nearestCamera?.id
-            let routeIDs = env.route.routeCameraIDs
-            // Множество читается один раз на сборку слоя, а не на маркер:
-            // оно меняется раз в поездку, а маркеров на экране до двух сотен.
-            let familiarIDs = env.location.familiarCameraIDs
-            ForEach(map.visibleCameras) { camera in
-                Annotation(camera.displayTitle, coordinate: camera.coordinate, anchor: .center) {
-                    // Средний зум: точки; близкий — мини-знак лимита («60»);
-                    // полный пин — у выбранной и ближайшей по курсу.
-                    CameraAnnotationView(
-                        camera: camera,
-                        selected: map.highlightedID == camera.id,
-                        compact: map.isDotZoom && camera.id != targetID,
-                        // Лимит из слоя, а не из спатиал-индекса: 220 запросов
-                        // на каждую перерисовку карты — это и был один из лагов.
-                        limit: map.isDotZoom ? nil : map.visibleLimits[camera.id],
-                        tier: CameraMapContent.tier(camera: camera, focus: map.focus,
-                                                    targetID: targetID, routeIDs: routeIDs),
-                        mapHeading: map.mapHeading,
-                        isFamiliar: familiarIDs.contains(camera.id)
-                    )
-                    .onTapGesture { map.select(camera) }
-                }
-                .annotationTitles(.hidden)
-            }
-            ForEach(map.clusters) { cluster in
-                Annotation("\(cluster.count)", coordinate: cluster.coordinate, anchor: .center) {
-                    ClusterAnnotationView(count: cluster.count)
-                        .onTapGesture { map.zoomInto(cluster) }
-                }
-                .annotationTitles(.hidden)
-            }
-
-            // Точка долгого тапа — пульсирующий маркер, пока открыт бар действий.
-            if let point = map.pressedPoint {
-                Annotation("", coordinate: point.coordinate, anchor: .center) {
-                    Image(systemName: "mappin.circle.fill")
-                        .font(.rounded(26, .bold))
-                        .foregroundStyle(Theme.background, Theme.accent)
-                        .shadow(color: Theme.accent.opacity(0.6), radius: 8)
-                }
-                .annotationTitles(.hidden)
-            }
-        }
-        .mapStyle(.standard(elevation: .flat, pointsOfInterest: pointsOfInterest,
-                            showsTraffic: env.settings.mapTraffic))
-        // Системный компас убран совсем: при севере вверху он не значит ничего,
-        // а при повороте его роль берёт третье состояние MapOrientationControl.
-        .mapControls {}
-        .onMapCameraChange(frequency: .onEnd) { context in
-            map.updateVisible(for: context.region)
-            // Поворот карты руками (двухпалый жест): клин направления должен
-            // знать актуальный угол. В compass-follow сюда не попадаем — там
-            // heading уже честно nil.
-            if !map.followsDeviceHeading { map.setMapHeading(context.camera.heading) }
-        }
-        // Любое касание карты будит спрятанные кнопки (не мешая тапам по маркерам)
-        // и закрывает бар точки долгого тапа.
-        .simultaneousGesture(TapGesture().onEnded {
-            if map.pressedPoint != nil {
-                withMotion(.spring(duration: 0.3)) { map.pressedPoint = nil }
-            }
-        })
-        // Потянул карту рукой — слежение снимается. Именно жест, а не
-        // onMapCameraChange: тот срабатывает и на собственные анимации следования,
-        // и режим «по ходу движения» гасил бы сам себя на каждом кадре.
-        .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in
-            map.releaseOrientation()
-        })
+        #endif
     }
 
     // MARK: - Разовые подсказки
@@ -648,7 +462,7 @@ struct MapScreen: View {
             // серая карта без сети, урезанная карта в жару, отсутствие лимитов.
             // Выше всего, потому что человек должен узнать причину раньше, чем
             // упрётся в неё сам и решит, что приложение сломалось.
-            MapStatusBanner(modernMap: shownBase == .engine && env.settings.mapModernStyle)
+            MapStatusBanner(modernMap: env.settings.mapModernStyle)
             // Доступ к геопозиции — сразу под объявлениями сервера, а не внизу
             // поверх карты: это причина, по которой приложение не предупреждает
             // в фоне, и место ей рядом с остальными «почему не в полную силу».
@@ -848,15 +662,9 @@ struct MapScreen: View {
         // после старта поездки; пробки и места жили в отдельной панели,
         // которой в поездке не бывало вовсе. Теперь это одна панель; в
         // поездке та же панель — подменю «…» (mapLayersMenu).
-        MapLayersControl(base: setting(\.mapBase),
-                         traffic: setting(\.mapTraffic),
-                         places: setting(\.mapPlaces),
+        MapLayersControl(places: setting(\.mapPlaces),
                          houses: setting(\.mapHouses),
                          sidewalks: setting(\.mapSidewalks),
-                         modern: setting(\.mapModernStyle),
-                         showsBuildingLayers: shownBase != .apple,
-                         available: Self.availableBases,
-                         showsLegend: shownBase == .apple,
                          maxPanelHeight: columnSlots.map {
                              CGFloat($0) * AppConfig.mapColumnSlotHeight - AppConfig.mapColumnSpacing
                          } ?? .infinity)
@@ -936,34 +744,17 @@ struct MapScreen: View {
     /// по тем же правилам — пробки только у Apple, застройка только у нашей карты.
     private var mapLayersMenu: some View {
         Menu {
-            Picker(selection: setting(\.mapBase)) {
-                ForEach(Self.availableBases) { base in
-                    Label(base.title, systemImage: base.symbol).tag(base)
-                }
-            } label: {
-                Text("Карта")
-            }
-            if env.settings.mapBase == .apple {
-                Toggle(isOn: setting(\.mapTraffic)) {
-                    Label("Пробки", systemImage: "car.2.fill")
-                }
-            }
             Toggle(isOn: setting(\.mapPlaces)) {
                 Label("Места", systemImage: "fuelpump.fill")
             }
-            if shownBase != .apple {
-                Toggle(isOn: setting(\.mapModernStyle)) {
-                    Label("Новая карта (бета)", systemImage: "sparkles")
-                }
-                Toggle(isOn: setting(\.mapHouses)) {
-                    Label("Дома", systemImage: "building.2.fill")
-                }
-                Toggle(isOn: setting(\.mapSidewalks)) {
-                    Label("Тротуары", systemImage: "figure.walk")
-                }
+            Toggle(isOn: setting(\.mapHouses)) {
+                Label("Дома", systemImage: "building.2.fill")
+            }
+            Toggle(isOn: setting(\.mapSidewalks)) {
+                Label("Тротуары", systemImage: "figure.walk")
             }
         } label: {
-            Label("Слои карты", systemImage: env.settings.mapBase.symbol)
+            Label("Слои карты", systemImage: "square.3.layers.3d")
         }
     }
 
@@ -1001,9 +792,7 @@ struct MapScreen: View {
                         // пользователь при желании доводит позицию вручную.
                         withMotion {
                             map.pressedPoint = nil
-                            map.position = .region(MKCoordinateRegion(
-                                center: point.coordinate,
-                                latitudinalMeters: 500, longitudinalMeters: 500))
+                            map.center(on: point.coordinate)
                             map.isAddingCamera = true
                         }
                     },
@@ -1119,7 +908,7 @@ struct MapScreen: View {
                         // заданием от приложения человеку; распорядок оно
                         // знает само (FrequentPlaces).
                         // Разовое «Карта без интернета?» — до первого ответа.
-                        OfflineOfferCard(ownMap: shownBase == .engine)
+                        OfflineOfferCard(ownMap: true)
                         DestinationSuggestionBar { coordinate, name in
                             buildRoute(to: coordinate, name: name)
                         }

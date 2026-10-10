@@ -44,40 +44,6 @@ final class CursorStyleTests: XCTestCase {
         XCTAssertEqual(Set(titles).count, titles.count, "две плитки с одной подписью: \(titles)")
     }
 
-    // MARK: - Поворот на карте Apple
-
-    func testScreenAngleSubtractsMapRotation() throws {
-        // Север вверху: поворот — сам курс.
-        XCTAssertEqual(try XCTUnwrap(AppleUserCursor.screenAngle(course: 90, mapHeading: 0,
-                                                                 deviceHeading: nil)), 90, accuracy: 1e-9)
-        // Карта по курсу: значок смотрит строго вверх.
-        XCTAssertEqual(try XCTUnwrap(AppleUserCursor.screenAngle(course: 137, mapHeading: 137,
-                                                                 deviceHeading: nil)), 0, accuracy: 1e-9)
-        // Через ноль: 10° при карте на 350° — это 20° вправо, а не −340°.
-        XCTAssertEqual(try XCTUnwrap(AppleUserCursor.screenAngle(course: 10, mapHeading: 350,
-                                                                 deviceHeading: nil)), 20, accuracy: 1e-9)
-        XCTAssertEqual(try XCTUnwrap(AppleUserCursor.screenAngle(course: 350, mapHeading: 10,
-                                                                 deviceHeading: nil)), 340, accuracy: 1e-9)
-    }
-
-    func testScreenAngleUsesCompassOnlyWhenMapRotationIsUnknown() throws {
-        // Карту крутит компас: её поворот знает только он.
-        XCTAssertEqual(try XCTUnwrap(AppleUserCursor.screenAngle(course: 90, mapHeading: nil,
-                                                                 deviceHeading: 45)), 45, accuracy: 1e-9)
-        // Известный поворот карты старше компаса.
-        XCTAssertEqual(try XCTUnwrap(AppleUserCursor.screenAngle(course: 90, mapHeading: 0,
-                                                                 deviceHeading: 45)), 90, accuracy: 1e-9)
-    }
-
-    func testNoHonestAngleMeansHoldTheLastOne() {
-        // Курса нет — повернуть не на что.
-        XCTAssertNil(AppleUserCursor.screenAngle(course: -1, mapHeading: 0, deviceHeading: nil))
-        XCTAssertNil(AppleUserCursor.screenAngle(course: .nan, mapHeading: 0, deviceHeading: nil))
-        // Поворот карты неизвестен, компас молчит (−1 — «нет данных» у CLHeading).
-        XCTAssertNil(AppleUserCursor.screenAngle(course: 90, mapHeading: nil, deviceHeading: nil))
-        XCTAssertNil(AppleUserCursor.screenAngle(course: 90, mapHeading: nil, deviceHeading: -1))
-    }
-
     // MARK: - Картинки
 
     /// Значок в той же рамке, в какой его запекает движок карты.

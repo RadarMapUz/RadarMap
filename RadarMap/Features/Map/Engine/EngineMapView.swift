@@ -103,9 +103,23 @@ struct EngineMapView: UIViewRepresentable {
     /// ссылку на OSM тогда показывает вызывающий — текстом.
     var hidesAttribution: Bool = false
     /// Поворот карты (градусы от севера) — компасу экрана.
+    /// Флаг цели маршрута и точка долгого тапа (бар действий открыт).
+    var destination: CLLocationCoordinate2D?
+    var pressedPoint: CLLocationCoordinate2D?
+    /// Зоны «здесь часто ставят треногу»: пустые — слоя нет.
+    var hotspots: [CLLocationCoordinate2D] = []
+    /// Перенести центр в точку (счётчик, как у остальных команд): нужно
+    /// крестику постановки камеры, который встаёт на точку долгого тапа.
+    var centerCommand: Int = 0
+    var centerTarget: CLLocationCoordinate2D?
     var onHeading: (Double) -> Void = { _ in }
     var onBrowse: () -> Void = {}
     var onSelectCamera: (Camera) -> Void = { _ in }
+    /// Долгий тап по карте — координата под пальцем.
+    var onLongPress: (CLLocationCoordinate2D) -> Void = { _ in }
+    /// Видимая область после каждого движения карты — для крестика
+    /// постановки камеры (центр) и зума точек/кластеров.
+    var onRegion: (MKCoordinateRegion) -> Void = { _ in }
 
     func makeUIView(context: Context) -> MLNMapView {
         // Сторож тайлов — ДО первой карты: движок начинает качать сразу, и
@@ -141,6 +155,10 @@ struct EngineMapView: UIViewRepresentable {
             selection.require(toFail: tap)
         }
         view.addGestureRecognizer(selection)
+        let hold = UILongPressGestureRecognizer(target: context.coordinator,
+                                                action: #selector(Coordinator.longPress(_:)))
+        hold.minimumPressDuration = AppConfig.mapLongPressSeconds
+        view.addGestureRecognizer(hold)
         context.coordinator.view = view
         view.onLayout = { [weak coordinator = context.coordinator] view in
             guard let coordinator, let model = coordinator.current else { return }
@@ -256,6 +274,22 @@ struct EngineMapView: UIViewRepresentable {
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
             if let current, styleReady { updateCameras(current, in: mapView) }
             current?.onHeading(mapView.direction)
+            current?.onRegion(Self.region(of: mapView))
+        }
+
+        static func region(of view: MLNMapView) -> MKCoordinateRegion {
+            let bounds = view.visibleCoordinateBounds
+            return MKCoordinateRegion(center: CLLocationCoordinate2D(
+                latitude: (bounds.ne.latitude + bounds.sw.latitude) / 2,
+                longitude: (bounds.ne.longitude + bounds.sw.longitude) / 2), span: MKCoordinateSpan(
+                latitudeDelta: abs(bounds.ne.latitude - bounds.sw.latitude),
+                longitudeDelta: abs(bounds.ne.longitude - bounds.sw.longitude)))
+        }
+
+        @objc func longPress(_ gesture: UILongPressGestureRecognizer) {
+            guard gesture.state == .began, let view, let current else { return }
+            let point = gesture.location(in: view)
+            current.onLongPress(view.convert(point, toCoordinateFrom: view))
         }
 
         #if DEBUG
@@ -365,7 +399,27 @@ struct EngineMapView: UIViewRepresentable {
                     .font: UIFont.systemFont(ofSize: 8, weight: .bold), .foregroundColor: UIColor.white])
             }
             style.setImage(stop, forName: "radar-stop")
-            let names = ["radar-signal", "radar-stop"] + kinds.flatMap {
+            // Флаг цели и точка долгого тапа — те же, что были на карте Apple:
+            // акцентный диск с белым кольцом и булавка.
+            let flag = UIGraphicsImageRenderer(size: CGSize(width: 34, height: 34)).image { _ in
+                UIColor.white.setFill()
+                UIBezierPath(ovalIn: CGRect(x: 1, y: 1, width: 32, height: 32)).fill()
+                Theme.rgb(0x2563D9).setFill()
+                UIBezierPath(ovalIn: CGRect(x: 3, y: 3, width: 28, height: 28)).fill()
+                UIImage(systemName: "flag.checkered",
+                        withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .bold))?
+                    .withTintColor(.white, renderingMode: .alwaysOriginal)
+                    .draw(at: CGPoint(x: 8, y: 9))
+            }
+            style.setImage(flag, forName: "radar-flag")
+            let pin = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 32)).image { _ in
+                UIImage(systemName: "mappin.circle.fill",
+                        withConfiguration: UIImage.SymbolConfiguration(pointSize: 26, weight: .bold))?
+                    .withTintColor(Theme.rgb(0x2563D9), renderingMode: .alwaysOriginal)
+                    .draw(in: CGRect(x: 2, y: 2, width: 28, height: 28))
+            }
+            style.setImage(pin, forName: "radar-pin")
+            let names = ["radar-signal", "radar-stop", "radar-flag", "radar-pin"] + kinds.flatMap {
                 [$0.symbolName, $0.symbolName + "-alert"]
             }
             for name in names { Self.iconCache[name] = style.image(forName: name) }
@@ -716,6 +770,7 @@ struct EngineMapView: UIViewRepresentable {
             }
             lastFollowInterval = nil
             updateCameras(model, in: view)
+            updateMarks(model, in: view)
             let newRoute = !routeInitialized || lastRouteObject !== model.routeObject
             if newRoute || lastManeuverAlong != model.maneuverAlong
                 || abs(model.routeProgress - lastProgress) >= AppConfig.engineRouteProgressStep {
@@ -750,13 +805,57 @@ struct EngineMapView: UIViewRepresentable {
             }
         }
 
+        /// Флаг цели, точка долгого тапа, зоны треног — только на изменение:
+        /// запись в источник будит перерисовку слоя.
+        private var lastMarksKey: [Double] = []
+        private var lastHotspotsKey: Int = -1
+        private var lastCenterCommand = 0
+
+        private func updateMarks(_ model: EngineMapView, in view: MLNMapView) {
+            let key = [model.destination?.latitude ?? .nan, model.destination?.longitude ?? .nan,
+                       model.pressedPoint?.latitude ?? .nan, model.pressedPoint?.longitude ?? .nan]
+            if key.map({ $0.isNaN ? 0 : $0 }) != lastMarksKey.map({ $0.isNaN ? 0 : $0 }) || lastMarksKey.isEmpty {
+                lastMarksKey = key
+                var points: [MLNPointFeature] = []
+                if let destination = model.destination {
+                    let flag = MLNPointFeature(); flag.coordinate = destination
+                    flag.attributes = ["icon": "radar-flag"]; points.append(flag)
+                }
+                if let pressed = model.pressedPoint {
+                    let pin = MLNPointFeature(); pin.coordinate = pressed
+                    pin.attributes = ["icon": "radar-pin"]; points.append(pin)
+                }
+                (view.style?.source(withIdentifier: "marks") as? MLNShapeSource)?.shape =
+                    MLNShapeCollectionFeature(shapes: points)
+            }
+            var hasher = Hasher()
+            for spot in model.hotspots { hasher.combine(spot.latitude); hasher.combine(spot.longitude) }
+            let hotspotsKey = hasher.finalize()
+            if hotspotsKey != lastHotspotsKey {
+                lastHotspotsKey = hotspotsKey
+                let zones = model.hotspots.map { centre -> MLNPolygonFeature in
+                    let ring = (0..<36).map { step -> CLLocationCoordinate2D in
+                        GeoMath.destination(from: centre, bearing: Double(step) * 10,
+                                            distanceMeters: AppConfig.hotspotZoneRadiusMeters)
+                    }
+                    return MLNPolygonFeature(coordinates: ring, count: UInt(ring.count))
+                }
+                (view.style?.source(withIdentifier: "hotspots") as? MLNShapeSource)?.shape =
+                    MLNShapeCollectionFeature(shapes: zones)
+            }
+            if model.centerCommand != lastCenterCommand {
+                lastCenterCommand = model.centerCommand
+                if let target = model.centerTarget {
+                    browsing = true
+                    model.onBrowse()
+                    view.setCenter(target, zoomLevel: max(view.zoomLevel, AppConfig.mapCenterZoom),
+                                   animated: true)
+                }
+            }
+        }
+
         private func updateCameras(_ model: EngineMapView, in view: MLNMapView) {
-            let bounds = view.visibleCoordinateBounds
-            let region = MKCoordinateRegion(center: CLLocationCoordinate2D(
-                latitude: (bounds.ne.latitude + bounds.sw.latitude) / 2,
-                longitude: (bounds.ne.longitude + bounds.sw.longitude) / 2), span: MKCoordinateSpan(
-                latitudeDelta: abs(bounds.ne.latitude - bounds.sw.latitude),
-                longitudeDelta: abs(bounds.ne.longitude - bounds.sw.longitude)))
+            let region = Self.region(of: view)
             let refresh = cameraRegion.map { !EngineMapPresentation.contains($0, region) } ?? true
             if refresh || cameraRevision != model.cameraRevision || limitRevision != model.limitRevision {
                 os_signpost(.event, log: performanceLog, name: "Camera viewport query")

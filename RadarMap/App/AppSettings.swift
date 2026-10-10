@@ -267,61 +267,6 @@ enum MapAppearance: String, CaseIterable, Identifiable {
     }
 }
 
-/// Чем рисуется карта. Одно значение вместо двух тумблеров.
-///
-/// Тумблеров было два («Своя схема в движении» и «Карта на движке»), и они
-/// умели противоречить друг другу. Хуже того: оба лежали в девятом разделе
-/// настроек, а показывались только после старта поездки — то есть человек
-/// включал карту и видел прежнюю. Здесь выбор один, живёт он на самой карте и
-/// применяется немедленно.
-nonisolated enum MapBase: String, CaseIterable, Identifiable, Sendable {
-    /// Карта Apple: где ищут адрес, смотрят город и ставят камеру.
-    case apple
-    /// Наши данные, нарисованные настоящим картографическим движком.
-    case engine
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .apple:  return String(localized: "Apple")
-        case .engine: return String(localized: "Карта RadarMap")
-        }
-    }
-
-    /// Значок — он же показывает выбранное, когда список свёрнут.
-    var symbol: String {
-        switch self {
-        case .apple:  return "map"
-        case .engine: return "square.3.layers.3d"
-        }
-    }
-
-    /// Что показать НА САМОМ ДЕЛЕ.
-    ///
-    /// Выбор человека сильнее режима — это и есть главное правило нового
-    /// экрана. Прежнее `allowsSketchMap` перебивало выбор: на стоянке своей
-    /// карты не бывало вовсе, и включивший её видел карту Apple.
-    ///
-    /// Apple возвращается ровно в двух случаях, и оба не вкусовые: операция,
-    /// которой без неё нет (постановка камеры, точка по долгому тапу), и
-    /// отсутствие того, что выбрано (движок без пакета). Второе — отказ, а не
-    /// подмена: пустой экран вместо карты оставил бы водителя без карты вовсе.
-    ///
-    /// Подложек две. Самодельная схема была третьей и убрана: держать ДВА
-    /// своих рендерера одних и тех же данных — это два разных ответа на один
-    /// вопрос и вдвое больше мест, где карта может соврать.
-    static func resolved(chosen: MapBase, isAddingCamera: Bool,
-                         hasPressedPoint: Bool,
-                         engineAvailable: Bool) -> MapBase {
-        if isAddingCamera || hasPressedPoint { return .apple }
-        switch chosen {
-        case .apple:  return .apple
-        case .engine: return engineAvailable ? .engine : .apple
-        }
-    }
-}
-
 /// Профиль оповещений — одна строка вместо четырёх перечислений.
 ///
 /// Поведение задавали `VoiceMode`, `AlertMode`, `BackgroundAlertMode` и
@@ -549,7 +494,6 @@ final class AppSettings {
     /// затор впереди нужен именно в дороге. Места (заправки, парковки,
     /// больницы, посты) в поездке гасятся сами — на скорости их подписи только
     /// засоряют карту, а стоя они и есть то, ради чего карту открывают.
-    var mapTraffic: Bool { didSet { store.set(mapTraffic, forKey: Keys.mapTraffic) } }
     var mapPlaces: Bool { didSet { store.set(mapPlaces, forKey: Keys.mapPlaces) } }
     /// Дома на своей схеме. ВЫКЛЮЧЕНЫ по умолчанию, и это не экономия ради
     /// экономии.
@@ -588,11 +532,6 @@ final class AppSettings {
         didSet { store.set(mapAppearance.rawValue, forKey: Keys.mapAppearance) }
     }
 
-    /// Чем рисуется карта. Меняется кнопкой слоёв НА КАРТЕ и действует сразу.
-    var mapBase: MapBase {
-        didSet { store.set(mapBase.rawValue, forKey: Keys.mapBase) }
-    }
-
     /// Значок «я» на карте: стрелка, машина, спорткар, звездолёт. Один на все
     /// подложки и на экран машины — менять «себя» вместе с подложкой значило
     /// бы терять себя взглядом при каждом переключении (см. CursorStyle).
@@ -610,9 +549,6 @@ final class AppSettings {
     /// водителя, а не в голове у разработчика.
     ///
     /// По умолчанию ВЫКЛЮЧЕНО.
-    var engineMap: Bool {
-        didSet { store.set(engineMap, forKey: Keys.engineMap) }
-    }
 
     /// Выбранный язык интерфейса (применяется при следующем запуске — см. AppLanguage).
     var appLanguage: AppLanguage {
@@ -654,7 +590,6 @@ final class AppSettings {
         static let destinationHints = "destinationSuggestions"
         static let smartSilence = "smartSilence"
         static let tripodHints = "tripodHints"
-        static let mapTraffic = "mapTraffic"
         static let mapPlaces = "mapPlaces"
         static let mapHouses = "mapHouses"
         static let mapSidewalks = "mapSidewalks"
@@ -662,9 +597,6 @@ final class AppSettings {
         static let map3D = "map3D"
         static let voiceBeforeMute = "voiceBeforeMute"
         static let mapZoomButtons = "mapZoomButtons"
-        static let sketchWhileDriving = "sketchWhileDriving"
-        static let engineMap = "engineMapEnabled"
-        static let mapBase = "mapBase"
         static let cursorStyle = "cursorStyle"
         static let alertMode = "alertMode"
         static let knownCarAudio = "knownCarAudio"
@@ -747,7 +679,6 @@ final class AppSettings {
         destinationSuggestions = store.bool(forKey: Keys.destinationHints)
         smartSilence = store.bool(forKey: Keys.smartSilence)
         tripodHints = store.bool(forKey: Keys.tripodHints)
-        mapTraffic = store.bool(forKey: Keys.mapTraffic)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)
         // Дома и тротуары — единственные слои схемы БЕЗ значения по умолчанию
         // в register: `bool(forKey:)` даёт false там, где ключа ещё нет, и это
@@ -757,26 +688,8 @@ final class AppSettings {
         mapModernStyle = store.bool(forKey: Keys.mapModernStyle)
         map3D = store.bool(forKey: Keys.map3D)
         mapZoomButtons = store.bool(forKey: Keys.mapZoomButtons)
-        engineMap = store.bool(forKey: Keys.engineMap)
-        // Перенос со старых тумблеров: выбор человека не теряется при
-        // обновлении — кто включил схему, с ней и останется.
-        if let saved = store.string(forKey: Keys.mapBase),
-           let base = MapBase(rawValue: saved) {
-            mapBase = base
-        } else if store.bool(forKey: Keys.engineMap) {
-            mapBase = .engine
-        } else if store.bool(forKey: Keys.sketchWhileDriving) {
-            // Схемы больше нет; выбравший СВОЮ карту получает ту, что осталась
-            // своей, а не карту Apple. Ключ читается только ради этой миграции.
-            mapBase = .engine
-        } else {
-            // С 2.0 по умолчанию — своя карта (новая, OpenMapTiles + наши слои).
-            // Прежде по умолчанию стояла Apple, и свежая установка новой карты
-            // не видела вовсе: она пряталась за кнопкой слоёв. Сознательный
-            // выбор Apple сохранён ключом mapBase выше и здесь не трогается;
-            // без пакета движка MapBase.resolved сам вернёт Apple.
-            mapBase = .engine
-        }
+        // Подложка одна — движок (карта Apple и схема убраны 11.10): старые
+        // ключи mapBase/engineMapEnabled/sketchWhileDriving больше не читаются.
         alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto
         cursorStyle = CursorStyle(stored: store.string(forKey: Keys.cursorStyle))
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []

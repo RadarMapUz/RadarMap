@@ -41,8 +41,6 @@ final class CarPlayMapModel {
     nonisolated deinit {}
 
     var recenterRequests = 0
-    var zoomInRequests = 0
-    var zoomOutRequests = 0
     /// Карта на движке: панорама от шаблона (счётчик и сдвиг содержимого в
     /// точках), «+/−» при слежении — сдвиг автозума вдвое за нажатие (как на
     /// телефоне), «+/−» на свободной карте — шаг уровня.
@@ -73,23 +71,6 @@ final class CarPlayMapModel {
     /// слежение, как только водитель тронул карту пальцем или крутилкой),
     /// читает значок кнопки «к себе»: залитый — следим, контурный — стоим.
     var isFollowing = true
-    /// Последний регион карты Apple (фолбэк при выключенном движке). Карта
-    /// выгружается, пока экран машины занят другим приложением, и при возврате
-    /// создавалась бы заново в умолчании, теряя масштаб, выставленный руками.
-    /// Держать её живой ради этого нельзя — невидимая, она тянет тайлы.
-    /// Поэтому помним не карту, а её регион — четыре числа.
-    @ObservationIgnored var lastRegion: MKCoordinateRegion?
-
-    /// Рисует ли карту движок (наша карта), а не MapKit. Та же настройка
-    /// подложки, что на телефоне: выключатель один на оба экрана.
-    static func usesEngine(_ settings: AppSettings) -> Bool {
-        #if canImport(MapLibre)
-        settings.mapBase == .engine
-        #else
-        false
-        #endif
-    }
-
     /// Сдвиг карты на столько точек экрана (содержимое едет за пальцем).
     func pan(by translation: CGSize) {
         guard translation != .zero else { return }
@@ -101,11 +82,7 @@ final class CarPlayMapModel {
 
     /// «+ / −». При слежении меняется автозум (масштаб по скорости остаётся,
     /// сдвигается его уровень), на свободной карте — сам вид.
-    func zoom(in zoomIn: Bool, engine: Bool) {
-        guard engine else {
-            if zoomIn { zoomInRequests += 1 } else { zoomOutRequests += 1 }
-            return
-        }
+    func zoom(in zoomIn: Bool) {
         if isFollowing {
             zoomBias = min(AppConfig.carPlayZoomBiasLimit,
                            max(-AppConfig.carPlayZoomBiasLimit, zoomBias + (zoomIn ? 1 : -1)))
@@ -130,8 +107,8 @@ final class CarPlayMapModel {
     func pinch(scale: Double) {
         guard scale > 0 else { return }
         pinchAccumulated *= scale
-        while pinchAccumulated >= 2 { pinchAccumulated /= 2; zoom(in: true, engine: true) }
-        while pinchAccumulated <= 0.5 { pinchAccumulated *= 2; zoom(in: false, engine: true) }
+        while pinchAccumulated >= 2 { pinchAccumulated /= 2; zoom(in: true) }
+        while pinchAccumulated <= 0.5 { pinchAccumulated *= 2; zoom(in: false) }
     }
     @ObservationIgnored private var pinchAccumulated = 1.0
 
@@ -175,22 +152,9 @@ struct CarPlayMapScreen: View {
 
     var body: some View {
         ZStack {
-            if CarPlayMapModel.usesEngine(env.settings) {
-                if model.isOnScreen { engineMap } else { Theme.background.ignoresSafeArea() }
-            } else if model.isOnScreen {
-                CarPlayMapView(model: model,
-                               repository: env.cameras,
-                               route: env.route,
-                               location: env.location,
-                               speedLimits: env.speedLimits,
-                               thermal: env.thermal,
-                               filter: env.settings.filter,
-                               showsTraffic: env.settings.mapTraffic,
-                               isDaylight: model.isDaylight)
-                    .ignoresSafeArea()
-            } else {
-                Theme.background.ignoresSafeArea()
-            }
+            // Карта — движок, единственная подложка (11.10). В фоне окна нет:
+            // картинку никто не видит, а рисует и греется телефон.
+            if model.isOnScreen { engineMap } else { Theme.background.ignoresSafeArea() }
 
             // HUD — отдельная вью-изолятор (см. CarPlayOverlay): пер-тиковые
             // скорость/дистанции читаются там, и тик пересобирает маленький
@@ -251,6 +215,8 @@ struct CarPlayMapScreen: View {
     @ViewBuilder private var engineMap: some View {
         #if canImport(MapLibre)
         CarPlayEngineLayer(model: model)
+        #else
+        Theme.background.ignoresSafeArea()
         #endif
     }
 }

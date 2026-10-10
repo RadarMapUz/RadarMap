@@ -44,6 +44,15 @@ final class MapState {
     var isAddingCamera = false
     /// Точка долгого тапа: маркер + бар действий «Маршрут сюда / Радар / Своя камера».
     var pressedPoint: MapPoint?
+    /// Команда движку «в точку»: счётчик и цель (крестик постановки камеры
+    /// встаёт на точку долгого тапа).
+    private(set) var centerCommand = 0
+    private(set) var centerTarget: CLLocationCoordinate2D?
+
+    func center(on coordinate: CLLocationCoordinate2D) {
+        centerTarget = coordinate
+        centerCommand &+= 1
+    }
     var filter: CameraFilter = .all
     var position: MapCameraPosition = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
     /// Режим «по компасу устройства»: карта крутится сама за телефоном

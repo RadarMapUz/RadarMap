@@ -393,6 +393,15 @@ final class LocationService: NSObject {
     /// вопрос «вы за рулём?» (в своей — CarPlay/знакомая магнитола — молча).
     func startTrip(auto: Bool = false) {
         guard isAuthorized else { return }
+        // Идущую поездку второй старт НЕ перезапускает: trip.begin обнулил бы
+        // километры, трек и проезды, накопленные до этого момента. Все
+        // известные вызывающие проверяют isTripActive сами, но «ехал, выбрал
+        // «Домой» — данные до этого пропали» (владелец, 11.10) означает, что
+        // хотя бы один путь этого не делал. Теперь защита здесь, одна на всех.
+        guard !isTripActive else {
+            Log.trips.notice("startTrip при идущей поездке — игнорирую (auto: \(auto, privacy: .public))")
+            return
+        }
         refreshFamiliarCameras()   // «свои» камеры считаем один раз на поездку
         if auto, isPassengerSession { return }   // пассажир уже сказал своё слово
         // Режим «Умный»: сама поездка стартует только в знакомой машине, иначе

@@ -20,6 +20,7 @@
 //
 
 import Foundation
+import os
 
 nonisolated enum EngineModernStyle {
 
@@ -29,12 +30,40 @@ nonisolated enum EngineModernStyle {
     /// Свои источники приложения — пустые при сборке, наполняются на тике.
     static let liveSources = ["cameras", "route", "traveled", "maneuver", "position"]
 
+    /// Готовые стили по набору входов. Сборка — это чтение и разбор 214 КБ
+    /// шаблона, правка слоёв и сериализация обратно, и шла она на главном
+    /// потоке при КАЖДОЙ смене: тема, «в поездке» на старте и в конце,
+    /// дома, места. Входов немного, и они повторяются — второй раз стиль
+    /// берётся готовым. Неудача не кэшируется: битый выпуск может починиться.
+    private static let cache = OSAllocatedUnfairLock<[String: String]>(initialState: [:])
+
     /// Стиль новой карты. nil — ресурса нет, он битый или в выпуске нет
     /// нужного набора: тогда вызывающий остаётся на прежнем стиле.
     static func json(daylight: Bool, base: URL, release: TileRelease,
                      houses: Bool, places: Bool = true, driving: Bool = false,
                      offline: OfflineFiles? = nil,
                      labelLanguage: String = "ru", bundle: Bundle = .main) -> String? {
+        let key = [String(daylight), base.absoluteString,
+                   release.tilesTemplate(base: base, set: "omt") ?? "-",
+                   release.tilesTemplate(base: base, set: "mvt") ?? "-",
+                   String(houses), String(places), String(driving),
+                   offline.map { $0.omt.absoluteString + " " + $0.mvt.absoluteString } ?? "-",
+                   labelLanguage, bundle.bundlePath].joined(separator: "\u{1F}")
+        if let hit = cache.withLock({ $0[key] }) { return hit }
+        guard let built = build(daylight: daylight, base: base, release: release, houses: houses,
+                                places: places, driving: driving, offline: offline,
+                                labelLanguage: labelLanguage, bundle: bundle) else { return nil }
+        cache.withLock { store in
+            if store.count >= AppConfig.engineStyleCacheLimit { store.removeAll() }
+            store[key] = built
+        }
+        return built
+    }
+
+    private static func build(daylight: Bool, base: URL, release: TileRelease,
+                              houses: Bool, places: Bool, driving: Bool,
+                              offline: OfflineFiles?, labelLanguage: String,
+                              bundle: Bundle) -> String? {
         guard var style = template(daylight: daylight, base: base, language: labelLanguage, bundle: bundle),
               var sources = style["sources"] as? [String: Any],
               var layers = style["layers"] as? [[String: Any]],

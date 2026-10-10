@@ -673,15 +673,12 @@ final class LocationService: NSObject {
             : .greatestFiniteMagnitude
         let nearest = min(cameraDistance, stepDistance)
 
-        // Порядок правил (стоянка бьёт близость вне 150 м, буст только с
-        // крейсера и на холодном телефоне) — в чистом GPSTiers под тестами.
+        // Порядок правил (стоянка бьёт близость вне 150 м) — в чистом
+        // GPSTiers под тестами.
         let tier = GPSTiers.tier(.init(
             nearestTargetMeters: nearest,
             speedKmh: speedKmh,
-            idleSeconds: Date().timeIntervalSince(lastMovementAt),
-            sketchVisible: isCarPlaySketchVisible,
-            isForeground: isForeground,
-            thermalIsFull: (thermal?.mode ?? .full) == .full),
+            idleSeconds: Date().timeIntervalSince(lastMovementAt)),
                                  lowPower: isLowPowerMode)
         guard tier != accuracyTier else { return }
         accuracyTier = tier
@@ -696,20 +693,6 @@ final class LocationService: NSObject {
                  manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
                  manager.distanceFilter = 30
         }
-    }
-
-    /// Схема на экране CarPlay (см. буст в tuneAdaptiveAccuracy). Телефонной
-    /// приборки со своим бустом больше нет — спидометр убран из приложения.
-    @ObservationIgnored private var isCarPlaySketchVisible = false
-
-    /// Схема CarPlay показана/скрыта: пересматриваем тир GPS сразу, не
-    /// дожидаясь следующего фикса — на стоящем в пробке телефоне он может
-    /// прийти нескоро.
-    func setCarPlaySketchVisible(_ visible: Bool) {
-        guard isCarPlaySketchVisible != visible else { return }
-        isCarPlaySketchVisible = visible
-        accuracyTier = -1
-        tuneAdaptiveAccuracy()
     }
 
     /// Попросить точную геопозицию на эту сессию (если дана «приблизительная»).

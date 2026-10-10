@@ -22,14 +22,12 @@
 import SwiftUI
 
 #if canImport(MapLibre)
-/// Карта на движке. Правила точки зрения — ТЕ ЖЕ, что у схемы: охват по
-/// скорости и дистанции до камеры, поля вида от панелей, наклон уходит в ноль,
-/// когда камера в охвате. Один закон на два рендера, иначе переключатель
-/// сравнивал бы не рендеры, а две разные логики.
+/// Карта на движке: охват по скорости и дистанции до камеры, поля вида от
+/// панелей (MapFrameState), наклон уходит в ноль, когда камера в охвате.
 struct EngineBaseLayer: View {
     var onSelectCamera: (Camera) -> Void = { _ in }
     @Environment(AppEnvironment.self) private var env
-    let state: SketchState
+    let state: MapFrameState
     /// Общий вид главного экрана: ориентация, 3D, масштаб кнопками — одни на
     /// карту Apple и движок, чтобы кнопки на карте значили одно и то же.
     let map: MapState
@@ -127,6 +125,10 @@ struct EngineBaseLayer: View {
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
+                // Высоту сообщает сама карта: без неё поля панелей не
+                // посчитать, и «я» стоял бы под нижней панелью.
+                .onAppear { state.setViewHeight(geo.size.height) }
+                .onChange(of: geo.size.height) { _, height in state.setViewHeight(height) }
                 // Кнопка «моё местоположение» (или «К машине») вывела карту из
                 // свободы — движок снова цепляется за машину.
                 .onChange(of: map.orientation) { old, new in

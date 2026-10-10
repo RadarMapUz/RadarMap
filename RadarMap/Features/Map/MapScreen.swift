@@ -22,7 +22,7 @@ struct MapScreen: View {
     /// Поля вида (отступы панелей и якорь машины) — их читает наша карта.
     /// Имя историческое: модель заводилась под самодельную схему, а осталась
     /// от неё только геометрия вида, которой пользуется движок.
-    @State private var sketch = SketchState()
+    @State private var frame = MapFrameState()
     /// Нижняя кромка верхних панелей и верхняя кромка нижних, в пунктах окна.
     /// Меряют сами панели; схема переводит их в доли своей высоты.
     @State private var topPanelEdge: CGFloat = 0
@@ -317,7 +317,7 @@ struct MapScreen: View {
     /// Одной точкой, а не двумя вызовами из двух замеров: поля приходят
     /// парой, и половина пары — это неверная проекция на один кадр.
     private func applySketchInsets() {
-        sketch.setPanelEdges(top: topPanelEdge, bottom: bottomPanelEdge)
+        frame.setPanelEdges(top: topPanelEdge, bottom: bottomPanelEdge)
     }
 
     /// Подложка экрана: своя схема или карта Apple.
@@ -374,7 +374,7 @@ struct MapScreen: View {
             #if canImport(MapLibre)
             // Карту рисует движок. Панели поверх — те же: они про скорость и
             // камеры, а не про подложку.
-            EngineBaseLayer(onSelectCamera: { map.select($0) }, state: sketch, map: map).ignoresSafeArea()
+            EngineBaseLayer(onSelectCamera: { map.select($0) }, state: frame, map: map).ignoresSafeArea()
             #else
             mapLayer.ignoresSafeArea().environment(\.colorScheme, scheme)
             #endif

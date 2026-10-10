@@ -3,8 +3,7 @@
 //  RadarMapTests
 //
 //  Тиры точности GPS: стоянка бьёт близость (но не ближе 150 м к камере),
-//  буст схемы — только с крейсера и на холодном телефоне, выход из стоянки
-//  мгновенный. Порядок правил — политика, и она закреплена здесь, а не
+//  выход из стоянки мгновенный. Порядок правил — политика, и она закреплена здесь, а не
 //  чтением LocationService рядом с живым CLLocationManager.
 //
 
@@ -14,10 +13,8 @@ import XCTest
 final class GPSTiersTests: XCTestCase {
 
     private func situation(nearest: Double = 5000, speed: Double = 60,
-                           idle: TimeInterval = 0, sketch: Bool = false,
-                           foreground: Bool = true, cold: Bool = true) -> GPSTiers.Situation {
-        .init(nearestTargetMeters: nearest, speedKmh: speed, idleSeconds: idle,
-              sketchVisible: sketch, isForeground: foreground, thermalIsFull: cold)
+                           idle: TimeInterval = 0) -> GPSTiers.Situation {
+        .init(nearestTargetMeters: nearest, speedKmh: speed, idleSeconds: idle)
     }
 
     func testBaseTiersByDistance() {
@@ -54,21 +51,6 @@ final class GPSTiersTests: XCTestCase {
         XCTAssertEqual(GPSTiers.tier(situation(nearest: 5000, speed: 0, idle: 10)), 2)
     }
 
-    /// Буст плавности схемы: только с крейсера, только на переднем плане и
-    /// только на холодном телефоне; стоянку не трогает — стоя анимировать нечего.
-    func testSketchBoostRules() {
-        XCTAssertEqual(GPSTiers.tier(situation(sketch: true)), 1, "крейсер + схема → подъезд")
-        XCTAssertEqual(GPSTiers.tier(situation(sketch: true, cold: false)), 2,
-                       "в перегрев буст выключен")
-        XCTAssertEqual(GPSTiers.tier(situation(sketch: true, foreground: false)), 2,
-                       "в фоне глазами на схему не смотрят")
-        XCTAssertEqual(GPSTiers.tier(situation(nearest: 5000, speed: 0, idle: 25,
-                                               sketch: true)), 3,
-                       "стоянка старше буста")
-        XCTAssertEqual(GPSTiers.tier(situation(nearest: 900, sketch: true)), 1,
-                       "подъезд бустом не трогается — он и так точный")
-    }
-
     /// «Стою» — скорость ниже порога дольше GPS-ной выдержки. Затемнение
     /// приборки со своей, более длинной выдержкой ушло вместе со спидометром.
     func testIsStandingDefinition() {
@@ -95,7 +77,7 @@ final class GPSTiersTests: XCTestCase {
     /// работал ВДВОЕ точнее, чем без экономии: режим, включённый ради батареи,
     /// запрещал самую большую экономию.
     func testLowPowerKeepsTheCheapestTier() {
-        let parked = situation(nearest: 4000, speed: 0, idle: 600, foreground: false)
+        let parked = situation(nearest: 4000, speed: 0, idle: 600)
         XCTAssertEqual(GPSTiers.tier(parked), 3)
         XCTAssertEqual(GPSTiers.tier(parked, lowPower: true), 3,
                        "стоянка обязана оставаться самой дешёвой и в экономии")

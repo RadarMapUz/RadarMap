@@ -55,6 +55,14 @@ struct CarPlayStatusChips: View {
                                       tint: Theme.warning,
                                       text: String(localized: "Дайте доступ «Всегда» на телефоне")))
         }
+        // Тишина включается кнопкой в баре рядом с «Поездкой»: промах слепого
+        // тапа не должен глушить камеры незаметно. Выше сети и жары — это
+        // единственное состояние, при котором водитель не услышит камеру.
+        if !env.settings.soundEnabled && env.settings.voiceMode == .off {
+            result.append(CarPlayChip(id: "muted", symbol: "speaker.slash.fill",
+                                      tint: Theme.warning,
+                                      text: String(localized: "Без звука")))
+        }
         // Тайлы карты требуют сети, база камер — нет. Сказать об этом обязаны:
         // серая карта без объяснения читается как сломанное приложение.
         if !env.network.isOnline {

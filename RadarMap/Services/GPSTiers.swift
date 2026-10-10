@@ -27,11 +27,6 @@ nonisolated enum GPSTiers {
         var speedKmh: Double
         /// Секунд с последнего движения (скорость ≥ 3 км/ч).
         var idleSeconds: TimeInterval
-        /// Схема CarPlay на экране (телефонной приборки больше нет).
-        var sketchVisible: Bool
-        var isForeground: Bool
-        /// Телефон холодный (PerformanceMode == .full).
-        var thermalIsFull: Bool
     }
 
     /// «Стоим»: скорость ниже порога дольше выдержки. Второй потребитель —
@@ -50,18 +45,16 @@ nonisolated enum GPSTiers {
     ///    очередь ползком у самой камеры пишет проезд точно (зона замера
     ///    80 м + запас). Выход мгновенный: первый фикс с движением возвращает
     ///    точный тир, а до камеры остаётся >120 м точного ведения.
-    /// 3. Буст плавности схемы — только с крейсера и только на холодном
-    ///    телефоне: стоянку не трогаем (стоя анимировать нечего), финал и
-    ///    подъезд и так точные.
+    ///
+    /// Буста плавности больше нет: он существовал ради схемы CarPlay, а схема
+    /// убрана 11.10. Карта движка плавна и на крейсерских 25 м — она тянет
+    /// метку между фиксами анимацией.
     static func tier(_ s: Situation) -> Int {
         var tier = s.nearestTargetMeters < AppConfig.gpsPreciseApproachMeters ? 0
                  : s.nearestTargetMeters < AppConfig.gpsMidApproachMeters ? 1 : 2
         if isStanding(speedKmh: s.speedKmh, idleSeconds: s.idleSeconds),
            s.nearestTargetMeters > AppConfig.gpsStandstillNearCameraMeters {
             tier = 3
-        }
-        if tier == 2, s.sketchVisible, s.isForeground, s.thermalIsFull {
-            tier = 1
         }
         return tier
     }

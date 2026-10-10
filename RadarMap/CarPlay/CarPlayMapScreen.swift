@@ -4,11 +4,13 @@
 //
 //  Экран CarPlay: тёмная карта с камерами и маршрутом + приборная панель.
 //
-//  Раньше данные жили тремя плашками в разных углах — взгляд метался по экрану.
-//  Теперь всё, что нужно постоянно (скорость, лимит, ближайшая камера, прибытие),
-//  собрано в одну полосу внизу слева фиксированной высоты: карта не прыгает,
-//  а глаз всегда знает, куда смотреть. Сверху — только события: манёвр слева
-//  и алерт приближения справа.
+//  Всё, что нужно постоянно (скорость, лимит, ближайшая камера, прибытие),
+//  собрано внизу слева: карта не прыгает, а глаз всегда знает, куда
+//  смотреть. Сверху — только манёвр.
+//
+//  Режима «Схема» больше нет (11.10, слово владельца: «не актуально, там
+//  ничего не работает»). Экран машины — одна карта: движок или, при
+//  выключенном движке, карта Apple.
 //
 
 import SwiftUI
@@ -37,11 +39,6 @@ final class CarPlayMapModel {
     /// main рантайма баг уже исправлен; до выхода такой iOS помогает одно —
     /// не синтезировать isolated deinit вовсе.
     nonisolated deinit {}
-    /// Состояние схемы. Живёт ЗДЕСЬ, а не во вью, потому что осмотр в машине
-    /// приходит от шаблона CarPlay (CPMapTemplateDelegate), а до вью делегату
-    /// не дотянуться. Одна модель на оба входа — иначе правило возврата
-    /// разошлось бы между телефоном и машиной.
-    let sketch = SketchState()
 
     var recenterRequests = 0
     var zoomInRequests = 0
@@ -72,47 +69,12 @@ final class CarPlayMapModel {
     /// слежение, как только водитель тронул карту пальцем или крутилкой),
     /// читает значок кнопки «к себе»: залитый — следим, контурный — стоим.
     var isFollowing = true
-    /// «Схема» вместо карты: MKMapView выгружается ЦЕЛИКОМ. Картинка в машину
-    /// стримится с телефона, так что тайлы и аннотации греют именно телефон —
-    /// схема снимает самый дорогой рендер, оставляя те же предупреждения.
-    var showsSketch: Bool {
-        didSet { if showsSketch != oldValue { onViewModeChanged?() } }
-    }
-
-    /// Режим сменился — пересобрать кнопки шаблона.
-    ///
-    /// Кнопки CarPlay живут вне цикла обновления SwiftUI, и обновляет их только
-    /// пересборка шаблона. Наблюдения для этого мало: подписка одноразовая и
-    /// восстанавливается асинхронно, а режим меняет не только кнопка, но и
-    /// автоматика жары — из вью, до которой делегату не дотянуться. Без крючка
-    /// содержимое уходило в схему, а кнопки оставались от карты.
-    @ObservationIgnored var onViewModeChanged: (() -> Void)? {
-        didSet { Wiring.assertSingleAssignment(previous: oldValue,
-                                               current: onViewModeChanged, "onViewModeChanged") }
-    }
-    /// Режим выбран рукой водителя: автоматика жары его больше не трогает
-    /// (та же иерархия, что у кнопки тишины: человек старше автоматики).
-    @ObservationIgnored var userChoseView: Bool
-
-    /// Последний регион карты. Схема выгружает MKMapView целиком — в этом и
-    /// смысл режима, — но при возврате карта создавалась заново и вставала в
-    /// умолчание, теряя масштаб, который водитель выставил руками. Держать
-    /// карту живой ради этого нельзя: невидимая, она продолжает тянуть тайлы,
-    /// то есть ровно то, от чего схема и спасает. Поэтому помним не карту,
-    /// а её регион — четыре числа.
+    /// Последний регион карты Apple (фолбэк при выключенном движке). Карта
+    /// выгружается, пока экран машины занят другим приложением, и при возврате
+    /// создавалась бы заново в умолчании, теряя масштаб, выставленный руками.
+    /// Держать её живой ради этого нельзя — невидимая, она тянет тайлы.
+    /// Поэтому помним не карту, а её регион — четыре числа.
     @ObservationIgnored var lastRegion: MKCoordinateRegion?
-
-    init() {
-        showsSketch = Storage.bool(.carPlayShowsSketch)
-        userChoseView = Storage.bool(.carPlayViewChosen)
-        #if DEBUG
-        // Скриншот-хук: -carplayPreview -carplaySketch открывает сразу схему.
-        if ProcessInfo.processInfo.arguments.contains("-carplaySketch") {
-            showsSketch = true
-            userChoseView = true
-        }
-        #endif
-    }
 
     /// Рисует ли карту движок (наша карта), а не MapKit. Та же настройка
     /// подложки, что на телефоне: выключатель один на оба экрана.
@@ -165,21 +127,6 @@ final class CarPlayMapModel {
         }
         if day != isDaylight { isDaylight = day }
     }
-
-    /// Тумблер с кнопки шаблона: выбор запоминается между поездками.
-    func toggleView() {
-        showsSketch.toggle()
-        userChoseView = true
-        Storage.set(showsSketch, for: .carPlayShowsSketch)
-        Storage.set(true, for: .carPlayViewChosen)
-    }
-
-    /// Автоматика жары: телефон греется — включаем схему, остыл — возвращаем
-    /// карту. Только пока водитель не выбрал режим сам.
-    func autoSwitch(for mode: PerformanceMode) {
-        guard !userChoseView else { return }
-        showsSketch = mode != .full
-    }
 }
 
 struct CarPlayMapScreen: View {
@@ -188,9 +135,7 @@ struct CarPlayMapScreen: View {
 
     var body: some View {
         ZStack {
-            if model.showsSketch {
-                CarPlaySketchView(sketch: model.sketch)
-            } else if CarPlayMapModel.usesEngine(env.settings) {
+            if CarPlayMapModel.usesEngine(env.settings) {
                 if model.isOnScreen { engineMap } else { Theme.background.ignoresSafeArea() }
             } else {
                 CarPlayMapView(model: model,
@@ -217,17 +162,13 @@ struct CarPlayMapScreen: View {
         // Тема HUD — та же, что у подложки, из одной точки (model.isDaylight):
         // токены Theme адаптивные и иначе брали бы тему окна машины.
         .environment(\.colorScheme, model.isDaylight ? .light : .dark)
-        // Жара: схема сама, пока водитель не выбрал режим кнопкой. Проверка и
-        // на подключении тоже — в машину можно сесть с уже горячим телефоном.
-        .onAppear { model.autoSwitch(for: env.thermal.mode) }
-        .onChange(of: env.thermal.mode) { _, mode in
-            withMotion(.easeInOut(duration: 0.3)) { model.autoSwitch(for: mode) }
-        }
-        // Улика для «окно машины застыло»: эта строка пишется только когда
-        // SwiftUI действительно пересобрал экран машины. «Кнопка вида» в
-        // журнале без неё — кнопка дошла, а дерево интерфейса стоит.
-        .onChange(of: model.showsSketch) { _, sketch in
-            Log.carplay.notice("экран машины: вид \(sketch ? "схема" : "карта", privacy: .public)")
+        // Улика для «окно машины застыло» (11.10: кнопки шаблона жили,
+        // картинка стояла). Эта строка пишется, только когда SwiftUI
+        // действительно пересобрал экран машины; делегат рядом пишет
+        // «сцена машины: background/foreground». Есть его строка, а этой
+        // нет — сцена сменилась, а дерево интерфейса стоит.
+        .onChange(of: model.isOnScreen) { _, shown in
+            Log.carplay.notice("экран машины перерисован: на экране \(shown, privacy: .public)")
         }
         // База камер докодировалась/обновилась — пересчитать «что рядом» СРАЗУ.
         // Раньше эта подписка жила только в телефонном MapScreen: при холодном

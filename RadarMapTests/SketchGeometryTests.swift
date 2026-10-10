@@ -83,48 +83,4 @@ final class SketchGeometryTests: XCTestCase {
         // а не с отрицательной отметки пути.
         XCTAssertEqual(RoadSketch.maneuverWindow(stepAlong: 30, progress: 0)?.from, 0)
     }
-
-    // MARK: - Стрелка
-
-    func testTrimmedShortensFromTheEnd() {
-        let trimmed = SketchGeometry.trimmed([CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 100)],
-                                             byLast: 30)
-        XCTAssertEqual(Double(trimmed.last?.y ?? 0), 70, accuracy: 0.01,
-                       "тело стрелки не должно торчать сквозь её голову")
-    }
-
-    func testTrimmedEatsWholeSegments() {
-        let points = [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 50), CGPoint(x: 0, y: 100)]
-        let trimmed = SketchGeometry.trimmed(points, byLast: 70)
-        XCTAssertEqual(trimmed.count, 2)
-        XCTAssertEqual(Double(trimmed.last?.y ?? 0), 30, accuracy: 0.01)
-    }
-
-    func testArrowHeadPointsAlongTheLastSegment() {
-        let head = SketchGeometry.arrowHead(
-            along: [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0)], size: 20)
-        let box = head.body.boundingRect
-        XCTAssertEqual(Double(box.maxX), 100, accuracy: 0.5, "остриё — в конце ломаной")
-        XCTAssertEqual(Double(box.minX), 80, accuracy: 0.5, "голова смотрит по ходу")
-        XCTAssertEqual(Double(box.midY), 0, accuracy: 0.5)
-    }
-
-    func testArrowHeadIgnoresDegenerateTail() {
-        // На выходе из поворота последние точки маршрута могут совпасть.
-        // Нулевой вектор развернул бы голову куда угодно — и стрелка смотрела
-        // бы поперёк дороги.
-        let clean = SketchGeometry.arrowHead(
-            along: [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0)], size: 20)
-        let doubled = SketchGeometry.arrowHead(
-            along: [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0), CGPoint(x: 100, y: 0)],
-            size: 20)
-        XCTAssertEqual(clean.body.boundingRect, doubled.body.boundingRect)
-    }
-
-    func testArrowCasingIsBiggerThanBody() {
-        let head = SketchGeometry.arrowHead(
-            along: [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0)], size: 20)
-        XCTAssertGreaterThan(head.casing.boundingRect.width, head.body.boundingRect.width,
-                             "кайма обязана обводить голову, а не совпадать с ней")
-    }
 }

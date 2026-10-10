@@ -26,6 +26,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     nonisolated deinit {}
 
     var interfaceController: CPInterfaceController?
+    /// Показанный вопрос «ещё на месте?» и его отметка — чтобы снять его,
+    /// когда ответ уже не нужен (CarPlayAlerts.presentPendingConfirmIfNeeded).
+    weak var confirmAlert: CPAlertTemplate?
+    var confirmAlertID: Int?
     /// Начало сессии экрана машины — для суточной статистики (минуты).
     private var connectedAt: Date?
     private var mapTemplate: CPMapTemplate?

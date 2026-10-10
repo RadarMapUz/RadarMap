@@ -80,14 +80,20 @@ nonisolated enum SpeedLimitCache {
     }
 
     /// Файл по подписанному индексу: размер → sha → разбор, и только потом
-    /// запись на диск — сначала файл, затем конверт, чтобы конверт на диске
-    /// никогда не описывал файл, которого там ещё нет.
+    /// запись на диск — старый конверт долой, файл, затем новый конверт.
+    /// Две атомарные записи — не одна: убитое между ними приложение раньше
+    /// оставляло новый файл рядом со СТАРЫМ конвертом, и тот описывал файл,
+    /// которого уже нет. Теперь в разрыве конверта нет вовсе — честное «нет
+    /// проверенного кэша», и сервис сразу спросит сервер.
     static func acceptSigned(_ data: Data, file: LimitsManifest.File, envelope: Data,
                              dataURL: URL, manifestURL: URL)
         -> Result<LimitIndex, LimitsTrust.Rejection> {
         let outcome = verifyAndBuild(data, against: file)
         guard case .success = outcome else { return outcome }
         do {
+            if FileManager.default.fileExists(atPath: manifestURL.path) {
+                try FileManager.default.removeItem(at: manifestURL)
+            }
             try data.write(to: dataURL, options: .atomic)
             try envelope.write(to: manifestURL, options: .atomic)
         } catch {

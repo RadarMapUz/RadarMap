@@ -704,24 +704,38 @@ final class MobileCameraService {
     /// карты на телефоне проезд мимо треноги не замечался вовсе, и вопрос
     /// «радар ещё стоял?» — то, что держит данные свежими, — не задавался.
     func trackPasses(from coordinate: CLLocationCoordinate2D, now: Date = Date()) {
-        if pendingConfirm != nil, let at = pendingConfirmAt,
-           now.timeIntervalSince(at) > AppConfig.mobileConfirmMaxAgeSeconds {
-            // Молчание ничего не отправляет — как и «Пропустить».
-            pendingConfirm = nil
-            pendingConfirmAt = nil
-        }
-        guard isEnabled, pendingConfirm == nil else { return }
-        guard let askID = MobilePassWatch.update(tracks: &passTracks,
-                                                 mobileCameras: reports,
-                                                 from: coordinate) else { return }
+        expireStaleConfirm(now: now)
+        guard isEnabled else { return }
+        // Проезды отслеживаются и пока висит вопрос: с погашенным экраном он
+        // висит до пяти минут, и без этого все отметки, мимо которых проехали
+        // за это время, пропадали из наблюдения.
+        let askID = MobilePassWatch.update(tracks: &passTracks,
+                                           mobileCameras: reports,
+                                           from: coordinate)
+        guard pendingConfirm == nil, let askID else { return }
         pendingConfirm = reports.first { $0.id == askID }
         pendingConfirmAt = pendingConfirm == nil ? nil : now
     }
 
+    /// Снять вопрос, который никто не увидел за `mobileConfirmMaxAgeSeconds`.
+    /// Зовётся на фиксе И там, где вопрос показывают (плашка, CarPlay):
+    /// открыли приложение после поездки — фиксов ещё нет, а вопрос про радар,
+    /// мимо которого проехали час назад, показываться уже не должен.
+    /// Молчание ничего не отправляет — как и «Пропустить».
+    func expireStaleConfirm(now: Date = Date()) {
+        guard pendingConfirm != nil, let at = pendingConfirmAt,
+              now.timeIntervalSince(at) > AppConfig.mobileConfirmMaxAgeSeconds else { return }
+        pendingConfirm = nil
+        pendingConfirmAt = nil
+    }
+
     /// Ответили. `nil` — закрыли/промолчали: не шлём ничего, потому что
     /// «не знаю» испортит данные сильнее, чем их отсутствие.
-    func answerConfirm(stillThere: Bool?) {
-        guard let camera = pendingConfirm else { return }
+    /// `id` — о какой отметке был вопрос. Ответ на устаревший вопрос (его уже
+    /// сменил другой) игнорируется: иначе «Нет» про отметку A уходило бы
+    /// голосом против отметки B, о которой водителя не спрашивали.
+    func answerConfirm(stillThere: Bool?, for id: Int? = nil) {
+        guard let camera = pendingConfirm, id == nil || id == camera.id else { return }
         pendingConfirm = nil
         pendingConfirmAt = nil
         guard let stillThere else { return }

@@ -290,11 +290,14 @@ final class RouteService {
         let gen = generation
 
         lastArrival = nil   // новый маршрут — карточка прошлого прибытия неактуальна
-        stop = nil          // новая цель — остановка прежнего маршрута не её
         do {
             let built = try await calculate(from: source, via: nil, to: destination,
                                             alternatives: alternatives)
             guard gen == generation else { return }   // пока считали — маршрут сбросили/заменили
+            // Новая цель — остановка прежнего маршрута не её. Забываем ТОЛЬКО
+            // после успеха: не построилось — прежняя линия (через остановку)
+            // остаётся, и перестроение по ней обязано помнить заезд.
+            stop = nil
             await apply(built, name: name, destination: destination,
                         cameras: cameras, gen: gen, history: personalHistory?())
         } catch RouteError.serverUnreachable {
@@ -311,7 +314,12 @@ final class RouteService {
     /// выбрал сам. Не вышло — старый маршрут остаётся как был, с сообщением.
     func addStop(_ coordinate: CLLocationCoordinate2D, name: String,
                  from source: CLLocationCoordinate2D, cameras: [Camera]) async {
-        guard isActive, let destination = destinationCoordinate else { return }
+        errorMessage = nil   // прежняя ошибка — не причина этого отказа
+        guard isActive, let destination = destinationCoordinate else {
+            // Маршрут успел закончиться (приехали, сбросили), пока выбирали место.
+            errorMessage = String(localized: "Маршрута уже нет — заезд не добавлен")
+            return
+        }
         guard isRoutingEnabled else {
             errorMessage = String(localized: "Маршруты временно недоступны — мы уже чиним")
             return

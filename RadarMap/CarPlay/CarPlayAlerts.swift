@@ -50,6 +50,23 @@ extension CarPlaySceneDelegate {
     }
 
     func presentPendingConfirmIfNeeded() {
+        env.mobile.expireStaleConfirm()
+        // Вопрос на экране, а ответ уже не нужен (истёк, отвечен на телефоне)
+        // или теперь он про другую отметку — снять. Оставленный, он принимал
+        // бы «Нет» за отметку, о которой не спрашивал, и держал бы экран
+        // занятым для всех следующих диалогов.
+        if let shown = confirmAlert, interfaceController?.presentedTemplate === shown,
+           env.mobile.pendingConfirm?.id != confirmAlertID {
+            confirmAlert = nil
+            confirmAlertID = nil
+            interfaceController?.dismissTemplate(animated: true) { [weak self] _, error in
+                if let error {
+                    Log.carplay.error("dismissTemplate(подтверждение): \(error.localizedDescription, privacy: .public)")
+                }
+                self?.presentPendingConfirmIfNeeded()   // следующий вопрос, если он есть
+            }
+            return
+        }
         guard let camera = env.mobile.pendingConfirm else { return }
         // Пока на экране предупреждение о камере, вопрос ждёт: перекрывать
         // предупреждение вопросом — ровно то, чего делать нельзя.
@@ -58,9 +75,12 @@ extension CarPlaySceneDelegate {
         // presentTemplate поверх показанного CarPlay отклоняет. Наблюдение
         // выше перепокажет вопрос при следующей смене состояния.
         guard interfaceController?.presentedTemplate == nil else { return }
+        let id = camera.id
         func answer(_ value: Bool?) -> (CPAlertAction) -> Void {
             { [weak self] _ in
-                self?.env.mobile.answerConfirm(stillThere: value)
+                self?.env.mobile.answerConfirm(stillThere: value, for: id)
+                self?.confirmAlert = nil
+                self?.confirmAlertID = nil
                 self?.dismissTopTemplate()
             }
         }
@@ -75,6 +95,8 @@ extension CarPlaySceneDelegate {
             titleVariants: [String(format: String(localized: "%@ ещё на месте?"), camera.kind.displayName),
                             String(localized: "Ещё на месте?")],
             actions: CPAlertTemplate.maximumActionCount >= 3 ? [yes, no, skip] : [yes, no])
+        confirmAlert = alert
+        confirmAlertID = id
         interfaceController?.presentTemplate(alert, animated: true) { _, error in
             if let error {
                 Log.carplay.error("presentTemplate(подтверждение): \(error.localizedDescription, privacy: .public)")

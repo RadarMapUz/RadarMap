@@ -17021,6 +17021,22 @@
           }
         }
       }
+    },
+    "Маршрута уже нет — заезд не добавлен": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрута уже нет — заезд не добавлен"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut endi yo‘q — kirib o‘tish qo‘shilmadi"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

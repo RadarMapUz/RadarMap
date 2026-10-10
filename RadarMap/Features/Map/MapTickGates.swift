@@ -150,6 +150,7 @@ struct MobileConfirmGate: View {
 
     var body: some View {
         MobileConfirmBar(isCovered: env.location.isApproachingCamera || dashboardShown)
+            .onAppear { env.mobile.expireStaleConfirm() }
     }
 }
 
@@ -164,9 +165,6 @@ struct ReportRefineGate: View {
     }
 }
 
-/// Проезд чужой передвижной отметки → вопрос «ещё стоял?». Тик читается
-/// здесь: onChange(locationTick) прямо в MapScreen был второй независимой
-/// подпиской body на тик — с ним тишина follow ничего не давала.
 
 
 struct LocationFollowDriver: View {

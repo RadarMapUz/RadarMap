@@ -41,8 +41,10 @@ final class CarPlayDiagnosticsTests: XCTestCase {
         var stats = UsageStats(day: "2026-10-10")
         stats.carPlay = ["sessions": 1, "minutes": 34, "hitches": 2, "longHitches": 1, "maxHitchMs": 1800]
         let json = String(decoding: try JSONEncoder().encode(stats), as: UTF8.self)
-        for leak in ["lat", "lon", "timestamp", "track"] {
-            XCTAssertFalse(json.contains(leak), leak)
+        // Ищем КЛЮЧИ JSON, а не подстроку: «lon» — часть честного
+        // «longHitches», и голый поиск ловил его как утечку координаты.
+        for leak in ["lat", "lon", "latitude", "longitude", "timestamp", "track"] {
+            XCTAssertFalse(json.contains("\"\(leak)\""), leak)
         }
     }
 }

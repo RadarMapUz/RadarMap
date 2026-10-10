@@ -165,7 +165,16 @@ nonisolated enum TripScreenLayout {
 
     /// Кнопка колонки справа, которую можно убрать, когда места мало.
     enum ColumnExtra: Hashable, Sendable {
-        case layers, compass, overview, threeD, zoom
+        case compass, overview, threeD, zoom
+    }
+
+    /// Сколько мест колонки помещается в просвет между панелями.
+    /// `nil` — просвет ещё не измерен; измеренный, но нулевой или
+    /// отрицательный (панели сошлись) — это 0 мест, а НЕ «не измерено»:
+    /// путать их значило показать всю колонку ровно тогда, когда места нет.
+    static func columnSlots(room: CGFloat?) -> Int? {
+        guard let room else { return nil }
+        return max(0, Int((room + AppConfig.mapColumnSpacing) / AppConfig.mapColumnSlotHeight))
     }
 
     /// Какие необязательные кнопки колонки помещаются в просвет.
@@ -175,17 +184,19 @@ nonisolated enum TripScreenLayout {
     /// уходили ПОД карточку маршрута (на SE — на ~250 pt) и не нажимались; в
     /// поездке на SE то же делали плашки «Радар ещё стоял?» и «Что это было?».
     /// Теперь колонка мерит просвет и раздаёт его по важности: обязательные
-    /// кнопки (`fixed` — звук, «к себе», «…») не прячутся никогда, остальные
-    /// встают, пока есть место, самые нужные первыми. Убранное не потеряно:
-    /// зум — щипком, 3D и «весь маршрут» — в меню «…» поездки.
+    /// кнопки (`fixed` — слои, звук, «к себе», «…») не прячутся никогда,
+    /// остальные встают, пока есть место, самые нужные первыми. Чем платим:
+    /// зум остаётся щипком, «весь маршрут» карта показывает сама при
+    /// построении, а 3D в покое до следующего просторного экрана недоступна
+    /// (в поездке она в меню «…»).
     ///
-    /// - `available` — просвет по высоте; 0 и меньше — ещё не измерен,
+    /// - `slots` — мест в просвете (`columnSlots`); `nil` — ещё не измерен,
     ///   тогда показываем всё (первый кадр не должен мигать пустой колонкой).
     /// - `candidates` — (кнопка, сколько мест занимает), по убыванию важности.
-    static func columnExtras(available: CGFloat, fixed: Int,
+    static func columnExtras(slots: Int?, fixed: Int,
                              candidates: [(ColumnExtra, Int)]) -> Set<ColumnExtra> {
-        guard available > 0 else { return Set(candidates.map(\.0)) }
-        var free = Int((available + AppConfig.mapColumnSpacing) / AppConfig.mapColumnSlotHeight) - fixed
+        guard let slots else { return Set(candidates.map(\.0)) }
+        var free = slots - fixed
         var shown = Set<ColumnExtra>()
         for (extra, slots) in candidates where slots <= free {
             shown.insert(extra)

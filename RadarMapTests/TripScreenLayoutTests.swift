@@ -28,51 +28,68 @@ final class TripScreenLayoutTests: XCTestCase {
 
     // MARK: - Колонка справа: сколько кнопок помещается
 
+    /// Покой: слои, «к себе» и звук обязательны (3 места), остальное — по важности.
     private let idleCandidates: [(TripScreenLayout.ColumnExtra, Int)] =
-        [(.layers, 1), (.overview, 1), (.threeD, 1), (.zoom, 2)]
+        [(.overview, 1), (.threeD, 1), (.zoom, 2)]
+
+    private func idle(room: CGFloat?) -> Set<TripScreenLayout.ColumnExtra> {
+        TripScreenLayout.columnExtras(slots: TripScreenLayout.columnSlots(room: room),
+                                      fixed: 3, candidates: idleCandidates)
+    }
+
+    /// Место кнопки — 56 pt (44 + промежуток 12), последний промежуток не нужен.
+    func testSlotsFromRoom() {
+        XCTAssertNil(TripScreenLayout.columnSlots(room: nil))
+        XCTAssertEqual(TripScreenLayout.columnSlots(room: 100), 2)
+        XCTAssertEqual(TripScreenLayout.columnSlots(room: 99), 1)
+    }
+
+    /// Панели сошлись (просвет ≤ 0) — это НОЛЬ мест, а не «не измерено».
+    /// Прежде 0 значил и то и другое, и колонка показывалась целиком ровно
+    /// тогда, когда места не было совсем.
+    func testOverlappingPanelsAreZeroSlotsNotUnmeasured() {
+        XCTAssertEqual(TripScreenLayout.columnSlots(room: -40), 0)
+        XCTAssertTrue(idle(room: -40).isEmpty)
+    }
 
     /// Первый кадр, кромки ещё не измерены: показать всё, а не пустую колонку.
     func testUnmeasuredRoomShowsEverything() {
-        let shown = TripScreenLayout.columnExtras(available: 0, fixed: 2, candidates: idleCandidates)
-        XCTAssertEqual(shown, [.layers, .overview, .threeD, .zoom])
+        XCTAssertEqual(idle(room: nil), [.overview, .threeD, .zoom])
     }
 
     /// Большой экран: всё влезает.
     func testTallRoomShowsEverything() {
-        let shown = TripScreenLayout.columnExtras(available: 600, fixed: 2, candidates: idleCandidates)
-        XCTAssertEqual(shown, [.layers, .overview, .threeD, .zoom])
+        XCTAssertEqual(idle(room: 600), [.overview, .threeD, .zoom])
     }
 
     /// SE в покое с маршрутом: прежде зум и звук уходили под карточку
     /// маршрута. Теперь лишнее уходит по важности — зум первым (он и щипком).
     func testSmallRoomDropsTheLeastNeededFirst() {
-        // 250 pt — четыре места по 56: два обязательных и ещё два.
-        let shown = TripScreenLayout.columnExtras(available: 250, fixed: 2, candidates: idleCandidates)
-        XCTAssertEqual(shown, [.layers, .overview])
-        XCTAssertFalse(shown.contains(.zoom), "зум уходит первым")
+        // 250 pt — четыре места: три обязательных и ещё одно.
+        XCTAssertEqual(idle(room: 250), [.overview])
     }
 
-    /// Обязательные не прячутся: если места нет даже на них — нет только
+    /// Обязательные не прячутся: места нет даже на них — нет только
     /// необязательных, сама колонка остаётся.
     func testNoRoomShowsOnlyTheRequired() {
-        let shown = TripScreenLayout.columnExtras(available: 90, fixed: 2, candidates: idleCandidates)
-        XCTAssertTrue(shown.isEmpty)
+        XCTAssertTrue(idle(room: 90).isEmpty)
     }
 
     /// Зуму нужно два места: при одном свободном он не встаёт, а кнопка в
     /// одно место после него — встаёт.
     func testTwoSlotButtonDoesNotBlockSmallerOnes() {
-        let shown = TripScreenLayout.columnExtras(available: 180, fixed: 2,
+        let shown = TripScreenLayout.columnExtras(slots: 3, fixed: 2,
                                                   candidates: [(.zoom, 2), (.threeD, 1)])
         XCTAssertEqual(shown, [.threeD])
     }
 
     /// В поездке компас — единственная необязательная кнопка.
     func testTripCompassNeedsItsOwnSlot() {
-        XCTAssertEqual(TripScreenLayout.columnExtras(available: 220, fixed: 3,
-                                                     candidates: [(.compass, 1)]), [.compass])
-        XCTAssertTrue(TripScreenLayout.columnExtras(available: 200, fixed: 3,
-                                                    candidates: [(.compass, 1)]).isEmpty)
+        let compass: [(TripScreenLayout.ColumnExtra, Int)] = [(.compass, 1)]
+        XCTAssertEqual(TripScreenLayout.columnExtras(slots: TripScreenLayout.columnSlots(room: 220),
+                                                     fixed: 3, candidates: compass), [.compass])
+        XCTAssertTrue(TripScreenLayout.columnExtras(slots: TripScreenLayout.columnSlots(room: 200),
+                                                    fixed: 3, candidates: compass).isEmpty)
     }
 
     // MARK: - Прибытие

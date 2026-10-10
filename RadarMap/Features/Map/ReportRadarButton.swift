@@ -71,7 +71,11 @@ struct ReportRadarButton: View {
         .scaleEffect(fan == nil ? 1 : 0.96)
         .contentShape(Rectangle())
         .gesture(fanGesture)
-        .overlay(alignment: .bottom) { fanOverlay }
+        // В панели поездки кнопка стоит у правого края экрана (TripLiveBar),
+        // и веер, центрованный по ней, уходил строками за край — «Передвижной
+        // р…». Компактной кнопке веер раскрывается влево от правого края; на
+        // приборке кнопка во всю ширину, там по центру.
+        .overlay(alignment: isLarge ? .bottom : .bottomTrailing) { fanOverlay }
         .allowsHitTesting(!isSending)
         .motionAnimation(.easeOut(duration: 0.25), value: flash)
         .motionAnimation(.easeOut(duration: 0.2), value: isSending)
@@ -146,7 +150,7 @@ struct ReportRadarButton: View {
 
     @ViewBuilder private var fanOverlay: some View {
         if let fan {
-            VStack(spacing: Self.rowPitch - Self.rowHeight) {
+            VStack(alignment: isLarge ? .center : .trailing, spacing: Self.rowPitch - Self.rowHeight) {
                 ForEach(Array(kinds.enumerated()).reversed(), id: \.offset) { index, kind in
                     fanRow(kind, isActive: index == fan.index && !fan.isCancelling)
                 }
@@ -154,7 +158,7 @@ struct ReportRadarButton: View {
             .fixedSize()
             .offset(y: -((isLarge ? 62 : 56) + 12))
             .allowsHitTesting(false)
-            .transition(.scale(scale: 0.9, anchor: .bottom).combined(with: .opacity))
+            .transition(.scale(scale: 0.9, anchor: isLarge ? .bottom : .bottomTrailing).combined(with: .opacity))
         }
     }
 
@@ -168,13 +172,15 @@ struct ReportRadarButton: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
-        .foregroundStyle(isActive ? .white : Theme.textSecondary)
+        // Выбранная строка — жёлтая, как сама «Радар!»: это её действие. Была
+        // `warning` с белым текстом — ночью белое на светлом янтаре ~2:1.
+        .foregroundStyle(isActive ? Theme.onAction : Theme.textSecondary)
         .padding(.horizontal, 18)
         .frame(minWidth: 210, alignment: .leading)
         .frame(height: Self.rowHeight)
         .background {
             RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
-                .fill(isActive ? AnyShapeStyle(Theme.warning.gradient)
+                .fill(isActive ? AnyShapeStyle(Theme.action)
                                : AnyShapeStyle(.ultraThinMaterial))
         }
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)

@@ -78,6 +78,7 @@ final class SpeedLimitService {
         didSet {
             indexRevision += 1
             sketchNetwork = index.map { CachedRoadNetwork($0) } ?? EmptyRoadNetwork()
+            if isReady != (index != nil) { isReady = index != nil }
         }
     }
     @ObservationIgnored private var missCount = 0
@@ -135,7 +136,12 @@ final class SpeedLimitService {
     /// База лимитов есть. Без неё не считаются ни превышения, ни рейтинг, ни
     /// «возможные штрафы» — то есть половина Итогов пустая, и по экрану
     /// непонятно почему. Пользователю это надо сказать, а не оставить гадать.
-    var isReady: Bool { index != nil }
+    ///
+    /// Хранимое и наблюдаемое, а не `index != nil`: сам индекс вне наблюдения
+    /// (пишется редко, но читается каждый тик), и вычисляемое свойство поверх
+    /// него не будило плашку — она застревала на «не загрузились», хотя база
+    /// уже поднялась с диска через секунду после первого кадра.
+    private(set) var isReady = false
 
     /// Скачивание идёт прямо сейчас (для честной плашки, а не спиннера-загадки).
     private(set) var isDownloading = false

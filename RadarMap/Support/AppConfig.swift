@@ -525,6 +525,9 @@ nonisolated enum AppConfig {
     /// Страница проекта: поддержка, политика конфиденциальности, контакты.
     /// Она же Support URL в App Store Connect.
     static let projectPageURL = URL(string: "https://soulmed.uz/radarmap/")!
+    /// Политика конфиденциальности — прямой ссылкой из Настроек, а не через
+    /// подвал страницы проекта (App Review ищет её в два касания, не в три).
+    static let privacyPolicyURL = URL(string: "https://soulmed.uz/radarmap/privacy.html")!
 
     /// Правдоподобный диапазон дорожного лимита. Второй забор после подписи
     /// (LimitsTrust): подпись говорит, что файл собрал владелец, но не что OSM

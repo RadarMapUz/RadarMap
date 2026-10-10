@@ -13,6 +13,7 @@
 
 import SwiftUI
 import MapKit
+import os
 
 /// Сигналы от кнопок шаблона CarPlay к карте (счётчики — представление
 /// обрабатывает дельту и не хранит состояния шаблона).
@@ -221,6 +222,12 @@ struct CarPlayMapScreen: View {
         .onAppear { model.autoSwitch(for: env.thermal.mode) }
         .onChange(of: env.thermal.mode) { _, mode in
             withMotion(.easeInOut(duration: 0.3)) { model.autoSwitch(for: mode) }
+        }
+        // Улика для «окно машины застыло»: эта строка пишется только когда
+        // SwiftUI действительно пересобрал экран машины. «Кнопка вида» в
+        // журнале без неё — кнопка дошла, а дерево интерфейса стоит.
+        .onChange(of: model.showsSketch) { _, sketch in
+            Log.carplay.notice("экран машины: вид \(sketch ? "схема" : "карта", privacy: .public)")
         }
         // База камер докодировалась/обновилась — пересчитать «что рядом» СРАЗУ.
         // Раньше эта подписка жила только в телефонном MapScreen: при холодном

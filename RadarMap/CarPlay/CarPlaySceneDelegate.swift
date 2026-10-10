@@ -355,6 +355,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// он при перекрытии чужим приложением не приходит. Батарея — приоритет
     /// номер один, и считать невидимое ей противоречит.
     func sceneWillResignActive(_ scene: UIScene) {
+        Log.carplay.notice("сцена машины: resign active")
         // Только владелец: события устаревшей сцены не должны гасить буст живой.
         guard Self.activeDelegate === self else { return }
         AppEnvironment.shared.location.setCarPlaySketchVisible(false)
@@ -364,6 +365,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// На экране машины другое приложение или приборная панель — карту
     /// выгружаем (model.isOnScreen); вернулись — поднимаем заново.
     func sceneDidEnterBackground(_ scene: UIScene) {
+        Log.carplay.notice("сцена машины: background, владелец \(Self.activeDelegate === self, privacy: .public)")
         guard Self.activeDelegate === self else { return }
         model.isOnScreen = false
         // В фоне приложение могут приостановить, и сторож записал бы паузу
@@ -372,11 +374,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     func sceneWillEnterForeground(_ scene: UIScene) {
+        Log.carplay.notice("сцена машины: foreground")
         model.isOnScreen = true
         HitchWatch.setCounting(true)
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
+        Log.carplay.notice("сцена машины: active")
         // Стали видимым экраном машины — значит, мы и владелец.
         Self.activeDelegate = self
         guidance.isOnScreen = true
@@ -473,6 +477,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                   title: sketchShown ? String(localized: "Карта")
                                      : String(localized: "Схема")) { [weak self, model] _ in
             model.toggleView()
+            // Пара к «экран машины: вид …» в CarPlayMapScreen: есть эта
+            // строка, а той нет — кнопка дошла, а окно машины не перерисовалось
+            // (11.10 так и застыло: кнопки жили, картинка стояла).
+            Log.carplay.notice("кнопка вида: схема \(model.showsSketch, privacy: .public)")
             // Пересобираем шаблон СРАЗУ, не полагаясь на наблюдение.
             //
             // Кнопки живут вне цикла обновления SwiftUI: их держит CPMapTemplate,

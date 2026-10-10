@@ -215,9 +215,13 @@ struct OnboardingView: View {
     /// по-прежнему центрируют её, и вид не меняется. «Далее» снаружи —
     /// закреплена под страницами и не уезжает вместе с текстом.
     private func scrollingPage(@ViewBuilder _ content: () -> some View) -> some View {
-        GeometryReader { proxy in
+        // Содержимое собираем ДО GeometryReader: его замыкание сбегающее, и
+        // захватить в нём несбегающий `content` нельзя (компилятор это
+        // ловит только при полной сборке, не при проверке типов).
+        let page = content()
+        return GeometryReader { proxy in
             ScrollView {
-                content()
+                page
                     .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
             .scrollBounceBehavior(.basedOnSize)

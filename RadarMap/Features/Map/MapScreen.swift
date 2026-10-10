@@ -90,20 +90,31 @@ struct MapScreen: View {
 
             if map.isAddingCamera { crosshair }
 
-            // Панели знают, что под ними светлая карта: днём их фон плотнее,
-            // иначе белые цифры на солнце тонут в стекле.
-            topLayer
-                .environment(\.onLightMap, scheme == .light)
-            bottomLayer
-                .environment(\.onLightMap, scheme == .light)
+            // Всё, что читает тик GPS, — только пока экран на виду.
+            //
+            // Профиль свёрнутого приложения в поездке (Time Profiler, 11.10)
+            // показал главный поток, занятый SwiftUI: AttributeGraph
+            // пересчитывал HUD скорости, панель поездки и плашки на каждом
+            // фиксе, хотя экран не видел никто, — ~9 % ядра часами, в кармане
+            // и в держателе на солнце. Подложка в фоне уже выгружается
+            // (baseLayer); здесь — живые цифры поверх неё. Вернулись — слои
+            // собираются заново первым же тиком; листы и маршрут живут не тут.
+            if scenePhase != .background {
+                // Панели знают, что под ними светлая карта: днём их фон плотнее,
+                // иначе белые цифры на солнце тонут в стекле.
+                topLayer
+                    .environment(\.onLightMap, scheme == .light)
+                bottomLayer
+                    .environment(\.onLightMap, scheme == .light)
 
-            // Превышение у камеры: свечение по краям. Отдельная вью: условие
-            // читает скорость и дистанцию, меняющиеся каждый тик GPS, — в body
-            // MapScreen это чтение пересобирало весь экран с картой ежесекундно.
-            OverspeedVignetteGate()
+                // Превышение у камеры: свечение по краям. Отдельная вью: условие
+                // читает скорость и дистанцию, меняющиеся каждый тик GPS, — в body
+                // MapScreen это чтение пересобирало весь экран с картой ежесекундно.
+                OverspeedVignetteGate()
 
-            // Следование за GPS: единственный подписчик locationTick.
-            LocationFollowDriver(map: map, drivesAppleCamera: shownBase == .apple)
+                // Следование за GPS: единственный подписчик locationTick.
+                LocationFollowDriver(map: map, drivesAppleCamera: shownBase == .apple)
+            }
         }
         .mapScope(mapScope)
         .task {
@@ -205,7 +216,9 @@ struct MapScreen: View {
             })
         }
         .overlay { loadErrorOverlay }
-        .overlay { approachOverlay }
+        // Окно камеры читает дистанцию каждый тик — в фоне его не держим
+        // (то же правило, что у слоёв выше).
+        .overlay { if scenePhase != .background { approachOverlay } }
         // Пуш «Итоги поездки» и другие диплинки на статистику ведут сюда:
         // radarmap://trip — пуш и виджет недели на локскрине,
         // radarmap://stats — домашний виджет километров.

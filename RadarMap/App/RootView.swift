@@ -18,7 +18,9 @@ struct RootView: View {
     #if DEBUG
     /// Скриншот-автоматизация: CarPlay-экран на телефоне (симулятор не даёт
     /// открыть CarPlay-дисплей без ручного клика по меню).
-    @State private var carPlayPreview = ProcessInfo.processInfo.arguments.contains("-carplayPreview")
+    /// Поднимается в `.task`, а не истиной с первого кадра: cover, чей флаг
+    /// уже true при первом рендере, SwiftUI показывает через раз.
+    @State private var carPlayPreview = false
     /// Одна модель на весь показ: созданная в теле, она пересоздавалась бы
     /// каждой пересборкой и теряла бы и сдвиг, и масштаб.
     @State private var carPlayPreviewModel = CarPlayMapModel()
@@ -125,6 +127,12 @@ struct RootView: View {
             // Экран передачи без машины: проверить глазами на симуляторе.
             if ProcessInfo.processInfo.arguments.contains("-carplayConnected") {
                 env.setCarPlayConnected(true)
+            }
+            if ProcessInfo.processInfo.arguments.contains("-carplayPreview") {
+                Task {
+                    await Task.pause(seconds: 1)
+                    carPlayPreview = true
+                }
             }
             #endif
             // Общий набор сервисов вождения — см. startDrivingServices:

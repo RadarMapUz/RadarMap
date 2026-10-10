@@ -72,42 +72,91 @@ struct CarPlayOverlay: View {
 
     // MARK: - Приборная панель
 
-    /// Полоса внизу: скорость | ближайшая камера | прибытие. Высота фиксирована
-    /// (AppConfig.carPlayDockHeight) — на эту же величину карта поджимает свои
-    /// служебные подписи, чтобы «Правовые документы» не оказались под панелью.
+    /// Низ экрана: скорость со знаком — кругом в углу, камера и прибытие —
+    /// капсулами по размеру своего текста. Как у Amap и Яндекса.
+    ///
+    /// До 11.10 здесь была одна широкая плашка на три зоны. В CarPlay
+    /// Simulator на 800×480 она легла на середину карты — туда, куда смотрят
+    /// на дорогу и машину, — и при этом обрезала текст («Камер…» вместо
+    /// «Камер рядом нет»): ширина делилась на трети, а не по содержимому.
+    /// Теперь элементы занимают ровно свой текст и стоят в левом углу,
+    /// напротив системных кнопок карты (они справа), а центр карты свободен.
     private var dock: some View {
-        // Экраны в машинах разные — от узких 800×480 до широких. Прибытие
-        // отваливается первым: без него панель остаётся полезной, а вот резать
-        // скорость и камеру нельзя. И его нет, пока идёт навигационная сессия:
-        // время в пути тогда показывает сама машина под карточкой манёвра.
-        dockRow(showRoute: showsManeuver
-                && Self.fitsRoute(hudWidth: width))
-        .padding(.horizontal, 18)
-        .frame(maxWidth: .infinity)
-        .frame(height: AppConfig.carPlayDockHeight)
-        // Подкраска в тон тревоги ПОД содержимым, но НАД тёмной подложкой:
-        // с 70 см кромку-нитку не видно, а тонированная плашка читается
-        // боковым зрением как «внизу что-то происходит».
-        .background((alertTint ?? .clear).opacity(alertTint == nil ? 0 : 0.07),
-                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .background(Theme.background.opacity(0.88),
-                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        // Кромка панели окрашивается по тревоге: боковым зрением видно, что
-        // впереди камера, даже если смотришь на дорогу, а не на цифры.
-        // 3.5, а не 2: двухточечная кромка с торпеды — нитка.
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .stroke(dockEdge, lineWidth: alertTint == nil ? 1 : 3.5))
-        // Тень в тон тревоги — «нимб», который виден краем глаза даже там,
-        // где сама плашка перекрыта рукой на руле.
-        .shadow(color: (alertTint ?? .black).opacity(alertTint == nil ? 0.45 : 0.6),
-                radius: alertTint == nil ? 14 : 20, y: 6)
-        // Остров, а не лента: на экране в 1900 точек зоны, растянутые по
-        // третям всей ширины, разъезжаются на полэкрана — глазу приходится
-        // пробегать весь дисплей, чтобы собрать «скорость—камера—прибытие».
-        // Капим ширину и центрируем: на обычных экранах ничего не меняется.
-        .frame(maxWidth: AppConfig.carPlayDockMaxWidth)
-        .frame(maxWidth: .infinity)
+        HStack(alignment: .bottom, spacing: 10) {
+            speedBadge
+            cameraPill
+            // Прибытие — только пока манёвр не рисует сама машина: в
+            // навигационной сессии время в пути стоит в её карточке.
+            if showsManeuver, env.route.isActive, Self.fitsRoute(hudWidth: width) {
+                pill { etaCell }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: AppConfig.carPlayDockHeight, alignment: .bottom)
         .motionAnimation(.easeOut(duration: 0.3), value: env.location.alertLevel)
+    }
+
+    /// Скорость в круге и знак ограничения поверх его угла — сравнение
+    /// «еду / можно» одним взглядом, как на приборке. Кольцо круга греется
+    /// по превышению: цвет цифры — не единственный носитель.
+    private var speedBadge: some View {
+        let limit = env.settings.speedLimitsEnabled ? env.speedLimits.currentLimit : nil
+        return ZStack(alignment: .topTrailing) {
+            VStack(spacing: -2) {
+                Text("\(Int(env.location.speedKmh.rounded()))")
+                    .font(.rounded(30, .heavy).monospacedDigit())
+                    .foregroundStyle(speedColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .contentTransition(.numericText())
+                    .motionAnimation(.snappy(duration: 0.25), value: Int(env.location.speedKmh.rounded()))
+                Text("км/ч")
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .frame(width: 78, height: 78)
+            .background(Theme.background.opacity(0.94), in: Circle())
+            .overlay(Circle().stroke(speedColor == Theme.textPrimary ? Theme.stroke : speedColor,
+                                     lineWidth: speedColor == Theme.textPrimary ? 1 : 3))
+            .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
+            if let limit {
+                SpeedLimitSign(limit: limit, diameter: 42,
+                               isAssumed: env.speedLimits.isCurrentLimitAssumed)
+                    .shadow(color: env.speedLimits.isOverspeeding ? Theme.danger.opacity(0.8) : .black.opacity(0.3),
+                            radius: env.speedLimits.isOverspeeding ? 9 : 4)
+                    .offset(x: 16, y: -12)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        // Знак выступает за круг — место под него, чтобы капсула камеры не
+        // легла на знак.
+        .padding(.trailing, limit == nil ? 0 : 16)
+        .padding(.top, limit == nil ? 0 : 12)
+        .motionAnimation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
+    }
+
+    /// Камера — капсулой по размеру текста; кромка и тень в тон тревоги.
+    private var cameraPill: some View {
+        pill(edge: dockEdge, edgeWidth: alertTint == nil ? 1 : 3,
+             glow: alertTint) { cameraCell }
+    }
+
+    /// Общая подложка капсулы низа: тёмное стекло темы, кромка, тень. Размер —
+    /// по содержимому (`fixedSize`): обрезать текст ради ровной сетки нельзя.
+    private func pill<Content: View>(edge: Color = Theme.stroke, edgeWidth: CGFloat = 1,
+                                     glow: Color? = nil,
+                                     @ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .fixedSize()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Theme.background.opacity(0.94),
+                        in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(edge, lineWidth: edgeWidth))
+            .shadow(color: (glow ?? .black).opacity(glow == nil ? 0.4 : 0.6),
+                    radius: glow == nil ? 10 : 16, y: 4)
     }
 
     /// Влезает ли третья зона (прибытие): ширина дока — ширина HUD без его
@@ -115,87 +164,6 @@ struct CarPlayOverlay: View {
     static func fitsRoute(hudWidth: CGFloat) -> Bool {
         let dock = min(hudWidth - 28, AppConfig.carPlayDockMaxWidth) - 36
         return dock >= AppConfig.carPlayDockThreeZoneWidth
-    }
-
-    /// Три зоны: скорость — камера — прибытие.
-    ///
-    /// Главное правило — акцент отдаётся СРОЧНОМУ, а не постоянному. Пока
-    /// едем спокойно, крупная цифра одна: скорость. Как только впереди камера,
-    /// центральная зона получает заливку и вес, а скорость уходит на второй
-    /// план — за рулём глаз должен сразу знать, что читать первым, а до этого
-    /// обе цифры были набраны почти одинаково и конкурировали.
-    /// Каждая зона стоит по центру своей доли панели.
-    ///
-    /// Прижатыми влево они оставляли пустой правую треть; прижатыми к краям —
-    /// дыру посередине, и на настоящем экране машины эта дыра оказалась в
-    /// семьсот точек, то есть шире любой из зон. Центрирование в своей доле
-    /// даёт единственную раскладку, которая ровна при любом числе зон: поля
-    /// распределяются симметрично, а не собираются в одном месте.
-    private func dockRow(showRoute: Bool) -> some View {
-        let withRoute = showRoute && env.route.isActive
-        return HStack(spacing: 0) {
-            speedCell
-                .frame(maxWidth: .infinity)
-            cameraCell
-                .frame(maxWidth: .infinity)
-            if withRoute {
-                etaCell
-                    .frame(maxWidth: .infinity)
-            }
-        }
-    }
-
-    // Разделителей-ниток между зонами больше нет.
-    //
-    // Линия в один пункт с торпеды не видна — ровно та же причина, по которой
-    // кромка панели здесь 3,5, а не 2. Зоны разделяет заливка: у камеры на
-    // подходе своя панель состояния, у остальных — воздух.
-
-    /// Скорость крупно + знак лимита рядом: сравнение «еду / можно» одним взглядом.
-    ///
-    /// Кегль скорости ПОСТОЯННЫЙ. Раньше при камере цифра сжималась 38→30,
-    /// уступая акцент дистанции, — но скорость нужна водителю сильнее всего
-    /// именно у камеры: он сравнивает «еду/можно» в момент решения тормозить.
-    /// Waze и Google размер спидометра не трогают никогда. Акцент камере уже
-    /// дают красная подложка её зоны и выросшая дистанция.
-    private var speedCell: some View {
-        HStack(spacing: 12) {
-            VStack(spacing: -1) {
-                // Кегль 46 — решение, принятое по макету, а не по инерции.
-                //
-                // История числа поучительна. В коде стояло 38, но прежняя
-                // шкала обрезалась потолком 30, и все эти месяцы цифра
-                // рисовалась ТРИДЦАТОЙ — раскладку панели подгоняли в машине
-                // именно под неё. Новая шкала молча вернула 38; я откатил к
-                // 30 как к тому, что реально видел водитель.
-                //
-                // На макете стало видно, что 30 было мало с самого начала.
-                // Экран машины смотрят с семидесяти сантиметров: тридцать
-                // пунктов оттуда — это примерно двенадцать с вытянутой руки.
-                // Скорость здесь главная цифра, её сравнивают со знаком в
-                // момент решения тормозить.
-                Text("\(Int(env.location.speedKmh.rounded()))")
-                    .font(.rounded(46, .heavy).monospacedDigit())
-                    .foregroundStyle(speedColor)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .contentTransition(.numericText())
-                    .motionAnimation(.snappy(duration: 0.25), value: Int(env.location.speedKmh.rounded()))
-                Text("км/ч")
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(Theme.textTertiary)
-            }
-            .frame(minWidth: 58)
-
-            if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
-                SpeedLimitSign(limit: limit, diameter: 52,
-                               isAssumed: env.speedLimits.isCurrentLimitAssumed)
-                    .shadow(color: env.speedLimits.isOverspeeding ? Theme.danger.opacity(0.8) : .clear,
-                            radius: 9)
-                    .transition(.scale.combined(with: .opacity))
-            }
-        }
-        .motionAnimation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
     }
 
     /// Ближайшая камера — честные состояния: нет сигнала, уточняем положение,

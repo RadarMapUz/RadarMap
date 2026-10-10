@@ -33,6 +33,10 @@ enum Storage {
         case overridesCheck         // дата последней проверки правок модератора (overrides.json)
         case cameraDBVersion        // версия локальной базы камер
         case speedLimitsLastCheck   // дата последней проверки базы лимитов
+        // Храповик лимитов (LimitsTrust): подписанный индекс уже видели —
+        // неподписанный путь закрыт НАВСЕГДА. Без него тот, кто срежет индекс
+        // (404 вместо файла), вернул бы телефон на старые неподписанные лимиты.
+        case speedLimitsSignedSeen
         case roadsIndexLastCheck    // дата последней проверки индекса дорожных тайлов
         case hotspotsLastCheck      // дата последней проверки горячих точек треног
         case hasCompletedOnboarding // онбординг пройден (@AppStorage)

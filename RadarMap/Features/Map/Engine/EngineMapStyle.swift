@@ -279,31 +279,33 @@ nonisolated enum EngineMapStyle {
         return out
     }
 
-    /// Маршрут: пройденное, кайма, линия, манёвр. Общие для обоих стилей — в
+    /// Маршрут: пройденное, кайма, линия, манёвр. Цвета — Theme.route и
+    /// Theme.routeCasing строкой (стиль движка — JSON, Color сюда не пройдёт).
+    /// Общие для обоих стилей — в
     /// новом (EngineModernStyle) ложатся над основой и под подписями.
     static func routeLayers(daylight: Bool) -> [[String: Any]] {
         var out: [[String: Any]] = []
         out.append([
             "id": "route-traveled", "type": "line", "source": "traveled",
             "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": daylight ? "#8a9f94" : "#52685f",
+            "paint": ["line-color": daylight ? "#9aa6b8" : "#4a5568",
                       "line-width": routeWidth(extra: 0), "line-opacity": 0.75],
         ])
         // Маршрут — под подписями и над дорогой.
         out.append([
             "id": "route-case", "type": "line", "source": "route",
             "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": daylight ? "#d1eadb" : "#163e32", "line-width": routeWidth(extra: 2)],
+            "paint": ["line-color": daylight ? "#ffffff" : "#0e1a33", "line-width": routeWidth(extra: 2)],
         ])
         out.append([
             "id": "route", "type": "line", "source": "route",
             "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": daylight ? "#278660" : "#a2dfb5", "line-width": routeWidth(extra: 0)],
+            "paint": ["line-color": daylight ? "#2a6ff0" : "#5b9bff", "line-width": routeWidth(extra: 0)],
         ])
         out.append([
             "id": "route-maneuver", "type": "line", "source": "maneuver",
             "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": daylight ? "#145c42" : "#e2f6b9", "line-width": routeWidth(extra: 1)],
+            "paint": ["line-color": daylight ? "#123a8f" : "#d6e6ff", "line-width": routeWidth(extra: 1)],
         ])
         return out
     }

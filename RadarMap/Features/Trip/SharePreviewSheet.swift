@@ -52,7 +52,8 @@ struct SharePreviewSheet: View {
             .navigationTitle("Поделиться")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                // «Готово» — справа, как во всех остальных листах приложения.
+                ToolbarItem(placement: .confirmationAction) {
                     Button("Готово") { dismiss() }
                 }
             }

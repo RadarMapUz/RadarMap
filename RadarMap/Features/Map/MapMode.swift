@@ -163,6 +163,37 @@ nonisolated enum TripScreenLayout {
         !arrivalShown && !isAddingCamera
     }
 
+    /// Кнопка колонки справа, которую можно убрать, когда места мало.
+    enum ColumnExtra: Hashable, Sendable {
+        case layers, compass, overview, threeD, zoom
+    }
+
+    /// Какие необязательные кнопки колонки помещаются в просвет.
+    ///
+    /// Колонка и нижние панели — разные слои экрана, и колонка не знала, где
+    /// панели начинаются: в покое с маршрутом «весь маршрут», зум и звук
+    /// уходили ПОД карточку маршрута (на SE — на ~250 pt) и не нажимались; в
+    /// поездке на SE то же делали плашки «Радар ещё стоял?» и «Что это было?».
+    /// Теперь колонка мерит просвет и раздаёт его по важности: обязательные
+    /// кнопки (`fixed` — звук, «к себе», «…») не прячутся никогда, остальные
+    /// встают, пока есть место, самые нужные первыми. Убранное не потеряно:
+    /// зум — щипком, 3D и «весь маршрут» — в меню «…» поездки.
+    ///
+    /// - `available` — просвет по высоте; 0 и меньше — ещё не измерен,
+    ///   тогда показываем всё (первый кадр не должен мигать пустой колонкой).
+    /// - `candidates` — (кнопка, сколько мест занимает), по убыванию важности.
+    static func columnExtras(available: CGFloat, fixed: Int,
+                             candidates: [(ColumnExtra, Int)]) -> Set<ColumnExtra> {
+        guard available > 0 else { return Set(candidates.map(\.0)) }
+        var free = Int((available + AppConfig.mapColumnSpacing) / AppConfig.mapColumnSlotHeight) - fixed
+        var shown = Set<ColumnExtra>()
+        for (extra, slots) in candidates where slots <= free {
+            shown.insert(extra)
+            free -= slots
+        }
+        return shown
+    }
+
     /// Чип камеры под манёвром: только на подходе или пока камера говорит.
     /// Потеря сигнала — тоже повод: в навигации HUD сверху нет, и «нет GPS»
     /// иначе было бы негде сказать.

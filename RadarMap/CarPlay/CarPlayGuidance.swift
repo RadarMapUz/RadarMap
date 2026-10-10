@@ -157,9 +157,13 @@ final class CarPlayGuidance {
         model.hasSystemGuidance = false
     }
 
-    /// Цвет карточки манёвра — в тон теме экрана машины.
+    /// Цвет карточки манёвра — в тон теме экрана машины: поверхность
+    /// палитры (Theme.surface), белая днём, графит ночью. Синей, как на
+    /// телефоне, системную карточку не делаем, пока не проверено в машине:
+    /// вариант значка (чёрный/белый) CarPlay выбирает сам, и чёрная стрелка
+    /// на синем — хуже, чем разный цвет карточки на двух экранах.
     func applyTheme(daylight: Bool) {
-        template?.guidanceBackgroundColor = daylight ? .white : UIColor(white: 0.12, alpha: 1)
+        template?.guidanceBackgroundColor = daylight ? Theme.rgb(0xFFFFFF) : Theme.rgb(0x1E232A)
     }
 
     // MARK: - Наблюдение

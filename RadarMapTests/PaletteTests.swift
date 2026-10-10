@@ -140,6 +140,37 @@ final class PaletteTests: XCTestCase {
         }
     }
 
+    /// Синяя заливка (карточка манёвра, синие кнопки) несёт БЕЛЫЙ текст в
+    /// обеих темах. Ради этого заливка — отдельный токен: ночной `accent`
+    /// светлый, и белое на нём читалось бы 2,4:1.
+    func testFilledAccentCarriesWhiteText() {
+        inBothThemes { theme in
+            XCTAssertGreaterThanOrEqual(contrast(Theme.onAccentFill, Theme.accentFill), 4.5,
+                                        "белый на синей заливке \(theme)")
+            XCTAssertGreaterThanOrEqual(contrast(Theme.onAccentFillSecondary, Theme.accentFill), 4.5,
+                                        "вторая строка на синей заливке \(theme)")
+        }
+    }
+
+    /// Маршрут — не «в норме». Он был зелёным, и «твой путь» красился тем же
+    /// цветом, что «в лимите»; теперь синий, и это держит тест.
+    func testRouteIsNotTheSuccessColour() {
+        inBothThemes { theme in
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.route, Theme.success), 40,
+                                        "маршрут сливается с «в норме» \(theme)")
+        }
+    }
+
+    /// Маркер камеры на линии маршрута читается отдельно от неё.
+    func testMarkersStandOutOnTheRoute() {
+        inBothThemes { theme in
+            for (name, type) in types {
+                XCTAssertGreaterThanOrEqual(deltaE(type, Theme.route), 25,
+                                            "маркер \(name) тонет в линии маршрута \(theme)")
+            }
+        }
+    }
+
     /// Значок на маркере читается: белый на тёмных заливках, тёмный на радаре.
     func testMarkerGlyphsAreReadable() {
         inBothThemes { theme in

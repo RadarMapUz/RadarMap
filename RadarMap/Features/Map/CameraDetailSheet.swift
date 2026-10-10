@@ -215,7 +215,8 @@ struct CameraDetailSheet: View {
     }
 
     private var openInMapsButton: some View {
-        PrimaryButton(title: "Открыть в Картах", systemImage: "map.fill") {
+        // Второе действие — не жёлтое: две жёлтые подряд не говорят, какая главная.
+        SecondaryButton(title: "Открыть в Картах", systemImage: "map.fill") {
             let item = MKMapItem(placemark: MKPlacemark(coordinate: camera.coordinate))
             item.name = camera.displayTitle
             item.openInMaps()

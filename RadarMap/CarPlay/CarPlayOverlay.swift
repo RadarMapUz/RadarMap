@@ -434,23 +434,25 @@ struct CarPlayOverlay: View {
     /// водитель ищет глазами «куда», а не «сколько». Раньше было наоборот —
     /// имя улицы стояло самым мелким текстом баннера (12 pt), при том что
     /// у Google и Apple именно оно доминирует.
+    /// Синяя карточка с белым текстом — та же, что на телефоне (вариант А,
+    /// 10.10): манёвр узнаётся одним видом на обоих экранах.
     private func maneuverBanner(step: RouteStep, distance: CLLocationDistance) -> some View {
         HStack(spacing: 12) {
             Image(systemName: step.icon)
                 .font(.rounded(24, .bold))
-                .foregroundStyle(Theme.background)
+                .foregroundStyle(Theme.onAccentFill)
                 .frame(width: 50, height: 50)
-                .background(Theme.accent.gradient,
+                .background(Theme.onAccentFill.opacity(0.18),
                             in: RoundedRectangle(cornerRadius: 13, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
                 Text(Formatting.distance(distance))
                     .font(.rounded(22, .heavy).monospacedDigit())
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(Theme.onAccentFill)
                     .contentTransition(.numericText())
                     .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
                 Text(step.text)
                     .font(.rounded(16, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
+                    .foregroundStyle(Theme.onAccentFillSecondary)
                     .lineLimit(1)
             }
         }
@@ -458,10 +460,10 @@ struct CarPlayOverlay: View {
         .padding(.vertical, 10)
         .frame(maxWidth: 360, alignment: .leading)
         .layoutPriority(0)
-        .background(Theme.background.opacity(0.88),
+        .background(Theme.accentFill,
                     in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .stroke(Theme.stroke, lineWidth: 1))
+            .stroke(Theme.onAccentFill.opacity(0.12), lineWidth: 1))
         .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
         .transition(.move(edge: .top).combined(with: .opacity))
     }

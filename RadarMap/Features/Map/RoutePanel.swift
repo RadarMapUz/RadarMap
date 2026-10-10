@@ -38,9 +38,9 @@ struct RoutePanel: View {
                     HStack(spacing: 12) {
                         Image(systemName: "flag.checkered")
                             .font(.rounded(16, .bold))
-                            .foregroundStyle(Theme.background)
+                            .foregroundStyle(Theme.onAccentFill)
                             .frame(width: 38, height: 38)
-                            .background(Theme.accent.gradient, in: Circle())
+                            .background(Theme.accentFill, in: Circle())
                         VStack(alignment: .leading, spacing: 2) {
                             Text(route.destinationName)
                                 .font(.rounded(16, .bold))
@@ -58,25 +58,19 @@ struct RoutePanel: View {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.rounded(22))
                                 .foregroundStyle(Theme.textTertiary)
+                                .tapTarget()
                         }
+                        .buttonStyle(.plain)
                         .accessibilityLabel(Text("Сбросить маршрут"))
                     }
 
                     // В поездке панель заменяется компактной TripLiveBar — здесь всегда «до старта».
                     camerasButton
 
-                    Button(action: onTripToggle) {
-                        HStack(spacing: 10) {
-                            Image(systemName: "play.fill")
-                            Text("Поехали")
-                        }
-                        .font(.rounded(17, .bold))
-                        .foregroundStyle(Theme.background)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Theme.success,
-                                    in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-                    }
+                    // Главное действие — жёлтое, как «Начать поездку» и «Радар!»:
+                    // было зелёное (success), то есть цвет «в лимите» на кнопке
+                    // старта, и третий облик одной и той же роли.
+                    PrimaryButton(title: "Поехали", systemImage: "play.fill", action: onTripToggle)
                 }
                 .padding(14)
             }
@@ -222,29 +216,32 @@ struct ManeuverBanner: View {
     /// Порог зависит от скорости, и на 68–72 км/ч между 600 и 1000 м ряд
     /// мигал бы — появился, исчез, появился.
     @State private var lanesShownFor: CLLocationDistance?
-    /// Цвет манёвра — акцент темы (был нефритовый на тёмно-зелёной плашке,
-    /// вшитый под тёмный интерфейс; днём он читался бы бледным пятном).
-    private let jade = Theme.accent
+    /// Карточка манёвра — синяя заливка с белым текстом (вариант А, 10.10):
+    /// главный предмет экрана в поездке, и он должен отделяться от белых
+    /// панелей и от карты одним взглядом, как у Amap. Раньше это была ещё
+    /// одна белая карточка среди белых карточек.
+    private let fill = Theme.accentFill
+    private let ink = Theme.onAccentFill
 
     var body: some View {
         VStack(spacing: 0) {
         HStack(spacing: 12) {
             Image(systemName: step.icon)
-                .font(.rounded(22, .bold))
-                .foregroundStyle(Theme.background)
-                .frame(width: 46, height: 46)
-                .background(jade, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+                .font(.rounded(24, .bold))
+                .foregroundStyle(ink)
+                .frame(width: 52, height: 52)
+                .background(ink.opacity(0.18), in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
                 // Моноширинные цифры — как у приборки и CarPlay: дистанция
                 // тает каждый тик, и без них баннер дрожал шириной.
                 Text(Formatting.distance(distance))
-                    .font(.rounded(26, .semibold).monospacedDigit())
-                    .foregroundStyle(Theme.textPrimary)
+                    .font(.rounded(30, .bold).monospacedDigit())
+                    .foregroundStyle(ink)
                     .contentTransition(.numericText())
                     .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
                 Text(step.text)
-                    .font(.rounded(13, .medium))
-                    .foregroundStyle(Theme.textSecondary)
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.onAccentFillSecondary)
                     .lineLimit(2)
             }
             Spacer(minLength: 0)
@@ -253,31 +250,31 @@ struct ManeuverBanner: View {
         if !step.lanes.isEmpty, step.lanes.count <= 8,
            step.lanes.contains(where: \.isValid),
            lanesShownFor == step.distanceAlong || distance <= LaneAdvice.showDistance(speedKmh: speedKmh) {
-            Divider().overlay(Theme.stroke)
+            Rectangle().fill(ink.opacity(0.22)).frame(height: 1)
             // Как у Amap: ряд полос — сама дорога, полосы разделены
-            // разметкой, нужные — залиты акцентом, и над рядом словами,
+            // разметкой, нужные — залиты белым, и над рядом словами,
             // в какой ряд встать: считать стрелки на ходу — лишний взгляд.
             VStack(spacing: 6) {
                 if let advice = LaneAdvice.phrase(step.lanes) {
                     Text(advice)
-                        .font(.rounded(14, .semibold))
-                        .foregroundStyle(jade)
+                        .font(.rounded(15, .bold))
+                        .foregroundStyle(ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 HStack(spacing: 0) {
                     ForEach(Array(step.lanes.enumerated()), id: \.offset) { index, lane in
                         if index > 0 {
                             Rectangle()
-                                .fill(Theme.textTertiary.opacity(0.5))
+                                .fill(ink.opacity(0.3))
                                 .frame(width: 1.5)
                                 .padding(.vertical, 6)
                         }
                         Image(systemName: lane.primaryArrow(for: step.kind).symbolName)
                             .font(.rounded(24, lane.isValid ? .heavy : .regular))
-                            .foregroundStyle(lane.isValid ? Theme.background : Theme.textTertiary)
+                            .foregroundStyle(lane.isValid ? fill : ink.opacity(0.45))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
-                            .background(lane.isValid ? jade : .clear,
+                            .background(lane.isValid ? ink : .clear,
                                         in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .padding(.horizontal, 3)
                             .accessibilityLabel(Text("Полоса \(index + 1)"))
@@ -285,7 +282,7 @@ struct ManeuverBanner: View {
                     }
                 }
                 .padding(4)
-                .background(Theme.textPrimary.opacity(0.06),
+                .background(ink.opacity(0.12),
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
             .padding(.horizontal, 10)
@@ -293,9 +290,9 @@ struct ManeuverBanner: View {
             .accessibilityElement(children: .contain)
         }
         }
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .background(fill, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
         .liftPanel()
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous).stroke(ink.opacity(0.12), lineWidth: 1))
         .transition(.move(edge: .top).combined(with: .opacity))
         .onChange(of: distance <= LaneAdvice.showDistance(speedKmh: speedKmh), initial: true) { _, near in
             if near { lanesShownFor = step.distanceAlong }
@@ -329,20 +326,20 @@ struct LaneNoticeBanner: View {
                 ForEach(Array(lanes.enumerated()), id: \.offset) { index, lane in
                     Image(systemName: lane.primaryArrow(for: .straight).symbolName)
                         .font(.rounded(16, lane.isValid ? .heavy : .regular))
-                        .foregroundStyle(lane.isValid ? Theme.background : Theme.textTertiary)
+                        .foregroundStyle(lane.isValid ? Theme.onAccentFill : Theme.textTertiary)
                         .frame(width: 26, height: 28)
-                        .background(lane.isValid ? Theme.accent : .clear,
+                        .background(lane.isValid ? Theme.accentFill : .clear,
                                     in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                         .accessibilityLabel(Text("Полоса \(index + 1)"))
                         .accessibilityValue(lane.isValid ? Text("Подходит для манёвра") : Text("Не подходит для манёвра"))
                 }
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
         .liftPanel()
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 }

@@ -408,4 +408,37 @@ nonisolated enum SketchPalette {
     static let meTop = Color(red: 0.42, green: 0.78, blue: 1.0)
     static let meBody = Color(red: 0.16, green: 0.52, blue: 0.96)
     static let meBase = Color(red: 0.08, green: 0.30, blue: 0.68)
+
+    // MARK: - Значки «я» (настройка «Значок на карте»)
+    //
+    // Цвета запекаются в битмап движка и рисуются поверх дневной и ночной
+    // карты одинаково, поэтому они фиксированные, а не адаптивные: читаться на
+    // обеих подложках значок обязан за счёт белой каймы и тени, а не за счёт
+    // перекраски.
+
+    /// Спорткар — оранжевый «папайя». Не красный, и это правило, а не вкус:
+    /// красный на этой карте — камера и тревога, а «я» с ними путаться не
+    /// должен ни на миг.
+    static let sportTop = Color(red: 1.00, green: 0.66, blue: 0.30)
+    static let sportBody = Color(red: 0.98, green: 0.47, blue: 0.08)
+    static let sportBase = Color(red: 0.70, green: 0.29, blue: 0.02)
+    /// Стекло машин: глубокий синий, а не чёрный — чёрное стекло на ночной
+    /// карте проваливается дырой в кузове.
+    static let glassTop = Color(red: 0.20, green: 0.31, blue: 0.46)
+    static let glass = Color(red: 0.06, green: 0.11, blue: 0.20)
+    /// Фары и стопы — по паре пикселей, но именно они говорят «вот перед,
+    /// вот зад» раньше, чем глаз разберёт силуэт.
+    static let headlight = Color(red: 1.00, green: 0.96, blue: 0.80)
+    static let taillight = Color(red: 1.00, green: 0.27, blue: 0.27)
+    /// Карбон антикрыла спорткара.
+    static let carbon = Color(red: 0.13, green: 0.14, blue: 0.16)
+    /// Фюзеляж звездолёта: светлый металл в три тона, как и у остальных.
+    static let hullTop = Color(red: 1.00, green: 1.00, blue: 1.00)
+    static let hullBody = Color(red: 0.84, green: 0.88, blue: 0.94)
+    static let hullBase = Color(red: 0.55, green: 0.61, blue: 0.70)
+    /// Сопло и пламя: пламя горячее у сопла и остывает к хвосту.
+    static let nozzle = Color(red: 0.24, green: 0.27, blue: 0.33)
+    static let flameCore = Color(red: 1.00, green: 0.97, blue: 0.78)
+    static let flameMid = Color(red: 1.00, green: 0.70, blue: 0.18)
+    static let flameTail = Color(red: 1.00, green: 0.36, blue: 0.10)
 }

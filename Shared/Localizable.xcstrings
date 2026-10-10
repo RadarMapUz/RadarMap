@@ -16972,6 +16972,102 @@
           }
         }
       }
+    },
+    "Стрелка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стрелка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ko‘rsatkich"
+          }
+        }
+      }
+    },
+    "Машина": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Машина"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina"
+          }
+        }
+      }
+    },
+    "Спорткар": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Спорткар"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sport avto"
+          }
+        }
+      }
+    },
+    "Звездолёт": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Звездолёт"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kosmik kema"
+          }
+        }
+      }
+    },
+    "Значок на карте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Значок на карте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xaritadagi belgi"
+          }
+        }
+      }
+    },
+    "Так вы выглядите на карте — на телефоне и в CarPlay. Значок поворачивается по ходу движения.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Так вы выглядите на карте — на телефоне и в CarPlay. Значок поворачивается по ходу движения."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xaritada siz shunday ko‘rinasiz — telefonda ham, CarPlay’da ham. Belgi harakat yo‘nalishiga qarab buriladi."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

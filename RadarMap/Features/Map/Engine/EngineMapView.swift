@@ -87,6 +87,10 @@ struct EngineMapView: UIViewRepresentable {
     /// приложения, а тот применяется после перезапуска — перезагрузка стиля
     /// ради него не нужна.
     var labelLanguage: String = "ru"
+    /// Значок «я» (настройка «Значок на карте»). Смена — это замена ОДНОЙ
+    /// картинки в живом стиле, а не перезагрузка стиля: перезагрузка
+    /// сбрасывает слои, маршрут и камеры ради значка в сорок пунктов.
+    var cursorStyle: CursorStyle = .arrow
     /// «Весь маршрут»: счётчик нажатий — вписать линию маршрута в экран.
     var overviewCommand: Int = 0
     /// Сдвиг карты командой, а не пальцем: в машине касания до вида не
@@ -210,6 +214,11 @@ struct EngineMapView: UIViewRepresentable {
         private var limitRevision = -1
         private var lastFollowTime: CFTimeInterval?
         private static var iconCache: [String: UIImage] = [:]
+        /// Битмапы курсора — по значку: выбор в настройках меняет картинку в
+        /// стиле, а не рисует её заново на каждой перезагрузке стиля.
+        private static var cursorCache: [CursorStyle: UIImage] = [:]
+        /// Какой значок сейчас лежит в стиле под именем "radar-user".
+        private var lastCursor: CursorStyle?
         private let performanceLog = OSLog(subsystem: "uz.radarmap", category: "MapPerformance")
         private var lastProgress = -Double.infinity
         private var lastManeuverAlong: Double?
@@ -274,15 +283,35 @@ struct EngineMapView: UIViewRepresentable {
         }
         #endif
 
+        /// Курсор «я» в стиль: картинка под тем же именем, что ждёт слой
+        /// user-location, — замена на лету, без перезагрузки стиля.
+        private func installCursor(_ cursor: CursorStyle, in style: MLNStyle) {
+            lastCursor = cursor
+            guard let image = Self.cursorImage(cursor) else {
+                Log.network.error("MapLibre: курсор \(cursor.rawValue, privacy: .public) не отрисовался")
+                return
+            }
+            style.setImage(image, forName: "radar-user")
+        }
+
+        /// Тот же MeCursor, что у схемы и карты Apple, — растром ×3. Рамка та
+        /// же, что была у стрелки: значки вписаны в неё сами, а поля — под тень.
+        private static func cursorImage(_ cursor: CursorStyle) -> UIImage? {
+            if let cached = cursorCache[cursor] { return cached }
+            let renderer = ImageRenderer(content: MeCursor(scale: 1, style: cursor)
+                .frame(width: 30, height: 36).padding(8))
+            renderer.scale = 3
+            let image = renderer.uiImage
+            cursorCache[cursor] = image
+            return image
+        }
+
         private func installCameraIcons(in style: MLNStyle) {
+            installCursor(current?.cursorStyle ?? .arrow, in: style)
             if !Self.iconCache.isEmpty {
                 for (name, image) in Self.iconCache { style.setImage(image, forName: name) }
                 return
             }
-            let renderer = ImageRenderer(content: MeCursor(scale: 1)
-                .frame(width: 30, height: 36).padding(8))
-            renderer.scale = 3
-            if let image = renderer.uiImage { style.setImage(image, forName: "radar-user") }
             let kinds: [CameraType] = [.stationaryCamera, .stationaryRadar,
                 .intelligentRadar, .mobileRadar, .tripod, .dpsPost, .accident, .other("")]
             for kind in kinds {
@@ -336,7 +365,7 @@ struct EngineMapView: UIViewRepresentable {
                     .font: UIFont.systemFont(ofSize: 8, weight: .bold), .foregroundColor: UIColor.white])
             }
             style.setImage(stop, forName: "radar-stop")
-            let names = ["radar-user", "radar-signal", "radar-stop"] + kinds.flatMap {
+            let names = ["radar-signal", "radar-stop"] + kinds.flatMap {
                 [$0.symbolName, $0.symbolName + "-alert"]
             }
             for name in names { Self.iconCache[name] = style.image(forName: name) }
@@ -548,6 +577,9 @@ struct EngineMapView: UIViewRepresentable {
                 return
             }
             pending = nil
+            if lastCursor != model.cursorStyle, let style = view.style {
+                installCursor(model.cursorStyle, in: style)
+            }
             if lastRecenterToken != model.recenterToken {
                 lastRecenterToken = model.recenterToken
                 browsing = false

@@ -593,6 +593,13 @@ final class AppSettings {
         didSet { store.set(mapBase.rawValue, forKey: Keys.mapBase) }
     }
 
+    /// Значок «я» на карте: стрелка, машина, спорткар, звездолёт. Один на все
+    /// подложки и на экран машины — менять «себя» вместе с подложкой значило
+    /// бы терять себя взглядом при каждом переключении (см. CursorStyle).
+    var cursorStyle: CursorStyle {
+        didSet { store.set(cursorStyle.rawValue, forKey: Keys.cursorStyle) }
+    }
+
     /// Карту рисует ДВИЖОК (MapLibre) вместо самописной схемы.
     ///
     /// Третья подложка рядом с двумя существующими, а не замена им, и это не
@@ -658,6 +665,7 @@ final class AppSettings {
         static let sketchWhileDriving = "sketchWhileDriving"
         static let engineMap = "engineMapEnabled"
         static let mapBase = "mapBase"
+        static let cursorStyle = "cursorStyle"
         static let alertMode = "alertMode"
         static let knownCarAudio = "knownCarAudio"
         static let usageStats = "usageStatsDisabled"
@@ -770,6 +778,7 @@ final class AppSettings {
             mapBase = .engine
         }
         alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto
+        cursorStyle = CursorStyle(stored: store.string(forKey: Keys.cursorStyle))
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []
         weeklyDigest = store.bool(forKey: Keys.digest)
         usageStatsEnabled = !store.bool(forKey: Keys.usageStats)

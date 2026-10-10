@@ -418,7 +418,18 @@ struct MapScreen: View {
 
     private var mapContent: some View {
         Map(position: $map.position, scope: mapScope) {
-            UserAnnotation()
+            // Значок «я» — по выбору в настройках. Стрелка здесь — системная
+            // точка с кругом точности (см. AppleUserCursor); выбранный значок
+            // рисуется своей вью, которая сама читает курс на каждом тике.
+            let cursorStyle = env.settings.cursorStyle
+            if cursorStyle == .arrow {
+                UserAnnotation()
+            } else {
+                UserAnnotation { user in
+                    AppleUserCursor(location: env.location, map: map, style: cursorStyle,
+                                    deviceHeading: user.heading?.trueHeading)
+                }
+            }
 
             // Маршрут: сперва тусклые альтернативы, поверх — выбранный вариант
             // (кайма + синяя линия Theme.route — тот же цвет, что на движке и в машине).

@@ -85,7 +85,8 @@ struct CarPlaySketchView: View {
         if let scene = sketch.scene, !scene.isEmpty {
             RoadSketchView(scene: scene, state: sketch, tint: alertColor,
                            strokeScale: AppConfig.carPlaySketchStrokeScale,
-                           trim: env.thermal.mode.sketchTrim)
+                           trim: env.thermal.mode.sketchTrim,
+                           cursorStyle: env.settings.cursorStyle)
                 // Стоим и курса нет: рисуем «последнее, что знали»,
                 // приглушённо — как на приборке телефона.
                 .opacity(env.location.currentCourse < 0 ? 0.45 : 1)

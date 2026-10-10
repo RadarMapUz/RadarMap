@@ -388,9 +388,22 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     // MARK: - Кнопки бара
 
     /// «Поездка» / «Завершить» — главный тумблер: включает активные оповещения.
+    /// Кнопки бара — значками, как у Amap и Google на том же экране: в баре
+    /// CarPlay с iOS 26 кнопка — стеклянная капсула, и слово в ней читалось
+    /// мельче и дольше значка. Фолбэк — словом (`barButton`), а не пустой
+    /// картинкой: невидимая нажимаемая кнопка хуже подписи.
+    private func barButton(symbol: String, title: String,
+                           handler: @escaping (CPBarButton) -> Void) -> CPBarButton {
+        if let image = buttonImage(symbol) {
+            return CPBarButton(image: image, handler: handler)
+        }
+        return CPBarButton(title: title, handler: handler)
+    }
+
     private func tripButton(active: Bool) -> CPBarButton {
-        CPBarButton(title: active ? String(localized: "Завершить")
-                                  : String(localized: "Поездка")) { [weak self] _ in
+        barButton(symbol: active ? "stop.circle.fill" : "play.circle.fill",
+                  title: active ? String(localized: "Завершить")
+                                : String(localized: "Поездка")) { [weak self] _ in
             guard let self else { return }
             let location = env.location
             // Без разрешения startTrip выходит первой строкой и молча ничего
@@ -456,8 +469,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // model — сильным захватом, а не через self: содержимое экрана обязано
         // переключаться, даже если делегат по какой-то причине умер раньше
         // шаблона. Ровно эту гарантию давала 1.1.0, и терять её нельзя.
-        CPBarButton(title: sketchShown ? String(localized: "Карта")
-                                       : String(localized: "Схема")) { [weak self, model] _ in
+        barButton(symbol: sketchShown ? "map.fill" : "scribble.variable",
+                  title: sketchShown ? String(localized: "Карта")
+                                     : String(localized: "Схема")) { [weak self, model] _ in
             model.toggleView()
             // Пересобираем шаблон СРАЗУ, не полагаясь на наблюдение.
             //
@@ -477,8 +491,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// «Куда» — сетка направлений; при активном маршруте подписью намекаем,
     /// что там же лежит «Стоп».
     private func destinationsButton(routeActive: Bool) -> CPBarButton {
-        CPBarButton(title: routeActive ? String(localized: "Маршрут")
-                                       : String(localized: "Куда")) { [weak self] _ in
+        barButton(symbol: routeActive ? "arrow.triangle.turn.up.right.diamond.fill" : "magnifyingglass",
+                  title: routeActive ? String(localized: "Маршрут")
+                                     : String(localized: "Куда")) { [weak self] _ in
             self?.presentDestinations()
         }
     }

@@ -152,6 +152,18 @@ final class PaletteTests: XCTestCase {
         }
     }
 
+    /// Белый текст на красной и зелёной заливке («Стоп», «Завершить поездку»,
+    /// «Да»/«Нет» на приборке) читается в обеих темах. Ночные `danger` и
+    /// `success` светлые, белое на них было 2,2–2,6:1 — поэтому заливки свои.
+    func testStateFillsCarryWhiteText() {
+        inBothThemes { theme in
+            XCTAssertGreaterThanOrEqual(contrast(Color.white, Theme.dangerFill), 4.5,
+                                        "белый на красной заливке \(theme)")
+            XCTAssertGreaterThanOrEqual(contrast(Color.white, Theme.successFill), 4.5,
+                                        "белый на зелёной заливке \(theme)")
+        }
+    }
+
     /// Маршрут — не «в норме». Он был зелёным, и «твой путь» красился тем же
     /// цветом, что «в лимите»; теперь синий, и это держит тест.
     func testRouteIsNotTheSuccessColour() {

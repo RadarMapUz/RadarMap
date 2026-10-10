@@ -14,7 +14,7 @@
 
 ## Описание (ru)
 
-RadarMap — карта камер видеофиксации Узбекистана и голосовой помощник водителя. 3 300+ камер и радаров из официальных открытых данных МВД, обновляются автоматически.
+RadarMap — карта камер видеофиксации Узбекистана и голосовой помощник водителя. 3 400+ камер и радаров из официальных открытых данных МВД, база обновляется по воздуху.
 
 ПРЕДУПРЕЖДЕНИЯ О КАМЕРАХ
 • Голос и звук за 22 секунды до камеры — с учётом вашей скорости
@@ -28,7 +28,7 @@ RadarMap — карта камер видеофиксации Узбекиста
 • Варианты маршрута с числом камер на каждом — выбирайте, где камер меньше
 • Голосовые подсказки: «через 300 метров — направо»
 • Автоперестроение при съезде с маршрута
-• Дом, Работа и недавние места — маршрут в один тап
+• «Домой» и «На работу» — приложение само узнаёт ваши места; недавние — в поиске
 
 ЛИМИТЫ СКОРОСТИ
 • Знак ограничения дороги, по которой едете
@@ -50,7 +50,7 @@ RadarMap — карта камер видеофиксации Узбекиста
 
 ## Описание (uz) — кратко
 
-RadarMap — O‘zbekiston videokameralar xaritasi va haydovchining ovozli yordamchisi. 3 300+ kamera va radar rasmiy ochiq ma’lumotlardan, avtomatik yangilanadi.
+RadarMap — O‘zbekiston videokameralar xaritasi va haydovchining ovozli yordamchisi. 3 400+ kamera va radar rasmiy ochiq ma’lumotlardan, baza internet orqali yangilanadi.
 
 • Kameraga 22 soniya qolganda ovozli ogohlantirish
 • Ekran o‘chiq bo‘lsa ham ishlaydi
@@ -64,16 +64,19 @@ RadarMap — O‘zbekiston videokameralar xaritasi va haydovchining ovozli yorda
 Hisob ochish shart emas, reklama yo‘q, shaxsiy ma’lumotlar yig‘ilmaydi.
 
 ## Промо-текст (170 симв.)
-- ru: `3300+ камер Узбекистана, голосовой навигатор со своими маршрутами, лимиты скорости и передвижные радары. Работает в фоне, бережёт батарею.`
+- ru: `3400+ камер Узбекистана, голосовой навигатор со своими маршрутами, лимиты скорости и передвижные радары. Работает в фоне, бережёт батарею.`
 
 ## App Privacy (анкета Apple)
-- Data Not Collected — ДА (мы не собираем данные, связанные с пользователем)
-- MetricKit-телеметрия: агрегированные отчёты о крашах/энергии, анонимный UUID,
-  не связаны с личностью → по классификации Apple это "Diagnostics → Not linked to you".
-  В анкете: Diagnostics (Crash Data, Performance Data) — Not Linked to You, не для трекинга.
-- Краудсорсинг радаров: координаты метки + анонимный UUID устройства →
-  "Location → Not Linked to You" (отправляется только при ручной отметке радара).
-- Геолокация для оповещений обрабатывается только на устройстве.
+Пересмотрено 10.10.2026 по коду: «Data Not Collected» отвечать НЕЛЬЗЯ — данные
+собираются, просто не связаны с личностью. Анкета должна совпадать с
+`RadarMap/PrivacyInfo.xcprivacy`; трекинга нет нигде.
+- Location → Precise Location — Not Linked, App Functionality (отметка радара,
+  точки маршрута, жалоба «не предупредила»; фоновая геопозиция не уходит).
+- Identifiers → Device ID — Not Linked, App Functionality (случайный UUID, меняется раз в 30 дней).
+- Diagnostics → Crash Data, Performance Data — Not Linked, App Functionality (MetricKit на свой сервер).
+- Usage Data → Product Interaction — Not Linked, Analytics (суточные счётчики, выключаются в настройках).
+- User Content → Customer Support — Not Linked, App Functionality (форма обратной связи).
+- Contact Info → Other User Contact Info — Linked, App Functionality (необязательный контакт в форме).
 
 ## Категория
 - Основная: Navigation. Вторичная: Utilities.
@@ -93,8 +96,10 @@ Hisob ochish shart emas, reklama yo‘q, shaxsiy ma’lumotlar yig‘ilmaydi.
   через XCUITest или вручную), тёмная рамка/подписи по вкусу.
 
 ## Замечания для ревью Apple
-- Приложение показывает ТОЛЬКО стационарные камеры из официального публичного
-  официальных открытых данных — легально в юрисдикции распространения.
+- Стационарные камеры — из официального публичного набора МВД (data.egov.uz),
+  легально в юрисдикции распространения. Кроме них — пользовательские метки
+  передвижных радаров и треног (краудсорсинг с модерацией и сроком жизни) и
+  подсказки «здесь часто ставят треногу» по этим меткам.
 - Передвижные радары — пользовательские метки с TTL 3 часа.
 - Фоновая геолокация: режим «Поездка» — оповещения о камерах (UIBackgroundModes
   location+audio), объяснено в onboarding и в purpose strings.

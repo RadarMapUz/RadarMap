@@ -300,12 +300,27 @@ struct OnboardingView: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.rounded(22)).foregroundStyle(Theme.success)
         case .partial:
-            Button("Всегда", action: action)
-                .font(.rounded(13, .semibold)).foregroundStyle(Theme.warning)
+            permissionButton("Всегда", tint: Theme.warning, action: action)
         case .pending:
-            Button("Разрешить", action: action)
-                .font(.rounded(13, .semibold)).foregroundStyle(Theme.accent)
+            permissionButton("Разрешить", tint: Theme.accent, action: action)
         }
+    }
+
+    /// Кнопка разрешения — капсула 44 pt. Была голая подпись 13 pt (~16 pt в
+    /// высоту) под крупной жёлтой «Начать»: самое важное касание онбординга
+    /// («Всегда» — без него нет фоновых предупреждений) было самым мелким.
+    private func permissionButton(_ title: LocalizedStringKey, tint: Color,
+                                  action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.rounded(15, .semibold))
+                .foregroundStyle(tint)
+                .padding(.horizontal, 14)
+                .frame(minHeight: Theme.controlSize)
+                .background(tint.opacity(0.12), in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressableStyle())
     }
 
     private var backgroundGradient: some View {

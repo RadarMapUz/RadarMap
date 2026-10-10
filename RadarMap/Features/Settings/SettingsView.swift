@@ -58,6 +58,11 @@ struct SettingsView: View {
 
                 Section {
                     link(.database, value: "v\(env.cameras.dbVersion)") { DatabaseSettingsPage() }
+                    // Резервная копия поездок. Ссылка пропала 28.08 при
+                    // переделке настроек («экран за рулём»), и полтора месяца
+                    // сохранить историю перед сменой телефона было нечем:
+                    // она живёт только здесь.
+                    link(.backup) { BackupSettingsPage() }
                     link(.language, value: settings.appLanguage.title) { LanguageSettingsPage() }
                 }
 
@@ -125,7 +130,7 @@ enum SettingsItem {
     case alerts, speed, trip, route
     case map, offline, places
     case learning, battery, privacy
-    case database, language
+    case database, backup, language
     case feedback, project, version
 
     var title: LocalizedStringKey {
@@ -141,6 +146,7 @@ enum SettingsItem {
         case .battery:  return "Батарея"
         case .privacy:  return "Конфиденциальность"
         case .database: return "База камер"
+        case .backup:   return "Мои данные"
         case .language: return "Язык"
         case .feedback: return "Написать разработчику"
         case .project:  return "Страница проекта"
@@ -161,6 +167,7 @@ enum SettingsItem {
         case .battery:  return "battery.75percent"
         case .privacy:  return "hand.raised.fill"
         case .database: return "camera.fill"
+        case .backup:   return "externaldrive.fill"
         case .language: return "globe"
         case .feedback: return "envelope.fill"
         case .project:  return "safari.fill"
@@ -183,6 +190,7 @@ enum SettingsItem {
         case .battery:  return Color(uiColor: .systemGreen)
         case .privacy:  return Color(uiColor: .systemBlue)
         case .database: return Color(uiColor: .systemGray)
+        case .backup:   return Color(uiColor: .systemIndigo)
         case .language: return Color(uiColor: .systemBlue)
         case .feedback: return Color(uiColor: .systemBlue)
         case .project:  return Color(uiColor: .systemCyan)

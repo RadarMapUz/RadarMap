@@ -70,21 +70,14 @@ struct ArrivalCardView: View {
 
             // Единственная «завершить» на экране: панель поездки с её «стоп»
             // на это время убрана (TripScreenLayout.showsTripBar).
+            // На ходу — двумя касаниями, как «Стоп» в панели поездки: карточка
+            // встаёт туда, где была «Радар!», и слепой тап по ней иначе
+            // заканчивал поездку одним касанием. На стоянке — одним.
             if env.location.isTripActive {
-                Button {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                StopTripButton(wide: true) {
                     env.location.endTrip()
                     onDismiss()
-                } label: {
-                    Text("Завершить поездку")
-                        .font(.rounded(16, .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 52)
-                        .background(Theme.danger, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
                 }
-                .buttonStyle(PressableStyle())
             }
         }
         .padding(16)

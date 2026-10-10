@@ -21,6 +21,37 @@ struct CameraDetailSheet: View {
     /// а не в body: разбор истории — не работа для каждого кадра.
     @State private var aim: CameraAim.Verdict = .unknown
     @State private var aimPasses = 0
+    /// Действие, ждущее второго касания. Всё, что заставляет камеру замолчать
+    /// или стирает данные, — только через подтверждение: «Камеры больше нет»
+    /// стояла в 8 pt от «Камера на месте», и промах навсегда выключал
+    /// предупреждение о камере, которая стоит (вернуть её было нечем).
+    @State private var confirmation: Confirmation?
+
+    private enum Confirmation: Equatable {
+        case gone, hide, deleteCustom, cancelMark(Int)
+
+        var title: LocalizedStringKey {
+            switch self {
+            case .gone:         "Камеры больше нет?"
+            case .hide:         "Скрыть камеру?"
+            case .deleteCustom: "Удалить камеру?"
+            case .cancelMark:   "Убрать отметку?"
+            }
+        }
+
+        var message: LocalizedStringKey {
+            switch self {
+            case .gone:
+                "Сообщим модератору. Пока он не проверит, камера продолжит предупреждать: если она всё-таки стоит, молчание обойдётся дороже лишнего сигнала."
+            case .hide:
+                "Скрытая камера не показывается и не предупреждает. Вернуть её можно в Настройках → База камер → Скрытые камеры."
+            case .deleteCustom:
+                "Своя камера исчезнет с карты и перестанет предупреждать."
+            case .cancelMark:
+                "Отметка исчезнет у всех водителей."
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -51,6 +82,15 @@ struct CameraDetailSheet: View {
         .presentationDetents([.medium, .large])
             .onAppear { env.usage.noteScreen("camera") }
         .presentationDragIndicator(.visible)
+        .confirmationDialog(Text(confirmation?.title ?? ""),
+                            isPresented: Binding(get: { confirmation != nil },
+                                                 set: { if !$0 { confirmation = nil } }),
+                            titleVisibility: .visible,
+                            presenting: confirmation) { pending in
+            confirmationActions(pending)
+        } message: { pending in
+            Text(pending.message)
+        }
         .task {
             let passes = env.trip.history.flatMap(\.passed)
             aimPasses = passes.count { $0.cameraID == camera.id }
@@ -275,14 +315,12 @@ struct CameraDetailSheet: View {
             if let mine = env.mobile.cancellableReportID(),
                env.mobile.idOffsetApplied(mine) == camera.id {
                 destructiveButton(title: "Убрать мою отметку", icon: "trash") {
-                    Task { await env.mobile.cancelReport(id: mine) }
-                    dismiss()
+                    confirmation = .cancelMark(mine)
                 }
             }
         } else if env.cameras.isCustom(camera) {
             destructiveButton(title: "Удалить камеру", icon: "trash") {
-                env.cameras.deleteCustom(camera)   // revision → MapScreen обновит карту и мониторинг
-                dismiss()
+                confirmation = .deleteCustom
             }
         } else {
             reportBlock
@@ -291,8 +329,11 @@ struct CameraDetailSheet: View {
 
     // MARK: - Репорт об ошибке в базе
 
-    /// Обратная связь по камере: репорт уходит на сервер (ручная модерация),
-    /// «камеры больше нет» дополнительно скрывает её локально сразу.
+    /// Обратная связь по камере: репорт уходит на сервер (ручная модерация).
+    /// «Камеры больше нет» сама камеру НЕ глушит: раньше жалоба сразу скрывала
+    /// её у себя, то есть одно касание (или промах) выключало предупреждение
+    /// до конца жизни приложения. Теперь заглушить можно только явно — второй
+    /// кнопкой подтверждения, и вернуть — в Настройках.
     @ViewBuilder private var reportBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Что-то не так с этой камерой?")
@@ -331,7 +372,7 @@ struct CameraDetailSheet: View {
                     }
                     reportButton(title: "Камеры больше нет", icon: "camera.slash.fill",
                                  tint: Theme.warning) {
-                        sendReport(.gone)
+                        confirmation = .gone
                     }
                     reportButton(title: "Неверное место", icon: "mappin.slash.circle.fill",
                                  tint: Theme.warning) {
@@ -339,15 +380,16 @@ struct CameraDetailSheet: View {
                     }
                 }
                 Button {
-                    env.cameras.hide(camera)
-                    dismiss()
+                    confirmation = .hide
                 } label: {
                     Label("Просто скрыть на моей карте", systemImage: "eye.slash")
                         .font(.rounded(13, .medium))
                         .foregroundStyle(Theme.textTertiary)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .frame(minHeight: Theme.controlSize)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
         }
         .motionAnimation(.spring(duration: 0.35), value: reportState)
@@ -375,7 +417,35 @@ struct CameraDetailSheet: View {
         }
     }
 
-    private func sendReport(_ reason: CameraReportReason) {
+    /// Кнопки подтверждения. Глушащее действие — `.destructive`, и у жалобы
+    /// «нет камеры» оно второе, а первое — просто сообщить.
+    @ViewBuilder private func confirmationActions(_ pending: Confirmation) -> some View {
+        switch pending {
+        case .gone:
+            Button("Сообщить") { sendReport(.gone) }
+            Button("Сообщить и не предупреждать", role: .destructive) {
+                sendReport(.gone, hideLocally: true)
+            }
+        case .hide:
+            Button("Скрыть", role: .destructive) {
+                env.cameras.hide(camera)
+                dismiss()
+            }
+        case .deleteCustom:
+            Button("Удалить", role: .destructive) {
+                env.cameras.deleteCustom(camera)   // revision → MapScreen обновит карту и мониторинг
+                dismiss()
+            }
+        case .cancelMark(let id):
+            Button("Убрать", role: .destructive) {
+                Task { await env.mobile.cancelReport(id: id) }
+                dismiss()
+            }
+        }
+        Button("Отмена", role: .cancel) {}
+    }
+
+    private func sendReport(_ reason: CameraReportReason, hideLocally: Bool = false) {
         reportState = .sending
         Task {
             // Очередь никогда не теряет репорт: сервер недоступен → дошлём позже.
@@ -383,8 +453,9 @@ struct CameraDetailSheet: View {
                                                           dbVersion: env.cameras.dbVersion)
             reportState = outcome == .sent ? .sent : .queued
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-            if reason == .gone {
-                env.cameras.hide(camera)   // убрали у себя сразу, база поправится после модерации
+            // Только по явному выбору «и не предупреждать» — см. reportBlock.
+            if hideLocally {
+                env.cameras.hide(camera)
             }
             await Task.pause(seconds: 1.4)
             dismiss()
@@ -392,7 +463,7 @@ struct CameraDetailSheet: View {
     }
 
     private func destructiveButton(title: LocalizedStringKey, icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button(role: .destructive, action: action) {
             Label(title, systemImage: icon)
                 .font(.rounded(15, .semibold))
                 .foregroundStyle(Theme.danger)

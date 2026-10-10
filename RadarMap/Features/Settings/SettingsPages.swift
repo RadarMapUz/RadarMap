@@ -432,6 +432,67 @@ struct PrivacySettingsPage: View {
     }
 }
 
+// MARK: - Мои данные
+
+/// Резервная копия поездок и своих камер: сохранить файл и восстановить из
+/// него (BackupSection — сама логика и тексты).
+struct BackupSettingsPage: View {
+    var body: some View {
+        Form {
+            BackupSection()
+        }
+        .settingsPage("Мои данные")
+    }
+}
+
+// MARK: - Скрытые камеры
+
+/// Камеры, которые человек скрыл у себя. Скрытая камера не только пропадает с
+/// карты, но и МОЛЧИТ — поэтому список говорит об этом прямо и возвращает
+/// камеру одним касанием. До него скрытие было необратимым.
+struct HiddenCamerasPage: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        let cameras = env.cameras.hiddenCameras
+        Form {
+            Section {
+                ForEach(cameras) { camera in
+                    HStack(spacing: 12) {
+                        Image(systemName: camera.kind.symbolName)
+                            .font(.rounded(13, .bold))
+                            .foregroundStyle(camera.kind.glyphTint)
+                            .frame(width: 30, height: 30)
+                            .background(camera.kind.tint, in: Circle())
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(camera.displayTitle)
+                                .font(.rounded(15, .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                                .lineLimit(2)
+                            Text(camera.kind.displayName)
+                                .font(.rounded(12))
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                        Spacer(minLength: 8)
+                        Button("Вернуть") { env.cameras.unhide(id: camera.id) }
+                            .font(.rounded(15, .semibold))
+                            .buttonStyle(.borderless)
+                            .tapTarget()
+                    }
+                }
+            } footer: {
+                Text("Скрытая камера не показывается на карте и не предупреждает.")
+            }
+            if env.cameras.hiddenIDs.count > cameras.count || cameras.count > 1 {
+                Section {
+                    Button("Вернуть все") { env.cameras.unhideAll() }
+                }
+            }
+        }
+        .settingsPage("Скрытые камеры")
+    }
+}
+
 // MARK: - База камер
 
 struct DatabaseSettingsPage: View {
@@ -443,7 +504,11 @@ struct DatabaseSettingsPage: View {
                 LabeledContent("Версия базы", value: "v\(env.cameras.dbVersion)")
                 LabeledContent("Своих камер", value: "\(env.cameras.custom.count)")
                 if !env.cameras.hiddenIDs.isEmpty {
-                    LabeledContent("Скрыто", value: "\(env.cameras.hiddenIDs.count)")
+                    NavigationLink {
+                        HiddenCamerasPage()
+                    } label: {
+                        LabeledContent("Скрытые камеры", value: "\(env.cameras.hiddenIDs.count)")
+                    }
                 }
                 Button {
                     Task { await env.sync.check() }

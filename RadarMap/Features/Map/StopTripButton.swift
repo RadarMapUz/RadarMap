@@ -25,6 +25,10 @@ import SwiftUI
 
 struct StopTripButton: View {
     @Environment(AppEnvironment.self) private var env
+    /// Во всю ширину с подписью — для карточки прибытия. Она встаёт ровно
+    /// туда, где была панель поездки с «Радар!», и одно касание по ней
+    /// заканчивало поездку: слепой тап, адресованный «Радар!», попадал сюда.
+    var wide = false
     var action: () -> Void
 
     @State private var isArmed = false
@@ -43,6 +47,33 @@ struct StopTripButton: View {
     }
 
     var body: some View {
+        if wide { wideBody } else { compactBody }
+    }
+
+    private var wideBody: some View {
+        Button(action: tap) {
+            HStack(spacing: 8) {
+                Image(systemName: isArmed ? "questionmark" : "stop.fill")
+                    .contentTransition(.symbolEffect(.replace))
+                Text(isArmed ? "Точно? Нажмите ещё раз" : "Завершить поездку")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .font(.rounded(16, .bold))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: 52)
+            .background(Theme.dangerFill, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        }
+        .buttonStyle(PressableStyle())
+        .motionAnimation(.spring(response: 0.3, dampingFraction: 0.8), value: isArmed)
+        .accessibilityLabel(Text(isArmed ? "Подтвердить завершение поездки" : "Завершить поездку"))
+        .accessibilityHint(Text("Нажмите дважды: первое касание спрашивает подтверждение"))
+        .onDisappear { disarmTask?.cancel() }
+    }
+
+    private var compactBody: some View {
         Button(action: tap) {
             HStack(spacing: 6) {
                 Image(systemName: isArmed ? "questionmark" : "stop.fill")
@@ -59,7 +90,7 @@ struct StopTripButton: View {
             .padding(.horizontal, isArmed ? 14 : 0)
             .frame(minWidth: 44)
             .frame(height: 44)
-            .background(Theme.danger.gradient,
+            .background(Theme.dangerFill,
                         in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
         }
         .buttonStyle(.plain)

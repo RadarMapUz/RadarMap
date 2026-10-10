@@ -142,10 +142,16 @@ nonisolated struct APIClient {
         return req
     }
 
+    /// Ошибки сети и статуса пишутся в журнал ЗДЕСЬ, один раз на всех: вызовы
+    /// `getData` у дорог и лимитов идут через `try?`, и без этой записи сбой
+    /// загрузки (в том числе подмена набора на сервере) не оставлял следа
+    /// нигде (ARCHITECTURE.md, правило 3). Без сети — `notice`: это обычное
+    /// состояние в дороге, а не ошибка программы.
     private func transport(_ request: URLRequest) async throws -> (Data, URLResponse) {
         do {
             return try await session.data(for: request)
         } catch {
+            Log.network.notice("\(request.url?.path ?? "?", privacy: .public): сеть — \(error.localizedDescription, privacy: .public)")
             throw Failure.transport(error)
         }
     }
@@ -162,6 +168,7 @@ nonisolated struct APIClient {
     private static func checkStatus(_ response: URLResponse, path: String) throws {
         guard let http = response as? HTTPURLResponse else { return }
         guard (200..<300).contains(http.statusCode) else {
+            Log.network.error("\(path, privacy: .public): HTTP \(http.statusCode)")
             throw Failure.badStatus(http.statusCode)
         }
     }

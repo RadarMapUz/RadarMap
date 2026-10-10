@@ -207,6 +207,10 @@ nonisolated enum AppConfig {
     static let mapColumnSlotHeight: CGFloat = 56
     static let mapColumnSpacing: CGFloat = 12
 
+    /// Ниже этой высоты приборка — «короткий экран» (iPhone SE и подобные,
+    /// 667 pt): цифры мельче, схема сжимается первой (DashboardView).
+    static let dashCompactHeight: CGFloat = 720
+
     // MARK: - Карта проездов (Итоги)
 
     /// Сторона ячейки сетки, в которой считаем частоту проездов по участку.

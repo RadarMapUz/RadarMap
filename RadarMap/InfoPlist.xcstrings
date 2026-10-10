@@ -62,13 +62,13 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Чтобы предупреждать о камерах во время движения даже когда приложение свёрнуто, RadarMap использует геолокацию в фоновом режиме. Данные о местоположении обрабатываются только на вашем устройстве."
+            "value" : "Чтобы предупреждать о камерах в движении, даже когда приложение свёрнуто, RadarMap использует геолокацию в фоне. Фоновое местоположение обрабатывается только на устройстве; на сервер уходят лишь отметки радаров, которые вы ставите сами, и начало и конец маршрута при его построении."
           }
         },
         "uz" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ilova yig'ilgan bo'lsa ham harakat paytida kameralar haqida ogohlantirish uchun RadarMap fonda geolokatsiyadan foydalanadi. Joylashuv ma'lumotlari faqat qurilmangizda qayta ishlanadi."
+            "value" : "Ilova yig‘ilgan bo‘lsa ham harakat paytida kameralar haqida ogohlantirish uchun RadarMap fonda geolokatsiyadan foydalanadi. Fondagi joylashuv faqat qurilmada qayta ishlanadi; serverga faqat o‘zingiz qo‘ygan radar belgilari va marshrut qurilganda uning boshi va oxiri yuboriladi."
           }
         }
       }

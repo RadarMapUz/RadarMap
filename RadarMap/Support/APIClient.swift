@@ -59,6 +59,19 @@ nonisolated struct APIClient {
         return (try decode(data, path: path), fresh)
     }
 
+    /// Сырые данные «только если изменилось» — для файлов, которые разбирает
+    /// сам вызывающий (пробки: свой формат, разбор вне главного потока).
+    /// `nil` — 304, у нас уже есть то же самое.
+    func getRawIfChanged(_ path: String, etag: String?) async throws -> (data: Data, etag: String?)? {
+        var req = request(path)
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        if let etag { req.setValue(etag, forHTTPHeaderField: "If-None-Match") }
+        let (data, response) = try await transport(req)
+        if let http = response as? HTTPURLResponse, http.statusCode == 304 { return nil }
+        try Self.checkStatus(response, path: path)
+        return (data, (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag"))
+    }
+
     /// GET сырых данных (файлы базы) с проверкой статуса.
     func getData(_ path: String, cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy) async throws -> Data {
         var req = request(path)

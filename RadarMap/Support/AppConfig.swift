@@ -509,6 +509,50 @@ nonisolated enum AppConfig {
     /// Окно истории для обучения местам.
     nonisolated static let placeLearningWindowDays = 30
 
+    // MARK: - Пробки (TrafficProbes, TrafficService, server/traffic_build.py)
+
+    /// Длина куска следа и её разброс (±20 %): по одинаковой длине соседние
+    /// куски одного водителя склеивались бы обратно в поездку.
+    nonisolated static let trafficPieceMeters: CLLocationDistance = 1000
+    nonisolated static let trafficPieceJitter = 0.2
+    /// Первые и последние метры поездки не уходят никогда — откуда выехали и
+    /// куда приехали, сервер знать не должен.
+    nonisolated static let trafficTrimMeters: CLLocationDistance = 400
+    /// Ближе этого к дому, работе и сохранённым местам след не собирается.
+    nonisolated static let trafficPrivacyRadiusMeters: CLLocationDistance = 300
+    /// Прореживание: точка не чаще, чем через столько метров или секунд.
+    nonisolated static let trafficSampleMeters: CLLocationDistance = 25
+    nonisolated static let trafficSampleSeconds: TimeInterval = 5
+    /// Кусок закрывается по длине, по времени (стоим в пробке) или по числу
+    /// точек; сервер принимает до 900 с и 120 точек — здесь с запасом.
+    nonisolated static let trafficPieceMaxSeconds: TimeInterval = 600
+    nonisolated static let trafficPieceMaxPoints = 100
+    nonisolated static let trafficPieceMinPoints = 3
+    /// Скачок или пауза больше этого — не путь (туннель, потеря сигнала):
+    /// кусок рвётся.
+    nonisolated static let trafficMaxStepMeters: CLLocationDistance = 500
+    nonisolated static let trafficMaxGapSeconds: TimeInterval = 120
+    /// Отправка — пачкой раз в столько, пока идёт поездка.
+    static let trafficUploadInterval: TimeInterval = 120
+    /// Не отправленные (нет сети) куски копятся не больше этого — старые
+    /// выбрасываются: пробка часовой давности серверу уже не нужна.
+    static let trafficQueueCap = 30
+    /// Пробки с сервера: как часто перечитывать, пока карта на экране или идёт
+    /// поездка, и с какого возраста файла считать данных нет вовсе.
+    static let trafficRefreshInterval: TimeInterval = 120
+    static let trafficStaleSeconds: TimeInterval = 10 * 60
+    /// Участок маршрута совпал с ребром пробки: ближе этого и почти тем же
+    /// направлением (иначе встречная полоса проспекта красила бы нашу).
+    nonisolated static let trafficMatchMeters: CLLocationDistance = 18
+    nonisolated static let trafficMatchDegrees: Double = 35
+    /// Задержку пробками на остатке маршрута пересчитываем раз на столько
+    /// метров (и на каждом новом наборе пробок), а не на каждом фиксе.
+    static let routeTrafficRecomputeMeters: CLLocationDistance = 300
+    /// Задержка пробками, с которой о ней говорим цветом (янтарь), и большая
+    /// (красный).
+    static let routeTrafficNoticeSeconds: TimeInterval = 3 * 60
+    static let routeTrafficHeavySeconds: TimeInterval = 12 * 60
+
     // MARK: - Дорога на работу и домой (Commute)
 
     /// Поездка — «на работу», если началась у дома и кончилась у работы (и

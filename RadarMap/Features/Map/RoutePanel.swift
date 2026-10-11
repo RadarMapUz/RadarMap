@@ -59,6 +59,14 @@ struct RoutePanel: View {
                                 .font(.rounded(13, .medium))
                                 .foregroundStyle(Theme.textSecondary)
                                 .contentTransition(.numericText())
+                            // Пробки — словами и цветом: «+12 мин из-за пробок».
+                            // Нет данных — строки нет (не «без пробок»).
+                            if let note = route.trafficNote {
+                                Label(note, systemImage: "car.2.fill")
+                                    .font(.rounded(12, .semibold))
+                                    .foregroundStyle(Self.trafficTint(route.trafficDelay ?? 0))
+                                    .lineLimit(1)
+                            }
                         }
                         Spacer(minLength: 8)
                         Button {
@@ -117,7 +125,9 @@ struct RoutePanel: View {
                 }
                 Text(variant.etaText)
                     .font(.rounded(15, .bold))
-                    .foregroundStyle(isSelected ? Theme.background : Theme.textPrimary)
+                    .foregroundStyle(isSelected ? Theme.background
+                                     : (variant.trafficDelay ?? 0) >= AppConfig.routeTrafficNoticeSeconds
+                                        ? Self.trafficTint(variant.trafficDelay ?? 0) : Theme.textPrimary)
                 HStack(spacing: 4) {
                     Text(variant.distanceText)
                     Image(systemName: "camera.fill").font(.rounded(9))
@@ -135,6 +145,14 @@ struct RoutePanel: View {
                 .stroke(isSelected ? .clear : Theme.stroke, lineWidth: 1))
         }
         .buttonStyle(.plain)
+    }
+
+    /// Цвет пробки на маршруте: заметная задержка — янтарь, большая — красный,
+    /// без пробок — зелёный.
+    static func trafficTint(_ delay: TimeInterval) -> Color {
+        if delay >= AppConfig.routeTrafficHeavySeconds { return Theme.danger }
+        if delay >= AppConfig.routeTrafficNoticeSeconds { return Theme.warning }
+        return Theme.success
     }
 
     // MARK: - Ярлыки вариантов (RouteChoice)

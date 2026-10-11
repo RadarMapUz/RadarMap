@@ -21,6 +21,9 @@
 import SwiftUI
 
 struct MapLayersControl: View {
+    /// Пробки от водителей (TrafficService) — первым: это то, что смотрят
+    /// перед выездом.
+    @Binding var traffic: Bool
     @Binding var places: Bool
     /// Дома и тротуары своей схемы. Отдельными тумблерами, а не «подробнее»
     /// одной ручкой: платят за них по-разному (дома — 78 МБ из 347 по стране,
@@ -80,6 +83,7 @@ struct MapLayersControl: View {
                 .font(.rounded(11, .semibold))
                 .foregroundStyle(Theme.textTertiary)
                 .padding(.bottom, 2)
+            toggle("Пробки", "car.2.fill", isOn: $traffic)
             // «Места» прячут кафе и банки, заправки и парковки остаются всегда.
             toggle("Места", "fuelpump.fill", isOn: $places)
             toggle("Дома", "building.2.fill", isOn: $houses)

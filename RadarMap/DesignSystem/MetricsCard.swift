@@ -17,6 +17,8 @@ struct MetricsCard: View {
         let value: String
         let label: String
         let icon: String
+        /// Цвет знака по смыслу (Theme.Icon); цифра остаётся спокойной.
+        var tint: Color = Theme.accent
         var id: String { label }
     }
 
@@ -41,11 +43,8 @@ struct MetricsCard: View {
     }
 
     private func cell(_ item: Item) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: item.icon)
-                .font(.rounded(15, .semibold))
-                .foregroundStyle(Theme.accent)
-                .frame(width: 22)
+        HStack(alignment: .center, spacing: 10) {
+            IconBadge(symbol: item.icon, tint: item.tint, size: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.value)
                     .font(.rounded(20, .bold).monospacedDigit())

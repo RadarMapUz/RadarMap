@@ -86,6 +86,10 @@ struct EngineMapView: UIViewRepresentable {
     /// Карту накрыло полноэкранное предупреждение о камере (градиент до 96 %):
     /// рисовать её на полной частоте незачем (аудит 11.10).
     var covered: Bool = false
+    /// Пробки (TrafficService): рёбра с уровнем. Пишутся в источник только на
+    /// смене `trafficRevision` — раз в пару минут, а не на тике.
+    var trafficEdges: [TrafficEdge] = []
+    var trafficRevision: Int = 0
     /// Язык подписей новой карты («ru» / «uz»). Меняется только с языком
     /// приложения, а тот применяется после перезапуска — перезагрузка стиля
     /// ради него не нужна.
@@ -456,6 +460,7 @@ struct EngineMapView: UIViewRepresentable {
             routeInitialized = false
             lineKeys = [:]
             decorationsHidden = nil
+            lastTrafficRevision = -1
             lastPosition = nil
             cameraRegion = nil
             style.layer(withIdentifier: "houses")?.isVisible = current?.houses ?? false
@@ -784,6 +789,7 @@ struct EngineMapView: UIViewRepresentable {
             lastFollowInterval = nil
             updateCameras(model, in: view)
             updateMarks(model, in: view)
+            updateTraffic(model, in: view)
             let newRoute = !routeInitialized || lastRouteObject !== model.routeObject
             if newRoute || lastManeuverAlong != model.maneuverAlong
                 || abs(model.routeProgress - lastProgress) >= AppConfig.engineRouteProgressStep {
@@ -822,6 +828,27 @@ struct EngineMapView: UIViewRepresentable {
             guard hidden != decorationsHidden, let style = view.style else { return }
             decorationsHidden = hidden
             for id in Self.hotHiddenLayers { style.layer(withIdentifier: id)?.isVisible = !hidden }
+        }
+
+        private var lastTrafficRevision = -1
+
+        /// Пробки — только на новом наборе: тысяча рёбер по городу в источник
+        /// раз в две минуты, а не на каждом фиксе.
+        private func updateTraffic(_ model: EngineMapView, in view: MLNMapView) {
+            guard model.trafficRevision != lastTrafficRevision else { return }
+            guard let source = view.style?.source(withIdentifier: "traffic") as? MLNShapeSource else {
+                Log.network.error("MapLibre: источника пробок нет в стиле")
+                return
+            }
+            Log.network.debug("MapLibre: пробки в источник, рёбер \(model.trafficEdges.count, privacy: .public)")
+            lastTrafficRevision = model.trafficRevision
+            let lines = model.trafficEdges.map { edge -> MLNPolylineFeature in
+                var coordinates = [edge.a, edge.b]
+                let line = MLNPolylineFeature(coordinates: &coordinates, count: 2)
+                line.attributes = ["level": edge.level]
+                return line
+            }
+            source.shape = MLNShapeCollectionFeature(shapes: lines)
         }
 
         /// Что последним ушло в каждый источник линии: число точек и концы.

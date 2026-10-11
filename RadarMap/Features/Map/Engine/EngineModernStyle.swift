@@ -28,7 +28,7 @@ nonisolated enum EngineModernStyle {
     static let darkResource = "map_style_dark"
 
     /// Свои источники приложения — пустые при сборке, наполняются на тике.
-    static let liveSources = ["cameras", "route", "traveled", "maneuver", "position", "marks", "hotspots"]
+    static let liveSources = ["cameras", "route", "traveled", "maneuver", "traffic", "position", "marks", "hotspots"]
 
     /// Готовые стили по набору входов. Сборка — это чтение и разбор 214 КБ
     /// шаблона, правка слоёв и сериализация обратно, и шла она на главном

@@ -264,4 +264,21 @@ final class PaletteTests: XCTestCase {
         XCTAssertEqual(PassStyle.level(speed: 58, limit: 60), .normal)
         XCTAssertNil(PassStyle.symbol(speed: 58, limit: 60))
     }
+
+    // MARK: - Знаки-иконки (IconBadge, 12.10)
+
+    /// Глиф знака — не текст, но его ищут глазом: ≥ 3:1 и на карточке, и на
+    /// собственной плашке (14 % того же цвета поверх карточки), в обеих темах.
+    func testIconTintsAreReadable() {
+        let tints: [(String, Color)] = [
+            ("time", Theme.Icon.time), ("distance", Theme.Icon.distance), ("speed", Theme.Icon.speed),
+            ("money", Theme.Icon.money), ("rating", Theme.Icon.rating), ("camera", Theme.Icon.camera),
+            ("home", Theme.Icon.home), ("work", Theme.Icon.work), ("streak", Theme.Icon.streak),
+        ]
+        inBothThemes { theme in
+            for (name, tint) in tints {
+                XCTAssertGreaterThanOrEqual(contrast(tint, Theme.surface), 3, "\(name) на карточке, \(theme)")
+            }
+        }
+    }
 }

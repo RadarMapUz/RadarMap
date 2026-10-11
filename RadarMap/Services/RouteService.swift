@@ -56,9 +56,22 @@ final class RouteService {
         var laneNotices: [LaneNotice] = []
         /// Где по линии остановка по пути (конец первого плеча). nil — без заезда.
         var stopAlong: CLLocationDistance?
+        /// Сколько добавляют пробки (TrafficSnapshot.delay); nil — данных о
+        /// пробках нет (не «ноль»: ноль значит «пробок нет», а это мы знаем
+        /// только при свежем наборе).
+        var trafficDelay: TimeInterval?
 
-        var etaText: String { Formatting.duration(travelTime) }
+        /// Время в пути с пробками — его и показываем, и сравниваем.
+        var expectedTime: TimeInterval { travelTime + (trafficDelay ?? 0) }
+        var etaText: String { Formatting.duration(expectedTime) }
         var distanceText: String { Formatting.distance(distance) }
+        /// «+12 мин из-за пробок» / «без пробок»; nil — данных нет.
+        var trafficNote: String? {
+            guard let trafficDelay else { return nil }
+            if trafficDelay < 60 { return String(localized: "без пробок") }
+            return String(format: String(localized: "+%@ из-за пробок"),
+                          Formatting.unbreakable(Formatting.duration(trafficDelay)))
+        }
     }
 
     private enum RouteError: Error {
@@ -116,6 +129,19 @@ final class RouteService {
     /// которую иначе никак не сообщить пользователю до следующего релиза.
     @ObservationIgnored weak var config: RemoteConfigService?
     var isRoutingEnabled: Bool { config?.isRoutingEnabled ?? true }
+
+    /// Свежие пробки для времени в пути; nil — нет данных или выключено.
+    /// Ставит AppEnvironment (TrafficService). Снимок Sendable: задержка по
+    /// вариантам считается вне главного потока вместе с камерами коридора.
+    @ObservationIgnored var trafficSnapshot: (() -> TrafficSnapshot?)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: trafficSnapshot,
+                                               "RouteService.trafficSnapshot") }
+    }
+    /// Задержка пробками на ОСТАВШЕЙСЯ части маршрута — пересчитывается не на
+    /// каждом фиксе, а каждые `routeTrafficRecomputeMeters` и на новом наборе.
+    private(set) var remainingTrafficDelay: TimeInterval = 0
+    @ObservationIgnored private var trafficAlong: CLLocationDistance = -.infinity
+    @ObservationIgnored private var trafficRevisionSeen = -1
 
     @ObservationIgnored var onRerouted: (() -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onRerouted,
@@ -198,6 +224,8 @@ final class RouteService {
     var camerasOnRoute: [RouteCamera] { selected?.cameras ?? [] }
     var distanceText: String { selected?.distanceText ?? "" }
     var etaText: String { selected?.etaText ?? "" }
+    var trafficNote: String? { selected?.trafficNote }
+    var trafficDelay: TimeInterval? { selected?.trafficDelay }
 
     // MARK: - Индекс камер маршрута
 
@@ -254,7 +282,33 @@ final class RouteService {
     }
     var remainingTime: TimeInterval {
         guard let selected, selected.distance > 0 else { return 0 }
-        return selected.travelTime * remainingDistance / selected.distance
+        return selected.travelTime * remainingDistance / selected.distance + remainingTrafficDelay
+    }
+
+    /// Пересчитать задержку пробками на остатке пути: на новом наборе пробок
+    /// (`revision`) или когда проехали `routeTrafficRecomputeMeters`.
+    func refreshTrafficDelay(revision: Int) {
+        guard let selected else {
+            if remainingTrafficDelay != 0 { remainingTrafficDelay = 0 }
+            return
+        }
+        guard revision != trafficRevisionSeen
+                || abs(progressAlong - trafficAlong) >= AppConfig.routeTrafficRecomputeMeters else { return }
+        trafficRevisionSeen = revision
+        trafficAlong = progressAlong
+        let delay = trafficSnapshot?().map { $0.delay(along: Self.remaining(selected.points, after: progressAlong)) } ?? 0
+        if abs(delay - remainingTrafficDelay) >= 1 { remainingTrafficDelay = delay }
+    }
+
+    /// Точки маршрута после `along` метров от начала.
+    nonisolated static func remaining(_ points: [MKMapPoint], after along: CLLocationDistance) -> [CLLocationCoordinate2D] {
+        guard points.count >= 2 else { return [] }
+        var acc: CLLocationDistance = 0
+        for i in 1..<points.count {
+            acc += points[i - 1].distance(to: points[i])
+            if acc >= along { return points[(i - 1)...].map(\.coordinate) }
+        }
+        return []
     }
     var arrivalDate: Date { Date().addingTimeInterval(remainingTime) }
 
@@ -392,6 +446,10 @@ final class RouteService {
         offRouteTicks = 0
         announcedStage = [:]
         segmentHint = 0
+        // Задержка пробками — с варианта (посчитана при построении); дальше
+        // её ведёт refreshTrafficDelay по ходу и по новым наборам.
+        remainingTrafficDelay = selected?.trafficDelay ?? 0
+        trafficAlong = 0
     }
 
     // MARK: - Прогресс: прибытие, следующая камера, манёвры, перестроение
@@ -898,10 +956,11 @@ final class RouteService {
         // длинные маршруты не должны дёргать UI даже на старых устройствах.
         let inputs = built.filter { $0.points.count >= 2 }
         guard !inputs.isEmpty else { return }
+        let traffic = trafficSnapshot?()
 
         // Там же — выбор варианта по своим поездкам: сравнение с сотней
         // треков стоит десятки миллисекунд, главному потоку они не нужны.
-        let (variantCameras, verdict) = await Task.detached(priority: .userInitiated) {
+        let (variantCameras, verdict, trafficDelays) = await Task.detached(priority: .userInitiated) {
             let found = inputs.map { variant -> [RouteCamera] in
                 var bbox = MKMapRect.null
                 for p in variant.points { bbox = bbox.union(MKMapRect(origin: p, size: MKMapSize())) }
@@ -909,14 +968,17 @@ final class RouteService {
                 return Self.camerasAlong(pts: variant.points, bbox: bbox,
                                          centerLat: centerLat, cameras: cameras)
             }
+            // Пробки — к каждому варианту: «Быстрый» выбирается по времени
+            // с пробками, а не по пустым дорогам графа.
+            let delays = inputs.map { variant in traffic?.delay(along: variant.points.map(\.coordinate)) }
             let choice = RouteChoice.decide(inputs.indices.map { index in
                 RouteChoice.Input(path: inputs[index].points.map(\.coordinate),
                                   distance: inputs[index].distance,
-                                  travelTime: inputs[index].travelTime,
+                                  travelTime: inputs[index].travelTime + (delays[index] ?? 0),
                                   cameraIDs: found[index].map(\.camera.id),
                                   hardManeuvers: RouteChoice.hardManeuvers(inputs[index].steps))
             }, history: history)
-            return (found, choice)
+            return (found, choice, delays)
         }.value
 
         // Второй раз, и это не дублирование проверки у вызывающего: тот
@@ -937,7 +999,8 @@ final class RouteService {
                     steps: variant.steps,
                     assessment: verdict.assessments[index],
                     laneNotices: variant.laneNotices,
-                    stopAlong: variant.stopAlong)
+                    stopAlong: variant.stopAlong,
+                    trafficDelay: trafficDelays[index])
         }
         selectedID = verdict.recommended
         destinationName = name

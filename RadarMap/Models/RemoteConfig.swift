@@ -52,6 +52,9 @@ nonisolated struct RemoteConfig: Codable, Equatable, Sendable {
         var routing: Bool?
         var mobileReports: Bool?
         var metrics: Bool?
+        /// Пробки: и отправка кусков следа, и показ (рубильник на случай, если
+        /// с данными что-то не так). Нет поля — включено, как у остальных.
+        var traffic: Bool?
     }
 
     /// Значения сборки: то, к чему мы возвращаемся всегда, когда пульту нельзя верить.
@@ -62,6 +65,7 @@ nonisolated struct RemoteConfig: Codable, Equatable, Sendable {
     var isRoutingEnabled: Bool { features?.routing ?? true }
     var areMobileReportsEnabled: Bool { features?.mobileReports ?? true }
     var areMetricsEnabled: Bool { features?.metrics ?? true }
+    var isTrafficEnabled: Bool { features?.traffic ?? true }
 
     /// Интервал опроса с зажимом в разумные границы: присланные 0 или 86400 —
     /// это не «настройка», а испорченный файл.

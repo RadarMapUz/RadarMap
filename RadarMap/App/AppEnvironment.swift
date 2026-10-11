@@ -74,6 +74,9 @@ final class AppEnvironment {
     /// Обезличенная статистика использования: без неё неизвестно даже, сколько
     /// людей выдаёт геолокацию «Всегда» — а без неё не работает половина продукта.
     let usage: UsageStatsService
+    /// Пробки: помогаем считать (куски следа поездки) и показываем (карта,
+    /// время маршрута). На оповещения не влияют.
+    let traffic: TrafficService
 
     /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
     /// машина, телефонная карта уступает место дешёвому экрану передачи —
@@ -91,6 +94,7 @@ final class AppEnvironment {
     func setCarPlayConnected(_ connected: Bool) {
         isCarPlayConnected = connected
         location.setCarPlayConnected(connected)
+        refreshTrafficWanted()
         if connected {
             mobile.startPolling()
         } else if !isPhoneSceneActive, !mobile.isTripActive {
@@ -111,9 +115,16 @@ final class AppEnvironment {
         if day != interfaceIsDaylight { interfaceIsDaylight = day }
     }
 
+    /// Пробки нужны, пока на них кто-то смотрит: экран телефона, машина или
+    /// идущая поездка (её время в пути).
+    func refreshTrafficWanted() {
+        traffic.setWanted(isPhoneSceneActive || isCarPlayConnected || location.isTripActive)
+    }
+
     /// Ставит RootView по scenePhase телефона.
     func setPhoneSceneActive(_ active: Bool) {
         isPhoneSceneActive = active
+        refreshTrafficWanted()
         if active {
             mobile.startPolling()
         } else if !isCarPlayConnected, !mobile.isTripActive {
@@ -134,6 +145,7 @@ final class AppEnvironment {
         let trip = TripStats()
 
         self.usage = UsageStatsService(settings: settings)
+        self.traffic = TrafficService(settings: settings)
         self.settings = settings
         self.cameras = cameras
         self.notifications = notifications
@@ -185,6 +197,8 @@ final class AppEnvironment {
         location.onTripStateChanged = { [weak self] active in
             guard let self else { return }
             self.mobile.setTripActive(active)
+            if active { self.traffic.tripStarted() } else { self.traffic.tripEnded() }
+            self.refreshTrafficWanted()
             if !active, !self.isPhoneSceneActive, !self.isCarPlayConnected {
                 self.mobile.stopPolling()
             }
@@ -223,8 +237,31 @@ final class AppEnvironment {
         location.onCameraSpoken = { [weak usage] grade in usage?.noteCameraSpoken(grade) }
         // «Радар ещё стоял?» — наблюдение за проездом мимо передвижных точек
         // на каждом фиксе, и с погашенным экраном тоже (MobileCameraService).
-        location.onAcceptedFix = { [weak mobile] coordinate in
+        location.onAcceptedFix = { [weak mobile, weak traffic, weak location, weak route] coordinate in
             withMotion { mobile?.trackPasses(from: coordinate) }
+            traffic?.note(coordinate, speedKmh: location?.speedKmh ?? -1)
+            if let traffic, let route, route.isActive { route.refreshTrafficDelay(revision: traffic.revision) }
+        }
+        route.trafficSnapshot = { [weak traffic] in
+            guard let traffic, traffic.isShown, let snapshot = traffic.snapshot,
+                  snapshot.isFresh(now: Date()) else { return nil }
+            return snapshot
+        }
+        // Пробки: пульт и сеть — отсюда; приватные зоны — дом, работа (ручные и
+        // выученные) и все сохранённые места: рядом с ними след не собирается.
+        traffic.allowedByConfig = { [weak config] in config?.current.isTrafficEnabled ?? true }
+        traffic.isOnline = { [weak network] in network?.isOnline ?? false }
+        traffic.privacyZones = { [weak self] in
+            guard let self else { return [] }
+            // Выученные места считаются и при выключенных подсказках: зона
+            // нужна для защиты, а не для подсказки, и никуда не сохраняется.
+            let learned = self.learnedPlaces.isEmpty
+                ? FrequentPlaces.learn(history: self.trip.history, now: Date())
+                : self.learnedPlaces
+            var zones = learned.map(\.coordinate)
+            zones += [self.settings.place(for: .home), self.settings.place(for: .work)]
+                .compactMap { $0?.coordinate }
+            return zones
         }
         route.onManeuverSpoken = { [weak usage] kind in usage?.noteManeuver(kind) }
         trip.onTripDropped = { [weak usage] reason in usage?.noteTripDropped(reason) }

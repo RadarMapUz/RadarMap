@@ -51,10 +51,12 @@ struct GlassCard<Content: View>: View {
     }
 }
 
-/// Знак-иконка: SF Symbol в цветной скруглённой плашке. Один язык иконок во
-/// всём приложении — как в Настройках iOS: глаз находит раздел по цвету и
-/// форме раньше, чем прочтёт подпись. Цвет — по СМЫСЛУ (`Theme.Icon`), а не
-/// по вкусу экрана: время всегда одного цвета, деньги — другого.
+/// Знак-иконка: SF Symbol в цветном круге. Один язык иконок во всём
+/// приложении: глаз находит строку по цвету и форме раньше, чем прочтёт
+/// подпись. Круг — потому что так Итоги, подсказки и разделы и были
+/// нарисованы, только каждый раз руками и с разной заливкой. Цвет — по
+/// СМЫСЛУ (`Theme.Icon`), а не по вкусу экрана: время всегда одного цвета,
+/// деньги — другого.
 struct IconBadge: View {
     let symbol: String
     var tint: Color = Theme.accent
@@ -65,8 +67,7 @@ struct IconBadge: View {
             .font(.system(size: size * 0.44, weight: .semibold))
             .foregroundStyle(tint)
             .frame(width: size, height: size)
-            .background(tint.opacity(0.14),
-                        in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
+            .background(tint.opacity(0.14), in: Circle())
             .accessibilityHidden(true)
     }
 }

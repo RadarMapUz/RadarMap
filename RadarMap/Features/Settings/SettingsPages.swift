@@ -443,6 +443,15 @@ struct PrivacySettingsPage: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Section {
+                Toggle("Помогать с пробками", isOn: $settings.trafficContribution)
+            } footer: {
+                SettingsFootnote([
+                    "Во время поездки отправляем отрезки пути по километру: где и с какой скоростью ехала машина. Из них сервер считает пробки для всех.",
+                    "Без устройства, без поездки и без времени суток. Начало и конец каждой поездки и всё ближе 300 м от дома и работы не уходят никогда.",
+                    "На оповещения о камерах это не влияет.",
+                ])
+            }
+            Section {
                 Link(destination: AppConfig.privacyPolicyURL) {
                     HStack {
                         Text("Политика конфиденциальности")

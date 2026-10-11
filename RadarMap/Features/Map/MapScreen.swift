@@ -662,7 +662,8 @@ struct MapScreen: View {
         // после старта поездки; пробки и места жили в отдельной панели,
         // которой в поездке не бывало вовсе. Теперь это одна панель; в
         // поездке та же панель — подменю «…» (mapLayersMenu).
-        MapLayersControl(places: setting(\.mapPlaces),
+        MapLayersControl(traffic: setting(\.trafficShown),
+                         places: setting(\.mapPlaces),
                          houses: setting(\.mapHouses),
                          sidewalks: setting(\.mapSidewalks),
                          maxPanelHeight: columnSlots.map {
@@ -744,6 +745,9 @@ struct MapScreen: View {
     /// по тем же правилам — пробки только у Apple, застройка только у нашей карты.
     private var mapLayersMenu: some View {
         Menu {
+            Toggle(isOn: setting(\.trafficShown)) {
+                Label("Пробки", systemImage: "car.2.fill")
+            }
             Toggle(isOn: setting(\.mapPlaces)) {
                 Label("Места", systemImage: "fuelpump.fill")
             }
@@ -1276,6 +1280,14 @@ struct MapScreen: View {
             env.trip.seedDemoHistory(scale: args.contains("-demoBigNumbers") ? 20 : 1)
         }
         if args.contains("-demoMergePair") { env.trip.seedDemoMergePair() }
+        // С паузой: настоящие пробки приходят уже после загрузки карты, и
+        // слой обязан перерисоваться на новом наборе, а не только на старте.
+        if args.contains("-demoTraffic") {
+            Task {
+                await Task.pause(seconds: 3)
+                env.traffic.seedDemo()
+            }
+        }
         // Дорога на работу и домой: четыре недели будней поверх истории.
         if args.contains("-demoCommutes") {
             env.trip.seedDemoCommutes()

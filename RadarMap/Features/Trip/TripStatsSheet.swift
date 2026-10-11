@@ -144,6 +144,7 @@ struct TripStatsSheet: View {
                             .entrance(1, appeared)
                         riskCard(summary: summary)
                             .entrance(2, appeared)
+                            .id("risk")
                         pendingNudgeRow
                             .entrance(2, appeared)
                         mapCard
@@ -163,6 +164,7 @@ struct TripStatsSheet: View {
                         }
                         periodDetails(summary: summary)
                             .entrance(3, appeared)
+                            .id("details")
                         tripsSection(trip: trip, proxy: proxy)
                             .entrance(4, appeared)
                             .id("history")
@@ -178,6 +180,7 @@ struct TripStatsSheet: View {
                     if !trip.lifetime.isEmpty {
                         lifetimeSection(trip: trip)
                             .entrance(5, appeared)
+                            .id("lifetime")
                     }
                     } header: {
                         VStack(spacing: 6) {
@@ -216,6 +219,17 @@ struct TripStatsSheet: View {
                     if args.contains("-scrollCalendar") {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                             withMotion { proxy.scrollTo("calendar", anchor: .center) }
+                        }
+                    }
+                    // `-scrollTo risk|map|details|history|lifetime` — любой раздел.
+                    if let index = args.firstIndex(of: "-scrollTo"), index + 1 < args.count {
+                        let target = args[index + 1]
+                        if args.contains("-expandAll") {
+                            detailsExpanded = true
+                            lifetimeExpanded = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            proxy.scrollTo(target, anchor: .top)
                         }
                     }
                 }
@@ -289,6 +303,15 @@ struct TripStatsSheet: View {
                 // Дневная воронка: какие экраны вообще открывают. Только имя
                 // экрана и счётчик — ни времени, ни содержимого.
                 env.usage.noteScreen("stats")
+                // Понедельник утром текущая неделя пуста, и экран открывался
+                // с «В этом периоде поездок не было» — у каждого, каждую
+                // неделю. Открываем там, где поездки есть; стрелки периода
+                // на месте, к пустой текущей неделе вернуться можно.
+                if TripHistory.summary(days: env.trip.days, history: env.trip.history,
+                                       period: period, anchor: anchor).isEmpty,
+                   let nearest = nearestNonEmptyAnchor() {
+                    anchor = nearest
+                }
                 #if DEBUG
                 // Скриншот-автоматизация: открыть вложенные экраны (с паузой —
                 // sheet поверх ещё анимирующегося sheet молча не показывается).
@@ -582,11 +605,7 @@ struct TripStatsSheet: View {
     private func insightRow(_ insight: Insight) -> some View {
         let tint = Self.insightTint(insight.kind)
         return HStack(alignment: .top, spacing: 12) {
-            Image(systemName: insight.icon)
-                .font(.rounded(15, .bold))
-                .foregroundStyle(tint)
-                .frame(width: 30, height: 30)
-                .background(tint.opacity(0.14), in: Circle())
+            IconBadge(symbol: insight.icon, tint: tint, size: 30)
             Text(insight.text)
                 .font(.rounded(15, .medium))
                 .foregroundStyle(Theme.textPrimary)
@@ -725,11 +744,7 @@ struct TripStatsSheet: View {
                 showFines = true
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: "envelope.badge.clock")
-                        .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.warning)
-                        .frame(width: 30, height: 30)
-                        .background(Theme.warning.opacity(0.12), in: Circle())
+                    IconBadge(symbol: "envelope.badge.clock", tint: Theme.warning, size: 30)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(String(format: String(localized: "Ждут ответа: %lld"),
                                     nudge.count))
@@ -1079,11 +1094,7 @@ struct TripStatsSheet: View {
                 withMotion(.snappy(duration: 0.3)) { lifetimeExpanded.toggle() }
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: "infinity")
-                        .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 30, height: 30)
-                        .background(Theme.accent.opacity(0.12), in: Circle())
+                    IconBadge(symbol: "infinity", tint: Theme.accent, size: 30)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("За всё время")
                             .font(.rounded(15, .semibold))
@@ -1120,11 +1131,7 @@ struct TripStatsSheet: View {
                 withMotion(.snappy(duration: 0.3)) { detailsExpanded.toggle() }
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: "chart.bar.xaxis")
-                        .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 30, height: 30)
-                        .background(Theme.accent.opacity(0.12), in: Circle())
+                    IconBadge(symbol: "chart.bar.xaxis", tint: Theme.accent, size: 30)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Детали периода")
                             .font(.rounded(14, .semibold))
@@ -1234,11 +1241,7 @@ struct TripStatsSheet: View {
         let gap = pair.next.startedAt.timeIntervalSince(pair.previous.endedAt)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                Image(systemName: "arrow.triangle.merge")
-                    .font(.rounded(14, .bold))
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 34, height: 34)
-                    .background(Theme.accent.opacity(0.12), in: Circle())
+                IconBadge(symbol: "arrow.triangle.merge", tint: Theme.accent, size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Похоже, это одна поездка")
                         .font(.rounded(14, .bold))
@@ -1300,12 +1303,12 @@ struct TripStatsSheet: View {
     /// Пожизненные цифры — единственная честная правда «за всё время»:
     /// история чистится, а эти счётчики нет. Отсюда же вход во все поездки.
     private func lifetimeStrip(trip: TripStats) -> some View {
-        let cells: [(String, LocalizedStringKey, String)] = [
-            ("\(trip.lifetime.trips)", "поездок", "car.side"),
+        let cells: [(String, LocalizedStringKey, String, Color)] = [
+            ("\(trip.lifetime.trips)", "поездок", "car.side.fill", Theme.Icon.distance),
             (Formatting.distance(trip.lifetime.distanceMeters), "пройдено",
-             "point.topleft.down.to.point.bottomright.curvepath"),
-            ("\(trip.lifetime.camerasInLimit)", "камер в лимите", "checkmark.shield"),
-            ("\(trip.lifetime.bestStreak)", "лучшая серия", "flame"),
+             "point.topleft.down.to.point.bottomright.curvepath", Theme.Icon.distance),
+            ("\(trip.lifetime.camerasInLimit)", "камер в лимите", "checkmark.shield.fill", Theme.Icon.rating),
+            ("\(trip.lifetime.bestStreak)", "лучшая серия", "flame.fill", Theme.Icon.streak),
         ]
         return VStack(spacing: 12) {
             // Две на две, а не четыре в ряд. Четыре колонки на 390 pt дают по
@@ -1317,14 +1320,18 @@ struct TripStatsSheet: View {
             // языках; цена — сорок точек высоты.
             VStack(spacing: 14) {
                 HStack(spacing: 0) {
-                    StatStripCell(value: cells[0].0, label: cells[0].1, icon: cells[0].2)
+                    StatStripCell(value: cells[0].0, label: cells[0].1, icon: cells[0].2,
+                                  tint: cells[0].3)
                     StatStripDivider()
-                    StatStripCell(value: cells[1].0, label: cells[1].1, icon: cells[1].2)
+                    StatStripCell(value: cells[1].0, label: cells[1].1, icon: cells[1].2,
+                                  tint: cells[1].3)
                 }
                 HStack(spacing: 0) {
-                    StatStripCell(value: cells[2].0, label: cells[2].1, icon: cells[2].2)
+                    StatStripCell(value: cells[2].0, label: cells[2].1, icon: cells[2].2,
+                                  tint: cells[2].3)
                     StatStripDivider()
-                    StatStripCell(value: cells[3].0, label: cells[3].1, icon: cells[3].2)
+                    StatStripCell(value: cells[3].0, label: cells[3].1, icon: cells[3].2,
+                                  tint: cells[3].3)
                 }
             }
             Button {
@@ -1359,11 +1366,7 @@ struct TripStatsSheet: View {
         let mine = env.mobile.mineSummary()
         if mine.total > 0 {
             HStack(spacing: 12) {
-                Image(systemName: "person.2.wave.2.fill")
-                    .font(.rounded(15, .semibold))
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 34, height: 34)
-                    .background(Theme.accent.opacity(0.12), in: Circle())
+                IconBadge(symbol: "person.2.wave.2.fill", tint: Theme.accent, size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Ваши отметки за 30 дней")
                         .font(.rounded(15))
@@ -1425,11 +1428,7 @@ struct TripStatsSheet: View {
             selectedBadge = badge
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: badge.icon)
-                    .font(.rounded(15, .semibold))
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 38, height: 38)
-                    .background(Theme.accent.opacity(0.12), in: Circle())
+                IconBadge(symbol: badge.icon, tint: Theme.accent, size: 38)
                 VStack(alignment: .leading, spacing: 5) {
                     // Подпись и название — в столбик: на узбекском «Eng yaqin
                     // maqsad» и «Ketma-ket 5 toza» вставали вплотную и читались

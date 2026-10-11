@@ -480,6 +480,18 @@ final class AppSettings {
         didSet { store.set(!usageStatsEnabled, forKey: Keys.usageStats) }
     }
 
+    /// Пробки на карте и в времени маршрута. Хранится инвертированно — по той
+    /// же причине, что статистика: включено по умолчанию и после обновления.
+    var trafficShown: Bool {
+        didSet { store.set(!trafficShown, forKey: Keys.trafficHidden) }
+    }
+
+    /// Помогать с пробками: обезличенные куски следа поездки (TrafficProbes).
+    /// Без устройства, без концов поездки, без мест у дома и работы.
+    var trafficContribution: Bool {
+        didSet { store.set(!trafficContribution, forKey: Keys.trafficContributionOff) }
+    }
+
     /// Профиль оповещений. Записывает нижележащие `voiceMode`/`alertMode`,
     /// поэтому остальной код о нём знать не обязан (см. AlertProfile).
     var alertProfile: AlertProfile {
@@ -601,6 +613,8 @@ final class AppSettings {
         static let alertMode = "alertMode"
         static let knownCarAudio = "knownCarAudio"
         static let usageStats = "usageStatsDisabled"
+        static let trafficHidden = "trafficHidden"
+        static let trafficContributionOff = "trafficContributionOff"
         static let alertProfile = "alertProfile"
     }
 
@@ -695,6 +709,8 @@ final class AppSettings {
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []
         weeklyDigest = store.bool(forKey: Keys.digest)
         usageStatsEnabled = !store.bool(forKey: Keys.usageStats)
+        trafficShown = !store.bool(forKey: Keys.trafficHidden)
+        trafficContribution = !store.bool(forKey: Keys.trafficContributionOff)
         // Переезд со старой версии: профиля ещё нет — выводим его из того, что
         // человек уже выбрал, чтобы ни одна привычка не сменилась молча.
         alertProfile = AlertProfile(rawValue: store.string(forKey: Keys.alertProfile) ?? "")

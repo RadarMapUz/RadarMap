@@ -99,6 +99,7 @@ nonisolated enum EngineMapStyle {
                 "route": ["type": "geojson", "data": emptyCollection],
                 "traveled": ["type": "geojson", "data": emptyCollection],
                 "maneuver": ["type": "geojson", "data": emptyCollection],
+                "traffic": ["type": "geojson", "data": emptyCollection],
                 "position": ["type": "geojson", "data": emptyCollection],
                 "marks": ["type": "geojson", "data": emptyCollection],
                 "hotspots": ["type": "geojson", "data": emptyCollection],
@@ -116,6 +117,7 @@ nonisolated enum EngineMapStyle {
                 "route": ["type": "geojson", "data": emptyCollection],
                 "traveled": ["type": "geojson", "data": emptyCollection],
                 "maneuver": ["type": "geojson", "data": emptyCollection],
+                "traffic": ["type": "geojson", "data": emptyCollection],
                 "position": ["type": "geojson", "data": emptyCollection],
                 "marks": ["type": "geojson", "data": emptyCollection],
                 "hotspots": ["type": "geojson", "data": emptyCollection],
@@ -305,6 +307,26 @@ nonisolated enum EngineMapStyle {
             "id": "route", "type": "line", "source": "route",
             "layout": ["line-cap": "round", "line-join": "round"],
             "paint": ["line-color": daylight ? "#2a6ff0" : "#5b9bff", "line-width": routeWidth(extra: 0)],
+        ])
+        // Пробки — НАД линией маршрута и чуть уже неё: на маршруте линия
+        // красится по пробкам с синей каймой (как в навигаторах), на
+        // остальных дорогах видны тонкие цветные линии. Под манёвром: его
+        // подсветка важнее цвета участка.
+        out.append([
+            "id": "traffic", "type": "line", "source": "traffic",
+            "layout": ["line-cap": "round", "line-join": "round"],
+            "paint": ["line-color": ["match", ["get", "level"],
+                                     3, daylight ? "#D93025" : "#FF5A4E",
+                                     2, daylight ? "#E8A100" : "#FFB020",
+                                     daylight ? "#2BA84A" : "#3CC46B"],
+                      "line-width": ["interpolate", ["linear"], ["zoom"],
+                                     11, 1.2, 14, 2, 16, 3, 19, 5],
+                      // Каждое направление — справа по ходу (движение
+                      // правостороннее): у двусторонней улицы видны обе
+                      // стороны, а не та, что легла сверху.
+                      "line-offset": ["interpolate", ["linear"], ["zoom"],
+                                      11, 0.9, 14, 1.3, 16, 1.8, 19, 2.8],
+                      "line-opacity": ["match", ["get", "level"], 1, 0.7, 0.95]],
         ])
         out.append([
             "id": "route-maneuver", "type": "line", "source": "maneuver",

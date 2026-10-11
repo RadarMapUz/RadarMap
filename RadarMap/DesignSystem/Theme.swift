@@ -117,6 +117,7 @@ enum Theme {
         static let camera   = Theme.danger
         static let home     = Theme.accent
         static let work     = adaptive(0x9C5300, 0xF2A54A)
+        static let streak   = adaptive(0xC2410C, 0xFF8A4C)
     }
 
     /// Состояние объекта — единственный законный способ выбрать «смысловой»

@@ -17408,6 +17408,102 @@
           }
         }
       }
+    },
+    "без пробок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "без пробок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tirbandliksiz"
+          }
+        }
+      }
+    },
+    "+%@ из-за пробок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%@ из-за пробок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tirbandlik tufayli +%@"
+          }
+        }
+      }
+    },
+    "Помогать с пробками": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Помогать с пробками"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tirbandlikni hisoblashga yordam berish"
+          }
+        }
+      }
+    },
+    "Во время поездки отправляем отрезки пути по километру: где и с какой скоростью ехала машина. Из них сервер считает пробки для всех.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Во время поездки отправляем отрезки пути по километру: где и с какой скоростью ехала машина. Из них сервер считает пробки для всех."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar davomida yo'lning bir kilometrlik bo'laklarini yuboramiz: mashina qayerda va qanday tezlikda yurgani. Ulardan server hamma uchun tirbandlikni hisoblaydi."
+          }
+        }
+      }
+    },
+    "Без устройства, без поездки и без времени суток. Начало и конец каждой поездки и всё ближе 300 м от дома и работы не уходят никогда.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без устройства, без поездки и без времени суток. Начало и конец каждой поездки и всё ближе 300 м от дома и работы не уходят никогда."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qurilmasiz, safarsiz va kun vaqtisiz. Har bir safarning boshi va oxiri hamda uy va ishdan 300 m yaqinidagi hech narsa hech qachon yuborilmaydi."
+          }
+        }
+      }
+    },
+    "На оповещения о камерах это не влияет.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На оповещения о камерах это не влияет."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu kameralar haqidagi ogohlantirishlarga ta'sir qilmaydi."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

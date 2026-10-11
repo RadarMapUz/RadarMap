@@ -88,6 +88,8 @@ struct CarPlayEngineLayer: View {
             // Режим «в поездке» всегда: без кафе, номеров домов и подписей
             // дорожек — экран машины читают боковым зрением.
             driving: true,
+            trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
+            trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
             labelLanguage: env.settings.appLanguage.mapCode,
             cursorStyle: env.settings.cursorStyle,
             panTotal: model.panTotal,

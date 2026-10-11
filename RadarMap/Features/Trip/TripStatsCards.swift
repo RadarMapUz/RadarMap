@@ -65,15 +65,16 @@ struct KPIStrip: View {
             // Именно ПРОЕЗДЫ: одна камера, пройденная дважды, — это два.
             // Легенда карты считает уникальные точки — слово должно отличаться.
             StatStripCell(value: "\(summary.cameras)", label: "проездов камер",
-                          icon: "camera.metering.center.weighted")
+                          icon: "camera.fill", tint: Theme.Icon.camera)
             StatStripDivider()
-            StatStripCell(value: activeDaysText, label: "дней за рулём", icon: "calendar")
+            StatStripCell(value: activeDaysText, label: "дней за рулём", icon: "calendar",
+                          tint: Theme.Icon.time)
             StatStripDivider()
             StatStripCell(value: "\(Int(summary.averageSpeedKmh))", label: "средняя км/ч",
-                          icon: "gauge.with.dots.needle.33percent")
+                          icon: "gauge.with.dots.needle.33percent", tint: Theme.Icon.speed)
             StatStripDivider()
             StatStripCell(value: "\(Int(summary.maxSpeedKmh))", label: "макс. км/ч",
-                          icon: "gauge.with.dots.needle.100percent")
+                          icon: "gauge.with.dots.needle.100percent", tint: Theme.Icon.speed)
         }
         .statCard(padding: 14)
     }
@@ -86,12 +87,13 @@ struct StatStripCell: View {
     let value: String
     let label: LocalizedStringKey
     let icon: String
+    /// Цвет знака — по смыслу (Theme.Icon); сама цифра остаётся спокойной:
+    /// цветом в Итогах говорит только состояние, а знак лишь помогает найти.
+    var tint: Color = Theme.accent
 
     var body: some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.rounded(11, .semibold))
-                .foregroundStyle(Theme.textTertiary)
+        VStack(spacing: 5) {
+            IconBadge(symbol: icon, tint: tint, size: 26)
             // Число — главное: не переносится и сжимается не ниже 0.8. Ниже
             // оно перестаёт читаться с расстояния вытянутой руки, а ради этого
             // плитку и смотрят. Не влезает — режем подпись, а не число.

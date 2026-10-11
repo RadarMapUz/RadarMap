@@ -39,11 +39,8 @@ struct DestinationSuggestionBar: View {
                 onRoute(target.coordinate, target.title)
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: target.kind.symbol)
-                        .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 36, height: 36)
-                        .background(Theme.accent.opacity(0.14), in: Circle())
+                    IconBadge(symbol: target.kind.symbol,
+                              tint: target.kind == .work ? Theme.Icon.work : Theme.Icon.home, size: 36)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(target.kind.suggestionTitle)
                             .font(.rounded(15, .bold))

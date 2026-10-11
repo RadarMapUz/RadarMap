@@ -107,6 +107,8 @@ struct EngineBaseLayer: View {
                         // Хранимый флаг: меняется на въезде и выезде из зоны
                         // камеры, а не на каждом фиксе.
                         covered: env.location.isApproachingCamera,
+                        trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
+                        trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
                         labelLanguage: env.settings.appLanguage.mapCode,
                         cursorStyle: env.settings.cursorStyle,
                         overviewCommand: map.overviewCommand,

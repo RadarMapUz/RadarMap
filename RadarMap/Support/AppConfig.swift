@@ -830,16 +830,6 @@ nonisolated enum AppConfig {
     /// «Проще» — минимум на столько сложных манёвров меньше быстрого.
     static let routeSimplerMinDelta = 2
 
-    /// Через сколько метров пересобирать «пройденный кусок» маршрута.
-    ///
-    /// Это не косметическая константа: `traveledPolyline` читает тело экрана
-    /// карты, и каждая её перезапись пересобирает карту целиком — вместе с
-    /// двумя сотнями маркеров. При прежних 40 метрах это происходило каждые
-    /// две секунды на трассе. Тусклая подложка пройденного пути — грубая
-    /// подсказка «сколько осталось», и шаг в 150 м на ней не виден: экономия
-    /// вчетверо достаётся даром.
-    static let routeTraveledStepMeters: CLLocationDistance = 150
-
     // MARK: - Итоги: разбор периода
 
     /// На сколько должна измениться частота превышений на 100 км, чтобы назвать
@@ -1075,6 +1065,10 @@ nonisolated enum AppConfig {
     /// рулём не листают — первые строки обязаны быть лучшими.
     static let carPlaySearchLimit = 10
     static let carPlaySearchOwnLimit = 5
+    /// Пауза ввода перед запросом к Apple в поиске машины: без неё каждая
+    /// буква уходила в сеть (MKLocalSearch), отмена задачи сам запрос не
+    /// отменяет, и быстрый набор упирался в `loadingThrottled` (аудит 11.10).
+    static let carPlaySearchAppleDebounceSeconds = 0.35
     /// Сколько ближайших показывает плитка категории («АЗС»).
     static let searchCategoryLimit = 8
 
@@ -1135,6 +1129,10 @@ nonisolated enum AppConfig {
     /// (25 м / 3 с); дальше — 100 м и не чаще `liveActivityFarInterval`.
     /// С запасом к самому большому эффективному радиусу оповещения (~800 м).
     static let liveActivityNearMeters = 1_200.0
+    /// Нижняя граница частой ступени (город, малая скорость) и запас к
+    /// эффективному радиусу оповещения (LiveActivityService.nearZone).
+    static let liveActivityMinNearMeters = 400.0
+    static let liveActivityNearMargin = 1.3
     static let liveActivityFarInterval: TimeInterval = 15
     /// Часы без тревоги: не чаще раза в столько секунд.
     static let watchCalmInterval: TimeInterval = 10

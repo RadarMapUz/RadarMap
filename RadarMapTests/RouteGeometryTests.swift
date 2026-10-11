@@ -98,20 +98,6 @@ final class RouteGeometryTests: XCTestCase {
         XCTAssertEqual(full.along, cum[cum.count - 1], accuracy: 600)
     }
 
-    func testTraveledPrefixLength() {
-        let pts = straightRoute
-        guard let prefix = RouteService.traveledPrefix(points: pts, upTo: 1000) else {
-            return XCTFail("префикс на 1 км должен существовать")
-        }
-        let coords = prefix.points()
-        var length = 0.0
-        for i in 1..<prefix.pointCount { length += coords[i - 1].distance(to: coords[i]) }
-        XCTAssertEqual(length, 1000, accuracy: 5)
-
-        XCTAssertNil(RouteService.traveledPrefix(points: pts, upTo: 30),
-                     "первые метры не рисуем — нечего показывать")
-    }
-
     func testManeuverStepMapping() {
         func step(_ type: String, _ modifier: String?, name: String = "", exit: Int? = nil) -> RouteStep? {
             RouteService.maneuverStep(

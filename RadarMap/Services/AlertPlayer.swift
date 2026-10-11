@@ -43,16 +43,13 @@ final class AlertPlayer: NSObject {
         self.settings = settings
         super.init()
         synthesizer.delegate = self
-        // Предзагрузка: сигнал должен звучать мгновенно, без чтения файла в момент оповещения.
-        if let url = Bundle.main.url(forResource: "alert", withExtension: "wav") {
-            do {
-                player = try AVAudioPlayer(contentsOf: url)
-                player?.delegate = self
-                player?.prepareToPlay()
-            } catch {
-                Log.alerts.error("alert.wav не загрузился: \(error.localizedDescription, privacy: .public)")
-            }
-        }
+        // Предзагрузка: сигнал должен звучать мгновенно, без чтения файла в
+        // момент оповещения. Но не в init: AppEnvironment строится до первого
+        // кадра (и на каждом фоновом пробуждении), а чтение файла с
+        // prepareToPlay и запуск тактильного движка стоили запуску десятки
+        // миллисекунд (аудит 11.10). Следующий оборот главного цикла наступает
+        // задолго до первого фикса, а beep на всякий случай готовит сам.
+        Task { @MainActor [weak self] in self?.preparePlayerIfNeeded() }
         prepareHaptics()
         // Прогрев кэша голосов ВНЕ главного потока: первое перечисление
         // speechVoices() стоит сотни миллисекунд XPC, и без прогрева их платил
@@ -63,6 +60,18 @@ final class AlertPlayer: NSObject {
 
     // MARK: - Хаптика по уровням приближения
 
+    private func preparePlayerIfNeeded() {
+        guard player == nil,
+              let url = Bundle.main.url(forResource: "alert", withExtension: "wav") else { return }
+        do {
+            player = try AVAudioPlayer(contentsOf: url)
+            player?.delegate = self
+            player?.prepareToPlay()
+        } catch {
+            Log.alerts.error("alert.wav не загрузился: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private func prepareHaptics() {
         guard supportsHaptics else { return }
         do {
@@ -71,7 +80,10 @@ final class AlertPlayer: NSObject {
             // Движок могут сбросить/остановить (звонок, фон) — поднимаем обратно.
             engine.resetHandler = { [weak engine] in try? engine?.start() }
             engine.stoppedHandler = { _ in }
-            try engine.start()
+            // Без start(): haptic(level:) запускает движок сам перед каждым
+            // узором. Запуск здесь стоил запуску времени, а при фоновом
+            // пробуждении (геозона) бросал ошибку — движок обнулялся, и весь
+            // процесс до выгрузки жил на запасном системном отклике.
             hapticEngine = engine
         } catch {
             Log.alerts.error("CHHapticEngine не запустился: \(error.localizedDescription, privacy: .public)")
@@ -125,6 +137,7 @@ final class AlertPlayer: NSObject {
 
     /// `count` коротких сигналов подряд (эскалация: чем ближе, тем больше).
     func beep(count: Int) {
+        preparePlayerIfNeeded()
         guard player != nil else { return }
         let volume = Float(settings.alertVolume)
         let loops = max(1, count) - 1

@@ -151,8 +151,12 @@ final class UsageStatsService {
         file.current = UsageStats(day: today)
     }
 
+    /// Запись — вне главного потока, по порядку. `note` зовётся из конвейера
+    /// оповещений (~3 счётчика на камеру), и каждый раз синхронно кодировал и
+    /// атомарно писал файл в GPS-тике (аудит 11.10). Потерянный при вылете
+    /// счётчик анонимной статистики дешевле рывка в тике.
     private func save() {
-        JSONFile.save(file, to: Self.url, log: Log.network)
+        JSONFile.saveOrdered(file, to: Self.url, log: Log.network, wait: false)
     }
 
     // MARK: - Отправка

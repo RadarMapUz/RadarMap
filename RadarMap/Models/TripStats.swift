@@ -904,7 +904,8 @@ final class TripStats {
         let passed: [PassedCamera]
         let stops: [TripStop]
         /// Сырой трек плоским массивом [lat, lon, speed, …] — как в TripRecord.
-        let track: [Double]
+        /// var: упрощается и пакуется уже вне главного потока (checkpointIfDue).
+        var track: [Double]
         let endLat: Double?
         let endLon: Double?
     }
@@ -929,18 +930,22 @@ final class TripStats {
         // синхронно в GPS-тике). После упрощения слепок снова «единицы
         // килобайт», а восстановлению большего и не нужно — finish() всё
         // равно упрощает.
-        let snapshot = InflightTrip(
+        //
+        // Упрощение, кодирование и запись — не в тике: буфер уходит значимой
+        // копией, гонок нет, а потерянная запись не страшна — придёт
+        // следующая. Дуглас—Пекер по всему сырому треку стоил на длинной
+        // поездке 1–3 мс главного потока раз в 20 с (аудит 11.10).
+        let raw = trackBuffer
+        let head = InflightTrip(
             startedAt: startedAt, lastPointAt: lastPointAt ?? Date(),
             distanceMeters: distanceMeters, maxSpeedKmh: maxSpeedKmh,
-            passed: passed, stops: stops,
-            track: Self.packTrack(Self.simplify(trackBuffer,
-                                                tolerance: Self.trackTolerance,
-                                                maxPoints: Self.trackMaxPoints)) ?? [],
+            passed: passed, stops: stops, track: [],
             endLat: lastCoordinate?.latitude, endLon: lastCoordinate?.longitude)
-        // Кодирование и атомарная запись — не в тике: слепок — значимая копия,
-        // гонок с буфером нет, а потерянная запись не страшна — придёт следующая.
         let url = inflightURL
         Task.detached(priority: .utility) {
+            var snapshot = head
+            snapshot.track = Self.packTrack(Self.simplify(raw, tolerance: Self.trackTolerance,
+                                                          maxPoints: Self.trackMaxPoints)) ?? []
             JSONFile.save(snapshot, to: url, log: Log.trips)
         }
     }
@@ -1011,7 +1016,7 @@ final class TripStats {
 
     private func persistDays() {
         guard isLoaded else { return }
-        JSONFile.save(days, to: daysURL, log: Log.trips)
+        JSONFile.saveOrdered(days, to: daysURL, log: Log.trips, wait: mustWriteSynchronously())
     }
 
     private func persistLifetime() {
@@ -1025,6 +1030,14 @@ final class TripStats {
         // См. isLoaded: пока история не приехала с диска, в файле лежит
         // правда, а в памяти — пусто; запись в этом окне была бы потерей.
         guard isLoaded else { return }
-        JSONFile.save(history, to: storeURL, log: Log.trips)
+        JSONFile.saveOrdered(history, to: storeURL, log: Log.trips, wait: mustWriteSynchronously())
     }
+
+    /// Ждать ли записи на диск прямо в вызове. На переднем плане — нет:
+    /// кодирование истории уходит с главного потока, и карточка конца поездки
+    /// не дёргается. В фоне — да: приостановленное приложение не допишет
+    /// очередь, а интерфейса там всё равно никто не видит. По умолчанию — да
+    /// (безопасно); асинхронность включает AppEnvironment, знающий состояние
+    /// приложения (модель UIKit не импортирует).
+    @ObservationIgnored var mustWriteSynchronously: () -> Bool = { true }
 }

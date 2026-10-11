@@ -102,8 +102,6 @@ final class RouteService {
     /// не дальше laneNoticeMeters.
     private(set) var laneNotice: LaneNotice?
     private(set) var laneNoticeDistance: CLLocationDistance = 0
-    /// Пройденный кусок маршрута (рисуется тусклым поверх линии).
-    private(set) var traveledPolyline: MKPolyline?
 
     /// Прибытие к цели — данные для карточки «Вы на месте».
     struct ArrivalSummary: Equatable {
@@ -155,7 +153,6 @@ final class RouteService {
     }
 
     @ObservationIgnored private var offRouteTicks = 0
-    @ObservationIgnored private var lastSplitAlong: CLLocationDistance = -1
     @ObservationIgnored private var lastRebuildAt: Date = .distantPast
     @ObservationIgnored private var isRebuilding = false
     /// Поколение маршрута: растёт при build/clear. Фоновое перестроение (OSRM, до 12 с)
@@ -392,8 +389,6 @@ final class RouteService {
         nextStepDistance = 0
         laneNotice = nil
         laneNoticeDistance = 0
-        traveledPolyline = nil
-        lastSplitAlong = -1
         offRouteTicks = 0
         announcedStage = [:]
         segmentHint = 0
@@ -441,14 +436,6 @@ final class RouteService {
            point.distance(to: MKMapPoint(current.coordinate)) <= AppConfig.routeStopReachedMeters
             || variant.stopAlong.map({ along > $0 + AppConfig.routeStopPassedMeters }) == true {
             stop = nil
-        }
-
-        // Пройденный кусок для тусклой отрисовки. Шаг крупный намеренно: эту
-        // линию читает тело экрана карты, и каждая перезапись пересобирает
-        // карту со всеми маркерами (см. AppConfig.routeTraveledStepMeters).
-        if abs(along - lastSplitAlong) > AppConfig.routeTraveledStepMeters {
-            lastSplitAlong = along
-            traveledPolyline = Self.traveledPrefix(points: variant.points, upTo: along)
         }
 
         // Следующая камера впереди по маршруту.
@@ -1122,26 +1109,6 @@ final class RouteService {
         var diff = abs(bearing - course).truncatingRemainder(dividingBy: 360)
         if diff > 180 { diff = 360 - diff }
         return diff > 90 ? AppConfig.routeWrongWayPenaltyMeters : 0
-    }
-
-    /// Начальный кусок маршрута длиной `upTo` метров (пройденная часть).
-    nonisolated static func traveledPrefix(points: [MKMapPoint],
-                                                   upTo along: CLLocationDistance) -> MKPolyline? {
-        guard along > 60, points.count >= 2 else { return nil }
-        var result: [MKMapPoint] = [points[0]]
-        var acc: CLLocationDistance = 0
-        for i in 1..<points.count {
-            let step = points[i - 1].distance(to: points[i])
-            if acc + step >= along {
-                let t = step > 0 ? (along - acc) / step : 0
-                result.append(MKMapPoint(x: points[i - 1].x + (points[i].x - points[i - 1].x) * t,
-                                         y: points[i - 1].y + (points[i].y - points[i - 1].y) * t))
-                break
-            }
-            acc += step
-            result.append(points[i])
-        }
-        return result.count >= 2 ? MKPolyline(points: result, count: result.count) : nil
     }
 
     /// Ближайшая точка на сегменте AB к точке P + параметр t (0…1).

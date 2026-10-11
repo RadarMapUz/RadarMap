@@ -179,6 +179,8 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
             // Apple — вторым и только со связью: без неё запрос лишь задержит
             // ответ, а свои адреса уже готовы.
             if self.env.network.isOnline {
+                await Task.pause(seconds: AppConfig.carPlaySearchAppleDebounceSeconds)
+                guard !Task.isCancelled else { return }
                 places += await self.apple(query, near: near)
             }
             guard !Task.isCancelled else { return }

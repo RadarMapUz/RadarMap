@@ -188,7 +188,11 @@ nonisolated enum HitchWatch {
     /// размер — а размер здесь и есть главная улика.
     private static let giveUpAfter: TimeInterval = 30
 
-    private static let running = OSAllocatedUnfairLock(initialState: false)
+    /// Поколение сторожа: `start` заводит новое, `stop` его гасит. Поток
+    /// живёт, пока его поколение текущее, — так быстрые «стоп-старт» при
+    /// моргании провода не оставляют двух потоков.
+    private nonisolated struct State: Sendable { var running = false; var generation = 0 }
+    private static let state = OSAllocatedUnfairLock(initialState: State())
 
     /// Сколько фризов было с последнего `drain()`: всего (> 250 мс), длинных
     /// (> 1 с — экран машины «стоит») и самый долгий. Лог читается только с
@@ -230,15 +234,17 @@ nonisolated enum HitchWatch {
     /// (штатное «моргание» провода при запуске двигателя), а второй сторож
     /// удвоил бы пинги и не сказал ничего нового.
     static func start() {
-        let alreadyRunning = running.withLock { started -> Bool in
-            defer { started = true }
-            return started
+        let generation: Int? = state.withLock { current in
+            guard !current.running else { return nil }
+            current.running = true
+            current.generation += 1
+            return current.generation
         }
-        guard !alreadyRunning else { return }
+        guard let generation else { return }
 
         Thread.detachNewThread {
             Thread.current.name = "HitchWatch"
-            while true {
+            while state.withLock({ $0.running && $0.generation == generation }) {
                 let sem = DispatchSemaphore(value: 0)
                 let sentAt = CFAbsoluteTimeGetCurrent()
                 DispatchQueue.main.async { sem.signal() }
@@ -252,5 +258,13 @@ nonisolated enum HitchWatch {
                 Thread.sleep(forTimeInterval: pingEvery)
             }
         }
+    }
+
+    /// Погасить сторож. Раньше он жил до смерти процесса: подключили машину
+    /// один раз — и пинг главного потока раз в полсекунды шёл часами, в том
+    /// числе в фоновых поездках без машины (~7 200 пробуждений в час, аудит
+    /// 11.10). Поток выходит на следующем витке.
+    static func stop() {
+        state.withLock { $0.running = false }
     }
 }

@@ -8,6 +8,7 @@
 //  фоновых пробуждениях, завершается при возвращении в приложение.
 //
 
+import CoreLocation
 import Foundation
 import ActivityKit
 import os
@@ -65,16 +66,19 @@ final class LiveActivityService {
         lastSentState = quantized
     }
 
-    func update(state: CameraActivityAttributes.ContentState) {
+    /// `nearMeters` — граница частых обновлений: зона оповещения при текущей
+    /// скорости с запасом (см. `nearZone`).
+    func update(state: CameraActivityAttributes.ContentState, nearMeters: CLLocationDistance) {
         guard let activity else { return }
-        // Квантуем расстояние до 25 м и не шлём одинаковые состояния —
-        // у Live Activity ограниченный бюджет обновлений.
-        let quantized = Self.quantize(state)
+        // Квантуем расстояние и не шлём одинаковые состояния — у Live Activity
+        // ограниченный бюджет обновлений.
+        let quantized = Self.quantize(state, nearMeters: nearMeters)
         guard quantized != lastSentState else { return }
         // Смена камеры (заголовка) — сразу; бегущая дистанция — не чаще
         // minInterval.
         if quantized.nearestTitle == lastSentState?.nearestTitle,
-           Date().timeIntervalSince(lastSentAt) < Self.interval(for: quantized) { return }
+           Date().timeIntervalSince(lastSentAt) < Self.interval(for: quantized,
+                                                                nearMeters: nearMeters) { return }
         lastSentState = quantized
         lastSentAt = Date()
         Task { await activity.update(.init(state: quantized,
@@ -92,19 +96,33 @@ final class LiveActivityService {
     /// раз в 15 с: на трассе плашка обновлялась ~1 200 раз в час, и каждый раз
     /// будила расширение виджета и экран блокировки, а дистанцию «4,3 км»
     /// за рулём точнее сотни метров не читают (docs/perf_audit_2026-10-07.md).
-    static func quantize(_ state: CameraActivityAttributes.ContentState) -> CameraActivityAttributes.ContentState {
+    static func quantize(_ state: CameraActivityAttributes.ContentState,
+                         nearMeters: CLLocationDistance = AppConfig.liveActivityNearMeters)
+        -> CameraActivityAttributes.ContentState {
         var s = state
         if let d = s.distanceMeters {
-            let step = d > AppConfig.liveActivityNearMeters ? 100.0 : 25.0
+            let step = d > nearMeters ? 100.0 : 25.0
             s.distanceMeters = (d / step).rounded() * step
         }
         return s
     }
 
-    static func interval(for state: CameraActivityAttributes.ContentState) -> TimeInterval {
-        guard let d = state.distanceMeters, d <= AppConfig.liveActivityNearMeters else {
+    static func interval(for state: CameraActivityAttributes.ContentState,
+                         nearMeters: CLLocationDistance = AppConfig.liveActivityNearMeters) -> TimeInterval {
+        guard let d = state.distanceMeters, d <= nearMeters else {
             return AppConfig.liveActivityFarInterval
         }
         return minInterval
+    }
+
+    /// Граница частых обновлений — по настоящей зоне оповещения, а не одна
+    /// на всё. Прежние фиксированные 1 200 м были запасом под трассу (радиус
+    /// на 130 км/ч ~800 м), а в Ташкенте ближайшая камера почти всегда ближе
+    /// 1,2 км — и плашка шла частой ступенью всю поездку, ~1 200 обновлений в
+    /// час (аудит 11.10). Теперь — радиус при текущей скорости с запасом,
+    /// не меньше `liveActivityMinNearMeters` и не больше прежней границы.
+    static func nearZone(alertRadius: CLLocationDistance) -> CLLocationDistance {
+        min(AppConfig.liveActivityNearMeters,
+            max(AppConfig.liveActivityMinNearMeters, alertRadius * AppConfig.liveActivityNearMargin))
     }
 }

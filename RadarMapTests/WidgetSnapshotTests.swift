@@ -225,4 +225,44 @@ final class WidgetSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.dayDistances.count, 7)
         XCTAssertEqual(snapshot.dayOverspeed.count, 7)
     }
+
+    // MARK: - Перезагрузка только по делу (аудит 11.10)
+
+    private func snapshot(km: Double, updated: Date?) -> SharedDefaults.Snapshot {
+        var s = SharedDefaults.Snapshot()
+        s.weekDistance = km * 1000
+        s.updatedAt = updated
+        return s
+    }
+
+    /// Те же цифры, свежий снимок — бюджет WidgetKit не тратим.
+    func testUnchangedFreshSnapshotIsNotReloaded() {
+        let old = snapshot(km: 42, updated: now.addingTimeInterval(-3600))
+        XCTAssertFalse(WidgetWeek.needsRefresh(previous: old, next: snapshot(km: 42, updated: nil),
+                                               now: now))
+    }
+
+    /// Другие цифры — перезагрузка сразу (конец поездки).
+    func testChangedNumbersReload() {
+        let old = snapshot(km: 42, updated: now.addingTimeInterval(-60))
+        XCTAssertTrue(WidgetWeek.needsRefresh(previous: old, next: snapshot(km: 43, updated: nil),
+                                              now: now))
+    }
+
+    /// Неизменный снимок освежается раньше, чем виджет приглушит его как
+    /// устаревший (24 ч).
+    func testUnchangedSnapshotRefreshesBeforeItLooksStale() {
+        let old = snapshot(km: 42, updated: now.addingTimeInterval(-13 * 3600))
+        XCTAssertTrue(WidgetWeek.needsRefresh(previous: old, next: snapshot(km: 42, updated: nil),
+                                              now: now))
+        XCTAssertLessThan(WidgetWeek.unchangedRefreshInterval, 24 * 3600)
+    }
+
+    /// Снимка ещё не было (или нет доступа к группе) — пишем.
+    func testMissingPreviousSnapshotReloads() {
+        XCTAssertTrue(WidgetWeek.needsRefresh(previous: snapshot(km: 0, updated: nil),
+                                              next: snapshot(km: 0, updated: nil), now: now))
+        XCTAssertTrue(WidgetWeek.needsRefresh(previous: SharedDefaults.Snapshot(hasAccess: false),
+                                              next: snapshot(km: 0, updated: nil), now: now))
+    }
 }

@@ -30,11 +30,6 @@ final class MapState {
     /// main рантайма баг уже исправлен; до выхода такой iOS помогает одно —
     /// не синтезировать isolated deinit вовсе.
     nonisolated deinit {}
-    var visibleCameras: [Camera] = []
-    var clusters: [CameraCluster] = []
-    /// Лимит дороги у видимых камер (id → км/ч): посчитан вместе со слоем вне
-    /// main — маркеры берут его отсюда, а не из спатиал-индекса на каждый кадр.
-    var visibleLimits: [Int: Int] = [:]
     var selectedCamera: Camera?          // открытый попап детали
     var highlightedID: Int?              // подсвеченный маркер на карте
     var showNearbySheet = false
@@ -268,57 +263,26 @@ final class MapState {
         }
     }
 
-    // MARK: - Подгрузка аннотаций
+    // MARK: - Видимая область
 
-    /// Вызывается при остановке движения карты. Буфер + проверка покрытия дают «умный» плавный зум:
-    /// мелкие сдвиги/приближения внутри уже загруженной области не вызывают пересчёт.
-    /// На широких зумах вместо отдельных точек — кластеры с количеством.
-    /// Средний зум: камеры рисуются точками, полный пин — у ближайшей/выбранной.
-    private(set) var isDotZoom = false
-
-    @ObservationIgnored private var layerGeneration = 0
-    /// Масштаб, для которого построен текущий слой: решение «точки или кластеры»
-    /// зависит от области, поэтому при заметной смене зума слой надо пересобрать.
+    /// Масштаб, для которого отфильтрованы зоны треног: при заметной смене
+    /// зума фильтр по буферу надо повторить.
     @ObservationIgnored private var loadedSpan: CLLocationDegrees = 0
 
+    /// Камеры на карте рисует движок из своего источника; здесь от области
+    /// остались центр (фокус важности при осмотре) и зоны треног. Раньше на
+    /// каждую остановку камеры карты здесь ещё строился слой аннотаций Apple
+    /// (`CameraMapContent.layer` по всей базе вместе с лимитами), который
+    /// после ухода подложки Apple никто не читал (аудит 11.10).
     func updateVisible(for region: MKCoordinateRegion) {
         currentRegion = region
-        let dotZoom = region.span.latitudeDelta > AppConfig.dotModeSpanDegrees
-        if dotZoom != isDotZoom { isDotZoom = dotZoom }
         // Карту тянут рукой — важность считаем от центра экрана.
         if orientation == .free { updateFocus(region.center) }
-        // База декодируется асинхронно: пока камер нет, регион не кэшируем —
-        // иначе пустой результат «прилипнет» и карта останется без точек.
-        guard let repository, !repository.cameras.isEmpty else { return }
         guard needsRecompute(for: region) else { return }
-
         let buffered = region.scaled(by: AppConfig.annotationBufferFactor)
-        // Горячие точки — в том же такте, что и камеры: список короткий,
-        // фильтр по рамке дешевле, чем ещё один повод пересобирать слой.
         visibleHotspots = (hotspots?.spots ?? []).filter { buffered.contains($0.coordinate) }
-        layerGeneration &+= 1
-        let generation = layerGeneration
-        let cameras = repository.cameras
-        let filter = self.filter
-        let span = region.span.latitudeDelta
-        let limitIndex = speedLimits?.limitIndex
-        // Бюджет маркеров зависит от того, не режет ли iOS процессор из-за
-        // перегрева. Камера при этом не пропадает: всё, что не поместилось в
-        // бюджет, CameraMapContent отдаёт кластерами с числом.
-        let budget = performance.annotationBudget
-        Task {
-            let layer = await CameraMapContent.layer(
-                cameras: cameras, region: buffered, filter: filter,
-                budget: budget, limitIndex: limitIndex)
-            // Пока считали, карту могли увезти дальше — этот ответ уже не про то,
-            // что на экране. Область «загруженной» при этом НЕ помечаем: иначе
-            // после быстрой прокрутки туда-сюда кэш говорил бы «тут всё есть»,
-            // а слой для неё так и не применился — камеры просто не появлялись.
-            guard generation == layerGeneration else { return }
-            loadedRegion = buffered
-            loadedSpan = span
-            apply(layer)
-        }
+        loadedRegion = buffered
+        loadedSpan = region.span.latitudeDelta
     }
 
     /// Пересчитывать ли слой: выход за буфер, заметная смена масштаба или
@@ -327,9 +291,6 @@ final class MapState {
     private func needsRecompute(for region: MKCoordinateRegion) -> Bool {
         guard let loaded = loadedRegion, loadedSpan > 0 else { return true }
         if !loaded.contains(region) { return true }
-        // Зум внутрь: набор строился для широкой области и мог быть
-        // кластеризован — без пересчёта кластеры так и остались бы на месте
-        // отдельных камер.
         let ratio = region.span.latitudeDelta / loadedSpan
         if ratio < 0.6 || ratio > 1.6 { return true }
         // В перегрев порог сдвига растягиваем: пересчёт слоя — самая дорогая
@@ -340,37 +301,6 @@ final class MapState {
         let movedLon = abs(region.center.longitude - loaded.center.longitude)
         return movedLat > loaded.span.latitudeDelta / 2 * threshold
             || movedLon > loaded.span.longitudeDelta / 2 * threshold
-    }
-
-    /// Применить готовый слой. Анимируем только небольшие наборы: на сотнях
-    /// аннотаций анимированная перестройка представлений сама по себе — рывок.
-    private func apply(_ layer: CameraMapContent.Layer) {
-        visibleLimits = layer.limits
-        let animates = layer.cameras.count + layer.clusters.count <= 80
-        if animates {
-            withMotion(.easeInOut(duration: 0.25)) {
-                visibleCameras = layer.cameras
-                clusters = layer.clusters
-            }
-        } else {
-            visibleCameras = layer.cameras
-            clusters = layer.clusters
-        }
-    }
-
-    func zoomInto(_ cluster: CameraCluster) {
-        let span = currentRegion?.span ?? MKCoordinateSpan(latitudeDelta: 8, longitudeDelta: 12)
-        let region = MKCoordinateRegion(
-            center: cluster.coordinate,
-            span: MKCoordinateSpan(
-                latitudeDelta: max(0.05, span.latitudeDelta / 4),
-                longitudeDelta: max(0.05, span.longitudeDelta / 4)
-            )
-        )
-        withMotion(.easeInOut(duration: 0.4)) {
-            position = .region(region)
-        }
-        updateVisible(for: region)
     }
 
     // MARK: - Действия

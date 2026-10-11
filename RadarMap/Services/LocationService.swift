@@ -73,7 +73,7 @@ final class LocationService: NSObject {
     /// `currentCoordinate` в body подписывало весь экран с картой на каждый
     /// фикс — раз в секунду пересборка ради ответа, который не менялся.
     private(set) var hasLocation = false
-    private(set) var speedKmh: Double = 0
+    private(set) var speedKmh: Double = 0 { didSet { refreshApproachFlags() } }
 
     /// GPS-курс движения (0–360°, −1 = недостоверен: стоим или нет сигнала).
     private(set) var currentCourse: CLLocationDegrees = -1
@@ -96,13 +96,13 @@ final class LocationService: NSObject {
     /// Камера, о которой голос промолчал, потому что мы ползли в пробке: скажем
     /// про неё, как только поедем (пока она ещё впереди и в радиусе).
     @ObservationIgnored private var postponedVoice: Int?
-    private(set) var distanceToNearest: CLLocationDistance?
+    private(set) var distanceToNearest: CLLocationDistance? { didSet { refreshApproachFlags() } }
     /// false = пользователь дал только «приблизительную» геолокацию — оповещения ненадёжны.
     private(set) var hasFullAccuracy = true
     /// Режим энергосбережения iOS: снижаем точность GPS и отключаем голос.
     private(set) var isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
     /// Режим «Поездка»: непрерывная геолокация + активные оповещения даже в свёрнутом виде.
-    private(set) var isTripActive = false
+    private(set) var isTripActive = false { didSet { refreshApproachFlags() } }
 
     /// Поездка началась/закончилась. Нужен тем, чей режим работы зависит от
     /// того, за рулём человек или нет, — а не от того, открыт ли экран
@@ -194,7 +194,7 @@ final class LocationService: NSObject {
     /// Номер последнего принятого фикса — по нему сторож определяет, что новых нет.
     @ObservationIgnored private var fixSequence = 0
     /// true — фиксов нет дольше gpsStaleSeconds: данные на экране устарели.
-    private(set) var isSignalStale = false
+    private(set) var isSignalStale = false { didSet { refreshApproachFlags() } }
     /// Позиция получена из фикса, который в алерты не пускается: кэш при запуске
     /// или слабый сигнал в помещении. Окрестности показать можно, но расстояние
     /// на панели нельзя подавать как живое.
@@ -228,7 +228,7 @@ final class LocationService: NSObject {
     /// состояние, иначе тишина выглядит поломкой, а не заботой.
     private(set) var familiarCameraIDs: Set<Int> = []
     /// Текущий контекст для чипа на HUD (в режиме «Авто»).
-    private(set) var alertContext: AlertPolicy.Context = .city
+    private(set) var alertContext: AlertPolicy.Context = .city { didSet { refreshApproachFlags() } }
     // Два независимых «передних плана»: телефонная сцена и CarPlay. Один флаг
     // они затирали друг другу (блокировка телефона в машине замораживала HUD CarPlay,
     // а отключение CarPlay в фоне навсегда оставляло «передний» режим GPS).
@@ -677,7 +677,10 @@ final class LocationService: NSObject {
         // Энергосбережение больше не отменяет лестницу: оно запрещает верхнюю
         // ступень, но оставляет нижние. Раньше стояла отмена целиком, и на
         // стоянке в этом режиме чип работал ВДВОЕ точнее, чем без него.
-        guard isTripActive, settings.adaptiveGPS else { return }
+        // CarPlay без поездки — тоже вождение с живыми оповещениями, и лестница
+        // ему положена: раньше он держал «Best» и фильтр 5 м всю сессию, в том
+        // числе на стоянке и на трассе вдали от камер (аудит 11.10).
+        guard isTripActive || isCarPlayConnected, settings.adaptiveGPS else { return }
         let cameraDistance = distanceToNearest ?? .greatestFiniteMagnitude
         let stepDistance = (route?.isActive == true && route?.nextStep != nil)
             ? (route?.nextStepDistance ?? .greatestFiniteMagnitude)
@@ -889,7 +892,7 @@ final class LocationService: NSObject {
             // Молчание о камере хуже лишнего расхода батареи: забракован по
             // точности на стоянке в поездке — сразу поднимаем точность до
             // верхней ступени; следующий принятый фикс выставит тир по правилам.
-            if reason == .accuracy, isTripActive, accuracyTier == 3 {
+            if reason == .accuracy, isTripActive || isCarPlayConnected, accuracyTier == 3 {
                 Log.location.notice("стоянка: фикс \(fix.horizontalAccuracy, privacy: .public) м отброшен — поднимаем точность")
                 accuracyTier = 0
                 manager.desiredAccuracy = kCLLocationAccuracyBest
@@ -1145,7 +1148,8 @@ final class LocationService: NSObject {
         // собиралось каждую секунду ради вызова, который тут же выходил по
         // guard. Плашка не запущена почти всю жизнь приложения.
         if liveActivity?.isActive == true {
-            liveActivity?.update(state: activityState)
+            liveActivity?.update(state: activityState,
+                                 nearMeters: LiveActivityService.nearZone(alertRadius: effectiveAlertRadius))
         }
         // Часы: только в поездке. Вне её HUD часов рисует «нет поездки» без
         // цифр, а меняющаяся скорость пробивала дедуп и будила BT-радио ради
@@ -1161,14 +1165,46 @@ final class LocationService: NSObject {
 
     /// Непрерывный уровень тревоги (та же лестница порогов, что в AlertEngine):
     /// 0 — тихо, 1…3 — эскалация. Его показывают часы и приборная панель CarPlay.
-    /// Без промежуточных массивов: читается каждый тик и на каждую перерисовку
-    /// часового моста и дока CarPlay.
-    var alertLevel: Int {
-        guard isTripActive, let d = distanceToNearest else { return 0 }
-        let r = effectiveAlertRadius
-        if d <= r * 0.3 { return 3 }
-        if d <= r * 0.6 { return 2 }
-        if d <= r { return 1 }
+    ///
+    /// Хранимый, а не вычисляемый — как и `isApproachingCamera` ниже. Внутри
+    /// вычисляемого читались дистанция и скорость, которые пишутся КАЖДЫМ
+    /// фиксом, и каждый, кто смотрел на флаг, становился подписчиком тика:
+    /// корень экрана CarPlay пересобирался раз в секунду, а наблюдатели
+    /// CarPlay заводили по задаче на тик (аудит 11.10). Хранимое значение
+    /// будит читателей только на смене — несколько раз за камеру.
+    private(set) var alertLevel = 0
+    /// Полноэкранное предупреждение: движемся и ближайшая камера в радиусе
+    /// оповещения. Без свежего фикса расстояние на экране — вчерашняя правда:
+    /// панель прячем, но состояние эскалации не трогаем (иначе после туннеля
+    /// заорём заново).
+    private(set) var isApproachingCamera = false
+
+    /// Пересчёт обоих флагов. Зовётся из didSet каждого входа (скорость,
+    /// дистанция, сигнал, поездка, контекст), поэтому пропустить путь
+    /// обновления нельзя; запись — только на смене значения.
+    private func refreshApproachFlags() {
+        let radius = effectiveAlertRadius
+        let approaching = Self.isApproaching(distance: distanceToNearest, speedKmh: speedKmh,
+                                             radius: radius, signalStale: isSignalStale)
+        if approaching != isApproachingCamera { isApproachingCamera = approaching }
+        let level = Self.alertLevel(distance: distanceToNearest, radius: radius,
+                                    tripActive: isTripActive)
+        if level != alertLevel { alertLevel = level }
+    }
+
+    nonisolated static func isApproaching(distance: CLLocationDistance?, speedKmh: Double,
+                                          radius: CLLocationDistance, signalStale: Bool) -> Bool {
+        guard !signalStale, let distance,
+              speedKmh >= AppConfig.directionalMinSpeedKmh else { return false }
+        return distance <= radius
+    }
+
+    nonisolated static func alertLevel(distance: CLLocationDistance?, radius: CLLocationDistance,
+                                       tripActive: Bool) -> Int {
+        guard tripActive, let d = distance else { return 0 }
+        if d <= radius * 0.3 { return 3 }
+        if d <= radius * 0.6 { return 2 }
+        if d <= radius { return 1 }
         return 0
     }
 
@@ -1355,15 +1391,6 @@ final class LocationService: NSObject {
         guard !isSignalStale, let distance = distanceToNearest,
               distance < effectiveAlertRadius else { return nil }
         return 1 - distance / max(effectiveAlertRadius, 1)
-    }
-
-    /// Показывать полноэкранное предупреждение: движемся и ближайшая камера в радиусе
-    /// оповещения. Без свежего фикса расстояние на экране — вчерашняя правда: панель
-    /// прячем, но состояние эскалации не трогаем (иначе после туннеля заорём заново).
-    var isApproachingCamera: Bool {
-        guard !isSignalStale, let d = distanceToNearest,
-              speedKmh >= AppConfig.directionalMinSpeedKmh else { return false }
-        return d <= effectiveAlertRadius
     }
 
     /// Ползём: пробка или светофор. Голос в этот момент бесполезен — камеру

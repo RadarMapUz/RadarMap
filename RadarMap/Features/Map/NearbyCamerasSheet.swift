@@ -13,16 +13,19 @@ struct NearbyCamerasSheet: View {
     let onSelect: (Camera) -> Void
 
     var body: some View {
+        // Один раз за тело: список читался дважды, и каждый раз — полная
+        // сортировка с геодезикой на каждое сравнение (аудит 11.10).
+        let cameras = sortedCameras
         NavigationStack {
             Group {
-                if sortedCameras.isEmpty {
+                if cameras.isEmpty {
                     ContentUnavailableView(
                         "Камеры не найдены",
                         systemImage: "location.slash",
                         description: Text("Двигайтесь — приложение подберёт ближайшие камеры вокруг вас.")
                     )
                 } else {
-                    List(sortedCameras) { camera in
+                    List(cameras) { camera in
                         Button { onSelect(camera); dismiss() } label: { row(camera) }
                             .listRowBackground(Theme.surface)
                             .listRowSeparatorTint(Theme.stroke)
@@ -45,9 +48,14 @@ struct NearbyCamerasSheet: View {
         .presentationDragIndicator(.visible)
     }
 
+    /// Расстояние считается один раз на камеру, плоским приближением: для
+    /// порядка двадцати точек вокруг этого достаточно.
     private var sortedCameras: [Camera] {
-        guard let coordinate = env.location.currentCoordinate else { return env.location.nearbyCameras }
-        return env.location.nearbyCameras.sorted { $0.distance(from: coordinate) < $1.distance(from: coordinate) }
+        guard let c = env.location.currentCoordinate else { return env.location.nearbyCameras }
+        return env.location.nearbyCameras
+            .map { ($0, GeoMath.fastDistance(c.latitude, c.longitude, $0.lat, $0.lon)) }
+            .sorted { $0.1 < $1.1 }
+            .map(\.0)
     }
 
     private func row(_ camera: Camera) -> some View {

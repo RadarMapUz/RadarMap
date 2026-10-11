@@ -168,13 +168,17 @@ nonisolated struct VenueBook: Sendable {
     static func kind(for query: String) -> Venue.Kind? {
         let folded = AddressBook.fold(query)
         guard folded.count >= 3 else { return nil }
-        if let exact = Venue.Kind.allCases.first(where: { kind in
-            kind.searchWords.contains { AddressBook.fold($0) == folded }
-        }) { return exact }
-        return Venue.Kind.allCases.first { kind in
-            kind.searchWords.contains { AddressBook.fold($0).hasPrefix(folded) }
+        if let exact = foldedKindWords.first(where: { $0.words.contains(folded) }) {
+            return exact.kind
         }
+        return foldedKindWords.first { $0.words.contains { $0.hasPrefix(folded) } }?.kind
     }
+
+    /// Слова видов, уже приведённые: раньше каждая буква запроса заново
+    /// приводила все ~70 слов, до двух раз (аудит 11.10). Порядок видов —
+    /// как в allCases: первый по порядку вид побеждает при равенстве.
+    private static let foldedKindWords: [(kind: Venue.Kind, words: [String])] =
+        Venue.Kind.allCases.map { kind in (kind, kind.searchWords.map { AddressBook.fold($0) }) }
 
     /// Как спросить Apple о виде: категорией POI, где она есть (не зависит
     /// от языка — «AYOQSH» Apple не поймёт), иначе словом по-русски.

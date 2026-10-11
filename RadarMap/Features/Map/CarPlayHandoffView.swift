@@ -47,10 +47,7 @@ struct CarPlayHandoffView: View {
                             .foregroundStyle(Theme.success)
                         Text("·")
                             .foregroundStyle(Theme.textTertiary)
-                        Text(Formatting.distance(env.trip.distanceMeters))
-                            .font(.rounded(15, .semibold).monospacedDigit())
-                            .foregroundStyle(Theme.textSecondary)
-                            .contentTransition(.numericText())
+                        HandoffDistance()
                     }
                     .padding(.top, 10)
                 }
@@ -76,6 +73,24 @@ struct CarPlayHandoffView: View {
         .onDisappear {
             UIApplication.shared.isIdleTimerDisabled =
                 env.location.isTripActive && env.settings.keepScreenOn
+        }
+    }
+}
+
+/// Пробег поездки — отдельным листом. Он читает километраж, который пишется
+/// каждым фиксом; в корне экрана это пересобирало весь экран передачи на
+/// каждом фиксе всю CarPlay-поездку, в том числе с телефоном в кармане
+/// (аудит 11.10). В фоне лист пуст — фиксы его не будят.
+private struct HandoffDistance: View {
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        if scenePhase != .background {
+            Text(Formatting.distance(env.trip.distanceMeters))
+                .font(.rounded(15, .semibold).monospacedDigit())
+                .foregroundStyle(Theme.textSecondary)
+                .contentTransition(.numericText())
         }
     }
 }

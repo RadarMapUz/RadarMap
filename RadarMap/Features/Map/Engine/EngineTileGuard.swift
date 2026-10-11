@@ -98,7 +98,12 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
     /// берём разобранный индекс с диска и ни одного мегабайта не трогаем.
     /// Ответил 200 — значит индекс правда сменился, и только тогда платим
     /// полным разбором, один раз, с записью результата на диск.
-    static func prepare() async {
+    ///
+    /// `@concurrent`: без него обычный `async` здесь выполнялся на акторе
+    /// вызывающего — то есть на главном (EngineMapView зовёт из MainActor), и
+    /// разбор 23,5 МБ с проверкой подписи и записью 6,6 МБ подвешивал экран на
+    /// секунды (аудит 11.10). Всё состояние — под `lock`, главный ему не нужен.
+    @concurrent static func prepare() async {
         if isReady { return }
         let url = AppConfig.syncBaseURL.appendingPathComponent("mvt_index.json")
         var request = URLRequest(url: url)

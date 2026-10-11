@@ -228,8 +228,7 @@ nonisolated struct AddressBook: Sendable {
     /// Разбирается по ИСХОДНОЙ строке: приведение превращало «/» в пробел, и
     /// «12/1» становилось улицей «12» и домом «1».
     static func splitHouse(_ query: String) -> (street: String, house: String?) {
-        let pattern = #"^(.*?)[\s,]+(?:(?:д|дом|uy|d|№)\.?\s*)?(\d+\s*[\p{L}]?(?:\s*[/-]\s*\d+\s*[\p{L}]?)?)\s*$"#
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+        guard let regex = houseRegex,
               let match = regex.firstMatch(in: query, range: NSRange(query.startIndex..., in: query)),
               let streetRange = Range(match.range(at: 1), in: query),
               let houseRange = Range(match.range(at: 2), in: query) else { return (query, nil) }
@@ -238,6 +237,12 @@ nonisolated struct AddressBook: Sendable {
         guard !tokens(street).isEmpty else { return (query, nil) }
         return (street, houseKey(String(query[houseRange])))
     }
+
+    /// Шаблон «улица + номер» — компилируется один раз, а не на каждую букву
+    /// запроса (поиск зовёт splitHouse на каждом нажатии; аудит 11.10).
+    private static let houseRegex = try? NSRegularExpression(
+        pattern: #"^(.*?)[\s,]+(?:(?:д|дом|uy|d|№)\.?\s*)?(\d+\s*[\p{L}]?(?:\s*[/-]\s*\d+\s*[\p{L}]?)?)\s*$"#,
+        options: [.caseInsensitive])
 
     /// Слова, которые не сужают поиск.
     ///

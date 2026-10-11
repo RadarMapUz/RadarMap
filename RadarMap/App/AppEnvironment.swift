@@ -7,6 +7,7 @@
 
 import Foundation
 import Observation
+import UIKit
 import WidgetKit
 
 @MainActor
@@ -282,6 +283,9 @@ final class AppEnvironment {
         // назначать его дважды нельзя по определению: композиционный корень
         // читают как ответ на вопрос «что происходит в конце поездки», и ответ
         // обязан быть один.
+        // История поездок пишется с главного потока только на переднем плане:
+        // в фоне приложение могут приостановить с недописанной очередью.
+        trip.mustWriteSynchronously = { UIApplication.shared.applicationState == .background }
         let usage = self.usage
         trip.onTripFinished = { [weak self, weak trip, weak notifications, weak usage] in
             guard let trip else { return }
@@ -544,7 +548,7 @@ final class AppEnvironment {
             }
         }
         let month = TripHistory.summary(days: trip.days, history: trip.history, period: .month)
-        SharedDefaults.write(SharedDefaults.Snapshot(
+        let snapshot = SharedDefaults.Snapshot(
             weekStart: weekStart,
             weekDistance: week.distance,
             weekTrips: week.trips,
@@ -561,7 +565,12 @@ final class AppEnvironment {
             weekMovingDuration: week.movingDuration,
             lastTripDistance: trip.history.first?.distanceMeters ?? 0,
             lastTripAt: trip.history.first?.startedAt
-        ))
+        )
+        // Сравниваем с тем, что виджет уже видит: перезагрузка без новых цифр
+        // тратит дневной бюджет WidgetKit (см. WidgetWeek.needsRefresh).
+        guard WidgetWeek.needsRefresh(previous: SharedDefaults.read(), next: snapshot, now: now)
+        else { return }
+        SharedDefaults.write(snapshot)
         WidgetCenter.shared.reloadAllTimelines()
     }
 }

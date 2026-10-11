@@ -52,7 +52,7 @@ enum SharedDefaults {
         static let updatedAt = "widget.updatedAt"
     }
 
-    struct Snapshot {
+    struct Snapshot: Equatable {
         /// Начало недели, за которую здесь цифры. Без него виджет не может
         /// отличить «эта неделя» от «та, на которой человек последний раз
         /// открывал приложение», — и всю новую неделю честно показывал бы
@@ -167,6 +167,29 @@ nonisolated enum WidgetState: Equatable {
 }
 
 nonisolated enum WidgetWeek {
+    /// Как часто переписывать неизменный снимок. Меньше суток с запасом:
+    /// виджет приглушает подпись снимку старше `isStale` (24 ч), и при
+    /// ежедневно открываемом приложении он не должен тускнеть.
+    static let unchangedRefreshInterval: TimeInterval = 12 * 60 * 60
+
+    /// Перезаписать ли снимок и перезагрузить виджет.
+    ///
+    /// Раньше перезагрузка шла безусловно — на каждом уходе в фон, на каждом
+    /// запуске (в том числе фоновом, после выгрузки по памяти, ~3 раза в
+    /// фоновый час) и в конце поездки. У WidgetKit дневной бюджет
+    /// перезагрузок, и, выбранный впустую, он кончался ровно к концу поездки —
+    /// к единственному моменту, ради которого виджет и обновляют (аудит
+    /// 11.10). Теперь — только когда цифры другие или снимок пора освежить.
+    static func needsRefresh(previous: SharedDefaults.Snapshot, next: SharedDefaults.Snapshot,
+                             now: Date) -> Bool {
+        guard previous.hasAccess, let updatedAt = previous.updatedAt else { return true }
+        var old = previous, new = next
+        old.updatedAt = nil
+        new.updatedAt = nil
+        if old != new { return true }
+        return now.timeIntervalSince(updatedAt) > unchangedRefreshInterval
+    }
+
     /// Сколько дней недели были ездовыми.
     static func activeDayCount(_ distances: [Double]) -> Int {
         padded(distances).filter { $0 > 0 }.count

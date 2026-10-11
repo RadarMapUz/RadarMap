@@ -176,6 +176,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             self.connectedAt = nil
         }
         HitchWatch.setCounting(false)
+        #if !DEBUG
+        // В релизе сторож живёт только с машиной (в DEBUG он стоит с запуска).
+        HitchWatch.stop()
+        #endif
         // Вышли из машины: телефон мог всё это время быть в фоне, события
         // scenePhase не будет — снимаем «передний план» сами.
         AppEnvironment.shared.setCarPlayConnected(false)

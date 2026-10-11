@@ -8,3 +8,5 @@
 40 4 2 * * /opt/radarmap/api/update_speed_limits.sh >> /opt/radarmap/osrm/limits.log 2>&1
 # Реестр МВД: только ЗАМЕЧАЕТ изменение (кандидат + update.log), базу сливает владелец — merge_cameras.py. Включено 27.09.2026.
 0 5 * * 1 /usr/bin/python3 /opt/radarmap/api/update_cameras.py >/dev/null 2>&1
+# Пробки: куски следа → OSRM match → /radarmap/traffic/now.json (traffic_build.py). Выкладка — deploy_traffic.sh.
+*/2 * * * * /usr/bin/python3 /opt/radarmap/api/traffic_build.py >> /var/log/radarmap-traffic.log 2>&1

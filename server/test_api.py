@@ -43,12 +43,16 @@ def _get_raw(port, path, etag=None):
         return e.code, dict(e.headers), e.read()
 
 
-class APITest(unittest.TestCase):
+class ServerTestBase(unittest.TestCase):
+    """Настоящий сервер на случайном порту с временными базами."""
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         api.DB_PATH = cls.tmp.name
         api.init_db()      # схема, миграции и индексы — один раз, как в проде
+        cls.traffic_tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        api.TRAFFIC_DB_PATH = cls.traffic_tmp.name
+        api.init_traffic_db()
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), api.Handler)
         cls.port = cls.server.server_address[1]
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
@@ -64,6 +68,10 @@ class APITest(unittest.TestCase):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
+        conn = sqlite3.connect(api.TRAFFIC_DB_PATH)
+        conn.execute("DELETE FROM traffic_pieces")
+        conn.commit()
+        conn.close()
         with api._ip_lock:
             api._ip_counters.clear()
         with api._cleanup_lock:
@@ -73,6 +81,8 @@ class APITest(unittest.TestCase):
         with api._mobile_lock:
             api._mobile_cache = None
 
+
+class APITest(ServerTestBase):
     # --- дешёвый опрос: ETag и 304 ---
 
     def test_unchanged_list_answers_304_without_body(self):
@@ -956,6 +966,64 @@ class APITest(unittest.TestCase):
         finally:
             server.server_close()
 
+
+
+class TrafficTest(ServerTestBase):
+    """Куски следа для пробок. Важнее формы — то, чего сервер НЕ должен
+    сделать: сохранить устройство, поездку, время или точку за границей."""
+
+    @staticmethod
+    def piece(lat=41.3110, lon=69.2790, n=6, step=0.0006, dt=8, extra=None):
+        p = {"p": [[lat + i * step, lon, i * dt, 40] for i in range(n)]}
+        if extra:
+            p.update(extra)
+        return p
+
+    def stored(self):
+        conn = sqlite3.connect(api.TRAFFIC_DB_PATH)
+        rows = conn.execute("SELECT points FROM traffic_pieces").fetchall()
+        conn.close()
+        return [json.loads(r[0]) for r in rows]
+
+    def test_accepts_clean_piece_and_stores_only_numbers(self):
+        status, body = _call(self.port, "POST", "/api/traffic",
+                             {"v": 1, "device": "abc", "trip": 7,
+                              "pieces": [self.piece(extra={"device": "abc", "ts": 1760000000})]})
+        self.assertEqual((status, body.get("accepted")), (200, 1))
+        rows = self.stored()
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(all(len(point) == 4 for point in rows[0]))
+        raw = json.dumps(rows)
+        for leak in ("device", "abc", "trip", "ts", "1760000000"):
+            self.assertNotIn(leak, raw)
+
+    def test_rejects_bad_envelope(self):
+        for payload in ({"v": 2, "pieces": []}, {"pieces": []}, {"v": 1, "pieces": "x"}):
+            status, _ = _call(self.port, "POST", "/api/traffic", payload)
+            self.assertEqual(status, 400)
+
+    def test_skips_bad_pieces_keeps_good(self):
+        outside = self.piece(lat=55.75, lon=37.61)            # Москва
+        short = self.piece(n=2)
+        late_start = {"p": [[41.31, 69.27, 5, 40], [41.311, 69.27, 10, 40], [41.312, 69.27, 15, 40]]}
+        teleport = {"p": [[41.31, 69.27, 0, 40], [41.40, 69.27, 1, 40], [41.41, 69.27, 2, 40]]}
+        status, body = _call(self.port, "POST", "/api/traffic",
+                             {"v": 1, "pieces": [outside, short, late_start, teleport, self.piece()]})
+        self.assertEqual((status, body.get("accepted")), (200, 1))
+        self.assertEqual(len(self.stored()), 1)
+
+    def test_ip_quota(self):
+        old = api.TRAFFIC_PIECES_PER_IP_DAY
+        api.TRAFFIC_PIECES_PER_IP_DAY = 2
+        try:
+            status, body = _call(self.port, "POST", "/api/traffic",
+                                 {"v": 1, "pieces": [self.piece()] * 3}, ip="10.0.0.9")
+            self.assertEqual(body.get("accepted"), 2)
+            status, body = _call(self.port, "POST", "/api/traffic",
+                                 {"v": 1, "pieces": [self.piece()]}, ip="10.0.0.10")
+            self.assertEqual(body.get("accepted"), 1, "лимит — на адрес, а не на всех")
+        finally:
+            api.TRAFFIC_PIECES_PER_IP_DAY = old
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

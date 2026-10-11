@@ -17,6 +17,9 @@ Endpoints:
   POST /api/stat           {device, day, app, ios, model, location_auth, onboarded,
                             trips, km, alerts, passes, reports, screens} -> {"ok": true}
                            (обезличенный суточный агрегат: ни координат, ни времени событий)
+  POST /api/traffic        {v: 1, pieces: [{p: [[lat, lon, t, kmh], ...]}]} -> {"ok": true, "accepted": N}
+                           (куски следа для пробок: без устройства, без поездки, время —
+                            только относительное внутри куска; см. «Пробки» ниже)
 
 Правила передвижных радаров (жизненный цикл доверия):
   * новая отметка — на испытательном сроке (радар/тренога 75 мин, пост 2 ч):
@@ -51,6 +54,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import notify
 
 DB_PATH = "/opt/radarmap/api/reports.db"
+# Пробки — отдельный файл: куски следа пишутся потоком всю поездку каждого
+# водителя, и делить с ними блокировки базы отметок незачем. Читает и чистит
+# его server/traffic_build.py.
+TRAFFIC_DB_PATH = "/opt/radarmap/api/traffic.db"
 # Потолок одновременных обработчиков. У ThreadingHTTPServer предела нет: поток
 # на соединение плюс медленный клиент — и память кончается раньше, чем сработают
 # капы. Сверх потолка отвечаем 503: честный отказ лучше молчаливой очереди.
@@ -328,6 +335,82 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+
+# --- Пробки ---------------------------------------------------------------------
+#
+# Телефон присылает куски следа поездки (~1 км), из которых traffic_build.py
+# через OSRM match получает скорость на рёбрах дорог OSM. Приватность — по
+# построению, и проверки ниже её охраняют, а не только форму:
+#   * в куске нет ни устройства, ни поездки, ни абсолютного времени — только
+#     секунды от начала куска; лишние поля не читаются и не сохраняются;
+#   * IP не пишется никуда: он нужен только суточному лимиту в памяти;
+#   * сырой кусок живёт до сопоставления (traffic_build.py удаляет его сразу
+#     после, и в любом случае через TRAFFIC_PIECE_TTL);
+#   * концы поездок и места у дома/работы режет сам телефон (TrafficProbes).
+TRAFFIC_BODY_LIMIT = 64 * 1024
+TRAFFIC_MAX_PIECES = 12          # за один запрос (пачка раз в 2 минуты)
+TRAFFIC_MIN_POINTS = 3
+TRAFFIC_MAX_POINTS = 120         # в куске
+TRAFFIC_MAX_SPAN = 900           # секунд в куске (стоим в пробке — кусок длинный)
+TRAFFIC_MAX_STEP_MPS = 70.0      # между соседними точками (~250 км/ч)
+TRAFFIC_PIECES_PER_IP_DAY = 5000 # CGNAT: за адресом оператора — десятки машин
+# Узбекистан с запасом: точка за границей — не наша дорога или подделка.
+UZ_LAT = (37.0, 45.8)
+UZ_LON = (55.8, 73.3)
+
+
+def traffic_db():
+    conn = sqlite3.connect(TRAFFIC_DB_PATH, timeout=BUSY_TIMEOUT_MS / 1000)
+    conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    return conn
+
+
+def init_traffic_db():
+    conn = sqlite3.connect(TRAFFIC_DB_PATH, timeout=BUSY_TIMEOUT_MS / 1000)
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("""CREATE TABLE IF NOT EXISTS traffic_pieces(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        received REAL NOT NULL,
+        points TEXT NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS traffic_pieces_received ON traffic_pieces(received)")
+    conn.commit()
+    conn.close()
+
+
+def clean_traffic_piece(raw):
+    """Кусок в каноническом виде или None. Берутся только четыре числа точки;
+    всё, что прислали сверх, отбрасывается — сохранить «случайно» нечего."""
+    if not isinstance(raw, dict):
+        return None
+    points = raw.get("p")
+    if not isinstance(points, list) or not (TRAFFIC_MIN_POINTS <= len(points) <= TRAFFIC_MAX_POINTS):
+        return None
+    out = []
+    for point in points:
+        if not isinstance(point, list) or len(point) != 4:
+            return None
+        try:
+            lat, lon, t, kmh = (float(v) for v in point)
+        except (TypeError, ValueError):
+            return None
+        if not all(math.isfinite(v) for v in (lat, lon, t, kmh)):
+            return None
+        if not (UZ_LAT[0] <= lat <= UZ_LAT[1] and UZ_LON[0] <= lon <= UZ_LON[1]):
+            return None
+        if kmh > 250:
+            return None
+        out.append([round(lat, 5), round(lon, 5), int(round(t)), int(round(kmh)) if kmh >= 0 else -1])
+    if out[0][2] != 0 or out[-1][2] > TRAFFIC_MAX_SPAN:
+        return None
+    for a, b in zip(out, out[1:]):
+        dt = b[2] - a[2]
+        if dt <= 0:
+            return None
+        if haversine(a[0], a[1], b[0], b[1]) / dt > TRAFFIC_MAX_STEP_MPS:
+            return None
+    return out
 
 
 def migrate(conn, table, column_def):
@@ -609,7 +692,32 @@ class Handler(BaseHTTPRequestHandler):
             return self._feedback()
         if path == "/api/stat":
             return self._stat()
+        if path == "/api/traffic":
+            return self._traffic()
         self._json(404, {"error": "not found"})
+
+    def _traffic(self):
+        """Куски следа для пробок. Плохой кусок пропускается, а не роняет
+        пачку: один глюк GPS не должен стоить водителю всей отправки."""
+        data = self._body(limit=TRAFFIC_BODY_LIMIT)
+        if not isinstance(data, dict) or data.get("v") != 1 or not isinstance(data.get("pieces"), list):
+            return self._json(400, {"error": "bad json"})
+        pieces = [p for p in (clean_traffic_piece(raw) for raw in data["pieces"][:TRAFFIC_MAX_PIECES]) if p]
+        ip = self._ip()
+        accepted = 0
+        now = time.time()
+        conn = traffic_db()
+        try:
+            for piece in pieces:
+                if ip_quota_exceeded("traffic", ip, TRAFFIC_PIECES_PER_IP_DAY):
+                    break
+                conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+                             (now, json.dumps(piece, separators=(",", ":"))))
+                accepted += 1
+            conn.commit()
+        finally:
+            conn.close()
+        self._json(200, {"ok": True, "accepted": accepted})
 
     def _stat(self):
         """Суточный агрегат использования. Координат тут нет и быть не может:
@@ -1139,4 +1247,5 @@ class BoundedHTTPServer(ThreadingHTTPServer):
 
 if __name__ == "__main__":
     init_db()
+    init_traffic_db()
     BoundedHTTPServer(("127.0.0.1", 8091), Handler).serve_forever()

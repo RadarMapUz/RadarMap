@@ -61,12 +61,19 @@ final class CarPlayMapModel {
     var hasSystemGuidance = false
     /// Экран машины показывает нас. В фоне (на экране другое приложение или
     /// приборная панель) карта на движке выгружается: картинку никто не видит,
-    /// а рисует и греется телефон. Ставит делегат сцены.
-    var isOnScreen = true
+    /// а рисует и греется телефон. Ставит делегат сцены — по настоящему
+    /// состоянию сцены, а не «пока не сказали иначе»: до 2.2.6 здесь стояло
+    /// true, и сцена, подключённая в фоне (на экране машины Яндекс), сразу
+    /// поднимала карту и HUD в окне, которое никто не показывал.
+    var isOnScreen = false
     /// Последний тик GPS, на который экран машины действительно перерисовался.
     /// Пишет вью (onChange тика), читает сторож застывания в делегате: тики
     /// идут, а это число стоит — дерево интерфейса в окне машины мертво.
     @ObservationIgnored var lastRenderedTick = 0
+    /// Последний удар пульса экрана (TimelineView в CarPlayLiveness). В отличие
+    /// от тика GPS бьёт и у стоящей машины, поэтому сторож видит застывание
+    /// и тогда, когда фиксов нет минутами.
+    @ObservationIgnored var lastHeartbeat = Date()
     /// Едет ли карта за машиной. Пишет координатор карты (система сама снимает
     /// слежение, как только водитель тронул карту пальцем или крутилкой),
     /// читает значок кнопки «к себе»: залитый — следим, контурный — стоим.
@@ -180,9 +187,10 @@ struct CarPlayMapScreen: View {
         .onChange(of: model.isOnScreen) { _, shown in
             Log.carplay.notice("экран машины перерисован: на экране \(shown, privacy: .public)")
         }
-        // Отметка живости для сторожа застывания (см. CarPlaySceneDelegate):
-        // onChange срабатывает только у живого дерева.
-        .onChange(of: env.location.locationTick) { _, tick in model.lastRenderedTick = tick }
+        // Отметки живости для сторожа застывания — отдельной вью: тик GPS,
+        // прочитанный здесь, пересобирал бы на каждом фиксе всё дерево с
+        // картой, а не крошечный невидимый пульс.
+        .background { if model.isOnScreen { CarPlayLiveness(model: model) } }
         // Камера впереди — карта возвращается к машине, где бы её ни оставили.
         .onChange(of: env.location.isApproachingCamera) { _, approaching in
             if approaching { model.returnOnAlert() }
@@ -218,5 +226,27 @@ struct CarPlayMapScreen: View {
         #else
         Theme.background.ignoresSafeArea()
         #endif
+    }
+}
+
+/// Невидимые отметки живости экрана машины для сторожа застывания
+/// (CarPlaySceneDelegate.startFreezeWatch): тик GPS, на который дерево
+/// перерисовалось, и пульс TimelineView, который бьёт и без GPS. Оба пишутся,
+/// только пока SwiftUI действительно обновляет это окно.
+private struct CarPlayLiveness: View {
+    @Environment(AppEnvironment.self) private var env
+    let model: CarPlayMapModel
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: AppConfig.carPlayHeartbeatSeconds)) { context in
+            Color.clear
+                .frame(width: 0, height: 0)
+                .onChange(of: context.date, initial: true) { _, date in model.lastHeartbeat = date }
+        }
+        .onChange(of: env.location.locationTick, initial: true) { _, tick in
+            model.lastRenderedTick = tick
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
     }
 }

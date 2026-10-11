@@ -80,13 +80,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         model.carIsDark = scene.contentStyle == .dark
         model.refreshDaylight(appearance: env.settings.mapAppearance,
                               coordinate: env.location.currentCoordinate)
-        installHost(in: window)
 
-        // Сцена может подключиться в ФОНЕ (журнал 2.2.3: хост держал её в
-        // BG-Active четырнадцать секунд): карта на движке без этого рисовала
-        // бы невидимое рядом с картой приборной панели — два движка разом,
-        // сценарий из docs/crash_carplay_memory.md.
-        model.isOnScreen = scene.activationState != .background
+        // Сцена часто подключается в ФОНЕ: телефон с идущей поездкой
+        // подключили к машине, а на её экране последним был Яндекс (журнал
+        // 11.10, 16:20:28 — BG-Active). Окно в этот момент ещё не привязано к
+        // экрану («cannot add handler to 0 from 0» через 80 мс), и строить в
+        // нём карту и HUD нельзя: до 2.2.6 проверка была `!= .background`,
+        // подключение в состоянии «ещё не на экране» её проходило, дерево
+        // строилось вслепую, а сторож пересоздавал его — тоже в фоне. Потом
+        // водитель открывал RadarMap, кнопки шаблона жили, а окно стояло.
+        // Теперь окно строится только на экране, и всегда заново
+        // (sceneWillEnterForeground).
+        let shown = Self.isShown(scene)
+        model.isOnScreen = shown
+        if shown { installHost(in: window) } else { needsFreshHost = true }
         rootShown = false
 
         let template = CPMapTemplate()
@@ -113,7 +120,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         resendButtons()
         observePendingConfirm()
         startFreezeWatch(scene: scene)
-        Log.carplay.notice("CarPlay подключён, сцена \(scene.activationState == .background ? "в фоне" : "на экране", privacy: .public)")
+        Log.carplay.notice("CarPlay подключён, сцена \(Self.stateName(scene), privacy: .public)")
         // Без анимации: анимированная установка корня у сцены в фоне
         // теряется (так же лечили пропажу кнопок в CoMaps).
         interfaceController.setRootTemplate(template, animated: false) { _, error in
@@ -170,35 +177,72 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Сторож застывшего окна. 11.10 кнопки шаблона жили, а картинка в окне
     /// машины стояла пиксель в пиксель, и главный поток при этом не висел —
     /// то есть мёртвым было дерево SwiftUI в CPWindow, а не приложение.
-    /// Раз в carPlayFreezeCheckSeconds сверяем тик GPS с тиком, на который
-    /// экран перерисовался: отстал больше чем на carPlayFreezeTicks при
-    /// видимом экране — пишем фолт и пересоздаём хост. Цена проверки — одно
-    /// сравнение двух чисел.
+    ///
+    /// Две улики, обе пишет само дерево (CarPlayLiveness): тик GPS, на который
+    /// оно перерисовалось, и пульс TimelineView. Тик один слеп у стоящей
+    /// машины — фиксов нет минутами, и 11.10 застывание на столе сторож не
+    /// заметил; пульс бьёт и без GPS. Проверка — только когда сцена на
+    /// переднем плане: в фоне дерево и не обязано обновляться, и именно там
+    /// прежний сторож «чинил» окно, пересоздавая хост вслепую. Чинить больше
+    /// carPlayFreezeRepairs раз за показ бессмысленно — дальше только пишем.
     private var freezeWatch: Task<Void, Never>?
+    private var freezeRepairs = 0
 
     private func startFreezeWatch(scene: CPTemplateApplicationScene) {
         freezeWatch?.cancel()
         freezeWatch = Task { @MainActor [weak self, weak scene] in
             while !Task.isCancelled {
                 await Task.pause(seconds: AppConfig.carPlayFreezeCheckSeconds)
-                guard let self, let scene, self.model.isOnScreen else { continue }
+                guard let self, let scene, scene.activationState == .foregroundActive,
+                      self.model.isOnScreen, self.host != nil else { continue }
                 let behind = self.env.location.locationTick - self.model.lastRenderedTick
-                guard behind > AppConfig.carPlayFreezeTicks else { continue }
-                Log.carplay.fault("окно машины застыло: экран отстал на \(behind, privacy: .public) тиков — пересоздаю хост")
-                self.model.lastRenderedTick = self.env.location.locationTick
+                let silence = Date().timeIntervalSince(self.model.lastHeartbeat)
+                guard behind > AppConfig.carPlayFreezeTicks
+                        || silence > AppConfig.carPlayHeartbeatStaleSeconds else { continue }
+                guard self.freezeRepairs < AppConfig.carPlayFreezeRepairs else {
+                    Log.carplay.fault("окно машины стоит и после \(self.freezeRepairs, privacy: .public) пересозданий: тиков \(behind, privacy: .public), пульс молчит \(Int(silence), privacy: .public) с")
+                    continue
+                }
+                self.freezeRepairs += 1
+                Log.carplay.fault("окно машины застыло: тиков \(behind, privacy: .public), пульс молчит \(Int(silence), privacy: .public) с — пересоздаю хост")
                 self.installHost(in: scene.carWindow)
             }
         }
     }
 
-    /// Экран машины в окно. Отдельно от didConnect: тот же вызов чинит окно,
-    /// которое перестало быть нашим или перестало обновляться.
+    /// Хост окна нужно построить заново при следующем выходе на экран: сцена
+    /// подключилась в фоне или побывала в фоне.
+    private var needsFreshHost = false
+
+    /// Экран машины в окно. Только на переднем плане (см. didConnect): дерево,
+    /// построенное в окне, которое система не показывает, потом не оживало.
     private func installHost(in window: UIWindow) {
         let host = UIHostingController(rootView: AnyView(
             CarPlayMapScreen(model: model).environment(env)))
         host.view.backgroundColor = UIColor(Theme.background)
         window.rootViewController = host
         self.host = host
+        needsFreshHost = false
+        // Новое дерево ещё не успело отметиться — без сброса сторож счёл бы
+        // его застывшим по меткам прежнего.
+        model.lastHeartbeat = Date()
+        model.lastRenderedTick = env.location.locationTick
+    }
+
+    /// Сцена на экране машины: на переднем плане (активна или нет — например,
+    /// поверх висит системный алерт).
+    private static func isShown(_ scene: UIScene) -> Bool {
+        scene.activationState == .foregroundActive || scene.activationState == .foregroundInactive
+    }
+
+    private static func stateName(_ scene: UIScene) -> String {
+        switch scene.activationState {
+        case .foregroundActive:   return "на экране"
+        case .foregroundInactive: return "на экране (неактивна)"
+        case .background:         return "в фоне"
+        case .unattached:         return "не привязана к экрану"
+        @unknown default:         return "неизвестно"
+        }
     }
 
     // MARK: - Сборка шаблона
@@ -451,6 +495,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Своё окно выгружаем всегда — чужая сцена или нет, рисовать в фоне
         // ему нечего. Владелец важен только для глобального состояния.
         model.isOnScreen = false
+        // Хост, переживший фон, не пере-используем: при возвращении — новый.
+        needsFreshHost = true
         guard Self.activeDelegate === self else { return }
         // В фоне приложение могут приостановить, и сторож записал бы паузу
         // процесса как фриз — счёт только пока экран машины наш.
@@ -458,7 +504,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     func sceneWillEnterForeground(_ scene: UIScene) {
-        Log.carplay.notice("сцена машины: foreground")
+        Log.carplay.notice("сцена машины: foreground, свежий хост \(self.needsFreshHost || self.host == nil, privacy: .public)")
+        // Окно — заново, ДО первого кадра на экране: дерево, построенное или
+        // пересозданное, пока сцена была в фоне, потом не оживало (11.10).
+        // Карта в фоне и так выгружена, так что цена — сборка дерева SwiftUI.
+        if let scene = scene as? CPTemplateApplicationScene, needsFreshHost || host == nil {
+            installHost(in: scene.carWindow)
+        }
+        freezeRepairs = 0
         model.isOnScreen = true
         HitchWatch.setCounting(true)
     }
@@ -476,7 +529,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // уйти в одно подключение, а экран показывать окно другого. Это та
         // самая улика по застывшему окну 11.10, которой не хватало.
         if let scene = scene as? CPTemplateApplicationScene {
-            let ours = scene.carWindow.rootViewController === host
+            let ours = host != nil && scene.carWindow.rootViewController === host
             Log.carplay.notice("сцена машины: окно наше — \(ours, privacy: .public)")
             if !ours { installHost(in: scene.carWindow) }
         }

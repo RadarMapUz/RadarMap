@@ -26,6 +26,10 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
 
     private let model = CarPlayMapModel()
     private var controller: CPDashboardController?
+    private weak var window: UIWindow?
+    /// Окно строится только когда панель на экране, и заново после фона —
+    /// те же правила, что у основной сцены (CarPlaySceneDelegate, 11.10).
+    private var needsFreshHost = true
 
     private var env: AppEnvironment { .shared }
 
@@ -50,11 +54,25 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
             self.model.refreshDaylight(appearance: self.env.settings.mapAppearance,
                                        coordinate: self.env.location.currentCoordinate)
         }
+        self.window = window
+        // Панель подключается и в ФОНЕ (журнал 11.10: BG-Active сразу при
+        // открытии приложения), а модель раньше считала себя на экране по
+        // умолчанию — и в окне, которое никто не видел, поднималась вторая
+        // карта на движке рядом с основной.
+        let shown = scene.activationState == .foregroundActive
+            || scene.activationState == .foregroundInactive
+        model.isOnScreen = shown
+        if shown { installHost() }
+        env.startDrivingServices()
+        syncShortcuts()
+    }
+
+    private func installHost() {
+        guard let window else { return }
         let host = UIHostingController(rootView: CarPlayDashboardView(model: model).environment(env))
         host.view.backgroundColor = UIColor(Theme.background)
         window.rootViewController = host
-        env.startDrivingServices()
-        syncShortcuts()
+        needsFreshHost = false
     }
 
     func templateApplicationDashboardScene(_ scene: CPTemplateApplicationDashboardScene,
@@ -66,12 +84,14 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
     }
 
     func sceneWillEnterForeground(_ scene: UIScene) {
+        if needsFreshHost { installHost() }
         model.isOnScreen = true
         syncShortcuts()
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {
         model.isOnScreen = false
+        needsFreshHost = true
     }
 
     /// Ярлыки «Дом» / «Работа». С маршрутом панель показывает карточку

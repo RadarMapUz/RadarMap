@@ -955,6 +955,12 @@ final class RouteService {
         destinationCoordinate = destination
         errorMessage = nil
         resetProgress()
+        // Первый манёвр — сразу, а не со следующим фиксом: маршрут начинается
+        // там, где стоит машина, а у стоящей машины фикса может не быть минуту
+        // (distanceFilter). Всё это время экран машины показывал «Loading…»
+        // вместо поворота (CarPlay Simulator, 11.10), а телефон — пустую
+        // карточку манёвра. Без голоса: озвучка — дело живого прогресса.
+        if let variant = selected { updateManeuvers(variant: variant, along: 0, announce: false) }
     }
 
     // MARK: - Геометрия (фоновые потоки)

@@ -131,6 +131,9 @@ struct RootView: View {
             if ProcessInfo.processInfo.arguments.contains("-carplayPreview") {
                 Task {
                     await Task.pause(seconds: 1)
+                    // В машине «на экране» ставит делегат сцены по её
+                    // состоянию; у предпросмотра сцены нет — он на экране сразу.
+                    carPlayPreviewModel.isOnScreen = true
                     carPlayPreview = true
                 }
             }

@@ -80,4 +80,17 @@ final class CarPlayGuidanceTests: XCTestCase {
                                                           elapsed: AppConfig.carPlayEstimateMaxInterval),
                       "на стоянке цифра всё равно освежается")
     }
+
+    /// «12,834 meter» на панели прибытия: система печатает в той единице, в
+    /// какой дали. От километра — километры с десятой, ближе — метры по 10.
+    func testDistanceGoesToTheCarInReadableUnits() {
+        let far = CarPlayGuidanceMapping.distance(meters: 12_834)
+        XCTAssertEqual(far.unit, UnitLength.kilometers)
+        XCTAssertEqual(far.value, 12.8, accuracy: 0.001)
+        let near = CarPlayGuidanceMapping.distance(meters: 347)
+        XCTAssertEqual(near.unit, UnitLength.meters)
+        XCTAssertEqual(near.value, 350, accuracy: 0.001)
+        XCTAssertEqual(CarPlayGuidanceMapping.distance(meters: 154_300).value, 154, accuracy: 0.001)
+        XCTAssertEqual(CarPlayGuidanceMapping.distance(meters: -5).value, 0, accuracy: 0.001)
+    }
 }

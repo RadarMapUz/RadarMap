@@ -24,6 +24,21 @@ import os
 /// Перевод нашего маршрута в типы CarPlay. Без UIKit-состояния — тестируется.
 nonisolated enum CarPlayGuidanceMapping {
 
+    /// Расстояние для карточки машины. Система печатает Measurement в ТОЙ
+    /// единице, в которой его дали: метры давали «12,834 meter» на панели
+    /// прибытия (CarPlay Simulator, 11.10). От километра — километры с
+    /// десятой (дальше сотни — целые), ближе — метры, кратные десяти: «47 м»
+    /// за рулём не читается точнее, чем «50 м».
+    static func distance(meters: Double) -> Measurement<UnitLength> {
+        let meters = max(0, meters)
+        guard meters >= 1000 else {
+            return Measurement(value: (meters / 10).rounded() * 10, unit: .meters)
+        }
+        let km = meters / 1000
+        let shown = km >= 100 ? km.rounded() : (km * 10).rounded() / 10
+        return Measurement(value: shown, unit: .kilometers)
+    }
+
     /// Угол стрелки полосы, градусы: 0 — прямо, минус — влево, плюс — вправо.
     static func laneAngle(_ arrow: LaneArrow) -> Double {
         switch arrow {
@@ -372,7 +387,7 @@ final class CarPlayGuidance {
     // MARK: - Картинки и оценки
 
     private static func estimates(meters: Double, seconds: Double) -> CPTravelEstimates {
-        CPTravelEstimates(distanceRemaining: Measurement(value: max(0, meters), unit: UnitLength.meters),
+        CPTravelEstimates(distanceRemaining: CarPlayGuidanceMapping.distance(meters: meters),
                           timeRemaining: max(0, seconds))
     }
 

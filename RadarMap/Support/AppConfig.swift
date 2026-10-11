@@ -998,6 +998,15 @@ nonisolated enum AppConfig {
     /// экран вправе отстать (тик — каждый принятый фикс, то есть секунды).
     static let carPlayFreezeCheckSeconds: TimeInterval = 10
     static let carPlayFreezeTicks = 8
+    /// Пульс экрана машины, не зависящий от GPS: у стоящей машины фиксов нет
+    /// минутами, и сторож по тикам застывания не видел (11.10 воспроизведено
+    /// именно так — телефон на столе). Пульс бьёт раз в этот период, пока
+    /// SwiftUI перерисовывает дерево; молчит дольше порога — окно мертво.
+    static let carPlayHeartbeatSeconds: TimeInterval = 2
+    static let carPlayHeartbeatStaleSeconds: TimeInterval = 8
+    /// Сколько раз за один показ сторож пересоздаёт окно. Не помогло дважды —
+    /// третья попытка тоже не поможет, а мигание карты каждые 10 с хуже.
+    static let carPlayFreezeRepairs = 2
     /// «Я» в плитке приборной панели: дока там нет, только маленький прибор.
     static let carPlayDashboardMeY = 0.62
     /// Оценки манёвра и поездки уходят в машину сообщениями: не реже раза в

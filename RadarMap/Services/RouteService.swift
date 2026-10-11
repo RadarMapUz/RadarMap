@@ -833,6 +833,7 @@ final class RouteService {
         }
 
         guard var result = text else { return nil }
+        let phrase = result
         if !step.name.isEmpty, m.type != "arrive" {
             // «на улицу Беруни», а не «на Beruniy shoh ko'chasi»: фраза просит
             // винительный падеж.
@@ -847,7 +848,8 @@ final class RouteService {
             : m.type == "roundabout" || m.type == "rotary" ? .roundabout
             : ManeuverKind.fromOSRM(modifier: m.modifier)
         return RouteStep(distanceAlong: along, text: result, icon: icon,
-                         kind: kind, lanes: lanes(of: step))
+                         kind: kind, lanes: lanes(of: step),
+                         shortText: result == phrase ? nil : phrase)
     }
 
     /// Полосы на подходе к манёвру.

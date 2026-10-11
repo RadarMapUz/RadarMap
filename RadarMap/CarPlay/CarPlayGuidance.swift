@@ -24,6 +24,21 @@ import os
 /// Перевод нашего маршрута в типы CarPlay. Без UIKit-состояния — тестируется.
 nonisolated enum CarPlayGuidanceMapping {
 
+    /// Варианты фразы манёвра для карточки машины, от полной к короткой.
+    /// CarPlay берёт первый, что помещается; без короткого узкая карточка
+    /// оставалась пустой. С заглавной буквы — это подпись, а не продолжение
+    /// фразы голоса.
+    static func instructionVariants(text: String, shortText: String?) -> [String] {
+        var result: [String] = []
+        for variant in [text, shortText].compactMap({ $0 }) {
+            let trimmed = variant.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            let capitalized = trimmed.prefix(1).uppercased() + trimmed.dropFirst()
+            if !result.contains(capitalized) { result.append(capitalized) }
+        }
+        return result.isEmpty ? [text] : result
+    }
+
     /// Расстояние для карточки машины. Система печатает Measurement в ТОЙ
     /// единице, в которой его дали: метры давали «12,834 meter» на панели
     /// прибытия (CarPlay Simulator, 11.10). От километра — километры с
@@ -216,6 +231,8 @@ final class CarPlayGuidance {
         if themedDaylight != model.isDaylight {
             themedDaylight = model.isDaylight
             applyTheme(daylight: model.isDaylight)
+            // Стрелка красится под фон карточки — сменился фон, пересобираем.
+            maneuverStep = nil
         }
         let route = env.route
         if route.isActive, let destination = route.destinationCoordinate {
@@ -291,9 +308,19 @@ final class CarPlayGuidance {
             return
         }
         let next = CPManeuver()
-        next.instructionVariants = [step.text]
-        next.symbolImage = Self.symbol(step.kind?.isDrawable == false ? "flag.checkered" : step.icon,
-                                       pointSize: 34)
+        next.instructionVariants = CarPlayGuidanceMapping.instructionVariants(
+            text: step.text, shortText: step.shortText)
+        // Цвет стрелки — под фон НАШЕЙ карточки (guidanceBackgroundColor:
+        // белая днём, графит ночью). Варианты светлый/тёмный внутри одного
+        // UIImageAsset до машины не доезжают — приезжает тот, с которым
+        // картинку создали, и днём белая стрелка на белой карточке была
+        // невидима (CarPlay Simulator, 11.10). Баннеры поверх чужого
+        // приложения и плитка панели рисуются в теме МАШИНЫ — им свой цвет.
+        let symbolName = step.kind?.isDrawable == false ? "flag.checkered" : step.icon
+        next.symbolImage = Self.symbol(symbolName, pointSize: 34, onDark: !model.isDaylight)
+        let carDark = model.carIsDark ?? !model.isDaylight
+        next.notificationSymbolImage = Self.symbol(symbolName, pointSize: 34, onDark: carDark)
+        next.dashboardSymbolImage = Self.symbol(symbolName, pointSize: 34, onDark: carDark)
         next.maneuverType = CarPlayGuidanceMapping.maneuverType(step.kind)
         next.trafficSide = .right
         let lanes = CarPlayGuidanceMapping.lanes(step.lanes, kind: step.kind)
@@ -306,7 +333,7 @@ final class CarPlayGuidance {
                               highlightedAngle: Measurement(value: highlighted, unit: UnitAngle.degrees),
                               isPreferred: true)
             }
-            guidance.instructionVariants = [step.text]
+            guidance.instructionVariants = next.instructionVariants
             laneGuidances.append(guidance)
             session.add([guidance])
             next.linkedLaneGuidance = guidance
@@ -370,7 +397,8 @@ final class CarPlayGuidance {
             titleVariants: [String(format: String(localized: "%1$@ через %2$@"), camera.kind.shortName, far),
                             camera.kind.shortName],
             subtitleVariants: [camera.kind.displayName],
-            image: Self.symbol(camera.kind.symbolName, pointSize: 30),
+            image: Self.symbol(camera.kind.symbolName, pointSize: 30,
+                               onDark: model.carIsDark ?? !model.isDaylight),
             primaryAction: CPAlertAction(title: String(localized: "Понятно"), style: .cancel) { _ in },
             secondaryAction: nil,
             duration: AppConfig.carPlayCameraAlertSeconds)
@@ -391,9 +419,11 @@ final class CarPlayGuidance {
                           timeRemaining: max(0, seconds))
     }
 
-    /// Значок для карточки CarPlay в двух вариантах — тёмный на светлой
-    /// карточке и белый на тёмной: машина сама выбирает по своей теме.
-    static func symbol(_ name: String, pointSize: CGFloat) -> UIImage? {
+    /// Значок для карточки CarPlay: белый на тёмном фоне, чёрный на светлом.
+    /// Оба варианта по-прежнему лежат в UIImageAsset (на случай, если машина
+    /// умеет его читать), но отдаётся вариант под известный нам фон: до
+    /// 2.2.6 всегда уходил белый, и днём стрелка пропадала.
+    static func symbol(_ name: String, pointSize: CGFloat, onDark: Bool) -> UIImage? {
         let configuration = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .bold)
         guard let base = UIImage(systemName: name, withConfiguration: configuration)
                 ?? UIImage(systemName: "arrow.up", withConfiguration: configuration) else { return nil }
@@ -402,7 +432,7 @@ final class CarPlayGuidance {
                        with: UITraitCollection(userInterfaceStyle: .light))
         asset.register(base.withTintColor(.white, renderingMode: .alwaysOriginal),
                        with: UITraitCollection(userInterfaceStyle: .dark))
-        return asset.image(with: UITraitCollection(userInterfaceStyle: .dark))
+        return asset.image(with: UITraitCollection(userInterfaceStyle: onDark ? .dark : .light))
     }
 
     private static func same(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Bool {

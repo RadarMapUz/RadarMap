@@ -167,4 +167,16 @@ final class ManeuverTests: XCTestCase {
         XCTAssertEqual(RouteService.voiceStage(distance: 30, spoken: 3, earlyCall: true), 0)
         XCTAssertEqual(RouteService.voiceStage(distance: 200, spoken: 3, earlyCall: false), 1)
     }
+
+    // MARK: - Короткая фраза для машины (11.10)
+
+    /// Узкая карточка машины берёт первый влезающий вариант: без короткой
+    /// фразы без улицы она оставалась пустой.
+    func testShortTextDropsTheStreet() {
+        let withStreet = step("turn", "left", name: "Amir Temur shoh ko'chasi")
+        XCTAssertNotNil(withStreet?.shortText)
+        XCTAssertTrue(withStreet?.text.hasPrefix(withStreet?.shortText ?? "#") == true)
+        XCTAssertLessThan(withStreet?.shortText?.count ?? 0, withStreet?.text.count ?? 0)
+        XCTAssertNil(step("turn", "left")?.shortText, "улицы нет — короткая фраза не нужна")
+    }
 }

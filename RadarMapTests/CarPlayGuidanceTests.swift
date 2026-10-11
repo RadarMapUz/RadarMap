@@ -93,4 +93,15 @@ final class CarPlayGuidanceTests: XCTestCase {
         XCTAssertEqual(CarPlayGuidanceMapping.distance(meters: 154_300).value, 154, accuracy: 0.001)
         XCTAssertEqual(CarPlayGuidanceMapping.distance(meters: -5).value, 0, accuracy: 0.001)
     }
+
+    /// Варианты фразы — от полной к короткой, с заглавной, без повторов.
+    func testInstructionVariantsGoFromLongToShort() {
+        let variants = CarPlayGuidanceMapping.instructionVariants(
+            text: "поверните налево на улицу Амира Темура", shortText: "поверните налево")
+        XCTAssertEqual(variants, ["Поверните налево на улицу Амира Темура", "Поверните налево"])
+        XCTAssertEqual(CarPlayGuidanceMapping.instructionVariants(text: "вы прибыли", shortText: nil),
+                       ["Вы прибыли"])
+        XCTAssertEqual(CarPlayGuidanceMapping.instructionVariants(text: "разворот", shortText: "разворот"),
+                       ["Разворот"])
+    }
 }

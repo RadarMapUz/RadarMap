@@ -71,7 +71,12 @@ Hisob ochish shart emas, reklama yo‘q, shaxsiy ma’lumotlar yig‘ilmaydi.
 собираются, просто не связаны с личностью. Анкета должна совпадать с
 `RadarMap/PrivacyInfo.xcprivacy`; трекинга нет нигде.
 - Location → Precise Location — Not Linked, App Functionality (отметка радара,
-  точки маршрута, жалоба «не предупредила»; фоновая геопозиция не уходит).
+  точки маршрута, жалоба «не предупредила»; с 2.2.11 — отрезки пути для пробок во
+  время поездки, в том числе в фоне: без идентификатора устройства и поездки, без
+  времени суток, без первых/последних 400 м и мест у дома/работы, удаляются на
+  сервере после сопоставления с дорогой; выключается в настройках). Манифест
+  `PrivacyInfo.xcprivacy` уже объявляет Precise Location / App Functionality —
+  тип и цель не меняются, меняется только объём, и он описан в privacy.html.
 - Identifiers → Device ID — Not Linked, App Functionality (случайный UUID, меняется раз в 30 дней).
 - Diagnostics → Crash Data, Performance Data — Not Linked, App Functionality (MetricKit на свой сервер).
 - Usage Data → Product Interaction — Not Linked, Analytics (суточные счётчики, выключаются в настройках).

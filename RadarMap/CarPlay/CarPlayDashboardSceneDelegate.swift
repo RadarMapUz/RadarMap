@@ -32,10 +32,10 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
     func templateApplicationDashboardScene(_ scene: CPTemplateApplicationDashboardScene,
                                            didConnect dashboardController: CPDashboardController,
                                            to window: UIWindow) {
-        // Плитку на главном экране CarPlay система отдаёт тому навигатору,
-        // который последним вёл маршрут (CPNavigationSession): пока из машины
-        // не построен ни один маршрут, эта сцена не создаётся вовсе — и в
-        // журнале её нет, а на экране стоит чужая карта.
+        // Сцена создаётся, только если ключ CPSupportsDashboardNavigationScene
+        // лежит ВНУТРИ UIApplicationSceneManifest. С 10.10 по 2.2.4 он стоял
+        // уровнем выше, система его не видела, и эта строка журнала не
+        // появлялась ни разу — на главном экране машины была чужая карта.
         Log.carplay.notice("CarPlay: приборная панель подключена")
         controller = dashboardController
         model.carIsDark = window.traitCollection.userInterfaceStyle == .dark

@@ -31,10 +31,14 @@
 	</array>
 	<!-- CarPlay: отдельная сцена с собственным окном карты. Телефонный UI остаётся
 	     на SwiftUI-жизненном цикле — здесь описана только CarPlay-роль. -->
-	<key>CPSupportsDashboardNavigationScene</key>
-	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
+		<!-- Плитка на главном экране машины. Ключ обязан лежать ВНУТРИ манифеста
+		     сцен (developer.apple.com/documentation/carplay/displaying-content-in-carplay):
+		     с 10.10 по 2.2.4 он стоял уровнем выше, система его не видела, и
+		     RadarMap на главный экран CarPlay не попадал вовсе. -->
+		<key>CPSupportsDashboardNavigationScene</key>
+		<true/>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<true/>
 		<key>UISceneConfigurations</key>

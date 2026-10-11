@@ -46,7 +46,9 @@ struct ApproachAlertView: View {
                     ZStack {
                         Circle().fill(tint.opacity(0.18)).frame(width: 130, height: 130)
                             .scaleEffect(pulse ? 1.12 : 0.92)
-                            .motionAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+                            // Несколько вдохов и покой: вечный пульс держал
+                            // перерисовку на 60 Гц весь показ (аудит 11.10).
+                            .motionAnimation(.easeInOut(duration: 0.9).repeatCount(5, autoreverses: true), value: pulse)
                         Circle()
                             .trim(from: 0, to: proximity)
                             .stroke(tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
@@ -66,8 +68,7 @@ struct ApproachAlertView: View {
                     Text("\(Int(distance.rounded()))")
                         .font(.system(size: 88, weight: .heavy, design: .rounded))
                         .foregroundStyle(tint)
-                        .contentTransition(.numericText(value: distance))
-                        .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
+                        .liveNumber()
                     Text("м").font(.rounded(30, .bold)).foregroundStyle(Theme.textSecondary)
                 }
 
@@ -137,7 +138,9 @@ struct ApproachAlertView: View {
                 .font(.rounded(17, .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .frame(maxWidth: .infinity, minHeight: 56)
-                .background(.ultraThinMaterial,
+                // Сплошная заливка, не материал: под окном — живая карта, и
+                // размытие пересчитывалось бы на каждом её кадре.
+                .background(Theme.surface,
                             in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
         }
@@ -161,7 +164,7 @@ struct ApproachAlertView: View {
             Text(value).font(.rounded(18, .semibold)).foregroundStyle(.white)
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: Capsule())
+        .background(Theme.surface, in: Capsule())
     }
 
     private func directionText(_ rel: Double) -> String {

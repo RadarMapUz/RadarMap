@@ -1094,7 +1094,11 @@ nonisolated enum AppConfig {
     static let appleCategoryRadiusMeters = 10_000.0
     static let engineManeuverHighlightMeters = 35.0
     /// Частота обновления геометрии маршрута; курсор обновляется на каждом фиксе.
-    static let engineRouteProgressStep = 15.0
+    /// 30 м, а не 15 (аудит 11.10): каждая пересылка — две-три линии в
+    /// источники движка с перетайливанием, а на 54+ км/ч 15 м — это каждый
+    /// фикс. Хвост оставшейся линии за машиной при 30 м остаётся под стрелкой
+    /// (≈20 pt на масштабе ведения).
+    static let engineRouteProgressStep = 30.0
     static let engineCameraViewportLimit = 160
     static let engineCameraViewportPadding = 1.5
     static let engineMetricsSampleCount = 300

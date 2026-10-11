@@ -392,6 +392,9 @@ nonisolated enum EngineMapStyle {
             "layout": ["icon-image": ["get", "icon"], "icon-allow-overlap": true,
                        "icon-ignore-placement": true, "icon-pitch-alignment": "viewport"],
         ])
+        // Пустой с 11.10: стрелка «я» — вид поверх карты (EngineMapView,
+        // «Стрелка»), запись в этот источник на каждом кадре стоила движку
+        // полной расстановки символов. Слой оставлен: его ждёт шаблон выпуска.
         out.append([
             "id": "user-location", "type": "symbol", "source": "position",
             "layout": ["icon-image": "radar-user", "icon-allow-overlap": true,

@@ -73,7 +73,10 @@ struct EngineBaseLayer: View {
                         anchorY: insets.meY,
                         // 3D — кнопкой «3D» (по умолчанию включено); в поездке
                         // наклон уменьшается к манёвру — развилку видно сверху.
-                        pitchDegrees: !map.prefers3D ? 0 : (AppConfig.engineMapPitchDegrees
+                        // На горячем телефоне — плоско, как уже было в CarPlay:
+                        // наклон тянет к горизонту втрое больше тайлов.
+                        pitchDegrees: !map.prefers3D || env.thermal.mode != .full ? 0
+                            : (AppConfig.engineMapPitchDegrees
                             * (env.location.isTripActive
                                ? min(1, max(0, (maneuverDistance ?? AppConfig.engineManeuverApproachMeters)
                                             / AppConfig.engineManeuverApproachMeters))
@@ -101,6 +104,9 @@ struct EngineBaseLayer: View {
                         offline: offlineFiles,
                         places: env.settings.mapPlaces,
                         driving: env.location.isTripActive,
+                        // Хранимый флаг: меняется на въезде и выезде из зоны
+                        // камеры, а не на каждом фиксе.
+                        covered: env.location.isApproachingCamera,
                         labelLanguage: env.settings.appLanguage.mapCode,
                         cursorStyle: env.settings.cursorStyle,
                         overviewCommand: map.overviewCommand,

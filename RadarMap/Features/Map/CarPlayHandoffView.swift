@@ -90,7 +90,7 @@ private struct HandoffDistance: View {
             Text(Formatting.distance(env.trip.distanceMeters))
                 .font(.rounded(15, .semibold).monospacedDigit())
                 .foregroundStyle(Theme.textSecondary)
-                .contentTransition(.numericText())
+                .liveNumber()
         }
     }
 }

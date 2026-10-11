@@ -32,8 +32,7 @@ struct TripSpeedCluster: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                     .foregroundStyle(over ? Color.white : Theme.textPrimary)
-                    .contentTransition(.numericText(value: Double(speed)))
-                    .motionAnimation(.easeOut(duration: 0.3), value: speed)
+                    .liveNumber()
                 HStack(spacing: 2) {
                     Text("км/ч")
                         .lineLimit(1)
@@ -128,8 +127,7 @@ struct TripCameraChip: View {
                     .fixedSize()
                     .foregroundStyle(near && !location.isPositionCoarse
                                      ? Theme.danger : Theme.textPrimary)
-                    .contentTransition(.numericText(value: distance))
-                    .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
+                    .liveNumber()
                 SpeedHUDView.caption(for: camera, location: location)
                     .font(.rounded(12, .medium))
                     .lineLimit(1)

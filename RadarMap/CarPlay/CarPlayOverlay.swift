@@ -107,8 +107,7 @@ struct CarPlayOverlay: View {
                     .foregroundStyle(speedColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                    .contentTransition(.numericText())
-                    .motionAnimation(.snappy(duration: 0.25), value: Int(env.location.speedKmh.rounded()))
+                    .liveNumber()
                 Text("км/ч")
                     .font(.rounded(12, .semibold))
                     .foregroundStyle(Theme.textTertiary)
@@ -254,8 +253,7 @@ struct CarPlayOverlay: View {
                     .foregroundStyle(env.location.isPositionCoarse ? Theme.textSecondary
                                      : (env.location.isApproachingCamera ? Theme.danger
                                                                          : Theme.textPrimary))
-                    .contentTransition(.numericText())
-                    .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
+                    .liveNumber()
                 Text(env.location.isPositionCoarse
                      ? String(localized: "уточняем положение")
                      : camera.kind.genitivePhrase)
@@ -344,8 +342,7 @@ struct CarPlayOverlay: View {
                 Text(Formatting.distance(distance))
                     .font(.rounded(22, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.onAccentFill)
-                    .contentTransition(.numericText())
-                    .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
+                    .liveNumber()
                 Text(step.text)
                     .font(.rounded(16, .semibold))
                     .foregroundStyle(Theme.onAccentFillSecondary)

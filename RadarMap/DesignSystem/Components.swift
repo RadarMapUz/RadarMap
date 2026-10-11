@@ -51,6 +51,25 @@ struct GlassCard<Content: View>: View {
     }
 }
 
+/// Панель поверх ЖИВОЙ карты — сплошная заливка вместо стекла.
+///
+/// Стекло (`glassEffect`, материалы) размывает то, что под ним, и пока карта
+/// под панелью едет, система заново считает размытие на каждом её кадре —
+/// всю поездку, на сервере рендеринга (backboardd +32 % на ходу в профиле
+/// 11.10). Над картой, которая стоит (маршрут до старта, постановка камеры),
+/// стекло остаётся: там оно бесплатно.
+struct SolidPanel<Content: View>: View {
+    var cornerRadius: CGFloat = Theme.cornerLarge
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        content
+            .liftedBackground(Theme.surface, in: shape)
+            .overlay(shape.strokeBorder(Theme.edgePanel, lineWidth: 1))
+    }
+}
+
 /// Единый контейнер карточки статистики: одинаковые отступы, радиус и фон.
 /// Раньше каждый блок Итогов задавал их сам и они расходились на пару пунктов.
 extension View {

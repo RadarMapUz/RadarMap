@@ -58,7 +58,10 @@ struct TripLiveBar: View {
             ReportRadarButton()
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        // Сплошная панель, как у кластера скорости и чипа камеры: под ней
+        // живая карта, и материал заставлял систему заново размывать её на
+        // каждом кадре всю поездку (аудит 11.10).
+        .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
@@ -81,7 +84,7 @@ struct TripLiveBar: View {
                 Text(verbatim: "\(Formatting.duration(route.remainingTime)) · \(Formatting.distance(route.remainingDistance))")
                     .font(.rounded(12, .medium).monospacedDigit())
                     .foregroundStyle(Theme.textSecondary)
-                    .contentTransition(.numericText())
+                    .liveNumber()
             } else {
                 // Свободная поездка без маршрута: таймер + путь + камеры.
                 if let started = env.trip.startedAt {
@@ -93,7 +96,7 @@ struct TripLiveBar: View {
                 // из всего интерфейса — здесь тот же SF Symbol, что везде.
                 HStack(spacing: 4) {
                     Text(Formatting.distance(env.trip.distanceMeters))
-                        .contentTransition(.numericText())
+                        .liveNumber()
                     Text(verbatim: "·")
                     Image(systemName: "camera.fill")
                         .font(.rounded(10, .semibold))
@@ -127,7 +130,7 @@ struct TripLiveBar: View {
                         .font(.rounded(13, .bold).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
-                        .contentTransition(.numericText())
+                        .liveNumber()
                 }
                 .padding(.leading, 5).padding(.trailing, 10).padding(.vertical, 5)
                 .background(Theme.surface, in: Capsule())

@@ -83,6 +83,9 @@ struct EngineMapView: UIViewRepresentable {
     /// Режим «в поездке»: без общих POI, номеров домов и подписей дорожек,
     /// дома приглушены (EngineModernStyle.drivingLayers).
     var driving: Bool = false
+    /// Карту накрыло полноэкранное предупреждение о камере (градиент до 96 %):
+    /// рисовать её на полной частоте незачем (аудит 11.10).
+    var covered: Bool = false
     /// Язык подписей новой карты («ru» / «uz»). Меняется только с языком
     /// приложения, а тот применяется после перезапуска — перезагрузка стиля
     /// ради него не нужна.
@@ -271,7 +274,14 @@ struct EngineMapView: UIViewRepresentable {
             return true
         }
 
+        /// Каждый кадр движения камеры (ведение, жест, вписывание): стрелка —
+        /// вид поверх карты, и её экранную точку пересчитываем сами.
+        func mapViewRegionIsChanging(_ mapView: MLNMapView) {
+            layoutPositionView(in: mapView)
+        }
+
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
+            layoutPositionView(in: mapView)
             if let current, styleReady { updateCameras(current, in: mapView) }
             current?.onHeading(mapView.direction)
             current?.onRegion(Self.region(of: mapView))
@@ -317,15 +327,15 @@ struct EngineMapView: UIViewRepresentable {
         }
         #endif
 
-        /// Курсор «я» в стиль: картинка под тем же именем, что ждёт слой
-        /// user-location, — замена на лету, без перезагрузки стиля.
-        private func installCursor(_ cursor: CursorStyle, in style: MLNStyle) {
+        /// Курсор «я» — картинка вида-стрелки поверх карты (см. «Стрелка»).
+        private func installCursor(_ cursor: CursorStyle) {
             lastCursor = cursor
             guard let image = Self.cursorImage(cursor) else {
                 Log.network.error("MapLibre: курсор \(cursor.rawValue, privacy: .public) не отрисовался")
                 return
             }
-            style.setImage(image, forName: "radar-user")
+            positionView?.image = image
+            positionView?.bounds = CGRect(origin: .zero, size: image.size)
         }
 
         /// Тот же MeCursor, что у схемы и карты Apple, — растром ×3. Рамка та
@@ -341,7 +351,7 @@ struct EngineMapView: UIViewRepresentable {
         }
 
         private func installCameraIcons(in style: MLNStyle) {
-            installCursor(current?.cursorStyle ?? .arrow, in: style)
+            installCursor(current?.cursorStyle ?? .arrow)
             if !Self.iconCache.isEmpty {
                 for (name, image) in Self.iconCache { style.setImage(image, forName: name) }
                 return
@@ -444,6 +454,8 @@ struct EngineMapView: UIViewRepresentable {
             installCameraIcons(in: style)
             lastCameras = nil
             routeInitialized = false
+            lineKeys = [:]
+            decorationsHidden = nil
             lastPosition = nil
             cameraRegion = nil
             style.layer(withIdentifier: "houses")?.isVisible = current?.houses ?? false
@@ -631,9 +643,10 @@ struct EngineMapView: UIViewRepresentable {
                 return
             }
             pending = nil
-            if lastCursor != model.cursorStyle, let style = view.style {
-                installCursor(model.cursorStyle, in: style)
+            if lastCursor != model.cursorStyle {
+                installCursor(model.cursorStyle)
             }
+            applyDecorations(hidden: model.performance != .full, in: view)
             if lastRecenterToken != model.recenterToken {
                 lastRecenterToken = model.recenterToken
                 browsing = false
@@ -687,7 +700,7 @@ struct EngineMapView: UIViewRepresentable {
             } ?? true
             // Частота кадров: полная — только когда водитель сам двигает карту.
             let fps = Self.framesPerSecond(browsing: browsing, performance: model.performance,
-                                           lowPower: model.lowPower)
+                                           lowPower: model.lowPower, covered: model.covered)
             if fps != lastFPS {
                 lastFPS = fps
                 view.preferredFramesPerSecond = fps > 0
@@ -774,7 +787,7 @@ struct EngineMapView: UIViewRepresentable {
             let newRoute = !routeInitialized || lastRouteObject !== model.routeObject
             if newRoute || lastManeuverAlong != model.maneuverAlong
                 || abs(model.routeProgress - lastProgress) >= AppConfig.engineRouteProgressStep {
-                if newRoute { routeIndex = nil }
+                if newRoute { routeIndex = nil; lineKeys = [:] }
                 routeInitialized = true
                 lastRouteObject = model.routeObject
                 lastProgress = model.routeProgress
@@ -795,8 +808,35 @@ struct EngineMapView: UIViewRepresentable {
             }
         }
 
-        private func setLine(_ coordinates: [CLLocationCoordinate2D], source: String, in view: MLNMapView) {
-            guard let source = view.style?.source(withIdentifier: source) as? MLNShapeSource else { return }
+        /// Объёмные украшения и размытые тени — первое, что уходит на горячем
+        /// телефоне: деревья и ограждения выдавливаются на близком масштабе
+        /// ведения (охват манёвра ~z17), тени зданий рисуются line-blur до 22.
+        /// Видимость слоя, а не новый стиль: перезагрузка стиля — сама по
+        /// себе пик, и она сбросила бы тайлы ровно тогда, когда процессор уже
+        /// режут (аудит 11.10).
+        static let hotHiddenLayers = ["radar-tree-3d", "radar-barrier-3d", "radar-tree-shadow",
+                                      "building-ground-shadow"]
+        private var decorationsHidden: Bool?
+
+        private func applyDecorations(hidden: Bool, in view: MLNMapView) {
+            guard hidden != decorationsHidden, let style = view.style else { return }
+            decorationsHidden = hidden
+            for id in Self.hotHiddenLayers { style.layer(withIdentifier: id)?.isVisible = !hidden }
+        }
+
+        /// Что последним ушло в каждый источник линии: число точек и концы.
+        /// Пустой манёвр поверх пустого и тот же отрезок манёвра на каждом
+        /// шаге прогресса переписывались заново — с перетайливанием (аудит 11.10).
+        private var lineKeys: [String: [Double]] = [:]
+
+        private func setLine(_ coordinates: [CLLocationCoordinate2D], source name: String, in view: MLNMapView) {
+            guard let source = view.style?.source(withIdentifier: name) as? MLNShapeSource else { return }
+            let key: [Double] = coordinates.count < 2 ? [0] : [
+                Double(coordinates.count),
+                coordinates[0].latitude, coordinates[0].longitude,
+                coordinates[coordinates.count - 1].latitude, coordinates[coordinates.count - 1].longitude]
+            guard lineKeys[name] != key else { return }
+            lineKeys[name] = key
             os_signpost(.begin, log: performanceLog, name: "Route source")
             defer { os_signpost(.end, log: performanceLog, name: "Route source") }
             if coordinates.count < 2 { source.shape = nil; return }
@@ -903,13 +943,45 @@ struct EngineMapView: UIViewRepresentable {
         private var lastFollowInterval: CFTimeInterval?
         /// Где стрелка нарисована сейчас (середина хода), а не куда едет.
         private var displayedPosition: CLLocationCoordinate2D?
+        /// Стрелка «я» — обычный вид поверх карты, а не символ в источнике.
+        ///
+        /// Раньше каждый шаг плавного хода (до 30 раз в секунду, всю поездку)
+        /// писал точку в GeoJSON-источник `position`: движок заново строил его
+        /// тайл на воркерах и заново расставлял все символьные слои карты на
+        /// главном потоке, а стрелка ещё и отставала от камеры на кадр — тайл
+        /// приходит асинхронно (аудит 11.10). Аннотация MapLibre не спасает:
+        /// под видом аннотации движок держит невидимый символ и так же
+        /// перетайливает его на каждом сдвиге. Вид поверх карты стоит только
+        /// пересчёта экранной точки: на каждом кадре движения камеры
+        /// (`mapViewRegionIsChanging`) и на каждом шаге хода. Источник и слой
+        /// `user-location` в стиле остаются пустыми — их ждёт шаблон выпуска.
+        private var positionView: UIImageView?
 
         private func setPosition(_ coordinate: CLLocationCoordinate2D, in view: MLNMapView) {
-            let feature = MLNPointFeature()
-            feature.coordinate = coordinate
-            feature.attributes = ["rotation": positionHeading]
-            (view.style?.source(withIdentifier: "position") as? MLNShapeSource)?.shape = feature
             displayedPosition = coordinate
+            layoutPositionView(in: view)
+        }
+
+        /// Точка и поворот стрелки по текущей камере. Поворот — курс минус
+        /// направление карты: как у прежнего символа с `icon-rotation-alignment:
+        /// map`. Вид стоит лицом к экрану при наклоне — как `icon-pitch-alignment:
+        /// viewport`.
+        private func layoutPositionView(in view: MLNMapView) {
+            guard let coordinate = displayedPosition else { return }
+            let marker = positionView ?? makePositionView(in: view)
+            marker.center = view.convert(coordinate, toPointTo: view)
+            marker.transform = CGAffineTransform(
+                rotationAngle: (positionHeading - view.direction) * .pi / 180)
+        }
+
+        private func makePositionView(in view: MLNMapView) -> UIImageView {
+            let marker = UIImageView()
+            marker.isUserInteractionEnabled = false
+            marker.isAccessibilityElement = false
+            view.addSubview(marker)
+            positionView = marker
+            installCursor(current?.cursorStyle ?? lastCursor ?? .arrow)
+            return marker
         }
 
         private func startPositionGlide(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
@@ -952,8 +1024,12 @@ struct EngineMapView: UIViewRepresentable {
         }
 
         /// 0 — частота по умолчанию (движок сам выбирает, плавно для жестов).
-        static func framesPerSecond(browsing: Bool, performance: PerformanceMode, lowPower: Bool) -> Int {
+        static func framesPerSecond(browsing: Bool, performance: PerformanceMode, lowPower: Bool,
+                                    covered: Bool = false) -> Int {
             if browsing { return performance == .full && !lowPower ? 0 : AppConfig.engineWarmFPS }
+            // Под предупреждением о камере — как у горячего телефона: видна
+            // лишь верхняя полоска карты сквозь градиент.
+            if covered { return AppConfig.engineHotFPS }
             switch performance {
             case .minimal: return AppConfig.engineHotFPS
             case .reduced: return AppConfig.engineWarmFPS

@@ -31,7 +31,8 @@ struct SpeedHUDView: View {
 
     var body: some View {
         let location = env.location
-        GlassCard(cornerRadius: Theme.cornerPanel) {
+        // Сплошная, не стекло: под панелью едет карта (см. SolidPanel).
+        SolidPanel(cornerRadius: Theme.cornerPanel) {
             HStack(spacing: 0) {
                 speedBlock(location.speedKmh)
 
@@ -118,8 +119,7 @@ struct SpeedHUDView: View {
                 .font(.rounded(secondary ? 26 : 34, .bold))
                 .monospacedDigit()
                 .foregroundStyle(env.speedLimits.isOverspeeding ? Theme.danger : Theme.textPrimary)
-                .contentTransition(.numericText(value: speed))
-                .motionAnimation(.easeOut(duration: 0.3), value: Int(speed.rounded()))
+                .liveNumber()
             HStack(spacing: 3) {
                 Text("км/ч")
                     .font(.rounded(11, .medium))
@@ -191,8 +191,7 @@ struct SpeedHUDView: View {
                         // позиции: цифра от грубого фикса на красный не имеет права.
                         .foregroundStyle(near && !env.location.isPositionCoarse
                                          ? Theme.danger : Theme.textPrimary)
-                        .contentTransition(.numericText(value: distance))
-                        .motionAnimation(.easeOut(duration: 0.3), value: Int(distance))
+                        .liveNumber()
                     Self.caption(for: camera, location: env.location)
                         .font(.rounded(11, .medium))
                         .lineLimit(1)

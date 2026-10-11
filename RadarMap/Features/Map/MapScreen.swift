@@ -1276,6 +1276,11 @@ struct MapScreen: View {
             env.trip.seedDemoHistory(scale: args.contains("-demoBigNumbers") ? 20 : 1)
         }
         if args.contains("-demoMergePair") { env.trip.seedDemoMergePair() }
+        // Дорога на работу и домой: четыре недели будней поверх истории.
+        if args.contains("-demoCommutes") {
+            env.trip.seedDemoCommutes()
+            env.refreshLearnedPlaces()
+        }
         // Демо-история двухнедельной давности: проверка «в этом периоде поездок нет».
         if args.contains("-demoHistoryOld") { env.trip.seedDemoHistory(shiftDays: 14) }
         if args.contains("-showStats") { map.showStats = true }

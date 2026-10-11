@@ -90,6 +90,30 @@ enum Formatting {
         return f
     }()
 
+    /// Время на часах: «8:22». Минуты от полуночи — для окон выезда
+    /// (Commute), дата — для выезда и приезда.
+    static func clock(minuteOfDay: Int, calendar: Calendar = .current) -> String {
+        let day = calendar.startOfDay(for: Date())
+        return clock(day.addingTimeInterval(Double(minuteOfDay) * 60))
+    }
+
+    static func clock(_ date: Date) -> String {
+        date.formatted(date: .omitted, time: .shortened)
+    }
+
+    /// Разница с обычным временем в пути словами: «на 12 мин дольше обычного»,
+    /// «на 6 мин быстрее обычного», «как обычно». Порог «заметно» — общий с
+    /// карточкой (AppConfig.commuteNoticeableDelaySeconds).
+    static func delayPhrase(_ delay: TimeInterval) -> String {
+        let minutes = Int((abs(delay) / 60).rounded())
+        if abs(delay) < AppConfig.commuteNoticeableDelaySeconds || minutes == 0 {
+            return String(localized: "как обычно")
+        }
+        return unbreakable(delay > 0
+            ? String(format: String(localized: "на %lld мин дольше обычного"), minutes)
+            : String(format: String(localized: "на %lld мин быстрее обычного"), minutes))
+    }
+
     /// «5 мин» / «1 ч 23 мин» (uz: daq/soat)
     static func duration(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())

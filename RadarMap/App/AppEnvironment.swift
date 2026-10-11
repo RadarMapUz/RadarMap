@@ -5,6 +5,7 @@
 //  Композиционный корень зависимостей. Создаётся один раз и раздаётся через SwiftUI Environment.
 //
 
+import CoreLocation
 import Foundation
 import Observation
 import UIKit
@@ -387,6 +388,11 @@ final class AppEnvironment {
     /// меняется медленно, считать его в body главного экрана незачем.
     private(set) var learnedPlaces: [FrequentPlaces.Place] = []
 
+    /// Дорога на работу и домой (Commute) за 30 дней — пересчитывается там же,
+    /// где места: на старте сцены, в конце поездки, после загрузки истории и
+    /// смены мест в настройках. Порядок — по времени суток.
+    private(set) var commute: [Commute.Summary] = []
+
     /// Разовая чистка проездов, засчитанных с моста над камерой. Нужны и оси
     /// камер, и прочитанная история; порядок их прихода не определён.
     private func runAxisCleanupIfPossible() {
@@ -436,11 +442,34 @@ final class AppEnvironment {
     func refreshLearnedPlaces() {
         guard settings.destinationSuggestions else {
             // Выключили подсказки — забываем и выученное: держать в памяти
-            // домашний адрес, которым не пользуемся, незачем.
+            // домашний адрес, которым не пользуемся, незачем. Дорога на работу
+            // остаётся только по заданным вручную местам.
             learnedPlaces = []
+            refreshCommute()
             return
         }
         learnedPlaces = FrequentPlaces.learn(history: trip.history, now: Date())
+        refreshCommute()
+    }
+
+    /// Дом и работа для дороги: заданный вручную адрес старше выученного —
+    /// то же правило, что у подсказки «Домой».
+    var commuteEnds: (home: CLLocationCoordinate2D, work: CLLocationCoordinate2D)? {
+        func end(_ kind: FrequentPlaces.Kind) -> CLLocationCoordinate2D? {
+            settings.place(for: kind == .home ? .home : .work)?.coordinate
+                ?? learnedPlaces.first { $0.kind == kind }?.coordinate
+        }
+        guard let home = end(.home), let work = end(.work) else { return nil }
+        return (home, work)
+    }
+
+    func refreshCommute() {
+        guard let ends = commuteEnds else {
+            commute = []
+            return
+        }
+        let trips = Commute.trips(history: trip.history, home: ends.home, work: ends.work)
+        commute = Commute.summaries(trips: trips, now: Date())
     }
 
     #if DEBUG

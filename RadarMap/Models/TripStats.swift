@@ -304,7 +304,11 @@ final class TripStats {
             stops: stops.isEmpty ? nil : stops,
             endedManually: endedManually,
             batteryDropPercent: Self.batteryDrop(startPercent: startBatteryPercent,
-                                                 endPercent: batteryPercent)
+                                                 endPercent: batteryPercent),
+            // Сырой буфер начинается со старта (после склейки — со старта
+            // первой ноги): упрощённый трек вырежут через неделю, старт нет.
+            startLat: trackBuffer.first?.lat,
+            startLon: trackBuffer.first?.lon
         )
         history.insert(record, at: 0)
         history = TripHistory.pruned(history)
@@ -555,6 +559,68 @@ final class TripStats {
         history = seeded
         // Агрегаты пересобираем вместе с историей: иначе экран считает рейтинг
         // по дням от прошлого запуска, а разложение — по свежим записям.
+        days = TripDayBook.rebuilt(from: history)
+        lifetime = LifetimeStats.rebuilt(from: history)
+        persist()
+        persistDays()
+        persistLifetime()
+    }
+
+    /// Дорога на работу и домой: четыре недели будней — утро с разным временем
+    /// выезда (раньше выехал — быстрее доехал), вечер домой. Добавляется к
+    /// истории, дом и работа выучиваются из неё же.
+    /// `simctl launch <app> -demoHistory -demoCommutes -showStats`.
+    func seedDemoCommutes() {
+        // Не там, где стартует остальная демо-история (41.3110, 69.2790): её
+        // утренние выезды сделали бы «работу» домом, и дорога не выучилась бы.
+        let home = CLLocationCoordinate2D(latitude: 41.2930, longitude: 69.2150)
+        let work = CLLocationCoordinate2D(latitude: 41.3285, longitude: 69.3010)
+        let calendar = Calendar.current
+        let now = Date()
+        func line(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> [Double] {
+            (0...8).flatMap { k -> [Double] in
+                let t = Double(k) / 8
+                return [a.latitude + (b.latitude - a.latitude) * t,
+                        a.longitude + (b.longitude - a.longitude) * t, 40]
+            }
+        }
+        // (выезд ч, мин, минут в пути) — утро; вечер — свой список.
+        let mornings: [(Int, Int, Double)] = [(8, 22, 55), (7, 46, 37), (8, 18, 49), (8, 31, 58),
+                                              (7, 52, 39), (8, 20, 46), (8, 12, 44), (8, 25, 52),
+                                              (7, 44, 36), (8, 19, 47), (8, 35, 57), (8, 21, 45),
+                                              (7, 49, 38), (8, 16, 43), (8, 23, 50), (8, 27, 53)]
+        let evenings: [(Int, Int, Double)] = [(18, 34, 41), (18, 12, 38), (19, 5, 33), (18, 40, 44),
+                                              (18, 21, 40), (18, 55, 35), (18, 30, 42), (18, 48, 39)]
+        var seeded: [TripRecord] = []
+        var morning = 0, evening = 0
+        for back in 0..<28 {
+            guard let day = calendar.date(byAdding: .day, value: -back, to: calendar.startOfDay(for: now)),
+                  !calendar.isDateInWeekend(day) else { continue }
+            let m = mornings[morning % mornings.count]; morning += 1
+            let start = day.addingTimeInterval(Double(m.0 * 3600 + m.1 * 60))
+            if start.addingTimeInterval(m.2 * 60) < now {
+                seeded.append(TripRecord(id: start.timeIntervalSince1970, startedAt: start,
+                                         endedAt: start.addingTimeInterval(m.2 * 60),
+                                         distanceMeters: 11_800, maxSpeedKmh: 74, passed: [],
+                                         endLat: work.latitude, endLon: work.longitude,
+                                         track: line(home, work), score: 97, endedManually: true,
+                                         startLat: home.latitude, startLon: home.longitude))
+            }
+            let e = evenings[evening % evenings.count]; evening += 1
+            let back2 = day.addingTimeInterval(Double(e.0 * 3600 + e.1 * 60))
+            if back2.addingTimeInterval(e.2 * 60) < now {
+                seeded.append(TripRecord(id: back2.timeIntervalSince1970, startedAt: back2,
+                                         endedAt: back2.addingTimeInterval(e.2 * 60),
+                                         distanceMeters: 12_300, maxSpeedKmh: 70, passed: [],
+                                         endLat: home.latitude, endLon: home.longitude,
+                                         track: line(work, home), score: 99, endedManually: true,
+                                         startLat: work.latitude, startLon: work.longitude))
+            }
+        }
+        // Идемпотентно: экран может появиться не один раз, и каждый вызов
+        // добавлял бы ещё четыре недели.
+        let ids = Set(seeded.map(\.id))
+        history = (history.filter { !ids.contains($0.id) } + seeded).sorted { $0.startedAt > $1.startedAt }
         days = TripDayBook.rebuilt(from: history)
         lifetime = LifetimeStats.rebuilt(from: history)
         persist()

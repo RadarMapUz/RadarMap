@@ -150,6 +150,11 @@ nonisolated struct TripRecord: Codable, Identifiable {
     /// а не верой. nil — заряд не читался (симулятор) или заряжались в пути:
     /// фиктивную дельту честнее не хранить вовсе. У старых записей отсутствует.
     var batteryDropPercent: Int? = nil
+    /// Точка старта. Трек — единственный другой источник старта — вырезают
+    /// через неделю, а дорога на работу («вышел из дома в 8:22») нужна и
+    /// через месяц (Commute). У старых записей отсутствует.
+    var startLat: Double? = nil
+    var startLon: Double? = nil
 
     var camerasPassed: Int { passed.count }
     /// Общее время от старта до финиша — включая стоянки: столько поездка заняла.
@@ -172,6 +177,15 @@ nonisolated struct TripRecord: Codable, Identifiable {
     var averageSpeedKmh: Double {
         movingDuration > 0 ? distanceMeters / movingDuration * 3.6 : 0
     }
+    /// Откуда выехали: сохранённая точка старта, иначе первая точка трека.
+    var startCoordinate: CLLocationCoordinate2D? {
+        if let startLat, let startLon {
+            return CLLocationCoordinate2D(latitude: startLat, longitude: startLon)
+        }
+        guard let first = trackPoints.first else { return nil }
+        return CLLocationCoordinate2D(latitude: first.lat, longitude: first.lon)
+    }
+
     var endCoordinate: CLLocationCoordinate2D? {
         guard let endLat, let endLon else { return nil }
         return CLLocationCoordinate2D(latitude: endLat, longitude: endLon)

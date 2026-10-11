@@ -509,6 +509,32 @@ nonisolated enum AppConfig {
     /// Окно истории для обучения местам.
     nonisolated static let placeLearningWindowDays = 30
 
+    // MARK: - Дорога на работу и домой (Commute)
+
+    /// Поездка — «на работу», если началась у дома и кончилась у работы (и
+    /// наоборот) в пределах этого радиуса. Шире кластера мест: машину ставят
+    /// и за углом, и на соседней улице, а старт фиксируется с первым точным
+    /// фиксом, уже метрах в ста от подъезда.
+    nonisolated static let commutePlaceRadiusMeters: CLLocationDistance = 400
+    /// Окно истории для «обычно» и лучшего времени выезда.
+    nonisolated static let commuteWindowDays = 30
+    /// «Обычно» говорим с трёх поездок: по одной-двум медиана — случайность.
+    nonisolated static let commuteMinTrips = 3
+    /// Окно времени выезда для поиска лучшего — четверть часа.
+    nonisolated static let commuteBucketMinutes = 15
+    /// В окне нужно хотя бы столько поездок, чтобы советовать его.
+    nonisolated static let commuteBucketMinTrips = 2
+    /// Совет «выезжайте раньше» — только если он экономит хотя бы столько.
+    nonisolated static let commuteMinSavingSeconds: TimeInterval = 5 * 60
+    /// Совет — в пределах полутора часов от обычного выезда: «выезжайте в
+    /// 5 утра» правда быстрее, но это не совет, а насмешка.
+    nonisolated static let commuteAdviceSpanMinutes = 90
+    /// Старт старой записи без трека — конец предыдущей поездки, если машина
+    /// простояла не дольше этого (ночь у дома, день у работы).
+    nonisolated static let commuteChainMaxGapSeconds: TimeInterval = 18 * 3600
+    /// «Дольше обычного» считаем заметным с этой разницы.
+    nonisolated static let commuteNoticeableDelaySeconds: TimeInterval = 3 * 60
+
     // MARK: - Обновление базы камер (OTA)
 
     /// Сервер с актуальной базой, краудсорсом и маршрутизацией.

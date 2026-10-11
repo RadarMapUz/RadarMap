@@ -17152,6 +17152,262 @@
           }
         }
       }
+    },
+    "Дорога на работу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дорога на работу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga yo'l"
+          }
+        }
+      }
+    },
+    "Дорога домой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дорога домой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga yo'l"
+          }
+        }
+      }
+    },
+    "Ещё %lld — и появится «обычно»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ещё %lld — и появится «обычно»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yana %lld ta safar — va «odatda» paydo bo'ladi"
+          }
+        }
+      }
+    },
+    "Обычно %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычно %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda %@"
+          }
+        }
+      }
+    },
+    "Обычно %1$@, выезжаете около %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычно %1$@, выезжаете около %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda %1$@, taxminan %2$@ da chiqasiz"
+          }
+        }
+      }
+    },
+    "на %lld мин дольше обычного": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на %lld мин дольше обычного"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatdagidan %lld daq uzoqroq"
+          }
+        }
+      }
+    },
+    "на %lld мин быстрее обычного": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на %lld мин быстрее обычного"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatdagidan %lld daq tezroq"
+          }
+        }
+      }
+    },
+    "Выезжайте в %1$@ — в среднем %2$@, на %3$@ быстрее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выезжайте в %1$@ — в среднем %2$@, на %3$@ быстрее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ da chiqing — o'rtacha %2$@, %3$@ tezroq"
+          }
+        }
+      }
+    },
+    "Считается на телефоне по вашим поездкам между домом и работой. Наружу эти данные не уходят.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Считается на телефоне по вашим поездкам между домом и работой. Наружу эти данные не уходят."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uy va ish o'rtasidagi safarlaringiz bo'yicha telefonning o'zida hisoblanadi. Bu ma'lumotlar tashqariga chiqmaydi."
+          }
+        }
+      }
+    },
+    "Когда выезжали и сколько ехали": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Когда выезжали и сколько ехали"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qachon chiqdingiz va qancha yurdingiz"
+          }
+        }
+      }
+    },
+    "обычно %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "обычно %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatda %@"
+          }
+        }
+      }
+    },
+    "График: время выезда и время в пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "График: время выезда и время в пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grafik: chiqish vaqti va yo'ldagi vaqt"
+          }
+        }
+      }
+    },
+    "Окно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Окно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oyna"
+          }
+        }
+      }
+    },
+    "Выезд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выезд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chiqish"
+          }
+        }
+      }
+    },
+    "Минут": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Минут"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daqiqa"
+          }
+        }
+      }
+    },
+    "Обычно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

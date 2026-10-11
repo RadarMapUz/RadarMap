@@ -51,6 +51,26 @@ struct GlassCard<Content: View>: View {
     }
 }
 
+/// Знак-иконка: SF Symbol в цветной скруглённой плашке. Один язык иконок во
+/// всём приложении — как в Настройках iOS: глаз находит раздел по цвету и
+/// форме раньше, чем прочтёт подпись. Цвет — по СМЫСЛУ (`Theme.Icon`), а не
+/// по вкусу экрана: время всегда одного цвета, деньги — другого.
+struct IconBadge: View {
+    let symbol: String
+    var tint: Color = Theme.accent
+    var size: CGFloat = 36
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.44, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: size, height: size)
+            .background(tint.opacity(0.14),
+                        in: RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
+            .accessibilityHidden(true)
+    }
+}
+
 /// Панель поверх ЖИВОЙ карты — сплошная заливка вместо стекла.
 ///
 /// Стекло (`glassEffect`, материалы) размывает то, что под ним, и пока карта

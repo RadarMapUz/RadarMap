@@ -14,10 +14,11 @@
 //  нет уверенной догадки, стоим уже в этом месте, выключено в настройках —
 //  элемента на экране просто нет, и низ карты чистый.
 //
-//  Времени в пути и числа камер здесь намеренно НЕТ: чтобы их узнать, нужно
-//  построить маршрут, то есть сходить в сеть на догадку, которую человек не
-//  просил. Тап строит маршрут по-настоящему — и тогда всё это показывает
-//  панель маршрута, честно и один раз.
+//  Маршрута на догадку здесь нет: чтобы узнать время по дорогам, нужно сходить
+//  в сеть за маршрутом, которого человек не просил. Тап строит его
+//  по-настоящему — и тогда всё показывает панель маршрута. Зато «обычно 44
+//  мин» — из СВОЕЙ истории поездок (Commute), без сети и без догадок: так
+//  человек ездит туда каждый день.
 //
 //  Заданный вручную адрес (Настройки → Мои места) старше выученного: если
 //  человек сказал, где его дом, спорить с ним нельзя.
@@ -98,12 +99,21 @@ struct DestinationSuggestionBar: View {
                                                     from: env.location.currentCoordinate,
                                                     now: Date())
         else { return nil }
+        let usual = usualTime(to: place.kind)
         if let manual = manualPlace(for: place.kind) {
             return Target(kind: place.kind, coordinate: manual.coordinate,
-                          subtitle: manual.title)
+                          subtitle: [manual.title, usual].compactMap { $0 }.joined(separator: " · "))
         }
         return Target(kind: place.kind, coordinate: place.coordinate,
-                      subtitle: String(localized: "Ваш обычный маршрут"))
+                      subtitle: usual.map { $0.prefix(1).uppercased() + $0.dropFirst() }
+                        ?? String(localized: "Ваш обычный маршрут"))
+    }
+
+    /// «обычно 44 мин» — медиана своих поездок туда за 30 дней.
+    private func usualTime(to kind: FrequentPlaces.Kind) -> String? {
+        let direction: Commute.Direction = kind == .work ? .toWork : .toHome
+        guard let usual = env.commute.first(where: { $0.direction == direction })?.usual else { return nil }
+        return String(format: String(localized: "обычно %@"), Formatting.unbreakable(Formatting.duration(usual)))
     }
 
     /// Ручные места подмешиваются к выученным: заданный дом делает подсказку

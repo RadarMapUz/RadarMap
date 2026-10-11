@@ -84,6 +84,8 @@ struct TripStatsSheet: View {
     @State private var mapSelection: TripRecord?
     /// Скользящая пилюля фильтра периода.
     @Namespace private var periodPill
+    /// Открытая «Дорога на работу/домой».
+    @State private var commuteDetail: Commute.Summary?
 
     /// Ключ пересчёта данных карты: период и состав истории.
     private struct MapDataKey: Equatable {
@@ -110,6 +112,17 @@ struct TripStatsSheet: View {
                     if active {
                         LiveTripCard()
                             .entrance(0, appeared)
+                    }
+
+                    // Дорога на работу и домой — над периодом: у неё своё окно
+                    // (30 дней), и это первое, что человек хочет знать о
+                    // будничной езде. Нет поездок дом↔работа — блока нет.
+                    ForEach(env.commute) { commute in
+                        Button { commuteDetail = commute } label: {
+                            CommuteCard(summary: commute)
+                        }
+                        .buttonStyle(PressableStyle())
+                        .entrance(0, appeared)
                     }
 
                     // Пикер и стрелки — одна визуальная группа и ЛИПКАЯ:
@@ -330,6 +343,18 @@ struct TripStatsSheet: View {
             FinesSheet(period: period, anchor: anchor)
         }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
+        .sheet(item: $commuteDetail) { commute in
+            CommuteDetailSheet(summary: commute)
+                .presentationDetents([.large])
+        }
+        #if DEBUG
+        // Скриншот-хук: `-showCommute` сразу открывает дорогу (первую по времени суток).
+        .task {
+            guard ProcessInfo.processInfo.arguments.contains("-showCommute") else { return }
+            await Task.pause(seconds: 0.8)
+            commuteDetail = env.commute.first
+        }
+        #endif
         .sheet(isPresented: $showRecallInfo) {
             AlertRecallInfoSheet(tally: env.trip.alertRecall)
         }

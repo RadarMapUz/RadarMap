@@ -104,6 +104,21 @@ enum Theme {
     /// Кайма линии: белая днём (как у Amap), тёмно-синяя ночью.
     static let routeCasing = adaptive(0xFFFFFF, 0x0E1A33)
 
+    /// Цвета знаков-иконок (`IconBadge`) — по СМЫСЛУ цифры рядом. Глаз ищет
+    /// «время» и «деньги» по цвету раньше, чем прочтёт подпись, поэтому смысл
+    /// красится одинаково на всех экранах. Глиф на своей плашке и на карточке
+    /// держит ≥ 3:1 в обеих темах (PaletteTests).
+    enum Icon {
+        static let time     = Theme.accent
+        static let distance = adaptive(0x0B7480, 0x45C6CF)
+        static let speed    = adaptive(0x6A3FD1, 0xAE93FF)
+        static let money    = Theme.warning
+        static let rating   = Theme.success
+        static let camera   = Theme.danger
+        static let home     = Theme.accent
+        static let work     = adaptive(0x9C5300, 0xF2A54A)
+    }
+
     /// Состояние объекта — единственный законный способ выбрать «смысловой»
     /// цвет там, где состояние вычисляется. Прямая ссылка на warning/danger
     /// остаётся законной для статичной разметки (иконка раздела и т.п.).

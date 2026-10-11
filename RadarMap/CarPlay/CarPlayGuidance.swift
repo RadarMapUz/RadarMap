@@ -341,6 +341,16 @@ final class CarPlayGuidance {
         } else {
             session.currentLaneGuidance = nil
         }
+        // Начальная оценка — в самом манёвре, как у Mapbox: карточка не ждёт
+        // первого updateEstimates, чтобы показать расстояние до поворота.
+        let distance = env.route.nextStepDistance
+        next.initialTravelEstimates = Self.estimates(
+            meters: distance,
+            seconds: CarPlayGuidanceMapping.timeToManeuver(stepDistance: distance,
+                                                           remainingDistance: env.route.remainingDistance,
+                                                           remainingTime: env.route.remainingTime))
+        // Улика на случай пустой карточки: что именно ушло в машину.
+        Log.carplay.notice("манёвр в машину: вариантов \(next.instructionVariants.count, privacy: .public), первый \(next.instructionVariants.first?.count ?? 0, privacy: .public) симв., стрелка \(next.symbolImage != nil, privacy: .public), \(Int(distance), privacy: .public) м")
         maneuver = next
         // Каждый манёвр, попадающий в upcomingManeuvers, сначала регистрируется
         // в сессии (CPNavigationSession.h, iOS 17.4+): без этого приборка и

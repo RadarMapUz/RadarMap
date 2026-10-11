@@ -66,7 +66,9 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         let shown = scene.activationState == .foregroundActive
             || scene.activationState == .foregroundInactive
         model.isOnScreen = shown
-        if shown { installHost() }
+        // Карта — только в активном приложении: MapLibre, созданный в фоне,
+        // стартует «спящим» (см. CarPlaySceneDelegate.didConnect).
+        if shown && UIApplication.shared.applicationState != .background { installHost() }
         env.startDrivingServices()
         syncShortcuts()
     }
@@ -90,9 +92,19 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
     }
 
     func sceneWillEnterForeground(_ scene: UIScene) {
-        if needsFreshHost { installHost() }
+        if needsFreshHost {
+            if UIApplication.shared.applicationState == .background {
+                windowRoot?.setContent(nil)   // построим в sceneDidBecomeActive
+            } else {
+                installHost()
+            }
+        }
         model.isOnScreen = true
         syncShortcuts()
+    }
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        if needsFreshHost || windowRoot?.content == nil { installHost() }
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {

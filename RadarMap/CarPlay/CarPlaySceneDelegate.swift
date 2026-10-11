@@ -101,7 +101,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let root = CarPlayWindowRoot()
         window.rootViewController = root
         windowRoot = root
-        if shown { installHost() } else { needsFreshHost = true }
+        // Содержимое — только когда и сцена на экране, и приложение не в фоне:
+        // MLNMapView, созданный при applicationState == .background, стартует
+        // «спящим» и будится не всегда (MLNMapView.mm 6.29, dormant) — карта
+        // осталась бы пустой или стоящей. Иначе — в sceneDidBecomeActive.
+        if shown && UIApplication.shared.applicationState != .background {
+            installHost()
+        } else {
+            needsFreshHost = true
+        }
         rootShown = false
 
         let template = CPMapTemplate()
@@ -199,6 +207,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// carPlayFreezeRepairs раз за показ бессмысленно — дальше только пишем.
     private var freezeWatch: Task<Void, Never>?
     private var freezeRepairs = 0
+    private var heartbeatReported = false
 
     private func startFreezeWatch(scene: CPTemplateApplicationScene) {
         freezeWatch?.cancel()
@@ -209,8 +218,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                       self.model.isOnScreen, self.host != nil else { continue }
                 let behind = self.env.location.locationTick - self.model.lastRenderedTick
                 let silence = Date().timeIntervalSince(self.model.lastHeartbeat)
-                guard behind > AppConfig.carPlayFreezeTicks
-                        || silence > AppConfig.carPlayHeartbeatStaleSeconds else { continue }
+                // Пульс TimelineView — только улика, не повод чинить: такт,
+                // взятый не от экрана машины, при погашенном экране телефона
+                // встаёт (форум Apple 777989), и сторож перезагружал бы живую
+                // карту. Чиним только по тикам GPS, которые дерево не отметило.
+                if behind <= AppConfig.carPlayFreezeTicks {
+                    if silence > AppConfig.carPlayHeartbeatStaleSeconds, !self.heartbeatReported {
+                        self.heartbeatReported = true
+                        Log.carplay.fault("пульс экрана машины молчит \(Int(silence), privacy: .public) с при живых тиках — только пишу")
+                    }
+                    continue
+                }
                 guard self.freezeRepairs < AppConfig.carPlayFreezeRepairs else {
                     Log.carplay.fault("окно машины стоит и после \(self.freezeRepairs, privacy: .public) пересозданий: тиков \(behind, privacy: .public), пульс молчит \(Int(silence), privacy: .public) с")
                     continue
@@ -348,8 +366,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// путь пальца заново.
     private var panSoFar = CGPoint.zero
 
+    /// Перетаскивание пальцем. Само окно карты касаний не получает никогда
+    /// (CPWindow: «does not receive tap or drag events») — жест приходит
+    /// только сюда, и только от машин с сенсорным экраном: «CarPlay doesn't
+    /// call this method when connected to some CarPlay systems». CarPlay
+    /// Simulator перетаскивание не присылает вовсе (форум Apple, 730949) —
+    /// проверять в машине. Журнал говорит, пришёл ли жест и в каком виде:
+    /// документация не уточняет, сдвиг накопительный или пошаговый.
     func mapTemplateDidBeginPanGesture(_ mapTemplate: CPMapTemplate) {
         panSoFar = .zero
+        panUpdates = 0
+        Log.carplay.notice("перетаскивание пальцем: начало")
     }
 
     func mapTemplate(_ mapTemplate: CPMapTemplate,
@@ -357,12 +384,19 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                      velocity: CGPoint) {
         let step = CGSize(width: translation.x - panSoFar.x, height: translation.y - panSoFar.y)
         panSoFar = translation
+        panUpdates += 1
+        if panUpdates <= 3 {
+            Log.carplay.notice("перетаскивание: сдвиг \(Int(translation.x), privacy: .public),\(Int(translation.y), privacy: .public)")
+        }
         model.pan(by: step)
     }
 
     func mapTemplate(_ mapTemplate: CPMapTemplate, didEndPanGestureWithVelocity velocity: CGPoint) {
+        Log.carplay.notice("перетаскивание: конец, обновлений \(self.panUpdates, privacy: .public), итог \(Int(self.panSoFar.x), privacy: .public),\(Int(self.panSoFar.y), privacy: .public)")
         panSoFar = .zero
     }
+
+    private var panUpdates = 0
 
     /// Кнопки-стрелки на головных устройствах без сенсора: там панорамируют
     /// крутилкой, и шаг обязан быть заметным — иначе до соседнего квартала
@@ -476,8 +510,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         guidance.systemCancelled()
     }
 
-    /// Манёвр и название дороги — на приборку машины и проекцию на стекло.
-    func mapTemplateShouldProvideNavigationMetadata(_ mapTemplate: CPMapTemplate) -> Bool { true }
+    /// Метаданные манёвра для приборки и проекции на стекло — ВЫКЛЮЧЕНЫ.
+    ///
+    /// Включили их в 2.2.4, и с тех пор карточка манёвра на экране машины
+    /// показывала одно расстояние — без стрелки и текста (CarPlay Simulator,
+    /// 11.10, 2.2.5–2.2.7). Руководство CarPlay (июнь 2026) требует для
+    /// метаданных тип манёвра, ТИП ПЕРЕКРЁСТКА и сторону движения плюс
+    /// состояние манёвра по ходу подъезда — типа перекрёстка и состояния у нас
+    /// нет. Навигатор Mapbox метаданные не включает и карточку собирает только
+    /// из стрелки, текста и начальной оценки. Вернём, когда будут все поля
+    /// и проверка в машине с приборкой.
+    func mapTemplateShouldProvideNavigationMetadata(_ mapTemplate: CPMapTemplate) -> Bool { false }
 
     // MARK: - Системные баннеры, когда на экране машины не мы
 
@@ -521,14 +564,24 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     func sceneWillEnterForeground(_ scene: UIScene) {
-        Log.carplay.notice("сцена машины: foreground, свежий хост \(self.needsFreshHost || self.host == nil, privacy: .public)")
+        let appInBackground = UIApplication.shared.applicationState == .background
+        Log.carplay.notice("сцена машины: foreground, свежий хост \(self.needsFreshHost || self.host == nil, privacy: .public), приложение в фоне \(appInBackground, privacy: .public)")
         // Окно — заново, ДО первого кадра на экране: дерево, построенное или
         // пересозданное, пока сцена была в фоне, потом не оживало (11.10).
         // Карта в фоне и так выгружена, так что цена — сборка дерева SwiftUI.
+        // Приложение ещё в фоне (телефон заблокирован) — карту сейчас не
+        // создаём (MapLibre стартовал бы «спящим»): прежнее содержимое
+        // снимаем и строим в sceneDidBecomeActive.
         if needsFreshHost || host == nil {
-            installHost()
+            if appInBackground {
+                windowRoot?.setContent(nil)
+                host = nil
+            } else {
+                installHost()
+            }
         }
         freezeRepairs = 0
+        heartbeatReported = false
         model.isOnScreen = true
         HitchWatch.setCounting(true)
     }
@@ -551,7 +604,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             let ours = windowRoot != nil && scene.carWindow.rootViewController === windowRoot
             Log.carplay.notice("сцена машины: окно наше — \(ours, privacy: .public), хост \(self.host != nil, privacy: .public)")
             if !ours, let windowRoot { scene.carWindow.rootViewController = windowRoot }
-            if host == nil { installHost() }
+            if needsFreshHost || host == nil { installHost() }
         }
         watchRootTemplate()
     }

@@ -7,6 +7,7 @@
 //  чтением LocationService рядом с живым CLLocationManager.
 //
 
+import CoreLocation
 import XCTest
 @testable import RadarMap
 
@@ -92,5 +93,33 @@ final class GPSTiersTests: XCTestCase {
                 XCTAssertEqual(GPSTiers.tier(s, lowPower: false), GPSTiers.tier(s))
             }
         }
+    }
+
+    // MARK: - Открытое приложение без поездки (11.10)
+
+    /// Просить точность хуже порога фильтра — значит не получить ни одного
+    /// принятого фикса: экран навсегда в «уточняем положение». Так было в
+    /// энергосбережении (просили 100 м при пороге 65).
+    func testForegroundNeverAsksWorseThanTheFilterAccepts() {
+        for lowPower in [false, true] {
+            let request = GPSTiers.foreground(lowPower: lowPower)
+            XCTAssertLessThanOrEqual(request.accuracy, AppConfig.maxHorizontalAccuracyMeters,
+                                     "энергосбережение: \(lowPower)")
+        }
+    }
+
+    /// Без энергосбережения — максимум, как у Apple Карт: «до 10 м» в
+    /// помещении система исполняет точками по Wi-Fi хуже 65 м.
+    func testForegroundAsksBestLikeAppleMaps() {
+        XCTAssertEqual(GPSTiers.foreground(lowPower: false).accuracy, kCLLocationAccuracyBest)
+    }
+
+    /// Забракованный фикс поднимает просьбу до максимума, и только один раз.
+    func testRejectedFixEscalatesToBestOnce() {
+        XCTAssertEqual(GPSTiers.escalatedAccuracy(from: kCLLocationAccuracyNearestTenMeters),
+                       kCLLocationAccuracyBest)
+        XCTAssertEqual(GPSTiers.escalatedAccuracy(from: kCLLocationAccuracyHundredMeters),
+                       kCLLocationAccuracyBest)
+        XCTAssertNil(GPSTiers.escalatedAccuracy(from: kCLLocationAccuracyBest))
     }
 }

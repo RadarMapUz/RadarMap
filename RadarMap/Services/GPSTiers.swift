@@ -16,6 +16,7 @@
 //  Покрыто GPSTiersTests.
 //
 
+import CoreLocation
 import Foundation
 
 nonisolated enum GPSTiers {
@@ -74,5 +75,39 @@ nonisolated enum GPSTiers {
     static func tier(_ s: Situation, lowPower: Bool) -> Int {
         let base = tier(s)
         return lowPower ? max(base, 1) : base
+    }
+
+    // MARK: - Открытое приложение без поездки
+
+    /// Что просить у системы.
+    struct Request: Equatable {
+        var accuracy: CLLocationAccuracy
+        var distanceFilter: CLLocationDistance
+    }
+
+    /// Просьба для открытого экрана без поездки и без машины.
+    ///
+    /// Здесь просили «до 10 м» (в энергосбережении — «до 100 м»), и в
+    /// помещении система честно исполняла это точками по Wi-Fi хуже 65 м.
+    /// Фильтр (`maxHorizontalAccuracyMeters`) их бракует, а значит ни одного
+    /// принятого фикса: экран навсегда застревал в «уточняем положение» с
+    /// меткой в 100–300 м от человека. Телефон владельца, 11.10: Apple Карты
+    /// ставили точку на место, RadarMap — нет. Запрос «до 100 м» вообще был
+    /// хуже порога фильтра, то есть в энергосбережении принятых фиксов не
+    /// бывало по построению.
+    ///
+    /// Теперь как у Apple Карт: «Best». Экран при этом всё равно включён, и
+    /// разница в расходе с «до 10 м» на его фоне мала. В энергосбережении —
+    /// десять метров: в пределах порога фильтра, а если и они бракуются,
+    /// просьбу поднимет `escalatedAccuracy`.
+    static func foreground(lowPower: Bool) -> Request {
+        lowPower ? Request(accuracy: kCLLocationAccuracyNearestTenMeters, distanceFilter: 20)
+                 : Request(accuracy: kCLLocationAccuracyBest, distanceFilter: 10)
+    }
+
+    /// Фикс открытого экрана забракован по точности: какую точность просить
+    /// теперь. nil — уже просим максимум, поднимать некуда.
+    static func escalatedAccuracy(from requested: CLLocationAccuracy) -> CLLocationAccuracy? {
+        requested == kCLLocationAccuracyBest ? nil : kCLLocationAccuracyBest
     }
 }

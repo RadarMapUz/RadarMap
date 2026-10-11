@@ -627,8 +627,10 @@ final class LocationService: NSObject {
             manager.showsBackgroundLocationIndicator = true
         } else {
             // Просто открытое приложение: точный GPS для HUD, фон не держим.
-            manager.desiredAccuracy = isLowPowerMode ? kCLLocationAccuracyHundredMeters : kCLLocationAccuracyNearestTenMeters
-            manager.distanceFilter = isLowPowerMode ? 50 : 10
+            // Точность — как у Apple Карт (почему — GPSTiers.foreground).
+            let request = GPSTiers.foreground(lowPower: isLowPowerMode)
+            manager.desiredAccuracy = request.accuracy
+            manager.distanceFilter = request.distanceFilter
             manager.allowsBackgroundLocationUpdates = false
             manager.showsBackgroundLocationIndicator = false
         }
@@ -892,6 +894,13 @@ final class LocationService: NSObject {
                 accuracyTier = 0
                 manager.desiredAccuracy = kCLLocationAccuracyBest
                 manager.distanceFilter = 6
+            }
+            // То же для открытого экрана без поездки: забракован по точности —
+            // просим максимум, иначе метка так и стоит по грубой точке.
+            if reason == .accuracy, !isTripActive, isForeground,
+               let raised = GPSTiers.escalatedAccuracy(from: manager.desiredAccuracy) {
+                Log.location.notice("открытый экран: фикс \(fix.horizontalAccuracy, privacy: .public) м отброшен — поднимаем точность")
+                manager.desiredAccuracy = raised
             }
         case .accepted(let good):
             if isSignalStale { isSignalStale = false }

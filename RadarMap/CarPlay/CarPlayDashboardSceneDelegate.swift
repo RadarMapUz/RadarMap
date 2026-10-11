@@ -26,9 +26,10 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
 
     private let model = CarPlayMapModel()
     private var controller: CPDashboardController?
-    private weak var window: UIWindow?
-    /// Окно строится только когда панель на экране, и заново после фона —
-    /// те же правила, что у основной сцены (CarPlaySceneDelegate, 11.10).
+    /// Постоянный корень окна плитки (CarPlayWindowRoot) — ставится при
+    /// подключении и не меняется; содержимое — только когда плитка на экране
+    /// и заново после фона (те же правила, что у основной сцены, 11.10).
+    private var windowRoot: CarPlayWindowRoot?
     private var needsFreshHost = true
 
     private var env: AppEnvironment { .shared }
@@ -54,11 +55,14 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
             self.model.refreshDaylight(appearance: self.env.settings.mapAppearance,
                                        coordinate: self.env.location.currentCoordinate)
         }
-        self.window = window
         // Панель подключается и в ФОНЕ (журнал 11.10: BG-Active сразу при
         // открытии приложения), а модель раньше считала себя на экране по
         // умолчанию — и в окне, которое никто не видел, поднималась вторая
-        // карта на движке рядом с основной.
+        // карта на движке рядом с основной. Корень окна — сразу, содержимое —
+        // только на экране.
+        let root = CarPlayWindowRoot()
+        window.rootViewController = root
+        windowRoot = root
         let shown = scene.activationState == .foregroundActive
             || scene.activationState == .foregroundInactive
         model.isOnScreen = shown
@@ -68,10 +72,10 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
     }
 
     private func installHost() {
-        guard let window else { return }
+        guard let windowRoot else { return }
         let host = UIHostingController(rootView: CarPlayDashboardView(model: model).environment(env))
         host.view.backgroundColor = UIColor(Theme.background)
-        window.rootViewController = host
+        windowRoot.setContent(host)
         needsFreshHost = false
     }
 
@@ -81,6 +85,8 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         Log.carplay.notice("CarPlay: приборная панель отключена")
         controller = nil
         model.isOnScreen = false
+        windowRoot?.setContent(nil)
+        windowRoot = nil
     }
 
     func sceneWillEnterForeground(_ scene: UIScene) {

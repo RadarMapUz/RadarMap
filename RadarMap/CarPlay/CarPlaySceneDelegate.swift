@@ -35,8 +35,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Начало сессии экрана машины — для суточной статистики (минуты).
     private var connectedAt: Date?
     private var mapTemplate: CPMapTemplate?
-    /// Хост SwiftUI в окне машины. Хранится, чтобы в sceneDidBecomeActive
-    /// проверить, что окно показывает именно его, и пересоздать, если нет.
+    /// Постоянный корень окна машины на всё подключение (CarPlayWindowRoot):
+    /// хост CarPlay показывает слой именно этого корня, и подменять его нельзя.
+    private var windowRoot: CarPlayWindowRoot?
+    /// Хост SwiftUI внутри корня — его и пересоздаём, не трогая корень.
     private weak var host: UIHostingController<AnyView>?
     private let model = CarPlayMapModel()
     /// Навигационная сессия CarPlay: манёвр, время в пути, полосы, камеры
@@ -93,7 +95,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // (sceneWillEnterForeground).
         let shown = Self.isShown(scene)
         model.isOnScreen = shown
-        if shown { installHost(in: window) } else { needsFreshHost = true }
+        // Корень окна — СРАЗУ и один раз (CarPlayWindowRoot): без него хост
+        // CarPlay считает, что видимого окна нет, и экран машины пустой
+        // (2.2.6, «not considered visible»). Содержимое — только на экране.
+        let root = CarPlayWindowRoot()
+        window.rootViewController = root
+        windowRoot = root
+        if shown { installHost() } else { needsFreshHost = true }
         rootShown = false
 
         let template = CPMapTemplate()
@@ -136,6 +144,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         Log.carplay.notice("CarPlay отключён")
         self.interfaceController = nil
         mapTemplate = nil
+        windowRoot?.setContent(nil)
+        windowRoot = nil
+        templateWatch?.cancel()
+        templateWatch = nil
         freezeWatch?.cancel()
         freezeWatch = nil
         guidance.detach()
@@ -205,7 +217,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 }
                 self.freezeRepairs += 1
                 Log.carplay.fault("окно машины застыло: тиков \(behind, privacy: .public), пульс молчит \(Int(silence), privacy: .public) с — пересоздаю хост")
-                self.installHost(in: scene.carWindow)
+                self.installHost()
             }
         }
     }
@@ -214,13 +226,18 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// подключилась в фоне или побывала в фоне.
     private var needsFreshHost = false
 
-    /// Экран машины в окно. Только на переднем плане (см. didConnect): дерево,
-    /// построенное в окне, которое система не показывает, потом не оживало.
-    private func installHost(in window: UIWindow) {
+    /// Экран машины — новым содержимым постоянного корня. Только на переднем
+    /// плане (см. didConnect): дерево, построенное в окне, которое система не
+    /// показывает, потом не оживало. Корень окна при этом не меняется.
+    private func installHost() {
+        guard let windowRoot else {
+            Log.carplay.error("хост экрана машины: корня окна нет")
+            return
+        }
         let host = UIHostingController(rootView: AnyView(
             CarPlayMapScreen(model: model).environment(env)))
         host.view.backgroundColor = UIColor(Theme.background)
-        window.rootViewController = host
+        windowRoot.setContent(host)
         self.host = host
         needsFreshHost = false
         // Новое дерево ещё не успело отметиться — без сброса сторож счёл бы
@@ -508,8 +525,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Окно — заново, ДО первого кадра на экране: дерево, построенное или
         // пересозданное, пока сцена была в фоне, потом не оживало (11.10).
         // Карта в фоне и так выгружена, так что цена — сборка дерева SwiftUI.
-        if let scene = scene as? CPTemplateApplicationScene, needsFreshHost || host == nil {
-            installHost(in: scene.carWindow)
+        if needsFreshHost || host == nil {
+            installHost()
         }
         freezeRepairs = 0
         model.isOnScreen = true
@@ -529,9 +546,38 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // уйти в одно подключение, а экран показывать окно другого. Это та
         // самая улика по застывшему окну 11.10, которой не хватало.
         if let scene = scene as? CPTemplateApplicationScene {
-            let ours = host != nil && scene.carWindow.rootViewController === host
-            Log.carplay.notice("сцена машины: окно наше — \(ours, privacy: .public)")
-            if !ours { installHost(in: scene.carWindow) }
+            // Корень окна обязан быть нашим постоянным: подменивший его
+            // оставил бы машину показывать чужой слой.
+            let ours = windowRoot != nil && scene.carWindow.rootViewController === windowRoot
+            Log.carplay.notice("сцена машины: окно наше — \(ours, privacy: .public), хост \(self.host != nil, privacy: .public)")
+            if !ours, let windowRoot { scene.carWindow.rootViewController = windowRoot }
+            if host == nil { installHost() }
+        }
+        watchRootTemplate()
+    }
+
+    /// Проверка «корень действительно на экране машины». rootShown ставит
+    /// первый templateDidAppear корня; не пришёл он за
+    /// carPlayTemplateShowTimeout — шаблон потерян по дороге в машину.
+    /// Один повтор установки корня: второй раз подряд терять его система не
+    /// обязана, а бесконечные повторы мигали бы экраном.
+    private var templateWatch: Task<Void, Never>?
+
+    private func watchRootTemplate() {
+        templateWatch?.cancel()
+        guard !rootShown else { return }
+        let session = session
+        templateWatch = Task { @MainActor [weak self] in
+            await Task.pause(seconds: AppConfig.carPlayTemplateShowTimeout)
+            guard let self, !Task.isCancelled, self.session == session, !self.rootShown,
+                  let mapTemplate = self.mapTemplate,
+                  let interfaceController = self.interfaceController else { return }
+            Log.carplay.fault("корневой шаблон не показан за \(Int(AppConfig.carPlayTemplateShowTimeout), privacy: .public) с — ставлю заново")
+            interfaceController.setRootTemplate(mapTemplate, animated: false) { _, error in
+                if let error {
+                    Log.carplay.error("setRootTemplate (повтор): \(error.localizedDescription, privacy: .public)")
+                }
+            }
         }
     }
 

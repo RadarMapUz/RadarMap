@@ -975,7 +975,14 @@ final class LocationService: NSObject {
                 let capped = SpeedBound.capped(self.speedKmh, distanceFilter: self.manager.distanceFilter,
                                                secondsSinceFix: Date().timeIntervalSince(fixAt))
                 // Пишем только заметное изменение: speedKmh наблюдаемый.
-                if abs(capped - self.speedKmh) >= 0.5 { self.speedKmh = capped }
+                if abs(capped - self.speedKmh) >= 0.5 {
+                    self.speedKmh = capped
+                    // Флаг — следом за цифрой. Раньше он пересчитывался только
+                    // на принятом фиксе со скоростью, а в помещении таких нет:
+                    // спидометр гас до 0, а «Похоже, вы едете» висело до
+                    // следующей поездки (телефон владельца, 11.10).
+                    self.refreshDrivingFlag()
+                }
                 if self.speedKmh == 0 {
                     self.speedSmoother.reset()
                     return
@@ -985,6 +992,15 @@ final class LocationService: NSObject {
     }
 
     @ObservationIgnored private var speedDecayTask: Task<Void, Never>?
+
+    /// «Похоже, вы едете» по текущей цифре спидометра. Присваиваем ТОЛЬКО на
+    /// изменение: @Observable будит подписчиков на каждую запись, а смысл
+    /// флага ровно в том, чтобы их не будить.
+    private func refreshDrivingFlag() {
+        let driving = Self.probablyDriving(was: isProbablyDriving, speedKmh: speedKmh,
+                                           tripActive: isTripActive)
+        if driving != isProbablyDriving { isProbablyDriving = driving }
+    }
 
     private func handleLocation(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed, course: CLLocationDirection) {
         // Главный горячий путь приложения: всё, что происходит на GPS-точке, —
@@ -1008,11 +1024,7 @@ final class LocationService: NSObject {
         // проезда, и один такой фикс занизил бы записанную скорость у камеры.
         if speed >= 0 {
             speedKmh = speedSmoother.update(rawKmh: speed * 3.6, at: Date())
-            // Присваиваем ТОЛЬКО на изменение: @Observable будит подписчиков на
-            // каждую запись, а смысл флага ровно в том, чтобы их не будить.
-            let driving = Self.probablyDriving(was: isProbablyDriving, speedKmh: speedKmh,
-                                               tripActive: isTripActive)
-            if driving != isProbablyDriving { isProbablyDriving = driving }
+            refreshDrivingFlag()
         }
         if speedKmh >= 3 { lastMovementAt = Date() }
         currentCourse = course

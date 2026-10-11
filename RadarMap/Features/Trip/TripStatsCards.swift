@@ -20,7 +20,6 @@ struct AchievementBadge: View {
             ZStack {
                 if badge.earned {
                     Circle().fill(Theme.accent.gradient)
-                        .shadow(color: Theme.accent.opacity(0.45), radius: 6)
                 } else {
                     Circle().fill(Theme.surface)
                     Circle()

@@ -226,6 +226,17 @@ nonisolated enum AppConfig {
     /// поездку: карта важнее градусов.
     static let heatMaxLines = 400
 
+    /// Картинка карты в прокрутке (MapPicture): кадр не меньше этой стороны —
+    /// короткая поездка иначе раздувалась до уровня подъезда.
+    static let mapPictureMinSpanMeters = 600.0
+    /// Запас по краям кадра, доля его стороны: трек не упирается в рамку.
+    static let mapPicturePadding = 0.12
+    /// Сколько готовых кадров держим: период × тема × выбранная поездка.
+    static let mapPictureCacheLimit = 24
+    /// Строка списка поездок рисует силуэт трека в 44 pt — больше точек там
+    /// не различить, а каждая лишняя — работа при каждой перерисовке строки.
+    static let trackThumbnailPoints = 80
+
     /// Дистанция камеры (метры) при центрировании на выбранной камере из списка.
     static let focusDistance: CLLocationDistance = 1200
 

@@ -59,7 +59,7 @@ RadarMap/
 │                   RemoteSyncService, MotionService, AlertPlayer, LiveActivityService
 ├── Features/       Map / Search / Trip / Settings / Onboarding — по фичам
 ├── CarPlay/        Сцена CarPlay (переиспользует те же модели)
-├── DesignSystem/   Theme, SpeedLimitSign, StatTile, ShareCardShell, компоненты
+├── DesignSystem/   Theme, SpeedLimitSign, MetricsCard, MapPicture, ShareCardShell, компоненты
 └── Support/        AppConfig (все константы), Log (os.Logger), Storage
                     (типизированный UserDefaults), APIClient (единая сеть),
                     JSONFile, Formatting, GeoMath

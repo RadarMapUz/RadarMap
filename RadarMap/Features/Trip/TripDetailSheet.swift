@@ -142,6 +142,15 @@ struct TrackCanvas: View {
     let points: [TrackPoint]
     var passes: [PassedCamera] = []
     var lineWidth: CGFloat = 3
+    var endpointSize: CGFloat = 9
+
+    /// Каждая N-я точка, первая и последняя — всегда. Для силуэта в 44 pt
+    /// четыреста точек трека неотличимы от восьмидесяти.
+    static func thinned(_ points: [TrackPoint], to limit: Int) -> [TrackPoint] {
+        guard points.count > limit, limit >= 2 else { return points }
+        let step = Double(points.count - 1) / Double(limit - 1)
+        return (0..<limit).map { points[Int((Double($0) * step).rounded())] }
+    }
 
     var body: some View {
         Canvas { context, size in
@@ -167,18 +176,22 @@ struct TrackCanvas: View {
             var path = Path()
             path.move(to: project(points[0].lat, points[0].lon))
             for p in points.dropFirst() { path.addLine(to: project(p.lat, p.lon)) }
-            context.stroke(path, with: .linearGradient(
-                Gradient(colors: [Theme.accent, Theme.Types.intelligent]),
-                startPoint: .zero, endPoint: CGPoint(x: size.width, y: size.height)),
-                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+            // Один цвет маршрута, как на всех картах приложения. Градиент
+            // синий→индиго остался от старой карты Apple и спорил с маршрутом.
+            context.stroke(path, with: .color(Theme.route),
+                           style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
 
-            // Старт и финиш.
+            // Старт и финиш — как на картах (TripEndpoints): старт белый с
+            // кольцом маршрута, финиш — точка маршрута с белым кольцом.
+            let d = endpointSize, r = d / 2
             let start = project(points[0].lat, points[0].lon)
-            context.fill(Path(ellipseIn: CGRect(x: start.x - 4, y: start.y - 4, width: 8, height: 8)),
-                         with: .color(Theme.success))
+            let startDot = Path(ellipseIn: CGRect(x: start.x - r, y: start.y - r, width: d, height: d))
+            context.fill(startDot, with: .color(.white))
+            context.stroke(startDot, with: .color(Theme.route), lineWidth: max(1.5, d * 0.2))
             let end = project(points[points.count - 1].lat, points[points.count - 1].lon)
-            context.fill(Path(ellipseIn: CGRect(x: end.x - 4, y: end.y - 4, width: 8, height: 8)),
-                         with: .color(.white))
+            let endDot = Path(ellipseIn: CGRect(x: end.x - r, y: end.y - r, width: d, height: d))
+            context.fill(endDot, with: .color(Theme.route))
+            context.stroke(endDot, with: .color(.white), lineWidth: max(1.5, d * 0.18))
 
             // Проезды камер — цвет по честности проезда.
             for pass in passes {
@@ -218,8 +231,7 @@ struct TripDetailSheet: View {
     var body: some View {
         NavigationStack {
             TripDetailContent(record: record, onRoute: onRoute) { selectedPass = $0 }
-                .navigationTitle(record.startedAt.formatted(date: .abbreviated,
-                                                            time: .shortened))
+                .navigationTitle(Formatting.tripTitle(record.startedAt))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
@@ -261,11 +273,9 @@ struct TripDetailContent: View {
                     .entrance(0, appeared)
                 ratingCard
                     .entrance(0, appeared)
-                scoreRow
+                scoreCard
                     .entrance(1, appeared)
-                scoreBreakdown
-                    .entrance(1, appeared)
-                statsGrid
+                metricsCard
                     .entrance(2, appeared)
                 TripStopsSection(record: record) { dismiss() }
                     .entrance(3, appeared)
@@ -382,49 +392,14 @@ struct TripDetailContent: View {
     @ViewBuilder private var mapSection: some View {
         let points = record.trackPoints
         if points.count >= 2 {
-            Map(initialPosition: .rect(trackRect(points))) {
-                MapPolyline(coordinates: points.map {
-                    CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
-                })
-                .stroke(LinearGradient(colors: [Theme.accent, Theme.Types.intelligent],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing),
-                        style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
-
-                ForEach(record.passed) { pass in
-                    if let coordinate = pass.coordinate {
-                        Annotation("", coordinate: coordinate, anchor: .center) {
-                            // Второй носитель на карте — ФОРМА, а не значок:
-                            // точка 22 pt мала для глифа, но кольцо от
-                            // залитого круга отличается и в оттенках серого.
-                            // Залито — превышение, кольцо — чистый проезд.
-                            ZStack {
-                                let over = PassStyle.symbol(speed: pass.speedKmh,
-                                                            limit: pass.limitKmh) != nil
-                                let tint = PassStyle.color(speed: pass.speedKmh,
-                                                           limit: pass.limitKmh)
-                                Circle()
-                                    .fill(over ? AnyShapeStyle(tint)
-                                               : AnyShapeStyle(Theme.background.opacity(0.85)))
-                                    .frame(width: 22, height: 22)
-                                Circle()
-                                    .stroke(tint, lineWidth: over ? 0 : 3)
-                                    .frame(width: 22, height: 22)
-                                Text("\(Int(pass.speedKmh.rounded()))")
-                                    .font(.system(size: 8.5, weight: .heavy, design: .rounded))
-                                    .foregroundStyle(over ? .white : tint)
-                            }
-                            .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 1.5))
-                        }
-                        .annotationTitles(.hidden)
-                    }
-                }
-            }
-            .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll, showsTraffic: false))
-            .frame(height: 250)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
-                .stroke(Theme.stroke, lineWidth: 1))
-            .allowsHitTesting(false)   // статичная витрина: жесты не крадём у скролла
+            // Картинка, а не живая карта: жестов здесь не было и раньше, а
+            // полсотни SwiftUI-кружков с цифрами стоили прокрутке как карта.
+            MapPictureView(key: "trip|\(record.id)|\(record.passed.count)",
+                           picture: tripPicture(points), height: 230)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
+                    .strokeBorder(Theme.stroke, lineWidth: 1))
+                .overlay(alignment: .bottomLeading) { mapLegend.padding(10) }
         } else {
             HStack(spacing: 10) {
                 Image(systemName: "point.bottomleft.forward.to.point.topright.scurvepath")
@@ -438,60 +413,119 @@ struct TripDetailContent: View {
         }
     }
 
-    private func trackRect(_ points: [TrackPoint]) -> MKMapRect {
-        var rect = MKMapRect.null
-        for p in points {
-            let mp = MKMapPoint(CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon))
-            rect = rect.union(MKMapRect(origin: mp, size: MKMapSize()))
+    /// Трек одним цветом маршрута; чистые проезды — маленькие зелёные точки,
+    /// превышения — крупные, со скоростью внутри и поверх всего. Полсотни
+    /// одинаковых кружков с цифрами лежали кучей, и найти в ней превышение
+    /// было нельзя, а превышение — ровно то, ради чего на карту смотрят.
+    private func tripPicture(_ points: [TrackPoint]) -> MapPicture {
+        var picture = MapPicture()
+        picture.lines = [.init(coordinates: points.map {
+            CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+        }, color: Theme.route, width: 4.5, casing: Theme.routeCasing, casingWidth: 8)]
+        var over: [MapPicture.Dot] = []
+        for pass in record.passed {
+            guard let coordinate = pass.coordinate else { continue }
+            if PassStyle.symbol(speed: pass.speedKmh, limit: pass.limitKmh) != nil {
+                over.append(.init(coordinate: coordinate, diameter: 24,
+                                  fill: PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh),
+                                  ringWidth: 2, label: "\(Int(pass.speedKmh.rounded()))",
+                                  labelColor: Theme.background))
+            } else {
+                picture.dots.append(.init(coordinate: coordinate, diameter: 9,
+                                          fill: Theme.success, ringWidth: 1.5))
+            }
         }
-        return rect.insetBy(dx: -rect.width * 0.15, dy: -rect.height * 0.15)
+        if let start = points.first, let finish = points.last {
+            picture.dots += TripEndpoints.dots(
+                start: CLLocationCoordinate2D(latitude: start.lat, longitude: start.lon),
+                finish: CLLocationCoordinate2D(latitude: finish.lat, longitude: finish.lon))
+        }
+        picture.dots += over
+        return picture
+    }
+
+    /// Легенда на самой карте: без неё зелёная точка и красный круг с числом
+    /// — догадка, а не знание.
+    @ViewBuilder private var mapLegend: some View {
+        let over = record.passed.filter { PassStyle.symbol(speed: $0.speedKmh, limit: $0.limitKmh) != nil }.count
+        let clean = record.passed.count - over
+        if !record.passed.isEmpty {
+            HStack(spacing: 10) {
+                if clean > 0 { legendDot(Theme.success, String(format: String(localized: "в лимите: %lld"), clean)) }
+                if over > 0 { legendDot(Theme.danger, String(format: String(localized: "превышений: %lld"), over)) }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Theme.surface.opacity(0.92), in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.stroke, lineWidth: 1))
+        }
+    }
+
+    private func legendDot(_ color: Color, _ text: String) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(text)
+                .font(.rounded(12, .semibold).monospacedDigit())
+                .foregroundStyle(Theme.textSecondary)
+        }
     }
 
     // MARK: Рейтинг поездки и риск штрафов
 
-    @ViewBuilder private var scoreRow: some View {
+    /// Балл поездки и то, из чего он сложился, — одна карточка, как герой
+    /// Итогов: число и его объяснение не должны жить в разных коробках.
+    /// Внизу — сама арифметика «100 − 10 = 90»: разбор проверяется сложением.
+    @ViewBuilder private var scoreCard: some View {
         let risk = TripHistory.fineRisk(of: record.passed)
         if record.score != nil || risk > 0 {
-            HStack(spacing: 14) {
-                if let score = record.score {
-                    RatingRing(rating: Int(score), compact: true)
-                        .frame(width: 56, height: 56)
-                }
-                VStack(alignment: .leading, spacing: 4) {
+            let items = record.score == nil ? [] : DrivingScore.breakdown(
+                passed: record.passed, trackSpeeds: record.trackPoints.map(\.speedKmh),
+                score: record.score)
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 14) {
                     if let score = record.score {
-                        Text(DrivingScore.level(for: Int(score)))
-                            .font(.rounded(15, .bold))
-                            .foregroundStyle(Theme.textPrimary)
+                        RatingRing(rating: Int(score), compact: true)
+                            .frame(width: 56, height: 56)
                     }
-                    if risk > 0 {
-                        Label("возможные штрафы ≈ \(Formatting.money(risk))",
-                              systemImage: "exclamationmark.triangle.fill")
-                            .font(.rounded(15, .semibold))
-                            .foregroundStyle(Theme.danger)
-                    } else {
-                        Label("Без риска штрафов", systemImage: "checkmark.shield.fill")
-                            .font(.rounded(15, .semibold))
-                            .foregroundStyle(Theme.success)
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let score = record.score {
+                            Text(DrivingScore.level(for: Int(score)))
+                                .font(.rounded(17, .bold))
+                                .foregroundStyle(Theme.textPrimary)
+                        }
+                        if risk > 0 {
+                            Label(String(format: String(localized: "Возможные штрафы ≈ %@"),
+                                         Formatting.money(risk)),
+                                  systemImage: "exclamationmark.triangle.fill")
+                                .font(.rounded(14, .semibold))
+                                .foregroundStyle(Theme.danger)
+                        } else {
+                            Label("Без риска штрафов", systemImage: "checkmark.shield.fill")
+                                .font(.rounded(14, .semibold))
+                                .foregroundStyle(Theme.success)
+                        }
                     }
+                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
                 }
-                Spacer(minLength: 0)
-            }
-            .statCard()
-        }
-    }
-
-    // MARK: Из чего сложился балл
-
-    /// «Почему 68?» — самый частый вопрос к деталке. Раскладываем балл по
-    /// строкам: каждая камера со снятыми баллами, потолок, плавность.
-    @ViewBuilder private var scoreBreakdown: some View {
-        let items = DrivingScore.breakdown(passed: record.passed,
-                                           trackSpeeds: record.trackPoints.map(\.speedKmh))
-        if record.score != nil, !items.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(String(localized: "Из чего сложился балл"))
-                ForEach(items) { item in
-                    penaltyRow(item)
+                if !items.isEmpty {
+                    Divider().overlay(Theme.stroke)
+                    Text("Из чего сложился балл")
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                    ForEach(items) { item in
+                        penaltyRow(item)
+                    }
+                    if let score = record.score {
+                        let taken = items.reduce(0) { $0 + $1.points }
+                        // Показываем, только если сходится: неверная
+                        // арифметика на экране хуже её отсутствия.
+                        if taken > 0, 100 - taken == Int(score) {
+                            Text(verbatim: "100 − \(taken) = \(Int(score))")
+                                .font(.rounded(13, .semibold).monospacedDigit())
+                                .foregroundStyle(Theme.textTertiary)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                    }
                 }
             }
             .statCard()
@@ -501,69 +535,85 @@ struct TripDetailContent: View {
     /// Строка снятых баллов. Если снял конкретный проезд — строка ведёт к нему:
     /// «−25 за Юнусабад» без возможности посмотреть сам проезд остаётся
     /// утверждением, которое нечем проверить.
-    private func penaltyRow(_ item: DrivingScore.Penalty) -> some View {
+    @ViewBuilder private func penaltyRow(_ item: DrivingScore.Penalty) -> some View {
+        let pass = item.passID.flatMap { id in record.passed.first { $0.id == id } }
+        if let pass, let onOpenPass {
+            Button {
+                onOpenPass(pass)
+            } label: {
+                penaltyContent(item, openable: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+        } else {
+            // Не кнопка: выключенная кнопка рисуется системой бледной, и
+            // строка «Резкие разгоны» читалась как недоступная, а не как факт.
+            penaltyContent(item, openable: false)
+                .accessibilityElement(children: .combine)
+        }
+    }
+
+    private func penaltyContent(_ item: DrivingScore.Penalty, openable: Bool) -> some View {
         // Отрицательные баллы = «вернули» (потолок штрафа) — зелёный плюс.
         let returned = item.points < 0
-        let pass = item.passID.flatMap { id in record.passed.first { $0.id == id } }
-        let openable = pass != nil && onOpenPass != nil
-        return Button {
-            if let pass { onOpenPass?(pass) }
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: item.icon)
-                    .font(.rounded(15, .bold))
-                    .foregroundStyle(returned ? Theme.success : Theme.danger)
-                    .frame(width: 30, height: 30)
-                    .background((returned ? Theme.success : Theme.danger).opacity(0.12),
-                                in: Circle())
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(item.title)
-                        .font(.rounded(15, .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(1)
-                    if let detail = item.detail {
-                        Text(detail)
-                            .font(.rounded(11))
-                            .foregroundStyle(Theme.textTertiary)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 8)
-                Text(returned ? "+\(-item.points)" : "−\(item.points)")
-                    .font(.rounded(15, .heavy).monospacedDigit())
-                    .foregroundStyle(returned ? Theme.success : Theme.danger)
-                if openable {
-                    Image(systemName: "chevron.right")
-                        .font(.rounded(11, .semibold))
-                        .foregroundStyle(Theme.textTertiary)
+        let tint = returned ? Theme.success : Theme.danger
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: item.icon)
+                .font(.rounded(14, .bold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(tint.opacity(0.12), in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.title)
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(2)
+                if let detail = item.detail {
+                    Text(detail)
+                        .font(.rounded(12))
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .contentShape(Rectangle())
+            Spacer(minLength: 8)
+            Text(returned ? "+\(-item.points)" : "−\(item.points)")
+                .font(.rounded(15, .heavy).monospacedDigit())
+                .foregroundStyle(tint)
+                .padding(.top, 5)
+            if openable {
+                Image(systemName: "chevron.right")
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+                    .padding(.top, 7)
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(!openable)
-        .accessibilityElement(children: .combine)
+        .contentShape(Rectangle())
     }
 
     // MARK: Метрики
 
-    private var statsGrid: some View {
-        let cols = [GridItem(.flexible()), GridItem(.flexible())]
-        return LazyVGrid(columns: cols, spacing: 12) {
-            StatTile(value: "\(record.camerasPassed)", label: "камер пройдено",
-                     icon: "camera.metering.center.weighted", color: Theme.accent)
-            StatTile(value: Formatting.distance(record.distanceMeters), label: "пройдено пути",
-                     icon: "point.topleft.down.to.point.bottomright.curvepath", color: Theme.success)
-            StatTile(value: "\(Int(record.maxSpeedKmh))", label: "макс. км/ч",
-                     icon: "gauge.with.dots.needle.100percent", color: Theme.danger)
-            StatTile(value: "\(Int(record.averageSpeedKmh))", label: "средняя км/ч",
-                     icon: "gauge.with.dots.needle.33percent", color: Theme.warning)
-            // Цена поездки в заряде — цифрой, а не верой (есть не у всех записей).
-            if let drop = record.batteryDropPercent {
-                StatTile(value: "−\(drop) %", label: "заряда за поездку",
-                         icon: "battery.75percent", color: Theme.success)
-            }
+    /// Шесть чисел одной карточкой в две колонки. Было четыре-пять плиток
+    /// с крупной иконкой своего цвета у каждой: цвет ничего не значил, а
+    /// плитки занимали экран ради четырёх цифр.
+    private var metricsCard: some View {
+        var items: [MetricsCard.Item] = [
+            .init(value: Formatting.duration(record.duration), label: String(localized: "в пути"),
+                  icon: "clock"),
+            .init(value: Formatting.distance(record.distanceMeters), label: String(localized: "пройдено пути"),
+                  icon: "point.topleft.down.to.point.bottomright.curvepath"),
+            .init(value: "\(record.camerasPassed)", label: String(localized: "камер пройдено"),
+                  icon: "camera.metering.center.weighted"),
+            .init(value: "\(Int(record.maxSpeedKmh))", label: String(localized: "макс. км/ч"),
+                  icon: "gauge.with.dots.needle.100percent"),
+            .init(value: "\(Int(record.averageSpeedKmh))", label: String(localized: "средняя км/ч"),
+                  icon: "gauge.with.dots.needle.33percent"),
+        ]
+        // Цена поездки в заряде — цифрой, а не верой (есть не у всех записей).
+        if let drop = record.batteryDropPercent {
+            items.append(.init(value: "−\(drop) %", label: String(localized: "заряда за поездку"),
+                               icon: "battery.75percent"))
         }
+        return MetricsCard(items: items)
     }
 
     private var passesSection: some View {

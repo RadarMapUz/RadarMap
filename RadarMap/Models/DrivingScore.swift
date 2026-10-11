@@ -122,8 +122,16 @@ enum DrivingScore {
     /// Из чего сложился балл поездки — та же арифметика, что в tripScore,
     /// но по строкам: «почему 68?» — самый частый вопрос к деталке.
     /// Пустой список — балл не считался (нет ни лимитных проездов, ни трека).
+    /// `score` — балл, сохранённый в записи. Если он есть, штраф за плавность
+    /// берётся как остаток от него: балл считался в конце поездки по СЫРОМУ
+    /// треку, а в записи лежит упрощённый (до 400 точек), где скачки между
+    /// точками крупнее. По нему штраф выходил до двух раз больше — деталка
+    /// показывала «90» и единственную строку «−20». Плавность — единственная
+    /// часть балла сверх камер, поэтому остаток равен ей точно, и строки
+    /// разбора складываются в показанный балл.
     nonisolated static func breakdown(passed: [PassedCamera],
-                                      trackSpeeds: [Double]) -> [Penalty] {
+                                      trackSpeeds: [Double],
+                                      score: Double? = nil) -> [Penalty] {
         var items: [Penalty] = []
         var cameraPenalty = 0.0
         var limitedPasses = 0
@@ -153,18 +161,38 @@ enum DrivingScore {
                 points: -Int(cameraPenalty - cameraPenaltyCap)))
         }
 
-        if let smooth = smoothPenalty(trackSpeeds: trackSpeeds) {
+        let smooth: Double?
+        let meanChange: Double
+        if let score, score > 0 {
+            // Показанный балл — целая часть (так он печатается везде), и
+            // остаток считаем от неё же: иначе 89,6 → «89» и «−10» снова
+            // не сошлись бы на единицу.
+            let cameras = min(cameraPenalty, cameraPenaltyCap)
+            let rest = max(0, 100 - cameras - Double(Int(score)))
+            smooth = rest
+            // Средний перепад восстанавливается из того же штрафа: штраф —
+            // это (перепад − порог) × множитель, пока не упёрся в потолок.
+            meanChange = smoothBaselineKmh + min(rest, smoothPenaltyCap) / smoothFactor
+        } else {
+            smooth = smoothPenalty(trackSpeeds: trackSpeeds)
+            meanChange = meanSpeedChange(trackSpeeds: trackSpeeds)
+        }
+
+        if let smooth {
             let points = Int(smooth.rounded())
             if points > 0 {
                 // «по треку поездки» не объясняло НИЧЕГО: человек видел −20 и
                 // не мог ни проверить, ни исправить. Показываем измеренное
                 // число и порог, с которого начинается штраф, — тогда строка
                 // становится проверяемой, как и все остальные.
+                let capped = smooth >= smoothPenaltyCap - 0.5
+                let format = capped
+                    ? String(localized: "скорость менялась в среднем больше чем на %1$lld км/ч между точками трека, спокойная езда — до %2$lld")
+                    : String(localized: "скорость менялась в среднем на %1$lld км/ч между точками трека, спокойная езда — до %2$lld")
                 items.append(Penalty(
                     id: "smooth", icon: "waveform.path.ecg",
                     title: String(localized: "Резкие разгоны и торможения"),
-                    detail: String(format: String(localized: "скорость менялась в среднем на %1$lld км/ч между точками трека, спокойная езда — до %2$lld"),
-                                   Int(meanSpeedChange(trackSpeeds: trackSpeeds).rounded()),
+                    detail: String(format: format, Int(meanChange.rounded()),
                                    Int(smoothBaselineKmh)),
                     points: points))
             }

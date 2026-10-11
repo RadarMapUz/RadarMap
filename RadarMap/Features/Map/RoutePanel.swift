@@ -299,8 +299,7 @@ struct ManeuverBanner: View {
             .accessibilityElement(children: .contain)
         }
         }
-        .background(fill, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
-        .liftPanel()
+        .liftedBackground(fill, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous).stroke(ink.opacity(0.12), lineWidth: 1))
         .transition(.move(edge: .top).combined(with: .opacity))
         .onChange(of: distance <= LaneAdvice.showDistance(speedKmh: speedKmh), initial: true) { _, near in
@@ -346,8 +345,7 @@ struct LaneNoticeBanner: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
-        .liftPanel()
+        .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
         .transition(.move(edge: .top).combined(with: .opacity))
     }

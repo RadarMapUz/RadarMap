@@ -103,8 +103,7 @@ struct RatingDetailSheet: View {
             if let record = env.trip.history.first(where: { $0.id == id }) {
                 TripDetailContent(record: record, rating: ratingContext(for: id),
                                   onOpenPass: { path.append(.pass(trip: id, pass: $0.id)) })
-                    .navigationTitle(record.startedAt.formatted(date: .abbreviated,
-                                                                time: .shortened))
+                    .navigationTitle(Formatting.tripTitle(record.startedAt))
                     .navigationBarTitleDisplayMode(.inline)
             }
         case .pass(let tripID, let passID):

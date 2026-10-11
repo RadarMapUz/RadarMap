@@ -7,11 +7,44 @@ import Foundation
 import CoreLocation
 
 enum Formatting {
+    /// Локаль чисел — по ЯЗЫКУ приложения, а не по региону телефона. При
+    /// русском интерфейсе и регионе «США» дробные шли с точкой: «64.3 км»,
+    /// «1.3 млн сум» посреди русского текста. И русский, и узбекский пишут
+    /// дробь через запятую.
+    nonisolated static let numberLocale = Locale(
+        identifier: Bundle.main.preferredLocalizations.first ?? "ru")
+
+    /// «1,3» — дробное с одним знаком (или `digits`) в локали приложения.
+    nonisolated static func decimal(_ value: Double, digits: Int = 1,
+                                    locale: Locale = numberLocale) -> String {
+        value.formatted(.number.precision(.fractionLength(digits))
+            .rounded(rule: .toNearestOrAwayFromZero)
+            .grouping(.never)
+            .locale(locale))
+    }
+
     /// Заголовок дня в истории: «Сегодня» / «Вчера» / дата.
     static func dayTitle(_ day: Date, calendar: Calendar = .current) -> String {
         if calendar.isDateInToday(day) { return String(localized: "Сегодня") }
         if calendar.isDateInYesterday(day) { return String(localized: "Вчера") }
         return day.formatted(.dateTime.day().month(.wide))
+    }
+
+    /// Заголовок поездки: «Сегодня, 11:39», «Вчера, 16:23», «11 октября, 11:39»;
+    /// год — только если не текущий. Было «11 окт. 2026г., 11:39»: сокращение,
+    /// слипшийся год и дата там, где человек думает «сегодня».
+    static func tripTitle(_ date: Date, calendar: Calendar = .current, now: Date = .now) -> String {
+        let time = date.formatted(date: .omitted, time: .shortened)
+        let day = calendar.isDate(date, equalTo: now, toGranularity: .year)
+            ? dayTitle(date, calendar: calendar)
+            : date.formatted(.dateTime.day().month(.wide).year())
+        return "\(day), \(time)"
+    }
+
+    /// Число не отрывается от единицы: «2,2 / млн сум» переносом на две строки
+    /// читалось как два разных значения.
+    nonisolated static func unbreakable(_ text: String) -> String {
+        text.replacingOccurrences(of: " ", with: "\u{00A0}")
     }
 
     /// «850 м» / «1.4 км» (uz: m/km — единицы тоже локализуются)
@@ -21,33 +54,33 @@ enum Formatting {
     /// приложение и виджет — раньше их было три, и цифры расходились.
     static func distance(_ meters: CLLocationDistance) -> String {
         if meters < 1000 {
-            return String(format: String(localized: "%@ м"), String(Int(meters.rounded())))
+            return unbreakable(String(format: String(localized: "%@ м"), String(Int(meters.rounded()))))
         }
         let km = meters / 1000
         guard km < 100 else {
-            return String(format: String(localized: "%@ км"),
-                          km.formatted(.number.precision(.fractionLength(0))))
+            return unbreakable(String(format: String(localized: "%@ км"),
+                                      km.formatted(.number.precision(.fractionLength(0))
+                                        .locale(numberLocale))))
         }
-        return String(format: String(localized: "%@ км"),
-                      String(format: "%.1f", locale: .current, km))
+        return unbreakable(String(format: String(localized: "%@ км"), decimal(km)))
     }
 
     /// «440 000 сум» / «1,2 млн сум» — суммы штрафов и экономии.
     /// Баллы рейтинга: «−12,6», «0». Один формат на все блоки разбора —
     /// разложение должно читаться как одна таблица, а не как три разных.
     static func points(_ value: Double) -> String {
-        value < 0.05 ? "0" : "−" + String(format: "%.1f", locale: .current, value)
+        value < 0.05 ? "0" : "−" + decimal(value)
     }
 
     static func money(_ sum: Double) -> String {
         if sum >= 1_000_000 {
             let millions = (sum / 100_000).rounded() / 10
             let text = millions == millions.rounded()
-                ? String(Int(millions)) : String(format: "%.1f", locale: .current, millions)
-            return String(format: String(localized: "%@ млн сум"), text)
+                ? String(Int(millions)) : decimal(millions)
+            return unbreakable(String(format: String(localized: "%@ млн сум"), text))
         }
         let grouped = Self.groupedInt.string(from: NSNumber(value: Int(sum.rounded()))) ?? "\(Int(sum))"
-        return String(format: String(localized: "%@ сум"), grouped)
+        return unbreakable(String(format: String(localized: "%@ сум"), grouped))
     }
 
     private static let groupedInt: NumberFormatter = {

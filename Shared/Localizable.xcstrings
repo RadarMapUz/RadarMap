@@ -2104,6 +2104,23 @@
         }
       }
     },
+    "Возможные штрафы ≈ %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Возможные штрафы ≈ %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ehtimoliy jarimalar ≈ %@"
+          }
+        }
+      }
+    },
     "Возможный штраф": {
       "localizations": {
         "ru": {
@@ -8213,6 +8230,23 @@
         }
       }
     },
+    "Появились превышения: %@ на 100 км, в прошлый период их не было": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Появились превышения: %@ на 100 км, в прошлый период их не было"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oshirishlar paydo bo'ldi: har 100 km ga %@ ta, o'tgan davrda bo'lmagan edi"
+          }
+        }
+      }
+    },
     "Превышение скорости": {
       "localizations": {
         "ru": {
@@ -11441,6 +11475,23 @@
         }
       }
     },
+    "в лимите: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "в лимите: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "limitda: %lld"
+          }
+        }
+      }
+    },
     "в поездке места скрыты": {
       "localizations": {
         "ru": {
@@ -12978,6 +13029,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "orqada o'ngda"
+          }
+        }
+      }
+    },
+    "скорость менялась в среднем больше чем на %1$lld км/ч между точками трека, спокойная езда — до %2$lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "скорость менялась в среднем больше чем на %1$lld км/ч между точками трека, спокойная езда — до %2$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "trek nuqtalari orasida tezlik o‘rtacha %1$lld km/soatdan ko‘proq o‘zgargan, xotirjam haydash — %2$lld gacha"
           }
         }
       }

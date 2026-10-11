@@ -241,4 +241,17 @@ final class PeriodInsightsTests: XCTestCase {
         XCTAssertEqual(next?.progressText, "950 / 1000")
         XCTAssertFalse(next?.earned ?? true)
     }
+
+    /// Прошлый период без превышений: «против 0,0» — арифметика, а не мысль.
+    func testTrendFromCleanPreviousPeriodSaysItInWords() {
+        var summary = PeriodSummary()
+        summary.distance = 100_000
+        summary.overPasses = 3
+        summary.previousDistance = 100_000
+        summary.previousOverPasses = 0
+
+        let insight = PeriodInsights.build(summary).first
+        XCTAssertEqual(insight?.id, "trend.worse")
+        XCTAssertFalse(insight?.text.contains("0,0") == true || insight?.text.contains("0.0") == true)
+    }
 }

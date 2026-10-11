@@ -175,14 +175,15 @@ struct ReportRadarButton: View {
         .frame(minWidth: 210, alignment: .leading)
         .frame(height: Self.rowHeight)
         .background {
+            // Тень у формы строки, а не у текста поверх неё (см. View.statCard).
             RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
                 .fill(isActive ? AnyShapeStyle(Theme.action)
                                : AnyShapeStyle(.ultraThinMaterial))
+                .shadow(color: .black.opacity(isActive ? 0.3 : 0.15), radius: isActive ? 10 : 4, y: 3)
         }
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
             .stroke(isActive ? Color.white.opacity(0.5) : Theme.stroke, lineWidth: 1))
         .scaleEffect(isActive ? 1.04 : 1)
-        .shadow(color: .black.opacity(isActive ? 0.3 : 0.15), radius: isActive ? 10 : 4, y: 3)
     }
 
     /// Строка поездки: квадрат в ряду других кнопок. Крупная капсула во всю

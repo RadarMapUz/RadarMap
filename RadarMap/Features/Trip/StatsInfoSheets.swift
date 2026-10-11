@@ -201,7 +201,6 @@ struct AchievementInfoSheet: View {
                 ZStack {
                     if badge.earned {
                         Circle().fill(Theme.accentFill.gradient)
-                            .shadow(color: Theme.accent.opacity(0.5), radius: 12)
                     } else {
                         Circle().fill(Theme.surface)
                         Circle()
@@ -275,7 +274,7 @@ struct AchievementInfoSheet: View {
 
     private static func count(_ value: Double) -> String {
         value >= 100 ? "\(Int(value.rounded()))"
-            : value == value.rounded() ? "\(Int(value))" : String(format: "%.1f", locale: .current, value)
+            : value == value.rounded() ? "\(Int(value))" : Formatting.decimal(value)
     }
 }
 

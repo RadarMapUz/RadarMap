@@ -114,10 +114,14 @@ struct CarPlayOverlay: View {
                     .foregroundStyle(Theme.textTertiary)
             }
             .frame(width: 78, height: 78)
-            .background(Theme.background.opacity(0.94), in: Circle())
+            // Тень у круга, а не у цифр: `.shadow` на составной вью размывал
+            // каждую цифру скорости отдельно и заново на каждом тике GPS.
+            .background {
+                Circle().fill(Theme.background.opacity(0.94))
+                    .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
+            }
             .overlay(Circle().stroke(speedColor == Theme.textPrimary ? Theme.stroke : speedColor,
                                      lineWidth: speedColor == Theme.textPrimary ? 1 : 3))
-            .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
             if let limit {
                 SpeedLimitSign(limit: limit, diameter: 42,
                                isAssumed: env.speedLimits.isCurrentLimitAssumed)
@@ -149,12 +153,15 @@ struct CarPlayOverlay: View {
             .fixedSize()
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Theme.background.opacity(0.94),
-                        in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            // Тень у подложки, а не у содержимого (см. круг скорости выше).
+            .background {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Theme.background.opacity(0.94))
+                    .shadow(color: (glow ?? .black).opacity(glow == nil ? 0.4 : 0.6),
+                            radius: glow == nil ? 10 : 16, y: 4)
+            }
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(edge, lineWidth: edgeWidth))
-            .shadow(color: (glow ?? .black).opacity(glow == nil ? 0.4 : 0.6),
-                    radius: glow == nil ? 10 : 16, y: 4)
     }
 
     /// Влезает ли третья зона (прибытие): ширина дока — ширина HUD без его
@@ -349,11 +356,14 @@ struct CarPlayOverlay: View {
         .padding(.vertical, 10)
         .frame(maxWidth: 360, alignment: .leading)
         .layoutPriority(0)
-        .background(Theme.accentFill,
-                    in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        // Тень у карточки, а не у расстояния до манёвра поверх неё.
+        .background {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Theme.accentFill)
+                .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
+        }
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
             .stroke(Theme.onAccentFill.opacity(0.12), lineWidth: 1))
-        .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 

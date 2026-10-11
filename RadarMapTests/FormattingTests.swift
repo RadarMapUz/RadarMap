@@ -75,4 +75,35 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(Formatting.points(0.04), "0")
         XCTAssertTrue(Formatting.points(12.6).hasPrefix("−12"))
     }
+
+    // MARK: - Локаль чисел и неразрывность (Итоги, 11.10)
+
+    /// Дробь — через запятую по языку приложения, а не точкой по региону
+    /// телефона: «64.3 км» посреди русского текста.
+    func testDecimalUsesCommaForRussianAndUzbek() {
+        XCTAssertEqual(Formatting.decimal(1.25, locale: Locale(identifier: "ru")), "1,3")
+        XCTAssertEqual(Formatting.decimal(1.25, locale: Locale(identifier: "uz")), "1,3")
+        XCTAssertEqual(Formatting.decimal(12.04, locale: Locale(identifier: "ru")), "12,0")
+    }
+
+    /// Число не отрывается от единицы переносом строки: «2,2 / млн сум».
+    func testNumbersStickToUnits() {
+        XCTAssertFalse(Formatting.money(2_200_000).contains(" "))
+        XCTAssertFalse(Formatting.money(440_000).contains(" "))
+        XCTAssertFalse(Formatting.distance(12_400).contains(" "))
+        XCTAssertFalse(Formatting.distance(850).contains(" "))
+    }
+
+    /// Заголовок поездки: день словами и время, год — только чужой.
+    func testTripTitleSpeaksLikeAPerson() {
+        let calendar = Calendar.current
+        let now = Date()
+        let today = Formatting.tripTitle(now, calendar: calendar, now: now)
+        XCTAssertTrue(today.hasPrefix(Formatting.dayTitle(now, calendar: calendar)))
+        let lastYear = calendar.date(byAdding: .year, value: -1, to: now)!
+        let year = calendar.component(.year, from: lastYear)
+        XCTAssertTrue(Formatting.tripTitle(lastYear, calendar: calendar, now: now).contains("\(year)"))
+        XCTAssertFalse(today.contains("\(calendar.component(.year, from: now))"),
+                       "текущий год в заголовке — шум")
+    }
 }

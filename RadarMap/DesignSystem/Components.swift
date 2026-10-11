@@ -30,16 +30,24 @@ struct GlassCard<Content: View>: View {
     @Environment(\.onLightMap) private var onLightMap
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let veil = onLightMap ? 0.62 : 0.32
         content
             // Тёмная подложка под стеклом: на светлой карте чистое стекло
             // белеет, и белый текст по нему исчезает.
-            .background(Theme.background.opacity(onLightMap ? 0.62 : 0.32),
-                        in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            //
+            // Тень — у ПОДЛОЖКИ, а не у всей панели. `.shadow` на составной
+            // вью SwiftUI накладывает на каждый вложенный элемент: каждая
+            // цифра скорости получала своё размытие, и оно пересчитывалось
+            // на каждом тике GPS. Сила тени умножается на прозрачность
+            // заливки, поэтому цвет тени поделён на неё — на глаз как было.
+            .background {
+                shape.fill(Theme.background.opacity(veil))
+                    .shadow(color: .black.opacity(min(0.25 / veil, 0.8)), radius: 14, y: 6)
+            }
             .backport.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
             // Световая кромка сверху — единый премиальный язык стекла в приложении.
-            .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(Theme.edgePanel, lineWidth: 1))
-            .shadow(color: .black.opacity(0.25), radius: 14, y: 6)
+            .overlay(shape.strokeBorder(Theme.edgePanel, lineWidth: 1))
     }
 }
 
@@ -48,20 +56,21 @@ struct GlassCard<Content: View>: View {
 extension View {
     func statCard(padding: CGFloat = 16, radius: CGFloat = Theme.cornerLarge) -> some View {
         self.padding(padding)
-            // Заливка градиентом, а не краской: на почти чёрном фоне объём
-            // даёт перепад светлоты, а не тень — тени там попросту не видно.
-            .background(Theme.surfaceRaised,
-                        in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-            // Кромка — та же, что у панелей над картой (`Theme.edgePanel`).
-            // Она в проекте была с самого начала и до карточек контента не
-            // доехала: отсюда и ощущение, что Итоги нарисованы другим
-            // приложением, чем карта.
-            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .strokeBorder(Theme.edgePanel, lineWidth: 1))
-            // Тень мягче, чем у плавающих панелей, и это не экономия на
-            // красоте, а на прокрутке: в Итогах карточек до одиннадцати,
-            // и каждая тень — отдельный проход отрисовки.
-            .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+            .background {
+                let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+                // Заливка градиентом, а не краской: на почти чёрном фоне объём
+                // даёт перепад светлоты, а не тень — тени там попросту не видно.
+                shape.fill(Theme.surfaceRaised)
+                    // Тень — только у ФОРМЫ карточки. До 11.10 `.shadow` висел
+                    // на всей карточке, и SwiftUI размывал каждый вложенный
+                    // элемент отдельно: под каждой цифрой и строкой лежал серый
+                    // ореол (видно на скриншотах Итогов), а прокрутка считала
+                    // сотни размытий на кадр — отсюда «лагает жёстко». Тень
+                    // формы рисуется один раз и при прокрутке только едет.
+                    .shadow(color: Theme.cardShadow, radius: 12, y: 4)
+                    // Кромка — та же, что у панелей над картой (`Theme.edgePanel`).
+                    .overlay(shape.strokeBorder(Theme.edgePanel, lineWidth: 1))
+            }
     }
 }
 
@@ -177,9 +186,12 @@ extension View {
     /// колонке — этот модификатор, и третьего облика не появится.
     func controlCircle(size: CGFloat = Theme.controlSize) -> some View {
         frame(width: size, height: size)
-            .background(Theme.surface, in: Circle())
+            // Тень у круга, а не у глифа поверх него (см. statCard).
+            .background {
+                Circle().fill(Theme.surface)
+                    .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+            }
             .overlay(Circle().strokeBorder(Theme.edgeControl, lineWidth: 1))
-            .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
     }
 }
 
@@ -191,8 +203,23 @@ extension View {
 /// значило бы завести словарь из синонимов.
 extension View {
     /// Панель поверх карты: карточка, бар действий, панель слоёв.
+    ///
+    /// Только для стеклянных панелей без своей заливки — там тени не от чего
+    /// отбрасываться, кроме самой панели. У панели с заливкой бери
+    /// `liftedBackground`: `.shadow` на составной вью SwiftUI накладывает на
+    /// КАЖДЫЙ вложенный элемент, и цифры, меняющиеся на каждом тике GPS,
+    /// получали своё размытие заново.
     func liftPanel() -> some View {
         shadow(color: .black.opacity(0.3), radius: 14, y: 6)
+    }
+
+    /// Заливка панели с тенью у ФОРМЫ — та же тень, что у `liftPanel`, но
+    /// рисуется один раз и не ложится на текст поверх.
+    func liftedBackground<S: Shape, F: ShapeStyle>(_ style: F, in shape: S) -> some View {
+        background {
+            shape.fill(style)
+                .shadow(color: .black.opacity(0.3), radius: 14, y: 6)
+        }
     }
 
     /// Ближняя тень акцентной кнопки — та, что даёт объём под пальцем. Ходит
@@ -391,7 +418,8 @@ struct RatingRing: View {
                 .stroke(color.gradient,
                         style: StrokeStyle(lineWidth: compact ? 5 : 7, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .shadow(color: color.opacity(0.5), radius: compact ? 3 : 5)
+                // Без неонового ореола: он остался от тёмной «радарной» темы
+                // и на белой карточке читался размытым краем кольца.
             VStack(spacing: 0) {
                 Text("\(rating)")
                     .font(.rounded(compact ? 20 : 30, .heavy).monospacedDigit())

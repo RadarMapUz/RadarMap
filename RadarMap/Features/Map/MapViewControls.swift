@@ -78,9 +78,12 @@ struct MapZoomButtons: View {
             Rectangle().fill(Theme.stroke).frame(width: 24, height: 1)
             zoomButton("minus", delta: -1, label: "Отдалить")
         }
-        .background(Theme.surface, in: Capsule())
+        // Тень у капсулы, а не у глифов поверх неё (см. View.statCard).
+        .background {
+            Capsule().fill(Theme.surface)
+                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+        }
         .overlay(Capsule().strokeBorder(Theme.edgeControl, lineWidth: 1))
-        .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
     }
 
     private func zoomButton(_ symbol: String, delta: Double, label: LocalizedStringKey) -> some View {

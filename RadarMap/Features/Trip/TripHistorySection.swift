@@ -119,12 +119,9 @@ struct TripHistorySection: View {
                 .stroke(selected ? Theme.accent : .clear, lineWidth: 1.5))
         }
         .buttonStyle(.plain)
-        // Лёгкое «проявление» строк при прокрутке — живо, но не мешает.
-        .scrollTransition(.interactive(timingCurve: .easeOut)) { content, phase in
-            content
-                .opacity(phase.isIdentity ? 1 : 0.4)
-                .scaleEffect(phase.isIdentity ? 1 : 0.96)
-        }
+        // «Проявления» строк при прокрутке (scrollTransition) больше нет: оно
+        // меняло прозрачность и масштаб каждой строки на каждом кадре, и
+        // прокрутка перерисовывала строки целиком вместо того, чтобы их двигать.
         // Своя подпись затирала время, километры, балл и место — всё, что в
         // строке и написано. Оставляем производную, назначение — в hint.
         .accessibilityElement(children: .combine)
@@ -179,7 +176,9 @@ struct TripHistorySection: View {
             // плоский массив заново, и без него строка списка делала это
             // дважды — на проверку и на отрисовку.
             if record.hasTrack {
-                TrackCanvas(points: record.trackPoints, lineWidth: 2)
+                TrackCanvas(points: TrackCanvas.thinned(record.trackPoints,
+                                                        to: AppConfig.trackThumbnailPoints),
+                            lineWidth: 2, endpointSize: 7)
             } else {
                 Image(systemName: "car.side")
                     .font(.rounded(15))

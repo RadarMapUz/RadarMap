@@ -76,9 +76,12 @@ struct TripStatsSheet: View {
     @State private var mapPayload: PeriodMapPayload?
     /// Треки, маркеры и слой частоты — считаются на смену периода, а не в body.
     @State private var mapData = PeriodMapData()
+    /// Чьи это данные карты: ключ кэша картинки. Ставится вместе с mapData —
+    /// иначе картинка нового периода нарисовалась бы по данным старого и
+    /// легла бы в кэш под чужим ключом.
+    @State private var mapStamp = ""
     /// Поездка, «применённая» к карте тапом по списку (nil — весь период).
     @State private var mapSelection: TripRecord?
-    @State private var mapPosition: MapCameraPosition = .automatic
     /// Скользящая пилюля фильтра периода.
     @Namespace private var periodPill
 
@@ -248,8 +251,11 @@ struct TripStatsSheet: View {
             // В body это делать нельзя: пересчёт шёл бы на каждый кадр прокрутки.
             .task(id: MapDataKey(period: period, anchor: anchor, count: trip.history.count,
                                  latest: trip.history.first?.id)) {
-                mapData = await TripHistory.mapData(trip.history, period: period, anchor: anchor)
-                if mapSelection == nil { framePeriod() }
+                let window = period.interval(containing: anchor).start.timeIntervalSince1970
+                let stamp = "\(period)|\(Int(window))|\(trip.history.count)|\(trip.history.first?.id ?? 0)"
+                let data = await TripHistory.mapData(trip.history, period: period, anchor: anchor)
+                mapData = data
+                mapStamp = stamp
             }
             .onChange(of: period) {
                 // Выбранная поездка могла не попасть в новый период; раскрытый
@@ -487,29 +493,36 @@ struct TripStatsSheet: View {
                     // Уровень и движение рейтинга — в одной строке. Раньше
                     // бейдж «−16» висел под кольцом и прижимался к его обводке:
                     // круг держал сразу три вещи — число, подпись и дельту.
-                    HStack(spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        // Переносится: «Уверенный, но с риском» рядом с
+                        // бейджем дельты обрезалось до «Уверенный, но с…».
                         Text(DrivingScore.level(for: rating))
                             .font(.rounded(14, .bold))
                             .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
+                            .fixedSize(horizontal: false, vertical: true)
                         if let delta = summary.ratingDelta,
                            abs(delta) >= AppConfig.insightRatingStep {
                             ratingDeltaBadge(delta)
                         }
                     }
                 }
+                // Переносится, а не обрезается: при крупном шрифте «за рулём»
+                // превращалось в «за ру…» — обрезанная фраза хуже второй строки.
                 Text(heroSubtitle(summary))
-                    .font(.rounded(15))
+                    .font(.rounded(13))
                     .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)               // «за рулём» уезжало на вторую
-                    .minimumScaleFactor(0.75)   // строку и рвало ритм карточки
+                    .fixedSize(horizontal: false, vertical: true)
                 if trip.lifetime.cleanStreak >= 2 {
-                    Label(String(format: String(localized: "чистая серия: %lld подряд"),
-                                 trip.lifetime.cleanStreak),
-                          systemImage: "flame.fill")
-                        .font(.rounded(11, .semibold))
-                        .foregroundStyle(Theme.warning)
+                    // Огонёк цветной, подпись — обычным вторичным текстом:
+                    // коричневая строка читалась как предупреждение, а это похвала.
+                    HStack(spacing: 4) {
+                        Image(systemName: "flame.fill")
+                            .foregroundStyle(Theme.warning)
+                        Text(String(format: String(localized: "чистая серия: %lld подряд"),
+                                    trip.lifetime.cleanStreak))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .font(.rounded(13, .semibold))
                 }
             }
             Spacer(minLength: 0)
@@ -599,40 +612,46 @@ struct TripStatsSheet: View {
                         showFines = true
                     }
                 } label: {
-                    HStack(spacing: 14) {
-                        // Иконка спокойная даже у риска: красным на первом
-                        // экране имеет право быть ОДНА вещь — сама сумма.
-                        // Раньше с ней спорили красный значок и красная
-                        // подложка, и экран читался как авария.
-                        Image(systemName: ok ? "shield.lefthalf.filled.badge.checkmark"
-                                             : "exclamationmark.shield.fill")
-                            .font(.rounded(22, .bold))
-                            .foregroundStyle(ok ? Theme.success : Theme.textSecondary)
-                            .frame(width: 48, height: 48)
-                            .background((ok ? Theme.success : Theme.textSecondary).opacity(0.10),
+                    HStack(alignment: .top, spacing: 14) {
+                        // Красный — у значка, сумма — обычным текстом. Красные
+                        // «1,3 млн сум» кеглем 28 были самым громким на экране,
+                        // громче рейтинга, и Итоги читались как авария даже у
+                        // аккуратного водителя. Риск по-прежнему виден сразу:
+                        // значок состояния и число превышений.
+                        Image(systemName: ok ? "checkmark.shield.fill"
+                                             : "exclamationmark.triangle.fill")
+                            .font(.rounded(18, .bold))
+                            .foregroundStyle(ok ? Theme.success : Theme.danger)
+                            .frame(width: 40, height: 40)
+                            .background((ok ? Theme.success : Theme.danger).opacity(0.12),
                                         in: Circle())
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(ok ? String(localized: "Зона риска")
                                     : String(localized: "Возможные штрафы"))
-                                .font(.rounded(15, .medium))
+                                .font(.rounded(13, .medium))
                                 .foregroundStyle(Theme.textSecondary)
                             Text(ok ? String(localized: "0 штрафов")
                                     : Formatting.money(summary.fineRisk))
-                                .font(.rounded(28, .heavy))
-                                .foregroundStyle(ok ? Theme.success : Theme.danger)
+                                .font(.rounded(26, .heavy))
+                                .foregroundStyle(ok ? Theme.success : Theme.textPrimary)
                                 .contentTransition(.numericText())
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.55)
                             Text(passesLine(summary, total: total, ok: ok))
-                                .font(.rounded(11))
-                                .foregroundStyle(Theme.textTertiary)
+                                .font(.rounded(13))
+                                .foregroundStyle(Theme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
                             if !ok {
                                 // Что за проезды и «не пришёл» — на своём экране.
-                                Label("Разобрать проезды", systemImage: "list.bullet.circle.fill")
-                                    .font(.rounded(11, .medium))
-                                    .foregroundStyle(Theme.warning)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.8)
+                                // Ссылка — цветом ссылки, как везде в приложении.
+                                HStack(spacing: 4) {
+                                    Text("Разобрать проезды")
+                                    Image(systemName: "chevron.right")
+                                        .font(.rounded(11, .bold))
+                                }
+                                .font(.rounded(14, .semibold))
+                                .foregroundStyle(Theme.accent)
+                                .padding(.top, 2)
                             }
                         }
                         Spacer(minLength: 0)
@@ -743,88 +762,72 @@ struct TripStatsSheet: View {
     }
 
     private var mapPreview: some View {
-        Map(position: $mapPosition) {
-            if let selected = mapSelection {
-                selectedTripContent(selected)
-            } else {
-                heatContent
+        // Картинка, а не живая карта: жестов у превью нет (весь блок — кнопка
+        // «открыть на весь экран»), а живая карта с сотней SwiftUI-точек
+        // стоила при прокрутке как полноценная карта (см. MapPicture).
+        MapPictureView(key: "period|\(mapStamp)|\(mapSelection?.id ?? 0)",
+                       picture: mapPicture, height: 190)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
+                .strokeBorder(Theme.stroke, lineWidth: 1))
+            .overlay(alignment: .topLeading) {
+                if let selected = mapSelection { tripChip(selected).padding(10) }
             }
-            ForEach(shownMarkers) { marker in
-                Annotation("", coordinate: marker.coordinate, anchor: .center) {
-                    previewDot(marker)
-                }
-                .annotationTitles(.hidden)
-            }
-        }
-        .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll,
-                            showsTraffic: false))
-        // Жесты самой карты выключены: превью целиком — кнопка «открыть на весь
-        // экран», а панорамировать можно там. Форму тапа задаём ниже: без неё
-        // выключенный хит-тест карты съедает и тап по кнопке.
-        .allowsHitTesting(false)
-        .frame(height: 190)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
-            .stroke(Theme.stroke, lineWidth: 1))
-        .overlay(alignment: .topLeading) {
-            if let selected = mapSelection { tripChip(selected).padding(10) }
-        }
-        .contentShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
     }
 
-    /// Слой частоты: три градуса толщины и яркости. Подложка только у заметных
-    /// линий — на редких она превратила бы карту в кашу и удвоила бы число ломаных.
-    @MapContentBuilder private var heatContent: some MapContent {
-        ForEach(mapData.heat) { line in
-            if line.tier > 0 {
-                MapPolyline(coordinates: line.coordinates)
-                    .stroke(Theme.background.opacity(0.7),
-                            style: Self.strokeStyle(width: line.tier == 2 ? 8 : 6))
+    /// Две картины одной карты. «Все поездки»: слой частоты — постоянный
+    /// коридор яркий и толстый, разовая поездка едва видна. «Одна поездка»:
+    /// её трек в полную яркость со стартом и финишем, остальные — призраки.
+    /// Камеры: чистые — маленькие зелёные, с превышением — крупнее, красные
+    /// и поверх: сотня одинаковых кругов читалась пятном, а не картой.
+    private var mapPicture: MapPicture {
+        var picture = MapPicture()
+        func coordinates(_ track: [TrackPoint]) -> [CLLocationCoordinate2D] {
+            track.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+        }
+        if let selected = mapSelection {
+            for track in mapData.tracks {
+                picture.lines.append(.init(coordinates: coordinates(track),
+                                           color: Theme.route.opacity(0.18), width: 2))
             }
+            let points = selected.trackPoints
+            picture.lines.append(.init(coordinates: coordinates(points), color: Theme.route,
+                                       width: 4, casing: Theme.routeCasing, casingWidth: 7))
+            picture.dots += markerDots(TripHistory.passMarkers(of: selected))
+            if let start = points.first, let finish = points.last {
+                picture.dots += TripEndpoints.dots(
+                    start: CLLocationCoordinate2D(latitude: start.lat, longitude: start.lon),
+                    finish: CLLocationCoordinate2D(latitude: finish.lat, longitude: finish.lon))
+            }
+        } else {
+            // Сначала все каймы, потом все линии: кайма следующей линии не
+            // должна перечёркивать предыдущую.
+            for line in mapData.heat where line.tier > 0 {
+                picture.lines.append(.init(coordinates: line.coordinates,
+                                           color: Theme.routeCasing.opacity(0.8),
+                                           width: Self.heatWidth(line.tier) + 3))
+            }
+            for line in mapData.heat {
+                picture.lines.append(.init(coordinates: line.coordinates,
+                                           color: Theme.route.opacity(Self.heatOpacity(line.tier)),
+                                           width: Self.heatWidth(line.tier)))
+            }
+            picture.dots += markerDots(mapData.markers)
         }
-        ForEach(mapData.heat) { line in
-            MapPolyline(coordinates: line.coordinates)
-                .stroke(Theme.accent.opacity(Self.heatOpacity(line.tier)),
-                        style: Self.strokeStyle(width: Self.heatWidth(line.tier)))
-        }
+        return picture
     }
 
-    /// Выбранная поездка: остальные треки остаются призраками — видно, как эта
-    /// поездка легла в общую картину недели.
-    @MapContentBuilder private func selectedTripContent(_ record: TripRecord) -> some MapContent {
-        ForEach(Array(mapData.tracks.enumerated()), id: \.offset) { _, track in
-            MapPolyline(coordinates: track.map {
-                CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
-            })
-            .stroke(Theme.accent.opacity(0.12), style: Self.strokeStyle(width: 2))
+    private func markerDots(_ markers: [PassMarker]) -> [MapPicture.Dot] {
+        let clean = markers.filter { !$0.hasViolation }
+        let over = markers.filter(\.hasViolation)
+        let cleanSize: CGFloat = markers.count > 60 ? 6 : 8
+        return clean.map {
+            MapPicture.Dot(coordinate: $0.coordinate, diameter: cleanSize, fill: Theme.success,
+                           ringWidth: 1.2)
+        } + over.map {
+            MapPicture.Dot(coordinate: $0.coordinate, diameter: 13, fill: Theme.danger, ringWidth: 2)
         }
-        let points = record.trackPoints
-        MapPolyline(coordinates: points.map {
-            CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
-        })
-        .stroke(Theme.background.opacity(0.8), style: Self.strokeStyle(width: 8))
-        MapPolyline(coordinates: points.map {
-            CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
-        })
-        .stroke(Theme.accent, style: Self.strokeStyle(width: 4))
-        if let start = points.first, let finish = points.last {
-            Annotation("", coordinate: CLLocationCoordinate2D(latitude: start.lat,
-                                                              longitude: start.lon),
-                       anchor: .center) {
-                endpointDot(.white, size: 11)
-            }
-            .annotationTitles(.hidden)
-            Annotation("", coordinate: CLLocationCoordinate2D(latitude: finish.lat,
-                                                              longitude: finish.lon),
-                       anchor: .center) {
-                endpointDot(Theme.accent, size: 15)
-            }
-            .annotationTitles(.hidden)
-        }
-    }
-
-    private static func strokeStyle(width: CGFloat) -> StrokeStyle {
-        StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)
     }
 
     private static func heatWidth(_ tier: Int) -> CGFloat {
@@ -841,27 +844,6 @@ struct TripStatsSheet: View {
         case 1:  return 0.7
         default: return 0.35
         }
-    }
-
-    /// Маркеры камер: в режиме одной поездки — только её проезды.
-    private var shownMarkers: [PassMarker] {
-        mapSelection.map { TripHistory.passMarkers(of: $0) } ?? mapData.markers
-    }
-
-    private func previewDot(_ marker: PassMarker) -> some View {
-        let size = min(26.0, 15 + Double(marker.times) * 2)
-        return Circle()
-            .fill(marker.hasViolation ? Theme.danger : Theme.success)
-            .frame(width: size, height: size)
-            .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 1.5))
-    }
-
-    private func endpointDot(_ color: Color, size: CGFloat) -> some View {
-        Circle()
-            .fill(color)
-            .frame(width: size, height: size)
-            .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 2))
-            .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
     }
 
     /// Подпись выбранной поездки поверх карты — не занимает строку под ней.
@@ -966,10 +948,6 @@ struct TripStatsSheet: View {
                 clearMapSelection()
             } else {
                 mapSelection = record
-                if let rect = PeriodMapSheet.boundingRect(
-                    tracks: [record.trackPoints], markers: TripHistory.passMarkers(of: record)) {
-                    mapPosition = .rect(rect)
-                }
             }
             proxy.scrollTo("map", anchor: .top)
         }
@@ -977,15 +955,6 @@ struct TripStatsSheet: View {
 
     private func clearMapSelection() {
         mapSelection = nil
-        framePeriod()
-    }
-
-    /// Рамка по всем трекам и камерам периода. `.automatic` тут не годится: он
-    /// обрамляет содержимое с таким запасом, что вместо города показывает область.
-    private func framePeriod() {
-        guard let rect = PeriodMapSheet.boundingRect(tracks: mapData.tracks,
-                                                    markers: mapData.markers) else { return }
-        mapPosition = .rect(rect)
     }
 
     private func openMap(focus: PassMarker?) {

@@ -129,7 +129,9 @@ struct PeriodMapSheet: View {
         .overlay(Circle().stroke(.white.opacity(isSelected ? 1 : 0.85),
                                  lineWidth: isSelected ? 3 : 1.5))
         .scaleEffect(isSelected ? 1.25 : 1)
-        .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
+        // Без тени: белое кольцо и так отделяет точку от подложки, а тень на
+        // составном маркере размывала отдельно круг и цифру — по два прохода
+        // на каждую из сотен точек при каждом сдвиге карты.
         // Цвет маркера — единственное, что говорит о превышении; имя места
         // без этого не отвечает на вопрос, ради которого открыли карту.
         .accessibilityLabel(marker.hasViolation

@@ -65,6 +65,14 @@ nonisolated enum PeriodInsights {
                 text: String(format: String(localized: "Стали ездить чище: %1$@ превышения на 100 км против %2$@ в прошлый период"),
                              rate(current), rate(previous)))
         }
+        // «против 0,0 в прошлый период» — арифметика, а не мысль: если
+        // превышений раньше не было, так и говорим.
+        if previous < 0.05, current > previous {
+            return Insight(
+                id: "trend.worse", kind: .bad, icon: "arrow.up.right.circle.fill",
+                text: String(format: String(localized: "Появились превышения: %@ на 100 км, в прошлый период их не было"),
+                             rate(current)))
+        }
         if current > previous * (1 + AppConfig.insightTrendChange) {
             return Insight(
                 id: "trend.worse", kind: .bad, icon: "arrow.up.right.circle.fill",
@@ -131,8 +139,8 @@ nonisolated enum PeriodInsights {
             text: String(localized: "У пройденных камер неизвестен лимит дороги — превышения по ним не считались"))
     }
 
-    /// «1,2» — одна цифра после запятой в локали пользователя.
+    /// «1,2» — одна цифра после запятой в локали приложения.
     private static func rate(_ value: Double) -> String {
-        String(format: "%.1f", locale: .current, value)
+        Formatting.decimal(value)
     }
 }

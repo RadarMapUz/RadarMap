@@ -176,6 +176,42 @@ final class DrivingScoreTests: XCTestCase {
         XCTAssertEqual(TripHistorySection.scoreColor(55), Theme.score(55))
     }
 
+
+    // MARK: - Разбор сходится с СОХРАНЁННЫМ баллом (11.10)
+
+    private func taken(_ items: [DrivingScore.Penalty]) -> Int {
+        items.reduce(0) { $0 + $1.points }
+    }
+
+    /// Балл записи считается в конце поездки по сырому треку, а деталка
+    /// раскладывает его по упрощённому (до 400 точек), где скачки между
+    /// точками крупнее. Разбор обязан складываться в сохранённый балл:
+    /// в поле было «90» и единственная строка «−20».
+    func testBreakdownSumsToStoredScoreAcrossTrackSimplification() {
+        let passedList = [passed(66, limit: 60)]                          // −8
+        let raw: [Double] = (0..<400).map { $0 % 2 == 0 ? 50.0 : 55.5 }   // перепад 5,5 → −10
+        let simplified: [Double] = (0..<120).map { $0 % 2 == 0 ? 50.0 : 57.5 } // перепад 7,5 → −20
+        let passes = passedList.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) }
+        let stored = DrivingScore.tripScore(passes: passes, trackSpeeds: raw) ?? -1
+        XCTAssertEqual(stored, 82, accuracy: 0.001)
+
+        let naive = DrivingScore.breakdown(passed: passedList, trackSpeeds: simplified)
+        XCTAssertNotEqual(100 - taken(naive), Int(stored),
+                          "без балла разбор по упрощённому треку и правда расходится")
+
+        let items = DrivingScore.breakdown(passed: passedList, trackSpeeds: simplified, score: stored)
+        XCTAssertEqual(100 - taken(items), Int(stored))
+        let smooth = items.first { $0.id == "smooth" }
+        XCTAssertEqual(smooth?.points, 10)
+        XCTAssertTrue(smooth?.detail?.contains("6") == true,
+                      "перепад восстановлен из штрафа: 3,5 + 10 / 5 = 5,5 ≈ 6 км/ч")
+    }
+
+    /// Балл печатается целой частью — разбор сходится именно с ней.
+    func testBreakdownMatchesPrintedIntegerScore() {
+        let items = DrivingScore.breakdown(passed: [], trackSpeeds: smoothSpeeds(), score: 89.6)
+        XCTAssertEqual(100 - taken(items), 89)
+    }
 }
 
 // MARK: - Чистка истории

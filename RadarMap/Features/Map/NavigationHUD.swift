@@ -49,10 +49,9 @@ struct TripSpeedCluster: View {
             }
             .padding(6)
             .frame(width: 62, height: 62)
-            .background(over ? AnyShapeStyle(Theme.danger.gradient) : AnyShapeStyle(Theme.surface),
-                        in: Circle())
+            .liftedBackground(over ? AnyShapeStyle(Theme.danger.gradient) : AnyShapeStyle(Theme.surface),
+                              in: Circle())
             .overlay(Circle().strokeBorder(Theme.edgeControl, lineWidth: 1))
-            .liftPanel()
 
             if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
                 SpeedLimitSign(limit: limit, diameter: 46,
@@ -138,9 +137,8 @@ struct TripCameraChip: View {
             }
         }
         .padding(.leading, 6).padding(.trailing, 14).padding(.vertical, 6)
-        .background(Theme.surface, in: Capsule())
+        .liftedBackground(Theme.surface, in: Capsule())
         .overlay(Capsule().strokeBorder(Theme.stroke, lineWidth: 1))
-        .liftPanel()
         .accessibilityElement(children: .combine)
     }
 }

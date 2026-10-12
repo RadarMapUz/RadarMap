@@ -1,0 +1,651 @@
+{
+ "result": {
+  "tableFields": [
+   {
+    "name": "ID",
+    "text": {
+     "uzbText": "ID",
+     "uzbKrText": "ID",
+     "rusText": "ID",
+     "engText": "ID"
+    },
+    "dataType": 4,
+    "isUnique": true,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Nomlanishi",
+    "text": {
+     "uzbText": "Nomlanishi",
+     "uzbKrText": "Номланиши",
+     "rusText": "Название",
+     "engText": "Name"
+    },
+    "dataType": 2,
+    "isUnique": false,
+    "isVisible": false,
+    "isSearch": false
+   },
+   {
+    "name": "Bank",
+    "text": {
+     "uzbText": "Bank",
+     "uzbKrText": "Банк",
+     "rusText": "Банк",
+     "engText": "Bank"
+    },
+    "dataType": 2,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Joylashuvi",
+    "text": {
+     "uzbText": "Joylashuvi",
+     "uzbKrText": "Жойлашуви",
+     "rusText": "Объект расположения",
+     "engText": "Location"
+    },
+    "dataType": 2,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Protsessingmarkazi",
+    "text": {
+     "uzbText": "Protsessing markazi",
+     "uzbKrText": "Процессинг маркази",
+     "rusText": "Процессинговый центр",
+     "engText": "Processing center"
+    },
+    "dataType": 3,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Tolovtizimi",
+    "text": {
+     "uzbText": "To‘lov tizimi",
+     "uzbKrText": "Тўлов тизими",
+     "rusText": "Платежная система",
+     "engText": "Payment system"
+    },
+    "dataType": 3,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Bankomatningtexniktaminlanishtelefonraqami",
+    "text": {
+     "uzbText": "Bankomatning texnik ta'minlanish telefon raqami",
+     "uzbKrText": "Банкоматнинг техник таъминланиш телефон рақами",
+     "rusText": "Телефон техподдержки банкомата",
+     "engText": "ATM technical support phone number"
+    },
+    "dataType": 3,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Viloyat",
+    "text": {
+     "uzbText": "Viloyat",
+     "uzbKrText": "Вилоят",
+     "rusText": "Область",
+     "engText": "Region"
+    },
+    "dataType": 2,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Tumanshahar",
+    "text": {
+     "uzbText": "Tuman/shahar",
+     "uzbKrText": "Туман/шаҳар",
+     "rusText": "Район/город",
+     "engText": "District/City"
+    },
+    "dataType": 2,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "latitude",
+    "text": {
+     "uzbText": "Kenglik",
+     "uzbKrText": "Кенглик",
+     "rusText": "Широта",
+     "engText": "Latitude"
+    },
+    "dataType": 6,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "longitude",
+    "text": {
+     "uzbText": "Uzunlik",
+     "uzbKrText": "Узунлик",
+     "rusText": "Долгота",
+     "engText": "Longitude"
+    },
+    "dataType": 6,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   }
+  ],
+  "count": 5,
+  "data": [
+   {
+    "id": "68b7d392372b8bce06ddc252",
+    "dateTime": "2025-09-03T05:35:10.727Z",
+    "userId": 1401,
+    "tableStructId": "664af8be2f776a551cd0b845",
+    "tableColumn": {
+     "ID": {
+      "text": null,
+      "number": 44102.0,
+      "data": null,
+      "default": 44102.0
+     },
+     "Nomlanishi": {
+      "text": {
+       "uzbText": "\" Ziraat Bank Uzbekistan \" AO ОПЕРУ GRG",
+       "uzbKrText": "\" Ziraat Bank Uzbekistan \" AO ОПЕРУ GRG",
+       "rusText": "\" Ziraat Bank Uzbekistan \" AJ OPERU GRG",
+       "engText": "\" Ziraat Bank Uzbekistan \" АЖ ОПЕРУ GRG"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "\" Ziraat Bank Uzbekistan \" AJ OPERU GRG"
+     },
+     "Bank": {
+      "text": {
+       "uzbText": "Ziraat Bank Uzbekistan",
+       "uzbKrText": "Ziraat Bank Uzbekistan",
+       "rusText": null,
+       "engText": null
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Ziraat Bank Uzbekistan"
+     },
+     "Joylashuvi": {
+      "text": {
+       "uzbText": "Shayxontoxur tumani, Kichik Xalqa yo‘li 57, Malika bozori (Korzinka)",
+       "uzbKrText": "Шайхонтохур тумани, Кичик Халка йўли 57, Малика бозори (Корзинка",
+       "rusText": "Корзинка, дорога Кичик Халка, 57, Шайхонтахурский район",
+       "engText": "Shayxontoxur tumani, Kichik Xalqa yo‘li 57, Malika bozori (Korzinka)"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Корзинка, дорога Кичик Халка, 57, Шайхонтахурский район"
+     },
+     "Protsessingmarkazi": {
+      "text": null,
+      "number": 0.0,
+      "data": "Uzcard",
+      "default": "Uzcard"
+     },
+     "Tolovtizimi": {
+      "text": null,
+      "number": 0.0,
+      "data": "Uzcard",
+      "default": "Uzcard"
+     },
+     "Bankomatningtexniktaminlanishtelefonraqami": {
+      "text": null,
+      "number": 0.0,
+      "data": "78 147 97 30",
+      "default": "78 147 97 30"
+     },
+     "Viloyat": {
+      "text": {
+       "uzbText": "Toshkent shahri",
+       "uzbKrText": "Тошкент шаҳри",
+       "rusText": "город Ташкент",
+       "engText": "город Ташкент"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "город Ташкент"
+     },
+     "Tumanshahar": {
+      "text": {
+       "uzbText": "Shayxontoxur tumani",
+       "uzbKrText": "Шайхонтохур тумани",
+       "rusText": "Шайхантахурский район",
+       "engText": "Шайхантахурский район"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Шайхантахурский район"
+     },
+     "latitude": {
+      "text": null,
+      "number": 41.3378369,
+      "data": null,
+      "default": 41.3378369
+     },
+     "longitude": {
+      "text": null,
+      "number": 69.2735523,
+      "data": null,
+      "default": 69.2735523
+     }
+    }
+   },
+   {
+    "id": "68b7d392372b8bce06ddc253",
+    "dateTime": "2025-09-03T05:35:10.727Z",
+    "userId": 1401,
+    "tableStructId": "664af8be2f776a551cd0b845",
+    "tableColumn": {
+     "ID": {
+      "text": null,
+      "number": 44118.0,
+      "data": null,
+      "default": 44118.0
+     },
+     "Nomlanishi": {
+      "text": {
+       "uzbText": "\" Ziraat Bank Uzbekistan \" AO ОПЕРУ GRG",
+       "uzbKrText": "\" Ziraat Bank Uzbekistan \" AO ОПЕРУ GRG",
+       "rusText": "\" Ziraat Bank Uzbekistan \" AJ OPERU GRG",
+       "engText": "\" Ziraat Bank Uzbekistan \" АЖ ОПЕРУ GRG"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "\" Ziraat Bank Uzbekistan \" AJ OPERU GRG"
+     },
+     "Bank": {
+      "text": {
+       "uzbText": "Ziraat Bank Uzbekistan",
+       "uzbKrText": "Ziraat Bank Uzbekistan",
+       "rusText": null,
+       "engText": null
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Ziraat Bank Uzbekistan"
+     },
+     "Joylashuvi": {
+      "text": {
+       "uzbText": "Chilonzor tumani, Chilonzor G9A kvartal",
+       "uzbKrText": "Чилонзор тумани, Чилонзор Г9A квартал",
+       "rusText": "Chilonzor tumani, Chilonzor G9A kvartal",
+       "engText": "Chilonzor tumani, Chilonzor G9A kvartal"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Chilonzor tumani, Chilonzor G9A kvartal"
+     },
+     "Protsessingmarkazi": {
+      "text": null,
+      "number": 0.0,
+      "data": "Uzcard",
+      "default": "Uzcard"
+     },
+     "Tolovtizimi": {
+      "text": null,
+      "number": 0.0,
+      "data": "Uzcard",
+      "default": "Uzcard"
+     },
+     "Bankomatningtexniktaminlanishtelefonraqami": {
+      "text": null,
+      "number": 0.0,
+      "data": "78 147 97 30",
+      "default": "78 147 97 30"
+     },
+     "Viloyat": {
+      "text": {
+       "uzbText": "Toshkent shahri",
+       "uzbKrText": "Тошкент шаҳри",
+       "rusText": "город Ташкент",
+       "engText": "город Ташкент"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "город Ташкент"
+     },
+     "Tumanshahar": {
+      "text": {
+       "uzbText": "Uchtepa tumani",
+       "uzbKrText": "Учтепа тумани",
+       "rusText": "Учтепинский район",
+       "engText": "Учтепинский район"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Учтепинский район"
+     },
+     "latitude": {
+      "text": null,
+      "number": 41.2854469,
+      "data": null,
+      "default": 41.2854469
+     },
+     "longitude": {
+      "text": null,
+      "number": 69.1892254,
+      "data": null,
+      "default": 69.1892254
+     }
+    }
+   },
+   {
+    "id": "68b7d392372b8bce06ddc254",
+    "dateTime": "2025-09-03T05:35:10.727Z",
+    "userId": 1401,
+    "tableStructId": "664af8be2f776a551cd0b845",
+    "tableColumn": {
+     "ID": {
+      "text": null,
+      "number": 44129.0,
+      "data": null,
+      "default": 44129.0
+     },
+     "Nomlanishi": {
+      "text": {
+       "uzbText": "АТБ \"Узагроэкспортбанк\" 24/7",
+       "uzbKrText": "АТБ \"Узагроэкспортбанк\" 24/7",
+       "rusText": "АТБ \"Узагроэкспортбанк\" 24/7",
+       "engText": "АТБ \"Узагроэкспортбанк\" 24/7"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "АТБ \"Узагроэкспортбанк\" 24/7"
+     },
+     "Bank": {
+      "text": {
+       "uzbText": "AVO bank",
+       "uzbKrText": "AVO bank",
+       "rusText": null,
+       "engText": null
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "AVO bank"
+     },
+     "Joylashuvi": {
+      "text": {
+       "uzbText": "Юнусобод т. А.Темур 79 А уй",
+       "uzbKrText": "Юнусобод т. А.Темур 79 А уй",
+       "rusText": "Юнусобод т. А.Темур 79 А уй",
+       "engText": "Юнусобод т. А.Темур 79 А уй"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Юнусобод т. А.Темур 79 А уй"
+     },
+     "Protsessingmarkazi": {
+      "text": null,
+      "number": 0.0,
+      "data": "Humo",
+      "default": "Humo"
+     },
+     "Tolovtizimi": {
+      "text": null,
+      "number": 0.0,
+      "data": "Humo, Visa, Mastercard",
+      "default": "Humo, Visa, Mastercard"
+     },
+     "Bankomatningtexniktaminlanishtelefonraqami": {
+      "text": null,
+      "number": 0.0,
+      "data": "+998712252805",
+      "default": "+998712252805"
+     },
+     "Viloyat": {
+      "text": {
+       "uzbText": "Toshkent shahri",
+       "uzbKrText": "Тошкент шаҳри",
+       "rusText": "город Ташкент",
+       "engText": "город Ташкент"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "город Ташкент"
+     },
+     "Tumanshahar": {
+      "text": {
+       "uzbText": "Нет данных",
+       "uzbKrText": "Нет данных",
+       "rusText": "Юнусабадский район",
+       "engText": "Юнусабадский район"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Юнусабадский район"
+     },
+     "latitude": {
+      "text": null,
+      "number": 41.382002942494,
+      "data": null,
+      "default": 41.382002942494
+     },
+     "longitude": {
+      "text": null,
+      "number": 69.289257736804,
+      "data": null,
+      "default": 69.289257736804
+     }
+    }
+   },
+   {
+    "id": "68b7d392372b8bce06ddc255",
+    "dateTime": "2025-09-03T05:35:10.727Z",
+    "userId": 1401,
+    "tableStructId": "664af8be2f776a551cd0b845",
+    "tableColumn": {
+     "ID": {
+      "text": null,
+      "number": 44134.0,
+      "data": null,
+      "default": 44134.0
+     },
+     "Nomlanishi": {
+      "text": {
+       "uzbText": "“Экобозор” худуди",
+       "uzbKrText": "“Экобозор” худуди",
+       "rusText": "“Экобозор” худуди",
+       "engText": "“Экобозор” худуди"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "“Экобозор” худуди"
+     },
+     "Bank": {
+      "text": {
+       "uzbText": "AVO bank",
+       "uzbKrText": "AVO bank",
+       "rusText": null,
+       "engText": null
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "AVO bank"
+     },
+     "Joylashuvi": {
+      "text": {
+       "uzbText": "М.Улугбек т. Т.Малик 3 А уй",
+       "uzbKrText": "М.Улугбек т. Т.Малик 3 А уй",
+       "rusText": "М.Улугбек т. Т.Малик 3 А уй",
+       "engText": "М.Улугбек т. Т.Малик 3 А уй"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "М.Улугбек т. Т.Малик 3 А уй"
+     },
+     "Protsessingmarkazi": {
+      "text": null,
+      "number": 0.0,
+      "data": "Humo",
+      "default": "Humo"
+     },
+     "Tolovtizimi": {
+      "text": null,
+      "number": 0.0,
+      "data": "Humo, Visa, Mastercard",
+      "default": "Humo, Visa, Mastercard"
+     },
+     "Bankomatningtexniktaminlanishtelefonraqami": {
+      "text": null,
+      "number": 0.0,
+      "data": "+998712252805",
+      "default": "+998712252805"
+     },
+     "Viloyat": {
+      "text": {
+       "uzbText": "Toshkent shahri",
+       "uzbKrText": "Тошкент шаҳри",
+       "rusText": "город Ташкент",
+       "engText": "город Ташкент"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "город Ташкент"
+     },
+     "Tumanshahar": {
+      "text": {
+       "uzbText": "Mirzo Ulug`bek tumani",
+       "uzbKrText": "Мирзо Улугбек тумани",
+       "rusText": "Нет данных",
+       "engText": "Нет данных"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Нет данных"
+     },
+     "latitude": {
+      "text": null,
+      "number": 41.353140708986,
+      "data": null,
+      "default": 41.353140708986
+     },
+     "longitude": {
+      "text": null,
+      "number": 69.351243587135,
+      "data": null,
+      "default": 69.351243587135
+     }
+    }
+   },
+   {
+    "id": "68b7d392372b8bce06ddc256",
+    "dateTime": "2025-09-03T05:35:10.727Z",
+    "userId": 1401,
+    "tableStructId": "664af8be2f776a551cd0b845",
+    "tableColumn": {
+     "ID": {
+      "text": null,
+      "number": 44138.0,
+      "data": null,
+      "default": 44138.0
+     },
+     "Nomlanishi": {
+      "text": {
+       "uzbText": "Юнусободмедикал центр",
+       "uzbKrText": "Юнусободмедикал центр",
+       "rusText": "Юнусободмедикал центр",
+       "engText": "Юнусободмедикал центр"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Юнусободмедикал центр"
+     },
+     "Bank": {
+      "text": {
+       "uzbText": "AVO bank",
+       "uzbKrText": "AVO bank",
+       "rusText": null,
+       "engText": null
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "AVO bank"
+     },
+     "Joylashuvi": {
+      "text": {
+       "uzbText": "Юнусобод т. А.Дониш 16 мавзе",
+       "uzbKrText": "Юнусобод т. А.Дониш 16 мавзе",
+       "rusText": "Юнусобод т. А.Дониш 16 мавзе",
+       "engText": "Юнусобод т. А.Дониш 16 мавзе"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Юнусобод т. А.Дониш 16 мавзе"
+     },
+     "Protsessingmarkazi": {
+      "text": null,
+      "number": 0.0,
+      "data": "Humo",
+      "default": "Humo"
+     },
+     "Tolovtizimi": {
+      "text": null,
+      "number": 0.0,
+      "data": "Humo, Visa, Mastercard",
+      "default": "Humo, Visa, Mastercard"
+     },
+     "Bankomatningtexniktaminlanishtelefonraqami": {
+      "text": null,
+      "number": 0.0,
+      "data": "+998712252805",
+      "default": "+998712252805"
+     },
+     "Viloyat": {
+      "text": {
+       "uzbText": "Toshkent shahri",
+       "uzbKrText": "Тошкент шаҳри",
+       "rusText": "город Ташкент",
+       "engText": "город Ташкент"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "город Ташкент"
+     },
+     "Tumanshahar": {
+      "text": {
+       "uzbText": "Yunusobod tumani",
+       "uzbKrText": "Юнусобод тумани",
+       "rusText": "Юнусабадский район",
+       "engText": "Юнусабадский район"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Юнусабадский район"
+     },
+     "latitude": {
+      "text": null,
+      "number": 41.383154418748,
+      "data": null,
+      "default": 41.383154418748
+     },
+     "longitude": {
+      "text": null,
+      "number": 69.298457713725,
+      "data": null,
+      "default": 69.298457713725
+     }
+    }
+   }
+  ]
+ },
+ "status": "OK",
+ "code": 200,
+ "error": null,
+ "errors": null
+}

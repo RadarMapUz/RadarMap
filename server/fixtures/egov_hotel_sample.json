@@ -1,0 +1,558 @@
+{
+ "result": {
+  "tableFields": [
+   {
+    "name": "ID",
+    "text": {
+     "uzbText": "№",
+     "uzbKrText": "№",
+     "rusText": "№",
+     "engText": "№"
+    },
+    "dataType": 4,
+    "isUnique": true,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "ObyektSTIRraqami",
+    "text": {
+     "uzbText": "Obyekt STIR raqami",
+     "uzbKrText": "Объект СТИР рақами",
+     "rusText": "ИНН объекта",
+     "engText": "Object TIN number"
+    },
+    "dataType": 4,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Royxatdanotgansertifikatraqami",
+    "text": {
+     "uzbText": "Ro’yxatdan o’tgan sertifikat raqami",
+     "uzbKrText": "Рўйхатдан ўтган сертификат рақами",
+     "rusText": "Регистрационный номер сертификата",
+     "engText": "Registered Certificate Number"
+    },
+    "dataType": 5,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Sertifikatberilgansana",
+    "text": {
+     "uzbText": "Sertifikat berilgan sana",
+     "uzbKrText": "Сертификат берилган сана",
+     "rusText": "Дата выдачи сертификата",
+     "engText": "Date of certificate issuance"
+    },
+    "dataType": 5,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Sertifikatamalqilishmuddati",
+    "text": {
+     "uzbText": "Sertifikat amal qilish muddati",
+     "uzbKrText": "Сертификатнинг амал қилиш муддати",
+     "rusText": "Срок действия сертификата",
+     "engText": "Certificate validity period"
+    },
+    "dataType": 5,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "latitude",
+    "text": {
+     "uzbText": "Kenglik",
+     "uzbKrText": "Кенглик",
+     "rusText": "Широта",
+     "engText": "Latitude"
+    },
+    "dataType": 6,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "longitude",
+    "text": {
+     "uzbText": "Uzunlik",
+     "uzbKrText": "Узунлик",
+     "rusText": "Долгота",
+     "engText": "Longitude"
+    },
+    "dataType": 6,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Manzil",
+    "text": {
+     "uzbText": "Manzil",
+     "uzbKrText": "Манзил",
+     "rusText": "Адрес",
+     "engText": "Address"
+    },
+    "dataType": 2,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Yuridikshaxsnomi",
+    "text": {
+     "uzbText": "Yuridik shaxs nomi",
+     "uzbKrText": "Юридик шахс номи",
+     "rusText": "Наименование юридического лица",
+     "engText": "Name of the legal entity"
+    },
+    "dataType": 2,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "Viloyat",
+    "text": {
+     "uzbText": "Viloyat",
+     "uzbKrText": "Вилоят",
+     "rusText": "Область",
+     "engText": "Province"
+    },
+    "dataType": 2,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   }
+  ],
+  "count": 5,
+  "data": [
+   {
+    "id": "696f93d3685b794563f06a07",
+    "dateTime": "2026-01-20T14:40:17.961Z",
+    "userId": 212,
+    "tableStructId": "662758862f776a551cc8b7c6",
+    "tableColumn": {
+     "ID": {
+      "text": null,
+      "number": 1.0,
+      "data": null,
+      "default": 1.0
+     },
+     "ObyektSTIRraqami": {
+      "text": null,
+      "number": 311137448.0,
+      "data": null,
+      "default": 311137448.0
+     },
+     "Royxatdanotgansertifikatraqami": {
+      "text": null,
+      "number": 0.0,
+      "data": "UZ.SMT.02.0003.018351",
+      "default": "UZ.SMT.02.0003.018351"
+     },
+     "Sertifikatberilgansana": {
+      "text": null,
+      "number": 0.0,
+      "data": "08/01/2026",
+      "default": "08/01/2026"
+     },
+     "Sertifikatamalqilishmuddati": {
+      "text": null,
+      "number": 0.0,
+      "data": "08/01/2031",
+      "default": "08/01/2031"
+     },
+     "latitude": {
+      "text": null,
+      "number": 40.51238361445,
+      "data": null,
+      "default": 40.51238361445
+     },
+     "longitude": {
+      "text": null,
+      "number": 71.703036002655,
+      "data": null,
+      "default": 71.703036002655
+     },
+     "Manzil": {
+      "text": {
+       "uzbText": "Ойбек МФЙ, Мозий (М.Ғолиб тор) кучаси, 23А-уй",
+       "uzbKrText": "Ойбек МФЙ, Мозий (М.Ғолиб тор) кучаси, 23А-уй",
+       "rusText": "Ойбек МФЙ, Мозий (М.Ғолиб тор) кучаси, 23А-уй",
+       "engText": "Ойбек МФЙ, Мозий (М.Ғолиб тор) кучаси, 23А-уй"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Ойбек МФЙ, Мозий (М.Ғолиб тор) кучаси, 23А-уй"
+     },
+     "Yuridikshaxsnomi": {
+      "text": {
+       "uzbText": "\"SM HOTEL\" MChJ ",
+       "uzbKrText": "\"SM HOTEL\" MChJ ",
+       "rusText": "\"SM HOTEL\" MChJ ",
+       "engText": "\"SM HOTEL\" MChJ "
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "\"SM HOTEL\" MChJ "
+     },
+     "Viloyat": {
+      "text": {
+       "uzbText": "Ферганская область",
+       "uzbKrText": "Ферганская область",
+       "rusText": "Ферганская область",
+       "engText": "Ферганская область"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Ферганская область"
+     }
+    }
+   },
+   {
+    "id": "696f93d3685b794563f06a08",
+    "dateTime": "2026-01-20T14:40:17.961Z",
+    "userId": 212,
+    "tableStructId": "662758862f776a551cc8b7c6",
+    "tableColumn": {
+     "ID": {
+      "text": null,
+      "number": 2.0,
+      "data": null,
+      "default": 2.0
+     },
+     "ObyektSTIRraqami": {
+      "text": null,
+      "number": 311876866.0,
+      "data": null,
+      "default": 311876866.0
+     },
+     "Royxatdanotgansertifikatraqami": {
+      "text": null,
+      "number": 0.0,
+      "data": "UZ.SMT.02.0003.018350",
+      "default": "UZ.SMT.02.0003.018350"
+     },
+     "Sertifikatberilgansana": {
+      "text": null,
+      "number": 0.0,
+      "data": "05/01/2026",
+      "default": "05/01/2026"
+     },
+     "Sertifikatamalqilishmuddati": {
+      "text": null,
+      "number": 0.0,
+      "data": "05/01/2031",
+      "default": "05/01/2031"
+     },
+     "latitude": {
+      "text": null,
+      "number": 41.2297461503064,
+      "data": null,
+      "default": 41.2297461503064
+     },
+     "longitude": {
+      "text": null,
+      "number": 69.3388810502624,
+      "data": null,
+      "default": 69.3388810502624
+     },
+     "Manzil": {
+      "text": {
+       "uzbText": "Хамид Сулаймон МФЙ, Цеховий переулок кучаси, 10-уй",
+       "uzbKrText": "Хамид Сулаймон МФЙ, Цеховий переулок кучаси, 10-уй",
+       "rusText": "Хамид Сулаймон МФЙ, Цеховий переулок кучаси, 10-уй",
+       "engText": "Хамид Сулаймон МФЙ, Цеховий переулок кучаси, 10-уй"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Хамид Сулаймон МФЙ, Цеховий переулок кучаси, 10-уй"
+     },
+     "Yuridikshaxsnomi": {
+      "text": {
+       "uzbText": "\"GRINGO\" MChJ ",
+       "uzbKrText": "\"GRINGO\" MChJ ",
+       "rusText": "\"GRINGO\" MChJ ",
+       "engText": "\"GRINGO\" MChJ "
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "\"GRINGO\" MChJ "
+     },
+     "Viloyat": {
+      "text": {
+       "uzbText": "г. Ташкент",
+       "uzbKrText": "г. Ташкент",
+       "rusText": "г. Ташкент",
+       "engText": "г. Ташкент"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "г. Ташкент"
+     }
+    }
+   },
+   {
+    "id": "696f93d3685b794563f06a09",
+    "dateTime": "2026-01-20T14:40:17.962Z",
+    "userId": 212,
+    "tableStructId": "662758862f776a551cc8b7c6",
+    "tableColumn": {
+     "ID": {
+      "text": null,
+      "number": 3.0,
+      "data": null,
+      "default": 3.0
+     },
+     "ObyektSTIRraqami": {
+      "text": null,
+      "number": 312552897.0,
+      "data": null,
+      "default": 312552897.0
+     },
+     "Royxatdanotgansertifikatraqami": {
+      "text": null,
+      "number": 0.0,
+      "data": "UZ.SMT.02.0003.018349",
+      "default": "UZ.SMT.02.0003.018349"
+     },
+     "Sertifikatberilgansana": {
+      "text": null,
+      "number": 0.0,
+      "data": "05/01/2026",
+      "default": "05/01/2026"
+     },
+     "Sertifikatamalqilishmuddati": {
+      "text": null,
+      "number": 0.0,
+      "data": "05/01/2031",
+      "default": "05/01/2031"
+     },
+     "latitude": {
+      "text": null,
+      "number": 41.2988060907105,
+      "data": null,
+      "default": 41.2988060907105
+     },
+     "longitude": {
+      "text": null,
+      "number": 69.292783457672,
+      "data": null,
+      "default": 69.292783457672
+     },
+     "Manzil": {
+      "text": {
+       "uzbText": "Registon MFY, Registon ko'chasi, 3-d-uy",
+       "uzbKrText": "Registon MFY, Registon ko'chasi, 3-d-uy",
+       "rusText": "Registon MFY, Registon ko'chasi, 3-d-uy",
+       "engText": "Registon MFY, Registon ko'chasi, 3-d-uy"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Registon MFY, Registon ko'chasi, 3-d-uy"
+     },
+     "Yuridikshaxsnomi": {
+      "text": {
+       "uzbText": "\"VELVET HOTEL\" OK",
+       "uzbKrText": "\"VELVET HOTEL\" OK",
+       "rusText": "\"VELVET HOTEL\" OK",
+       "engText": "\"VELVET HOTEL\" OK"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "\"VELVET HOTEL\" OK"
+     },
+     "Viloyat": {
+      "text": {
+       "uzbText": "г. Ташкент",
+       "uzbKrText": "г. Ташкент",
+       "rusText": "г. Ташкент",
+       "engText": "г. Ташкент"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "г. Ташкент"
+     }
+    }
+   },
+   {
+    "id": "696f93d3685b794563f06a0a",
+    "dateTime": "2026-01-20T14:40:17.962Z",
+    "userId": 212,
+    "tableStructId": "662758862f776a551cc8b7c6",
+    "tableColumn": {
+     "ID": {
+      "text": null,
+      "number": 4.0,
+      "data": null,
+      "default": 4.0
+     },
+     "ObyektSTIRraqami": {
+      "text": null,
+      "number": 310897209.0,
+      "data": null,
+      "default": 310897209.0
+     },
+     "Royxatdanotgansertifikatraqami": {
+      "text": null,
+      "number": 0.0,
+      "data": "UZ.SMT.02.0003.018348",
+      "default": "UZ.SMT.02.0003.018348"
+     },
+     "Sertifikatberilgansana": {
+      "text": null,
+      "number": 0.0,
+      "data": "05/01/2026",
+      "default": "05/01/2026"
+     },
+     "Sertifikatamalqilishmuddati": {
+      "text": null,
+      "number": 0.0,
+      "data": "05/01/2031",
+      "default": "05/01/2031"
+     },
+     "latitude": {
+      "text": null,
+      "number": 41.2687377584636,
+      "data": null,
+      "default": 41.2687377584636
+     },
+     "longitude": {
+      "text": null,
+      "number": 69.2232990766907,
+      "data": null,
+      "default": 69.2232990766907
+     },
+     "Manzil": {
+      "text": {
+       "uzbText": "Лабзак МФЙ, Лабзак кучаси, 1а-уй, 53-хонадон",
+       "uzbKrText": "Лабзак МФЙ, Лабзак кучаси, 1а-уй, 53-хонадон",
+       "rusText": "Лабзак МФЙ, Лабзак кучаси, 1а-уй, 53-хонадон",
+       "engText": "Лабзак МФЙ, Лабзак кучаси, 1а-уй, 53-хонадон"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Лабзак МФЙ, Лабзак кучаси, 1а-уй, 53-хонадон"
+     },
+     "Yuridikshaxsnomi": {
+      "text": {
+       "uzbText": "\"ARS HOTEL\" MChJ (\"LAVRASIYA TRAVELS\" MChJ)",
+       "uzbKrText": "\"ARS HOTEL\" MChJ (\"LAVRASIYA TRAVELS\" MChJ)",
+       "rusText": "\"ARS HOTEL\" MChJ (\"LAVRASIYA TRAVELS\" MChJ)",
+       "engText": "\"ARS HOTEL\" MChJ (\"LAVRASIYA TRAVELS\" MChJ)"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "\"ARS HOTEL\" MChJ (\"LAVRASIYA TRAVELS\" MChJ)"
+     },
+     "Viloyat": {
+      "text": {
+       "uzbText": "г. Ташкент",
+       "uzbKrText": "г. Ташкент",
+       "rusText": "г. Ташкент",
+       "engText": "г. Ташкент"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "г. Ташкент"
+     }
+    }
+   },
+   {
+    "id": "696f93d3685b794563f06a0b",
+    "dateTime": "2026-01-20T14:40:17.962Z",
+    "userId": 212,
+    "tableStructId": "662758862f776a551cc8b7c6",
+    "tableColumn": {
+     "ID": {
+      "text": null,
+      "number": 5.0,
+      "data": null,
+      "default": 5.0
+     },
+     "ObyektSTIRraqami": {
+      "text": null,
+      "number": 309265770.0,
+      "data": null,
+      "default": 309265770.0
+     },
+     "Royxatdanotgansertifikatraqami": {
+      "text": null,
+      "number": 0.0,
+      "data": "UZ.SMT.02.0003.018347",
+      "default": "UZ.SMT.02.0003.018347"
+     },
+     "Sertifikatberilgansana": {
+      "text": null,
+      "number": 0.0,
+      "data": "05/01/2026",
+      "default": "05/01/2026"
+     },
+     "Sertifikatamalqilishmuddati": {
+      "text": null,
+      "number": 0.0,
+      "data": "05/01/2031",
+      "default": "05/01/2031"
+     },
+     "latitude": {
+      "text": null,
+      "number": 40.555362426369,
+      "data": null,
+      "default": 40.555362426369
+     },
+     "longitude": {
+      "text": null,
+      "number": 70.9339988492126,
+      "data": null,
+      "default": 70.9339988492126
+     },
+     "Manzil": {
+      "text": {
+       "uzbText": "Damariq MFY, Abdulla Qaxxor ko`chasi, 150-uy",
+       "uzbKrText": "Damariq MFY, Abdulla Qaxxor ko`chasi, 150-uy",
+       "rusText": "Damariq MFY, Abdulla Qaxxor ko`chasi, 150-uy",
+       "engText": "Damariq MFY, Abdulla Qaxxor ko`chasi, 150-uy"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Damariq MFY, Abdulla Qaxxor ko`chasi, 150-uy"
+     },
+     "Yuridikshaxsnomi": {
+      "text": {
+       "uzbText": "\"HMC U\" MChJ ",
+       "uzbKrText": "\"HMC U\" MChJ ",
+       "rusText": "\"HMC U\" MChJ ",
+       "engText": "\"HMC U\" MChJ "
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "\"HMC U\" MChJ "
+     },
+     "Viloyat": {
+      "text": {
+       "uzbText": "Ферганская область",
+       "uzbKrText": "Ферганская область",
+       "rusText": "Ферганская область",
+       "engText": "Ферганская область"
+      },
+      "number": 0.0,
+      "data": null,
+      "default": "Ферганская область"
+     }
+    }
+   }
+  ]
+ },
+ "status": "OK",
+ "code": 200,
+ "error": null,
+ "errors": null
+}

@@ -1349,6 +1349,9 @@ VENUE_KINDS = (
     (8, "amenity", {"pharmacy"}),
     (9, "amenity", {"atm", "bank"}),
     (10, "shop", {"supermarket"}),
+    # Гостиницы — для междугородних. Код 11 клиент до поддержки Venue.Kind
+    # .hotel просто пропускает (guard let kind = Kind(rawValue:)).
+    (11, "tourism", {"hotel", "motel", "guest_house", "hostel"}),
 )
 # Одно заведение точкой и контуром в паре метров — одна запись.
 VENUE_DUPLICATE_METERS = 30.0
@@ -1391,6 +1394,37 @@ def collect_venues(source_path):
                     or properties.get("brand") or "").strip()
             out.append((code, name, spot[0], spot[1]))
     return out
+
+
+def merge_venues(primary, extra, meters=VENUE_DUPLICATE_METERS):
+    """Слить заведения двух источников: OSM (`primary`) + реестры портала
+    (`extra`, import_poi_egov.py).
+
+    Правило одно — расстояние: точка реестра того же вида ближе `meters` к
+    точке OSM считается той же самой и выбрасывается. OSM побеждает намеренно:
+    там имя, под которым место знают люди (name:ru), а реестр ценен тем, чего в
+    OSM нет вовсе — семью тысячами банкоматов за пределами карты. Названия не
+    сравниваются: «Kapitalbank» и «Капиталбанк» — одна точка, а два банкомата
+    разных банков в одном фойе всё равно различимы по виду только расстоянием.
+    """
+    if not extra:
+        return list(primary)
+    # Сетка ~100 м: 9 тысяч точек реестра против полутора тысяч OSM, и попарно
+    # это 14 миллионов расстояний на каждый вид.
+    step = 0.001
+    index = defaultdict(list)
+    for code, _name, lon, lat in primary:
+        index[(code, int(lat // step), int(lon // step))].append((lon, lat))
+    merged = list(primary)
+    for code, name, lon, lat in extra:
+        row, column = int(lat // step), int(lon // step)
+        taken = any(
+            meters_between((lon, lat), other) < meters
+            for dr in (-1, 0, 1) for dc in (-1, 0, 1)
+            for other in index.get((code, row + dr, column + dc), ()))
+        if not taken:
+            merged.append((code, name, lon, lat))
+    return merged
 
 
 def venues_by_cell(rows):
@@ -5722,6 +5756,10 @@ def main():
                         help="geojsonl объектов с addr:street (необязателен)")
     parser.add_argument("--venues", dest="venues", default=None,
                         help="geojsonl заведений: АЗС, парковки, мойки (необязателен)")
+    parser.add_argument("--venues-extra", dest="venues_extra", action="append",
+                        default=[],
+                        help="ещё geojsonl заведений (реестры портала, import_poi_egov.py); "
+                             "точка ближе 30 м к OSM того же вида не дублируется")
     parser.add_argument("--places", dest="places", default=None,
                         help="geojsonl населённых пунктов (необязателен)")
     parser.add_argument("--trees", dest="trees", default=None,
@@ -5851,6 +5889,12 @@ def main():
     if islands:
         print(f"островков из OSM: {len(islands)}")
     venue_rows = collect_venues(args.venues)
+    for extra_path in args.venues_extra:
+        extra_rows = collect_venues(extra_path)
+        before = len(venue_rows)
+        venue_rows = merge_venues(venue_rows, extra_rows)
+        print(f"заведения из {os.path.basename(extra_path)}: {len(extra_rows)}, "
+              f"новых {len(venue_rows) - before}")
     venues = venues_by_cell(venue_rows)
     index, index_v2 = write_tiles(roads, args.tiles_dir, args.grid, areas, points,
                                   far_points, far, addresses, houses,

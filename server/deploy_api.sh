@@ -146,5 +146,5 @@ echo
 curl -sf https://soulmed.uz/radarmap/api/health
 echo
 report_drift
-echo "✓ Готово. Смоук-записи можно почистить:"
-echo "  ssh $HOST \"sqlite3 /opt/radarmap/api/reports.db \\\"DELETE FROM camera_reports WHERE device='deploy-smoke-test'; DELETE FROM feedback WHERE device='deploy-smoke-test';\\\"\""
+echo "✓ Готово. Смоук-записи можно почистить (sqlite3 CLI на сервере нет — через python3):"
+echo "  ssh $HOST \"python3 -c \\\"import sqlite3; c=sqlite3.connect('/opt/radarmap/api/reports.db', timeout=5); c.execute('DELETE FROM camera_reports WHERE device=?', ('deploy-smoke-test',)); c.execute('DELETE FROM feedback WHERE device=?', ('deploy-smoke-test',)); c.commit()\\\"\""

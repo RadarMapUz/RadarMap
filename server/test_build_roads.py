@@ -3541,6 +3541,20 @@ class VenueTests(unittest.TestCase):
         self.assertEqual(build_roads.venue_kind({"amenity": "cafe"}), 7)
         self.assertIsNone(build_roads.venue_kind({"amenity": "bench"}))
 
+    def test_gas_stations_are_their_own_kinds(self):
+        # Метан и пропан — отдельно от бензина: по метке и по названию.
+        self.assertEqual(build_roads.venue_kind({"amenity": "fuel", "fuel:cng": "yes"}), build_roads.VENUE_CNG)
+        self.assertEqual(build_roads.venue_kind({"amenity": "fuel", "fuel:lpg": "yes"}), build_roads.VENUE_LPG)
+        self.assertEqual(build_roads.venue_kind({"amenity": "fuel", "name": "АГНКС Метан"}), build_roads.VENUE_CNG)
+        self.assertEqual(build_roads.venue_kind({"amenity": "fuel", "name:uz": "Propan gaz"}), build_roads.VENUE_LPG)
+        # Бензин с метаном на одной станции — метан: его ищут отдельно.
+        self.assertEqual(build_roads.venue_kind({"amenity": "fuel", "fuel:cng": "yes", "fuel:octane_95": "yes"}),
+                         build_roads.VENUE_CNG)
+        self.assertEqual(build_roads.venue_kind({"amenity": "fuel", "name": "Uzbekneftegaz"}), 1)
+        # Коды не пересекаются с гостиницей (11).
+        self.assertEqual(sorted({c for c, _, _ in build_roads.VENUE_KINDS} | {build_roads.VENUE_CNG, build_roads.VENUE_LPG}),
+                         list(range(1, 14)))
+
     def test_russian_name_first_then_name_then_brand(self):
         path = self.write([
             self.point(69.25, 41.30, amenity="fuel", name="Uzbekneftegaz", **{"name:ru": "Узбекнефтегаз"}),

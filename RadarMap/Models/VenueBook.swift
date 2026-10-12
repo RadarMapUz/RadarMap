@@ -21,10 +21,11 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
     /// сервер вправе завести новый вид раньше, чем выйдет сборка.
     enum Kind: Int, Sendable, CaseIterable {
         case fuel = 1, parking, carWash, carRepair, tyres, charging, food, pharmacy, atm, supermarket
-        /// Метан (АГНКС) и пропан (АГЗС) — отдельно от бензина (13.10):
-        /// большинство машин на газу, и «АЗС» в поиске отвечала всеми
-        /// заправками подряд. Коды 11 и 12 — контракт с build_roads.py.
-        case cng = 11, lpg = 12
+        /// Гостиницы — для междугородних (OSM + сертифицированные с портала
+        /// открытых данных). Метан (АГНКС) и пропан (АГЗС) — отдельно от
+        /// бензина (13.10): большинство машин на газу, и «АЗС» в поиске
+        /// отвечала всеми заправками подряд. Коды — контракт с build_roads.py.
+        case hotel = 11, cng = 12, lpg = 13
 
         var title: String {
             switch self {
@@ -38,6 +39,7 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
             case .pharmacy:    return String(localized: "Аптека")
             case .atm:         return String(localized: "Банкомат")
             case .supermarket: return String(localized: "Супермаркет")
+            case .hotel:       return String(localized: "Гостиница")
             case .cng:         return String(localized: "Метан")
             case .lpg:         return String(localized: "Пропан")
             }
@@ -57,6 +59,7 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
             case .pharmacy:    return "cross.case.fill"
             case .atm:         return "banknote.fill"
             case .supermarket: return "cart.fill"
+            case .hotel:       return "bed.double.fill"
             case .cng:         return "flame.fill"
             case .lpg:         return "flame"
             }
@@ -68,6 +71,7 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
         var searchWords: [String] {
             switch self {
             case .fuel:        return ["азс", "заправка", "бензин", "zapravka", "benzin", "yoqilg'i", "azs"]
+            case .hotel:       return ["гостиница", "отель", "хостел", "mehmonxona", "hotel", "otel"]
             case .cng:         return ["метан", "агнкс", "metan", "agnks", "gaz"]
             case .lpg:         return ["пропан", "агзс", "propan", "agzs", "suyultirilgan"]
             case .parking:     return ["парковка", "стоянка", "parking", "avtoturargoh", "to'xtash"]
@@ -206,6 +210,7 @@ nonisolated struct VenueBook: Sendable {
         case .pharmacy:    return ([.pharmacy], "аптека")
         case .atm:         return ([.atm, .bank], "банкомат")
         case .supermarket: return ([.foodMarket], "супермаркет")
+        case .hotel:       return ([.hotel], "гостиница")
         case .cng:         return ([.gasStation], "метан заправка")
         case .lpg:         return ([.gasStation], "пропан заправка")
         }

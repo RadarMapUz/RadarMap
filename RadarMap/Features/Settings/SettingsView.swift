@@ -87,8 +87,13 @@ struct SettingsView: View {
                     }
                     .tint(Theme.textPrimary)
                     SettingsRow(.version, value: Self.appVersion)
+                    // Условие лицензии CC BY-SA 4.0 портала: ссылка на источник.
+                    Link(destination: AppConfig.openDataURL) {
+                        SettingsRow(.openData, accessory: "arrow.up.right")
+                    }
+                    .tint(Theme.textPrimary)
                 } footer: {
-                    Text("Карты и ограничения скорости — © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки.")
+                    Text("Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Приложение бесплатное, без рекламы и без слежки.")
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -162,7 +167,7 @@ enum SettingsItem {
     case map, offline, places
     case learning, battery, privacy
     case database, backup, language
-    case help, feedback, project, version
+    case help, feedback, project, version, openData
 
     var title: LocalizedStringKey {
         switch self {
@@ -183,6 +188,7 @@ enum SettingsItem {
         case .feedback: return "Написать разработчику"
         case .project:  return "Страница проекта"
         case .version:  return "Версия"
+        case .openData: return "Источники данных"
         }
     }
 
@@ -205,6 +211,7 @@ enum SettingsItem {
         case .feedback: return "envelope.fill"
         case .project:  return "safari.fill"
         case .version:  return "info.circle.fill"
+        case .openData: return "doc.text.fill"
         }
     }
 
@@ -229,6 +236,7 @@ enum SettingsItem {
         case .feedback: return Color(uiColor: .systemBlue)
         case .project:  return Color(uiColor: .systemCyan)
         case .version:  return Color(uiColor: .systemGray)
+        case .openData: return Color(uiColor: .systemGray)
         }
     }
 }

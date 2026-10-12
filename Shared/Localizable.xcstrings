@@ -3025,6 +3025,22 @@
         }
       }
     },
+    "Гостиница": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Гостиница"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehmonxona"
+          }
+        }
+      }
+    },
     "Готов к поездке": {
       "localizations": {
         "ru": {
@@ -4485,6 +4501,22 @@
         }
       }
     },
+    "Источники данных": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Источники данных"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ma’lumot manbalari"
+          }
+        }
+      }
+    },
     "Итоги": {
       "localizations": {
         "ru": {
@@ -5148,6 +5180,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Xarita sizni kuzatmoqda"
+          }
+        }
+      }
+    },
+    "Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Приложение бесплатное, без рекламы и без слежки.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Приложение бесплатное, без рекламы и без слежки."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xaritalar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari. Kameralar, bankomatlar va mehmonxonalar — O‘zbekiston Respublikasi Ochiq ma’lumotlar portali (CC BY-SA 4.0). Ilova bepul, reklamasiz va kuzatuvsiz."
           }
         }
       }

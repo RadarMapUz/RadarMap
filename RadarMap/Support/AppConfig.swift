@@ -609,6 +609,9 @@ nonisolated enum AppConfig {
 
     /// Страница проекта: поддержка, политика конфиденциальности, контакты.
     /// Она же Support URL в App Store Connect.
+    /// Портал открытых данных — источник камер (МВД), банкоматов (ЦБ) и
+    /// гостиниц; лицензия CC BY-SA 4.0 требует ссылку на источник.
+    static let openDataURL = URL(string: "https://data.egov.uz")!
     static let projectPageURL = URL(string: "https://soulmed.uz/radarmap/")!
     /// Политика конфиденциальности — прямой ссылкой из Настроек, а не через
     /// подвал страницы проекта (App Review ищет её в два касания, не в три).

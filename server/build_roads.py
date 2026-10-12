@@ -1353,6 +1353,28 @@ VENUE_KINDS = (
     # .hotel просто пропускает (guard let kind = Kind(rawValue:)).
     (11, "tourism", {"hotel", "motel", "guest_house", "hostel"}),
 )
+# Метан (12) и пропан (13) — отдельно от бензина: большинство машин на газу,
+# а «АЗС» в поиске отвечала всеми заправками подряд. Вид решает venue_kind:
+# у amenity=fuel смотрим fuel:cng / fuel:lpg, а без меток — название
+# («АГНКС», «метан», «пропан»): половина газовых заправок в OSM размечена
+# только именем (разбор 12.10: 381 с меткой + ~200 по названию).
+VENUE_CNG, VENUE_LPG = 12, 13
+CNG_WORDS = ("метан", "metan", "агнкс", "agnks", "cng", "компрессор")
+LPG_WORDS = ("пропан", "propan", "агзс", "agzs", "lpg", "суюлтирилган", "suyultirilgan")
+
+
+def fuel_kind(properties):
+    """Код газовой заправки или None — обычная АЗС."""
+    if properties.get("fuel:cng") == "yes":
+        return VENUE_CNG
+    if properties.get("fuel:lpg") == "yes":
+        return VENUE_LPG
+    text = " ".join(str(properties.get(k) or "") for k in ("name", "name:ru", "name:uz", "brand", "operator")).lower()
+    if any(w in text for w in CNG_WORDS):
+        return VENUE_CNG
+    if any(w in text for w in LPG_WORDS):
+        return VENUE_LPG
+    return None
 # Одно заведение точкой и контуром в паре метров — одна запись.
 VENUE_DUPLICATE_METERS = 30.0
 
@@ -1361,6 +1383,8 @@ def venue_kind(properties):
     """Код вида заведения или None — не наше."""
     for code, key, values in VENUE_KINDS:
         if properties.get(key) in values:
+            if code == 1:
+                return fuel_kind(properties) or code
             return code
     return None
 

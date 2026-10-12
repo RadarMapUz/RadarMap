@@ -367,21 +367,23 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Панорама в машине идёт НЕ через жесты SwiftUI: касаниями на карте
     /// распоряжается шаблон, а приложению приходят команды делегата.
     ///
-    /// Сдвиг жеста приходит НАКОПЛЕННЫМ от его начала (как у
-    /// UIPanGestureRecognizer), а карта двигается приращениями: без разницы с
-    /// прошлым вызовом осмотр разгонялся — каждый кадр жеста добавлял весь
-    /// путь пальца заново.
-    private var panSoFar = CGPoint.zero
+    /// Сдвиг жеста приходит ПРИРАЩЕНИЕМ за кадр, а не от начала жеста. Замер
+    /// 12.10 (carplay11: iOS 26, CarPlay Simulator с сенсорным профилем): за
+    /// 2,4 с одного жеста — 135 вызовов по −10…−40 точек, последний около
+    /// нуля (палец встал перед отрывом), у трёх из четырёх жестов — ровно 0.
+    /// До 2.2.15 сдвиг считали накопленным и брали разницу соседних вызовов —
+    /// от пальца оставался шум, и карта стояла: «перетаскиваю, а он не
+    /// двигается». Сумма — только для журнала.
+    private var panSum = CGPoint.zero
 
     /// Перетаскивание пальцем. Само окно карты касаний не получает никогда
     /// (CPWindow: «does not receive tap or drag events») — жест приходит
     /// только сюда, и только от машин с сенсорным экраном: «CarPlay doesn't
-    /// call this method when connected to some CarPlay systems». CarPlay
-    /// Simulator перетаскивание не присылает вовсе (форум Apple, 730949) —
-    /// проверять в машине. Журнал говорит, пришёл ли жест и в каком виде:
-    /// документация не уточняет, сдвиг накопительный или пошаговый.
+    /// call this method when connected to some CarPlay systems». В CarPlay
+    /// Simulator — только в профиле с `primaryInput: Touch`: в стандартных
+    /// мышь идёт как тачпад (нажатия и фокус), и жеста нет вовсе.
     func mapTemplateDidBeginPanGesture(_ mapTemplate: CPMapTemplate) {
-        panSoFar = .zero
+        panSum = .zero
         panUpdates = 0
         Log.carplay.notice("перетаскивание пальцем: начало")
     }
@@ -389,18 +391,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     func mapTemplate(_ mapTemplate: CPMapTemplate,
                      didUpdatePanGestureWithTranslation translation: CGPoint,
                      velocity: CGPoint) {
-        let step = CGSize(width: translation.x - panSoFar.x, height: translation.y - panSoFar.y)
-        panSoFar = translation
+        panSum = CGPoint(x: panSum.x + translation.x, y: panSum.y + translation.y)
         panUpdates += 1
         if panUpdates <= 3 {
-            Log.carplay.notice("перетаскивание: сдвиг \(Int(translation.x), privacy: .public),\(Int(translation.y), privacy: .public)")
+            Log.carplay.notice("перетаскивание: шаг \(Int(translation.x), privacy: .public),\(Int(translation.y), privacy: .public), скорость \(Int(velocity.x), privacy: .public),\(Int(velocity.y), privacy: .public)")
         }
-        model.pan(by: step)
+        model.pan(by: CGSize(width: translation.x, height: translation.y))
     }
 
     func mapTemplate(_ mapTemplate: CPMapTemplate, didEndPanGestureWithVelocity velocity: CGPoint) {
-        Log.carplay.notice("перетаскивание: конец, обновлений \(self.panUpdates, privacy: .public), итог \(Int(self.panSoFar.x), privacy: .public),\(Int(self.panSoFar.y), privacy: .public)")
-        panSoFar = .zero
+        Log.carplay.notice("перетаскивание: конец, обновлений \(self.panUpdates, privacy: .public), сумма \(Int(self.panSum.x), privacy: .public),\(Int(self.panSum.y), privacy: .public)")
+        panSum = .zero
     }
 
     private var panUpdates = 0

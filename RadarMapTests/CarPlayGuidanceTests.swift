@@ -104,4 +104,53 @@ final class CarPlayGuidanceTests: XCTestCase {
         XCTAssertEqual(CarPlayGuidanceMapping.instructionVariants(text: "разворот", shortText: "разворот"),
                        ["Разворот"])
     }
+
+    // MARK: - Значок манёвра
+
+    func testManeuverSymbolIsARealImageTheManeuverKeeps() {
+        // До 2.2.15 здесь был nil: пустой UIImageAsset возвращал nil, и в
+        // машине карточка манёвра шла без стрелки («стрелка false», carplay11).
+        for onDark in [false, true] {
+            let image = CarPlayGuidance.symbol("arrow.turn.up.right", pointSize: 34, onDark: onDark)
+            XCTAssertNotNil(image?.cgImage, "значок обязан быть растром, onDark=\(onDark)")
+            let maneuver = CPManeuver()
+            maneuver.symbolImage = image
+            maneuver.notificationSymbolImage = image
+            maneuver.dashboardSymbolImage = image
+            XCTAssertNotNil(maneuver.symbolImage)
+            XCTAssertNotNil(maneuver.notificationSymbolImage)
+            XCTAssertNotNil(maneuver.dashboardSymbolImage)
+        }
+    }
+
+    func testUnknownSymbolFallsBackToAnArrow() {
+        XCTAssertNotNil(CarPlayGuidance.symbol("нет.такого.символа", pointSize: 34, onDark: false)?.cgImage)
+    }
+
+    func testSymbolColourMatchesTheCardBackground() throws {
+        // Белая стрелка на белой карточке днём уже была (11.10) — цвет обязан
+        // идти от фона.
+        let light = try XCTUnwrap(Self.inkBrightness(CarPlayGuidance.symbol("arrow.up", pointSize: 34, onDark: false)))
+        let dark = try XCTUnwrap(Self.inkBrightness(CarPlayGuidance.symbol("arrow.up", pointSize: 34, onDark: true)))
+        XCTAssertLessThan(light, 0.2, "на светлой карточке — тёмная стрелка")
+        XCTAssertGreaterThan(dark, 0.8, "на тёмной карточке — светлая стрелка")
+    }
+
+    /// Средняя яркость непрозрачных пикселей картинки (0 — чёрный, 1 — белый).
+    private static func inkBrightness(_ image: UIImage?) -> Double? {
+        guard let cg = image?.cgImage else { return nil }
+        let width = cg.width, height = cg.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(data: &pixels, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: width, height: height))
+        var sum = 0.0, count = 0.0
+        for i in stride(from: 0, to: pixels.count, by: 4) where pixels[i + 3] > 200 {
+            let alpha = Double(pixels[i + 3])
+            sum += (Double(pixels[i]) + Double(pixels[i + 1]) + Double(pixels[i + 2])) / 3 / alpha
+            count += 1
+        }
+        return count > 0 ? sum / count : nil
+    }
 }

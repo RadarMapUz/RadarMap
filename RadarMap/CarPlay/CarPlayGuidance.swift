@@ -311,11 +311,9 @@ final class CarPlayGuidance {
         next.instructionVariants = CarPlayGuidanceMapping.instructionVariants(
             text: step.text, shortText: step.shortText)
         // Цвет стрелки — под фон НАШЕЙ карточки (guidanceBackgroundColor:
-        // белая днём, графит ночью). Варианты светлый/тёмный внутри одного
-        // UIImageAsset до машины не доезжают — приезжает тот, с которым
-        // картинку создали, и днём белая стрелка на белой карточке была
-        // невидима (CarPlay Simulator, 11.10). Баннеры поверх чужого
-        // приложения и плитка панели рисуются в теме МАШИНЫ — им свой цвет.
+        // белая днём, графит ночью): до машины доезжает одна картинка, та,
+        // что создана. Баннеры поверх чужого приложения и плитка панели
+        // рисуются в теме МАШИНЫ — им свой цвет.
         let symbolName = step.kind?.isDrawable == false ? "flag.checkered" : step.icon
         next.symbolImage = Self.symbol(symbolName, pointSize: 34, onDark: !model.isDaylight)
         let carDark = model.carIsDark ?? !model.isDaylight
@@ -430,19 +428,28 @@ final class CarPlayGuidance {
     }
 
     /// Значок для карточки CarPlay: белый на тёмном фоне, чёрный на светлом.
-    /// Оба варианта по-прежнему лежат в UIImageAsset (на случай, если машина
-    /// умеет его читать), но отдаётся вариант под известный нам фон: до
-    /// 2.2.6 всегда уходил белый, и днём стрелка пропадала.
+    ///
+    /// Готовая растровая картинка, а не символ: до 2.2.15 здесь собирался
+    /// пустой `UIImageAsset()` из двух вариантов символа, и
+    /// `asset.image(with:)` возвращал nil (проверено на симуляторе 12.10) —
+    /// у карточки манёвра, баннера и плитки панели стрелки не было НИКОГДА
+    /// («в карточке одно расстояние», 11.10), а системный алерт камеры шёл
+    /// без значка. Журнал carplay11 это и показал: «стрелка false». Отдаётся
+    /// один вариант под известный нам фон — варианты внутри одного ассета до
+    /// машины не доезжают.
     static func symbol(_ name: String, pointSize: CGFloat, onDark: Bool) -> UIImage? {
         let configuration = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .bold)
         guard let base = UIImage(systemName: name, withConfiguration: configuration)
                 ?? UIImage(systemName: "arrow.up", withConfiguration: configuration) else { return nil }
-        let asset = UIImageAsset()
-        asset.register(base.withTintColor(.black, renderingMode: .alwaysOriginal),
-                       with: UITraitCollection(userInterfaceStyle: .light))
-        asset.register(base.withTintColor(.white, renderingMode: .alwaysOriginal),
-                       with: UITraitCollection(userInterfaceStyle: .dark))
-        return asset.image(with: UITraitCollection(userInterfaceStyle: onDark ? .dark : .light))
+        let tinted = base.withTintColor(onDark ? .white : .black, renderingMode: .alwaysOriginal)
+        let format = UIGraphicsImageRendererFormat()
+        // Экран машины бывает @3x — рисуем с запасом, а не в масштабе телефона.
+        format.scale = AppConfig.carPlaySymbolScale
+        format.opaque = false
+        let image = UIGraphicsImageRenderer(size: base.size, format: format).image { _ in
+            tinted.draw(in: CGRect(origin: .zero, size: base.size))
+        }
+        return image.withRenderingMode(.alwaysOriginal)
     }
 
     private static func same(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Bool {

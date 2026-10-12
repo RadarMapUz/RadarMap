@@ -18,6 +18,7 @@
 //
 
 #if canImport(MapLibre)
+import CoreLocation
 import SwiftUI
 
 struct CarPlayEngineLayer: View {
@@ -54,16 +55,26 @@ struct CarPlayEngineLayer: View {
         // к горизонту втрое больше тайлов, а картинка в машину рисуется на
         // телефоне.
         let height = Double(size.height + safe.top + safe.bottom)
-        // Ближайшая камера в 500 м — в кадре всегда, и на плитке, и на карте
-        // машины: стоя карта видела 60 м, а камера стояла в 128 («радары не
-        // показывает», carplay12; «куда пропал радар?», 12.10).
-        let keepAhead = env.location.nearestCamera != nil ? env.location.distanceToNearest : nil
+        // Ближайшая камера в 500 м — в кадре всегда и в любую сторону, и на
+        // плитке, и на карте машины: стоя карта видела 60 м, а камера стояла
+        // в 128 («радары не показывает», carplay12; «куда пропал радар?»,
+        // 12.10). Без курса карта держит прежний поворот, которого мы не
+        // знаем, — тогда камера обязана влезть в любую сторону.
+        let keep = env.location.nearestCamera.map {
+            DriveCamera.Keep.offset(from: me, to: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
+                                    bearing: env.location.displayCourse >= 0 ? env.location.displayCourse : nil)
+        }
+        let width = Double(size.width + safe.leading + safe.trailing)
+        // Верх окна машины — бар с кнопками, низ — док HUD, справа — кнопки карты.
+        let clear = compact ? DriveCamera.Clear(width: width)
+            : DriveCamera.Clear(top: Double(safe.top) / max(1, height),
+                                bottom: Double(safe.bottom + 12) / max(1, height),
+                                width: width,
+                                side: Double(max(safe.leading, safe.trailing)) + AppConfig.engineKeepSidePoints)
         let target = DriveCamera.target(
             speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
-            pitchAllowed: env.thermal.mode == .full, keepAhead: keepAhead,
-            viewHeight: height, latitude: me.latitude,
-            // Верх окна машины — бар с кнопками.
-            clearTop: compact ? 0 : Double(safe.top) / max(1, height),
+            pitchAllowed: env.thermal.mode == .full, keep: keep,
+            viewHeight: height, latitude: me.latitude, clear: clear,
             carY: { compact ? AppConfig.carPlayDashboardMeY : Self.meY(size: size, safe: safe, share: $0) })
         let frame = model.cameraSmoother.step(toward: target, at: Date())
         let offlineFiles: OfflineFiles? = env.network.isOnline

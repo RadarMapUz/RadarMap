@@ -34,6 +34,7 @@
 //  Чистая логика, время — параметром; покрыто DriveCameraTests.
 //
 
+import CoreLocation
 import Foundation
 
 nonisolated enum DriveCamera {
@@ -54,6 +55,41 @@ nonisolated enum DriveCamera {
         var zoom: Double
         var pitchDegrees: Double
         var carShare: Double
+    }
+
+    /// Что обязано быть в кадре (ближайшая камера): смещение от машины в
+    /// метрах, в осях экрана — вперёд (к верху) и вправо. `anyDirection` —
+    /// поворот карты неизвестен (стоим без курса, карта держит прежний):
+    /// тогда точка обязана влезть в любую сторону.
+    struct Keep: Equatable, Sendable {
+        var forward: Double
+        var right: Double
+        var anyDirection = false
+
+        var distance: Double { (forward * forward + right * right).squareRoot() }
+
+        /// Смещение `point` от машины при повороте карты `bearing` (куда
+        /// смотрит верх экрана, градусы); nil или отрицательный — неизвестен.
+        static func offset(from car: CLLocationCoordinate2D, to point: CLLocationCoordinate2D,
+                           bearing: Double?) -> Keep {
+            let k = cos(car.latitude * .pi / 180) * 111_320
+            let east = (point.longitude - car.longitude) * k
+            let north = (point.latitude - car.latitude) * 111_320
+            guard let bearing, bearing.isFinite, bearing >= 0 else {
+                return Keep(forward: (east * east + north * north).squareRoot(), right: 0, anyDirection: true)
+            }
+            let a = bearing * .pi / 180
+            return Keep(forward: east * sin(a) + north * cos(a), right: east * cos(a) - north * sin(a))
+        }
+    }
+
+    /// Где на экране карта не закрыта: доли высоты под верхней и нижней
+    /// панелями и точки по бокам под кнопками. Ширина 0 — сбоку не меряем.
+    struct Clear: Equatable, Sendable {
+        var top = 0.0
+        var bottom = 0.0
+        var width = 0.0
+        var side = 0.0
     }
 
     /// Вертикальный угол обзора MapLibre Native (util::DEFAULT_FOV).
@@ -113,6 +149,8 @@ nonisolated enum DriveCamera {
     /// Дальше этого «держать в кадре» не действует: плитка не отъезжает до
     /// масштаба района ради камеры в километре.
     static let keepAheadMaxMeters = 500.0
+    /// Запас вокруг удерживаемой точки, точки экрана: значок тревоги — 38.
+    static let keepMarginPoints = 28.0
     static let maneuverMinZoom = 17.3
     static let maneuverMarginMeters = 40.0
 
@@ -140,15 +178,18 @@ nonisolated enum DriveCamera {
     ///   - viewHeight: высота вида карты, точки.
     ///   - carY: где машина по высоте вида (0 — верх, 1 — низ) при данной
     ///     `Profile.carShare` — раскладку экрана знает только вид.
-    ///   - keepAhead: метров до того, что обязано быть в кадре (ближайшая
-    ///     камера), nil — ничего; дальше `keepAheadMaxMeters` не учитывается.
-    ///   - clearTop: доля высоты вида под верхней панелью (HUD телефона, бар
-    ///     машины). «Видно впереди» считается до её нижней кромки: камера под
-    ///     плашкой «377 м до радара» в кадре только формально (12.10).
+    ///   - keep: что обязано быть в кадре (ближайшая камера) — в любую
+    ///     сторону, не только вперёд: стоя курса нет, и камера «136 м» сбоку
+    ///     за краем экрана — та же пропажа, что впереди (12.10); дальше
+    ///     `keepAheadMaxMeters` не учитывается.
+    ///   - clear: незакрытая часть экрана. «Видно» считается до нижней кромки
+    ///     верхней панели (HUD телефона, бар машины): камера под плашкой
+    ///     «377 м до радара» в кадре только формально (12.10), — до верхней
+    ///     кромки нижней и до кнопок сбоку.
     static func target(speedKmh: Double, maneuverDistance: Double?, pitchAllowed: Bool,
                        maxPitch: Double = AppConfig.engineMapPitchDegrees,
-                       keepAhead: Double? = nil,
-                       viewHeight: Double, latitude: Double, clearTop: Double = 0,
+                       keep: Keep? = nil,
+                       viewHeight: Double, latitude: Double, clear: Clear = Clear(),
                        carY: (Double) -> Double) -> Frame {
         let profile = profile(speedKmh: speedKmh, pitchAllowed: pitchAllowed, maxPitch: maxPitch)
         let mps = max(0, speedKmh.isFinite ? speedKmh : 0) / 3.6
@@ -173,22 +214,24 @@ nonisolated enum DriveCamera {
             }
         }
 
-        // Объект впереди, который обязан быть виден (ближайшая камера): обзор
-        // не короче, а порог полос ему уступает — в приложении о камерах
-        // камера на карте важнее разметки.
-        if let k = keepAhead, k.isFinite, k >= 0, k <= keepAheadMaxMeters {
-            lookahead = max(lookahead, k + maneuverMarginMeters)
-            visibilityCap = lookahead   // и развилка, и камера — обе в кадре
-        }
-
         let y = carY(profile.carShare)
-        let zoom = zoomShowing(lookahead, pitchDegrees: pitch, viewHeight: viewHeight,
-                               carY: y, latitude: latitude, clearTop: clearTop)
+        var zoom = zoomShowing(lookahead, pitchDegrees: pitch, viewHeight: viewHeight,
+                               carY: y, latitude: latitude, clearTop: clear.top)
         // Порог полос не крупнее масштаба, при котором развилка ещё в кадре.
         if visibilityCap.isFinite {
             minZoom = min(minZoom, zoomShowing(visibilityCap, pitchDegrees: pitch,
                                                viewHeight: viewHeight, carY: y, latitude: latitude,
-                                               clearTop: clearTop))
+                                               clearTop: clear.top))
+        }
+        // Камера, которая обязана быть видна: масштаб не крупнее того, при
+        // котором она в кадре, и порог полос ей уступает — в приложении о
+        // камерах камера на карте важнее разметки. Развилка при этом тоже в
+        // кадре: из двух потолков берётся меньший.
+        if let keep, keep.distance.isFinite, keep.distance <= keepAheadMaxMeters {
+            let cap = maxZoom(keeping: keep, pitchDegrees: pitch, viewHeight: viewHeight,
+                              carY: y, latitude: latitude, clear: clear)
+            zoom = min(zoom, cap)
+            minZoom = min(minZoom, cap)
         }
         // Порог развилки (стрелки полос) старше потолка скорости.
         let maxZoom = max(profile.maxZoom, minZoom)
@@ -245,6 +288,66 @@ nonisolated enum DriveCamera {
         let top = min(max(0, clearTop), max(0, carY - 0.05))
         let toTop = -groundOffset(spanMeters: span, share: top - 0.5, pitchDegrees: pitchDegrees)
         return toTop + centreAhead(spanMeters: span, anchorY: carY, pitchDegrees: pitchDegrees)
+    }
+
+    /// Сколько метров видно от машины назад, до верхней кромки нижней
+    /// панели; 0 — панель выше машины.
+    static func visibleBehind(zoom: Double, pitchDegrees: Double, viewHeight: Double,
+                              carY: Double, latitude: Double, clearBottom: Double = 0) -> Double {
+        let bottom = 1 - min(max(0, clearBottom), 1)
+        guard bottom > carY + 0.02 else { return 0 }
+        let span = span(zoom: zoom, viewHeight: viewHeight, latitude: latitude)
+        return groundOffset(spanMeters: span, share: bottom - 0.5, pitchDegrees: pitchDegrees)
+            - groundOffset(spanMeters: span, share: carY - 0.5, pitchDegrees: pitchDegrees)
+    }
+
+    /// Метров на точку поперёк экрана в строке `share` ниже центра, к
+    /// метрам на точку в центре: на наклоне ближние строки мельче.
+    static func lateralScale(share: Double, pitchDegrees: Double) -> Double {
+        let a = atan(2 * share * tan(fieldOfView / 2))
+        let p = pitchDegrees * .pi / 180
+        let ratio = cos(p) * cos(a) / cos(p - a)
+        return ratio.isFinite && ratio > 0 ? ratio : 1
+    }
+
+    /// Самый крупный масштаб, при котором `keep` в незакрытой части экрана с
+    /// запасом `keepMarginPoints`. Обзор в любую сторону ∝ 2^-zoom, запас —
+    /// в точках, поэтому решение в одну строку на каждую сторону.
+    static func maxZoom(keeping keep: Keep, pitchDegrees: Double, viewHeight: Double,
+                        carY: Double, latitude: Double, clear: Clear) -> Double {
+        let reference = 17.0
+        let margin = keepMarginPoints * metersPerPoint(zoom: reference, latitude: latitude)
+        var cap = Double.infinity
+        /// `seen` — обзор в эту сторону на эталонном масштабе, `need` — метров до точки.
+        func limit(_ seen: Double, _ need: Double) {
+            guard seen > margin, need > 0 else { return }
+            cap = min(cap, reference - log2(need / (seen - margin)))
+        }
+        let ahead = visibleAhead(zoom: reference, pitchDegrees: pitchDegrees, viewHeight: viewHeight,
+                                 carY: carY, latitude: latitude, clearTop: clear.top)
+        let behind = visibleBehind(zoom: reference, pitchDegrees: pitchDegrees, viewHeight: viewHeight,
+                                   carY: carY, latitude: latitude, clearBottom: clear.bottom)
+        let usable = clear.width / 2 - clear.side
+        let perPoint = metersPerPoint(zoom: reference, latitude: latitude)
+        func half(atShare share: Double) -> Double {
+            usable > 0 ? perPoint * usable * lateralScale(share: share, pitchDegrees: pitchDegrees) : 0
+        }
+        if keep.anyDirection {
+            // Сторона неизвестна — точка обязана влезть в самую короткую.
+            let sides = [ahead, behind, half(atShare: carY - 0.5)].filter { $0 > margin }
+            if let shortest = sides.min() { limit(shortest, keep.distance) }
+            return cap
+        }
+        if keep.forward >= 0 {
+            limit(ahead, keep.forward)
+            // Впереди строка точки — между машиной и центром и выше: мерка центра.
+            limit(half(atShare: 0), abs(keep.right))
+        } else {
+            limit(behind, -keep.forward)
+            // Позади — самая мелкая строка, нижняя кромка.
+            limit(half(atShare: 0.5 - min(max(0, clear.bottom), 1)), abs(keep.right))
+        }
+        return cap
     }
 
     /// Масштаб, при котором впереди видно ровно `meters`. Обзор обратно

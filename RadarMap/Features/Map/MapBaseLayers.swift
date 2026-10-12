@@ -56,7 +56,7 @@ struct EngineBaseLayer: View {
             let offlineFiles: OfflineFiles? = env.network.isOnline
                 ? nil : env.offlineMaps.offlineFiles(at: me)
             GeometryReader { geo in
-                let camera = camera(me: me, height: geo.size.height, insets: insets,
+                let camera = camera(me: me, size: geo.size, insets: insets,
                                     maneuverDistance: maneuverDistance)
                 let inRange = distance.map { $0 <= camera.visibleAhead * AppConfig.engineCameraInRangeShare } ?? false
                 ZStack {
@@ -155,11 +155,11 @@ struct EngineBaseLayer: View {
     /// Вне поездки — обзор города, как раньше. «+ / −» сдвигают масштаб на
     /// ступень за нажатие. 3D — кнопкой «3D» (по умолчанию включено); на
     /// горячем телефоне — плоско: наклон тянет к горизонту втрое больше тайлов.
-    private func camera(me: CLLocationCoordinate2D, height: CGFloat, insets: RoadSketch.Insets,
+    private func camera(me: CLLocationCoordinate2D, size: CGSize, insets: RoadSketch.Insets,
                         maneuverDistance: Double?) -> (spanMeters: Double, pitchDegrees: Double,
                                                        visibleAhead: Double) {
         let pitchAllowed = map.prefers3D && env.thermal.mode == .full
-        let viewHeight = max(1, Double(height))
+        let viewHeight = max(1, Double(size.height))
         guard env.location.isTripActive else {
             map.cameraSmoother.reset()
             let span = AppConfig.engineOverviewSpan * pow(2, -map.zoomBias)
@@ -168,14 +168,22 @@ struct EngineBaseLayer: View {
             return (span, pitch, DriveCamera.visibleAhead(zoom: zoom, pitchDegrees: pitch, viewHeight: viewHeight,
                                                           carY: insets.meY, latitude: me.latitude))
         }
-        // Ближайшая камера в 500 м — в кадре всегда: «368 м до радара» над
-        // картой, на которой радара не видно, — «куда пропал радар?»
-        // (владелец, 12.10). Камера старше полос: порог масштаба ей уступает.
+        // Ближайшая камера в 500 м — в кадре всегда и в любую сторону: «368 м
+        // до радара» над картой, на которой радара не видно, — «куда пропал
+        // радар?» (владелец, 12.10); стоя курса нет, и камера бывает сбоку.
+        // Поворот — тот, что у карты: север, курс или последний (движок).
+        let bearing: Double = map.orientation == .following ? 0
+            : (env.location.displayCourse >= 0 ? env.location.displayCourse : map.displayedDirection)
+        let keep = env.location.nearestCamera.map {
+            DriveCamera.Keep.offset(from: me, to: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
+                                    bearing: bearing)
+        }
+        let clear = DriveCamera.Clear(top: insets.safeTop, bottom: insets.safeBottom,
+                                      width: Double(size.width), side: AppConfig.engineKeepSidePoints)
         let target = DriveCamera.target(speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
-                                        pitchAllowed: pitchAllowed,
-                                        keepAhead: env.location.nearestCamera != nil ? env.location.distanceToNearest : nil,
+                                        pitchAllowed: pitchAllowed, keep: keep,
                                         viewHeight: viewHeight, latitude: me.latitude,
-                                        clearTop: insets.safeTop, carY: { _ in insets.meY })
+                                        clear: clear, carY: { _ in insets.meY })
         let frame = map.cameraSmoother.step(toward: target, at: Date())
         let zoom = frame.zoom + map.zoomBias
         return (DriveCamera.span(zoom: zoom, viewHeight: viewHeight, latitude: me.latitude),

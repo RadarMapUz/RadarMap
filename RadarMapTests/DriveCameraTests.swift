@@ -6,6 +6,7 @@
 //  впереди видно нужные секунды пути; развилка не уходит из кадра; плавно.
 //
 
+import CoreLocation
 import XCTest
 @testable import RadarMap
 
@@ -124,17 +125,19 @@ final class DriveCameraTests: XCTestCase {
         XCTAssertEqual(frame(50, turn: 600, height: 382), frame(50, height: 382))
     }
 
+    private func ahead(_ d: Double) -> Cam.Keep { Cam.Keep(forward: d, right: 0) }
+
     func testKeptObjectStaysInFrameOnTheSmallTile() {
         // Плитка главного экрана машины (374 pt): камера в 130–480 м впереди
         // обязана быть видна, даже стоя (carplay12: «радары не показывает»).
         for d in [130.0, 250, 480] {
             let f = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
-                               keepAhead: d, viewHeight: 374, latitude: tashkent, carY: { _ in 0.62 })
+                               keep: ahead(d), viewHeight: 374, latitude: tashkent, carY: { _ in 0.62 })
             XCTAssertGreaterThanOrEqual(ahead(f, height: 374, carY: 0.62), d, "камера в \(d) м")
         }
         // Дальняя камера вид не трогает.
         let far = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
-                             keepAhead: 2_000, viewHeight: 374, latitude: tashkent, carY: { _ in 0.62 })
+                             keep: ahead(2_000), viewHeight: 374, latitude: tashkent, carY: { _ in 0.62 })
         XCTAssertEqual(far, Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
                                        viewHeight: 374, latitude: tashkent, carY: { _ in 0.62 }))
     }
@@ -142,25 +145,85 @@ final class DriveCameraTests: XCTestCase {
     func testKeptObjectIsNotHiddenUnderTheTopPanel() {
         // Телефон, 12.10: «377 м до радара», а радар — под плашкой HUD у
         // верхней кромки. Обзор считается до нижнего края панели.
-        let top = 0.17, carY = 0.72
+        let clear = Cam.Clear(top: 0.17), carY = 0.72
         for kmh in [0.0, 40, 70] {
             for d in [150.0, 377, 480] {
                 let f = Cam.target(speedKmh: kmh, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
-                                   keepAhead: d, viewHeight: 760, latitude: tashkent, clearTop: top,
+                                   keep: ahead(d), viewHeight: 760, latitude: tashkent, clear: clear,
                                    carY: { _ in carY })
                 XCTAssertGreaterThanOrEqual(
                     Cam.visibleAhead(zoom: f.zoom, pitchDegrees: f.pitchDegrees, viewHeight: 760,
-                                     carY: carY, latitude: tashkent, clearTop: top), d,
+                                     carY: carY, latitude: tashkent, clearTop: clear.top), d,
                     "\(kmh) км/ч, камера в \(d) м")
             }
         }
         // Под панелью видно меньше, чем до края экрана, — и никогда не ноль.
         let plain = Cam.visibleAhead(zoom: 17, pitchDegrees: 30, viewHeight: 760, carY: carY, latitude: tashkent)
-        let clear = Cam.visibleAhead(zoom: 17, pitchDegrees: 30, viewHeight: 760, carY: carY, latitude: tashkent,
-                                     clearTop: top)
-        XCTAssertLessThan(clear, plain)
+        let covered = Cam.visibleAhead(zoom: 17, pitchDegrees: 30, viewHeight: 760, carY: carY, latitude: tashkent,
+                                       clearTop: clear.top)
+        XCTAssertLessThan(covered, plain)
         XCTAssertGreaterThan(Cam.visibleAhead(zoom: 17, pitchDegrees: 0, viewHeight: 760, carY: carY,
                                               latitude: tashkent, clearTop: 0.95), 0, "панель ниже «я» — бред, не ноль")
+    }
+
+    /// Телефон 402×760, HUD сверху, панель поездки снизу, кнопки справа.
+    private let phone = Cam.Clear(top: 0.17, bottom: 0.12, width: 402, side: 60)
+
+    /// Точка (вперёд, вправо) в незакрытой части экрана при этом кадре — вид
+    /// сверху: стоя наклона нет, а наклонный случай проверяет «вперёд».
+    private func isVisible(_ keep: Cam.Keep, in f: Cam.Frame, carY: Double = 0.72) -> Bool {
+        let perPoint = Cam.metersPerPoint(zoom: f.zoom, latitude: tashkent)
+        let up = carY * 760 - phone.top * 760
+        let down = (1 - phone.bottom) * 760 - carY * 760
+        let side = 402 / 2 - phone.side
+        let x = keep.right / perPoint, y = keep.forward / perPoint
+        return abs(x) <= side && (y >= 0 ? y <= up : -y <= down)
+    }
+
+    func testKeptCameraBesideOrBehindIsInFrameToo() {
+        // 12.10, Чиланзар: «136 м до камеры», стоя, а камера справа за краем
+        // экрана — «вперёд» её не ловило.
+        for keep in [Cam.Keep(forward: 20, right: 130), Cam.Keep(forward: 0, right: -136),
+                     Cam.Keep(forward: -110, right: 30), Cam.Keep(forward: 90, right: 90)] {
+            let f = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
+                               keep: keep, viewHeight: 760, latitude: tashkent, clear: phone,
+                               carY: { _ in 0.72 })
+            XCTAssertEqual(f.pitchDegrees, 0, "стоя — сверху")
+            XCTAssertTrue(isVisible(keep, in: f), "камера \(keep)")
+        }
+    }
+
+    func testUnknownDirectionFitsAnySide() {
+        // Курса нет, поворот карты неизвестен — точка влезает в любую сторону.
+        let d = 136.0
+        let f = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
+                           keep: Cam.Keep(forward: d, right: 0, anyDirection: true),
+                           viewHeight: 760, latitude: tashkent, clear: phone, carY: { _ in 0.72 })
+        for keep in [Cam.Keep(forward: d, right: 0), Cam.Keep(forward: -d, right: 0),
+                     Cam.Keep(forward: 0, right: d), Cam.Keep(forward: 0, right: -d)] {
+            XCTAssertTrue(isVisible(keep, in: f), "в сторону \(keep)")
+        }
+    }
+
+    func testKeptCameraDoesNotZoomOutMoreThanNeeded() {
+        // Камера прямо впереди в 60 м — полосы остаются (порог z17 не трогается).
+        let f = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
+                           keep: ahead(60), viewHeight: 760, latitude: tashkent, clear: phone, carY: { _ in 0.72 })
+        XCTAssertGreaterThanOrEqual(f.zoom, Cam.laneZoom)
+    }
+
+    func testKeepOffsetFollowsTheMapRotation() {
+        let car = CLLocationCoordinate2D(latitude: tashkent, longitude: 69.24)
+        let east = CLLocationCoordinate2D(latitude: tashkent, longitude: 69.24 + 100 / (cos(tashkent * .pi / 180) * 111_320))
+        let north = Cam.Keep.offset(from: car, to: east, bearing: 0)
+        XCTAssertEqual(north.forward, 0, accuracy: 0.5)
+        XCTAssertEqual(north.right, 100, accuracy: 0.5, "север вверху — восток справа")
+        let facingEast = Cam.Keep.offset(from: car, to: east, bearing: 90)
+        XCTAssertEqual(facingEast.forward, 100, accuracy: 0.5, "едем на восток — точка впереди")
+        XCTAssertEqual(facingEast.right, 0, accuracy: 0.5)
+        let unknown = Cam.Keep.offset(from: car, to: east, bearing: nil)
+        XCTAssertTrue(unknown.anyDirection)
+        XCTAssertEqual(unknown.distance, 100, accuracy: 0.5)
     }
 
     // MARK: - Геометрия

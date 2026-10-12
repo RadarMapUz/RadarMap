@@ -1247,6 +1247,9 @@ nonisolated enum AppConfig {
     /// Тревожная камера подсвечивается на карте, если до неё не дальше этой
     /// доли видимого впереди (у самого края её не разглядеть).
     static let engineCameraInRangeShare = 0.9
+    /// Сколько точек сбоку закрыто кнопками карты (колонка 44 + поля): там
+    /// удерживаемая камера не считается видимой (DriveCamera.Clear.side).
+    static let engineKeepSidePoints = 60.0
     /// Сколько секунд подпись «© OpenStreetMap» видна при показе карты:
     /// правила OSMF разрешают свернуть её «после пяти секунд».
     static let mapAttributionSeconds: TimeInterval = 5

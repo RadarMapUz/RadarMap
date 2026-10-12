@@ -237,10 +237,17 @@ final class AppEnvironment {
         location.onCameraSpoken = { [weak usage] grade in usage?.noteCameraSpoken(grade) }
         // «Радар ещё стоял?» — наблюдение за проездом мимо передвижных точек
         // на каждом фиксе, и с погашенным экраном тоже (MobileCameraService).
-        location.onAcceptedFix = { [weak mobile, weak traffic, weak location, weak route] coordinate in
+        location.onAcceptedFix = { [weak mobile, weak traffic, weak location, weak route, weak alerts] coordinate in
             withMotion { mobile?.trackPasses(from: coordinate) }
             traffic?.note(coordinate, speedKmh: location?.speedKmh ?? -1)
             if let traffic, let route, route.isActive { route.refreshTrafficDelay(revision: traffic.revision) }
+            // «Впереди пробка» — только без маршрута: с маршрутом пробки уже в
+            // ETA и в предложении объезда. Одна фраза на пробку (JamAhead).
+            if let traffic, let location, let route, location.isTripActive, !route.isActive,
+               settings.voiceEnabled,
+               let jam = traffic.jamToAnnounce(position: coordinate, course: location.currentCourse) {
+                alerts?.speak(jam.spoken)
+            }
         }
         route.trafficSnapshot = { [weak traffic] in
             guard let traffic, traffic.isShown, let snapshot = traffic.snapshot,

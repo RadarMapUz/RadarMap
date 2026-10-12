@@ -1067,6 +1067,26 @@ nonisolated enum AppConfig {
     static let detourSampleMeters: Double = 100
     /// Сколько держать предложение без ответа (дальше — «остаёмся»).
     static let detourOfferSeconds: TimeInterval = 20
+
+    // MARK: - «Впереди пробка» без маршрута (JamAhead)
+
+    /// Где искать: от 30 м до 1,5 км по ходу, в коридоре 25 м + 5 % дальности.
+    static let jamMinAheadMeters: Double = 30
+    static let jamLookAheadMeters: Double = 1_500
+    static let jamCorridorMeters: Double = 25
+    static let jamCorridorSlope = 0.05
+    /// Пробка — не короче 300 м и не меньше минуты задержки; говорим, когда
+    /// до её начала не больше километра.
+    static let jamMinLengthMeters: Double = 300
+    static let jamMinDelaySeconds: TimeInterval = 60
+    static let jamAnnounceWithinMeters: Double = 1_000
+    /// Не чаще раза в 3 минуты; о той же пробке (начало в 400 м от прежнего)
+    /// — не раньше, чем через 15 минут.
+    static let jamAnnounceGapSeconds: TimeInterval = 180
+    static let jamSameJamSeconds: TimeInterval = 900
+    static let jamSameJamMeters: Double = 400
+    /// Как часто смотреть, нет ли пробки впереди.
+    static let jamCheckIntervalSeconds: TimeInterval = 10
     /// Шаг обновления «пройденной» части маршрута: перекладывать оверлей на
     /// каждый фикс GPS — лишняя работа рендера, глазу хватает и таких шагов.
     static let carPlayTraveledStepMeters: CLLocationDistance = 25

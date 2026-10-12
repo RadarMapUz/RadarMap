@@ -190,6 +190,24 @@ final class TrafficService {
     }
     #endif
 
+    // MARK: - «Впереди пробка» без маршрута
+
+    @ObservationIgnored private var jamAnnouncer = JamAhead.Announcer()
+    @ObservationIgnored private var jamCheckedAt: Date?
+
+    /// Пробка впереди по ходу, о которой ещё не говорили (JamAhead); nil —
+    /// сказать нечего. Смотрит не чаще `jamCheckIntervalSeconds`.
+    func jamToAnnounce(position: CLLocationCoordinate2D, course: CLLocationDirection,
+                       now: Date = Date()) -> JamAhead.Jam? {
+        guard isShown, let snapshot, snapshot.isFresh(now: now) else { return nil }
+        if let at = jamCheckedAt, now.timeIntervalSince(at) < AppConfig.jamCheckIntervalSeconds { return nil }
+        jamCheckedAt = now
+        guard let jam = JamAhead.detect(edges: snapshot.edges, position: position, course: course),
+              jamAnnouncer.shouldAnnounce(jam, at: now) else { return nil }
+        Log.network.notice("пробка впереди: через \(Int(jam.startsIn), privacy: .public) м, \(Int(jam.length), privacy: .public) м, +\(Int(jam.delay), privacy: .public) с")
+        return jam
+    }
+
     // MARK: - Маршрут
 
     /// Сколько добавляют пробки к маршруту; nil — данных нет (не «ноль»: ноль

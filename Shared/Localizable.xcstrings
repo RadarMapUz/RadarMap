@@ -17674,6 +17674,16 @@
           }
         }
       }
+    },
+    "Впереди пробка: около %1$@, плюс %2$@": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda tirbandlik: taxminan %1$@, qo‘shimcha %2$@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

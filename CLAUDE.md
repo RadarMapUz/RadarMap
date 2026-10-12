@@ -261,6 +261,7 @@ The VPS also serves the camera DB and speed-limit files (nginx :8090) and runs O
 ## Working docs (`docs/`)
 
 Not part of the build, but the current state of the release effort lives here and is worth reading before planning work:
+- `plan_prod_2026-10-12.md` — the road to the real App Store release: blockers (CarPlay entitlement, privacy page, server deploy, dashboard tile), the design pass that makes the secondary screens match the main ones, the recommended features in order (Uzbek voice, gas stations, open-data imports, fines, Android), quality gates, and a week-by-week order.
 - `plan_carplay_next_2026-10-12.md` — what CarPlay gets next, as business cases: route choice in the car, «куда едем?» suggestions, detour offers when stuck in traffic, junction images, cluster metadata, the Yandex-companion positioning; order and what needs the owner.
 - `drive_camera_2026-10-12.md` — the zoom-based trip camera: before/after numbers per screen, the 45° pitch cap and what a device measurement would unlock.
 - `plan_commute_traffic_2026-10-11.md` — commute stats, crowd traffic (phone + server) and the icon language: decisions, phases, what needs the owner's OK.

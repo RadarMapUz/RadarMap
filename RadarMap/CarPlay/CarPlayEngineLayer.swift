@@ -43,27 +43,28 @@ struct CarPlayEngineLayer: View {
 
     private func map(me: CLLocationCoordinate2D, size: CGSize, safe: EdgeInsets) -> some View {
         let maneuverDistance = env.route.nextStep.map { _ in env.route.nextStepDistance }
-        // Охват — всегда «в движении» (машина подключена — значит едем, обзор
-        // города на экране машины не нужен) и ближе телефонного: экран в
-        // машине низкий и широкий, и с телефонным охватом карта выглядела
-        // «очень большой», а плитка панели показывала город целиком — и ни
-        // одной камеры: значки рисуются с z14.5 (владелец, 12.10). Ближе —
-        // и разметка полос видна у перекрёстков.
-        let span = EngineMapPresentation.span(speedKmh: env.location.speedKmh,
-                                              maneuverDistance: maneuverDistance,
-                                              active: true) * AppConfig.carPlaySpanScale
-        // Вид строго сверху: в машине читают дорогу и полосы, а не фасады
-        // («вид сверху, максимально удобно» — владелец, 12.10). Заодно и
-        // дешевле: плоская карта тянет меньше тайлов.
-        let pitch = 0.0
+        // Камера — динамическая (CarPlayCamera): стоя и в городе близко и
+        // строго сверху (полосы, разметка), на скорости дальше, с наклоном и
+        // машиной ниже, у развилки — снова сверху. Всегда «в движении»:
+        // машина подключена — значит едем, обзор города здесь не нужен
+        // (плитка панели показывала город целиком, а значки камер рисуются с
+        // z14.5 — «камер нет», владелец, 12.10).
+        let frame = CarPlayCamera.frame(speedKmh: env.location.speedKmh,
+                                        maneuverDistance: maneuverDistance)
+        let span = frame.spanMeters
+        // Наклон дороже плоской картинки (больше тайлов до горизонта), а
+        // картинка в машину рисуется на телефоне: на горячем — плоско.
+        let pitch = env.thermal.mode != .full ? 0 : frame.pitchDegrees
         let offlineFiles: OfflineFiles? = env.network.isOnline
             ? nil : env.offlineMaps.offlineFiles(at: me)
         return EngineMapView(
             coordinate: me,
             courseDegrees: env.location.displayCourse,
-            spanMeters: (span * pow(2, -model.zoomBias) / AppConfig.engineSpanStep).rounded()
-                * AppConfig.engineSpanStep,
-            anchorY: compact ? AppConfig.carPlayDashboardMeY : Self.meY(size: size, safe: safe),
+            // «+/−» сдвигают динамику вдвое за нажатие; ступень 30 м — та же,
+            // что у CarPlayCamera.
+            spanMeters: (span * pow(2, -model.zoomBias) / 30).rounded() * 30,
+            anchorY: compact ? AppConfig.carPlayDashboardMeY
+                : Self.meY(size: size, safe: safe, share: frame.carShare),
             pitchDegrees: pitch,
             daylight: model.isDaylight,
             houses: env.settings.mapHouses,
@@ -126,13 +127,16 @@ struct CarPlayEngineLayer: View {
     /// между верхней safe area (бар CarPlay) и приборной панелью HUD; «я»
     /// стоит на AppConfig.carPlayMeShare его высоты. Окно — на всю высоту,
     /// поэтому доля считается от полной высоты с safe area.
-    static func meY(size: CGSize, safe: EdgeInsets) -> Double {
+    /// Машина по высоте экрана: доля `share` свободной полосы между верхней
+    /// и нижней безопасной зоной. Резерва под док снизу больше нет — док
+    /// справа, у кнопок карты (12.10), середину низа он не закрывает.
+    static func meY(size: CGSize, safe: EdgeInsets, share: Double = AppConfig.carPlayMeShare) -> Double {
         let full = size.height + safe.top + safe.bottom
         guard full > 0 else { return AppConfig.mapMeY }
         let top = safe.top + 12
-        let bottom = full - safe.bottom - AppConfig.carPlayDockReserve - 12
+        let bottom = full - safe.bottom - 12
         guard bottom > top else { return AppConfig.mapMeY }
-        return Double((top + (bottom - top) * AppConfig.carPlayMeShare) / full)
+        return Double((top + (bottom - top) * share) / full)
     }
 }
 #endif

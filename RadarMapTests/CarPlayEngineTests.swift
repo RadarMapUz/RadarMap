@@ -88,21 +88,22 @@ final class CarPlayEngineTests: XCTestCase {
     }
 
     #if canImport(MapLibre)
-    func testMeSitsInTheFreeFieldAboveTheDock() {
+    func testMeSitsInTheFreeFieldBelowTheBar() {
         let size = CGSize(width: 800, height: 420)
         let safe = EdgeInsets(top: 60, leading: 0, bottom: 0, trailing: 0)
-        let meY = CarPlayEngineLayer.meY(size: size, safe: safe)
         let full = 480.0
-        let dockTop = (full - Double(AppConfig.carPlayDockReserve) - 12) / full
-        XCTAssertGreaterThan(meY, 72 / full, "ниже бара CarPlay")
-        XCTAssertLessThan(meY, dockTop, "выше приборной панели")
-        XCTAssertGreaterThan(meY, 0.5, "впереди видно больше, чем позади")
+        let slow = CarPlayEngineLayer.meY(size: size, safe: safe, share: 0.58)
+        let fast = CarPlayEngineLayer.meY(size: size, safe: safe, share: 0.74)
+        XCTAssertGreaterThan(slow, 72 / full, "ниже бара CarPlay")
+        XCTAssertLessThan(fast, (full - 12) / full, "выше нижнего края")
+        XCTAssertGreaterThan(slow, 0.5, "впереди видно больше, чем позади")
+        XCTAssertGreaterThan(fast, slow, "на скорости машина ниже — дорога впереди длиннее")
     }
 
     func testDegenerateWindowFallsBackToDefault() {
         XCTAssertEqual(CarPlayEngineLayer.meY(size: .zero, safe: EdgeInsets()), RoadSketch.meY)
-        XCTAssertEqual(CarPlayEngineLayer.meY(size: CGSize(width: 300, height: 100),
-                                              safe: EdgeInsets()), RoadSketch.meY)
+        let tiny = CarPlayEngineLayer.meY(size: CGSize(width: 300, height: 100), safe: EdgeInsets())
+        XCTAssertTrue((0...1).contains(tiny))
     }
     #endif
 }

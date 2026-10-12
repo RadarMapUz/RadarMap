@@ -465,7 +465,15 @@ struct EngineMapView: UIViewRepresentable {
             cameraRegion = nil
             style.layer(withIdentifier: "houses")?.isVisible = current?.houses ?? false
             styleReady = true
-            pending.map { apply($0, to: mapView) }
+            // Последняя модель — заново, даже если ждущей нет. Стиль грузится
+            // ДВАЖДЫ (сразу — без индекса, потом — с подписанным набором), и
+            // после второй загрузки камеры, маршрут и пробки в новом стиле
+            // пусты, а `pending` уже снят первой. Пока SwiftUI не пришлёт
+            // следующее обновление, карта стояла пустой — у стоящей машины и
+            // на плитке панели (ни фиксов, ни касаний) это навсегда: «камер
+            // нет» (CarPlay, 12.10). То же после смены дня/ночи и старта
+            // поездки на стоянке.
+            (pending ?? current).map { apply($0, to: mapView) }
         }
 
         func mapViewDidFailLoadingMap(_ mapView: MLNMapView, withError error: Error) {

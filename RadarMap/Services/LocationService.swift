@@ -703,20 +703,17 @@ final class LocationService: NSObject {
             speedKmh: speedKmh,
             idleSeconds: Date().timeIntervalSince(lastMovementAt)),
                                  lowPower: isLowPowerMode)
-        guard tier != accuracyTier else { return }
+        // На карту смотрят (машина или открытый телефон) — фиксы без фильтра
+        // расстояния: спидометр и камера карты живут каждую секунду.
+        let watched = isForeground
+        guard tier != accuracyTier || watched != accuracyWatched else { return }
         accuracyTier = tier
-        switch tier {
-        case 0:  manager.desiredAccuracy = kCLLocationAccuracyBest
-                 manager.distanceFilter = 6
-        case 1:  manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-                 manager.distanceFilter = 15
-        case 2:  manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-                 manager.distanceFilter = 25
-        default: // стоянка: GPS-чип отдыхает; тронулись — первый тик вернёт тир
-                 manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-                 manager.distanceFilter = 30
-        }
+        accuracyWatched = watched
+        let request = GPSTiers.request(tier: tier, watched: watched)
+        manager.desiredAccuracy = request.accuracy
+        manager.distanceFilter = request.distanceFilter
     }
+    @ObservationIgnored private var accuracyWatched = false
 
     /// Попросить точную геопозицию на эту сессию (если дана «приблизительная»).
     func requestPreciseLocation() {
@@ -904,8 +901,9 @@ final class LocationService: NSObject {
             if reason == .accuracy, isTripActive || isCarPlayConnected, accuracyTier == 3 {
                 Log.location.notice("стоянка: фикс \(fix.horizontalAccuracy, privacy: .public) м отброшен — поднимаем точность")
                 accuracyTier = 0
-                manager.desiredAccuracy = kCLLocationAccuracyBest
-                manager.distanceFilter = 6
+                let request = GPSTiers.request(tier: 0, watched: isForeground)
+                manager.desiredAccuracy = request.accuracy
+                manager.distanceFilter = request.distanceFilter
             }
             // То же для открытого экрана без поездки: забракован по точности —
             // просим максимум, иначе метка так и стоит по грубой точке.

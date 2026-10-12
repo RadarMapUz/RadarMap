@@ -51,6 +51,12 @@ final class CarPlayMapModel {
     /// Шаг делает вид карты на каждом своём пересчёте — состояние не
     /// наблюдаемое, перерисовку оно не вызывает.
     @ObservationIgnored var cameraSmoother = DriveCamera.Smoother()
+    /// На ходу — только дорога (DrivingDeclutter); пишет тело карты на тике.
+    @ObservationIgnored var declutter = DrivingDeclutter()
+    /// Поворот карты, каким его нарисовал движок (после каждого хода
+    /// камеры). Камеру «держать в кадре» считаем по нему, а не по курсу:
+    /// поворот, которого карта не сделала, кадр не спасает.
+    @ObservationIgnored var mapDirection: Double?
     var zoomCommand = 0
     /// На экране выбор маршрута (CarPlayTripPreview): навигационная сессия
     /// ждёт «Поехали», бар — одна «Отмена».

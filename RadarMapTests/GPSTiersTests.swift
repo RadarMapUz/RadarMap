@@ -95,6 +95,34 @@ final class GPSTiersTests: XCTestCase {
         }
     }
 
+    // MARK: - На карту смотрят (12.10: «спидометр не успевает, карта рывками»)
+
+    func testWatchedMapGetsEveryFix() {
+        // Экран машины или открытый телефон: фиксов не прореживаем ни на одном
+        // тире — на 40 км/ч фильтр 25 м давал цифру скорости раз в 2–3 с.
+        for tier in 0...3 {
+            XCTAssertEqual(GPSTiers.request(tier: tier, watched: true).distanceFilter, kCLDistanceFilterNone,
+                           "тир \(tier)")
+        }
+    }
+
+    func testWatchedStandstillKeepsGPS() {
+        // Со стоянки первый фикс должен прийти сразу, а не через 30 м с
+        // точностью вышек: водитель уже едет, а на экране ноль.
+        let parked = GPSTiers.request(tier: 3, watched: true)
+        XCTAssertLessThanOrEqual(parked.accuracy, kCLLocationAccuracyNearestTenMeters)
+        XCTAssertEqual(GPSTiers.request(tier: 0, watched: true).accuracy, kCLLocationAccuracyBest)
+    }
+
+    func testPocketKeepsTheBatteryLadder() {
+        // Никто не смотрит — прежняя лестница ради батареи.
+        XCTAssertEqual(GPSTiers.request(tier: 0, watched: false),
+                       .init(accuracy: kCLLocationAccuracyBest, distanceFilter: 6))
+        XCTAssertEqual(GPSTiers.request(tier: 2, watched: false).distanceFilter, 25)
+        XCTAssertEqual(GPSTiers.request(tier: 3, watched: false),
+                       .init(accuracy: kCLLocationAccuracyHundredMeters, distanceFilter: 30))
+    }
+
     // MARK: - Открытое приложение без поездки (11.10)
 
     /// Просить точность хуже порога фильтра — значит не получить ни одного

@@ -90,6 +90,17 @@ struct EngineMapView: UIViewRepresentable {
     /// Карту накрыло полноэкранное предупреждение о камере (градиент до 96 %):
     /// рисовать её на полной частоте незачем (аудит 11.10).
     var covered: Bool = false
+    /// На ходу — только дорога (DrivingDeclutter): пешеходные тоннели и
+    /// тротуары, деревья, тени, парковки, значки заведений прячутся видимостью
+    /// слоёв; встали — возвращаются.
+    var declutter: Bool = false
+    /// Можно ли трогать карту. Плитка главного экрана машины — только для
+    /// взгляда: касание по ней открывает приложение, а случайный жест движка
+    /// снимал слежение навсегда (у плитки нет «к себе»).
+    var interactive: Bool = true
+    /// Метка журнала здоровья карты («машина», «плитка»): раз в 10 с строка
+    /// с состоянием приложения, кадрами, поворотом и камерами. nil — молчим.
+    var healthTag: String?
     /// Пробки (TrafficService): рёбра с уровнем. Пишутся в источник только на
     /// смене `trafficRevision` — раз в пару минут, а не на тике.
     var trafficEdges: [TrafficEdge] = []
@@ -143,6 +154,7 @@ struct EngineMapView: UIViewRepresentable {
         MLNOfflineStorage.shared.setMaximumAmbientCacheSize(
             UInt(AppConfig.engineMapCacheBytes)) { _ in }
         let view = EngineNativeMapView(frame: .zero)
+        view.isUserInteractionEnabled = interactive
         // Осмотр не меняет GPS и маршрут; вернуться к слежению можно кнопкой.
         view.isScrollEnabled = true
         view.isZoomEnabled = true
@@ -314,17 +326,21 @@ struct EngineMapView: UIViewRepresentable {
             current.onLongPress(view.convert(point, toCoordinateFrom: view))
         }
 
-        #if DEBUG
-        private var encodingSamples: [Double] = []
-        private var renderingSamples: [Double] = []
-
+        /// Кадр нарисован — счётчик для журнала здоровья (одно сложение на кадр).
         func mapViewDidFinishRenderingFrame(_ mapView: MLNMapView, fullyRendered: Bool,
                                            frameEncodingTime: Double, frameRenderingTime: Double) {
+            framesRendered &+= 1
+            #if DEBUG
             guard frameEncodingTime.isFinite, frameRenderingTime.isFinite else { return }
             encodingSamples.append(frameEncodingTime)
             renderingSamples.append(frameRenderingTime)
             if encodingSamples.count >= AppConfig.engineMetricsSampleCount { reportRendering() }
+            #endif
         }
+
+        #if DEBUG
+        private var encodingSamples: [Double] = []
+        private var renderingSamples: [Double] = []
 
         func mapViewDidBecomeIdle(_ mapView: MLNMapView) { reportRendering() }
 
@@ -533,7 +549,7 @@ struct EngineMapView: UIViewRepresentable {
             lastCameras = nil
             routeInitialized = false
             lineKeys = [:]
-            decorationsHidden = nil
+            hiddenLayers = nil
             lastTrafficRevision = -1
             lastPosition = nil
             cameraRegion = nil
@@ -733,7 +749,12 @@ struct EngineMapView: UIViewRepresentable {
             if lastCursor != model.cursorStyle {
                 installCursor(model.cursorStyle)
             }
-            applyDecorations(hidden: model.performance != .full, in: view)
+            if view.isUserInteractionEnabled != model.interactive {
+                view.isUserInteractionEnabled = model.interactive
+            }
+            applyHiddenLayers(model, in: view)
+            applyCount &+= 1
+            logHealthIfDue(model, in: view)
             if lastRecenterToken != model.recenterToken {
                 lastRecenterToken = model.recenterToken
                 browsing = false
@@ -850,6 +871,7 @@ struct EngineMapView: UIViewRepresentable {
                 view.setCamera(camera, withDuration: cameraPlaced && !UIAccessibility.isReduceMotionEnabled ? interval : 0,
                            animationTimingFunction: CAMediaTimingFunction(name: .linear))
                 lastCameraModel = model
+                followCount &+= 1
             }
             if !cameraPlaced {
                 Log.network.info("MapLibre: камера установлена, zoom \(view.zoomLevel, privacy: .public)")
@@ -907,12 +929,90 @@ struct EngineMapView: UIViewRepresentable {
         /// режут (аудит 11.10).
         static let hotHiddenLayers = ["radar-tree-3d", "radar-barrier-3d", "radar-tree-shadow",
                                       "building-ground-shadow"]
-        private var decorationsHidden: Bool?
+        /// На ходу (DrivingDeclutter) — всё, что не дорога: подземные
+        /// пешеходные переходы и тротуары (широкие фиолетовые полосы поперёк
+        /// проспекта — «убери тоннели», 12.10), наложение тоннелей, деревья и
+        /// тени, парковочная разметка, значки заведений, зерно асфальта.
+        /// Дорога, полосы, «зебры», светофоры, заправки, маршрут и камеры
+        /// остаются. Слоя нет в стиле — пропускается.
+        static let drivingHiddenLayers = [
+            "tunnel-path-steps-casing", "tunnel-path-steps", "tunnel-path",
+            "bridge-path-shadow", "bridge-path-casing", "bridge-path-steps", "bridge-path",
+            "highway-path-steps-casing", "highway-path", "highway-path-steps", "highway-name-path",
+            "radar-tunnel-case", "radar-tunnel",
+            "trees", "radar-tree-shadow", "radar-tree", "radar-tree-light", "radar-tree-3d", "radar-barrier-3d",
+            "building-ground-shadow",
+            "radar-parking", "radar-parking-kerb", "radar-parking-stall", "radar-poi-parking",
+            "poi-level-1", "poi-level-2", "poi-level-3", "poi-railway",
+            "radar-asphalt-grain",
+        ]
+        private var hiddenLayers: Set<String>?
 
-        private func applyDecorations(hidden: Bool, in view: MLNMapView) {
-            guard hidden != decorationsHidden, let style = view.style else { return }
-            decorationsHidden = hidden
-            for id in Self.hotHiddenLayers { style.layer(withIdentifier: id)?.isVisible = !hidden }
+        /// Видимость, а не новый стиль: перезагрузка стиля — сама по себе пик и
+        /// сброс тайлов, а на ходу слои меняются на каждой остановке.
+        private func applyHiddenLayers(_ model: EngineMapView, in view: MLNMapView) {
+            var wanted = Set<String>()
+            if model.performance != .full { wanted.formUnion(Self.hotHiddenLayers) }
+            if model.declutter { wanted.formUnion(Self.drivingHiddenLayers) }
+            guard wanted != hiddenLayers, let style = view.style else { return }
+            hiddenLayers = wanted
+            for id in Set(Self.hotHiddenLayers).union(Self.drivingHiddenLayers) {
+                style.layer(withIdentifier: id)?.isVisible = !wanted.contains(id)
+            }
+        }
+
+        // MARK: - Здоровье карты (журнал)
+
+        private var applyCount = 0
+        private var followCount = 0
+        private var framesRendered = 0
+        private var lastHealthLog: CFTimeInterval = 0
+
+        /// Раз в 10 с, только с меткой: на машине карта рывками, не крутится
+        /// и не показывает камеры (12.10, плитка главного экрана), а у
+        /// симулятора плитки нет. Строка отвечает на главный вопрос — рисует
+        /// ли движок вообще: сколько кадров, жив ли его таймер кадров, спит
+        /// ли он, в каком состоянии приложение и на каком экране окно.
+        private func logHealthIfDue(_ model: EngineMapView, in view: MLNMapView) {
+            guard let tag = model.healthTag else { return }
+            let now = CACurrentMediaTime()
+            guard now - lastHealthLog >= AppConfig.engineHealthLogSeconds else { return }
+            let seconds = lastHealthLog > 0 ? now - lastHealthLog : 0
+            lastHealthLog = now
+            let app = switch UIApplication.shared.applicationState {
+            case .active: "active"
+            case .inactive: "inactive"
+            case .background: "background"
+            @unknown default: "?"
+            }
+            let scene = switch view.window?.windowScene?.activationState {
+            case .foregroundActive: "fgActive"
+            case .foregroundInactive: "fgInactive"
+            case .background: "bg"
+            case .unattached: "unattached"
+            case nil: "нет окна"
+            @unknown default: "?"
+            }
+            let onMain = view.window?.screen == UIScreen.main
+            // Внутреннее состояние MapLibre 6.29 (MLNMapView.mm): спит ли
+            // движок и тикает ли его таймер кадров. Через KVC и только при
+            // наличии селектора — другая версия движка просто даст «?».
+            let dormant = view.responds(to: NSSelectorFromString("isDormant"))
+                ? ((view.value(forKey: "dormant") as? Bool).map { $0 ? "да" : "нет" } ?? "?") : "?"
+            let link: String
+            if view.responds(to: NSSelectorFromString("displayLink")) {
+                let displayLink = view.value(forKey: "displayLink") as? CADisplayLink
+                link = displayLink.map { $0.isPaused ? "стоит" : "идёт" } ?? "нет"
+            } else {
+                link = "?"
+            }
+            let bounds = view.visibleCoordinateBounds
+            let inView = cachedCameras.filter { MLNCoordinateInCoordinateBounds($0.coordinate, bounds) }.count
+            let course = model.courseDegrees
+            Log.carplay.notice("карта \(tag, privacy: .public): приложение \(app, privacy: .public), сцена \(scene, privacy: .public), экран телефона \(onMain, privacy: .public), спит \(dormant, privacy: .public), таймер кадров \(link, privacy: .public), кадров \(self.framesRendered, privacy: .public) за \(Int(seconds), privacy: .public) с, обновлений \(self.applyCount, privacy: .public), ходов камеры \(self.followCount, privacy: .public), осмотр \(self.browsing, privacy: .public), поворот \(Int(view.direction), privacy: .public)° курс \(Int(course), privacy: .public)°, масштаб \(view.zoomLevel, format: .fixed(precision: 1), privacy: .public), камер в источнике \(self.cachedCameras.count, privacy: .public), в кадре \(inView, privacy: .public), кадров/с \(self.lastFPS ?? 0, privacy: .public)")
+            framesRendered = 0
+            applyCount = 0
+            followCount = 0
         }
 
         private var lastTrafficRevision = -1

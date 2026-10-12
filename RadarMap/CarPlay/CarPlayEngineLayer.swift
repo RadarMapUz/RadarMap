@@ -60,9 +60,10 @@ struct CarPlayEngineLayer: View {
         // в 128 («радары не показывает», carplay12; «куда пропал радар?»,
         // 12.10). Без курса карта держит прежний поворот, которого мы не
         // знаем, — тогда камера обязана влезть в любую сторону.
+        let bearing = model.mapDirection ?? (env.location.displayCourse >= 0 ? env.location.displayCourse : nil)
         let keep = env.location.nearestCamera.map {
             DriveCamera.Keep.offset(from: me, to: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
-                                    bearing: env.location.displayCourse >= 0 ? env.location.displayCourse : nil)
+                                    bearing: bearing)
         }
         let width = Double(size.width + safe.leading + safe.trailing)
         // Верх окна машины — бар с кнопками, низ — док HUD, справа — кнопки карты.
@@ -123,6 +124,12 @@ struct CarPlayEngineLayer: View {
             // Режим «в поездке» всегда: без кафе, номеров домов и подписей
             // дорожек — экран машины читают боковым зрением.
             driving: true,
+            // На ходу — только дорога; встали — окрестность возвращается.
+            declutter: model.declutter.update(speedKmh: env.location.speedKmh, at: Date()),
+            // Плитка — только смотреть: случайный жест снимал слежение, а
+            // вернуть его на плитке нечем.
+            interactive: !compact,
+            healthTag: compact ? "плитка" : "машина",
             trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
             trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
             labelLanguage: env.settings.appLanguage.mapCode,
@@ -134,6 +141,7 @@ struct CarPlayEngineLayer: View {
                                           bottom: safe.bottom + 30,
                                           right: model.mapButtonInsets.trailing + 30),
             panTotal: model.panTotal,
+            onHeading: { model.mapDirection = $0 },
             onBrowse: { if model.isFollowing { model.isFollowing = false } })
     }
 

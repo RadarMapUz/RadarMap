@@ -60,6 +60,35 @@ nonisolated enum GPSTiers {
         return tier
     }
 
+    /// Точность и фильтр расстояния для тира.
+    ///
+    /// `watched` — на карту смотрят: подключён экран машины или телефон
+    /// открыт. Тогда фильтра расстояния нет вовсе, а на стоянке точность не
+    /// падает до сотни метров. Причина — поле 12.10 («спидометр не успевает,
+    /// карта рывками»): на крейсере фильтр 25 м давал фикс раз в 2–3 с на
+    /// 40 км/ч — цифра скорости и камера карты ехали ступенями, а со стоянки
+    /// (фильтр 30 м) первый фикс приходил метров через тридцать: машина уже
+    /// ехала, а на экране стоял ноль. Фильтр не экономит чип — он только
+    /// прореживает фиксы; экономия стоянки — в точности, а у смотрящего
+    /// водителя она не нужна: экран и так горит сильнее GPS. В кармане (никто
+    /// не смотрит) лестница прежняя.
+    static func request(tier: Int, watched: Bool) -> Request {
+        if watched {
+            switch tier {
+            case 0:  return Request(accuracy: kCLLocationAccuracyBest, distanceFilter: kCLDistanceFilterNone)
+            default: return Request(accuracy: kCLLocationAccuracyNearestTenMeters,
+                                    distanceFilter: kCLDistanceFilterNone)
+            }
+        }
+        switch tier {
+        case 0:  return Request(accuracy: kCLLocationAccuracyBest, distanceFilter: 6)
+        case 1:  return Request(accuracy: kCLLocationAccuracyNearestTenMeters, distanceFilter: 15)
+        case 2:  return Request(accuracy: kCLLocationAccuracyNearestTenMeters, distanceFilter: 25)
+        // Стоянка: GPS-чип отдыхает; тронулись — первый тик вернёт тир.
+        default: return Request(accuracy: kCLLocationAccuracyHundredMeters, distanceFilter: 30)
+        }
+    }
+
     /// Тир с оглядкой на энергосбережение.
     ///
     /// Раньше Low Power Mode просто ВЫКЛЮЧАЛ лестницу, и вместо неё на всю

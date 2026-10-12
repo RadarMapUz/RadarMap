@@ -82,6 +82,8 @@ final class MapState {
     /// Сглаживание камеры поездки (DriveCamera). Шаг делает вид карты на
     /// своём пересчёте; состояние не наблюдаемое и перерисовку не вызывает.
     @ObservationIgnored var cameraSmoother = DriveCamera.Smoother()
+    /// На ходу — только дорога (DrivingDeclutter); пишет тело карты на тике.
+    @ObservationIgnored var declutter = DrivingDeclutter()
     /// Счётчик нажатий и шаг последнего — движку, когда карта свободна
     /// (тогда приближает сам вид, а не охват слежения).
     private(set) var zoomCommand = 0

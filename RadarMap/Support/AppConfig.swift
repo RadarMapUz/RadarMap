@@ -1320,7 +1320,13 @@ nonisolated enum AppConfig {
     /// не в метрах: 30 м были третью охвата на масштабе полос (z18 в машине —
     /// 85 м) и 3 % на трассе.
     static let engineCameraZoomThreshold = 0.02
-    static let engineCameraDuration = 0.8
+    /// Потолок длительности хода камеры между фиксами. Ход длится столько,
+    /// сколько прошло с прошлого фикса: камера едет непрерывно, а не «0,8 с
+    /// едет — остаток секунды стоит» (поле 12.10: «отстаёт и не плавно»;
+    /// фиксы — раз в секунду, когда на карту смотрят, см. GPSTiers.request).
+    static let engineCameraDuration = 1.25
+    /// Как часто карта с меткой пишет строку здоровья в журнал (EngineMapView.healthTag).
+    static let engineHealthLogSeconds: CFTimeInterval = 10
 
     // MARK: - Карта на движке: кадры и нагрев (docs/perf_audit_2026-10-07.md)
 

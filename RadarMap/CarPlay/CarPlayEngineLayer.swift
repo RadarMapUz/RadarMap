@@ -98,6 +98,13 @@ struct CarPlayEngineLayer: View {
             // («в одном месте со скоростью хватит» — владелец, 12.10).
             limitProvider: nil,
             alertCameraID: env.location.isApproachingCamera ? env.location.nearestCamera?.id : nil,
+            // Вариант B: цвет типа — только у камер на нашем пути.
+            pathCameraIDs: CameraMarkerLook.pathIDs(
+                route: env.route.camerasOnRoute.map { (id: $0.id, along: $0.distanceAlong) },
+                progress: env.route.isActive ? env.route.progressAlong : nil,
+                passedTolerance: AppConfig.routePassedToleranceMeters,
+                nearest: env.location.nearestCamera?.id),
+            familiarCameraIDs: env.location.familiarCameraIDs,
             route: env.route.routeCoordinates,
             routeObject: env.route.polyline,
             routeProgress: env.route.progressAlong,

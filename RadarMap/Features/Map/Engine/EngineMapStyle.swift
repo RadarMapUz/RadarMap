@@ -375,15 +375,19 @@ nonisolated enum EngineMapStyle {
             "paint": ["circle-radius": 26, "circle-color": "#D93025",
                       "circle-opacity": 0.18],
         ])
-        // Точка мелкого масштаба — тот же язык, что значок: цвет типа и
-        // белое кольцо (макет 07.10). Цвет приходит свойством точки.
+        // Точка мелкого масштаба — тот же язык, что значок (вариант B,
+        // CameraMarkerLook): цвет типа у камер на пути, графит у спокойных,
+        // и спокойная мельче. Цвет приходит свойством точки.
+        let calm: [Any] = ["==", ["get", "tier"], "calm"]
         out.append([
             "id": "camera-dot", "type": "circle", "source": "cameras",
             "maxzoom": 14.5,
             "paint": ["circle-radius": ["interpolate", ["linear"], ["zoom"],
-                                        12, 4, 15, 10, 17, 13],
+                                        12, ["case", calm, 3, 4],
+                                        15, ["case", calm, 7, 10],
+                                        17, ["case", calm, 9, 13]],
                       "circle-color": ["coalesce", ["get", "color"], "#D93025"],
-                      "circle-opacity": ["case", ["get", "unconfirmed"], 0.55, 1],
+                      "circle-opacity": ["case", ["get", "unconfirmed"], 0.55, calm, 0.85, 1],
                       "circle-stroke-width": ["case", ["get", "alert"], 3, 1.8],
                       "circle-stroke-color": "#FFFFFF"],
         ])
@@ -401,8 +405,26 @@ nonisolated enum EngineMapStyle {
             "minzoom": 14.5,
             "layout": ["icon-image": ["get", "icon"],
                        "icon-allow-overlap": true, "icon-ignore-placement": false,
-                       "symbol-sort-key": ["case", ["get", "alert"], 0, 1]],
+                       // При allow-overlap больший ключ лежит СВЕРХУ: тревога
+                       // поверх «на пути», те — поверх спокойных. До 12.10
+                       // ключ был 0 у тревоги — она пряталась под соседями.
+                       "symbol-sort-key": ["coalesce", ["get", "sort"], 0]],
             "paint": ["icon-opacity": ["case", ["get", "unconfirmed"], 0.55, 1]],
+        ])
+        // Пометки поверх значка: «?» у отметки водителей, галочка у своей
+        // камеры. Отдельным слоем — иначе каждая пометка удваивала бы набор
+        // картинок, — и вне раскладки: пометка ничего не вытесняет.
+        out.append([
+            "id": "camera-badges", "type": "symbol", "source": "cameras",
+            "minzoom": 14.5,
+            "filter": ["!=", ["coalesce", ["get", "badge"], ""], ""],
+            "layout": ["icon-image": ["get", "badge"],
+                       "icon-allow-overlap": true, "icon-ignore-placement": true,
+                       "icon-offset": ["match", ["get", "tier"],
+                                       "alert", ["literal", [13, -13]],
+                                       "path", ["literal", [11, -11]],
+                                       ["literal", [9, -9]]],
+                       "symbol-sort-key": ["coalesce", ["get", "sort"], 0]],
         ])
         // Лимит под значком камеры убран (владелец, 12.10): цифра «60» у
         // каждой камеры дублировала знак у скорости и загромождала карту.

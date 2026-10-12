@@ -59,6 +59,10 @@ struct EngineMapView: UIViewRepresentable {
     var cameraProvider: ((MKCoordinateRegion) -> [Camera])?
     var limitProvider: ((Camera) -> Int?)?
     var alertCameraID: Int?
+    /// Камеры на нашем пути (CameraMarkerLook): только у них цвет типа.
+    var pathCameraIDs: Set<Int> = []
+    /// Свои камеры — голос о них молчит, на значке галочка.
+    var familiarCameraIDs: Set<Int> = []
     var cameraLimits: [Int: Int] = [:]
     var route: [CLLocationCoordinate2D]
     var routeObject: MKPolyline?
@@ -216,6 +220,10 @@ struct EngineMapView: UIViewRepresentable {
         private var lastCameras: [Camera]?
         private var lastLimits: [Int: Int] = [:]
         private var lastAlertID: Int?
+        private var lastPathIDs: Set<Int> = []
+        private var lastFamiliarIDs: Set<Int> = []
+        /// Тема, в которой собраны точки камер (графит спокойных — свой днём и ночью).
+        private var camerasDaylight: Bool?
         private var lastRouteObject: MKPolyline?
         private var routeInitialized = false
         private var routeIndex: EngineMapPresentation.RouteIndex?
@@ -354,6 +362,60 @@ struct EngineMapView: UIViewRepresentable {
             return image
         }
 
+        /// Три облика значка камеры (CameraMarkerLook): размер, кольцо, заливка
+        /// (nil — цвет типа) и глиф (nil — свой цвет типа).
+        private struct MarkerLook {
+            let suffix: String
+            let side: CGFloat
+            let ringWidth: CGFloat
+            let glyph: CGFloat
+            let ring: UInt32
+            let fill: UInt32?
+            let glyphColor: UInt32?
+        }
+
+        private static let markerLooks = [
+            // На пути — круг цвета типа, как был.
+            MarkerLook(suffix: "", side: 30, ringWidth: 2.5, glyph: 14, ring: 0xFFFFFF, fill: nil, glyphColor: nil),
+            // Тревога — крупнее; ореол — слой camera-halo.
+            MarkerLook(suffix: "-alert", side: 38, ringWidth: 3, glyph: 17, ring: 0xFFFFFF, fill: nil, glyphColor: nil),
+            // Спокойная днём — графит, белое кольцо, белый глиф.
+            MarkerLook(suffix: "-calm-d", side: 24, ringWidth: 2, glyph: 11, ring: 0xFFFFFF,
+                       fill: 0x3D4652, glyphColor: 0xFFFFFF),
+            // Ночью — светлый графит, тёмное кольцо и глиф: белое кольцо на
+            // тёмной карте горело бы ярче самой тревоги.
+            MarkerLook(suffix: "-calm-n", side: 24, ringWidth: 2, glyph: 11, ring: 0x14181D,
+                       fill: 0xAEB6C2, glyphColor: 0x14181D),
+        ]
+
+        /// Пометка поверх значка: «?» у отметки водителей, галочка у своей.
+        private static func badgeIcon(fill: UInt32, text: String?) -> UIImage {
+            UIGraphicsImageRenderer(size: CGSize(width: 16, height: 16)).image { _ in
+                let disc = CGRect(x: 0.75, y: 0.75, width: 14.5, height: 14.5)
+                UIColor.white.setFill()
+                UIBezierPath(ovalIn: disc).fill()
+                Theme.rgb(fill).setFill()
+                UIBezierPath(ovalIn: disc.insetBy(dx: 1.5, dy: 1.5)).fill()
+                if let text {
+                    let attributes: [NSAttributedString.Key: Any] = [
+                        .font: UIFont.systemFont(ofSize: 10, weight: .heavy), .foregroundColor: UIColor.white]
+                    let size = (text as NSString).size(withAttributes: attributes)
+                    (text as NSString).draw(at: CGPoint(x: 8 - size.width / 2, y: 8 - size.height / 2),
+                                            withAttributes: attributes)
+                } else {
+                    let check = UIBezierPath()
+                    check.move(to: CGPoint(x: 4.8, y: 8.2))
+                    check.addLine(to: CGPoint(x: 7.0, y: 10.4))
+                    check.addLine(to: CGPoint(x: 11.3, y: 5.8))
+                    check.lineWidth = 1.9
+                    check.lineCapStyle = .round
+                    check.lineJoinStyle = .round
+                    UIColor.white.setStroke()
+                    check.stroke()
+                }
+            }
+        }
+
         /// Значок светофора: капсула 10×20 pt, графит с белой кромкой, три точки.
         static func trafficLightIcon() -> UIImage {
             UIGraphicsImageRenderer(size: CGSize(width: 10, height: 20)).image { _ in
@@ -379,29 +441,32 @@ struct EngineMapView: UIViewRepresentable {
             }
             let kinds: [CameraType] = [.stationaryCamera, .stationaryRadar,
                 .intelligentRadar, .mobileRadar, .tripod, .dpsPost, .accident, .other("")]
+            // Вариант B «Спокойная карта» (владелец, 12.10; CameraMarkerLook):
+            // цвет типа — только у камер на нашем пути и у тревоги, остальные
+            // — графитовый круг поменьше, тип читается по глифу. Цвет
+            // запекается в пиксели: движок не применяет к картинке стиля
+            // template-режим UIKit. Ореол тревоги рисует слой camera-halo.
             for kind in kinds {
-                let configuration = UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
-                if let image = UIImage(systemName: kind.symbolName, withConfiguration: configuration) {
-                    // Маркер (макет 07.10): круг цветом ТИПА с белым кольцом,
-                    // значок тёмный на светлом радаре и белый на остальных.
-                    // Тревожный — крупнее; ореол рисует слой camera-halo.
-                    // Цвет запекается в пиксели: движок не применяет к
-                    // картинке стиля template-режим UIKit.
-                    for alert in [false, true] {
-                        let side: CGFloat = alert ? 38 : 30
-                        let bitmap = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
-                            let disc = CGRect(x: 1, y: 1, width: side - 2, height: side - 2)
-                            UIColor.white.setFill()
-                            UIBezierPath(ovalIn: disc).fill()
-                            UIColor(kind.tint).setFill()
-                            UIBezierPath(ovalIn: disc.insetBy(dx: alert ? 3 : 2.5, dy: alert ? 3 : 2.5)).fill()
-                            image.withTintColor(UIColor(kind.glyphTint), renderingMode: .alwaysOriginal)
-                                .draw(at: CGPoint(x: (side - image.size.width) / 2, y: (side - image.size.height) / 2))
-                        }
-                        style.setImage(bitmap, forName: kind.symbolName + (alert ? "-alert" : ""))
+                for look in Self.markerLooks {
+                    let configuration = UIImage.SymbolConfiguration(pointSize: look.glyph, weight: .semibold)
+                    guard let glyph = UIImage(systemName: kind.symbolName, withConfiguration: configuration)
+                    else { continue }
+                    let side = look.side
+                    let bitmap = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
+                        let disc = CGRect(x: 1, y: 1, width: side - 2, height: side - 2)
+                        Theme.rgb(look.ring).setFill()
+                        UIBezierPath(ovalIn: disc).fill()
+                        (look.fill.map { Theme.rgb($0) } ?? UIColor(kind.tint)).setFill()
+                        UIBezierPath(ovalIn: disc.insetBy(dx: look.ringWidth, dy: look.ringWidth)).fill()
+                        let tint = look.glyphColor.map { Theme.rgb($0) } ?? UIColor(kind.glyphTint)
+                        glyph.withTintColor(tint, renderingMode: .alwaysOriginal)
+                            .draw(at: CGPoint(x: (side - glyph.size.width) / 2, y: (side - glyph.size.height) / 2))
                     }
+                    style.setImage(bitmap, forName: kind.symbolName + look.suffix)
                 }
             }
+            style.setImage(Self.badgeIcon(fill: 0x46525E, text: "?"), forName: CameraMarkerLook.ghostBadge)
+            style.setImage(Self.badgeIcon(fill: 0x177A41, text: nil), forName: CameraMarkerLook.ownBadge)
             // Светофор — минималистично (владелец, 12.10: «красиво, по-другому,
             // задевает камеры»): маленькая графитовая капсула с тремя светлыми
             // точками, без красно-жёлто-зелёных огней — фазу тайл всё равно не
@@ -442,9 +507,8 @@ struct EngineMapView: UIViewRepresentable {
             }
             style.setImage(pin, forName: "radar-pin")
             let names = ["radar-signal", EngineModernStyle.trafficLightImage, "radar-stop", "radar-flag",
-                         "radar-pin"] + kinds.flatMap {
-                [$0.symbolName, $0.symbolName + "-alert"]
-            }
+                         "radar-pin", CameraMarkerLook.ghostBadge, CameraMarkerLook.ownBadge]
+                + kinds.flatMap { kind in Self.markerLooks.map { kind.symbolName + $0.suffix } }
             for name in names { Self.iconCache[name] = style.image(forName: name) }
         }
 
@@ -955,18 +1019,23 @@ struct EngineMapView: UIViewRepresentable {
                 cameraRevision = model.cameraRevision
                 limitRevision = model.limitRevision
             }
-            guard cachedCameras != lastCameras || model.alertCameraID != lastAlertID || cachedLimits != lastLimits else { return }
+            guard cachedCameras != lastCameras || model.alertCameraID != lastAlertID || cachedLimits != lastLimits
+                    || model.pathCameraIDs != lastPathIDs || model.familiarCameraIDs != lastFamiliarIDs
+                    || model.daylight != camerasDaylight else { return }
             lastCameras = cachedCameras
             lastAlertID = model.alertCameraID
             lastLimits = cachedLimits
+            lastPathIDs = model.pathCameraIDs
+            lastFamiliarIDs = model.familiarCameraIDs
+            camerasDaylight = model.daylight
             let points = cachedCameras.map { camera in
                 let point = MLNPointFeature()
                 point.coordinate = camera.coordinate
-                point.attributes = ["id": camera.id, "alert": camera.id == model.alertCameraID,
-                    "color": EngineMapStyle.typeHex(camera.kind),
-                    "icon": camera.kind.symbolName + (camera.id == model.alertCameraID ? "-alert" : ""),
-                    "limit": cachedLimits[camera.id].map(String.init) ?? "",
-                    "unconfirmed": camera.isUnconfirmedMobile]
+                point.attributes = Self.cameraAttributes(camera, alert: model.alertCameraID,
+                                                         path: model.pathCameraIDs,
+                                                         familiar: model.familiarCameraIDs,
+                                                         daylight: model.daylight,
+                                                         limit: cachedLimits[camera.id])
                 return point
             }
             (view.style?.source(withIdentifier: "cameras") as? MLNShapeSource)?.shape = MLNShapeCollectionFeature(shapes: points)
@@ -1090,16 +1159,32 @@ struct EngineMapView: UIViewRepresentable {
                                        / (512 * max(1, spanMeters)))))
         }
 
-        static func cameraFeatures(_ cameras: [Camera], alert: Int?, limits: [Int: Int] = [:]) -> [String: Any] {
+        /// Свойства точки камеры для слоёв стиля — облик варианта B
+        /// (CameraMarkerLook): уровень, значок, пометка, цвет точки.
+        static func cameraAttributes(_ camera: Camera, alert: Int?, path: Set<Int>, familiar: Set<Int>,
+                                     daylight: Bool, limit: Int?) -> [String: Any] {
+            let tier = CameraMarkerLook.tier(id: camera.id, alert: alert, path: path)
+            return ["id": camera.id, "alert": tier == .alert, "tier": tier.rawValue,
+                    "sort": CameraMarkerLook.sortKey(tier),
+                    "color": CameraMarkerLook.dotColor(typeHex: EngineMapStyle.typeHex(camera.kind),
+                                                       tier: tier, daylight: daylight),
+                    "icon": CameraMarkerLook.icon(symbol: camera.kind.symbolName, tier: tier, daylight: daylight),
+                    "badge": CameraMarkerLook.badge(tier: tier, unconfirmed: camera.isUnconfirmedMobile,
+                                                    familiar: familiar.contains(camera.id)),
+                    "limit": limit.map(String.init) ?? "",
+                    "unconfirmed": camera.isUnconfirmedMobile]
+        }
+
+        static func cameraFeatures(_ cameras: [Camera], alert: Int?, path: Set<Int> = [],
+                                   familiar: Set<Int> = [], daylight: Bool = true,
+                                   limits: [Int: Int] = [:]) -> [String: Any] {
             [
                 "type": "FeatureCollection",
                 "features": cameras.map { camera in
                     [
                         "type": "Feature",
-                        "properties": ["id": camera.id, "alert": camera.id == alert,
-                                       "icon": camera.kind.symbolName + (camera.id == alert ? "-alert" : ""),
-                                       "limit": limits[camera.id].map { String($0) } ?? "",
-                                       "unconfirmed": camera.isUnconfirmedMobile],
+                        "properties": cameraAttributes(camera, alert: alert, path: path, familiar: familiar,
+                                                       daylight: daylight, limit: limits[camera.id]),
                         "geometry": ["type": "Point",
                                      "coordinates": [camera.lon, camera.lat]],
                     ]

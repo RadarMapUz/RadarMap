@@ -216,6 +216,22 @@ struct EngineMapStyleTests {
         #expect(layout?["icon-ignore-placement"] as? Bool == false)
     }
 
+    @Test("Тревога лежит поверх соседей, пометки ничего не вытесняют")
+    func alertOnTopBadgesOutOfPlacement() throws {
+        let all = layers(style())
+        let icons = try #require(all.first { $0["id"] as? String == "camera-icons" })
+        let sort = (icons["layout"] as? [String: Any])?["symbol-sort-key"] as? [Any]
+        // Ключ — из свойства точки (CameraMarkerLook.sortKey: тревога — 2).
+        #expect((sort?[1] as? [Any])?.last as? String == "sort")
+        let badges = try #require(all.first { $0["id"] as? String == "camera-badges" })
+        let layout = badges["layout"] as? [String: Any]
+        #expect(layout?["icon-ignore-placement"] as? Bool == true)
+        #expect(layout?["icon-allow-overlap"] as? Bool == true)
+        // Пометки — над значками.
+        let ids = all.compactMap { $0["id"] as? String }
+        #expect((ids.firstIndex(of: "camera-badges") ?? 0) > (ids.firstIndex(of: "camera-icons") ?? .max))
+    }
+
     @Test("Светофор новой карты — свой значок, и он не налезает на соседей")
     func ownTrafficLight() {
         let layer: [String: Any] = ["id": "radar-signal-icon",

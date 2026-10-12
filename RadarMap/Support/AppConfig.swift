@@ -509,6 +509,18 @@ nonisolated enum AppConfig {
     /// Окно истории для обучения местам.
     nonisolated static let placeLearningWindowDays = 30
 
+    // MARK: - Стоянка (Standstill)
+
+    /// Ниже этой доплеровской скорости и дольше `standstillEnterSeconds` —
+    /// стоим: на месте приёмник показывает 2–7 км/ч шума, и спидометр не
+    /// падал до нуля (CarPlay, 12.10).
+    nonisolated static let standstillEnterKmh = 3.5
+    nonisolated static let standstillEnterSeconds: TimeInterval = 2
+    /// Тронулись: два фикса подряд не медленнее этого или смещение от точки
+    /// остановки больше max(standstillExitMeters, точность фикса).
+    nonisolated static let standstillExitKmh = 6.0
+    nonisolated static let standstillExitMeters: CLLocationDistance = 15
+
     // MARK: - Пробки (TrafficProbes, TrafficService, server/traffic_build.py)
 
     /// Длина куска следа и её разброс (±20 %): по одинаковой длине соседние
@@ -1075,6 +1087,9 @@ nonisolated enum AppConfig {
     static let carPlayTemplateShowTimeout: TimeInterval = 3
     /// «Я» в плитке приборной панели: дока там нет, только маленький прибор.
     static let carPlayDashboardMeY = 0.62
+    /// Охват карты в машине относительно телефонного: вдвое ближе (низкий
+    /// широкий экран; разметка полос и камеры видны, обзор города — нет).
+    static let carPlaySpanScale = 0.5
     /// Оценки манёвра и поездки уходят в машину сообщениями: не реже раза в
     /// столько секунд (на стоянке цифра всё равно должна жить) и не чаще, чем
     /// сменится видимое число — шаг в метрах вблизи, 5 % вдали.

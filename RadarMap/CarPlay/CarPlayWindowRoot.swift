@@ -18,6 +18,7 @@
 //  который показывает машина, один на всё подключение.
 //
 
+import CarPlay
 import SwiftUI
 import UIKit
 
@@ -27,6 +28,28 @@ final class CarPlayWindowRoot: UIViewController {
 
     /// Что сейчас внутри (хост SwiftUI экрана машины или плитки панели).
     private(set) var content: UIViewController?
+
+    /// Отступы, которые занимают кнопки карты (+, −, осмотр, «к себе»):
+    /// разница между окном и `mapButtonSafeAreaLayoutGuide`. SwiftUI внутри
+    /// окна этот гайд не видит — без него HUD у правого края ложился бы под
+    /// кнопки. Зовётся только на изменение.
+    var onMapButtonInsets: ((UIEdgeInsets) -> Void)?
+    private var lastButtonInsets: UIEdgeInsets?
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard let window = view.window as? CPWindow else { return }
+        let guide = window.mapButtonSafeAreaLayoutGuide.layoutFrame
+        let bounds = view.bounds
+        guard guide.width > 0, guide.height > 0 else { return }
+        let insets = UIEdgeInsets(top: max(0, guide.minY - bounds.minY),
+                                  left: max(0, guide.minX - bounds.minX),
+                                  bottom: max(0, bounds.maxY - guide.maxY),
+                                  right: max(0, bounds.maxX - guide.maxX))
+        guard insets != lastButtonInsets else { return }
+        lastButtonInsets = insets
+        onMapButtonInsets?(insets)
+    }
 
     override func loadView() {
         let view = UIView()

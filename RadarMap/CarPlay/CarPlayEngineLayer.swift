@@ -43,16 +43,19 @@ struct CarPlayEngineLayer: View {
 
     private func map(me: CLLocationCoordinate2D, size: CGSize, safe: EdgeInsets) -> some View {
         let maneuverDistance = env.route.nextStep.map { _ in env.route.nextStepDistance }
+        // Охват — всегда «в движении» (машина подключена — значит едем, обзор
+        // города на экране машины не нужен) и ближе телефонного: экран в
+        // машине низкий и широкий, и с телефонным охватом карта выглядела
+        // «очень большой», а плитка панели показывала город целиком — и ни
+        // одной камеры: значки рисуются с z14.5 (владелец, 12.10). Ближе —
+        // и разметка полос видна у перекрёстков.
         let span = EngineMapPresentation.span(speedKmh: env.location.speedKmh,
                                               maneuverDistance: maneuverDistance,
-                                              active: env.location.isTripActive)
-        // Наклон — только на холодном телефоне: картинка в машину рисуется на
-        // телефоне, а 3D дороже плоской. К манёвру уходит в ноль — развилку
-        // видно сверху (то же правило, что на телефоне).
-        let pitch = env.thermal.mode != .full ? 0 : (AppConfig.engineMapPitchDegrees
-            * min(1, max(0, (maneuverDistance ?? AppConfig.engineManeuverApproachMeters)
-                         / AppConfig.engineManeuverApproachMeters))
-            / AppConfig.enginePitchStep).rounded() * AppConfig.enginePitchStep
+                                              active: true) * AppConfig.carPlaySpanScale
+        // Вид строго сверху: в машине читают дорогу и полосы, а не фасады
+        // («вид сверху, максимально удобно» — владелец, 12.10). Заодно и
+        // дешевле: плоская карта тянет меньше тайлов.
+        let pitch = 0.0
         let offlineFiles: OfflineFiles? = env.network.isOnline
             ? nil : env.offlineMaps.offlineFiles(at: me)
         return EngineMapView(
@@ -68,7 +71,9 @@ struct CarPlayEngineLayer: View {
             cameraRevision: env.cameras.revision,
             limitRevision: env.speedLimits.indexRevision * 2 + (env.settings.speedLimitsEnabled ? 1 : 0),
             cameraProvider: { env.cameras.cameras(in: $0, limit: AppConfig.engineCameraViewportLimit) },
-            limitProvider: { env.settings.speedLimitsEnabled ? env.speedLimits.limit(near: $0.coordinate) : nil },
+            // Лимит под значком камеры не рисуется: он один — у скорости
+            // («в одном месте со скоростью хватит» — владелец, 12.10).
+            limitProvider: nil,
             alertCameraID: env.location.isApproachingCamera ? env.location.nearestCamera?.id : nil,
             route: env.route.routeCoordinates,
             routeObject: env.route.polyline,

@@ -20,6 +20,11 @@ struct CarPlayOverlay: View {
     /// Свой баннер манёвра. Выключен, пока манёвр рисует сама машина
     /// (навигационная сессия CarPlay).
     var showsManeuver = true
+    /// Сколько занимают кнопки карты по краям окна (CarPlayWindowRoot →
+    /// mapButtonSafeAreaLayoutGuide): док у правого края встаёт левее них.
+    var buttonInsets = EdgeInsets()
+    /// Безопасная зона окна — от неё уже отступает весь HUD.
+    @State private var safe = EdgeInsets()
     /// Ширина HUD. Меняется только со сменой экрана, а не тиком: решение
     /// «влезает ли третья зона» раньше принимал ViewThatFits, раскладывая обе
     /// версии дока на КАЖДЫЙ фикс (perf-аудит 07.10, п. 12).
@@ -61,6 +66,7 @@ struct CarPlayOverlay: View {
         .padding(.vertical, 12)
         .safeAreaPadding()
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safe = $0 }
         .motionAnimation(.spring(duration: 0.35), value: env.location.isApproachingCamera)
         .motionAnimation(.spring(duration: 0.35), value: env.route.isActive)
         // HUD — только показывает: жесты карты (тап, панорама, щипок) должны
@@ -77,20 +83,29 @@ struct CarPlayOverlay: View {
     /// Simulator на 800×480 она легла на середину карты — туда, куда смотрят
     /// на дорогу и машину, — и при этом обрезала текст («Камер…» вместо
     /// «Камер рядом нет»): ширина делилась на трети, а не по содержимому.
-    /// Теперь элементы занимают ровно свой текст и стоят в левом углу,
-    /// напротив системных кнопок карты (они справа), а центр карты свободен.
+    /// Теперь элементы занимают ровно свой текст.
+    ///
+    /// С 12.10 док — у ПРАВОГО края, вплотную слева от кнопок карты, а не
+    /// у левого края безопасной зоны. В навигации левый край зоны начинается
+    /// сразу за системными карточками (манёвр, прибытие), и док вставал
+    /// посреди карты — на дорогу перед машиной («расположены вещи не
+    /// правильно», владелец, 12.10). Справа он группируется с кнопками, а
+    /// скорость со знаком лимита стоит крайней — одно место для «еду/можно».
     private var dock: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            speedBadge
-            cameraPill
+            Spacer(minLength: 0)
             // Прибытие — только пока манёвр не рисует сама машина: в
             // навигационной сессии время в пути стоит в её карточке.
             if showsManeuver, env.route.isActive, Self.fitsRoute(hudWidth: width) {
                 pill { etaCell }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            Spacer(minLength: 0)
+            cameraPill
+            speedBadge
         }
+        // Левее кнопок карты: HUD уже отступил на безопасную зону и 14 pt,
+        // добираем до ширины колонки кнопок и 8 pt воздуха.
+        .padding(.trailing, max(0, buttonInsets.trailing + 8 - safe.trailing - 14))
         .frame(height: AppConfig.carPlayDockHeight, alignment: .bottom)
         .motionAnimation(.easeOut(duration: 0.3), value: env.location.alertLevel)
     }

@@ -214,10 +214,12 @@ nonisolated enum EngineMapStyle {
         // Старые тайлы без этого слоя остаются читаемыми, догадок о полосах нет.
         out.append([
             "id": "lane-markings", "type": "line", "source": "near", "source-layer": "markings",
-            "minzoom": 17,
+            // С 16.5: охват машины у перекрёстков — z16.5–17, и с прежних 17
+            // разметка полос там не появлялась вовсе.
+            "minzoom": 16.5,
             "layout": ["line-cap": "butt", "line-join": "round"],
             "paint": ["line-color": daylight ? "#99a99c" : "#b5c5b5",
-                      "line-width": ["interpolate", ["exponential", 2], ["zoom"], 17, 0.65, 20, 2.5],
+                      "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16.5, 0.5, 17, 0.65, 20, 2.5],
                       "line-dasharray": [5, 7], "line-opacity": 0.7],
         ])
         // Полигон узла закрывает внутренние швы и пунктир, который иначе
@@ -397,17 +399,8 @@ nonisolated enum EngineMapStyle {
                        "symbol-sort-key": ["case", ["get", "alert"], 0, 1]],
             "paint": ["icon-opacity": ["case", ["get", "unconfirmed"], 0.55, 1]],
         ])
-        out.append([
-            "id": "camera-limits", "type": "symbol", "source": "cameras",
-            "minzoom": 15.5,
-            "filter": ["!=", ["get", "limit"], ""],
-            "layout": ["text-field": ["get", "limit"],
-                       "text-font": ["Noto Sans Regular"], "text-size": 12,
-                       "text-offset": [0, 1.8], "text-padding": 5,
-                       "symbol-sort-key": ["case", ["get", "alert"], 0, 1]],
-            "paint": ["text-color": label, "text-halo-color": halo,
-                      "text-halo-width": 2],
-        ])
+        // Лимит под значком камеры убран (владелец, 12.10): цифра «60» у
+        // каждой камеры дублировала знак у скорости и загромождала карту.
         // Флаг цели и точка долгого тапа — поверх камер, но под «я».
         out.append([
             "id": "marks", "type": "symbol", "source": "marks",

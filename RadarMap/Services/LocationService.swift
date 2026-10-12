@@ -590,6 +590,8 @@ final class LocationService: NSObject {
             locationFilter.reset()
             speedSmoother.reset()
             roadSnapper.reset()
+            standstill.reset()
+            frozenDisplay = nil
             displayCoordinate = nil
             displayCourse = -1
             // Вернулись в тихий фон — геозоны снова единственный способ узнать
@@ -997,6 +999,9 @@ final class LocationService: NSObject {
                 }
                 if self.speedKmh == 0 {
                     self.speedSmoother.reset()
+                    // Скорость погасла без фиксов — стоим: следующий фикс-шум
+                    // стрелку не сдвинет (Standstill).
+                    self.standstill.stopIfIdle(at: self.displayCoordinate ?? self.currentCoordinate)
                     return
                 }
             }
@@ -1004,6 +1009,25 @@ final class LocationService: NSObject {
     }
 
     @ObservationIgnored private var speedDecayTask: Task<Void, Never>?
+    /// Стоянка: скорость 0 и неподвижная стрелка, пока приёмник гуляет на
+    /// месте (Standstill). Только скорость и картинка — гейты по сырому фиксу.
+    @ObservationIgnored private var standstill = Standstill()
+    /// Что рисовать на стоянке: отображаемая точка (уже на оси дороги или
+    /// маршрута) и курс в момент остановки.
+    @ObservationIgnored private var frozenDisplay: (coordinate: CLLocationCoordinate2D, course: Double)?
+
+    private func freezeDisplayIfStopped(shownBefore: CLLocationCoordinate2D?, courseBefore: CLLocationDirection) {
+        guard standstill.isStopped else {
+            frozenDisplay = nil
+            return
+        }
+        if frozenDisplay == nil, let point = shownBefore ?? standstill.anchor ?? displayCoordinate {
+            frozenDisplay = (point, courseBefore >= 0 ? courseBefore : standstill.anchorCourse)
+        }
+        guard let frozen = frozenDisplay else { return }
+        displayCoordinate = frozen.coordinate
+        if frozen.course >= 0 { displayCourse = frozen.course }
+    }
 
     /// «Похоже, вы едете» по текущей цифре спидометра. Присваиваем ТОЛЬКО на
     /// изменение: @Observable будит подписчиков на каждую запись, а смысл
@@ -1028,13 +1052,23 @@ final class LocationService: NSObject {
     private func handleLocationBody(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed,
                                     course: CLLocationDirection) {
         currentCoordinate = coordinate
+        let shownBefore = displayCoordinate
+        let courseBefore = displayCourse
+        standstill.update(coordinate, rawKmh: speed >= 0 ? speed * 3.6 : -1,
+                          accuracy: horizontalAccuracy, course: course, at: Date())
         // Спидометр: сглаживание по ВРЕМЕНИ и мгновенный отклик на настоящий
         // перепад (SpeedSmoother — прежние константные веса на редких тиках
         // адаптивного GPS растягивали хвост торможения на 5+ секунд).
         // speed < 0 — фикс без скорости (туннель, плохая геометрия спутников): держим
         // прошлое значение, нулём считать нельзя — PassTracking берёт МИНИМУМ по зоне
         // проезда, и один такой фикс занизил бы записанную скорость у камеры.
-        if speed >= 0 {
+        // На стоянке — ровно ноль: доплеровский шум приёмника на месте (2–7 км/ч)
+        // не скорость (Standstill).
+        if standstill.isStopped {
+            speedSmoother.reset()
+            if speedKmh != 0 { speedKmh = 0 }
+            refreshDrivingFlag()
+        } else if speed >= 0 {
             speedKmh = speedSmoother.update(rawKmh: speed * 3.6, at: Date())
             refreshDrivingFlag()
         }
@@ -1135,6 +1169,10 @@ final class LocationService: NSObject {
                 displayCoordinate = snap.coordinate
                 displayCourse = snap.course
             }
+            // Стоим — стрелка стоит там, где остановилась, и смотрит, куда
+            // ехала: «после остановки куда-то назад уходил» — это блуждание
+            // приёмника на месте, а не движение (владелец, 12.10).
+            freezeDisplayIfStopped(shownBefore: shownBefore, courseBefore: courseBefore)
             tuneAdaptiveAccuracy()
             // Умный режим: детектор города/трассы (дёшево — пара сравнений).
             contextDetector.update(roadLimitKmh: speedLimits?.certainLimit,

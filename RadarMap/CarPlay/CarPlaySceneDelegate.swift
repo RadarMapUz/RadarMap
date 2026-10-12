@@ -99,6 +99,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // CarPlay считает, что видимого окна нет, и экран машины пустой
         // (2.2.6, «not considered visible»). Содержимое — только на экране.
         let root = CarPlayWindowRoot()
+        root.onMapButtonInsets = { [weak self] insets in
+            Log.carplay.info("кнопки карты занимают: справа \(Int(insets.right), privacy: .public), слева \(Int(insets.left), privacy: .public), снизу \(Int(insets.bottom), privacy: .public)")
+            self?.model.mapButtonInsets = EdgeInsets(top: insets.top, leading: insets.left,
+                                                     bottom: insets.bottom, trailing: insets.right)
+        }
         window.rootViewController = root
         windowRoot = root
         // Содержимое — только когда и сцена на экране, и приложение не в фоне:

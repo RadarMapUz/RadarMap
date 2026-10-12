@@ -78,6 +78,9 @@ final class CarPlayMapModel {
     /// слежение, как только водитель тронул карту пальцем или крутилкой),
     /// читает значок кнопки «к себе»: залитый — следим, контурный — стоим.
     var isFollowing = true
+    /// Сколько занимают кнопки карты по краям окна (mapButtonSafeAreaLayoutGuide):
+    /// HUD у правого края встаёт левее них. Меняется со сменой экрана.
+    var mapButtonInsets = EdgeInsets()
     /// Сдвиг карты на столько точек экрана (содержимое едет за пальцем).
     func pan(by translation: CGSize) {
         guard translation != .zero else { return }
@@ -169,7 +172,8 @@ struct CarPlayMapScreen: View {
             // нет вовсе — та же экономия, что 41c4297 дал телефону: живые
             // цифры не держатся в дереве, которое никто не видит.
             if model.isOnScreen {
-                CarPlayOverlay(showsManeuver: !model.hasSystemGuidance)
+                CarPlayOverlay(showsManeuver: !model.hasSystemGuidance,
+                               buttonInsets: model.mapButtonInsets)
             }
 
             // «Радар ещё стоял?» после реального проезда: наблюдение — в

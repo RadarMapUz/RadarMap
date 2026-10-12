@@ -26,9 +26,13 @@ struct OfflineOfferCard: View {
                     .frame(width: 36, height: 36)
                     .background(Theme.accent.opacity(0.14), in: Circle())
                 VStack(alignment: .leading, spacing: 1) {
+                    // Заголовок в одну строку: на 4,7" он переносился, а
+                    // «Скачать» справа ломалось на «Скачат / ь» (16e, 13.10).
                     Text("Карта без интернета")
                         .font(.rounded(15, .bold))
                         .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                     Text(region.title(language: OfflineMapsView.language(env.settings.appLanguage))
                          + " · " + OfflineMapsView.size(region.totalBytes))
                         .font(.rounded(11))
@@ -36,15 +40,20 @@ struct OfflineOfferCard: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
+                // «Не сейчас» — крестиком: словом оно отнимало у заголовка
+                // место на 4,7" («Карта без и…», 16e, 13.10).
                 Button {
                     answer()
                 } label: {
-                    Text("Не сейчас")
-                        .font(.rounded(13, .semibold))
+                    Image(systemName: "xmark")
+                        .font(.rounded(14, .bold))
                         .foregroundStyle(Theme.textSecondary)
+                        .frame(width: 32, height: 32)
+                        .background(Theme.textTertiary.opacity(0.14), in: Circle())
                 }
                 .buttonStyle(.plain)
                 .tapTarget()
+                .accessibilityLabel(Text("Не сейчас"))
                 Button {
                     env.offlineMaps.download(region)
                     answer()
@@ -54,6 +63,7 @@ struct OfflineOfferCard: View {
                     Text("Скачать")
                         .font(.rounded(15, .bold))
                         .foregroundStyle(Theme.onAccentFill)
+                        .fixedSize()
                         .padding(.horizontal, 16)
                         .frame(minHeight: Theme.controlSize)
                         .background(Theme.accentFill, in: Capsule())

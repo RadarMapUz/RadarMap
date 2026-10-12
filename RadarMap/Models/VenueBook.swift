@@ -21,6 +21,10 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
     /// сервер вправе завести новый вид раньше, чем выйдет сборка.
     enum Kind: Int, Sendable, CaseIterable {
         case fuel = 1, parking, carWash, carRepair, tyres, charging, food, pharmacy, atm, supermarket
+        /// Метан (АГНКС) и пропан (АГЗС) — отдельно от бензина (13.10):
+        /// большинство машин на газу, и «АЗС» в поиске отвечала всеми
+        /// заправками подряд. Коды 11 и 12 — контракт с build_roads.py.
+        case cng = 11, lpg = 12
 
         var title: String {
             switch self {
@@ -34,6 +38,8 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
             case .pharmacy:    return String(localized: "Аптека")
             case .atm:         return String(localized: "Банкомат")
             case .supermarket: return String(localized: "Супермаркет")
+            case .cng:         return String(localized: "Метан")
+            case .lpg:         return String(localized: "Пропан")
             }
         }
 
@@ -51,6 +57,8 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
             case .pharmacy:    return "cross.case.fill"
             case .atm:         return "banknote.fill"
             case .supermarket: return "cart.fill"
+            case .cng:         return "flame.fill"
+            case .lpg:         return "flame"
             }
         }
 
@@ -59,7 +67,9 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
         /// в чьём имени это слово случайно есть.
         var searchWords: [String] {
             switch self {
-            case .fuel:        return ["азс", "заправка", "бензин", "метан", "пропан", "zapravka", "benzin", "yoqilg'i", "azs"]
+            case .fuel:        return ["азс", "заправка", "бензин", "zapravka", "benzin", "yoqilg'i", "azs"]
+            case .cng:         return ["метан", "агнкс", "metan", "agnks", "gaz"]
+            case .lpg:         return ["пропан", "агзс", "propan", "agzs", "suyultirilgan"]
             case .parking:     return ["парковка", "стоянка", "parking", "avtoturargoh", "to'xtash"]
             case .carWash:     return ["мойка", "автомойка", "moyka", "avtomoyka"]
             case .carRepair:   return ["автосервис", "сервис", "ремонт", "сто", "servis", "ta'mirlash"]
@@ -73,7 +83,7 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
         }
 
         /// Плитки на пустом экране поиска — то, что ищут из машины.
-        static let quick: [Kind] = [.fuel, .parking, .carWash, .tyres, .charging, .pharmacy, .atm, .food]
+        static let quick: [Kind] = [.fuel, .cng, .lpg, .parking, .carWash, .tyres, .charging, .pharmacy, .atm, .food]
     }
 
     let kind: Kind
@@ -196,6 +206,8 @@ nonisolated struct VenueBook: Sendable {
         case .pharmacy:    return ([.pharmacy], "аптека")
         case .atm:         return ([.atm, .bank], "банкомат")
         case .supermarket: return ([.foodMarket], "супермаркет")
+        case .cng:         return ([.gasStation], "метан заправка")
+        case .lpg:         return ([.gasStation], "пропан заправка")
         }
     }
 

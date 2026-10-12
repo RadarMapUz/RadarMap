@@ -1604,6 +1604,22 @@
         }
       }
     },
+    "Бензин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Бензин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benzin"
+          }
+        }
+      }
+    },
     "Берём каждый проезд камеры, у которой известен лимит дороги, и сравниваем с ним скорость в точке фиксации. Попал в штрафную ступень — прибавляем её сумму к риску. Проезды камер без известного лимита не считаем нарушением: выдумывать превышение мы не вправе.": {
       "localizations": {
         "ru": {
@@ -5634,6 +5650,22 @@
         }
       }
     },
+    "Метан": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Метан"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metan"
+          }
+        }
+      }
+    },
     "Метки «Знакомый» и «Спокойнее» на вариантах маршрута.": {
       "localizations": {
         "ru": {
@@ -9076,6 +9108,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bu kameradan %lld km/soat bilan o'tganingizda:"
+          }
+        }
+      }
+    },
+    "Пропан": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропан"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Propan"
           }
         }
       }

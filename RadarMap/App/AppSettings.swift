@@ -215,22 +215,27 @@ enum TripStartMode: String, CaseIterable, Identifiable {
 /// Чем машина заправляется: какие плитки «в дороге» показывать в «Куда»
 /// (сетка CarPlay — восемь мест, и «Зарядка» бензиновой машине — шум).
 enum VehicleEnergy: String, CaseIterable, Identifiable {
-    case fuel, electric, hybrid
+    case fuel, cng, lpg, electric, hybrid
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .fuel:     return String(localized: "Бензин или газ")
+        case .fuel:     return String(localized: "Бензин")
+        case .cng:      return String(localized: "Метан")
+        case .lpg:      return String(localized: "Пропан")
         case .electric: return String(localized: "Электромобиль")
         case .hybrid:   return String(localized: "Гибрид")
         }
     }
 
-    /// Плитки заведений в «Куда», по порядку.
+    /// Плитки заведений в «Куда», по порядку. Машина на газу ищет сначала
+    /// свой газ, а бензин — запасом: АГНКС меньше, и очередь на ней — быль.
     var stops: [Venue.Kind] {
         switch self {
         case .fuel:     return [.fuel]
+        case .cng:      return [.cng, .fuel]
+        case .lpg:      return [.lpg, .fuel]
         case .electric: return [.charging]
         case .hybrid:   return [.charging, .fuel]
         }

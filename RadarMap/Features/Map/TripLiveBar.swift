@@ -29,21 +29,30 @@ struct TripLiveBar: View {
     let onShowCameras: () -> Void
     let onStop: () -> Void
 
+    /// Ширина гибкой части; с неё решается, влезает ли капсула камеры.
+    @State private var barWidth: CGFloat = 0
+    /// Сводка («19:35 · 12 мин · 4,2 км») и капсула («📷 320 м») рядом —
+    /// от ~200 pt; у́же — только сводка (SE в крупном шрифте).
+    static let cameraCapsuleMinWidth: CGFloat = 200
+
     var body: some View {
         HStack(spacing: 10) {
-            // Гибкая часть — сведения о пути. ViewThatFits выбирает первый
-            // вариант, который влезает целиком в своём настоящем размере.
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 10) {
-                    summary.fixedSize()
+            // Гибкая часть — сведения о пути. Раньше здесь стоял ViewThatFits
+            // с тремя вариантами: он раскладывал все три на КАЖДОМ тике GPS
+            // (аудит 11.10, п. 8). Теперь решение по ширине панели, которая
+            // меняется только со сменой экрана: капсула камеры показывается,
+            // когда места хватает, а сводка в крайнем случае ужимается одной
+            // строкой — никаких «19:3 / 5».
+            HStack(spacing: 10) {
+                summary
+                    .minimumScaleFactor(0.6)
+                    .layoutPriority(1)
+                if barWidth >= Self.cameraCapsuleMinWidth {
                     cameraCapsule
                 }
-                summary.fixedSize()
-                // Крайний случай (SE + самый крупный шрифт): уменьшить, но
-                // одной строкой — никаких «19:3 / 5».
-                summary.minimumScaleFactor(0.6)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { barWidth = $0 }
             // «Радар!» — у самого края, «Стоп» — перед ней. Было наоборот, и
             // взведённый «Стоп» («Точно?», 44 → ~104 pt) толкал «Радар!» на
             // 60 pt влево и сам ложился на её прежнее место: три секунды

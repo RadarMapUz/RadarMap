@@ -84,7 +84,7 @@ enum MapPictureRenderer {
         // нашей. Движок не ответил (офлайн, выпуска нет) — снимок Apple, как
         // раньше; не ответил и он — пустой фон. Картинка есть всегда.
         var base: UIImage?
-        var project: (CLLocationCoordinate2D) -> CGPoint = fitProjection(rect, into: size)
+        var project: @Sendable (CLLocationCoordinate2D) -> CGPoint = fitProjection(rect, into: size)
         #if canImport(MapLibre)
         if let own = await EngineMapSnapshot.render(rect: rect, size: size, daylight: !dark, scale: scale) {
             base = own.image
@@ -112,6 +112,15 @@ enum MapPictureRenderer {
         }
         if Task.isCancelled { return nil }
 
+        // Линии и точки поверх подложки — вне главного потока (аудит 11.10,
+        // п. 6): при первом открытии Итогов рисуются сразу несколько карт.
+        return await Self.compose(picture, base: base, size: size, scale: scale, traits: traits, project: project)
+    }
+
+    @concurrent
+    private static func compose(_ picture: MapPicture, base: UIImage?, size: CGSize, scale: CGFloat,
+                                traits: UITraitCollection,
+                                project: @Sendable (CLLocationCoordinate2D) -> CGPoint) async -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         format.opaque = true
@@ -167,7 +176,7 @@ enum MapPictureRenderer {
 
     /// Своя проекция без подложки: кадр вписан в размер с сохранением сторон.
     private static func fitProjection(_ rect: MKMapRect,
-                                      into size: CGSize) -> (CLLocationCoordinate2D) -> CGPoint {
+                                      into size: CGSize) -> @Sendable (CLLocationCoordinate2D) -> CGPoint {
         let k = min(size.width / rect.width, size.height / rect.height)
         let dx = (size.width - rect.width * k) / 2
         let dy = (size.height - rect.height * k) / 2

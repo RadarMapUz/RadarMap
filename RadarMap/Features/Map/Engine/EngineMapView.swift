@@ -598,7 +598,7 @@ struct EngineMapView: UIViewRepresentable {
             lastDaylight = model.daylight
             lastHouses = model.houses
             lastPlaces = model.places
-            lastDriving = model.driving
+            lastDriving = nil   // приглушение домов выставит applyHiddenLayers после загрузки
             lastOffline = model.offline
             lastModern = model.modernStyle
             os_signpost(.event, log: performanceLog, name: "Style replacement")
@@ -606,7 +606,7 @@ struct EngineMapView: UIViewRepresentable {
             if model.modernStyle, !modernBroken, let release {
                 if let json = EngineModernStyle.json(daylight: model.daylight, base: AppConfig.syncBaseURL,
                                                      release: release, houses: model.houses,
-                                                     places: model.places, driving: model.driving,
+                                                     places: model.places, driving: false,
                                                      offline: model.offline,
                                                      labelLanguage: model.labelLanguage) {
                     modernLoaded = true
@@ -761,8 +761,11 @@ struct EngineMapView: UIViewRepresentable {
                 lastCameraModel = nil
             }
 
-            if modernLoaded, lastPlaces != model.places || lastDriving != model.driving
-                || lastOffline != model.offline {
+            // `driving` больше не перезагружает стиль (аудит 11.10, п. 3):
+            // старт и стоп поездки — пик и сброс тайлов ровно в момент,
+            // когда карта должна ехать. Слои поездки прячутся видимостью
+            // (applyHiddenLayers), дома приглушаются свойством слоя.
+            if modernLoaded, lastPlaces != model.places || lastOffline != model.offline {
                 loadStyle(model, in: view)
                 return
             }
@@ -951,13 +954,29 @@ struct EngineMapView: UIViewRepresentable {
         /// Видимость, а не новый стиль: перезагрузка стиля — сама по себе пик и
         /// сброс тайлов, а на ходу слои меняются на каждой остановке.
         private func applyHiddenLayers(_ model: EngineMapView, in view: MLNMapView) {
+            guard let style = view.style else { return }
             var wanted = Set<String>()
             if model.performance != .full { wanted.formUnion(Self.hotHiddenLayers) }
             if model.declutter { wanted.formUnion(Self.drivingHiddenLayers) }
-            guard wanted != hiddenLayers, let style = view.style else { return }
-            hiddenLayers = wanted
-            for id in Set(Self.hotHiddenLayers).union(Self.drivingHiddenLayers) {
-                style.layer(withIdentifier: id)?.isVisible = !wanted.contains(id)
+            // Режим «в поездке» новой карты: заведения, номера домов, подписи
+            // дорожек — те же слои, что раньше вырезал drivingLayers при сборке.
+            if model.driving, modernLoaded {
+                wanted.formUnion(style.layers.map(\.identifier).filter(EngineModernStyle.hiddenWhileDriving))
+            }
+            if wanted != hiddenLayers {
+                hiddenLayers = wanted
+                let managed = Set(Self.hotHiddenLayers).union(Self.drivingHiddenLayers)
+                    .union(style.layers.map(\.identifier).filter(EngineModernStyle.hiddenWhileDriving))
+                for id in managed {
+                    style.layer(withIdentifier: id)?.isVisible = !wanted.contains(id)
+                }
+            }
+            if modernLoaded, lastDriving != model.driving {
+                lastDriving = model.driving
+                if let buildings = style.layer(withIdentifier: "building-3d") as? MLNFillExtrusionStyleLayer {
+                    buildings.fillExtrusionOpacity = NSExpression(
+                        forConstantValue: model.driving ? AppConfig.engineDrivingBuildingOpacity : 1)
+                }
             }
         }
 

@@ -29,7 +29,7 @@ enum EngineMapSnapshot {
 
     struct Result {
         let image: UIImage
-        let project: (CLLocationCoordinate2D) -> CGPoint
+        let project: @Sendable (CLLocationCoordinate2D) -> CGPoint
     }
 
     /// Снимок области `rect` размером `size` точек. nil — не вышло.

@@ -3,7 +3,8 @@
 //  RadarMap
 //
 //  Звуковой сигнал + голосовое предупреждение. Играет поверх «беззвучного» режима,
-//  приглушает музыку на время оповещения (AVAudioSession .playback + .duckOthers).
+//  приглушает музыку на время оповещения (AVAudioSession .playback, режим
+//  .voicePrompt + .duckOthers; подкасты — на паузу).
 //
 
 import Foundation
@@ -235,7 +236,15 @@ final class AlertPlayer: NSObject {
             let started = Date()
             do {
                 let session = AVAudioSession.sharedInstance()
-                try session.setCategory(.playback, options: [.duckOthers, .mixWithOthers])
+                // Режим голосовой подсказки навигатора (`.voicePrompt`): так
+                // Apple велит звучать навигации. В машине CarPlay ведёт такой
+                // звук как подсказку навигатора — поверх музыки и рядом с
+                // голосом Яндекса, если он ведёт маршрут, — а подкаст или
+                // аудиокнига встают на паузу на время фразы, а не звучат
+                // одновременно с ней (`.interruptSpokenAudioAndMixWithOthers`).
+                // Музыка, как и раньше, приглушается (`.duckOthers`).
+                try session.setCategory(.playback, mode: .voicePrompt,
+                                        options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
                 try session.setActive(true)
             } catch {
                 // Сигнал всё равно попробуем сыграть — хуже не станет.

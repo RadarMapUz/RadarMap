@@ -196,10 +196,20 @@ echo "    мест в экстракте: $(wc -l < places.geojsonl)"
 osmium tags-filter uzbekistan.osm.pbf \
     nwa/amenity=fuel,parking,car_wash,charging_station,restaurant,cafe,fast_food,pharmacy,atm,bank \
     nwa/shop=car_repair,tyres,supermarket \
+    nwa/tourism=hotel,motel,guest_house,hostel \
     -o venues.osm.pbf --overwrite
 osmium export venues.osm.pbf -f geojsonseq \
     --geometry-types=point,polygon -o venues.geojsonl --overwrite
 echo "    заведений в экстракте: $(wc -l < venues.geojsonl)"
+
+# Реестры портала открытых данных (банкоматы ЦБ, гостиницы; CC BY-SA 4.0):
+# файлы кладёт владелец из server/poi/ (import_poi_egov.py) в $WORK/poi/.
+# Сборка сливает их с OSM по расстоянию; нет файлов — просто OSM.
+VENUES_EXTRA=""
+for extra in "$WORK"/poi/egov_*.geojsonl; do
+    [ -f "$extra" ] && VENUES_EXTRA="$VENUES_EXTRA --venues-extra $extra"
+done
+[ -n "$VENUES_EXTRA" ] && echo "    реестры портала:$VENUES_EXTRA"
 
 # Правки конструктора. Снимок, а не приращение: сборка накладывает состояние
 # целиком, и «отменить правку» значит собрать тайлы без этой строки.
@@ -252,6 +262,7 @@ fi
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
     --points points.geojsonl --houses houses.geojsonl \
     --places places.geojsonl --trees trees.geojsonl --venues venues.geojsonl \
+    $VENUES_EXTRA \
     --addresses addresses.geojsonl --edits "$EDITS" $SURFACE --mvt \
     --tiles "$CANDIDATE"
 
@@ -278,6 +289,7 @@ rm -rf "$CANDIDATE.check" && mkdir -p "$CANDIDATE.check"
 python3 "$WORK/build_roads.py" --in roads.geojsonl --areas areas.geojsonl \
     --points points.geojsonl --houses houses.geojsonl \
     --places places.geojsonl --trees trees.geojsonl --venues venues.geojsonl \
+    $VENUES_EXTRA \
     --addresses addresses.geojsonl --edits "$EDITS" $SURFACE --mvt \
     --tiles "$CANDIDATE.check" >/dev/null
 if ! diff -rq "$CANDIDATE" "$CANDIDATE.check" >/dev/null; then

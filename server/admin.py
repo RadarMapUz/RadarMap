@@ -59,6 +59,11 @@ import osm_queue
 
 DB_PATH = os.environ.get("RADARMAP_DB", "/opt/radarmap/api/reports.db")
 CAMERAS_PATH = os.environ.get("RADARMAP_CAMERAS", "/opt/radarmap/www/cameras.json")
+# «Камеры, которых нет в базе» — файл build_camera_candidates.py. Лежит рядом
+# с панелью (review/), на сервер приезжает вместе с ней через deploy_api.sh.
+CANDIDATES_PATH = os.environ.get(
+    "RADARMAP_CANDIDATES",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "review", "camera_candidates.json"))
 # 8092 занят OSRM (docker-proxy), 8091 — публичным api. 8093 свободен.
 PORT = int(os.environ.get("RADARMAP_ADMIN_PORT", "8093"))
 DAY = 86400
@@ -132,6 +137,16 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         at REAL NOT NULL, camera_id INTEGER,
         action TEXT NOT NULL, detail TEXT DEFAULT '')""")
+    # Решения по кандидатам «не в базе» (build_camera_candidates.py). Ключ —
+    # id кандидата из файла («osm:123», «egov-buxoro:…»): файл пересобирается,
+    # а отклонённое в нём не должно всплывать заново. Ничего не публикует —
+    # принять кандидата значит добавить камеру в базу руками владельца.
+    conn.execute("""CREATE TABLE IF NOT EXISTS candidate_decisions(
+        candidate_id TEXT PRIMARY KEY,
+        decision TEXT NOT NULL,            -- reject
+        note TEXT DEFAULT '',
+        decided_at REAL NOT NULL,
+        who TEXT DEFAULT '')""")
     try:
         conn.execute("ALTER TABLE camera_reports ADD COLUMN snooze_until REAL DEFAULT 0")
     except sqlite3.OperationalError:
@@ -571,6 +586,51 @@ def camera_details(conn, camera_id):
     }
 
 
+def load_candidates(path=None):
+    """Кандидаты из файла build_camera_candidates.py. Нет файла или он битый —
+    пустой список: раздел — подсказка, и панель обязана открыться без него."""
+    path = path or CANDIDATES_PATH
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return []
+    items = data.get("candidates") if isinstance(data, dict) else data
+    out = []
+    for item in items or []:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        try:
+            lat, lon = float(item["lat"]), float(item["lon"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        out.append({"id": str(item["id"]), "lat": lat, "lon": lon,
+                    "type": str(item.get("type") or ""), "source": str(item.get("source") or ""),
+                    "note": str(item.get("note") or ""), "maxspeed": item.get("maxspeed"),
+                    "direction": item.get("direction"), "nearest_m": item.get("nearest_m"),
+                    "also": list(item.get("also") or [])})
+    return out
+
+
+def rejected_candidates(conn):
+    """id → строка решения. Таблицу создаёт init_db панели."""
+    try:
+        return {row["candidate_id"]: row for row in conn.execute(
+            "SELECT candidate_id, note, decided_at, who FROM candidate_decisions")}
+    except sqlite3.OperationalError:
+        return {}
+
+
+def candidate_queue(conn, path=None):
+    """(открытые кандидаты, сколько отклонено). Отклонённые не показываются,
+    но и не удаляются из файла: он пересобирается из источников, где точка
+    остаётся, и решение должно пережить пересборку."""
+    rejected = rejected_candidates(conn)
+    items = load_candidates(path)
+    open_items = [item for item in items if item["id"] not in rejected]
+    return open_items, len(items) - len(open_items)
+
+
 def search_cameras(query, limit=20):
     """Поиск по id или части адреса — чтобы долететь до камеры, а не искать
     её глазами по стране."""
@@ -609,7 +669,7 @@ def static_url(name):
     return u(f"/static/{name}") + f"?v={stamp}"
 
 
-def render_moderation_map(api_key, pending, camera_count):
+def render_moderation_map(api_key, pending, camera_count, candidates=0):
     logout_url, moderate_js = u("/logout"), static_url("moderate.js")
     """Главный экран модерации: одна карта на все камеры.
 
@@ -668,6 +728,7 @@ color:#8ea0bb;line-height:1.7}}
     <span class="chip on" data-filter="all">Все · {camera_count}</span>
     <span class="chip" data-filter="work">Требуют проверки</span>
     <span class="chip" data-filter="done">Правки · {pending}</span>
+    <a class="chip" href="{esc(u("/candidates"))}">Кандидаты (не в базе) · {candidates}</a>
   </div>
 </div>
 
@@ -1560,6 +1621,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, junctions_page())
             if path == "/map":
                 return self.moderation_map(conn)
+            if path == "/candidates":
+                return self._send(200, self.candidates_page(conn))
             if path == "/api/cameras":
                 return self._json({"cameras": cameras_payload(conn)})
             if path.startswith("/api/camera/"):
@@ -1674,6 +1737,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/cameras/act":
                 self.camera_action(conn, field)
                 return self._redirect(u("/cameras"))
+            if path == "/candidates/act":
+                self.candidate_action(conn, field)
+                return self._redirect(u("/candidates"))
             if path == "/mobile/act":
                 self.mobile_action(conn, field)
                 return self._redirect(u("/mobile"))
@@ -2001,8 +2067,72 @@ class Handler(BaseHTTPRequestHandler):
                 'yandex_key=… — без неё карта не загрузится</div>'))
         pending = conn.execute(
             "SELECT COUNT(*) n FROM overrides WHERE published_at IS NULL").fetchone()["n"]
-        self._send(200, render_moderation_map(api_key, pending, len(cameras())),
+        open_candidates, _rejected = candidate_queue(conn)
+        self._send(200, render_moderation_map(api_key, pending, len(cameras()),
+                                              len(open_candidates)),
                    csp=self.CSP_MAP)
+
+    # --- Кандидаты «не в базе» ---
+
+    def candidates_page(self, conn):
+        """Раздел экрана «Положение»: точки из OSM и областных наборов портала,
+        которых нет в базе. Таблица с координатами, источником и заметкой;
+        одна кнопка — «Отклонить». Принять нечем намеренно: камера попадает в
+        базу только через снап и подпись владельца (deploy_db.sh)."""
+        act = u("/candidates/act")
+        items, rejected = candidate_queue(conn)
+        intro = (f'<div class="card"><b>Кандидаты (не в базе)</b> — точки дальше 300 м от '
+                 f'любой камеры базы: узлы OSM <code>highway=speed_camera</code> и областные '
+                 f'наборы портала открытых данных (CC BY-SA 4.0). Отклонённых: {rejected}. '
+                 f'Здесь ничего не публикуется: подтверждённую камеру добавляет владелец '
+                 f'через snap_cameras.py и deploy_db.sh.</div>')
+        if not items:
+            body = intro + '<div class="empty">Кандидатов нет'
+            if not os.path.exists(CANDIDATES_PATH):
+                body += (f' — файла {esc(os.path.basename(CANDIDATES_PATH))} нет; '
+                         f'его строит build_camera_candidates.py')
+            return page("/map", "Кандидаты", body + "</div>")
+        rows = []
+        for item in items:
+            extra = []
+            if item.get("maxspeed"):
+                extra.append(f'лимит {esc(item["maxspeed"])}')
+            if item.get("direction"):
+                extra.append(f'направление {esc(item["direction"])}')
+            if item.get("nearest_m") is not None:
+                extra.append(f'до базы {esc(item["nearest_m"])} м')
+            if item.get("also"):
+                extra.append("ещё: " + esc(", ".join(item["also"])))
+            tail = (" · " + " · ".join(extra)) if extra else ""
+            rows.append(f"""<div class="card">
+  <div class="row"><b>{esc(item['type'] or 'камера')}</b>
+    <span class="tag">{esc(item['source'])}</span>
+    <code>{item['lat']:.5f}, {item['lon']:.5f}</code>
+    {osm_link(item['lat'], item['lon'])}</div>
+  <div class="muted">{esc(item['note'] or 'без заметки')}{tail}</div>
+  <form method="post" action="{act}">
+    <input type="hidden" name="candidate_id" value="{esc(item['id'])}">
+    <input type="text" name="note" placeholder="почему (необязательно)" maxlength="200">
+    <button class="danger" name="action" value="reject">Отклонить</button>
+  </form></div>""")
+        return page("/map", "Кандидаты",
+                    f"{intro}<h1>Кандидаты ({len(items)})</h1>{''.join(rows)}")
+
+    def candidate_action(self, conn, field):
+        candidate_id = field("candidate_id")[:120]
+        if not candidate_id or field("action") != "reject":
+            return
+        # Только то, что есть в файле: чужая строка в таблице решений — мусор.
+        if candidate_id not in {item["id"] for item in load_candidates()}:
+            return
+        note = field("note")[:200]
+        conn.execute(
+            "INSERT OR REPLACE INTO candidate_decisions"
+            "(candidate_id, decision, note, decided_at, who) VALUES(?,'reject',?,?,?)",
+            (candidate_id, note, time.time(), self.who()))
+        log_action(conn, None, "candidate_reject", f"{candidate_id} {note}".strip(),
+                   who=self.who())
+        conn.commit()
 
     # --- Конструктор карты
 

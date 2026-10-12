@@ -1,0 +1,2191 @@
+{
+ "version": 1,
+ "generated": "2026-10-12",
+ "min_distance_m": 300.0,
+ "cameras_in_db": 3511,
+ "sources": [
+  "osm",
+  "egov-buxoro",
+  "egov-navoiy",
+  "egov-qoraqalpogiston",
+  "egov-xorazm"
+ ],
+ "candidates": [
+  {
+   "id": "egov-buxoro:649036a9320e217ad3e2ef4d",
+   "lat": 39.749696,
+   "lon": 64.438014,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-buxoro",
+   "note": "Бухоро Шаҳри · Бухоро шахри Мустақиллик - Пиридастгир кўчалари кесишмаси (Улгурчи бозор-Семруғ сп. мажмуа йўналиши)",
+   "nearest_m": 566
+  },
+  {
+   "id": "egov-buxoro:649036a9320e217ad3e2ef49",
+   "lat": 39.773669,
+   "lon": 64.456077,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-buxoro",
+   "note": "Бухоро Шаҳри · Бухоро Шаҳар А-380 Ғузор-бухоро-нукус-бейнеу А/Й 219,9 КМ",
+   "nearest_m": 681
+  },
+  {
+   "id": "egov-buxoro:649036a9320e217ad3e2ef53",
+   "lat": 39.787903,
+   "lon": 64.44859,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-buxoro",
+   "note": "Бухоро Шаҳри · Бухоро Ахоли Яшаш Пункти “А-380 Ғўзор-бухоро-нукус-бейнау” А/Й 221.4 КМ",
+   "nearest_m": 1179
+  },
+  {
+   "id": "egov-buxoro:649036a9320e217ad3e2ef44",
+   "lat": 39.901845,
+   "lon": 64.405429,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-buxoro",
+   "note": "Бухоро Тумани · Бухоро ТУМ 4P-68 А/Й 6КМ (чоруқ МФЙ)",
+   "nearest_m": 457
+  },
+  {
+   "id": "egov-buxoro:649036a9320e217ad3e2ef42",
+   "lat": 39.948166,
+   "lon": 64.29418,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-buxoro",
+   "note": "Ромитон Тумани · Наврўз Ахоли Яшаш Пункти 4Р-68 А/Й 19.5 КМ",
+   "nearest_m": null
+  },
+  {
+   "id": "egov-buxoro:649036a9320e217ad3e2ef64",
+   "lat": 40.092227,
+   "lon": 64.706397,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-buxoro",
+   "note": "Ғиждувон Тумани · 4Р58 \"С\" 0,65 КМ, Ю.хамадоний Кўчаси, Жахон Бозор Каршисида",
+   "nearest_m": 928
+  },
+  {
+   "id": "egov-buxoro:649036a9320e217ad3e2ef41",
+   "lat": 40.527389,
+   "lon": 68.21746,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-buxoro",
+   "note": "Ромитон Тумани · Ромитан Тумани, А-380 Автомобил Йўлининг 432 КМ, Қизилработ АЯЖ",
+   "nearest_m": null
+  },
+  {
+   "id": "egov-navoiy:6490375f320e217ad3e2ef86",
+   "lat": 39.944957,
+   "lon": 64.657897,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-navoiy",
+   "note": "Қизилтепа Тумани · Қизилтепа Тумани 4R65 Автомобил Йўлининг 19 КМ 800 М Арабон АЯЖ",
+   "nearest_m": null
+  },
+  {
+   "id": "egov-navoiy:6490375f320e217ad3e2ef87",
+   "lat": 40.091707,
+   "lon": 65.825165,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-navoiy",
+   "note": "Хатирчи Тумани · 4R48 Авт.йўлининг 139 КМ 450 М Гумбаз А.Я.Ж",
+   "nearest_m": 1206
+  },
+  {
+   "id": "egov-navoiy:6490375f320e217ad3e2ef8f",
+   "lat": 40.115245,
+   "lon": 65.366596,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-navoiy",
+   "note": "Навоий Шаҳри · Меъморлар V1 (9-БОЗОР Чоррахаси) · Навоий Шаҳри · Меъморлар V3 (9-БОЗОР Чоррахаси) · Навоий Шаҳри · И.каримов V2 (9-БОЗОР Чоррахаси)",
+   "nearest_m": 305,
+   "also": [
+    "egov-navoiy"
+   ]
+  },
+  {
+   "id": "egov-navoiy:6490375f320e217ad3e2ef8d",
+   "lat": 40.116237,
+   "lon": 65.370068,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-navoiy",
+   "note": "Навоий Шаҳри · Меъморлар V1 (марказий Банк Чоррахаси) · Навоий Шаҳри · Галабашох V4 (марказий Банк Чоррахаси) · Навоий Шаҳри · Меъморлар V2 (марказий Банк Чоррахаси) · Навоий Шаҳри · Галабашох V1 (марказий Банк Чоррахаси)",
+   "nearest_m": 469,
+   "also": [
+    "egov-navoiy"
+   ]
+  },
+  {
+   "id": "egov-navoiy:6490375f320e217ad3e2ef88",
+   "lat": 40.117775,
+   "lon": 65.120909,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-navoiy",
+   "note": "Кармана Тумани · Кармана Тумани М37 Автомобил Йўлининг 178 КМ 980М \"ТИР Парк\" Қаршисида",
+   "nearest_m": null
+  },
+  {
+   "id": "egov-navoiy:6490375f320e217ad3e2ef89",
+   "lat": 40.140167,
+   "lon": 65.356343,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-navoiy",
+   "note": "Кармана Тумани · 4R64E Автойўлининг 1 КМ КЎЗ Касалликлари Шифохонаси Қаршисида",
+   "nearest_m": 728
+  },
+  {
+   "id": "egov-navoiy:6490375f320e217ad3e2ef97",
+   "lat": 40.245582,
+   "lon": 65.234968,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-navoiy",
+   "note": "Навбахор тумани · 4R-48 автомобил йўлининг 198.9 км.да “Кескантерак”ахоли яшаш пункти",
+   "nearest_m": null
+  },
+  {
+   "id": "egov-qoraqalpogiston:649035bd320e217ad3e2ef05",
+   "lat": 41.445938,
+   "lon": 59.630697,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-qoraqalpogiston",
+   "note": "Нукус Шаҳри · А.Дустназаров билан Беруний. (Туркистон чоррахаси)",
+   "nearest_m": null
+  },
+  {
+   "id": "egov-qoraqalpogiston:649035bd320e217ad3e2ef0e",
+   "lat": 41.553222,
+   "lon": 60.990336,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-qoraqalpogiston",
+   "note": "Тўрткўл Тумани · Турткул билан Нукус ( Тўрткўл чоррахаси )",
+   "nearest_m": 667
+  },
+  {
+   "id": "egov-qoraqalpogiston:649035bd320e217ad3e2ef00",
+   "lat": 41.713654,
+   "lon": 60.70516,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-qoraqalpogiston",
+   "note": "Беруний Тумани · 4R171 А А/Й 1-2 КМ Оралиғи \"обихаёт\" МФЙ",
+   "nearest_m": 900
+  },
+  {
+   "id": "egov-qoraqalpogiston:649035bd320e217ad3e2ef06",
+   "lat": 42.441583,
+   "lon": 59.624188,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-qoraqalpogiston",
+   "note": "Нукус Шаҳри · Ўзбекистон шох билан Беруний. (Карвонсарой чоррахаси)",
+   "nearest_m": 526
+  },
+  {
+   "id": "egov-qoraqalpogiston:649035bd320e217ad3e2ef0c",
+   "lat": 42.457675,
+   "lon": 59.621973,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-qoraqalpogiston",
+   "note": "Нукус Шаҳри · А.Темур билан А.Дустназаров (Юсель чоррахаси)",
+   "nearest_m": 384
+  },
+  {
+   "id": "egov-qoraqalpogiston:649035bd320e217ad3e2ef03",
+   "lat": 43.063258,
+   "lon": 58.860174,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-qoraqalpogiston",
+   "note": "Кунгирот Тумани · 4Р173 Кунгрот-мойнок А.Й. 3-4 КМ (50КМ/С)",
+   "nearest_m": null
+  },
+  {
+   "id": "egov-xorazm:64903637320e217ad3e2ef29",
+   "lat": 41.290133,
+   "lon": 61.176698,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-xorazm",
+   "note": "Хазорасп Тумани · Хоразм Вилояти Хазарасп Тумани 4Р156 А/Й 62 КМ (карвак Ахоли Яшаш Пункити)",
+   "nearest_m": null
+  },
+  {
+   "id": "egov-xorazm:64903637320e217ad3e2ef2b",
+   "lat": 41.334968,
+   "lon": 60.913901,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-xorazm",
+   "note": "Боғот Тумани · Хоразм Вилояти Боғот Тумани 4Р156 А/Й 35 КМ (дехконбозор Ахоли Яшаш Пункти)",
+   "nearest_m": 440
+  },
+  {
+   "id": "egov-xorazm:64903637320e217ad3e2ef3b",
+   "lat": 41.36126,
+   "lon": 60.81639,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-xorazm",
+   "note": "Боғот Тумани · Ўзбекистон Кўчаси \"агробанк\" Ёнида",
+   "nearest_m": 619
+  },
+  {
+   "id": "egov-xorazm:64903637320e217ad3e2ef30",
+   "lat": 41.393396,
+   "lon": 60.674475,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-xorazm",
+   "note": "Янгиариқ Тумани · Хоразм Вилояти Янгиариқ Тумани 4Р164 А/Й 12 КМ (таган Ахоли Яшаш Пункити)",
+   "nearest_m": null
+  },
+  {
+   "id": "egov-xorazm:64903637320e217ad3e2ef2c",
+   "lat": 41.490788,
+   "lon": 60.751045,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-xorazm",
+   "note": "Хонқа Тумани · Хоразм Вилояти Хонқа Тумани 4Р156 А/Й 6 КМ (сарапаён Ахоли Яшаш Пункити)",
+   "nearest_m": 427
+  },
+  {
+   "id": "egov-xorazm:64903637320e217ad3e2ef34",
+   "lat": 41.490874,
+   "lon": 60.49968,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-xorazm",
+   "note": "Қўшқўпир Тумани · Хоразим Вилояти Қўшқўпир Тумани 4Р158 Автомобил Йўлининг 11 КМ (шихмашхад Ахоли Яшаш Пункти)",
+   "nearest_m": null
+  },
+  {
+   "id": "egov-xorazm:64903637320e217ad3e2ef15",
+   "lat": 41.529928,
+   "lon": 60.61665,
+   "type": "ПДД Камера",
+   "source": "egov-xorazm",
+   "note": "Urganch shahri / Город Ургенч / Urgench city · Саноатчилар R4 (телецентр Чоррахаси) · Urganch shahri / Город Ургенч / Urgench city · Янгиариқ R1 (телецентр Чоррахаси) · Urganch shahri / Город Ургенч / Urgench city · Саноатчилар R2 (телецентр Чоррахаси) · Urganch shahri / Город Ургенч / Urgench city · Янгиариқ R3 (телецентр Чоррахаси)",
+   "nearest_m": 1169,
+   "also": [
+    "egov-xorazm"
+   ]
+  },
+  {
+   "id": "egov-xorazm:64903637320e217ad3e2ef25",
+   "lat": 41.530333,
+   "lon": 60.674057,
+   "type": "ПДД Камера",
+   "source": "egov-xorazm",
+   "note": "Urganch shahri / Город Ургенч / Urgench city · 4Р156 а/й 2 км (Хонқа кучаси)",
+   "nearest_m": 612
+  },
+  {
+   "id": "egov-xorazm:64903637320e217ad3e2ef16",
+   "lat": 41.544931,
+   "lon": 60.615516,
+   "type": "ПДД Камера",
+   "source": "egov-xorazm",
+   "note": "Urganch shahri / Город Ургенч / Urgench city · Янгиариқ R1 (машал Чоррахаси) · Urganch shahri / Город Ургенч / Urgench city · Янгиариқ R4 (машал Чоррахаси) · Urganch shahri / Город Ургенч / Urgench city · Хонқа R4 (машал Чоррахаси) · Urganch shahri / Город Ургенч / Urgench city · Саёт R3 (машал Чоррахаси)",
+   "nearest_m": 317,
+   "also": [
+    "egov-xorazm"
+   ]
+  },
+  {
+   "id": "egov-xorazm:64903637320e217ad3e2ef26",
+   "lat": 41.557993,
+   "lon": 60.652451,
+   "type": "ПДД Камера",
+   "source": "egov-xorazm",
+   "note": "Urganch shahri / Город Ургенч / Urgench city · 4Р161 а/й 1 км (Амударё кўчаси)",
+   "nearest_m": 357
+  },
+  {
+   "id": "egov-xorazm:64903637320e217ad3e2ef2f",
+   "lat": 41.703295,
+   "lon": 60.297258,
+   "type": "ПДД Камера, Стационар Радар",
+   "source": "egov-xorazm",
+   "note": "Шовот Тумани · Хоразм Вилояти Шовот Тумани 4Р159 А/Й 30 КМ (киёт Ахоли Яшаш Пункти)",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:7904050711",
+   "lat": 37.27784,
+   "lon": 67.360336,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "203",
+   "nearest_m": 763
+  },
+  {
+   "id": "osm:5923821369",
+   "lat": 37.492283,
+   "lon": 67.128766,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар-С",
+   "maxspeed": 100,
+   "direction": "156",
+   "nearest_m": 587,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:8494675920",
+   "lat": 38.84556,
+   "lon": 65.796767,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 481
+  },
+  {
+   "id": "osm:8494675919",
+   "lat": 38.84603,
+   "lon": 65.796757,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 533
+  },
+  {
+   "id": "osm:5911790101",
+   "lat": 39.135694,
+   "lon": 65.424431,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар-С",
+   "maxspeed": 100,
+   "direction": "305",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:1891563971",
+   "lat": 39.145077,
+   "lon": 66.173432,
+   "type": "radar",
+   "source": "osm",
+   "note": "РАДАР",
+   "maxspeed": 70,
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6185342495",
+   "lat": 39.21288,
+   "lon": 66.243133,
+   "type": "radar",
+   "source": "osm",
+   "note": "РАДАР",
+   "maxspeed": 70,
+   "nearest_m": 381,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:11292713950",
+   "lat": 39.662533,
+   "lon": 68.492693,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 30,
+   "direction": "305",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6185342586",
+   "lat": 39.728457,
+   "lon": 67.147427,
+   "type": "radar",
+   "source": "osm",
+   "note": "РАДАР",
+   "nearest_m": 473
+  },
+  {
+   "id": "osm:5861042286",
+   "lat": 39.744474,
+   "lon": 67.201716,
+   "type": "radar",
+   "source": "osm",
+   "note": "Р А Д А Р",
+   "maxspeed": 70,
+   "nearest_m": 664,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6341895455",
+   "lat": 39.749225,
+   "lon": 64.437602,
+   "type": "radar",
+   "source": "osm",
+   "note": "Бухоро Шаҳри · Бухоро шахри Мустақиллик - Пиридастгир кўчалари кесишмаси (Тўқимачи бозор-ДОЗ-5 айланма йўналишида)",
+   "maxspeed": 60,
+   "nearest_m": 609,
+   "also": [
+    "egov-buxoro",
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6341895456",
+   "lat": 39.749676,
+   "lon": 64.437167,
+   "type": "radar",
+   "source": "osm",
+   "note": "Бухоро Шаҳри · Бухоро шахри Мустақиллик - Пиридастгир кўчалари кесишмаси (ДОЗ-5 айланма-Тўқимачи бозор йўналишида) · Бухоро Шаҳри · Бухоро шахри Мустақиллик - Пиридастгир кўчалари кесишмаси (Семруғ сп.мажмуа –Улгурчи бозор йўналиши)",
+   "maxspeed": 60,
+   "nearest_m": 600,
+   "also": [
+    "egov-buxoro",
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:5483400658",
+   "lat": 39.765822,
+   "lon": 67.259387,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "216",
+   "nearest_m": 333
+  },
+  {
+   "id": "osm:5203014558",
+   "lat": 39.770314,
+   "lon": 67.270099,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "74",
+   "nearest_m": 385,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6326956833",
+   "lat": 39.770794,
+   "lon": 67.273178,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "72",
+   "nearest_m": 357,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6471173327",
+   "lat": 39.781399,
+   "lon": 64.389775,
+   "type": "radar",
+   "source": "osm",
+   "note": "Бухоро Тумани · Бухоро Тумани Хонабод МФЙ Ҳудудидан Ўтувчи А-380 А/Й 14,8 КМ",
+   "maxspeed": 70,
+   "direction": "191",
+   "nearest_m": 634,
+   "also": [
+    "egov-buxoro",
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:5746432091",
+   "lat": 39.788323,
+   "lon": 67.314555,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар",
+   "maxspeed": 100,
+   "nearest_m": 418
+  },
+  {
+   "id": "osm:5861032991",
+   "lat": 39.802299,
+   "lon": 67.34712,
+   "type": "radar",
+   "source": "osm",
+   "note": "Р А Д А Р",
+   "maxspeed": 70,
+   "nearest_m": null,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:1838256069",
+   "lat": 39.819347,
+   "lon": 64.433275,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар · Бухоро Шаҳри · Бухоро Шаҳар М-37 Самарқанд-бухоро-туркманбоши А/Й 263 КМ",
+   "maxspeed": 70,
+   "direction": "15",
+   "nearest_m": 344,
+   "also": [
+    "egov-buxoro",
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:5483238197",
+   "lat": 39.941145,
+   "lon": 66.546041,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар",
+   "maxspeed": 70,
+   "nearest_m": 846
+  },
+  {
+   "id": "osm:6185342191",
+   "lat": 39.960543,
+   "lon": 67.546462,
+   "type": "radar",
+   "source": "osm",
+   "note": "РАДАР",
+   "maxspeed": 70,
+   "nearest_m": 677
+  },
+  {
+   "id": "osm:9715747330",
+   "lat": 39.992301,
+   "lon": 67.584417,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "205",
+   "nearest_m": 2031
+  },
+  {
+   "id": "osm:6081834639",
+   "lat": 39.994801,
+   "lon": 67.586061,
+   "type": "radar",
+   "source": "osm",
+   "note": "Video Radar",
+   "maxspeed": 70,
+   "nearest_m": 1723,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6081834637",
+   "lat": 39.998166,
+   "lon": 67.589005,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 1299,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:5696814822",
+   "lat": 40.020293,
+   "lon": 67.612649,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар",
+   "maxspeed": 70,
+   "nearest_m": 325,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:1573954885",
+   "lat": 40.023325,
+   "lon": 67.61547,
+   "type": "radar",
+   "source": "osm",
+   "note": "АВТО РАДАР",
+   "maxspeed": 70,
+   "nearest_m": 736
+  },
+  {
+   "id": "osm:7125011827",
+   "lat": 40.027467,
+   "lon": 64.774021,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар работал на состояние от Ноября 2019 года до 1 января 2020 года.",
+   "maxspeed": 70,
+   "direction": "84",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6081834633",
+   "lat": 40.033684,
+   "lon": 67.626359,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар камера · Kamera Radar",
+   "maxspeed": 70,
+   "nearest_m": null,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:12809683309",
+   "lat": 40.03612,
+   "lon": 64.329764,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "175",
+   "nearest_m": 1492
+  },
+  {
+   "id": "osm:6917476021",
+   "lat": 40.038165,
+   "lon": 65.682646,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "290",
+   "nearest_m": 1270,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:12813939481",
+   "lat": 40.048115,
+   "lon": 64.328669,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "0",
+   "nearest_m": 788
+  },
+  {
+   "id": "osm:6968160487",
+   "lat": 40.053961,
+   "lon": 64.872358,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "230",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6185342190",
+   "lat": 40.05407,
+   "lon": 67.707117,
+   "type": "radar",
+   "source": "osm",
+   "note": "РАДАР",
+   "maxspeed": 70,
+   "nearest_m": 471
+  },
+  {
+   "id": "osm:6579702119",
+   "lat": 40.057191,
+   "lon": 64.792134,
+   "type": "radar",
+   "source": "osm",
+   "note": "Точная дата нахождение радар здесь. По состояние 2020 года январь месяца, радар не работал.",
+   "maxspeed": 70,
+   "direction": "85",
+   "nearest_m": 1310
+  },
+  {
+   "id": "osm:5829780622",
+   "lat": 40.057306,
+   "lon": 64.845064,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар-М",
+   "maxspeed": 70,
+   "direction": "103",
+   "nearest_m": 1134
+  },
+  {
+   "id": "osm:1833182247",
+   "lat": 40.066978,
+   "lon": 64.900208,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "nearest_m": null,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:7124975974",
+   "lat": 40.078474,
+   "lon": 64.592347,
+   "type": "radar",
+   "source": "osm",
+   "note": "По состояние 2020 года январь месяца, радар работал.",
+   "maxspeed": 70,
+   "direction": "255",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:975394938",
+   "lat": 40.086331,
+   "lon": 64.674825,
+   "type": "radar",
+   "source": "osm",
+   "note": "По состояние 2020 года январь месяца, радар работал.",
+   "maxspeed": 60,
+   "direction": "282",
+   "nearest_m": 772,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:12873469700",
+   "lat": 40.090161,
+   "lon": 64.657459,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "100",
+   "nearest_m": 368,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6326941972",
+   "lat": 40.090789,
+   "lon": 64.968529,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "78",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6002857175",
+   "lat": 40.0984,
+   "lon": 67.793596,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 1131,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6579679392",
+   "lat": 40.100472,
+   "lon": 65.001864,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "230",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:2255665350",
+   "lat": 40.107595,
+   "lon": 65.535986,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар",
+   "maxspeed": 70,
+   "nearest_m": 403
+  },
+  {
+   "id": "osm:6627811196",
+   "lat": 40.112045,
+   "lon": 65.076963,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "220",
+   "nearest_m": 1017
+  },
+  {
+   "id": "osm:6725435226",
+   "lat": 40.114757,
+   "lon": 65.097751,
+   "type": "radar",
+   "source": "osm",
+   "note": "Камера в спину",
+   "maxspeed": 100,
+   "direction": "225",
+   "nearest_m": 779
+  },
+  {
+   "id": "osm:13521156980",
+   "lat": 40.117658,
+   "lon": 65.373422,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 376,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:4163106108",
+   "lat": 40.12545,
+   "lon": 65.467542,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 426
+  },
+  {
+   "id": "osm:6579702100",
+   "lat": 40.138147,
+   "lon": 65.277891,
+   "type": "radar",
+   "source": "osm",
+   "note": "Муляж",
+   "maxspeed": 70,
+   "direction": "270",
+   "nearest_m": 1227
+  },
+  {
+   "id": "osm:7208396276",
+   "lat": 40.147853,
+   "lon": 65.322158,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "280",
+   "nearest_m": 1025
+  },
+  {
+   "id": "osm:13521156977",
+   "lat": 40.162929,
+   "lon": 65.32996,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "25",
+   "nearest_m": null,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:13521156975",
+   "lat": 40.168943,
+   "lon": 65.316935,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "nearest_m": null,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6402318601",
+   "lat": 40.184955,
+   "lon": 68.685859,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "250",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:2114508867",
+   "lat": 40.233673,
+   "lon": 68.840567,
+   "type": "maxspeed",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "345",
+   "nearest_m": 340,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6473649003",
+   "lat": 40.275172,
+   "lon": 63.280941,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар · Радар бор",
+   "maxspeed": 100,
+   "direction": "160",
+   "nearest_m": null,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:5861032990",
+   "lat": 40.292069,
+   "lon": 68.06203,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": null,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:9729303887",
+   "lat": 40.294397,
+   "lon": 68.064702,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 110,
+   "direction": "40",
+   "nearest_m": null,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6642748903",
+   "lat": 40.300843,
+   "lon": 63.262721,
+   "type": "radar",
+   "source": "osm",
+   "note": "Radar",
+   "maxspeed": 100,
+   "nearest_m": null,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6002854748",
+   "lat": 40.368282,
+   "lon": 68.151656,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 110,
+   "direction": "35",
+   "nearest_m": 824,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:295331633",
+   "lat": 40.370921,
+   "lon": 71.415169,
+   "type": "radar",
+   "source": "osm",
+   "note": "Ayrilma",
+   "maxspeed": 55,
+   "direction": "180",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:13521156936",
+   "lat": 40.38901,
+   "lon": 65.097908,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "145",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6057210060",
+   "lat": 40.393816,
+   "lon": 68.792543,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "348",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6473648996",
+   "lat": 40.402332,
+   "lon": 63.089694,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар",
+   "maxspeed": 100,
+   "direction": "306",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6011616586",
+   "lat": 40.41596,
+   "lon": 71.725568,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 1072
+  },
+  {
+   "id": "osm:6011616585",
+   "lat": 40.423433,
+   "lon": 71.709199,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 507
+  },
+  {
+   "id": "osm:13521156935",
+   "lat": 40.446001,
+   "lon": 65.048512,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "155",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6014272285",
+   "lat": 40.459769,
+   "lon": 71.758057,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 325
+  },
+  {
+   "id": "osm:13521156934",
+   "lat": 40.468646,
+   "lon": 65.036436,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "155",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:8456731985",
+   "lat": 40.487559,
+   "lon": 68.762737,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "95",
+   "nearest_m": 343
+  },
+  {
+   "id": "osm:13521156933",
+   "lat": 40.489463,
+   "lon": 65.025385,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "155",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:2219644395",
+   "lat": 40.502055,
+   "lon": 68.537521,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "100",
+   "nearest_m": 1295,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:13545382796",
+   "lat": 40.536229,
+   "lon": 65.000444,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "160",
+   "nearest_m": 653
+  },
+  {
+   "id": "osm:8519326669",
+   "lat": 40.584236,
+   "lon": 72.180002,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "nearest_m": 1832
+  },
+  {
+   "id": "osm:14081845448",
+   "lat": 40.591077,
+   "lon": 68.681631,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "nearest_m": null
+  },
+  {
+   "id": "osm:14081845446",
+   "lat": 40.593801,
+   "lon": 68.68427,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "nearest_m": null
+  },
+  {
+   "id": "osm:8519326668",
+   "lat": 40.621024,
+   "lon": 72.227026,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 792
+  },
+  {
+   "id": "osm:14099460753",
+   "lat": 40.655079,
+   "lon": 68.715371,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "nearest_m": null
+  },
+  {
+   "id": "osm:14099460752",
+   "lat": 40.655593,
+   "lon": 68.715079,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "nearest_m": null
+  },
+  {
+   "id": "osm:8519355196",
+   "lat": 40.670456,
+   "lon": 72.272777,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 1319
+  },
+  {
+   "id": "osm:1891679742",
+   "lat": 40.691748,
+   "lon": 68.704105,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "345",
+   "nearest_m": 407
+  },
+  {
+   "id": "osm:14101631976",
+   "lat": 40.692542,
+   "lon": 68.703735,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "168",
+   "nearest_m": 500
+  },
+  {
+   "id": "osm:14105742711",
+   "lat": 40.705648,
+   "lon": 68.699872,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 481
+  },
+  {
+   "id": "osm:14105742700",
+   "lat": 40.706307,
+   "lon": 68.699532,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 403
+  },
+  {
+   "id": "osm:14105742620",
+   "lat": 40.715129,
+   "lon": 68.697224,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 551
+  },
+  {
+   "id": "osm:2246700075",
+   "lat": 40.716648,
+   "lon": 64.871728,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "nearest_m": null
+  },
+  {
+   "id": "osm:1657752580",
+   "lat": 40.722514,
+   "lon": 68.694974,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "345",
+   "nearest_m": 1395
+  },
+  {
+   "id": "osm:14115671542",
+   "lat": 40.723477,
+   "lon": 68.694492,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "165",
+   "nearest_m": 1508
+  },
+  {
+   "id": "osm:14115671517",
+   "lat": 40.729943,
+   "lon": 68.692522,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "168",
+   "nearest_m": 2247
+  },
+  {
+   "id": "osm:1849853146",
+   "lat": 40.730765,
+   "lon": 70.831592,
+   "type": "maxspeed",
+   "source": "osm",
+   "note": "Радар-C",
+   "maxspeed": 70,
+   "direction": "162",
+   "nearest_m": 793
+  },
+  {
+   "id": "osm:1849853147",
+   "lat": 40.733409,
+   "lon": 70.830497,
+   "type": "maxspeed",
+   "source": "osm",
+   "note": "Радар-C",
+   "maxspeed": 70,
+   "direction": "350",
+   "nearest_m": 484
+  },
+  {
+   "id": "osm:13512553289",
+   "lat": 40.761035,
+   "lon": 64.857563,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "155",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:13512553265",
+   "lat": 40.80512,
+   "lon": 64.833014,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "155",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:13512553193",
+   "lat": 40.834848,
+   "lon": 64.8164,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "340",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6002848870",
+   "lat": 40.848134,
+   "lon": 68.666968,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "340",
+   "nearest_m": 863
+  },
+  {
+   "id": "osm:14140428117",
+   "lat": 40.848902,
+   "lon": 68.66649,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "162",
+   "nearest_m": 772
+  },
+  {
+   "id": "osm:4487287213",
+   "lat": 40.874276,
+   "lon": 68.669051,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 363
+  },
+  {
+   "id": "osm:6354850381",
+   "lat": 40.874876,
+   "lon": 69.591884,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 489,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:7097424552",
+   "lat": 40.888618,
+   "lon": 64.775228,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "330",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:9127993432",
+   "lat": 40.894068,
+   "lon": 68.687028,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "255",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:14177740136",
+   "lat": 40.911845,
+   "lon": 68.703648,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "220",
+   "nearest_m": 644
+  },
+  {
+   "id": "osm:14178357937",
+   "lat": 40.932274,
+   "lon": 68.727827,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "218",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:7097424520",
+   "lat": 40.967379,
+   "lon": 64.682783,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "140",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6354852911",
+   "lat": 41.028087,
+   "lon": 69.507042,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "nearest_m": 481,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:7097424490",
+   "lat": 41.046895,
+   "lon": 64.610977,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "direction": "330",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6354231355",
+   "lat": 41.077775,
+   "lon": 69.471977,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "nearest_m": 357
+  },
+  {
+   "id": "osm:14222250253",
+   "lat": 41.099429,
+   "lon": 68.965098,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 80,
+   "direction": "220",
+   "nearest_m": 1131
+  },
+  {
+   "id": "osm:6327717787",
+   "lat": 41.120635,
+   "lon": 69.441827,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "nearest_m": 1189
+  },
+  {
+   "id": "osm:6185391986",
+   "lat": 41.145411,
+   "lon": 69.318121,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 50,
+   "nearest_m": 795
+  },
+  {
+   "id": "osm:14243960684",
+   "lat": 41.149315,
+   "lon": 69.035111,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 80,
+   "direction": "220",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6327717785",
+   "lat": 41.152289,
+   "lon": 69.42635,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "nearest_m": 339
+  },
+  {
+   "id": "osm:6327717791",
+   "lat": 41.187041,
+   "lon": 69.40355,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 100,
+   "nearest_m": 329
+  },
+  {
+   "id": "osm:6260578577",
+   "lat": 41.201366,
+   "lon": 69.331788,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "230",
+   "nearest_m": 457
+  },
+  {
+   "id": "osm:6260578576",
+   "lat": 41.202464,
+   "lon": 69.333027,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "45",
+   "nearest_m": 323
+  },
+  {
+   "id": "osm:13141177549",
+   "lat": 41.219281,
+   "lon": 69.134212,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 80,
+   "nearest_m": 1227,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:5928547479",
+   "lat": 41.234033,
+   "lon": 69.402254,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар стационарный",
+   "maxspeed": 100,
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6920368922",
+   "lat": 41.234968,
+   "lon": 69.338318,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 374
+  },
+  {
+   "id": "osm:6920368923",
+   "lat": 41.239663,
+   "lon": 69.347131,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 325
+  },
+  {
+   "id": "osm:6412304905",
+   "lat": 41.249935,
+   "lon": 69.404199,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 799
+  },
+  {
+   "id": "osm:7889899305",
+   "lat": 41.25246,
+   "lon": 69.304571,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 50,
+   "direction": "90",
+   "nearest_m": 437
+  },
+  {
+   "id": "osm:1661946804",
+   "lat": 41.252496,
+   "lon": 69.386056,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 653,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:378054628",
+   "lat": 41.255796,
+   "lon": 69.320483,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 387,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:245512452",
+   "lat": 41.298574,
+   "lon": 69.296122,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 769
+  },
+  {
+   "id": "osm:7552056485",
+   "lat": 41.308428,
+   "lon": 69.466202,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "nearest_m": 963,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:5982616227",
+   "lat": 41.317777,
+   "lon": 69.27682,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 323
+  },
+  {
+   "id": "osm:1133630040",
+   "lat": 41.319514,
+   "lon": 69.474061,
+   "type": "radar",
+   "source": "osm",
+   "note": "радар",
+   "nearest_m": 438
+  },
+  {
+   "id": "osm:4822122814",
+   "lat": 41.320478,
+   "lon": 69.288887,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "315",
+   "nearest_m": 337
+  },
+  {
+   "id": "osm:4623864315",
+   "lat": 41.320903,
+   "lon": 69.304236,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 453,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:4623864316",
+   "lat": 41.322113,
+   "lon": 69.303322,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 329
+  },
+  {
+   "id": "osm:9753810341",
+   "lat": 41.332256,
+   "lon": 61.0432,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "direction": "275",
+   "nearest_m": 1066
+  },
+  {
+   "id": "osm:9346970473",
+   "lat": 41.332472,
+   "lon": 69.332742,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 596,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:4433678899",
+   "lat": 41.33363,
+   "lon": 69.302655,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 465
+  },
+  {
+   "id": "osm:4433678900",
+   "lat": 41.333652,
+   "lon": 69.30348,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 438
+  },
+  {
+   "id": "osm:4536303334",
+   "lat": 41.334711,
+   "lon": 69.279421,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 463
+  },
+  {
+   "id": "osm:359363938",
+   "lat": 41.341862,
+   "lon": 69.36724,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 710
+  },
+  {
+   "id": "osm:13040930681",
+   "lat": 41.344659,
+   "lon": 69.286561,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "180",
+   "nearest_m": 564
+  },
+  {
+   "id": "osm:376518906",
+   "lat": 41.345507,
+   "lon": 69.360746,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 616
+  },
+  {
+   "id": "osm:7038988424",
+   "lat": 41.34749,
+   "lon": 69.357753,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 594
+  },
+  {
+   "id": "osm:4341528324",
+   "lat": 41.350948,
+   "lon": 69.287832,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "185",
+   "nearest_m": 317
+  },
+  {
+   "id": "osm:1640377076",
+   "lat": 41.355044,
+   "lon": 69.269066,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 50,
+   "nearest_m": 423
+  },
+  {
+   "id": "osm:6271668469",
+   "lat": 41.356077,
+   "lon": 69.270042,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 50,
+   "nearest_m": 563
+  },
+  {
+   "id": "osm:9724977491",
+   "lat": 41.435099,
+   "lon": 69.593989,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "nearest_m": null,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:332406535",
+   "lat": 41.512717,
+   "lon": 69.653615,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "nearest_m": 602
+  },
+  {
+   "id": "osm:5825051771",
+   "lat": 41.531356,
+   "lon": 69.65699,
+   "type": "radar",
+   "source": "osm",
+   "note": "Аранчи пост ГАИ",
+   "maxspeed": 70,
+   "nearest_m": null,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:5828582041",
+   "lat": 41.542439,
+   "lon": 69.676679,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар",
+   "maxspeed": 70,
+   "nearest_m": 1264,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6567200326",
+   "lat": 41.54772,
+   "lon": 60.671459,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 70,
+   "nearest_m": 615
+  },
+  {
+   "id": "osm:5694074927",
+   "lat": 41.552583,
+   "lon": 69.758803,
+   "type": "radar",
+   "source": "osm",
+   "note": "радар",
+   "maxspeed": 50,
+   "nearest_m": 945
+  },
+  {
+   "id": "osm:5825050450",
+   "lat": 41.555724,
+   "lon": 69.694428,
+   "type": "radar",
+   "source": "osm",
+   "note": "Товакса",
+   "maxspeed": 70,
+   "nearest_m": 855
+  },
+  {
+   "id": "osm:5828595846",
+   "lat": 41.563434,
+   "lon": 69.713879,
+   "type": "radar",
+   "source": "osm",
+   "note": "Радар",
+   "maxspeed": 70,
+   "nearest_m": 1305,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:5819597856",
+   "lat": 41.597936,
+   "lon": 69.874813,
+   "type": "radar",
+   "source": "osm",
+   "note": "РАДАР",
+   "maxspeed": 70,
+   "nearest_m": 627,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:5819558761",
+   "lat": 41.604428,
+   "lon": 69.888018,
+   "type": "radar",
+   "source": "osm",
+   "note": "РАДАР",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:7984369311",
+   "lat": 41.615195,
+   "lon": 69.911011,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 50,
+   "nearest_m": null,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:2302816341",
+   "lat": 41.61662,
+   "lon": 69.914929,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:12067982177",
+   "lat": 41.620818,
+   "lon": 60.582331,
+   "type": "radar",
+   "source": "osm",
+   "note": "Urganch shahri / Город Ургенч / Urgench city · 4Р160 а/й 6 км (Юқори дурман ахоли яшаш пункити)",
+   "direction": "250",
+   "nearest_m": null,
+   "also": [
+    "egov-xorazm"
+   ]
+  },
+  {
+   "id": "osm:9537185786",
+   "lat": 42.404253,
+   "lon": 59.631414,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 471
+  },
+  {
+   "id": "osm:13264652447",
+   "lat": 42.424004,
+   "lon": 59.652033,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "275",
+   "nearest_m": 1853,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:4860661363",
+   "lat": 42.432338,
+   "lon": 59.498806,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 1339
+  },
+  {
+   "id": "osm:12716593045",
+   "lat": 42.452076,
+   "lon": 59.585559,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "0",
+   "nearest_m": 435
+  },
+  {
+   "id": "osm:11472466350",
+   "lat": 42.454471,
+   "lon": 59.61873,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "170",
+   "nearest_m": 350
+  },
+  {
+   "id": "osm:7148424251",
+   "lat": 42.486122,
+   "lon": 59.575656,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "nearest_m": 551
+  },
+  {
+   "id": "osm:12731440087",
+   "lat": 42.497586,
+   "lon": 59.576608,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "5",
+   "nearest_m": 1830
+  },
+  {
+   "id": "osm:8987823599",
+   "lat": 42.524726,
+   "lon": 59.619545,
+   "type": "radar",
+   "source": "osm",
+   "note": "Нукус Шаҳри · 4P-176 Нукус-чимбой-тахтакупир А.Й 13 КМ \"нукус Шахри\"",
+   "maxspeed": 60,
+   "nearest_m": 564,
+   "also": [
+    "egov-qoraqalpogiston"
+   ]
+  },
+  {
+   "id": "osm:12731440091",
+   "lat": 42.575308,
+   "lon": 59.559797,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "150",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:247311880",
+   "lat": 42.599848,
+   "lon": 59.668995,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 50,
+   "nearest_m": null
+  },
+  {
+   "id": "osm:6468041965",
+   "lat": 42.670048,
+   "lon": 59.725907,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 50,
+   "nearest_m": null
+  },
+  {
+   "id": "osm:13267665045",
+   "lat": 42.78551,
+   "lon": 59.740501,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 60,
+   "direction": "180",
+   "nearest_m": null
+  },
+  {
+   "id": "osm:9388858202",
+   "lat": 42.825022,
+   "lon": 59.5201,
+   "type": "radar",
+   "source": "osm",
+   "note": "Кегейли Тумани · Кегейли Тумани 4P178 \"станция Кумшунгул-ауыл Казанкеткен\" А.Й.26.5 КМ (абат ОФЙ 3-МАКТАБ)",
+   "maxspeed": 50,
+   "nearest_m": null,
+   "also": [
+    "egov-qoraqalpogiston"
+   ]
+  },
+  {
+   "id": "osm:6468041952",
+   "lat": 42.901087,
+   "lon": 59.774619,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 50,
+   "nearest_m": 1199,
+   "also": [
+    "osm"
+   ]
+  },
+  {
+   "id": "osm:6468041951",
+   "lat": 42.973579,
+   "lon": 59.813639,
+   "type": "radar",
+   "source": "osm",
+   "note": "",
+   "maxspeed": 50,
+   "nearest_m": null
+  }
+ ]
+}

@@ -19,6 +19,7 @@
 //  них только «какая подложка» и «есть ли сцена».
 //
 
+import CoreLocation
 import SwiftUI
 
 #if canImport(MapLibre)
@@ -42,12 +43,6 @@ struct EngineBaseLayer: View {
             let distance = env.location.nearestCamera != nil
                 ? env.location.distanceToNearest : nil
             let maneuverDistance = env.route.nextStep.map { _ in env.route.nextStepDistance }
-            let span = EngineMapPresentation.span(speedKmh: env.location.speedKmh,
-                                                  maneuverDistance: maneuverDistance,
-                                                  active: env.location.isTripActive)
-            let inRange = distance.map {
-                RoadSketch.isInRange(distance: $0, span: span, insets: insets)
-            } ?? false
             // Размер берётся у КОНТЕЙНЕРА, а не у UIScreen.main.
             //
             // UIScreen.main объявлен устаревшим и вдобавок отвечает неверно
@@ -61,27 +56,16 @@ struct EngineBaseLayer: View {
             let offlineFiles: OfflineFiles? = env.network.isOnline
                 ? nil : env.offlineMaps.offlineFiles(at: me)
             GeometryReader { geo in
+                let camera = camera(me: me, height: geo.size.height, insets: insets,
+                                    maneuverDistance: maneuverDistance)
+                let inRange = distance.map { $0 <= camera.visibleAhead * AppConfig.engineCameraInRangeShare } ?? false
                 ZStack {
                     EngineMapView(
                         coordinate: me,
                         courseDegrees: env.location.displayCourse,
-                        // Ступенями: дрожание скорости и дистанции до манёвра на
-                        // стоянке запускало новую анимацию камеры каждый фикс.
-                        // «+ / −» сдвигают автозум вдвое за нажатие.
-                        spanMeters: (span * pow(2, -map.zoomBias) / AppConfig.engineSpanStep).rounded()
-                            * AppConfig.engineSpanStep,
+                        spanMeters: camera.spanMeters,
                         anchorY: insets.meY,
-                        // 3D — кнопкой «3D» (по умолчанию включено); в поездке
-                        // наклон уменьшается к манёвру — развилку видно сверху.
-                        // На горячем телефоне — плоско, как уже было в CarPlay:
-                        // наклон тянет к горизонту втрое больше тайлов.
-                        pitchDegrees: !map.prefers3D || env.thermal.mode != .full ? 0
-                            : (AppConfig.engineMapPitchDegrees
-                            * (env.location.isTripActive
-                               ? min(1, max(0, (maneuverDistance ?? AppConfig.engineManeuverApproachMeters)
-                                            / AppConfig.engineManeuverApproachMeters))
-                               : 1)
-                            / AppConfig.enginePitchStep).rounded() * AppConfig.enginePitchStep,
+                        pitchDegrees: camera.pitchDegrees,
                         daylight: env.settings.mapAppearance.isDaylight(at: me, now: Date()),
                         houses: env.settings.mapHouses,
                         cameras: [],
@@ -157,6 +141,36 @@ struct EngineBaseLayer: View {
         } else {
             SketchPalette.ground
         }
+    }
+
+    /// Камера карты. В поездке — DriveCamera (общая с машиной): масштаб, при
+    /// котором видны полосы и нужные секунды пути впереди, наклон по
+    /// скорости, у развилки — вид развилки, и она в кадре; плавно во времени.
+    /// Вне поездки — обзор города, как раньше. «+ / −» сдвигают масштаб на
+    /// ступень за нажатие. 3D — кнопкой «3D» (по умолчанию включено); на
+    /// горячем телефоне — плоско: наклон тянет к горизонту втрое больше тайлов.
+    private func camera(me: CLLocationCoordinate2D, height: CGFloat, insets: RoadSketch.Insets,
+                        maneuverDistance: Double?) -> (spanMeters: Double, pitchDegrees: Double,
+                                                       visibleAhead: Double) {
+        let pitchAllowed = map.prefers3D && env.thermal.mode == .full
+        let viewHeight = max(1, Double(height))
+        guard env.location.isTripActive else {
+            map.cameraSmoother.reset()
+            let span = AppConfig.engineOverviewSpan * pow(2, -map.zoomBias)
+            let pitch = pitchAllowed ? AppConfig.engineMapPitchDegrees : 0
+            let zoom = log2(DriveCamera.span(zoom: 0, viewHeight: viewHeight, latitude: me.latitude) / span)
+            return (span, pitch, DriveCamera.visibleAhead(zoom: zoom, pitchDegrees: pitch, viewHeight: viewHeight,
+                                                          carY: insets.meY, latitude: me.latitude))
+        }
+        let target = DriveCamera.target(speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
+                                        pitchAllowed: pitchAllowed, viewHeight: viewHeight,
+                                        latitude: me.latitude, carY: { _ in insets.meY })
+        let frame = map.cameraSmoother.step(toward: target, at: Date())
+        let zoom = frame.zoom + map.zoomBias
+        return (DriveCamera.span(zoom: zoom, viewHeight: viewHeight, latitude: me.latitude),
+                frame.pitchDegrees,
+                DriveCamera.visibleAhead(zoom: zoom, pitchDegrees: frame.pitchDegrees, viewHeight: viewHeight,
+                                         carY: insets.meY, latitude: me.latitude))
     }
 }
 #endif

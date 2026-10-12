@@ -1129,9 +1129,12 @@ nonisolated enum AppConfig {
     /// в поездке по стране связи нет часами.
     static let engineMapCacheBytes = 200 * 1024 * 1024
 
-    /// Городской обзор и приближение перед манёвром, в метрах видимой высоты.
+    /// Городской обзор вне поездки, в метрах видимой высоты. В поездке камеру
+    /// ведёт DriveCamera — масштабом, а не охватом.
     static let engineOverviewSpan = 1_400.0
-    static let engineCloseSpan = 420.0
+    /// Тревожная камера подсвечивается на карте, если до неё не дальше этой
+    /// доли видимого впереди (у самого края её не разглядеть).
+    static let engineCameraInRangeShare = 0.9
     static let engineManeuverApproachMeters = 600.0
     /// Ряд полос на трассе — раньше (LaneAdvice.showDistance): быстрее этой
     /// скорости ряд появляется за laneRowHighwayMeters, а не за 600 м.
@@ -1195,7 +1198,10 @@ nonisolated enum AppConfig {
     /// Подавление дрожания стоящей машины и повторных анимаций от обновления UI.
     static let engineCameraMoveThreshold = 2.0
     static let engineCameraHeadingThreshold = 2.0
-    static let engineCameraSpanThreshold = 30.0
+    /// Порог смены масштаба для новой анимации камеры — в долях уровня, а
+    /// не в метрах: 30 м были третью охвата на масштабе полос (z18 в машине —
+    /// 85 м) и 3 % на трассе.
+    static let engineCameraZoomThreshold = 0.02
     static let engineCameraDuration = 0.8
 
     // MARK: - Карта на движке: кадры и нагрев (docs/perf_audit_2026-10-07.md)
@@ -1212,10 +1218,6 @@ nonisolated enum AppConfig {
     static let engineWarmFPS = 20
     /// Телефон горячий: карта почти статична, HUD и голос важнее картинки.
     static let engineHotFPS = 15
-    /// Ступени наклона и охвата: дрожание GPS на стоянке не должно запускать
-    /// новую анимацию камеры каждую секунду.
-    static let enginePitchStep = 5.0
-    static let engineSpanStep = 60.0
     /// Порог сдвига камеры на горячем телефоне, метры (на холодном — 2 м).
     static let engineCameraMoveThresholdWarm = 6.0
 

@@ -84,14 +84,6 @@ nonisolated enum EngineMapPresentation {
         let throughTurn = split(coordinates, at: distance + AppConfig.engineManeuverHighlightMeters).traveled
         return split(throughTurn, at: max(progress, distance - AppConfig.engineManeuverHighlightMeters)).remaining
     }
-    static func span(speedKmh: Double, maneuverDistance: Double?, active: Bool) -> Double {
-        guard active else { return AppConfig.engineOverviewSpan }
-        let cruise = min(1_600, max(550, 550 + max(0, speedKmh - 30) * 11))
-        guard let distance = maneuverDistance, distance.isFinite, distance >= 0 else { return cruise }
-        let approach = min(1, max(0, distance / AppConfig.engineManeuverApproachMeters))
-        return AppConfig.engineCloseSpan + (cruise - AppConfig.engineCloseSpan) * approach
-    }
-
     /// Короткий путь через север: 359° → 1° не должен делать полный оборот.
     static func heading(_ target: Double, near previous: Double) -> Double {
         guard target.isFinite, target >= 0 else { return previous }

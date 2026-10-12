@@ -171,17 +171,6 @@ struct EngineMapStyleTests {
                 "фон карты разошёлся с палитрой схемы")
     }
 
-    @Test("Приближение к манёвру плавное, скорость расширяет обзор")
-    func maneuverZoom() {
-        let cruise = EngineMapPresentation.span(speedKmh: 100, maneuverDistance: nil, active: true)
-        let far = EngineMapPresentation.span(speedKmh: 100, maneuverDistance: 600, active: true)
-        let near = EngineMapPresentation.span(speedKmh: 100, maneuverDistance: 100, active: true)
-        #expect(cruise == far)
-        #expect(near < far)
-        #expect(near > AppConfig.engineCloseSpan)
-        #expect(EngineMapPresentation.span(speedKmh: 0, maneuverDistance: 0, active: false) == 1_400)
-    }
-
     @Test("Курс проходит север кратчайшим путём и держится без GPS-курса")
     func shortHeading() {
         #expect(EngineMapPresentation.heading(1, near: 359) == 361)

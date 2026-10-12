@@ -47,6 +47,10 @@ final class CarPlayMapModel {
     /// Сумма всех сдвигов панорамы (точки экрана) — карта берёт разницу.
     var panTotal = CGSize.zero
     var zoomBias = 0.0
+    /// Сглаживание камеры поездки (DriveCamera): кадр подходит к цели плавно.
+    /// Шаг делает вид карты на каждом своём пересчёте — состояние не
+    /// наблюдаемое, перерисовку оно не вызывает.
+    @ObservationIgnored var cameraSmoother = DriveCamera.Smoother()
     var zoomCommand = 0
     var zoomDelta = 0.0
     /// День или ночь на экране машины — ОДНО значение на карту и HUD.

@@ -687,10 +687,13 @@ struct EngineMapView: UIViewRepresentable {
             // используем осознанно: связка «слежение за курсом + наклон +
             // contentInset» — известная беда движка (issue #3029, до 400 %
             // процессора и перегрев). Смещаем саму точку взгляда вперёд по
-            // курсу: та же картинка, обычной арифметикой.
+            // курсу: та же картинка, обычной арифметикой — с перспективой
+            // (DriveCamera.centreAhead): формула вида сверху на наклоне ставила
+            // машину заметно выше задуманного места.
             let heading = model.northUp ? 0
                 : EngineMapPresentation.heading(model.courseDegrees, near: view.direction)
-            let ahead = model.spanMeters * (model.anchorY - 0.5)
+            let ahead = DriveCamera.centreAhead(spanMeters: model.spanMeters, anchorY: model.anchorY,
+                                                pitchDegrees: model.pitchDegrees)
             let centre = GeoMath.destination(from: model.coordinate,
                                               bearing: heading,
                                               distanceMeters: ahead)
@@ -707,7 +710,8 @@ struct EngineMapView: UIViewRepresentable {
                     >= (model.performance == .full ? AppConfig.engineCameraMoveThreshold
                                                    : AppConfig.engineCameraMoveThresholdWarm)
                 || GeoMath.angleDifference(previous.courseDegrees, model.courseDegrees) >= AppConfig.engineCameraHeadingThreshold
-                || abs(previous.spanMeters - model.spanMeters) >= AppConfig.engineCameraSpanThreshold
+                || abs(log2(max(1, previous.spanMeters) / max(1, model.spanMeters)))
+                    >= AppConfig.engineCameraZoomThreshold
                 || previous.pitchDegrees != model.pitchDegrees || previous.anchorY != model.anchorY
                 || previous.northUp != model.northUp
             } ?? true

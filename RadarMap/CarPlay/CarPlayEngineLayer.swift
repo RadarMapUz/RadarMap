@@ -43,29 +43,33 @@ struct CarPlayEngineLayer: View {
 
     private func map(me: CLLocationCoordinate2D, size: CGSize, safe: EdgeInsets) -> some View {
         let maneuverDistance = env.route.nextStep.map { _ in env.route.nextStepDistance }
-        // Камера — динамическая (CarPlayCamera): стоя и в городе близко и
-        // строго сверху (полосы, разметка), на скорости дальше, с наклоном и
-        // машиной ниже, у развилки — снова сверху. Всегда «в движении»:
-        // машина подключена — значит едем, обзор города здесь не нужен
-        // (плитка панели показывала город целиком, а значки камер рисуются с
-        // z14.5 — «камер нет», владелец, 12.10).
-        let frame = CarPlayCamera.frame(speedKmh: env.location.speedKmh,
-                                        maneuverDistance: maneuverDistance)
-        let span = frame.spanMeters
-        // Наклон дороже плоской картинки (больше тайлов до горизонта), а
-        // картинка в машину рисуется на телефоне: на горячем — плоско.
-        let pitch = env.thermal.mode != .full ? 0 : frame.pitchDegrees
+        // Камера поездки (DriveCamera) — общая с телефоном: масштаб, а не
+        // охват, поэтому полоса одного размера на любом экране машины, а
+        // большой экран показывает больше дороги. Стоя — сверху и крупно
+        // (полосы, стрелки полос), на скорости — наклон и столько обзора,
+        // сколько нужно секунд пути, у развилки — вид развилки, и она в кадре.
+        // Всегда «в движении»: машина подключена — значит едем (плитка панели
+        // показывала город целиком, а значки камер рисуются с z14.5 — «камер
+        // нет», владелец, 12.10). На горячем телефоне — плоско: наклон тянет
+        // к горизонту втрое больше тайлов, а картинка в машину рисуется на
+        // телефоне.
+        let height = Double(size.height + safe.top + safe.bottom)
+        let target = DriveCamera.target(
+            speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
+            pitchAllowed: env.thermal.mode == .full, viewHeight: height, latitude: me.latitude,
+            carY: { compact ? AppConfig.carPlayDashboardMeY : Self.meY(size: size, safe: safe, share: $0) })
+        let frame = model.cameraSmoother.step(toward: target, at: Date())
         let offlineFiles: OfflineFiles? = env.network.isOnline
             ? nil : env.offlineMaps.offlineFiles(at: me)
         return EngineMapView(
             coordinate: me,
             courseDegrees: env.location.displayCourse,
-            // «+/−» сдвигают динамику вдвое за нажатие; ступень 30 м — та же,
-            // что у CarPlayCamera.
-            spanMeters: (span * pow(2, -model.zoomBias) / 30).rounded() * 30,
+            // «+/−» сдвигают масштаб на ступень за нажатие поверх динамики.
+            spanMeters: DriveCamera.span(zoom: frame.zoom + model.zoomBias, viewHeight: height,
+                                         latitude: me.latitude),
             anchorY: compact ? AppConfig.carPlayDashboardMeY
                 : Self.meY(size: size, safe: safe, share: frame.carShare),
-            pitchDegrees: pitch,
+            pitchDegrees: frame.pitchDegrees,
             daylight: model.isDaylight,
             houses: env.settings.mapHouses,
             cameras: [],

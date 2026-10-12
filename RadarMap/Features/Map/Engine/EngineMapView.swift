@@ -108,7 +108,6 @@ struct EngineMapView: UIViewRepresentable {
     var panTotal: CGSize = .zero
     /// Кнопка атрибуции не нажимается там, где нет касаний (экран машины):
     /// ссылку на OSM тогда показывает вызывающий — текстом.
-    var hidesAttribution: Bool = false
     /// Поворот карты (градусы от севера) — компасу экрана.
     /// Флаг цели маршрута и точка долгого тапа (бар действий открыт).
     var destination: CLLocationCoordinate2D?
@@ -151,9 +150,10 @@ struct EngineMapView: UIViewRepresentable {
         view.maximumPitch = AppConfig.engineMapPitchDegrees
         view.compassView.isHidden = true
         view.logoView.isHidden = true
-        // Ссылка на источник данных обязана остаться: тайлы построены по OSM.
-        view.attributionButtonPosition = .bottomLeft
-        view.attributionButton.isHidden = hidesAttribution
+        // Своя кнопка движка («ⓘ») не показывается: подпись данных рисует
+        // MapAttribution поверх карты — пять секунд при показе, затем тает
+        // (правила OSMF это разрешают), а лицензия — в настройках.
+        view.attributionButton.isHidden = true
         view.delegate = context.coordinator
         let selection = UITapGestureRecognizer(target: context.coordinator,
                                                 action: #selector(Coordinator.selectCamera(_:)))

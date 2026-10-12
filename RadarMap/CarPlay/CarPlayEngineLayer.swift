@@ -108,7 +108,6 @@ struct CarPlayEngineLayer: View {
             labelLanguage: env.settings.appLanguage.mapCode,
             cursorStyle: env.settings.cursorStyle,
             panTotal: model.panTotal,
-            hidesAttribution: true,
             onBrowse: { if model.isFollowing { model.isFollowing = false } })
     }
 
@@ -119,17 +118,13 @@ struct CarPlayEngineLayer: View {
         if !model.isFollowing { model.isFollowing = true }
     }
 
-    /// Ссылка на данные обязана быть на экране (тайлы построены по OSM), а
-    /// нажать кнопку атрибуции в машине нельзя — поэтому текстом.
+    /// Подпись данных: пять секунд при показе карты, затем тает
+    /// (MapAttribution). Нажать кнопку атрибуции в машине нельзя — поэтому
+    /// текстом.
     private var attribution: some View {
-        Text(verbatim: "© OpenStreetMap")
-            .font(.rounded(10, .medium))
-            .foregroundStyle(Theme.textTertiary)
-            .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(Theme.background.opacity(0.6), in: Capsule())
+        MapAttribution()
             .padding(.trailing, 6)
             .padding(.bottom, 4)
-            .allowsHitTesting(false)
     }
 
     /// Где «я» по высоте всего окна (0 — верх, 1 — низ). Свободное поле —

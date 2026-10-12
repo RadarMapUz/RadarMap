@@ -128,6 +128,12 @@ struct EngineBaseLayer: View {
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
+                // Подпись данных — над нижней панелью, пять секунд и тает.
+                .overlay(alignment: .bottomLeading) {
+                    MapAttribution()
+                        .padding(.leading, 12)
+                        .padding(.bottom, geo.size.height * insets.safeBottom + 8)
+                }
                 // Высоту сообщает сама карта: без неё поля панелей не
                 // посчитать, и «я» стоял бы под нижней панелью.
                 .onAppear { state.setViewHeight(geo.size.height) }

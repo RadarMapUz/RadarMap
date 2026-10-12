@@ -1141,6 +1141,9 @@ nonisolated enum AppConfig {
     /// Тревожная камера подсвечивается на карте, если до неё не дальше этой
     /// доли видимого впереди (у самого края её не разглядеть).
     static let engineCameraInRangeShare = 0.9
+    /// Сколько секунд подпись «© OpenStreetMap» видна при показе карты:
+    /// правила OSMF разрешают свернуть её «после пяти секунд».
+    static let mapAttributionSeconds: TimeInterval = 5
     static let engineManeuverApproachMeters = 600.0
     /// Ряд полос на трассе — раньше (LaneAdvice.showDistance): быстрее этой
     /// скорости ряд появляется за laneRowHighwayMeters, а не за 600 м.

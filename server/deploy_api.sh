@@ -72,6 +72,16 @@ fi
 # глифов подключается одной строкой и роняет карту модератора вместе с собой.
 "${SSH[@]}" "$HOST" "mkdir -p $STATIC/vendor/glyphs"
 "${SCP[@]}" "$DIR/static/vendor/glyphs/"*.pbf "$HOST:$STATIC/vendor/glyphs/"
+# Кандидаты «не в базе» (build_camera_candidates.py, строится на маке): панель
+# читает файл рядом с собой, review/camera_candidates.json. Нет файла — раздел
+# пуст, панель жива.
+if [ -f "$DIR/review/camera_candidates.json" ]; then
+    "${SSH[@]}" "$HOST" "mkdir -p $(dirname "$ADMIN")/review"
+    "${SCP[@]}" "$DIR/review/camera_candidates.json" "$HOST:$(dirname "$ADMIN")/review/camera_candidates.json"
+fi
+# Публикация подтверждённых отметок в Telegram-канал (крон, см. crontab.txt).
+# Самостоятельный скрипт: панель и api его не импортируют.
+"${SCP[@]}" "$DIR/telegram_publish.py" "$HOST:$(dirname "$ADMIN")/telegram_publish.py"
 
 echo "→ Проверка синтаксиса, подмена, рестарт…"
 # ВАЖНО: проверять надо ТОЙ ЖЕ версией Python, что стоит на сервере, и падать

@@ -249,6 +249,8 @@ The VPS also serves the camera DB and speed-limit files (nginx :8090) and runs O
 ## Working docs (`docs/`)
 
 Not part of the build, but the current state of the release effort lives here and is worth reading before planning work:
+- `plan_carplay_next_2026-10-12.md` — what CarPlay gets next, as business cases: route choice in the car, «куда едем?» suggestions, detour offers when stuck in traffic, junction images, cluster metadata, the Yandex-companion positioning; order and what needs the owner.
+- `drive_camera_2026-10-12.md` — the zoom-based trip camera: before/after numbers per screen, the 45° pitch cap and what a device measurement would unlock.
 - `plan_commute_traffic_2026-10-11.md` — commute stats, crowd traffic (phone + server) and the icon language: decisions, phases, what needs the owner's OK.
 - `perf_audit_2026-10-11.md` — the performance audit with before/after measurement, what was fixed and the remaining queue (supersedes the queue in `perf_audit_2026-10-07.md`).
 - `plan_modules.md` — module-by-module improvement plan (written 3 Aug 2026 against the real code: 188 tests, DB v10, prod on v8), with cheap/medium/expensive estimates and an intended order.

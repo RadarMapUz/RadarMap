@@ -107,6 +107,17 @@ class AdminTest(unittest.TestCase):
                     "type": "Стационар камера"}], cls.cameras, ensure_ascii=False)
         cls.cameras.close()
         admin.CAMERAS_PATH = cls.cameras.name
+        # Кандидаты «не в базе» (build_camera_candidates.py): два, один из OSM.
+        cls.candidates = tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w")
+        json.dump({"version": 1, "candidates": [
+            {"id": "osm:555", "lat": 41.3501, "lon": 69.2801, "type": "radar",
+             "source": "osm", "note": "Камера у ТРЦ", "maxspeed": 70, "nearest_m": 812},
+            {"id": "egov-buxoro:abc", "lat": 40.5274, "lon": 68.2175,
+             "type": "Пдд Камера, Стационар Радар", "source": "egov-buxoro",
+             "note": "Ромитан Тумани · А-380 432 км", "nearest_m": None}]},
+            cls.candidates, ensure_ascii=False)
+        cls.candidates.close()
+        admin.CANDIDATES_PATH = cls.candidates.name
 
         # Пароль панели — во временный конфиг: настоящий трогать нельзя.
         cls.conf = tempfile.NamedTemporaryFile(suffix=".conf", delete=False)
@@ -144,7 +155,8 @@ class AdminTest(unittest.TestCase):
     def setUp(self):
         conn = sqlite3.connect(admin.DB_PATH)
         for table in ("camera_reports", "feedback", "reports", "votes", "blocked",
-                      "metrics", "overrides", "moderation_log", "usage_stats"):
+                      "metrics", "overrides", "moderation_log", "usage_stats",
+                      "candidate_decisions"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -500,6 +512,93 @@ class AdminTest(unittest.TestCase):
         _, body = _get(self.port, "/cameras")
         self.assertIn("Юнусабад", body, "модератор должен видеть адрес, а не голый id")
 
+
+    # --- Кандидаты «не в базе» ---
+
+    def decisions(self):
+        conn = admin.db()
+        try:
+            return [dict(r) for r in conn.execute(
+                "SELECT candidate_id, decision, note, who FROM candidate_decisions")]
+        finally:
+            conn.close()
+
+    def test_candidates_page_lists_points_not_in_the_db(self):
+        code, body = _get(self.port, "/candidates")
+        self.assertEqual(code, 200)
+        self.assertIn("Кандидаты (2)", body)
+        self.assertIn("41.35010, 69.28010", body)
+        self.assertIn("egov-buxoro", body)
+        self.assertIn("Камера у ТРЦ", body)
+        self.assertIn("лимит 70", body)
+        self.assertIn("openstreetmap.org/?mlat=41.3501", body)
+        self.assertIn("Отклонить", body)
+
+    def test_reject_hides_the_candidate_and_publishes_nothing(self):
+        """Решение ложится в candidate_decisions и переживает пересборку файла;
+        в overrides — ничего: кандидат в базу попадает только руками владельца."""
+        code = _post(self.port, "/candidates/act",
+                     {"candidate_id": "osm:555", "action": "reject", "note": "это знак"})
+        self.assertEqual(code, 303)
+        rows = self.decisions()
+        self.assertEqual([(r["candidate_id"], r["decision"], r["note"]) for r in rows],
+                         [("osm:555", "reject", "это знак")])
+        _, body = _get(self.port, "/candidates")
+        self.assertIn("Кандидаты (1)", body)
+        self.assertNotIn("Камера у ТРЦ", body)
+        self.assertIn("Отклонённых: 1", body)
+        conn = admin.db()
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM overrides").fetchone()[0], 0)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM moderation_log WHERE action = 'candidate_reject'"
+            ).fetchone()[0], 1)
+        finally:
+            conn.close()
+        # Повторное отклонение не плодит строк.
+        _post(self.port, "/candidates/act", {"candidate_id": "osm:555", "action": "reject"})
+        self.assertEqual(len(self.decisions()), 1)
+
+    def test_reject_of_an_unknown_candidate_is_ignored(self):
+        _post(self.port, "/candidates/act", {"candidate_id": "osm:999", "action": "reject"})
+        _post(self.port, "/candidates/act", {"candidate_id": "osm:555", "action": "accept"})
+        self.assertEqual(self.decisions(), [])
+
+    def test_guest_cannot_reject_candidates(self):
+        self.assertEqual(_get(self.port, "/candidates", cookie="")[0], 401)
+        code = _post(self.port, "/candidates/act",
+                     {"candidate_id": "osm:555", "action": "reject"}, cookie="")
+        self.assertEqual(code, 401)
+        self.assertEqual(self.decisions(), [])
+
+    def test_map_screen_links_to_the_open_candidates(self):
+        """Экран «Положение» — это карта; раздел виден с неё и несёт счётчик
+        открытых, а не всех."""
+        _post(self.port, "/candidates/act", {"candidate_id": "osm:555", "action": "reject"})
+        conf = admin_auth.read_config(self.conf.name)
+        conf["yandex_key"] = "test-key"
+        with open(self.conf.name, "w", encoding="utf-8") as handle:
+            handle.writelines(f"{k}={v}\n" for k, v in conf.items())
+        try:
+            code, body = _get(self.port, "/map")
+        finally:
+            conf.pop("yandex_key", None)
+            with open(self.conf.name, "w", encoding="utf-8") as handle:
+                handle.writelines(f"{k}={v}\n" for k, v in conf.items())
+        self.assertEqual(code, 200)
+        self.assertIn("Кандидаты (не в базе) · 1", body)
+        self.assertIn('href="/candidates"', body)
+
+    def test_missing_candidates_file_is_an_empty_section_not_an_error(self):
+        saved = admin.CANDIDATES_PATH
+        admin.CANDIDATES_PATH = saved + ".missing"
+        try:
+            code, body = _get(self.port, "/candidates")
+        finally:
+            admin.CANDIDATES_PATH = saved
+        self.assertEqual(code, 200)
+        self.assertIn("Кандидатов нет", body)
+        self.assertIn("build_camera_candidates.py", body)
 
     # --- Вход ---
 

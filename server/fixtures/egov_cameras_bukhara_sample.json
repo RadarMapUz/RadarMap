@@ -1,0 +1,311 @@
+{
+ "result": {
+  "tableFields": [
+   {
+    "name": "VILOYAT",
+    "text": {
+     "uzbText": "VILOYAT",
+     "uzbKrText": "ВИЛОЯТ",
+     "rusText": "ОБЛАСТ",
+     "engText": "REGION"
+    },
+    "dataType": 3,
+    "isUnique": true,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "TUMAN",
+    "text": {
+     "uzbText": "TUMAN",
+     "uzbKrText": "ТУМАН",
+     "rusText": "РАЙОН",
+     "engText": "DISTRICT"
+    },
+    "dataType": 3,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "JOYLASHGANJOYI",
+    "text": {
+     "uzbText": "JOYLASHGAN JOYI",
+     "uzbKrText": "ЖОЙЛАШГАН ЖОЙИ",
+     "rusText": "МЕСТО РАСПОЛОЖЕНИЯ",
+     "engText": "LOCATION"
+    },
+    "dataType": 3,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "TURI",
+    "text": {
+     "uzbText": "TURI",
+     "uzbKrText": "ТУРИ",
+     "rusText": "ТИП",
+     "engText": "A TYPE"
+    },
+    "dataType": 3,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "latitude",
+    "text": {
+     "uzbText": "Kenglik",
+     "uzbKrText": "Кенглик",
+     "rusText": "Широта",
+     "engText": "Latitude"
+    },
+    "dataType": 6,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   },
+   {
+    "name": "longitude",
+    "text": {
+     "uzbText": "Uzunlik",
+     "uzbKrText": "Узунлик",
+     "rusText": "Долгота",
+     "engText": "Longitude"
+    },
+    "dataType": 6,
+    "isUnique": false,
+    "isVisible": true,
+    "isSearch": false
+   }
+  ],
+  "count": 5,
+  "data": [
+   {
+    "id": "649036a9320e217ad3e2ef41",
+    "dateTime": "2023-06-19T11:06:15.743Z",
+    "userId": 697,
+    "tableStructId": "637f15614878653e5fe430a7",
+    "tableColumn": {
+     "VILOYAT": {
+      "text": null,
+      "number": 0.0,
+      "data": "Buxoro viloyati / Бухарская область / Bukhara region",
+      "default": "Buxoro viloyati / Бухарская область / Bukhara region"
+     },
+     "TUMAN": {
+      "text": null,
+      "number": 0.0,
+      "data": "РОМИТОН ТУМАНИ",
+      "default": "РОМИТОН ТУМАНИ"
+     },
+     "JOYLASHGANJOYI": {
+      "text": null,
+      "number": 0.0,
+      "data": "РОМИТАН ТУМАНИ, А-380 АВТОМОБИЛ ЙЎЛИНИНГ 432 КМ, ҚИЗИЛРАБОТ АЯЖ",
+      "default": "РОМИТАН ТУМАНИ, А-380 АВТОМОБИЛ ЙЎЛИНИНГ 432 КМ, ҚИЗИЛРАБОТ АЯЖ"
+     },
+     "TURI": {
+      "text": null,
+      "number": 0.0,
+      "data": "ПДД КАМЕРА, СТАЦИОНАР РАДАР",
+      "default": "ПДД КАМЕРА, СТАЦИОНАР РАДАР"
+     },
+     "latitude": {
+      "text": null,
+      "number": 40.527389,
+      "data": null,
+      "default": 40.527389
+     },
+     "longitude": {
+      "text": null,
+      "number": 68.21746,
+      "data": null,
+      "default": 68.21746
+     }
+    }
+   },
+   {
+    "id": "649036a9320e217ad3e2ef42",
+    "dateTime": "2023-06-19T11:06:15.743Z",
+    "userId": 697,
+    "tableStructId": "637f15614878653e5fe430a7",
+    "tableColumn": {
+     "VILOYAT": {
+      "text": null,
+      "number": 0.0,
+      "data": "Buxoro viloyati / Бухарская область / Bukhara region",
+      "default": "Buxoro viloyati / Бухарская область / Bukhara region"
+     },
+     "TUMAN": {
+      "text": null,
+      "number": 0.0,
+      "data": "РОМИТОН ТУМАНИ",
+      "default": "РОМИТОН ТУМАНИ"
+     },
+     "JOYLASHGANJOYI": {
+      "text": null,
+      "number": 0.0,
+      "data": "НАВРЎЗ АХОЛИ ЯШАШ ПУНКТИ 4Р-68 А/Й 19.5 КМ",
+      "default": "НАВРЎЗ АХОЛИ ЯШАШ ПУНКТИ 4Р-68 А/Й 19.5 КМ"
+     },
+     "TURI": {
+      "text": null,
+      "number": 0.0,
+      "data": "ПДД КАМЕРА, СТАЦИОНАР РАДАР",
+      "default": "ПДД КАМЕРА, СТАЦИОНАР РАДАР"
+     },
+     "latitude": {
+      "text": null,
+      "number": 39.948166,
+      "data": null,
+      "default": 39.948166
+     },
+     "longitude": {
+      "text": null,
+      "number": 64.29418,
+      "data": null,
+      "default": 64.29418
+     }
+    }
+   },
+   {
+    "id": "649036a9320e217ad3e2ef43",
+    "dateTime": "2023-06-19T11:06:15.743Z",
+    "userId": 697,
+    "tableStructId": "637f15614878653e5fe430a7",
+    "tableColumn": {
+     "VILOYAT": {
+      "text": null,
+      "number": 0.0,
+      "data": "Buxoro viloyati / Бухарская область / Bukhara region",
+      "default": "Buxoro viloyati / Бухарская область / Bukhara region"
+     },
+     "TUMAN": {
+      "text": null,
+      "number": 0.0,
+      "data": "БУХОРО ТУМАНИ",
+      "default": "БУХОРО ТУМАНИ"
+     },
+     "JOYLASHGANJOYI": {
+      "text": null,
+      "number": 0.0,
+      "data": "БУХОРО ТУМАНИ ХОНАБОД МФЙ ҲУДУДИДАН ЎТУВЧИ А-380 А/Й 14,8 КМ",
+      "default": "БУХОРО ТУМАНИ ХОНАБОД МФЙ ҲУДУДИДАН ЎТУВЧИ А-380 А/Й 14,8 КМ"
+     },
+     "TURI": {
+      "text": null,
+      "number": 0.0,
+      "data": "ПДД КАМЕРА, СТАЦИОНАР РАДАР",
+      "default": "ПДД КАМЕРА, СТАЦИОНАР РАДАР"
+     },
+     "latitude": {
+      "text": null,
+      "number": 39.781655,
+      "data": null,
+      "default": 39.781655
+     },
+     "longitude": {
+      "text": null,
+      "number": 64.390074,
+      "data": null,
+      "default": 64.390074
+     }
+    }
+   },
+   {
+    "id": "649036a9320e217ad3e2ef44",
+    "dateTime": "2023-06-19T11:06:15.743Z",
+    "userId": 697,
+    "tableStructId": "637f15614878653e5fe430a7",
+    "tableColumn": {
+     "VILOYAT": {
+      "text": null,
+      "number": 0.0,
+      "data": "Buxoro viloyati / Бухарская область / Bukhara region",
+      "default": "Buxoro viloyati / Бухарская область / Bukhara region"
+     },
+     "TUMAN": {
+      "text": null,
+      "number": 0.0,
+      "data": "БУХОРО ТУМАНИ",
+      "default": "БУХОРО ТУМАНИ"
+     },
+     "JOYLASHGANJOYI": {
+      "text": null,
+      "number": 0.0,
+      "data": "БУХОРО ТУМ 4P-68 А/Й 6КМ (ЧОРУҚ МФЙ)",
+      "default": "БУХОРО ТУМ 4P-68 А/Й 6КМ (ЧОРУҚ МФЙ)"
+     },
+     "TURI": {
+      "text": null,
+      "number": 0.0,
+      "data": "ПДД КАМЕРА, СТАЦИОНАР РАДАР",
+      "default": "ПДД КАМЕРА, СТАЦИОНАР РАДАР"
+     },
+     "latitude": {
+      "text": null,
+      "number": 39.901845,
+      "data": null,
+      "default": 39.901845
+     },
+     "longitude": {
+      "text": null,
+      "number": 64.405429,
+      "data": null,
+      "default": 64.405429
+     }
+    }
+   },
+   {
+    "id": "649036a9320e217ad3e2ef7d",
+    "dateTime": "2023-06-19T11:06:15.744Z",
+    "userId": 697,
+    "tableStructId": "637f15614878653e5fe430a7",
+    "tableColumn": {
+     "VILOYAT": {
+      "text": null,
+      "number": 0.0,
+      "data": "Buxoro viloyati / Бухарская область / Bukhara region",
+      "default": "Buxoro viloyati / Бухарская область / Bukhara region"
+     },
+     "TUMAN": {
+      "text": null,
+      "number": 0.0,
+      "data": "БУХОРО ШАҲРИ",
+      "default": "БУХОРО ШАҲРИ"
+     },
+     "JOYLASHGANJOYI": {
+      "text": null,
+      "number": 0.0,
+      "data": "М-37 САМАРҚАНД-БУХОРО-ТУРКМАНБОШИ АВТОМОБИЛ ЙЎЛИНИНГ 264 КМ",
+      "default": "М-37 САМАРҚАНД-БУХОРО-ТУРКМАНБОШИ АВТОМОБИЛ ЙЎЛИНИНГ 264 КМ"
+     },
+     "TURI": {
+      "text": null,
+      "number": 0.0,
+      "data": "ПДД КАМЕРА, СТАЦИОНАР РАДАР",
+      "default": "ПДД КАМЕРА, СТАЦИОНАР РАДАР"
+     },
+     "latitude": {
+      "text": null,
+      "number": 39809352.0,
+      "data": null,
+      "default": 39809352.0
+     },
+     "longitude": {
+      "text": null,
+      "number": 64430345.0,
+      "data": null,
+      "default": 64430345.0
+     }
+    }
+   }
+  ]
+ },
+ "status": "OK",
+ "code": 200,
+ "error": null,
+ "errors": null
+}

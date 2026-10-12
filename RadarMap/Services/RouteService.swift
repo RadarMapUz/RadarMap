@@ -186,6 +186,9 @@ final class RouteService {
     @ObservationIgnored private var offRouteTicks = 0
     @ObservationIgnored private var lastRebuildAt: Date = .distantPast
     @ObservationIgnored private var isRebuilding = false
+    /// Идёт перестроение после съезда — наблюдаемо: машина на это время
+    /// показывает «Перестраиваю маршрут» вместо уже неверного поворота.
+    private(set) var isRerouting = false
     /// Поколение маршрута: растёт при build/clear. Фоновое перестроение (OSRM, до 12 с)
     /// сверяется с ним — иначе доехавший rebuild «воскрешал» бы сброшенный маршрут
     /// или перетирал свежепостроенный к новой цели.
@@ -550,11 +553,15 @@ final class RouteService {
         offRouteTicks = 0
         lastRebuildAt = Date()
         isRebuilding = true
+        isRerouting = true
         let name = destinationName
         let gen = generation
         let via = stop   // ещё не заехали — объезд всё равно через остановку
         Task {
-            defer { isRebuilding = false }
+            defer {
+                isRebuilding = false
+                isRerouting = false
+            }
             // Перестраиваем без альтернатив — быстрее, и в движении выбор не нужен.
             guard let built = try? await calculate(from: coordinate, via: via, to: destination,
                                                    alternatives: false) else {

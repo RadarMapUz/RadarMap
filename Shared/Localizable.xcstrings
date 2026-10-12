@@ -17754,6 +17754,16 @@
           }
         }
       }
+    },
+    "Перестраиваю маршрут": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘nalishni qayta tuzyapman"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -155,6 +155,8 @@ final class CarPlayGuidance {
     private var sentTripDistance: Double?
     private var sentTripTime = Date.distantPast
     private var alertedCameraID: Int?
+    /// Ведение на паузе «Перестраиваю маршрут» (CPTripPauseReason.rerouting).
+    private var pausedForReroute = false
     private var generation = 0
     /// Наше приложение на экране машины. Пока да — камеру показывает док и
     /// баннер приближения, а системный баннер был бы вторым о том же.
@@ -208,6 +210,7 @@ final class CarPlayGuidance {
         maneuver = nil
         maneuverStep = nil
         laneGuidances = []
+        pausedForReroute = false
         cancelledDestination = tripDestination
         model.hasSystemGuidance = false
     }
@@ -221,6 +224,7 @@ final class CarPlayGuidance {
         maneuver = nil
         maneuverStep = nil
         laneGuidances = []
+        pausedForReroute = false
         template = nil
         themedDaylight = nil
         model.hasSystemGuidance = false
@@ -272,6 +276,7 @@ final class CarPlayGuidance {
                 maneuver = nil
                 maneuverStep = nil
                 laneGuidances = []
+                pausedForReroute = false
                 model.hasSystemGuidance = false
             }
             alertCamera(on: template)
@@ -284,7 +289,23 @@ final class CarPlayGuidance {
                 cancelledDestination = nil
                 start(on: template, to: destination)
             }
-            updateManeuver()
+            // Перестроение: старый поворот уже неверен — пауза с причиной, как
+            // у Mapbox. Снимает её новый манёвр (upcomingManeuvers), а если
+            // перестроить не удалось — прежний: карточка «перестраиваю» не
+            // застревает ни в одном исходе.
+            if route.isRerouting {
+                if let session, !pausedForReroute {
+                    pausedForReroute = true
+                    session.pauseTrip(for: .rerouting,
+                                      description: String(localized: "Перестраиваю маршрут"))
+                    Log.carplay.notice("ведение: пауза на перестроение")
+                }
+            } else if pausedForReroute {
+                pausedForReroute = false
+                maneuverStep = nil   // манёвр — заново: это и снимает паузу
+                Log.carplay.notice("ведение: перестроение закончено")
+            }
+            if !pausedForReroute { updateManeuver() }
             updateEstimates(on: template)
         } else if let session {
             // Маршрут снят: доехали — «завершить», иначе — «отменить».
@@ -302,6 +323,7 @@ final class CarPlayGuidance {
             maneuver = nil
             maneuverStep = nil
             laneGuidances = []
+            pausedForReroute = false
             model.hasSystemGuidance = false
         }
         alertCamera(on: template)
@@ -331,6 +353,7 @@ final class CarPlayGuidance {
         maneuver = nil
         maneuverStep = nil
         laneGuidances = []
+        pausedForReroute = false
         sentStepDistance = nil
         sentTripDistance = nil
         model.hasSystemGuidance = true

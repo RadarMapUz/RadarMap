@@ -124,6 +124,21 @@ final class DriveCameraTests: XCTestCase {
         XCTAssertEqual(frame(50, turn: 600, height: 382), frame(50, height: 382))
     }
 
+    func testKeptObjectStaysInFrameOnTheSmallTile() {
+        // Плитка главного экрана машины (374 pt): камера в 130–480 м впереди
+        // обязана быть видна, даже стоя (carplay12: «радары не показывает»).
+        for d in [130.0, 250, 480] {
+            let f = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
+                               keepAhead: d, viewHeight: 374, latitude: tashkent, carY: { _ in 0.62 })
+            XCTAssertGreaterThanOrEqual(ahead(f, height: 374, carY: 0.62), d, "камера в \(d) м")
+        }
+        // Дальняя камера вид не трогает.
+        let far = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
+                             keepAhead: 2_000, viewHeight: 374, latitude: tashkent, carY: { _ in 0.62 })
+        XCTAssertEqual(far, Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
+                                       viewHeight: 374, latitude: tashkent, carY: { _ in 0.62 }))
+    }
+
     // MARK: - Геометрия
 
     func testTopDownGeometryIsThePlainFormula() {

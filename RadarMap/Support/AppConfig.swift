@@ -1016,6 +1016,12 @@ nonisolated enum AppConfig {
     /// по соседней кнопке на ходу молча выключал бы оповещения о камерах.
     /// На стоянке тап осознанный — завершаем сразу.
     static let carPlayEndTripConfirmKmh: Double = 20
+    /// Повторное нажатие «Поездки» раньше этого — не решение, а «нажалось
+    /// ли?»: пропускаем (журнал 12.10 — старт и конец через 0,6–0,9 с).
+    static let carPlayTripToggleGuard: TimeInterval = 2
+    /// Предел значка плитки сетки до iOS 26 (с 26 — из
+    /// CPGridTemplate.maximumGridButtonImageSize, там те же 40×40).
+    static let carPlayGridImageMaxPoints: CGFloat = 40
     /// Шаг обновления «пройденной» части маршрута: перекладывать оверлей на
     /// каждый фикс GPS — лишняя работа рендера, глазу хватает и таких шагов.
     static let carPlayTraveledStepMeters: CLLocationDistance = 25

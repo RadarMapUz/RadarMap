@@ -663,8 +663,12 @@ final class RouteService {
             // Инструкции Apple уже локализованы системой; позиция шага — накопленная длина.
             var along: CLLocationDistance = 0
             var steps: [RouteStep] = []
-            for step in route.steps where !step.instructions.isEmpty {
-                steps.append(RouteStep(distanceAlong: along, text: step.instructions, icon: "arrow.up"))
+            // Шаг без текста тоже занимает дорогу: пропуская его, не прибавляли
+            // и его длину — следующие манёвры съезжали назад по маршруту.
+            for step in route.steps {
+                if !step.instructions.isEmpty {
+                    steps.append(RouteStep(distanceAlong: along, text: step.instructions, icon: "arrow.up"))
+                }
                 along += step.distance
             }
             return BuiltVariant(points: points, distance: route.distance,

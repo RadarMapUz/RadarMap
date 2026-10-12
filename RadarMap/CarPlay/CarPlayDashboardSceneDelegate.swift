@@ -105,6 +105,9 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
 
     func sceneDidBecomeActive(_ scene: UIScene) {
         if needsFreshHost || windowRoot?.content == nil { installHost() }
+        // Плитка инструкций рядом с картой рисует манёвр из навигационной
+        // сессии основной сцены — освежаем его на каждый показ панели.
+        CarPlaySceneDelegate.refreshGuidance(reason: "главный экран машины")
     }
 
     func sceneDidEnterBackground(_ scene: UIScene) {
@@ -150,9 +153,11 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         Task { @MainActor [weak self] in
             guard let self else { return }
             guard let from = await env.location.awaitPreciseCoordinate() else {
-                // Без точного фикса маршрута нет — и панель должна сказать
-                // хотя бы журналу: тап «Домой» без ответа читается как поломка.
+                // Без точного фикса маршрута нет. Сказать — голосом: у плитки
+                // нет своих диалогов, а тап «Домой» без ответа читается как
+                // поломка (аудит CarPlay, 12.10).
                 Log.carplay.error("маршрут с приборной панели: нет точного фикса")
+                env.alerts.speak(String(localized: "Не вижу точного положения — маршрут пока не построить"))
                 return
             }
             await env.route.build(from: from, to: place.coordinate, name: place.title,
@@ -161,6 +166,7 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
             if !env.location.isTripActive { env.location.startTrip() }
             if let error = env.route.errorMessage {
                 Log.carplay.error("маршрут с приборной панели: \(error, privacy: .public)")
+                env.alerts.speak(String(localized: "Маршрут не построился"))
             }
         }
     }
@@ -197,8 +203,14 @@ struct CarPlayDashboardView: View {
     }
 }
 
-/// Скорость, лимит и ближайшая камера — одной плашкой. Отдельная вью:
-/// пер-тиковые чтения пересобирают её, а не плитку с картой.
+/// Скорость, лимит, ближайшая камера и прибытие — одной плашкой. Отдельная
+/// вью: пер-тиковые чтения пересобирают её, а не плитку с картой.
+///
+/// Камера — по тому же правилу, что основной док (`carPlayNearestCameraMeters`),
+/// а не только в момент тревоги: на главном экране машины водитель смотрит
+/// мельком, и «до камеры 128 м» в доке рядом с пустой плиткой читалось как
+/// «плитка не видит камер» (12.10). Прибытие — при маршруте: системная плитка
+/// инструкций рядом показывает его не всегда.
 private struct CarPlayDashboardGauge: View {
     @Environment(AppEnvironment.self) private var env
 
@@ -207,11 +219,13 @@ private struct CarPlayDashboardGauge: View {
             Text("\(Int(env.location.speedKmh.rounded()))")
                 .font(.rounded(26, .heavy).monospacedDigit())
                 .foregroundStyle(env.speedLimits.isOverspeeding ? Theme.danger : Theme.textPrimary)
+                .liveNumber()
             if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
                 SpeedLimitSign(limit: limit, diameter: 32, isAssumed: env.speedLimits.isCurrentLimitAssumed)
             }
-            if env.location.isApproachingCamera, let camera = env.location.nearestCamera,
-               let distance = env.location.distanceToNearest {
+            if let camera = env.location.nearestCamera,
+               let distance = env.location.distanceToNearest,
+               distance <= AppConfig.carPlayNearestCameraMeters {
                 HStack(spacing: 4) {
                     Image(systemName: camera.kind.symbolName)
                         .font(.rounded(13, .bold))
@@ -220,7 +234,19 @@ private struct CarPlayDashboardGauge: View {
                         .background(camera.kind.tint, in: Circle())
                     Text(Formatting.distance(distance))
                         .font(.rounded(16, .bold).monospacedDigit())
-                        .foregroundStyle(Theme.danger)
+                        .foregroundStyle(env.location.isApproachingCamera ? Theme.danger : Theme.textPrimary)
+                        .liveNumber()
+                }
+            }
+            if env.route.isActive {
+                Rectangle().fill(Theme.stroke).frame(width: 1, height: 24)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(Formatting.duration(env.route.remainingTime))
+                        .font(.rounded(16, .heavy).monospacedDigit())
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(env.route.arrivalDate.formatted(date: .omitted, time: .shortened))
+                        .font(.rounded(11, .semibold).monospacedDigit())
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
         }

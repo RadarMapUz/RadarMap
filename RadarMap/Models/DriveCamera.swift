@@ -110,6 +110,9 @@ nonisolated enum DriveCamera {
     /// Наклон уходит к виду развилки только на этой доле окна подъезда:
     /// раньше он съедал обзор, пока развилка ещё далеко.
     static let maneuverPitchShare = 0.6
+    /// Дальше этого «держать в кадре» не действует: плитка не отъезжает до
+    /// масштаба района ради камеры в километре.
+    static let keepAheadMaxMeters = 500.0
     static let maneuverMinZoom = 17.3
     static let maneuverMarginMeters = 40.0
 
@@ -137,8 +140,12 @@ nonisolated enum DriveCamera {
     ///   - viewHeight: высота вида карты, точки.
     ///   - carY: где машина по высоте вида (0 — верх, 1 — низ) при данной
     ///     `Profile.carShare` — раскладку экрана знает только вид.
+    ///   - keepAhead: метров до того, что обязано быть в кадре (камера на
+    ///     плитке главного экрана машины), nil — ничего; дальше
+    ///     `keepAheadMaxMeters` не учитывается.
     static func target(speedKmh: Double, maneuverDistance: Double?, pitchAllowed: Bool,
                        maxPitch: Double = AppConfig.engineMapPitchDegrees,
+                       keepAhead: Double? = nil,
                        viewHeight: Double, latitude: Double,
                        carY: (Double) -> Double) -> Frame {
         let profile = profile(speedKmh: speedKmh, pitchAllowed: pitchAllowed, maxPitch: maxPitch)
@@ -162,6 +169,14 @@ nonisolated enum DriveCamera {
                 lookahead = max(minLookaheadMeters, d + maneuverMarginMeters)
                 visibilityCap = lookahead
             }
+        }
+
+        // Объект впереди, который обязан быть виден (камера на плитке): обзор
+        // не короче, а порог полос ему уступает — плитка маленькая, и камера
+        // в ней важнее разметки.
+        if let k = keepAhead, k.isFinite, k >= 0, k <= keepAheadMaxMeters {
+            lookahead = max(lookahead, k + maneuverMarginMeters)
+            visibilityCap = lookahead   // и развилка, и камера — обе в кадре
         }
 
         let y = carY(profile.carShare)

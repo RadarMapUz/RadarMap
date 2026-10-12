@@ -45,7 +45,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// поверх чужого приложения.
     private lazy var guidance = CarPlayGuidance(model: model)
     /// Поиск адреса в машине: тот же порядок источников, что на телефоне.
-    private lazy var search = CarPlaySearch { [weak self] place in self?.route(to: place) }
+    private lazy var search: CarPlaySearch = {
+        let search = CarPlaySearch { [weak self] place in self?.route(to: place) }
+        search.present = { [weak self] template in self?.pushSearchResults(template) }
+        return search
+    }()
     /// Чей сейчас экран машины. Переподключение (штатное «моргание» провода
     /// при запуске двигателя) может доставить didDisconnect СТАРОЙ сцены уже
     /// ПОСЛЕ didConnect новой — и старая, уходя, глобально гасила GPS и опрос
@@ -440,9 +444,38 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private var panHoldTask: Task<Void, Never>?
 
     /// Щипок на сенсорном экране (iOS 26): масштаб — командой карте.
+    ///
+    /// SDK: «scale factor relative to the zoom gesture» — то есть от НАЧАЛА
+    /// жеста, как у UIPinchGestureRecognizer. Карте нужен множитель шага,
+    /// поэтому делим на прошлое значение. До 2.2.16 значение умножалось как
+    /// есть каждый кадр и не сбрасывалось между жестами — накопленный масштаб
+    /// разгонял бы карту, а остаток прошлого жеста переходил в следующий.
+    /// Журнал пишет первые значения: с перетаскиванием документация уже
+    /// оказалась неточной (там приходит шаг, а не путь от начала).
+    private var pinchLast: CGFloat = 1
+    private var pinchUpdates = 0
+
+    func mapTemplateDidBeginZoomGesture(_ mapTemplate: CPMapTemplate) {
+        pinchLast = 1
+        pinchUpdates = 0
+        model.pinchBegan()
+        Log.carplay.notice("щипок: начало")
+    }
+
     func mapTemplate(_ mapTemplate: CPMapTemplate, didUpdateZoomGestureWithCenter center: CGPoint,
                      scale: CGFloat, velocity: CGFloat) {
-        model.pinch(scale: Double(scale))
+        pinchUpdates += 1
+        if pinchUpdates <= 3 {
+            Log.carplay.notice("щипок: масштаб \(Double(scale), format: .fixed(precision: 3), privacy: .public), скорость \(Double(velocity), format: .fixed(precision: 2), privacy: .public)")
+        }
+        guard scale > 0, pinchLast > 0 else { return }
+        model.pinch(scale: Double(scale / pinchLast))
+        pinchLast = scale
+    }
+
+    func mapTemplate(_ mapTemplate: CPMapTemplate, didEndZoomGestureWithVelocity velocity: CGFloat) {
+        Log.carplay.notice("щипок: конец, обновлений \(self.pinchUpdates, privacy: .public), итог \(Double(self.pinchLast), format: .fixed(precision: 3), privacy: .public)")
+        pinchLast = 1
     }
 
     /// Осмотр открылся — бар становится одной кнопкой «Готово». Своим
@@ -480,6 +513,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// экране, и отправка гарантированно доходит.
     func templateDidAppear(_ aTemplate: CPTemplate, animated: Bool) {
         shownTemplate = aTemplate === mapTemplate ? nil : aTemplate
+        // Улика для «диалог не показался / тост не погас»: на shownTemplate
+        // держится автоскрытие тоста, а templateDidAppear уже оказался
+        // ненадёжным для корня (carplay4, carplay10).
+        if aTemplate !== mapTemplate {
+            Log.carplay.notice("поверх карты: \(String(describing: type(of: aTemplate)), privacy: .public)")
+        }
         guard aTemplate === mapTemplate else { return }
         resendButtons()
         rootDidShow(via: "templateDidAppear")
@@ -558,6 +597,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     func mapTemplate(_ mapTemplate: CPMapTemplate,
                      shouldShowNotificationFor navigationAlert: CPNavigationAlert) -> Bool { true }
 
+    /// Плитка главного экрана вышла на экран: сессии — свежий манёвр и оценки.
+    static func refreshGuidance(reason: String) {
+        activeDelegate?.guidance.refresh(reason: reason)
+    }
+
     // MARK: - Уход с экрана машины
 
     /// Наше приложение ушло с экрана машины (водитель открыл другое), но
@@ -568,6 +612,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Только владелец: события устаревшей сцены не должны гасить буст живой.
         guard Self.activeDelegate === self else { return }
         guidance.isOnScreen = false
+        guidance.refresh(reason: "ушли с экрана машины")
     }
 
     /// На экране машины другое приложение или приборная панель — карту
@@ -613,6 +658,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Стали видимым экраном машины — значит, мы и владелец.
         Self.activeDelegate = self
         guidance.isOnScreen = true
+        guidance.refresh(reason: "вернулись на экран машины", driverReturned: true)
         model.isOnScreen = true
         // Бар — заново: что показывает головное устройство после чужого
         // приложения, решаем не мы.
@@ -715,7 +761,26 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             // не делает: заголовок кнопки остаётся «Поездка», водитель жмёт
             // ещё раз и решает, что приложение сломано. Говорим вслух.
             guard location.isAuthorized else { return self.showNoPermissionAlert() }
-            guard location.isTripActive else { return location.startTrip() }
+            // Второе нажатие сразу после переключения — это «нажалось ли?», а
+            // не решение. Журнал 12.10 (carplay12): старт и через 0,6–0,9 с
+            // конец «0 м, не сохранена», дважды подряд, — водитель не видел
+            // ответа на первое нажатие и жал ещё раз, а стоя второе нажатие
+            // завершает без вопроса. Кнопка «не работала».
+            if let last = lastTripToggle,
+               Date().timeIntervalSince(last) < AppConfig.carPlayTripToggleGuard {
+                Log.carplay.notice("поездка: повторное нажатие через \(Date().timeIntervalSince(last), format: .fixed(precision: 1), privacy: .public) с — пропускаю")
+                return
+            }
+            lastTripToggle = Date()
+            guard location.isTripActive else {
+                location.startTrip()
+                // Ответ на нажатие — словами: смена значка в баре доходит до
+                // машины не сразу, и одной её мало.
+                if location.isTripActive {
+                    showToast(String(localized: "Поездка началась — слежу за камерами"))
+                }
+                return
+            }
             // На ходу — подтверждение: «Завершить» соседствует со звуком, и
             // промах слепого тапа молча выключал бы оповещения о камерах.
             // На стоянке тап осознанный — завершаем сразу, как раньше.
@@ -723,9 +788,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 confirmEndTrip()
             } else {
                 location.endTrip()
+                showToast(String(localized: "Поездка завершена"))
             }
         }
     }
+
+    /// Когда кнопку «Поездка» нажимали в последний раз.
+    private var lastTripToggle: Date?
 
     /// «Завершить поездку?» на ходу. Тот же паттерн, что у Apple Maps: конец
     /// маршрута не висит одним тапом на баре.
@@ -928,11 +997,27 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     /// Иконка плитки сетки: шаблонное изображение — CarPlay сам красит его под
     /// тему машины (днём тёмным по светлому, ночью наоборот).
+    /// Значок плитки сетки — не больше `CPGridTemplate.maximumGridButtonImageSize`
+    /// (40×40). Символ в 36 pt выходил 52×44 (проверено пробой, 12.10), и
+    /// машина ужимала или обрезала его сама. Кегль подбирается по
+    /// фактическому размеру: у разных символов разные пропорции.
     private func gridImage(_ symbol: String) -> UIImage {
-        let image = UIImage(systemName: symbol,
-                            withConfiguration: carConfiguration(pointSize: 36, weight: .semibold))
-            ?? UIImage()
-        return image.withRenderingMode(.alwaysTemplate)
+        let limit: CGSize
+        if #available(iOS 26.0, *) {
+            limit = CPGridTemplate.maximumGridButtonImageSize
+        } else {
+            limit = CGSize(width: AppConfig.carPlayGridImageMaxPoints, height: AppConfig.carPlayGridImageMaxPoints)
+        }
+        var pointSize: CGFloat = 36
+        var image = UIImage(systemName: symbol,
+                            withConfiguration: carConfiguration(pointSize: pointSize, weight: .semibold))
+        if let size = image?.size, size.width > limit.width || size.height > limit.height,
+           size.width > 0, size.height > 0 {
+            pointSize *= min(limit.width / size.width, limit.height / size.height) * 0.98
+            image = UIImage(systemName: symbol,
+                            withConfiguration: carConfiguration(pointSize: pointSize, weight: .semibold))
+        }
+        return (image ?? UIImage()).withRenderingMode(.alwaysTemplate)
     }
 
     /// Конфигурация значка с трейтами ЭКРАНА МАШИНЫ. Без них картинка несёт
@@ -1038,6 +1123,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
     }
 
+    /// Полный список найденного по «Найти» на клавиатуре — поверх поиска.
+    private func pushSearchResults(_ template: CPTemplate) {
+        interfaceController?.pushTemplate(template, animated: true) { _, error in
+            if let error {
+                Log.carplay.error("pushTemplate(результаты поиска): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
     /// Поиск для слота Дом/Работа: выбранное место сохраняется в слот и к
     /// нему сразу строится маршрут. Делегат шаблона поиска слабый — держим
     /// объект, пока шаблон на экране.
@@ -1050,6 +1144,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             assignSearch = nil
             route(to: place)
         }
+        search.present = { [weak self] template in self?.pushSearchResults(template) }
         assignSearch = search
         interfaceController?.pushTemplate(search.makeTemplate(), animated: true) { _, error in
             if let error {

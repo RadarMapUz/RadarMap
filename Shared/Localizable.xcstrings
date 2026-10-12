@@ -17504,6 +17504,76 @@
           }
         }
       }
+    },
+    "Поездка началась — слежу за камерами": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar boshlandi — kameralarni kuzatyapman"
+          }
+        }
+      }
+    },
+    "Поездка завершена": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar yakunlandi"
+          }
+        }
+      }
+    },
+    "Не вижу точного положения — маршрут пока не построить": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aniq joylashuv yo‘q — hozircha yo‘nalish tuzib bo‘lmaydi"
+          }
+        }
+      }
+    },
+    "Маршрут не построился": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘nalish tuzilmadi"
+          }
+        }
+      }
+    },
+    "Ничего не нашлось": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hech narsa topilmadi"
+          }
+        }
+      }
+    },
+    "Попробуйте адрес или название иначе": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzil yoki nomni boshqacha yozib ko‘ring"
+          }
+        }
+      }
+    },
+    "Найдено": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Topildi"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

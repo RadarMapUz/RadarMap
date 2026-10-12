@@ -22,6 +22,11 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
 
     /// Выбранное место: название и точка.
     private let onPick: (SavedPlace) -> Void
+    /// Показать шаблон поверх поиска (список по кнопке «Найти»). Ставит
+    /// делегат сцены: у поиска своего контроллера интерфейса нет.
+    var present: ((CPTemplate) -> Void)?
+    /// Что нашлось на последний запрос — для полного списка по «Найти».
+    private var lastResults: [(SavedPlace, String)] = []
     private var book: AddressBook?
     private var venues: VenueBook?
     /// Клетка, для которой загружены адреса и заведения. Подключение длится
@@ -121,7 +126,29 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         }
     }
 
-    nonisolated func searchTemplateSearchButtonPressed(_ searchTemplate: CPSearchTemplate) {}
+    /// «Найти» на клавиатуре машины. До 2.2.16 метод был пустым: нажатие
+    /// ничего не делало (аудит CarPlay, 12.10). Теперь — полный список того,
+    /// что нашлось, а пусто — честное «ничего не нашлось».
+    nonisolated func searchTemplateSearchButtonPressed(_ searchTemplate: CPSearchTemplate) {
+        MainActor.assumeIsolated { self.showAllResults() }
+    }
+
+    private func showAllResults() {
+        let items: [CPListItem] = lastResults.map { place, detail in
+            let item = CPListItem(text: place.title, detailText: detail)
+            item.handler = { [weak self] _, completion in
+                self?.onPick(place)
+                completion()
+            }
+            return item
+        }
+        let section = items.isEmpty
+            ? CPListSection(items: [CPListItem(text: String(localized: "Ничего не нашлось"),
+                                               detailText: String(localized: "Попробуйте адрес или название иначе"))])
+            : CPListSection(items: items)
+        Log.carplay.notice("поиск: «Найти», результатов \(items.count, privacy: .public)")
+        present?(CPListTemplate(title: String(localized: "Найдено"), sections: [section]))
+    }
 
     // MARK: - Поиск
 
@@ -154,7 +181,10 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         let reply = Reply(completion)
         self.reply = reply
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.count >= 2 else { return reply([]) }
+        guard query.count >= 2 else {
+            lastResults = []
+            return reply([])
+        }
         let near = env.location.currentCoordinate
         task = Task { [weak self] in
             guard let self else { return reply([]) }
@@ -184,6 +214,7 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
                 places += await self.apple(query, near: near)
             }
             guard !Task.isCancelled else { return }
+            self.lastResults = Array(places.prefix(AppConfig.carPlaySearchLimit))
             reply(places.prefix(AppConfig.carPlaySearchLimit).map { place, detail in
                 let item = CPListItem(text: place.title, detailText: detail)
                 item.userInfo = place

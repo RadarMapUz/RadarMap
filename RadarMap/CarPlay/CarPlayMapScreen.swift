@@ -126,6 +126,9 @@ final class CarPlayMapModel {
     }
     @ObservationIgnored private var pinchAccumulated = 1.0
 
+    /// Новый жест щипка — остаток прошлого не переносится.
+    func pinchBegan() { pinchAccumulated = 1 }
+
     /// Автовозврат к слежению: водитель отпанорамировал и забыл — карта не
     /// должна стоять, пока он едет. Таймер взводится каждым сдвигом и гасится
     /// «к себе»; тревога камеры возвращает карту сразу (returnOnAlert).

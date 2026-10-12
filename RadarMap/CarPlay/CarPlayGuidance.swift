@@ -174,6 +174,31 @@ final class CarPlayGuidance {
         observe()
     }
 
+    /// Водитель ушёл с нашего экрана (главный экран машины, музыка) или
+    /// вернулся: манёвр и оценки — заново. Плитка инструкций на главном
+    /// экране рисует то, что сессия прислала ПОСЛЕДНИМ (carplay12: на главном
+    /// экране «Дом / Работа» при живом маршруте).
+    ///
+    /// `driverReturned` — водитель сам открыл RadarMap на экране машины. Если
+    /// перед этим навигацию забрала система (другой навигатор начал свою),
+    /// ведение к той же цели снова наше: до 2.2.16 сессия после такой отмены
+    /// не возвращалась до конца маршрута — ни манёвра, ни прибытия нигде.
+    func refresh(reason: String, driverReturned: Bool = false) {
+        if driverReturned, cancelledDestination != nil {
+            cancelledDestination = nil
+            Log.carplay.notice("водитель вернулся к RadarMap — ведение снова наше")
+        }
+        Log.carplay.notice("ведение заново (\(reason, privacy: .public)): маршрут \(self.env.route.isActive, privacy: .public), сессия \(self.session != nil, privacy: .public), манёвр \(self.maneuver != nil, privacy: .public)")
+        guard template != nil else { return }
+        sentStepDistance = nil
+        sentTripDistance = nil
+        if let session, let maneuver {
+            session.upcomingManeuvers = [maneuver]
+        }
+        // Запускает сессию, если её нет, и шлёт оценки (сброшены выше).
+        sync()
+    }
+
     /// Навигацию забрала система: сессии нет, и для ЭТОЙ цели её не
     /// перезапускаем — иначе шаблон и система дрались бы за экран до конца
     /// маршрута. Новый маршрут (другая цель) начнёт сессию заново.
@@ -302,14 +327,22 @@ final class CarPlayGuidance {
         maneuverStep = step
         sentStepDistance = nil
         guard let step else {
-            maneuver = nil
-            session.upcomingManeuvers = []
-            session.currentLaneGuidance = nil
+            // Маршрут ещё идёт, а следующего шага нет (пересчёт, последние
+            // метры): прежний манёвр ОСТАЁТСЯ. Пустой список манёвров при живой
+            // сессии машина читает как «ведения нет» — и плитка главного экрана
+            // показывает «Дом / Работа» вместо поворота (carplay12, 12.10).
+            if maneuver == nil {
+                session.upcomingManeuvers = []
+                session.currentLaneGuidance = nil
+            }
+            Log.carplay.notice("манёвра нет — в машине остаётся прежний: \(self.maneuver != nil, privacy: .public)")
             return
         }
         let next = CPManeuver()
         next.instructionVariants = CarPlayGuidanceMapping.instructionVariants(
             text: step.text, shortText: step.shortText)
+        // Плитка главного экрана — та же фраза явно, а не через запасной путь.
+        next.dashboardInstructionVariants = next.instructionVariants
         // Цвет стрелки — под фон НАШЕЙ карточки (guidanceBackgroundColor:
         // белая днём, графит ночью): до машины доезжает одна картинка, та,
         // что создана. Баннеры поверх чужого приложения и плитка панели

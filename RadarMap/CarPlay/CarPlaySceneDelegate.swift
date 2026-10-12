@@ -116,6 +116,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             needsFreshHost = true
         }
         rootShown = false
+        rootSet = nil
+        rootRetried = false
 
         let template = CPMapTemplate()
         template.mapDelegate = self
@@ -144,11 +146,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         Log.carplay.notice("CarPlay подключён, сцена \(Self.stateName(scene), privacy: .public)")
         // Без анимации: анимированная установка корня у сцены в фоне
         // теряется (так же лечили пропажу кнопок в CoMaps).
-        interfaceController.setRootTemplate(template, animated: false) { _, error in
-            if let error {
-                Log.carplay.error("setRootTemplate: \(error.localizedDescription, privacy: .public)")
-            }
-        }
+        setRoot(template, on: interfaceController)
     }
 
     func templateApplicationScene(_ scene: CPTemplateApplicationScene,
@@ -481,10 +479,19 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// экране, и отправка гарантированно доходит.
     func templateDidAppear(_ aTemplate: CPTemplate, animated: Bool) {
         shownTemplate = aTemplate === mapTemplate ? nil : aTemplate
-        guard aTemplate === mapTemplate, let mapTemplate else { return }
+        guard aTemplate === mapTemplate else { return }
         resendButtons()
-        guard !rootShown else { return }
+        rootDidShow(via: "templateDidAppear")
+    }
+
+    /// Корень на экране машины — один раз за подключение. Признак — либо
+    /// templateDidAppear, либо активная сцена с подтверждённой установкой
+    /// (CarPlayRootWatch): первый система присылает не всегда.
+    private func rootDidShow(via source: String) {
+        guard !rootShown, let mapTemplate else { return }
         rootShown = true
+        templateWatch?.cancel()
+        Log.carplay.notice("корневой шаблон на экране: \(source, privacy: .public)")
         // Сессия — только на шаблоне, который уже на экране: начатая на
         // летящем корне пропадала, а свой баннер манёвра при этом уже спрятан
         // (hasSystemGuidance) — водитель без манёвра. Completion у
@@ -510,6 +517,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Корневой шаблон уже показывался в этой сессии: сессия навигации и
     /// алерт о разрешении — один раз, а не на каждое возвращение к карте.
     private var rootShown = false
+    /// Ответ системы на установку корня: nil — ещё нет, true — установлен,
+    /// false — ошибка.
+    private var rootSet: Bool?
+    /// Корень в этом подключении уже ставили повторно.
+    private var rootRetried = false
 
     /// Навигацию забрала система (другое приложение, встроенный навигатор
     /// машины): сессии больше нет, и свой баннер манёвра обязан вернуться —
@@ -618,11 +630,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         watchRootTemplate()
     }
 
-    /// Проверка «корень действительно на экране машины». rootShown ставит
-    /// первый templateDidAppear корня; не пришёл он за
-    /// carPlayTemplateShowTimeout — шаблон потерян по дороге в машину.
-    /// Один повтор установки корня: второй раз подряд терять его система не
-    /// обязана, а бесконечные повторы мигали бы экраном.
+    /// Проверка «корень действительно на экране машины», когда сцена стала
+    /// активной. Решение — CarPlayRootWatch: подтверждённый системой корень
+    /// после паузы на анимацию считается показанным, даже если
+    /// templateDidAppear не пришёл (журналы 12.10: так бывает, когда машина
+    /// подключилась при сцене не на экране). Неподтверждённый — ставим заново
+    /// один раз за подключение, и только по таймауту.
     private var templateWatch: Task<Void, Never>?
 
     private func watchRootTemplate() {
@@ -630,15 +643,48 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         guard !rootShown else { return }
         let session = session
         templateWatch = Task { @MainActor [weak self] in
-            await Task.pause(seconds: AppConfig.carPlayTemplateShowTimeout)
-            guard let self, !Task.isCancelled, self.session == session, !self.rootShown,
-                  let mapTemplate = self.mapTemplate,
-                  let interfaceController = self.interfaceController else { return }
-            Log.carplay.fault("корневой шаблон не показан за \(Int(AppConfig.carPlayTemplateShowTimeout), privacy: .public) с — ставлю заново")
-            interfaceController.setRootTemplate(mapTemplate, animated: false) { _, error in
-                if let error {
-                    Log.carplay.error("setRootTemplate (повтор): \(error.localizedDescription, privacy: .public)")
-                }
+            await Task.pause(seconds: AppConfig.carPlayRootSettleDelay)
+            guard let self, !Task.isCancelled, self.session == session, self.model.isOnScreen else { return }
+            if self.applyRootWatch(timedOut: false) == .markShown { return }
+            await Task.pause(seconds: max(0, AppConfig.carPlayTemplateShowTimeout - AppConfig.carPlayRootSettleDelay))
+            guard !Task.isCancelled, self.session == session, self.model.isOnScreen else { return }
+            self.applyRootWatch(timedOut: true)
+        }
+    }
+
+    @discardableResult
+    private func applyRootWatch(timedOut: Bool) -> CarPlayRootWatch.Action {
+        let action = CarPlayRootWatch.action(rootShown: rootShown, rootSet: rootSet,
+                                             retried: rootRetried, timedOut: timedOut)
+        switch action {
+        case .none:
+            break
+        case .markShown:
+            rootDidShow(via: "сцена активна, установка подтверждена")
+        case .setAgain:
+            guard let mapTemplate, let interfaceController else { break }
+            rootRetried = true
+            Log.carplay.fault("корневой шаблон не подтверждён за \(Int(AppConfig.carPlayTemplateShowTimeout), privacy: .public) с — ставлю заново")
+            setRoot(mapTemplate, on: interfaceController)
+        }
+        return action
+    }
+
+    /// Установка корня без анимации (анимированная у сцены в фоне теряется).
+    /// Подтверждение системы запоминается для CarPlayRootWatch; пришло, пока
+    /// сцена на экране, — проверка «показан» запускается сразу.
+    private func setRoot(_ template: CPMapTemplate, on interfaceController: CPInterfaceController) {
+        rootSet = nil
+        let session = session
+        interfaceController.setRootTemplate(template, animated: false) { [weak self] success, error in
+            if let error {
+                Log.carplay.error("setRootTemplate: \(error.localizedDescription, privacy: .public)")
+            }
+            let confirmed = success && error == nil
+            Task { @MainActor [weak self] in
+                guard let self, self.session == session else { return }
+                self.rootSet = confirmed
+                if confirmed, self.model.isOnScreen, !self.rootShown { self.watchRootTemplate() }
             }
         }
     }

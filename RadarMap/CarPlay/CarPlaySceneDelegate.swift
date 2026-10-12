@@ -147,6 +147,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // не пустым с кнопками вдогонку. Повтор — в templateDidAppear.
         resendButtons()
         observePendingConfirm()
+        observeDetour()
         startFreezeWatch(scene: scene)
         Log.carplay.notice("CarPlay подключён, сцена \(Self.stateName(scene), privacy: .public)")
         // Без анимации: анимированная установка корня у сцены в фоне
@@ -554,6 +555,63 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // неотличимо от поломки. Поверх летящего корня CarPlay его отклонял.
         if !env.location.isAuthorized { return showNoPermissionAlert() }
         offerDestinationSoon()
+    }
+
+    // MARK: - Объезд пробки
+
+    /// Предложение объезда, показанное баннером в машине (id из RouteService).
+    private var detourAlertID: Int?
+    private var detourAlert: CPNavigationAlert?
+
+    /// Одно состояние на два экрана: предложение живёт в RouteService,
+    /// ответ на телефоне снимает баннер здесь, и наоборот.
+    private func observeDetour() {
+        let session = session
+        withObservationTracking {
+            _ = env.route.detourOffer
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.session == session else { return }
+                self.syncDetourAlert()
+                self.observeDetour()
+            }
+        }
+    }
+
+    private func syncDetourAlert() {
+        guard let mapTemplate else { return }
+        let offer = env.route.detourOffer
+        if let shownID = detourAlertID, offer?.id != shownID {
+            // Ответили на телефоне, истекло или пришло другое — снять своё.
+            if let detourAlert, mapTemplate.currentNavigationAlert === detourAlert {
+                mapTemplate.dismissNavigationAlert(animated: true) { _ in }
+            }
+            detourAlertID = nil
+            detourAlert = nil
+        }
+        guard let offer, detourAlertID == nil else { return }
+        detourAlertID = offer.id
+        let alert = CPNavigationAlert(
+            titleVariants: [offer.title],
+            subtitleVariants: [offer.subtitle, String(localized: "Объезд пробки")],
+            image: CarPlayGuidance.symbol("arrow.triangle.branch", pointSize: 30,
+                                          onDark: model.carIsDark ?? !model.isDaylight),
+            primaryAction: CPAlertAction(title: String(localized: "Объехать"), style: .default) { [weak self] _ in
+                guard let self else { return }
+                self.env.route.acceptDetour(cameras: self.env.cameras.cameras)
+            },
+            secondaryAction: CPAlertAction(title: String(localized: "Остаться"), style: .cancel) { [weak self] _ in
+                self?.env.route.declineDetour()
+            },
+            duration: AppConfig.detourOfferSeconds)
+        detourAlert = alert
+        Log.carplay.notice("объезд: баннер в машине")
+        guard mapTemplate.currentNavigationAlert != nil else {
+            return mapTemplate.present(navigationAlert: alert, animated: true)
+        }
+        mapTemplate.dismissNavigationAlert(animated: false) { [weak mapTemplate] _ in
+            Task { @MainActor in mapTemplate?.present(navigationAlert: alert, animated: true) }
+        }
     }
 
     // MARK: - «Куда едем?»

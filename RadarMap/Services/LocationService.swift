@@ -1153,6 +1153,9 @@ final class LocationService: NSObject {
                 GeoMath.fastDistance($0.latitude, $0.longitude,
                                      coordinate.latitude, coordinate.longitude)
             } ?? .greatestFiniteMagnitude
+            // Объезд пробки — на каждом фиксе, и стоя: в пробке машина не
+            // сдвигается, и прогресс ниже молчит ровно тогда, когда он нужен.
+            if isTripActive { route?.considerDetour(coordinate: coordinate, speedKmh: speedKmh) }
             if progressMoved >= RoadSketch.standstillMeters
                 || (route?.remainingDistance ?? .greatestFiniteMagnitude) < 300 {
                 lastRouteProgressCoordinate = coordinate

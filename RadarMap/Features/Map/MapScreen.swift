@@ -452,6 +452,8 @@ struct MapScreen: View {
         VStack(spacing: 10) {
             // The next turn stays at a fixed top position as statuses appear.
             ManeuverBannerGate()
+            // Объезд пробки — решение про маршрут, место ему под манёвром.
+            DetourOfferCard()
             // В навигации сверху — ОДНА карточка, манёвр. Камера на подходе —
             // компактным чипом под ней; скорость с лимитом — внизу слева
             // (bottomLayer). Две крупные карточки занимали треть экрана.
@@ -1286,6 +1288,13 @@ struct MapScreen: View {
             Task {
                 await Task.pause(seconds: 3)
                 env.traffic.seedDemo()
+            }
+        }
+        // Карточка объезда пробки — на снимок экрана без настоящей пробки.
+        if args.contains("-demoDetour") {
+            Task {
+                await Task.pause(seconds: 3)
+                env.route.seedDemoDetourOffer()
             }
         }
         // Дорога на работу и домой: четыре недели будней поверх истории.

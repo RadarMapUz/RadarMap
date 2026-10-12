@@ -360,6 +360,12 @@ final class AppEnvironment {
             guard settings.voiceEnabled else { return }
             alerts?.speak(String(localized: "Маршрут перестроен"))
         }
+        // Объезд пробки: сказать — голосом, решить — касанием (телефон или
+        // машина). Маршрут сам не меняется.
+        route.onDetourOffer = { [weak alerts] offer in
+            guard settings.voiceEnabled else { return }
+            alerts?.speak(offer.spoken)
+        }
         route.onArrived = { [weak alerts] in
             guard settings.voiceEnabled else { return }
             alerts?.speak(String(localized: "Вы прибыли"))

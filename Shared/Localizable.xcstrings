@@ -17604,6 +17604,76 @@
           }
         }
       }
+    },
+    "Быстрее на %@": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ tezroq"
+          }
+        }
+      }
+    },
+    "Объезд пробки": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tirbandlikni aylanib o‘tish"
+          }
+        }
+      }
+    },
+    "Объезд пробки · через %@": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tirbandlikni aylanib o‘tish · %@ orqali"
+          }
+        }
+      }
+    },
+    "Впереди пробка. Есть путь быстрее на %@": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda tirbandlik. %@ tezroq yo‘l bor"
+          }
+        }
+      }
+    },
+    ", через %@": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", %@ orqali"
+          }
+        }
+      }
+    },
+    "Остаться": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qolish"
+          }
+        }
+      }
+    },
+    "Объехать": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aylanib o‘tish"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

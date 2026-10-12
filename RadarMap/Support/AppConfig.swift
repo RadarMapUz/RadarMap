@@ -1036,6 +1036,37 @@ nonisolated enum AppConfig {
     /// (первый точный фикс) и сколько держать баннер.
     static let carPlayDestinationOfferDelay: TimeInterval = 4
     static let carPlayDestinationOfferSeconds: TimeInterval = 12
+
+    // MARK: - Объезд пробки (DetourAdvisor)
+
+    /// Искать объезд: задержка пробками впереди не меньше этой — сразу; если
+    /// машина ползёт дольше `detourCrawlSeconds` — уже от `detourCrawlDelaySeconds`.
+    static let detourDelayTriggerSeconds: TimeInterval = 300
+    static let detourCrawlSeconds: TimeInterval = 180
+    static let detourCrawlDelaySeconds: TimeInterval = 120
+    /// Ползём — ниже этой скорости; «поехали» — быстрее `detourFreeKmh` дольше
+    /// `detourCrawlBurstSeconds` (короткий рывок между стоянками — ещё пробка).
+    static let detourCrawlKmh: Double = 12
+    static let detourFreeKmh: Double = 25
+    static let detourCrawlBurstSeconds: TimeInterval = 20
+    /// До цели меньше — объезжать незачем.
+    static let detourMinRemainingMeters: Double = 2_000
+    /// Не чаще одного поиска за этот срок; после «Остаться» — тишина; не
+    /// больше предложений за маршрут.
+    static let detourSearchIntervalSeconds: TimeInterval = 180
+    static let detourDeclineQuietSeconds: TimeInterval = 600
+    static let detourMaxOffersPerRoute = 3
+    /// Выигрыш: не меньше max(5 мин, 15 % оставшегося) после цены перестроения.
+    static let detourMinSavingSeconds: TimeInterval = 300
+    static let detourMinSavingShare = 0.15
+    static let detourSwitchCostSeconds: TimeInterval = 60
+    /// Вариант, лежащий в 30 м от текущего пути на 70 %+ своей длины, —
+    /// не объезд, а тот же путь. Сравнение — по точкам через 100 м.
+    static let detourOverlapMeters: Double = 30
+    static let detourMaxOverlap = 0.7
+    static let detourSampleMeters: Double = 100
+    /// Сколько держать предложение без ответа (дальше — «остаёмся»).
+    static let detourOfferSeconds: TimeInterval = 20
     /// Шаг обновления «пройденной» части маршрута: перекладывать оверлей на
     /// каждый фикс GPS — лишняя работа рендера, глазу хватает и таких шагов.
     static let carPlayTraveledStepMeters: CLLocationDistance = 25

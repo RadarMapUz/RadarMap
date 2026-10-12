@@ -147,6 +147,11 @@ final class RouteService {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onRerouted,
                                                "RouteService.onRerouted") }
     }
+    /// Найден объезд пробки — сказать водителю (голос). Решение принимает он.
+    @ObservationIgnored var onDetourOffer: ((DetourOffer) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onDetourOffer,
+                                               "RouteService.onDetourOffer") }
+    }
     @ObservationIgnored var onArrived: (() -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onArrived,
                                                "RouteService.onArrived") }
@@ -339,6 +344,7 @@ final class RouteService {
         defer { isBuilding = false }
         generation += 1
         let gen = generation
+        resetDetour()
 
         lastArrival = nil   // новый маршрут — карточка прошлого прибытия неактуальна
         do {
@@ -404,6 +410,7 @@ final class RouteService {
 
     func clear() {
         generation += 1   // rebuild в полёте не должен вернуть линию на карту
+        resetDetour()
         variants = []
         selectedID = 0
         destinationName = ""
@@ -1017,6 +1024,142 @@ final class RouteService {
         // вместо поворота (CarPlay Simulator, 11.10), а телефон — пустую
         // карточку манёвра. Без голоса: озвучка — дело живого прогресса.
         if let variant = selected { updateManeuvers(variant: variant, along: 0, announce: false) }
+    }
+
+    // MARK: - Объезд пробки (DetourAdvisor)
+
+    /// Предложение объезда, ждущее ответа водителя. Маршрут без его нажатия
+    /// не меняется никогда.
+    struct DetourOffer: Identifiable, Equatable {
+        let id: Int
+        /// Сколько выигрывает объезд, секунды.
+        let saving: TimeInterval
+        /// Улица, которой объезд уходит; nil — не назвать.
+        let via: String?
+        /// Без ответа до этого момента — «остаёмся».
+        let expires: Date
+
+        /// «Быстрее на 8 мин».
+        var title: String {
+            String(format: String(localized: "Быстрее на %@"), Formatting.unbreakable(Formatting.duration(saving)))
+        }
+        /// «Объезд пробки · через Шота Руставели».
+        var subtitle: String {
+            guard let via else { return String(localized: "Объезд пробки") }
+            return String(format: String(localized: "Объезд пробки · через %@"), via)
+        }
+        /// Фраза голосом.
+        var spoken: String {
+            let head = String(format: String(localized: "Впереди пробка. Есть путь быстрее на %@"),
+                              Formatting.duration(saving))
+            guard let via else { return head }
+            return head + String(format: String(localized: ", через %@"), via)
+        }
+    }
+
+    private(set) var detourOffer: DetourOffer?
+    @ObservationIgnored private var detourVariant: BuiltVariant?
+    @ObservationIgnored private var detourCounter = 0
+    @ObservationIgnored private var detourCrawl = DetourAdvisor.CrawlWatch()
+    @ObservationIgnored private var detourSearchAt: Date?
+    @ObservationIgnored private var detourDeclinedAt: Date?
+    @ObservationIgnored private var detourOffers = 0
+    @ObservationIgnored private var detourSearching = false
+
+    /// На каждом фиксе поездки — и стоя: в пробке машина не сдвигается, и
+    /// updateProgress (он ждёт смещения) молчит ровно тогда, когда объезд нужен.
+    func considerDetour(coordinate: CLLocationCoordinate2D, speedKmh: Double, now: Date = Date()) {
+        if let offer = detourOffer, now >= offer.expires { declineDetour(now: now, reason: "нет ответа") }
+        let crawl = detourCrawl.update(speedKmh: speedKmh, at: now)
+        guard let variant = selected, let destination = destinationCoordinate,
+              !isBuilding, !isRebuilding, detourOffer == nil, !detourSearching,
+              let snapshot = trafficSnapshot?(), snapshot.isFresh(now: now),
+              DetourAdvisor.shouldSearch(remainingDistance: remainingDistance,
+                                         delayAhead: remainingTrafficDelay, crawl: crawl,
+                                         sinceLastSearch: detourSearchAt.map { now.timeIntervalSince($0) },
+                                         sinceDecline: detourDeclinedAt.map { now.timeIntervalSince($0) },
+                                         offersOnRoute: detourOffers) else { return }
+        detourSearching = true
+        detourSearchAt = now
+        let gen = generation
+        let current = Self.remaining(variant.points, after: progressAlong)
+        let currentRemaining = remainingTime
+        let via = stop
+        Log.route.notice("объезд: ищу — впереди +\(Int(self.remainingTrafficDelay), privacy: .public) с, ползём \(Int(crawl), privacy: .public) с")
+        Task {
+            defer { detourSearching = false }
+            guard let built = try? await calculate(from: coordinate, via: via, to: destination,
+                                                   alternatives: true),
+                  gen == generation else { return }
+            let candidates = built.map { variant in
+                (points: variant.points.map(\.coordinate), travelTime: variant.travelTime, steps: variant.steps)
+            }
+            let offer = await Task.detached(priority: .utility) { () -> DetourAdvisor.Offer? in
+                let scored = candidates.map { candidate in
+                    DetourAdvisor.Candidate(points: candidate.points,
+                                            expectedTime: candidate.travelTime + snapshot.delay(along: candidate.points),
+                                            steps: candidate.steps)
+                }
+                return DetourAdvisor.decide(currentRemaining: currentRemaining, current: current, candidates: scored)
+            }.value
+            guard gen == generation, detourOffer == nil else { return }
+            guard let offer, built.indices.contains(offer.index) else {
+                Log.route.notice("объезд: выгодного нет")
+                return
+            }
+            detourVariant = built[offer.index]
+            detourCounter += 1
+            detourOffers += 1
+            let shown = DetourOffer(id: detourCounter, saving: offer.saving, via: offer.via,
+                                    expires: Date().addingTimeInterval(AppConfig.detourOfferSeconds))
+            detourOffer = shown
+            Log.route.notice("объезд: предлагаю, выигрыш \(Int(offer.saving), privacy: .public) с")
+            onDetourOffer?(shown)
+        }
+    }
+
+    /// «Объехать»: тот вариант становится маршрутом.
+    func acceptDetour(cameras: [Camera]) {
+        guard detourOffer != nil, let built = detourVariant, let destination = destinationCoordinate else { return }
+        detourOffer = nil
+        detourVariant = nil
+        generation += 1
+        let gen = generation
+        let name = destinationName
+        Log.route.notice("объезд: принят")
+        Task {
+            await apply([built], name: name, destination: destination, cameras: cameras, gen: gen, history: nil)
+            guard gen == generation else { return }
+            onRerouted?()
+        }
+    }
+
+    /// «Остаться» (или нет ответа): 10 минут тишины.
+    func declineDetour(now: Date = Date(), reason: String = "остаться") {
+        guard detourOffer != nil else { return }
+        detourOffer = nil
+        detourVariant = nil
+        detourDeclinedAt = now
+        Log.route.notice("объезд: отказ (\(reason, privacy: .public))")
+    }
+
+    #if DEBUG
+    /// Скриншот-хук `-demoDetour`: карточка объезда без настоящей пробки.
+    /// Варианта за ней нет — «Объехать» ничего не меняет.
+    func seedDemoDetourOffer() {
+        detourCounter += 1
+        detourOffer = DetourOffer(id: detourCounter, saving: 8 * 60, via: "Шота Руставели",
+                                  expires: Date().addingTimeInterval(120))
+    }
+    #endif
+
+    private func resetDetour() {
+        detourOffer = nil
+        detourVariant = nil
+        detourSearchAt = nil
+        detourDeclinedAt = nil
+        detourOffers = 0
+        detourCrawl.reset()
     }
 
     // MARK: - Геометрия (фоновые потоки)

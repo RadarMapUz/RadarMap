@@ -757,8 +757,12 @@ def _layers_in_draw_order(p):
         # Жёлтой «вафли» больше нет — у Яндекса её нет (снимок 05.10.2026).
         {"id": "radar-signal-icon", "type": "symbol", "source": "radar", "source-layer": "surface", "minzoom": 16,
          "filter": ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], 14]],
-         "layout": {"icon-image": "traffic-light", "icon-allow-overlap": True,
-                    "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.6, 19, 1.1]}},
+         # Минималистично и не поверх камеры (владелец, 12.10): светофор
+         # обходит значки камер и подписи (allow-overlap false), но сам никого
+         # не выталкивает (ignore-placement true).
+         "layout": {"icon-image": "traffic-light", "icon-allow-overlap": False,
+                    "icon-ignore-placement": True, "icon-padding": 1,
+                    "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.7, 19, 1.0]}},
     ]
 
 

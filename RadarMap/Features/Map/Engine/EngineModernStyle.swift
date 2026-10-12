@@ -114,6 +114,13 @@ nonisolated enum EngineModernStyle {
         // В поездке — как у навигаторов: на ходу читают дорогу, а не вывески.
         if driving { layers = drivingLayers(layers) }
 
+        // Светофор — свой значок приложения (EngineMapView.trafficLightIcon).
+        // Подменять картинку «traffic-light» спрайта нельзя: спрайт выпуска
+        // приходит с сервера ПОСЛЕ загрузки стиля и перезаписывает её обратно
+        // (снимки 12.10 — огни остались цветными). Своё имя спрайту не
+        // перебить.
+        layers = layers.map(Self.ownTrafficLight)
+
         // Маршрут — над дорогой и разметкой, под подписями основы.
         let labels = layers.firstIndex {
             $0["type"] as? String == "symbol" && $0["source"] as? String == "openmaptiles"
@@ -131,6 +138,17 @@ nonisolated enum EngineModernStyle {
         guard let data = try? JSONSerialization.data(withJSONObject: style),
               let text = String(data: data, encoding: .utf8) else { return nil }
         return text
+    }
+
+    static let trafficLightImage = "radar-traffic-light"
+
+    static func ownTrafficLight(_ layer: [String: Any]) -> [String: Any] {
+        guard var layout = layer["layout"] as? [String: Any],
+              layout["icon-image"] as? String == "traffic-light" else { return layer }
+        var own = layer
+        layout["icon-image"] = trafficLightImage
+        own["layout"] = layout
+        return own
     }
 
     // MARK: - Режим «в поездке»

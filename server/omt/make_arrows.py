@@ -93,16 +93,19 @@ def waffle(ratio):
 
 
 def traffic_light(ratio):
-    """Значок светофора для центра регулируемого перекрёстка (как у Яндекса)."""
-    w, h = 12 * ratio, 26 * ratio
+    """Значок светофора — минималистично (владелец, 12.10): графитовая капсула
+    10×20 с белой кромкой и тремя светлыми точками, без цветных огней (фазу
+    тайл не знает, а красный спорил со значком камеры). Та же форма рисуется
+    в приложении (EngineMapView.trafficLightIcon) поверх спрайта выпуска."""
+    w, h = 10 * ratio, 20 * ratio
     image = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     pen = ImageDraw.Draw(image)
-    pen.rounded_rectangle((0, 0, w - 1, h - 1), radius=3 * ratio, fill=(52, 56, 64, 255),
+    pen.rounded_rectangle((0, 0, w - 1, h - 1), radius=int(4.25 * ratio), fill=(59, 64, 71, 255),
                           outline=(255, 255, 255, 230), width=max(1, ratio))
-    r = 3 * ratio
-    for index, colour in enumerate(((229, 72, 60), (244, 190, 40), (56, 190, 96))):
-        cy = (5 + index * 8) * ratio
-        pen.ellipse((w / 2 - r, cy - r, w / 2 + r, cy + r), fill=colour + (255,))
+    r = 1.8 * ratio
+    for cy in (5.4, 10.1, 14.8):
+        cy *= ratio
+        pen.ellipse((w / 2 - r, cy - r, w / 2 + r, cy + r), fill=(217, 222, 230, 255))
     return image
 
 

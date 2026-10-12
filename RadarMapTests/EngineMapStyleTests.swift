@@ -206,12 +206,26 @@ struct EngineMapStyleTests {
         }
     }
 
-    @Test("Камера рисуется всегда: подписи карты не вправе её вытеснить")
+    @Test("Камера рисуется всегда и занимает место: остальное её обходит")
     func cameraIconsNeverHidden() throws {
         let icons = try #require(layers(style()).first { $0["id"] as? String == "camera-icons" })
         let layout = icons["layout"] as? [String: Any]
+        // Подпись или светофор не вправе вытеснить камеру…
         #expect(layout?["icon-allow-overlap"] as? Bool == true)
-        #expect(layout?["icon-ignore-placement"] as? Bool == true)
+        // …и не ложатся поверх неё (12.10: «задевает иконки камеры»).
+        #expect(layout?["icon-ignore-placement"] as? Bool == false)
+    }
+
+    @Test("Светофор новой карты — свой значок, и он не налезает на соседей")
+    func ownTrafficLight() {
+        let layer: [String: Any] = ["id": "radar-signal-icon",
+                                    "layout": ["icon-image": "traffic-light", "icon-allow-overlap": false]]
+        let own = EngineModernStyle.ownTrafficLight(layer)["layout"] as? [String: Any]
+        #expect(own?["icon-image"] as? String == EngineModernStyle.trafficLightImage)
+        #expect(own?["icon-allow-overlap"] as? Bool == false)
+        let other: [String: Any] = ["id": "x", "layout": ["icon-image": "fuel_11"]]
+        #expect((EngineModernStyle.ownTrafficLight(other)["layout"] as? [String: Any])?["icon-image"] as? String
+                == "fuel_11")
     }
 
     @Test("Разметка берётся из готового слоя, светофоры без онлайн-фаз")

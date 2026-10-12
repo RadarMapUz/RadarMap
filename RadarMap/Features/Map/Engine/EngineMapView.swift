@@ -354,6 +354,23 @@ struct EngineMapView: UIViewRepresentable {
             return image
         }
 
+        /// Значок светофора: капсула 10×20 pt, графит с белой кромкой, три точки.
+        static func trafficLightIcon() -> UIImage {
+            UIGraphicsImageRenderer(size: CGSize(width: 10, height: 20)).image { _ in
+                let shell = UIBezierPath(roundedRect: CGRect(x: 0.75, y: 0.75, width: 8.5, height: 18.5),
+                                         cornerRadius: 4.25)
+                UIColor(red: 0.23, green: 0.25, blue: 0.28, alpha: 1).setFill()
+                shell.fill()
+                UIColor.white.withAlphaComponent(0.9).setStroke()
+                shell.lineWidth = 1.2
+                shell.stroke()
+                UIColor(red: 0.85, green: 0.87, blue: 0.90, alpha: 1).setFill()
+                for y in [3.6, 8.3, 13.0] {
+                    UIBezierPath(ovalIn: CGRect(x: 3.2, y: y, width: 3.6, height: 3.6)).fill()
+                }
+            }
+        }
+
         private func installCameraIcons(in style: MLNStyle) {
             installCursor(current?.cursorStyle ?? .arrow)
             if !Self.iconCache.isEmpty {
@@ -385,26 +402,17 @@ struct EngineMapView: UIViewRepresentable {
                     }
                 }
             }
-            // Все линзы нейтральны: тайл знает положение, но не текущую фазу.
-            let signal = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 38)).image { _ in
-                UIColor(red: 0.36, green: 0.43, blue: 0.39, alpha: 1).setFill()
-                UIBezierPath(roundedRect: CGRect(x: 9, y: 29, width: 2, height: 8), cornerRadius: 1).fill()
-                UIColor(red: 0.07, green: 0.13, blue: 0.11, alpha: 1).setFill()
-                let shell = UIBezierPath(roundedRect: CGRect(x: 3, y: 1, width: 14, height: 30), cornerRadius: 5)
-                shell.fill()
-                UIColor(red: 0.65, green: 0.73, blue: 0.67, alpha: 1).setStroke()
-                shell.lineWidth = 1
-                shell.stroke()
-                for y in [6, 14, 22] {
-                    UIColor.black.withAlphaComponent(0.75).setFill()
-                    UIBezierPath(ovalIn: CGRect(x: 5, y: y - 2, width: 10, height: 10)).fill()
-                    UIColor(red: 0.54, green: 0.62, blue: 0.56, alpha: 1).setFill()
-                    UIBezierPath(ovalIn: CGRect(x: 7, y: y, width: 6, height: 6)).fill()
-                    UIColor.white.withAlphaComponent(0.22).setFill()
-                    UIBezierPath(ovalIn: CGRect(x: 8, y: y, width: 3, height: 2)).fill()
-                }
-            }
+            // Светофор — минималистично (владелец, 12.10: «красиво, по-другому,
+            // задевает камеры»): маленькая графитовая капсула с тремя светлыми
+            // точками, без красно-жёлто-зелёных огней — фазу тайл всё равно не
+            // знает, а цветные огни спорили с красным значком камеры. Этим же
+            // значком рисует светофоры и новая карта: её слой получает своё имя
+            // при сборке стиля (EngineModernStyle.ownTrafficLight) — спрайт
+            // выпуска, пришедший позже, его не перебьёт. make_arrows.py рисует
+            // ту же форму для спрайта; прежний стиль берёт «radar-signal».
+            let signal = Self.trafficLightIcon()
             style.setImage(signal, forName: "radar-signal")
+            style.setImage(signal, forName: EngineModernStyle.trafficLightImage)
             let stop = UIGraphicsImageRenderer(size: CGSize(width: 26, height: 26)).image { _ in
                 UIImage(systemName: "octagon.fill")?.withTintColor(
                     UIColor(red: 0.64, green: 0.23, blue: 0.22, alpha: 1), renderingMode: .alwaysOriginal)
@@ -433,7 +441,8 @@ struct EngineMapView: UIViewRepresentable {
                     .draw(in: CGRect(x: 2, y: 2, width: 28, height: 28))
             }
             style.setImage(pin, forName: "radar-pin")
-            let names = ["radar-signal", "radar-stop", "radar-flag", "radar-pin"] + kinds.flatMap {
+            let names = ["radar-signal", EngineModernStyle.trafficLightImage, "radar-stop", "radar-flag",
+                         "radar-pin"] + kinds.flatMap {
                 [$0.symbolName, $0.symbolName + "-alert"]
             }
             for name in names { Self.iconCache[name] = style.image(forName: name) }

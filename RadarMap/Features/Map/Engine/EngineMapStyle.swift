@@ -257,8 +257,9 @@ nonisolated enum EngineMapStyle {
             "id": "traffic-signals", "type": "symbol", "source": "near", "source-layer": "points",
             "minzoom": 16.2, "filter": ["==", ["get", "kind"], 1],
             "layout": ["icon-image": "radar-signal", "icon-allow-overlap": false,
-                       "icon-padding": 6, "icon-anchor": "bottom",
-                       "icon-size": ["interpolate", ["linear"], ["zoom"], 16.2, 0.65, 18, 1],
+                       "icon-ignore-placement": true,
+                       "icon-padding": 2, "icon-anchor": "bottom",
+                       "icon-size": ["interpolate", ["linear"], ["zoom"], 16.2, 0.75, 18, 1],
                        "icon-pitch-alignment": "viewport", "icon-rotation-alignment": "viewport"],
         ])
         out.append([
@@ -391,11 +392,15 @@ nonisolated enum EngineMapStyle {
         // поставленная раньше, вытесняла его — и при приближении карты радар
         // исчезал ровно там, где на него смотрят (владелец, 11.10). Промолчать
         // о камере хуже лишней подписи, и правило то же, что у оповещений.
+        // И занимает своё место: с 12.10 значок камеры участвует в раскладке
+        // (icon-ignore-placement=false) — светофоры, подписи и заведения его
+        // обходят, а не ложатся поверх («задевает иконки камеры», владелец).
+        // Сама камера по-прежнему рисуется всегда (icon-allow-overlap).
         out.append([
             "id": "camera-icons", "type": "symbol", "source": "cameras",
             "minzoom": 14.5,
             "layout": ["icon-image": ["get", "icon"],
-                       "icon-allow-overlap": true, "icon-ignore-placement": true,
+                       "icon-allow-overlap": true, "icon-ignore-placement": false,
                        "symbol-sort-key": ["case", ["get", "alert"], 0, 1]],
             "paint": ["icon-opacity": ["case", ["get", "unconfirmed"], 0.55, 1]],
         ])

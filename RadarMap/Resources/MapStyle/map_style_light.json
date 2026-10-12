@@ -11107,8 +11107,10 @@
    ],
    "id": "radar-signal-icon",
    "layout": {
-    "icon-allow-overlap": true,
+    "icon-allow-overlap": false,
+    "icon-ignore-placement": true,
     "icon-image": "traffic-light",
+    "icon-padding": 1,
     "icon-size": [
      "interpolate",
      [
@@ -11118,9 +11120,9 @@
       "zoom"
      ],
      16,
-     0.6,
+     0.7,
      19,
-     1.1
+     1.0
     ]
    },
    "minzoom": 16,

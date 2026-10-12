@@ -109,6 +109,40 @@ nonisolated enum CarPlayGuidanceMapping {
         }
     }
 
+    // MARK: - Метаданные для приборки и проекции (CarPlayNavigationMetadata)
+
+    /// Тип перекрёстка: кольцо или обычный. Поле, без которого машина с
+    /// приборкой рисовала карточку манёвра пустой (2.2.4–2.2.7).
+    static func junctionType(_ kind: ManeuverKind?) -> CPJunctionType {
+        kind == .roundabout ? .roundabout : .intersection
+    }
+
+    /// Угол съезда, градусы: 0 — прямо, минус — влево (то же соглашение, что
+    /// у полос). nil — манёвр не поворот (прибытие) или тип неизвестен.
+    static func exitAngle(_ kind: ManeuverKind?) -> Double? {
+        switch kind {
+        case .straight:    return 0
+        case .slightLeft:  return -45
+        case .left:        return -90
+        case .sharpLeft:   return -135
+        case .uturn:       return -180
+        case .slightRight: return 45
+        case .right:       return 90
+        case .sharpRight:  return 135
+        case .roundabout, .arrive, nil: return nil
+        }
+    }
+
+    /// Состояние манёвра по мере подъезда — как у встроенных навигаторов:
+    /// «едем» вдали, «готовься» на подходе, «выполняй» у самого поворота.
+    /// Новый манёвр первые метры — «начальный».
+    static func maneuverState(distance: Double, sinceShown: TimeInterval) -> CPManeuverState {
+        if distance <= AppConfig.carPlayManeuverExecuteMeters { return .execute }
+        if distance <= AppConfig.carPlayManeuverPrepareMeters { return .prepare }
+        if sinceShown < AppConfig.carPlayManeuverInitialSeconds { return .initial }
+        return .continue
+    }
+
     /// Время до манёвра — долей оставшегося времени: скорость по маршруту
     /// известна только целиком, а доля пути — честная оценка без выдумки.
     static func timeToManeuver(stepDistance: Double, remainingDistance: Double,
@@ -155,6 +189,9 @@ final class CarPlayGuidance {
     private var sentTripDistance: Double?
     private var sentTripTime = Date.distantPast
     private var alertedCameraID: Int?
+    /// Когда показан текущий манёвр — для состояния «начальный».
+    private var maneuverShownAt = Date.distantPast
+    private var sentManeuverState: CPManeuverState?
     /// Ведение на паузе «Перестраиваю маршрут» (CPTripPauseReason.rerouting).
     private var pausedForReroute = false
     private var generation = 0
@@ -394,6 +431,12 @@ final class CarPlayGuidance {
         next.dashboardSymbolImage = Self.symbol(symbolName, pointSize: 34, onDark: carDark)
         next.maneuverType = CarPlayGuidanceMapping.maneuverType(step.kind)
         next.trafficSide = .right
+        next.junctionType = CarPlayGuidanceMapping.junctionType(step.kind)
+        if let angle = CarPlayGuidanceMapping.exitAngle(step.kind) {
+            next.junctionExitAngle = Measurement(value: angle, unit: .degrees)
+        }
+        maneuverShownAt = Date()
+        sentManeuverState = nil
         let lanes = CarPlayGuidanceMapping.lanes(step.lanes, kind: step.kind)
         if CarPlayGuidanceMapping.isUseful(lanes) {
             let guidance = CPLaneGuidance()
@@ -433,6 +476,14 @@ final class CarPlayGuidance {
     private func updateEstimates(on template: CPMapTemplate) {
         let route = env.route
         let now = Date()
+        if let session, maneuver != nil, maneuverStep != nil, AppConfig.carPlayNavigationMetadata {
+            let state = CarPlayGuidanceMapping.maneuverState(distance: route.nextStepDistance,
+                                                             sinceShown: now.timeIntervalSince(maneuverShownAt))
+            if state != sentManeuverState {
+                sentManeuverState = state
+                session.maneuverState = state
+            }
+        }
         if let session, let maneuver, maneuverStep != nil {
             let distance = route.nextStepDistance
             if CarPlayGuidanceMapping.shouldUpdate(previous: sentStepDistance, current: distance,

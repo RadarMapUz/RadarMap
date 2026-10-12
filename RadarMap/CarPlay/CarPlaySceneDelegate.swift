@@ -732,7 +732,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// нет. Навигатор Mapbox метаданные не включает и карточку собирает только
     /// из стрелки, текста и начальной оценки. Вернём, когда будут все поля
     /// и проверка в машине с приборкой.
-    func mapTemplateShouldProvideNavigationMetadata(_ mapTemplate: CPMapTemplate) -> Bool { false }
+    /// С 2.2.16 поля есть все (тип перекрёстка, угол съезда, состояние
+    /// манёвра — CarPlayGuidanceMapping), но включение — флагом
+    /// `carPlayNavigationMetadata`: проверить сначала в CarPlay Simulator на
+    /// втором дисплее «приборка» (профиль Widescreen, showsInstruments).
+    func mapTemplateShouldProvideNavigationMetadata(_ mapTemplate: CPMapTemplate) -> Bool {
+        AppConfig.carPlayNavigationMetadata
+    }
 
     // MARK: - Системные баннеры, когда на экране машины не мы
 

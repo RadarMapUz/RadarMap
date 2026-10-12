@@ -1036,6 +1036,16 @@ nonisolated enum AppConfig {
     /// (первый точный фикс) и сколько держать баннер.
     static let carPlayDestinationOfferDelay: TimeInterval = 4
     static let carPlayDestinationOfferSeconds: TimeInterval = 12
+    /// Метаданные ведения для приборки и проекции на стекло. Поля все на
+    /// месте (тип перекрёстка, угол, состояние); выключено, пока не проверено
+    /// на дисплее «приборка» в CarPlay Simulator — в 2.2.4 без полей карточка
+    /// манёвра приходила пустой.
+    static let carPlayNavigationMetadata = false
+    /// Состояние манёвра: «выполняй» ближе 50 м, «готовься» ближе 400 м,
+    /// «начальный» — первые 5 с нового манёвра.
+    static let carPlayManeuverExecuteMeters: Double = 50
+    static let carPlayManeuverPrepareMeters: Double = 400
+    static let carPlayManeuverInitialSeconds: TimeInterval = 5
 
     // MARK: - Объезд пробки (DetourAdvisor)
 

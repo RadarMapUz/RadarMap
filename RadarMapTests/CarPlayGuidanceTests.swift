@@ -105,6 +105,27 @@ final class CarPlayGuidanceTests: XCTestCase {
                        ["Разворот"])
     }
 
+    // MARK: - Метаданные для приборки
+
+    func testJunctionTypeAndExitAngle() {
+        XCTAssertEqual(CarPlayGuidanceMapping.junctionType(.roundabout), .roundabout)
+        XCTAssertEqual(CarPlayGuidanceMapping.junctionType(.left), .intersection)
+        XCTAssertEqual(CarPlayGuidanceMapping.exitAngle(.left), -90)
+        XCTAssertEqual(CarPlayGuidanceMapping.exitAngle(.slightRight), 45)
+        XCTAssertNil(CarPlayGuidanceMapping.exitAngle(.arrive), "прибытие — не поворот")
+        // Угол съезда — то же соглашение, что у полос: 0 прямо, минус влево.
+        XCTAssertEqual(CarPlayGuidanceMapping.exitAngle(.sharpLeft), CarPlayGuidanceMapping.laneAngle(.sharpLeft))
+    }
+
+    func testManeuverStateFollowsTheApproach() {
+        XCTAssertEqual(CarPlayGuidanceMapping.maneuverState(distance: 1_200, sinceShown: 1), .initial)
+        XCTAssertEqual(CarPlayGuidanceMapping.maneuverState(distance: 1_200, sinceShown: 30), .continue)
+        XCTAssertEqual(CarPlayGuidanceMapping.maneuverState(distance: 300, sinceShown: 30), .prepare)
+        XCTAssertEqual(CarPlayGuidanceMapping.maneuverState(distance: 30, sinceShown: 30), .execute)
+        XCTAssertEqual(CarPlayGuidanceMapping.maneuverState(distance: 30, sinceShown: 1), .execute,
+                       "у самого поворота — «выполняй», даже если манёвр новый")
+    }
+
     // MARK: - Значок манёвра
 
     func testManeuverSymbolIsARealImageTheManeuverKeeps() {

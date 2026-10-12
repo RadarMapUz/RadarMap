@@ -1022,6 +1022,20 @@ nonisolated enum AppConfig {
     /// Предел значка плитки сетки до iOS 26 (с 26 — из
     /// CPGridTemplate.maximumGridButtonImageSize, там те же 40×40).
     static let carPlayGridImageMaxPoints: CGFloat = 40
+    /// Выбор маршрута в машине (CarPlayTripPreview): показывать, пока скорость
+    /// ниже этой; тронулись не медленнее `…AutoStartKmh` на `…AutoStartSeconds`
+    /// — выбор принят сам.
+    static let carPlayPreviewMaxKmh: Double = 10
+    static let carPlayPreviewAutoStartKmh: Double = 15
+    static let carPlayPreviewAutoStartSeconds: TimeInterval = 4
+    /// Цвет оставшегося времени: задержка пробками меньше двух минут —
+    /// зелёный, меньше десяти — оранжевый, больше — красный.
+    static let carPlayTrafficGreenSeconds: TimeInterval = 120
+    static let carPlayTrafficOrangeSeconds: TimeInterval = 600
+    /// «Куда едем?» в машине: через сколько после показа карты предложить
+    /// (первый точный фикс) и сколько держать баннер.
+    static let carPlayDestinationOfferDelay: TimeInterval = 4
+    static let carPlayDestinationOfferSeconds: TimeInterval = 12
     /// Шаг обновления «пройденной» части маршрута: перекладывать оверлей на
     /// каждый фикс GPS — лишняя работа рендера, глазу хватает и таких шагов.
     static let carPlayTraveledStepMeters: CLLocationDistance = 25

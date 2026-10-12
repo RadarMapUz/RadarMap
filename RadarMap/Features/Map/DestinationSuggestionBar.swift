@@ -77,57 +77,20 @@ struct DestinationSuggestionBar: View {
         }
     }
 
-    /// Куда предлагаем ехать прямо сейчас.
+    /// Куда предлагаем ехать прямо сейчас — общая догадка с машиной
+    /// (DestinationGuess): ручные места старше выученных, «обычно» — из своих
+    /// поездок.
     private struct Target {
         let kind: FrequentPlaces.Kind
         let coordinate: CLLocationCoordinate2D
-        /// Заданный рукой адрес показываем как есть — это ответ на «а точно
-        /// туда?»; у выученного места адреса нет, и врать о нём не надо.
         let subtitle: String
         var title: String { kind.title }
     }
 
     private var suggestion: Target? {
         guard env.settings.destinationSuggestions,
-              !env.location.isTripActive, !env.route.isActive else { return nil }
-        // Ручные места старше выученных — и в самой подсказке тоже: сначала
-        // спрашиваем движок «куда бы сейчас», потом берём лучший адрес.
-        guard let place = FrequentPlaces.suggestion(places: places,
-                                                    from: env.location.currentCoordinate,
-                                                    now: Date())
-        else { return nil }
-        let usual = usualTime(to: place.kind)
-        if let manual = manualPlace(for: place.kind) {
-            return Target(kind: place.kind, coordinate: manual.coordinate,
-                          subtitle: [manual.title, usual].compactMap { $0 }.joined(separator: " · "))
-        }
-        return Target(kind: place.kind, coordinate: place.coordinate,
-                      subtitle: usual.map { $0.prefix(1).uppercased() + $0.dropFirst() }
-                        ?? String(localized: "Ваш обычный маршрут"))
-    }
-
-    /// «обычно 44 мин» — медиана своих поездок туда за 30 дней.
-    private func usualTime(to kind: FrequentPlaces.Kind) -> String? {
-        let direction: Commute.Direction = kind == .work ? .toWork : .toHome
-        guard let usual = env.commute.first(where: { $0.direction == direction })?.usual else { return nil }
-        return String(format: String(localized: "обычно %@"), Formatting.unbreakable(Formatting.duration(usual)))
-    }
-
-    /// Ручные места подмешиваются к выученным: заданный дом делает подсказку
-    /// возможной, даже если истории поездок ещё нет (первый день с приложением).
-    private var places: [FrequentPlaces.Place] {
-        var result = env.learnedPlaces
-        for kind in [FrequentPlaces.Kind.home, .work] {
-            guard let manual = manualPlace(for: kind) else { continue }
-            result.removeAll { $0.kind == kind }
-            result.append(FrequentPlaces.Place(kind: kind, lat: manual.lat,
-                                               lon: manual.lon,
-                                               days: AppConfig.placeMinDistinctDays))
-        }
-        return result
-    }
-
-    private func manualPlace(for kind: FrequentPlaces.Kind) -> SavedPlace? {
-        env.settings.place(for: kind == .home ? .home : .work)
+              !env.location.isTripActive, !env.route.isActive,
+              let guess = env.destinationGuess(now: Date()) else { return nil }
+        return Target(kind: guess.kind, coordinate: guess.coordinate, subtitle: guess.subtitle)
     }
 }

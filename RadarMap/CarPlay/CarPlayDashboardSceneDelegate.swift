@@ -128,8 +128,15 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         guard let controller else { return }
         controller.shortcutButtons = PlaceSlot.allCases.compactMap { slot in
             guard let image = UIImage(systemName: slot.symbol) else { return nil }
+            // «обычно 39 мин» — медиана своих поездок туда (Commute), без сети:
+            // на главном экране машины это ответ на «сколько ехать» до касания.
+            let usual = env.commute
+                .first { $0.direction == (slot == .work ? .toWork : .toHome) }?.usual
+                .map { String(format: String(localized: "обычно %@"), Formatting.duration($0)) }
             if let place = env.settings.place(for: slot) {
-                return CPDashboardButton(titleVariants: [slot.name], subtitleVariants: [place.title],
+                return CPDashboardButton(titleVariants: [slot.name],
+                                         subtitleVariants: [usual.map { "\(place.title) · \($0)" }, place.title]
+                                            .compactMap { $0 },
                                          image: image) { [weak self] _ in
                     self?.route(to: place)
                 }
@@ -137,7 +144,8 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
             if let learned = env.learnedPlaces.first(where: { $0.kind.rawValue == slot.rawValue }) {
                 let place = SavedPlace(title: slot.name, lat: learned.lat, lon: learned.lon)
                 return CPDashboardButton(titleVariants: [slot.name],
-                                         subtitleVariants: [String(localized: "по вашим поездкам")],
+                                         subtitleVariants: [usual, String(localized: "по вашим поездкам")]
+                                            .compactMap { $0 },
                                          image: image) { [weak self] _ in
                     self?.route(to: place)
                 }

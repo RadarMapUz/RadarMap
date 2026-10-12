@@ -260,6 +260,23 @@ final class CarPlayGuidance {
             maneuverStep = nil
         }
         let route = env.route
+        // Выбор маршрута на экране: сессия — только после «Поехали» (так
+        // устроен CarPlay: предпросмотр, затем startNavigationSession). Старое
+        // ведение к прежней цели при этом заканчиваем: маршрут уже другой.
+        if model.isPreviewing {
+            if let session {
+                session.cancelTrip()
+                session.upcomingManeuvers = []
+                self.session = nil
+                trip = nil
+                maneuver = nil
+                maneuverStep = nil
+                laneGuidances = []
+                model.hasSystemGuidance = false
+            }
+            alertCamera(on: template)
+            return
+        }
         if route.isActive, let destination = route.destinationCoordinate {
             let cancelledHere = cancelledDestination.map { Self.same($0, destination) } ?? false
             if !cancelledHere,
@@ -455,7 +472,7 @@ final class CarPlayGuidance {
 
     // MARK: - Картинки и оценки
 
-    private static func estimates(meters: Double, seconds: Double) -> CPTravelEstimates {
+    static func estimates(meters: Double, seconds: Double) -> CPTravelEstimates {
         CPTravelEstimates(distanceRemaining: CarPlayGuidanceMapping.distance(meters: meters),
                           timeRemaining: max(0, seconds))
     }

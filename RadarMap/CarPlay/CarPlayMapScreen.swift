@@ -52,6 +52,13 @@ final class CarPlayMapModel {
     /// наблюдаемое, перерисовку оно не вызывает.
     @ObservationIgnored var cameraSmoother = DriveCamera.Smoother()
     var zoomCommand = 0
+    /// На экране выбор маршрута (CarPlayTripPreview): навигационная сессия
+    /// ждёт «Поехали», бар — одна «Отмена».
+    var isPreviewing = false
+    /// «Весь маршрут» — вписать линию в экран (выбор маршрута).
+    var overviewCommand = 0
+
+    func showOverview() { overviewCommand &+= 1 }
     var zoomDelta = 0.0
     /// День или ночь на экране машины — ОДНО значение на карту и HUD.
     /// Раньше HUD брал тему окна машины, а подложка — солнце, и первый кадр
@@ -179,7 +186,9 @@ struct CarPlayMapScreen: View {
             // нет вовсе — та же экономия, что 41c4297 дал телефону: живые
             // цифры не держатся в дереве, которое никто не видит.
             if model.isOnScreen {
-                CarPlayOverlay(showsManeuver: !model.hasSystemGuidance,
+                // Во время выбора маршрута манёвр и прибытие — в карточке
+                // вариантов системы, свой баннер их бы дублировал.
+                CarPlayOverlay(showsManeuver: !model.hasSystemGuidance && !model.isPreviewing,
                                buttonInsets: model.mapButtonInsets)
             }
 

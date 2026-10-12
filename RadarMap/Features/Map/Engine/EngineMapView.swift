@@ -100,15 +100,15 @@ struct EngineMapView: UIViewRepresentable {
     var cursorStyle: CursorStyle = .arrow
     /// «Весь маршрут»: счётчик нажатий — вписать линию маршрута в экран.
     var overviewCommand: Int = 0
+    /// Поля вписывания: на телефоне — под панели сверху и снизу, в машине —
+    /// слева под карточку выбора маршрута.
+    var overviewPadding = UIEdgeInsets(top: 150, left: 40, bottom: 240, right: 90)
     /// Сдвиг карты командой, а не пальцем: в машине касания до вида не
     /// доходят, панораму присылает шаблон CarPlay (перетаскивание, стрелки
     /// крутилки). Сумма ВСЕХ сдвигов содержимого в точках экрана: карта берёт
     /// разницу с прошлой суммой, поэтому два шага, пришедшие между кадрами,
     /// оба доезжают (последний не затирает первый).
     var panTotal: CGSize = .zero
-    /// Кнопка атрибуции не нажимается там, где нет касаний (экран машины):
-    /// ссылку на OSM тогда показывает вызывающий — текстом.
-    /// Поворот карты (градусы от севера) — компасу экрана.
     /// Флаг цели маршрута и точка долгого тапа (бар действий открыт).
     var destination: CLLocationCoordinate2D?
     var pressedPoint: CLLocationCoordinate2D?
@@ -739,8 +739,7 @@ struct EngineMapView: UIViewRepresentable {
                     view.setCamera(MLNMapCamera(lookingAtCenter: view.centerCoordinate,
                                                 altitude: view.camera.altitude, pitch: 0,
                                                 heading: 0), animated: false)
-                    view.setVisibleCoordinateBounds(bounds, edgePadding: UIEdgeInsets(top: 150, left: 40,
-                                                                                      bottom: 240, right: 90),
+                    view.setVisibleCoordinateBounds(bounds, edgePadding: model.overviewPadding,
                                                     animated: true, completionHandler: nil)
                 }
             }

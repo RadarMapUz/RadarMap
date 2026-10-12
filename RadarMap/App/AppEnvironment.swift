@@ -489,6 +489,17 @@ final class AppEnvironment {
         refreshCommute()
     }
 
+    /// «Куда едем?» сейчас — одна догадка для телефона и машины
+    /// (DestinationGuess); nil — нечего предложить или подсказки выключены.
+    func destinationGuess(now: Date) -> DestinationGuess? {
+        guard settings.destinationSuggestions else { return nil }
+        return DestinationGuess.make(
+            learned: learnedPlaces,
+            manual: { [settings] kind in settings.place(for: kind == .home ? .home : .work) },
+            usual: { [commute] direction in commute.first { $0.direction == direction }?.usual },
+            from: location.currentCoordinate, now: now)
+    }
+
     /// Дом и работа для дороги: заданный вручную адрес старше выученного —
     /// то же правило, что у подсказки «Домой».
     var commuteEnds: (home: CLLocationCoordinate2D, work: CLLocationCoordinate2D)? {

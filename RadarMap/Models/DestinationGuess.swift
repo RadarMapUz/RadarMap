@@ -1,0 +1,78 @@
+//
+//  DestinationGuess.swift
+//  RadarMap
+//
+//  «Куда едем?» — одна догадка для телефона и машины.
+//
+//  Решение «куда предложить» живёт в FrequentPlaces.suggestion (по
+//  распорядку, а не по частоте). Здесь — то, что вокруг него: заданный рукой
+//  адрес старше выученного (и делает подсказку возможной в первый же день),
+//  «обычно 39 мин» — медиана своих поездок туда (Commute), без сети. Раньше
+//  это было зашито во вью телефона, и машине пришлось бы повторить его — с
+//  риском разойтись: в одной машине «Домой», на телефоне «На работу».
+//
+//  Маршрута на догадку нет и здесь: чтобы узнать время по дорогам, нужно
+//  отправить на сервер дом и работу человека, которых он не просил строить.
+//  Время с пробками он увидит, нажав «Поехали».
+//
+
+import CoreLocation
+import Foundation
+
+struct DestinationGuess: Equatable {
+    let kind: FrequentPlaces.Kind
+    let coordinate: CLLocationCoordinate2D
+    /// Адрес, заданный рукой; у выученного места адреса нет — и врать о нём
+    /// не надо.
+    let placeTitle: String?
+    /// Медиана своих поездок туда за 30 дней; nil — истории мало.
+    let usual: TimeInterval?
+
+    static func == (a: DestinationGuess, b: DestinationGuess) -> Bool {
+        a.kind == b.kind && a.placeTitle == b.placeTitle && a.usual == b.usual
+            && a.coordinate.latitude == b.coordinate.latitude
+            && a.coordinate.longitude == b.coordinate.longitude
+    }
+
+    /// «обычно 39 мин».
+    var usualText: String? {
+        usual.map { String(format: String(localized: "обычно %@"),
+                           Formatting.unbreakable(Formatting.duration($0))) }
+    }
+
+    /// Строка под заголовком: адрес и «обычно», что есть.
+    var subtitle: String {
+        let parts = [placeTitle, usualText].compactMap { $0 }
+        guard !parts.isEmpty else { return String(localized: "Ваш обычный маршрут") }
+        let line = parts.joined(separator: " · ")
+        return line.prefix(1).uppercased() + line.dropFirst()
+    }
+
+    /// Что предложить сейчас; nil — нечего.
+    /// - Parameters:
+    ///   - manual: заданные рукой Дом/Работа (Настройки → Мои места).
+    ///   - usual: медиана поездок по направлению (Commute), nil — нет данных.
+    static func make(learned: [FrequentPlaces.Place],
+                     manual: (FrequentPlaces.Kind) -> SavedPlace?,
+                     usual: (Commute.Direction) -> TimeInterval?,
+                     from coordinate: CLLocationCoordinate2D?,
+                     now: Date,
+                     calendar: Calendar = .current) -> DestinationGuess? {
+        var places = learned
+        for kind in [FrequentPlaces.Kind.home, .work] {
+            guard let place = manual(kind) else { continue }
+            places.removeAll { $0.kind == kind }
+            places.append(FrequentPlaces.Place(kind: kind, lat: place.lat, lon: place.lon,
+                                               days: AppConfig.placeMinDistinctDays))
+        }
+        guard let place = FrequentPlaces.suggestion(places: places, from: coordinate,
+                                                    now: now, calendar: calendar) else { return nil }
+        let typical = usual(place.kind == .work ? .toWork : .toHome)
+        if let hand = manual(place.kind) {
+            return DestinationGuess(kind: place.kind, coordinate: hand.coordinate,
+                                    placeTitle: hand.title, usual: typical)
+        }
+        return DestinationGuess(kind: place.kind, coordinate: place.coordinate,
+                                placeTitle: nil, usual: typical)
+    }
+}

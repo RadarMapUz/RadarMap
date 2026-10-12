@@ -107,6 +107,12 @@ struct CarPlayEngineLayer: View {
             trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
             labelLanguage: env.settings.appLanguage.mapCode,
             cursorStyle: env.settings.cursorStyle,
+            // Выбор маршрута: линия целиком, слева — место под карточку
+            // вариантов, справа — под кнопки карты.
+            overviewCommand: model.overviewCommand,
+            overviewPadding: UIEdgeInsets(top: safe.top + 30, left: size.width * 0.45,
+                                          bottom: safe.bottom + 30,
+                                          right: model.mapButtonInsets.trailing + 30),
             panTotal: model.panTotal,
             onBrowse: { if model.isFollowing { model.isFollowing = false } })
     }

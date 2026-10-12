@@ -17574,6 +17574,36 @@
           }
         }
       }
+    },
+    "камер: %lld": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kameralar: %lld"
+          }
+        }
+      }
+    },
+    "Варианты": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variantlar"
+          }
+        }
+      }
+    },
+    "Обзор": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Umumiy ko‘rinish"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

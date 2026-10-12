@@ -122,6 +122,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         rootShown = false
         rootSet = nil
         rootRetried = false
+        offeredDestination = false
 
         let template = CPMapTemplate()
         template.mapDelegate = self
@@ -157,6 +158,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                                   didDisconnect interfaceController: CPInterfaceController,
                                   from window: CPWindow) {
         Log.carplay.notice("CarPlay отключён")
+        previewWatch?.cancel()
+        previewWatch = nil
+        previewTrip = nil
+        model.isPreviewing = false
+        offerTask?.cancel()
+        offerTask = nil
         self.interfaceController = nil
         mapTemplate = nil
         windowRoot?.setContent(nil)
@@ -329,18 +336,22 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             let muted = isMuted   // читает оба тумблера — оба и отслеживаем
             let following = model.isFollowing
             let panning = isPanning
+            let previewing = model.isPreviewing
 
             // Осмотр по правилам CarPlay: система своей кнопки выхода не даёт
             // и требует её В БАРЕ (заголовок CPMapTemplate). Раньше «выйти»
             // было кнопкой карты, а бар после осмотра никто не возвращал — и
             // в 2.2.3 он исчезал насовсем: без «Поездки», «Куда» и «Радар!».
-            let bar = [tripActive, routeActive, muted, panning]
+            let bar = [tripActive, routeActive, muted, panning, previewing]
             if bar != sentBar {
                 sentBar = bar
-                Log.carplay.notice("бар шаблона: поездка=\(tripActive), маршрут=\(routeActive), тишина=\(muted), осмотр=\(panning)")
+                Log.carplay.notice("бар шаблона: поездка=\(tripActive), маршрут=\(routeActive), тишина=\(muted), осмотр=\(panning), выбор=\(previewing)")
                 if panning {
                     mapTemplate.leadingNavigationBarButtons = []
                     mapTemplate.trailingNavigationBarButtons = [panDoneButton]
+                } else if previewing {
+                    mapTemplate.leadingNavigationBarButtons = [cancelPreviewButton]
+                    mapTemplate.trailingNavigationBarButtons = []
                 } else {
                     mapTemplate.leadingNavigationBarButtons = [tripButton(active: tripActive),
                                                                soundButton(muted: muted)]
@@ -541,7 +552,57 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Алерт о разрешении — сразу, а не по первому тапу: без разрешения
         // экран машины не покажет ни скорости, ни камер, и молчание
         // неотличимо от поломки. Поверх летящего корня CarPlay его отклонял.
-        if !env.location.isAuthorized { showNoPermissionAlert() }
+        if !env.location.isAuthorized { return showNoPermissionAlert() }
+        offerDestinationSoon()
+    }
+
+    // MARK: - «Куда едем?»
+
+    /// Предложение цели уже было в этом подключении — второй раз за одну
+    /// посадку в машину не спрашиваем.
+    private var offeredDestination = false
+    private var offerTask: Task<Void, Never>?
+
+    /// Сев в машину, водитель чаще всего едет туда же, куда всегда: утром из
+    /// дома — на работу, вечером — домой (DestinationGuess — та же догадка,
+    /// что строка на телефоне). Одно касание вместо «Куда → Работа».
+    /// Пауза — на первый точный фикс: догадка смотрит, где мы стоим.
+    private func offerDestinationSoon() {
+        guard !offeredDestination else { return }
+        offerTask?.cancel()
+        offerTask = Task { @MainActor [weak self] in
+            await Task.pause(seconds: AppConfig.carPlayDestinationOfferDelay)
+            guard let self, !Task.isCancelled else { return }
+            self.offerDestinationIfUseful()
+        }
+    }
+
+    private func offerDestinationIfUseful() {
+        guard !offeredDestination, let mapTemplate, Self.activeDelegate === self, model.isOnScreen,
+              shownTemplate == nil, !model.isPreviewing, !env.route.isActive,
+              env.location.speedKmh < AppConfig.carPlayPreviewMaxKmh,
+              let guess = env.destinationGuess(now: Date()) else { return }
+        offeredDestination = true
+        let title = guess.kind.suggestionTitle
+        let place = SavedPlace(title: guess.placeTitle ?? guess.kind.title,
+                               lat: guess.coordinate.latitude, lon: guess.coordinate.longitude)
+        let alert = CPNavigationAlert(
+            titleVariants: [guess.usualText.map { "\(title) · \($0)" } ?? title, title],
+            subtitleVariants: [guess.subtitle],
+            image: CarPlayGuidance.symbol(guess.kind.symbol, pointSize: 30,
+                                          onDark: model.carIsDark ?? !model.isDaylight),
+            primaryAction: CPAlertAction(title: String(localized: "Поехали"), style: .default) { [weak self] _ in
+                Log.carplay.notice("«куда едем?»: принято — \(guess.kind.rawValue, privacy: .public)")
+                // Цель подтверждена этим касанием — второй экран выбора не нужен:
+                // ведём рекомендованным с учётом пробок.
+                self?.route(to: place, allowPreview: false)
+            },
+            secondaryAction: CPAlertAction(title: String(localized: "Не сейчас"), style: .cancel) { _ in
+                Log.carplay.notice("«куда едем?»: отказ")
+            },
+            duration: AppConfig.carPlayDestinationOfferSeconds)
+        Log.carplay.notice("«куда едем?»: предлагаю \(guess.kind.rawValue, privacy: .public)")
+        mapTemplate.present(navigationAlert: alert, animated: true)
     }
 
     /// Что сейчас показано поверх карты (алерт, тост, сетка, поиск). Своя
@@ -1207,7 +1268,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     /// Строим маршрут и сразу едем: за рулём выбирать из альтернатив некогда.
-    private func route(to place: SavedPlace) {
+    private func route(to place: SavedPlace, allowPreview: Bool = true) {
         Task { @MainActor [weak self] in
             guard let self else { return }
             // Грубая точка фонового режима сюда не годится: маршрут от неё
@@ -1218,15 +1279,133 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 return
             }
             popToMap()
+            // Выбор маршрута — только стоя (CarPlayTripPreview): на ходу
+            // ведём рекомендованным, как раньше. Флаг — ДО построения: иначе
+            // сессия навигации стартовала бы на первом варианте раньше выбора.
+            let preview = allowPreview && CarPlayTripPreview.shouldPreview(speedKmh: env.location.speedKmh)
+            if previewTrip != nil { mapTemplate?.hideTripPreviews() }
+            previewTrip = nil
+            model.isPreviewing = preview
             await env.route.build(from: from, to: place.coordinate,
                                   name: place.title, cameras: env.cameras.cameras,
-                                  alternatives: false)
+                                  alternatives: preview)
             env.settings.addRecent(title: place.title, lat: place.lat, lon: place.lon)
+            if preview, env.route.isActive, env.route.errorMessage == nil {
+                showPreview(name: place.title, destination: place.coordinate)
+                return
+            }
+            if preview { endPreview(start: false, keepRoute: true, reason: "маршрут не построен") }
             // Едем уже с активной поездкой — не обнулять её накат.
             if !env.location.isTripActive { env.location.startTrip() }
             if let error = env.route.errorMessage {
                 showAlert(title: String(localized: "Маршрут не построен"), message: error)
             }
+        }
+    }
+
+    // MARK: - Выбор маршрута
+
+    /// Поездка на экране выбора (CPTrip с вариантами). Держим, чтобы
+    /// обновлять оценки и закрыть выбор.
+    private var previewTrip: CPTrip?
+    /// Тронулись, пока выбор на экране, — выбор принят.
+    private var previewWatch: Task<Void, Never>?
+
+    /// Варианты с нашими метками и временем с пробками; рекомендованный —
+    /// первым и выбранным. Линия — целиком на экране.
+    private func showPreview(name: String, destination: CLLocationCoordinate2D) {
+        guard let mapTemplate else {
+            return endPreview(start: true, keepRoute: true, reason: "шаблона нет")
+        }
+        let route = env.route
+        let variants = route.variants
+        let ordered = variants.filter { $0.id == route.selectedID } + variants.filter { $0.id != route.selectedID }
+        let choices = ordered.map { variant -> CPRouteChoice in
+            let text = CarPlayTripPreview.text(for: variant, among: variants)
+            let choice = CPRouteChoice(summaryVariants: text.summary,
+                                       additionalInformationVariants: text.additional,
+                                       selectionSummaryVariants: text.selection)
+            choice.userInfo = variant.id
+            return choice
+        }
+        let origin = MKMapItem(placemark: MKPlacemark(coordinate: env.location.currentCoordinate ?? destination))
+        let target = MKMapItem(placemark: MKPlacemark(coordinate: destination))
+        target.name = name
+        let trip = CPTrip(origin: origin, destination: target, routeChoices: choices)
+        previewTrip = trip
+        let text = CPTripPreviewTextConfiguration(startButtonTitle: String(localized: "Поехали"),
+                                                  additionalRoutesButtonTitle: String(localized: "Варианты"),
+                                                  overviewButtonTitle: String(localized: "Обзор"))
+        mapTemplate.showTripPreviews([trip], selectedTrip: trip, textConfiguration: text)
+        updatePreviewEstimates(route.selected)
+        model.showOverview()
+        Log.carplay.notice("выбор маршрута: вариантов \(variants.count, privacy: .public)")
+        watchMovingOff()
+    }
+
+    private func updatePreviewEstimates(_ variant: RouteService.Variant?) {
+        guard let trip = previewTrip, let variant, let mapTemplate else { return }
+        let estimates = CarPlayGuidance.estimates(meters: variant.distance, seconds: variant.expectedTime)
+        let color: CPTimeRemainingColor = switch CarPlayTripPreview.timeColor(trafficDelay: variant.trafficDelay) {
+        case .standard: .default
+        case .green: .green
+        case .orange: .orange
+        case .red: .red
+        }
+        mapTemplate.update(estimates, for: trip, with: color)
+    }
+
+    /// Водитель отметил другой вариант: линия на карте — его, оценки — его.
+    func mapTemplate(_ mapTemplate: CPMapTemplate, selectedPreviewFor trip: CPTrip,
+                     using routeChoice: CPRouteChoice) {
+        guard trip === previewTrip, let id = routeChoice.userInfo as? Int else { return }
+        env.route.selectVariant(id)
+        updatePreviewEstimates(env.route.selected)
+        model.showOverview()
+    }
+
+    /// «Поехали».
+    func mapTemplate(_ mapTemplate: CPMapTemplate, startedTrip trip: CPTrip,
+                     using routeChoice: CPRouteChoice) {
+        if let id = routeChoice.userInfo as? Int { env.route.selectVariant(id) }
+        endPreview(start: true, keepRoute: true, reason: "Поехали")
+    }
+
+    /// Закрыть выбор. `keepRoute` — ехать выбранным; нет — маршрут снят
+    /// («Отмена»). Сессия навигации начнётся сама, как только выбор закрыт.
+    private func endPreview(start: Bool, keepRoute: Bool, reason: String) {
+        previewWatch?.cancel()
+        previewWatch = nil
+        if previewTrip != nil { mapTemplate?.hideTripPreviews() }
+        previewTrip = nil
+        guard model.isPreviewing else { return }
+        if !keepRoute { env.route.clear() }
+        model.isPreviewing = false
+        model.recenter()
+        if start, !env.location.isTripActive { env.location.startTrip() }
+        Log.carplay.notice("выбор маршрута закрыт: \(reason, privacy: .public)")
+    }
+
+    private func watchMovingOff() {
+        previewWatch?.cancel()
+        previewWatch = Task { @MainActor [weak self] in
+            var watch = CarPlayTripPreview.MovingWatch()
+            while !Task.isCancelled {
+                guard let self, self.model.isPreviewing else { return }
+                if watch.update(speedKmh: self.env.location.speedKmh, at: Date()) {
+                    self.endPreview(start: true, keepRoute: true, reason: "тронулись — едем выбранным")
+                    return
+                }
+                await Task.pause(seconds: 1)
+            }
+        }
+    }
+
+    /// «Отмена» в баре на время выбора — единственная кнопка: выбор закрыт,
+    /// маршрут снят, карта снова за машиной.
+    private var cancelPreviewButton: CPBarButton {
+        CPBarButton(title: String(localized: "Отмена")) { [weak self] _ in
+            self?.endPreview(start: false, keepRoute: false, reason: "Отмена")
         }
     }
 

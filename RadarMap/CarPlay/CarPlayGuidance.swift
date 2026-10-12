@@ -429,6 +429,12 @@ final class CarPlayGuidance {
         let carDark = model.carIsDark ?? !model.isDaylight
         next.notificationSymbolImage = Self.symbol(symbolName, pointSize: 34, onDark: carDark)
         next.dashboardSymbolImage = Self.symbol(symbolName, pointSize: 34, onDark: carDark)
+        // Схема развязки — для узла с другими дорогами (JunctionSketch): какой
+        // из трёх правых съездов наш, стрелка не говорит.
+        if let plan = junctionPlan(for: step) {
+            next.junctionImage = Self.junctionImage(plan, onDark: !model.isDaylight)
+            next.dashboardJunctionImage = Self.junctionImage(plan, onDark: carDark)
+        }
         next.maneuverType = CarPlayGuidanceMapping.maneuverType(step.kind)
         next.trafficSide = .right
         next.junctionType = CarPlayGuidanceMapping.junctionType(step.kind)
@@ -549,6 +555,60 @@ final class CarPlayGuidance {
     static func estimates(meters: Double, seconds: Double) -> CPTravelEstimates {
         CPTravelEstimates(distanceRemaining: CarPlayGuidanceMapping.distance(meters: meters),
                           timeRemaining: max(0, seconds))
+    }
+
+    /// План схемы развязки для шага или nil — узел простой или сети нет.
+    private func junctionPlan(for step: RouteStep) -> JunctionSketch.Plan? {
+        guard step.kind?.isDrawable == true, let route = env.route.selected else { return nil }
+        let coordinates = route.points.map(\.coordinate)
+        guard let center = JunctionSketch.point(on: coordinates, at: step.distanceAlong) else { return nil }
+        let roads = env.roads.network
+            .roads(near: center, radius: AppConfig.junctionRadiusMeters * 1.2)
+            .map(\.points)
+        guard let plan = JunctionSketch.plan(route: coordinates, maneuverAlong: step.distanceAlong, roads: roads),
+              plan.roads.count >= AppConfig.junctionMinRoads else { return nil }
+        return plan
+    }
+
+    /// Картинка схемы: дороги узла серым, наш путь — цветом маршрута со
+    /// стрелкой на съезде. Фон прозрачный — под ним карточка манёвра.
+    static func junctionImage(_ plan: JunctionSketch.Plan, onDark: Bool) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = AppConfig.carPlaySymbolScale
+        format.opaque = false
+        let image = UIGraphicsImageRenderer(size: plan.size, format: format).image { context in
+            let g = context.cgContext
+            g.setLineCap(.round)
+            g.setLineJoin(.round)
+            func stroke(_ line: [CGPoint]) {
+                guard let first = line.first else { return }
+                g.beginPath()
+                g.move(to: first)
+                for point in line.dropFirst() { g.addLine(to: point) }
+                g.strokePath()
+            }
+            g.setStrokeColor((onDark ? UIColor(white: 1, alpha: 0.30) : UIColor(white: 0, alpha: 0.20)).cgColor)
+            g.setLineWidth(7)
+            plan.roads.forEach(stroke)
+            let route = onDark ? Theme.rgb(0x5B9BFF) : Theme.rgb(0x2A6FF0)
+            g.setStrokeColor(route.cgColor)
+            g.setLineWidth(6)
+            stroke(plan.path)
+            // Стрелка на конце съезда.
+            if plan.path.count >= 2 {
+                let tip = plan.path[plan.path.count - 1], from = plan.path[plan.path.count - 2]
+                let angle = atan2(tip.y - from.y, tip.x - from.x)
+                let size: CGFloat = 9
+                g.setFillColor(route.cgColor)
+                g.beginPath()
+                g.move(to: CGPoint(x: tip.x + cos(angle) * size, y: tip.y + sin(angle) * size))
+                g.addLine(to: CGPoint(x: tip.x + cos(angle + 2.4) * size, y: tip.y + sin(angle + 2.4) * size))
+                g.addLine(to: CGPoint(x: tip.x + cos(angle - 2.4) * size, y: tip.y + sin(angle - 2.4) * size))
+                g.closePath()
+                g.fillPath()
+            }
+        }
+        return image.withRenderingMode(.alwaysOriginal)
     }
 
     /// Значок для карточки CarPlay: белый на тёмном фоне, чёрный на светлом.

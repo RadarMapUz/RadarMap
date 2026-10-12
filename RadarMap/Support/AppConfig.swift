@@ -1046,6 +1046,13 @@ nonisolated enum AppConfig {
     static let carPlayManeuverExecuteMeters: Double = 50
     static let carPlayManeuverPrepareMeters: Double = 400
     static let carPlayManeuverInitialSeconds: TimeInterval = 5
+    /// Схема развязки (JunctionSketch): окно вокруг манёвра и отрезок подъезда,
+    /// по которому схема поворачивается «по ходу».
+    static let junctionRadiusMeters: Double = 80
+    static let junctionApproachMeters: Double = 40
+    /// Схему рисуем, только если у узла есть хотя бы столько других дорог:
+    /// у простого поворота стрелки хватает.
+    static let junctionMinRoads = 2
 
     // MARK: - Объезд пробки (DetourAdvisor)
 

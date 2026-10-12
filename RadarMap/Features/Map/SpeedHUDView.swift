@@ -25,7 +25,9 @@ struct SpeedHUDView: View {
     /// скоростью едет.
     static func dimming(secondary: Bool, night: Bool, alertLevel: Int) -> Double {
         if alertLevel >= 1 { return 1 }
-        let base = secondary ? 0.85 : 1.0
+        // Днём приглушать нечего: полупрозрачный док пропускал подписи улиц
+        // сквозь цифры (снимок 12.10). Ночью — прежнее правило.
+        let base = secondary && night ? 0.85 : 1.0
         return night ? base * 0.72 : base
     }
 

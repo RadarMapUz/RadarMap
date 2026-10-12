@@ -267,13 +267,15 @@ final class CarPlayGuidance {
         model.hasSystemGuidance = false
     }
 
-    /// Цвет карточки манёвра — в тон теме экрана машины: поверхность
-    /// палитры (Theme.surface), белая днём, графит ночью. Синей, как на
-    /// телефоне, системную карточку не делаем, пока не проверено в машине:
-    /// вариант значка (чёрный/белый) CarPlay выбирает сам, и чёрная стрелка
-    /// на синем — хуже, чем разный цвет карточки на двух экранах.
+    /// Карточка манёвра — синяя, как на телефоне (`Theme.accentFill`,
+    /// вариант А «Синий навигатор»), днём и ночью: один цвет «куда я еду» на
+    /// обоих экранах. Стрелка на ней — белая, и это не выбор CarPlay, а наш
+    /// битмап (`symbol(onDark: true)`): с 2.2.15 в машину уезжает одна
+    /// картинка того цвета, что нарисован, поэтому чёрной стрелки на синем
+    /// быть не может. Системный текст карточки CarPlay красит сам по
+    /// светлоте фона — на синем 0x2563D9 он белый.
     func applyTheme(daylight: Bool) {
-        template?.guidanceBackgroundColor = daylight ? Theme.rgb(0xFFFFFF) : Theme.rgb(0x1E232A)
+        template?.guidanceBackgroundColor = daylight ? Theme.rgb(0x2563D9) : Theme.rgb(0x2A62D6)
     }
 
     // MARK: - Наблюдение
@@ -426,19 +428,19 @@ final class CarPlayGuidance {
             text: step.text, shortText: step.shortText)
         // Плитка главного экрана — та же фраза явно, а не через запасной путь.
         next.dashboardInstructionVariants = next.instructionVariants
-        // Цвет стрелки — под фон НАШЕЙ карточки (guidanceBackgroundColor:
-        // белая днём, графит ночью): до машины доезжает одна картинка, та,
-        // что создана. Баннеры поверх чужого приложения и плитка панели
-        // рисуются в теме МАШИНЫ — им свой цвет.
+        // Цвет стрелки — под фон НАШЕЙ карточки (guidanceBackgroundColor —
+        // синяя всегда, значит стрелка белая): до машины доезжает одна
+        // картинка, та, что создана. Баннеры поверх чужого приложения и
+        // плитка панели рисуются в теме МАШИНЫ — им свой цвет.
         let symbolName = step.kind?.isDrawable == false ? "flag.checkered" : step.icon
-        next.symbolImage = Self.symbol(symbolName, pointSize: 34, onDark: !model.isDaylight)
+        next.symbolImage = Self.symbol(symbolName, pointSize: 34, onDark: true)
         let carDark = model.carIsDark ?? !model.isDaylight
         next.notificationSymbolImage = Self.symbol(symbolName, pointSize: 34, onDark: carDark)
         next.dashboardSymbolImage = Self.symbol(symbolName, pointSize: 34, onDark: carDark)
         // Схема развязки — для узла с другими дорогами (JunctionSketch): какой
         // из трёх правых съездов наш, стрелка не говорит.
         if let plan = junctionPlan(for: step) {
-            next.junctionImage = Self.junctionImage(plan, onDark: !model.isDaylight)
+            next.junctionImage = Self.junctionImage(plan, onDark: true)
             next.dashboardJunctionImage = Self.junctionImage(plan, onDark: carDark)
         }
         next.maneuverType = CarPlayGuidanceMapping.maneuverType(step.kind)

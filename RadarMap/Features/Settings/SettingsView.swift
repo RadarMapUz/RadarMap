@@ -20,6 +20,9 @@ struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     @State private var showFeedback = false
+    /// DEBUG `-settingsPage <alerts|speed|trip|route|map|places|learning|battery|privacy|database|backup|language|help>`:
+    /// открыть страницу раздела сразу — на снимок без касаний.
+    @State private var path = NavigationPath()
 
     /// Версия и номер сборки: первое, что спрашивают в ответ на письмо.
     static var appVersion: String {
@@ -31,7 +34,7 @@ struct SettingsView: View {
 
     var body: some View {
         let settings = env.settings
-        NavigationStack {
+        NavigationStack(path: $path) {
             List {
                 Section {
                     link(.alerts, value: settings.alertProfile.title) { AlertSettingsPage() }
@@ -90,7 +93,16 @@ struct SettingsView: View {
                 }
             }
             .settingsPage("Настройки")
-            .onAppear { env.usage.noteScreen("settings") }
+            .navigationDestination(for: String.self) { Self.debugPage($0) }
+            .onAppear {
+                env.usage.noteScreen("settings")
+                #if DEBUG
+                let args = ProcessInfo.processInfo.arguments
+                if let i = args.firstIndex(of: "-settingsPage"), i + 1 < args.count, path.isEmpty {
+                    path.append(args[i + 1])
+                }
+                #endif
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Готово") { dismiss() }
@@ -99,6 +111,24 @@ struct SettingsView: View {
             .sheet(isPresented: $showFeedback) {
                 FeedbackFormView()
             }
+        }
+    }
+
+    @ViewBuilder private static func debugPage(_ name: String) -> some View {
+        switch name {
+        case "alerts": AlertSettingsPage()
+        case "speed": SpeedSettingsPage()
+        case "trip": TripSettingsPage()
+        case "route": RouteSettingsPage()
+        case "map": MapSettingsPage()
+        case "places": PlacesSettingsPage()
+        case "learning": LearningSettingsPage()
+        case "battery": BatterySettingsPage()
+        case "privacy": PrivacySettingsPage()
+        case "database": DatabaseSettingsPage()
+        case "backup": BackupSettingsPage()
+        case "language": LanguageSettingsPage()
+        default: HelpSettingsPage()
         }
     }
 
@@ -272,6 +302,43 @@ private struct SettingsTitle: ViewModifier {
         } else {
             content.navigationBarTitleDisplayMode(.inline)
         }
+    }
+}
+
+/// «Как это работает» — подробности, спрятанные за одной строкой.
+///
+/// Сноски страниц настроек выросли до трёх абзацев под каждой секцией
+/// (снимки 12.10: экран «Поездка» — две трети серого текста). Текст нужен,
+/// но не каждому и не каждый раз: строка раскрывается касанием, а сноска
+/// под секцией остаётся в одно предложение. Так экран читается за взгляд, а
+/// объяснение не потеряно.
+struct SettingsExplainer: View {
+    private let lines: [LocalizedStringKey]
+    @State private var expanded = false
+
+    init(_ lines: [LocalizedStringKey]) { self.lines = lines }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Circle().fill(Theme.textTertiary).frame(width: 5, height: 5)
+                            .padding(.top, 6)
+                        Text(line)
+                            .font(.rounded(14))
+                            .foregroundStyle(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(.vertical, 6)
+        } label: {
+            Label("Как это работает", systemImage: "questionmark.circle")
+                .font(.rounded(15))
+                .foregroundStyle(Theme.accent)
+        }
+        .tint(Theme.accent)
     }
 }
 

@@ -2,7 +2,16 @@
 //  OnboardingView.swift
 //  RadarMap
 //
-//  Первое впечатление: четыре страницы — камеры, оповещения, навигатор, разрешения.
+//  Первое впечатление: четыре страницы — дорога с камерой, голос, сообщество,
+//  разрешения.
+//
+//  Переделано 13.10. Было семь страниц с одинаковыми синими кругами-иконками
+//  и по четыре строки текста на каждой — это читали как инструкцию, а не как
+//  обещание. Теперь каждая страница — одна картинка из самого приложения
+//  (OnboardingScenes) и две-три строки под ней; про навигатор и Яндекс
+//  сказано одной строкой, подробности — в «Помощи». Последняя страница —
+//  два разрешения: без «Всегда» приложение не работает, и это единственное
+//  место, где онбординг чего-то просит.
 //
 
 import SwiftUI
@@ -13,22 +22,30 @@ struct OnboardingView: View {
     @Environment(AppEnvironment.self) private var env
     let onFinish: () -> Void
 
-    @State private var page = 0
-    private let lastPage = 6
+    @State private var page = Self.startPage
+    private let lastPage = 3
+
+    /// DEBUG `-onboardingPage N` — открыть страницу на снимок.
+    private static var startPage: Int {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-onboardingPage"), i + 1 < args.count, let n = Int(args[i + 1]) {
+            return max(0, min(3, n))
+        }
+        #endif
+        return 0
+    }
 
     var body: some View {
         ZStack {
-            backgroundGradient
+            Theme.screenBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 TabView(selection: $page) {
-                    heroPage.tag(0)
-                    alertsPage.tag(1)
-                    voicePage.tag(2)
-                    navigatorPage.tag(3)
-                    communityPage.tag(4)
-                    companionPage.tag(5)
-                    permissionsPage.tag(6)
+                    roadPage.tag(0)
+                    voicePage.tag(1)
+                    communityPage.tag(2)
+                    permissionsPage.tag(3)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .motionAnimation(.easeInOut(duration: 0.3), value: page)
@@ -56,109 +73,37 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Страница 1: герой
+    // MARK: - Страницы
 
-    private var heroPage: some View {
-        scrollingPage {
-            VStack(spacing: 0) {
-                Spacer()
-                RadarHero(active: page == 0)
-                    .frame(width: 170, height: 170)
-                    .padding(.bottom, 28)
-                Text("RadarMap")
-                    .font(.rounded(34, .bold))
-                    .foregroundStyle(Theme.textPrimary)
-                Text("Все камеры и радары Узбекистана из официальных данных. База обновляется сама.")
-                    .font(.rounded(15))
-                    .foregroundStyle(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 36)
-                    .padding(.top, 10)
-                Spacer()
-            }
+    private var roadPage: some View {
+        scenePage(title: "Предупредит о камере заранее",
+                  subtitle: "3 400+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.") {
+            OnboardingRoadScene()
+        } rows: {
+            row("car.fill", "Сели за руль — поездка началась сама")
+            row("map.fill", "Маршруты, лимиты и Итоги поездок — тоже здесь")
         }
     }
 
-    // MARK: - Страница 2: оповещения
-
-    private var alertsPage: some View {
-        featurePage(
-            icon: "bell.and.waves.left.and.right.fill",
-            title: "Предупредит заранее",
-            rows: [
-                ("waveform", "Голос за 22 секунды до камеры — с учётом вашей скорости"),
-                ("iphone.gen3", "Работает со свёрнутым приложением и погасшим экраном"),
-                ("car.fill", "Автостарт за рулём: сели — оповещения включились сами"),
-                ("location.north.line.fill", "Только камеры впереди по курсу — ничего лишнего"),
-            ]
-        )
-    }
-
-    // MARK: - Страница 3: когда я говорю (иначе «почему молчит в городе?» = удаление)
-
     private var voicePage: some View {
-        featurePage(
-            icon: "waveform.and.mic",
-            title: "Говорю только по делу",
-            rows: [
-                ("building.2.fill", "В городе — коротко: «камера, 300 метров». Камеры на перекрёстке назову одной фразой"),
-                ("road.lanes", "На трассе полностью: «по маршруту камера через 800 метров»"),
-                ("exclamationmark.triangle.fill", "Громко — только когда реально превышаете или впереди внезапный радар"),
-                ("car.side.and.exclamationmark", "В пробке молчу: скажу, когда поедете"),
-            ]
-        )
+        scenePage(title: "Говорит только по делу",
+                  subtitle: "В городе — коротко, на трассе — полностью. О камерах, которые вы проезжаете спокойно каждый день, молчит.") {
+            OnboardingVoiceScene()
+        } rows: {
+            row("exclamationmark.triangle.fill", "Громко — только при превышении или внезапном радаре")
+            row("square.2.layers.3d.top.filled", "Едете с Яндексом? Сверните RadarMap — голос останется")
+        }
     }
 
-    // MARK: - Страница 5: сообщество
-
-    /// Про кнопку «Радар!» не знал никто. Она живёт в панели поездки и на
-    /// приборке, то есть её видит только тот, кто уже едет и уже нашёл панель,
-    /// а единственным объяснением была разовая подсказка в одну строку.
-    /// Краудсорс без этой страницы не стартует: треноги приезжают в приложение
-    /// только через людей, а люди должны сперва узнать, что их об этом просят.
     private var communityPage: some View {
-        featurePage(
-            icon: "person.2.wave.2.fill",
-            title: "Треноги находим вместе",
-            rows: [
-                ("exclamationmark.triangle.fill", "Треноги нет ни в одной официальной базе — расписание закрыто с 2022 года"),
-                ("hand.tap.fill", "Увидели засаду — одна жёлтая кнопка, не глядя на экран. Всё остальное я сделаю сам"),
-                ("checkmark.seal.fill", "Отметку проверяет другой водитель. Пока не проверил — рисую пунктиром и честно говорю «отметка водителей»"),
-                ("clock.arrow.circlepath", "Нажали случайно — «Отменить» рядом. Нет связи — отправлю, когда появится"),
-            ]
-        )
+        scenePage(title: "Треноги находим вместе",
+                  subtitle: "Расписание передвижных радаров закрыто с 2022 года. Увидели засаду — одна жёлтая кнопка, не глядя на экран.") {
+            OnboardingCommunityScene()
+        } rows: {
+            row("checkmark.seal.fill", "Отметку проверяет другой водитель; до проверки она с «?»")
+            row("clock.arrow.circlepath", "Нажали случайно — «Отменить» рядом")
+        }
     }
-
-    // MARK: - Страница 4: навигатор
-
-    private var navigatorPage: some View {
-        featurePage(
-            icon: "map.fill",
-            title: "Навигатор и лимиты",
-            rows: [
-                ("arrow.triangle.branch", "Варианты маршрута с числом камер — езжайте, где их меньше"),
-                ("arrow.turn.up.right", "Голосовые подсказки: «через 300 метров — направо»"),
-                ("gauge.with.needle.fill", "Знак лимита дороги и голос при превышении"),
-                ("chart.bar.fill", "Итоги: трек поездки и скорость у каждой камеры"),
-            ]
-        )
-    }
-
-    // MARK: - Страница 4: работаем поверх любого навигатора
-
-    private var companionPage: some View {
-        featurePage(
-            icon: "square.2.layers.3d.top.filled",
-            title: "Едете с Яндексом?",
-            rows: [
-                ("arrow.down.right.circle", "Просто сверните RadarMap — голос и баннеры о камерах продолжат работать"),
-                ("map", "Пробки смотрите где угодно, о камерах предупредим мы"),
-                ("bolt.fill", "Фон почти не тратит заряд: точный GPS включается только у камер"),
-            ]
-        )
-    }
-
-    // MARK: - Страница 5: разрешения
 
     private var permissionsPage: some View {
         scrollingPage {
@@ -167,10 +112,9 @@ struct OnboardingView: View {
                 Image(systemName: "checkmark.shield.fill")
                     .font(.rounded(44, .bold))
                     .foregroundStyle(Theme.accent)
-                    .shadow(color: Theme.accent.opacity(0.5), radius: 14)
                     .padding(.bottom, 18)
                 Text("Два разрешения — и в путь")
-                    .font(.rounded(24, .bold))
+                    .font(.rounded(26, .bold))
                     .foregroundStyle(Theme.textPrimary)
                     .padding(.bottom, 20)
 
@@ -209,15 +153,10 @@ struct OnboardingView: View {
     // MARK: - Компоненты
 
     /// Страница, которая прокручивается, когда не влезает. На SE с крупным
-    /// шрифтом четыре строки фич и две карточки разрешений обрезались снизу,
-    /// а прокрутить было нечем — текст про «Всегда» просто пропадал.
-    /// Высота не меньше экрана: пока всё влезает, Spacer'ы страницы
-    /// по-прежнему центрируют её, и вид не меняется. «Далее» снаружи —
-    /// закреплена под страницами и не уезжает вместе с текстом.
+    /// шрифтом строки и карточки разрешений обрезались снизу, а прокрутить
+    /// было нечем. Высота не меньше экрана: пока всё влезает, Spacer'ы
+    /// по-прежнему центрируют страницу. «Далее» снаружи — закреплена.
     private func scrollingPage(@ViewBuilder _ content: () -> some View) -> some View {
-        // Содержимое собираем ДО GeometryReader: его замыкание сбегающее, и
-        // захватить в нём несбегающий `content` нельзя (компилятор это
-        // ловит только при полной сборке, не при проверке типов).
         let page = content()
         return GeometryReader { proxy in
             ScrollView {
@@ -228,46 +167,43 @@ struct OnboardingView: View {
         }
     }
 
-    private func featurePage(icon: String, title: LocalizedStringKey,
-                             rows: [(String, LocalizedStringKey)]) -> some View {
+    /// Картинка, заголовок, две-три строки.
+    private func scenePage<Scene: View, Rows: View>(title: LocalizedStringKey, subtitle: LocalizedStringKey,
+                                                    @ViewBuilder scene: () -> Scene,
+                                                    @ViewBuilder rows: () -> Rows) -> some View {
         scrollingPage {
-            VStack(spacing: 0) {
-                Spacer(minLength: 20)
-                ZStack {
-                    Circle().fill(Theme.accent.opacity(0.10)).frame(width: 116, height: 116)
-                    Circle().stroke(Theme.accent.opacity(0.3), lineWidth: 1.5).frame(width: 116, height: 116)
-                    Image(systemName: icon)
-                        .font(.rounded(42, .bold))
-                        .foregroundStyle(Theme.accent)
-                        .shadow(color: Theme.accent.opacity(0.55), radius: 12)
-                }
-                .padding(.bottom, 22)
-
+            VStack(alignment: .leading, spacing: 0) {
+                Spacer(minLength: 8)
+                scene()
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
                 Text(title)
-                    .font(.rounded(24, .bold))
+                    .font(.rounded(26, .bold))
                     .foregroundStyle(Theme.textPrimary)
-                    .padding(.bottom, 22)
-
-                VStack(spacing: 14) {
-                    ForEach(rows, id: \.0) { icon, text in
-                        HStack(spacing: 14) {
-                            Image(systemName: icon)
-                                .font(.rounded(16, .semibold))
-                                .foregroundStyle(Theme.accent)
-                                .frame(width: 40, height: 40)
-                                .background(Theme.accent.opacity(0.10),
-                                            in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                            Text(text)
-                                .font(.rounded(14, .medium))
-                                .foregroundStyle(Theme.textPrimary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 0)
-                        }
-                    }
-                }
-                .padding(.horizontal, 28)
-                Spacer(minLength: 20)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24)
+                Text(subtitle)
+                    .font(.rounded(15))
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+                    .padding(.bottom, 18)
+                VStack(spacing: 10) { rows() }
+                    .padding(.horizontal, 24)
+                Spacer(minLength: 8)
             }
+        }
+    }
+
+    private func row(_ icon: String, _ text: LocalizedStringKey) -> some View {
+        HStack(spacing: 12) {
+            IconBadge(symbol: icon, tint: Theme.accent, size: 34)
+            Text(text)
+                .font(.rounded(14, .medium))
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
     }
 
@@ -299,24 +235,18 @@ struct OnboardingView: View {
 
     private func permissionRow(icon: String, title: LocalizedStringKey, subtitle: LocalizedStringKey,
                                state: PermState, action: @escaping () -> Void) -> some View {
-        GlassCard(cornerRadius: Theme.cornerMedium) {
-            HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.rounded(18, .semibold))
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 44, height: 44)
-                    .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.rounded(15, .semibold)).foregroundStyle(Theme.textPrimary)
-                    Text(subtitle).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 8)
-                trailing(for: state, action: action)
+        HStack(spacing: 14) {
+            IconBadge(symbol: icon, tint: Theme.accent, size: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.rounded(15, .semibold)).foregroundStyle(Theme.textPrimary)
+                Text(subtitle).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(14)
+            Spacer(minLength: 8)
+            trailing(for: state, action: action)
         }
+        .padding(14)
+        .statCard(padding: 0)
     }
 
     @ViewBuilder
@@ -332,9 +262,8 @@ struct OnboardingView: View {
         }
     }
 
-    /// Кнопка разрешения — капсула 44 pt. Была голая подпись 13 pt (~16 pt в
-    /// высоту) под крупной жёлтой «Начать»: самое важное касание онбординга
-    /// («Всегда» — без него нет фоновых предупреждений) было самым мелким.
+    /// Кнопка разрешения — капсула 44 pt: самое важное касание онбординга
+    /// («Всегда» — без него нет фоновых предупреждений) не бывает мелким.
     private func permissionButton(_ title: LocalizedStringKey, tint: Color,
                                   action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -347,49 +276,5 @@ struct OnboardingView: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(PressableStyle())
-    }
-
-    private var backgroundGradient: some View {
-        LinearGradient(
-            colors: [Theme.background, Theme.adaptive(0xE6E8EE, 0x1F2023)],
-            startPoint: .top, endPoint: .bottom
-        )
-        .ignoresSafeArea()
-    }
-}
-
-/// Анимированный радар для героя онбординга. `active` — крутиться только пока
-/// страница на виду: в TabView(.page) соседние страницы остаются в иерархии,
-/// и вечная анимация гоняла бы GPU, пока пользователь читает про разрешения.
-private struct RadarHero: View {
-    let active: Bool
-    @State private var sweep = false
-
-    var body: some View {
-        ZStack {
-            ForEach(0..<3) { i in
-                Circle()
-                    .stroke(Theme.accent.opacity(0.35 - Double(i) * 0.09), lineWidth: 1.5)
-                    .padding(CGFloat(i) * 28)
-            }
-            Circle().fill(Theme.accent.opacity(0.06))
-
-            // вращающийся сектор
-            AngularGradient(
-                colors: [Theme.accent.opacity(0.0), Theme.accent.opacity(0.55)],
-                center: .center, angle: .degrees(0)
-            )
-            .mask(Circle())
-            .rotationEffect(.degrees(sweep ? 360 : 0))
-            .motionAnimation(sweep ? .linear(duration: 3).repeatForever(autoreverses: false)
-                             : .default, value: sweep)
-
-            Image(systemName: "camera.metering.center.weighted")
-                .font(.rounded(34, .bold))
-                .foregroundStyle(Theme.accent)
-                .shadow(color: Theme.accent.opacity(0.6), radius: 12)
-        }
-        .onAppear { sweep = active }
-        .onChange(of: active) { _, nowActive in sweep = nowActive }
     }
 }

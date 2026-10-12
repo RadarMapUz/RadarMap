@@ -75,11 +75,14 @@ struct NightDimmingTests {
                                      alertLevel: 2) == 1)
     }
 
-    @Test("Второй план приглушён и днём")
-    func secondaryStaysSecondary() {
+    @Test("Днём второй план не приглушён: полупрозрачный док пропускал подписи улиц")
+    func secondaryIsOpaqueByDay() {
         let main = SpeedHUDView.dimming(secondary: false, night: false, alertLevel: 0)
         let side = SpeedHUDView.dimming(secondary: true, night: false, alertLevel: 0)
-        #expect(side < main)
+        #expect(side == main)
+        // Ночью — приглушён, как и раньше.
+        #expect(SpeedHUDView.dimming(secondary: true, night: true, alertLevel: 0)
+                < SpeedHUDView.dimming(secondary: false, night: true, alertLevel: 0))
     }
 }
 

@@ -293,6 +293,12 @@ struct MapScreen: View {
         // полноэкранный и перекрывает баннер манёвра).
         if ProcessInfo.processInfo.arguments.contains("-hideCameraAlert") {
             EmptyView()
+        } else if ProcessInfo.processInfo.arguments.contains("-demoAlert"),
+                  let camera = env.location.currentCoordinate.flatMap({ env.cameras.nearest(to: $0, limit: 1).first })
+                    ?? env.cameras.cameras.first {
+            // Полноэкранное предупреждение на снимок — без поездки и движения.
+            ApproachAlertView(camera: camera, distance: 240, speedKmh: 67, relativeBearing: 12,
+                              alertRadius: 500, onDismiss: {})
         } else {
             ApproachOverlayGate(dismissedID: $dismissedApproachID)
         }
@@ -595,7 +601,7 @@ struct MapScreen: View {
             .foregroundStyle(Theme.textSecondary)
             .padding(.horizontal, 14)
             .frame(minHeight: Theme.controlSize)
-            .backport.glassEffect(.regular, in: .capsule)
+            .liftedBackground(Theme.surface, in: Capsule())
         }
         .buttonStyle(PressableStyle())
         .transition(.move(edge: .top).combined(with: .opacity))
@@ -1125,10 +1131,14 @@ struct MapScreen: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 8)
-        .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerPanel))
+        // Сплошная панель, а не стекло (решение 13.10): карта под баром в
+        // покое всё равно живёт — тайлы, «я», слежение, — и стекло
+        // пересчитывало размытие на каждом её кадре; к тому же сквозь него
+        // просвечивали подписи улиц под подписями кнопок (снимок 12.10).
+        // Та же поверхность, что у панели поездки и HUD.
+        .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
             .strokeBorder(Theme.edgePanel, lineWidth: 1))
-        .liftPanel()
     }
 
     /// Пункты меню поездки: то, что в покое лежит в нижнем баре.

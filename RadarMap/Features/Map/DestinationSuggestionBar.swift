@@ -57,10 +57,12 @@ struct DestinationSuggestionBar: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(.ultraThinMaterial,
-                            in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+                // Сплошная панель, как бар под ней: сквозь стекло просвечивали
+                // подписи улиц (снимок 12.10), а размытие над живой картой
+                // пересчитывается на каждом её кадре.
+                .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
-                    .stroke(Theme.stroke, lineWidth: 1))
+                    .strokeBorder(Theme.edgePanel, lineWidth: 1))
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressableStyle())

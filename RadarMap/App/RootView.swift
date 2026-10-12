@@ -12,6 +12,14 @@ struct RootView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(Storage.Key.hasCompletedOnboarding.rawValue) private var hasCompletedOnboarding = false
+    /// DEBUG `-showOnboarding`: онбординг на снимок без переустановки.
+    private static var forceOnboarding: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-showOnboarding")
+        #else
+        false
+        #endif
+    }
     /// «Открыть карту на телефоне» при подключённом CarPlay (пассажиру нужны
     /// настройки и Итоги). Память сцены, не настройка: живёт до конца сессии.
     @State private var phoneMapOverride = false
@@ -37,7 +45,7 @@ struct RootView: View {
         ZStack {
             Theme.background.ignoresSafeArea()
 
-            if hasCompletedOnboarding {
+            if hasCompletedOnboarding && !Self.forceOnboarding {
                 // Пока едет CarPlay, телефонная карта уступает место экрану
                 // передачи: MapKit на двух экранах разом — двойной нагрев,
                 // а водитель смотрит на экран машины.

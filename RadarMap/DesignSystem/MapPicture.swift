@@ -78,39 +78,47 @@ enum MapPictureRenderer {
         guard let rect = picture.frameRect, size.width > 1, size.height > 1 else { return nil }
         let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
 
-        let options = MKMapSnapshotter.Options()
-        options.mapRect = rect
-        options.size = size
-        options.scale = scale
-        let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
-        config.pointOfInterestFilter = .excludingAll
-        config.showsTraffic = false
-        options.preferredConfiguration = config
-        options.traitCollection = traits
-
-        var snapshot: MKMapSnapshotter.Snapshot?
-        do {
-            snapshot = try await MKMapSnapshotter(options: options).start()
-        } catch {
-            // Обычно это офлайн: картинка всё равно будет — без подложки.
-            Log.app.notice("снимок карты не получен: \(error.localizedDescription, privacy: .public)")
+        // Подложка — НАША карта (движок, те же тайлы и стиль, что на экране):
+        // до 13.10 здесь был снимок карты Apple — единственная чужая
+        // подложка в приложении, и карточка поездки в соцсети выглядела не
+        // нашей. Движок не ответил (офлайн, выпуска нет) — снимок Apple, как
+        // раньше; не ответил и он — пустой фон. Картинка есть всегда.
+        var base: UIImage?
+        var project: (CLLocationCoordinate2D) -> CGPoint = fitProjection(rect, into: size)
+        #if canImport(MapLibre)
+        if let own = await EngineMapSnapshot.render(rect: rect, size: size, daylight: !dark, scale: scale) {
+            base = own.image
+            project = own.project
+        }
+        #endif
+        if base == nil {
+            let options = MKMapSnapshotter.Options()
+            options.mapRect = rect
+            options.size = size
+            options.scale = scale
+            let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
+            config.pointOfInterestFilter = .excludingAll
+            config.showsTraffic = false
+            options.preferredConfiguration = config
+            options.traitCollection = traits
+            do {
+                let snapshot = try await MKMapSnapshotter(options: options).start()
+                base = snapshot.image
+                project = { snapshot.point(for: $0) }
+            } catch {
+                // Обычно это офлайн: картинка всё равно будет — без подложки.
+                Log.app.notice("снимок карты не получен: \(error.localizedDescription, privacy: .public)")
+            }
         }
         if Task.isCancelled { return nil }
-
-        let project: (CLLocationCoordinate2D) -> CGPoint
-        if let snapshot {
-            project = { snapshot.point(for: $0) }
-        } else {
-            project = fitProjection(rect, into: size)
-        }
 
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         format.opaque = true
         return UIGraphicsImageRenderer(size: size, format: format).image { context in
             func ui(_ color: Color) -> UIColor { UIColor(color).resolvedColor(with: traits) }
-            if let snapshot {
-                snapshot.image.draw(in: CGRect(origin: .zero, size: size))
+            if let base {
+                base.draw(in: CGRect(origin: .zero, size: size))
             } else {
                 ui(Theme.background).setFill()
                 context.fill(CGRect(origin: .zero, size: size))

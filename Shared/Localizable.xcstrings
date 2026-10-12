@@ -17794,6 +17794,56 @@
           }
         }
       }
+    },
+    "Поездка начнётся сама, когда тронетесь": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Harakatni boshlaganingizda safar o‘zi boshlanadi"
+          }
+        }
+      }
+    },
+    "Начните поездку кнопкой на экране машины": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarni mashina ekranidagi tugma bilan boshlang"
+          }
+        }
+      }
+    },
+    "Прибытие в %@": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ da yetib borasiz"
+          }
+        }
+      }
+    },
+    "Голос предупредит заранее": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovoz oldindan ogohlantiradi"
+          }
+        }
+      }
+    },
+    "В пути": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘lda"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

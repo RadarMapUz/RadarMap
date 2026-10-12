@@ -26,6 +26,13 @@ struct RootView: View {
     @State private var carPlayPreviewModel = CarPlayMapModel()
     #endif
 
+    /// DEBUG `-handoffPreview`: экран передачи без машины — для снимков.
+    #if DEBUG
+    private static let previewsHandoff = ProcessInfo.processInfo.arguments.contains("-handoffPreview")
+    #else
+    private static let previewsHandoff = false
+    #endif
+
     var body: some View {
         ZStack {
             Theme.background.ignoresSafeArea()
@@ -34,7 +41,7 @@ struct RootView: View {
                 // Пока едет CarPlay, телефонная карта уступает место экрану
                 // передачи: MapKit на двух экранах разом — двойной нагрев,
                 // а водитель смотрит на экран машины.
-                if env.isCarPlayConnected && !phoneMapOverride {
+                if (env.isCarPlayConnected || Self.previewsHandoff) && !phoneMapOverride {
                     CarPlayHandoffView { phoneMapOverride = true }
                         .transition(.opacity)
                 } else {

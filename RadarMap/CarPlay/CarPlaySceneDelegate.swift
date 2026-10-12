@@ -163,6 +163,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         previewWatch?.cancel()
         previewWatch = nil
         previewTrip = nil
+        previewDestination = nil
+        flowPhase = nil
         model.isPreviewing = false
         offerTask?.cancel()
         offerTask = nil
@@ -550,12 +552,72 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // (hasSystemGuidance) — водитель без манёвра. Completion у
         // setRootTemplate для этого не годится: он приходил через 25 мс, пока
         // хост ещё держал сцену в фоне.
+        // Выбор на телефоне уже идёт — тот же выбор и здесь, до сессии.
+        observeFlow()
         guidance.attach(to: mapTemplate)
         // Алерт о разрешении — сразу, а не по первому тапу: без разрешения
         // экран машины не покажет ни скорости, ни камер, и молчание
         // неотличимо от поломки. Поверх летящего корня CarPlay его отклонял.
         if !env.location.isAuthorized { return showNoPermissionAlert() }
         offerDestinationSoon()
+    }
+
+    // MARK: - Фаза маршрута
+
+    /// Фаза при прошлом решении о выборе (NavigationFlow); nil — с
+    /// подключения решений не было.
+    private var flowPhase: NavigationFlow.Phase?
+    /// Цель, выбор к которой на экране: маршрут заменили на телефоне —
+    /// выбор показывает новый.
+    private var previewDestination: CLLocationCoordinate2D?
+
+    /// Телефон и машина — в одной фазе: маршрут, построенный на телефоне,
+    /// здесь — тот же выбор с «Поехали»; «Поехали» или крестик там закрывают
+    /// выбор здесь. Ведение (сессия) следует за той же фазой в CarPlayGuidance.
+    private func observeFlow() {
+        let session = session
+        syncChoice()
+        withObservationTracking {
+            _ = env.route.isActive
+            _ = env.route.isBuilding
+            _ = env.route.destinationCoordinate
+            _ = env.location.isTripActive
+            _ = model.isPreviewing
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.session == session else { return }
+                self.observeFlow()
+            }
+        }
+    }
+
+    private func syncChoice() {
+        guard mapTemplate != nil, rootShown else { return }
+        let route = env.route
+        let phase = NavigationFlow.phase(hasRoute: route.isActive, isTripActive: env.location.isTripActive)
+        let building = route.isBuilding
+        let decision = NavigationFlow.carChoice(from: flowPhase, to: phase,
+                                                showing: model.isPreviewing, building: building)
+        // Пока строится, фаза промежуточная — прошлой её не считаем: иначе
+        // маршрут, достроенный на телефоне, не открыл бы выбор здесь.
+        if !building { flowPhase = phase }
+        switch decision {
+        case .none:
+            // Тот же выбор, но маршрут заменили на телефоне — показать новый.
+            if model.isPreviewing, !building, phase == .choosing,
+               let destination = route.destinationCoordinate, let shown = previewDestination,
+               !CarPlayGuidance.same(shown, destination) {
+                showPreview(name: route.destinationName, destination: destination)
+            }
+        case .show:
+            guard let destination = route.destinationCoordinate else { return }
+            Log.carplay.notice("выбор маршрута — с телефона или после автостопа")
+            model.isPreviewing = true
+            showPreview(name: route.destinationName, destination: destination)
+        case .close:
+            endPreview(start: false, keepRoute: true,
+                       reason: phase == .free ? "маршрут снят не в машине" : "поехали не из машины")
+        }
     }
 
     // MARK: - Объезд пробки
@@ -900,6 +962,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// CarPlay с iOS 26 кнопка — стеклянная капсула, и слово в ней читалось
     /// мельче и дольше значка. Фолбэк — словом (`barButton`), а не пустой
     /// картинкой: невидимая нажимаемая кнопка хуже подписи.
+    ///
+    /// Значки — голые глифы, без своей подложки: капсулу рисует система, и
+    /// ▶ в круге, ромб и пузырь внутри неё читались тяжёлыми чёрными кляксами
+    /// разной формы («иконки красиво нужно», владелец, 12.10). И те же, что
+    /// на телефоне: ▶ / ■ — «Начать поездку» и «Стоп», ⚠ — «Радар!», динамик —
+    /// звук. Один глиф на одно действие на обоих экранах.
     private func barButton(symbol: String, title: String,
                            handler: @escaping (CPBarButton) -> Void) -> CPBarButton {
         if let image = buttonImage(symbol) {
@@ -909,7 +977,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func tripButton(active: Bool) -> CPBarButton {
-        barButton(symbol: active ? "stop.circle.fill" : "play.circle.fill",
+        barButton(symbol: active ? "stop.fill" : "play.fill",
                   title: active ? String(localized: "Завершить")
                                 : String(localized: "Поездка")) { [weak self] _ in
             guard let self else { return }
@@ -944,10 +1012,25 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             if location.speedKmh >= AppConfig.carPlayEndTripConfirmKmh {
                 confirmEndTrip()
             } else {
-                location.endTrip()
-                showToast(String(localized: "Поездка завершена"))
+                endTripAndRoute()
             }
         }
+    }
+
+    /// «Стоп» в машине — конец ведения целиком, как «Завершить» в Apple Maps.
+    /// До 12.10 маршрут переживал стоп, и машина продолжала по нему вести —
+    /// карточка «Поверните налево», прибытие — под тостом «Поездка
+    /// завершена» и кнопкой ▶ («пишет завершена, но не сбрасывается»).
+    /// `toast` — ответ словами на слепой тап; после диалога «Завершить?»
+    /// ответ уже дан, а второй модальный шаблон вслед закрывающемуся CarPlay
+    /// отклоняет.
+    private func endTripAndRoute(toast: Bool = true) {
+        let hadRoute = env.route.isActive
+        env.location.endTrip()   // ручной стоп снимает и маршрут (NavigationFlow)
+        Log.carplay.notice("стоп из машины: маршрут \(hadRoute ? "снят" : "не был", privacy: .public)")
+        guard toast else { return }
+        showToast(hadRoute ? String(localized: "Маршрут завершён")
+                           : String(localized: "Поездка завершена"))
     }
 
     /// Когда кнопку «Поездка» нажимали в последний раз.
@@ -957,12 +1040,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// маршрута не висит одним тапом на баре.
     private func confirmEndTrip() {
         let alert = CPAlertTemplate(
-            titleVariants: [String(localized: "Завершить поездку?")],
+            titleVariants: [env.route.isActive ? String(localized: "Завершить маршрут?")
+                                               : String(localized: "Завершить поездку?")],
             actions: [
                 CPAlertAction(title: String(localized: "Завершить"),
                               style: .destructive) { [weak self] _ in
-                    self?.env.location.endTrip()
                     self?.dismissTopTemplate()
+                    self?.endTripAndRoute(toast: false)
                 },
                 CPAlertAction(title: String(localized: "Отмена"),
                               style: .cancel) { [weak self] _ in
@@ -993,10 +1077,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                   message: String(localized: "Откройте RadarMap на телефоне и разрешите доступ «Всегда» — без него я не вижу дорогу и молчу о камерах."))
     }
 
-    /// «Куда» — сетка направлений; при активном маршруте подписью намекаем,
-    /// что там же лежит «Стоп».
+    /// «Куда» — сетка направлений (с маршрутом — и заезд, и «Завершить
+    /// маршрут»). Лупа в обоих состояниях: кнопка на том же месте с тем же
+    /// значком находится вслепую; ромб «маршрут» прежде менял её облик
+    /// посреди поездки.
     private func destinationsButton(routeActive: Bool) -> CPBarButton {
-        barButton(symbol: routeActive ? "arrow.triangle.turn.up.right.diamond.fill" : "magnifyingglass",
+        barButton(symbol: "magnifyingglass",
                   title: routeActive ? String(localized: "Маршрут")
                                      : String(localized: "Куда")) { [weak self] _ in
             self?.presentDestinations()
@@ -1005,16 +1091,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     /// Отметить засаду прямо на ходу — иконкой, чтобы бар не распухал.
     ///
-    /// Речевой пузырь, а не треугольник. Треугольник в приложении уже занят и
-    /// занят прочно: `exclamationmark.triangle.fill` — это тип камеры «ДТП», он
-    /// стоит на маркерах карты и в ленте. Один глиф на две разные вещи в
-    /// пределах одного экрана — это не стиль, это ошибка чтения. Пузырь же
-    /// говорит ровно то, что делает кнопка: рассказать другим.
+    /// Треугольник, как у жёлтой «Радар!» на телефоне и у команды Siri:
+    /// водитель учит один значок, а не два. Речевой пузырь (до 12.10) был
+    /// единственным местом с другим глифом — и читался как «сообщения».
     ///
     /// Фолбэк — заголовком, а не пустой картинкой: `?? UIImage()` давал бы
     /// нажимаемую кнопку-невидимку в баре.
     private var reportButton: CPBarButton {
-        guard let image = buttonImage("exclamationmark.bubble.fill") else {
+        guard let image = buttonImage("exclamationmark.triangle.fill") else {
             return CPBarButton(title: String(localized: "Радар")) { [weak self] _ in
                 self?.presentReport()
             }
@@ -1038,7 +1122,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     /// Вход в осмотр карты. Обязателен: на машинах без сенсора крутилкой
     /// панорамируют только из осмотра. Выход — «Готово» в баре (так требует
-    /// CarPlay: своей кнопки выхода система не рисует).
+    /// CarPlay: своей кнопки выхода система не рисует). Значок — стрелки в
+    /// четыре стороны, как у Apple Maps в машине: «рука» читалась как
+    /// «рисовать».
     private var panButton: CPMapButton {
         let button = CPMapButton { [weak self] _ in
             guard let self, let mapTemplate else { return }
@@ -1050,7 +1136,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             }
             mapTemplate.showPanningInterface(animated: true)
         }
-        button.image = buttonImage("hand.draw")
+        button.image = buttonImage("arrow.up.and.down.and.arrow.left.and.right")
         return button
     }
 
@@ -1431,7 +1517,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let target = MKMapItem(placemark: MKPlacemark(coordinate: destination))
         target.name = name
         let trip = CPTrip(origin: origin, destination: target, routeChoices: choices)
+        if previewTrip != nil { mapTemplate.hideTripPreviews() }
         previewTrip = trip
+        previewDestination = destination
         let text = CPTripPreviewTextConfiguration(startButtonTitle: String(localized: "Поехали"),
                                                   additionalRoutesButtonTitle: String(localized: "Варианты"),
                                                   overviewButtonTitle: String(localized: "Обзор"))
@@ -1477,6 +1565,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         previewWatch = nil
         if previewTrip != nil { mapTemplate?.hideTripPreviews() }
         previewTrip = nil
+        previewDestination = nil
         guard model.isPreviewing else { return }
         if !keepRoute { env.route.clear() }
         model.isPreviewing = false

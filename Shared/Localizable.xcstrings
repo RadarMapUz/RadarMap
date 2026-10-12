@@ -3641,6 +3641,22 @@
         }
       }
     },
+    "Завершить маршрут?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завершить маршрут?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrutni yakunlaysizmi?"
+          }
+        }
+      }
+    },
     "Завершить поездку": {
       "localizations": {
         "ru": {
@@ -5182,6 +5198,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bir bosishda marshrut — xaritadagi «Mening joylarim» tugmasi yoki «Qidiruv»dan. Manzilni so‘z bilan qidirish yoki xaritada ko‘rsatish mumkin."
+          }
+        }
+      }
+    },
+    "Маршрут завершён": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут завершён"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut yakunlandi"
           }
         }
       }

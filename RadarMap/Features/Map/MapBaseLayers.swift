@@ -168,9 +168,14 @@ struct EngineBaseLayer: View {
             return (span, pitch, DriveCamera.visibleAhead(zoom: zoom, pitchDegrees: pitch, viewHeight: viewHeight,
                                                           carY: insets.meY, latitude: me.latitude))
         }
+        // Ближайшая камера в 500 м — в кадре всегда: «368 м до радара» над
+        // картой, на которой радара не видно, — «куда пропал радар?»
+        // (владелец, 12.10). Камера старше полос: порог масштаба ей уступает.
         let target = DriveCamera.target(speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
-                                        pitchAllowed: pitchAllowed, viewHeight: viewHeight,
-                                        latitude: me.latitude, carY: { _ in insets.meY })
+                                        pitchAllowed: pitchAllowed,
+                                        keepAhead: env.location.nearestCamera != nil ? env.location.distanceToNearest : nil,
+                                        viewHeight: viewHeight, latitude: me.latitude,
+                                        clearTop: insets.safeTop, carY: { _ in insets.meY })
         let frame = map.cameraSmoother.step(toward: target, at: Date())
         let zoom = frame.zoom + map.zoomBias
         return (DriveCamera.span(zoom: zoom, viewHeight: viewHeight, latitude: me.latitude),

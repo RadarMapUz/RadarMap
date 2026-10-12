@@ -556,6 +556,13 @@ final class LocationService: NSObject {
             // Припарковались у цели — маршрут выполнен, линия не должна висеть на карте.
             route?.finishIfNearDestination(coordinate: currentCoordinate)
         }
+        // «Стоп» рукой — конец и маршрута (NavigationFlow): иначе стоп на
+        // одном экране оставлял ведение на другом (12.10, машина вела после
+        // «Поездка завершена»). Автостоп и «я пассажир» маршрут оставляют.
+        let end: NavigationFlow.TripEnd = asPassenger ? .passenger : (auto ? .auto : .manual)
+        if !NavigationFlow.keepsRoute(after: end), let route, route.isActive {
+            route.clear()
+        }
         applyLocationMode()
         liveActivity?.end()
         notifier.clearApproaching()   // конец поездки — убрать висящий баннер камеры

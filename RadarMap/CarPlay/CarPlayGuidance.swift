@@ -319,7 +319,12 @@ final class CarPlayGuidance {
             alertCamera(on: template)
             return
         }
-        if route.isActive, let destination = route.destinationCoordinate {
+        // Ведём только в поездке (NavigationFlow): маршрут без поездки — это
+        // выбор с «Поехали», и на телефоне, и здесь. До 12.10 машина вела по
+        // любому маршруту — после «Стоп» и под «Поехали» на телефоне.
+        let phase = NavigationFlow.phase(hasRoute: route.isActive, isTripActive: env.location.isTripActive)
+        if NavigationFlow.carGuides(phase: phase, choosing: model.isPreviewing),
+           let destination = route.destinationCoordinate {
             let cancelledHere = cancelledDestination.map { Self.same($0, destination) } ?? false
             if !cancelledHere,
                session == nil || tripDestination.map({ !Self.same($0, destination) }) ?? true {
@@ -345,7 +350,8 @@ final class CarPlayGuidance {
             if !pausedForReroute { updateManeuver() }
             updateEstimates(on: template)
         } else if let session {
-            // Маршрут снят: доехали — «завершить», иначе — «отменить».
+            // Маршрут снят или поездка кончилась: доехали — «завершить»,
+            // иначе — «отменить».
             // Разница видна водителю: CarPlay по-разному прощается с поездкой.
             if let arrival = route.lastArrival,
                Date().timeIntervalSince(arrival.at) < AppConfig.carPlayArrivalFreshSeconds {
@@ -636,7 +642,7 @@ final class CarPlayGuidance {
         return image.withRenderingMode(.alwaysOriginal)
     }
 
-    private static func same(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Bool {
+    static func same(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Bool {
         GeoMath.fastDistance(a.latitude, a.longitude, b.latitude, b.longitude)
             < AppConfig.carPlaySameDestinationMeters
     }

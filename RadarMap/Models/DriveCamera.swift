@@ -140,13 +140,15 @@ nonisolated enum DriveCamera {
     ///   - viewHeight: высота вида карты, точки.
     ///   - carY: где машина по высоте вида (0 — верх, 1 — низ) при данной
     ///     `Profile.carShare` — раскладку экрана знает только вид.
-    ///   - keepAhead: метров до того, что обязано быть в кадре (камера на
-    ///     плитке главного экрана машины), nil — ничего; дальше
-    ///     `keepAheadMaxMeters` не учитывается.
+    ///   - keepAhead: метров до того, что обязано быть в кадре (ближайшая
+    ///     камера), nil — ничего; дальше `keepAheadMaxMeters` не учитывается.
+    ///   - clearTop: доля высоты вида под верхней панелью (HUD телефона, бар
+    ///     машины). «Видно впереди» считается до её нижней кромки: камера под
+    ///     плашкой «377 м до радара» в кадре только формально (12.10).
     static func target(speedKmh: Double, maneuverDistance: Double?, pitchAllowed: Bool,
                        maxPitch: Double = AppConfig.engineMapPitchDegrees,
                        keepAhead: Double? = nil,
-                       viewHeight: Double, latitude: Double,
+                       viewHeight: Double, latitude: Double, clearTop: Double = 0,
                        carY: (Double) -> Double) -> Frame {
         let profile = profile(speedKmh: speedKmh, pitchAllowed: pitchAllowed, maxPitch: maxPitch)
         let mps = max(0, speedKmh.isFinite ? speedKmh : 0) / 3.6
@@ -171,9 +173,9 @@ nonisolated enum DriveCamera {
             }
         }
 
-        // Объект впереди, который обязан быть виден (камера на плитке): обзор
-        // не короче, а порог полос ему уступает — плитка маленькая, и камера
-        // в ней важнее разметки.
+        // Объект впереди, который обязан быть виден (ближайшая камера): обзор
+        // не короче, а порог полос ему уступает — в приложении о камерах
+        // камера на карте важнее разметки.
         if let k = keepAhead, k.isFinite, k >= 0, k <= keepAheadMaxMeters {
             lookahead = max(lookahead, k + maneuverMarginMeters)
             visibilityCap = lookahead   // и развилка, и камера — обе в кадре
@@ -181,11 +183,12 @@ nonisolated enum DriveCamera {
 
         let y = carY(profile.carShare)
         let zoom = zoomShowing(lookahead, pitchDegrees: pitch, viewHeight: viewHeight,
-                               carY: y, latitude: latitude)
+                               carY: y, latitude: latitude, clearTop: clearTop)
         // Порог полос не крупнее масштаба, при котором развилка ещё в кадре.
         if visibilityCap.isFinite {
             minZoom = min(minZoom, zoomShowing(visibilityCap, pitchDegrees: pitch,
-                                               viewHeight: viewHeight, carY: y, latitude: latitude))
+                                               viewHeight: viewHeight, carY: y, latitude: latitude,
+                                               clearTop: clearTop))
         }
         // Порог развилки (стрелки полос) старше потолка скорости.
         let maxZoom = max(profile.maxZoom, minZoom)
@@ -233,21 +236,24 @@ nonisolated enum DriveCamera {
         groundOffset(spanMeters: spanMeters, share: anchorY - 0.5, pitchDegrees: pitchDegrees)
     }
 
-    /// Сколько метров дороги видно от машины до верхнего края вида.
+    /// Сколько метров дороги видно от машины до верхнего края вида или — с
+    /// `clearTop` — до нижней кромки верхней панели.
     static func visibleAhead(zoom: Double, pitchDegrees: Double, viewHeight: Double,
-                             carY: Double, latitude: Double) -> Double {
+                             carY: Double, latitude: Double, clearTop: Double = 0) -> Double {
         let span = span(zoom: zoom, viewHeight: viewHeight, latitude: latitude)
-        let toTop = -groundOffset(spanMeters: span, share: -0.5, pitchDegrees: pitchDegrees)
+        // Кромка ниже машины — не обзор: панель не бывает выше «я».
+        let top = min(max(0, clearTop), max(0, carY - 0.05))
+        let toTop = -groundOffset(spanMeters: span, share: top - 0.5, pitchDegrees: pitchDegrees)
         return toTop + centreAhead(spanMeters: span, anchorY: carY, pitchDegrees: pitchDegrees)
     }
 
     /// Масштаб, при котором впереди видно ровно `meters`. Обзор обратно
     /// пропорционален 2^zoom при том же наклоне — решается в одну строку.
     static func zoomShowing(_ meters: Double, pitchDegrees: Double, viewHeight: Double,
-                            carY: Double, latitude: Double) -> Double {
+                            carY: Double, latitude: Double, clearTop: Double = 0) -> Double {
         let reference = 17.0
         let seen = visibleAhead(zoom: reference, pitchDegrees: pitchDegrees, viewHeight: viewHeight,
-                                carY: carY, latitude: latitude)
+                                carY: carY, latitude: latitude, clearTop: clearTop)
         guard seen > 0, meters > 0 else { return reference }
         return reference + log2(seen / meters)
     }

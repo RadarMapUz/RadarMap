@@ -54,14 +54,16 @@ struct CarPlayEngineLayer: View {
         // к горизонту втрое больше тайлов, а картинка в машину рисуется на
         // телефоне.
         let height = Double(size.height + safe.top + safe.bottom)
-        // Плитка главного экрана — взгляд мельком: ближайшая камера впереди
-        // обязана быть в кадре (carplay12: «радары не показывает» — стоя
-        // плитка видела 60 м, а камера стояла в 128).
-        let keepAhead = compact && env.location.nearestCamera != nil ? env.location.distanceToNearest : nil
+        // Ближайшая камера в 500 м — в кадре всегда, и на плитке, и на карте
+        // машины: стоя карта видела 60 м, а камера стояла в 128 («радары не
+        // показывает», carplay12; «куда пропал радар?», 12.10).
+        let keepAhead = env.location.nearestCamera != nil ? env.location.distanceToNearest : nil
         let target = DriveCamera.target(
             speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
             pitchAllowed: env.thermal.mode == .full, keepAhead: keepAhead,
             viewHeight: height, latitude: me.latitude,
+            // Верх окна машины — бар с кнопками.
+            clearTop: compact ? 0 : Double(safe.top) / max(1, height),
             carY: { compact ? AppConfig.carPlayDashboardMeY : Self.meY(size: size, safe: safe, share: $0) })
         let frame = model.cameraSmoother.step(toward: target, at: Date())
         let offlineFiles: OfflineFiles? = env.network.isOnline

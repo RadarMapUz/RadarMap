@@ -139,6 +139,30 @@ final class DriveCameraTests: XCTestCase {
                                        viewHeight: 374, latitude: tashkent, carY: { _ in 0.62 }))
     }
 
+    func testKeptObjectIsNotHiddenUnderTheTopPanel() {
+        // Телефон, 12.10: «377 м до радара», а радар — под плашкой HUD у
+        // верхней кромки. Обзор считается до нижнего края панели.
+        let top = 0.17, carY = 0.72
+        for kmh in [0.0, 40, 70] {
+            for d in [150.0, 377, 480] {
+                let f = Cam.target(speedKmh: kmh, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
+                                   keepAhead: d, viewHeight: 760, latitude: tashkent, clearTop: top,
+                                   carY: { _ in carY })
+                XCTAssertGreaterThanOrEqual(
+                    Cam.visibleAhead(zoom: f.zoom, pitchDegrees: f.pitchDegrees, viewHeight: 760,
+                                     carY: carY, latitude: tashkent, clearTop: top), d,
+                    "\(kmh) км/ч, камера в \(d) м")
+            }
+        }
+        // Под панелью видно меньше, чем до края экрана, — и никогда не ноль.
+        let plain = Cam.visibleAhead(zoom: 17, pitchDegrees: 30, viewHeight: 760, carY: carY, latitude: tashkent)
+        let clear = Cam.visibleAhead(zoom: 17, pitchDegrees: 30, viewHeight: 760, carY: carY, latitude: tashkent,
+                                     clearTop: top)
+        XCTAssertLessThan(clear, plain)
+        XCTAssertGreaterThan(Cam.visibleAhead(zoom: 17, pitchDegrees: 0, viewHeight: 760, carY: carY,
+                                              latitude: tashkent, clearTop: 0.95), 0, "панель ниже «я» — бред, не ноль")
+    }
+
     // MARK: - Геометрия
 
     func testTopDownGeometryIsThePlainFormula() {

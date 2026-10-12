@@ -1211,11 +1211,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                                   titles: [String(localized: "Поиск")]) { [weak self] in
             self?.presentSearch()
         })
-        // АЗС — частый вопрос в дороге, и ответ на него — одна плитка.
-        buttons.append(gridButton(symbol: Venue.Kind.fuel.symbol,
-                                  titles: [Venue.Kind.fuel.title]) { [weak self] in
-            self?.presentNearest(.fuel)
-        })
+        // АЗС или зарядка — частый вопрос в дороге, и ответ на него — одна
+        // плитка. Какая — по машине (Настройки → Поездка → «Машина»): у
+        // электромобиля «Зарядка» вместо «АЗС», у гибрида обе.
+        for kind in env.settings.vehicleEnergy.stops {
+            buttons.append(gridButton(symbol: kind.symbol, titles: [kind.title]) { [weak self] in
+                self?.presentNearest(kind)
+            })
+        }
 
         // Дом и Работа уже стоят своими плитками выше — в «недавних» они
         // дублируются и съедают места из восьми, которые есть у сетки.

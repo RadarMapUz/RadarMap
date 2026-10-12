@@ -177,6 +177,14 @@ struct TripSettingsPage: View {
             }
 
             Section {
+                Picker("Машина", selection: $settings.vehicleEnergy) {
+                    ForEach(VehicleEnergy.allCases) { Text($0.title).tag($0) }
+                }
+            } footer: {
+                Text("В «Куда» в CarPlay — «АЗС», «Зарядка» или обе: в машине на них одна плитка.")
+            }
+
+            Section {
                 Toggle("Подробный трек для регистратора", isOn: $settings.recordTimedTrack)
                     .onChange(of: settings.recordTimedTrack) { _, on in
                         env.trip.recordsTimedTrack = on

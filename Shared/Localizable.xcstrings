@@ -17714,6 +17714,46 @@
           }
         }
       }
+    },
+    "Бензин или газ": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benzin yoki gaz"
+          }
+        }
+      }
+    },
+    "Электромобиль": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektromobil"
+          }
+        }
+      }
+    },
+    "Гибрид": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gibrid"
+          }
+        }
+      }
+    },
+    "В «Куда» в CarPlay — «АЗС», «Зарядка» или обе: в машине на них одна плитка.": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CarPlay’dagi «Qayerga»da — «AYOQSH», «Quvvatlash» yoki ikkalasi: mashinada ular uchun bitta tugma."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

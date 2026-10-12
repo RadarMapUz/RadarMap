@@ -212,6 +212,31 @@ enum TripStartMode: String, CaseIterable, Identifiable {
     var usesMotion: Bool { self != .manual }
 }
 
+/// Чем машина заправляется: какие плитки «в дороге» показывать в «Куда»
+/// (сетка CarPlay — восемь мест, и «Зарядка» бензиновой машине — шум).
+enum VehicleEnergy: String, CaseIterable, Identifiable {
+    case fuel, electric, hybrid
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .fuel:     return String(localized: "Бензин или газ")
+        case .electric: return String(localized: "Электромобиль")
+        case .hybrid:   return String(localized: "Гибрид")
+        }
+    }
+
+    /// Плитки заведений в «Куда», по порядку.
+    var stops: [Venue.Kind] {
+        switch self {
+        case .fuel:     return [.fuel]
+        case .electric: return [.charging]
+        case .hybrid:   return [.charging, .fuel]
+        }
+    }
+}
+
 enum BackgroundAlertMode: String, CaseIterable, Identifiable {
     case all, radarsOnly, off
     var id: String { rawValue }
@@ -424,6 +449,10 @@ final class AppSettings {
         didSet { store.set(tripStartMode.rawValue, forKey: Keys.tripStartMode) }
     }
     var alertVolume: Double { didSet { store.set(alertVolume, forKey: Keys.volume) } }
+    /// Чем заправляется машина — плитки «АЗС» / «Зарядка» в «Куда».
+    var vehicleEnergy: VehicleEnergy {
+        didSet { store.set(vehicleEnergy.rawValue, forKey: Keys.vehicleEnergy) }
+    }
     var homePlace: SavedPlace? { didSet { save(homePlace, forKey: Keys.home) } }
     var workPlace: SavedPlace? { didSet { save(workPlace, forKey: Keys.work) } }
 
@@ -581,6 +610,7 @@ final class AppSettings {
         static let filter = "cameraFilter"
         static let autoStart = "autoStartTrip"        // legacy, только для миграции
         static let tripStartMode = "tripStartMode"
+        static let vehicleEnergy = "vehicleEnergy"
         static let volume = "alertVolume"
         static let home = "homePlace"
         static let work = "workPlace"
@@ -679,6 +709,7 @@ final class AppSettings {
             tripStartMode = store.bool(forKey: Keys.autoStart) ? .smart : .manual
         }
         alertVolume = store.double(forKey: Keys.volume)
+        vehicleEnergy = VehicleEnergy(rawValue: store.string(forKey: Keys.vehicleEnergy) ?? "") ?? .fuel
         homePlace = Self.load(store, Keys.home)
         workPlace = Self.load(store, Keys.work)
         routeAlternatives = store.bool(forKey: Keys.alternatives)

@@ -20,6 +20,8 @@ Endpoints:
   POST /api/traffic        {v: 1, pieces: [{p: [[lat, lon, t, kmh], ...]}]} -> {"ok": true, "accepted": N}
                            (куски следа для пробок: без устройства, без поездки, время —
                             только относительное внутри куска; см. «Пробки» ниже)
+  POST /api/eta            {token, eta, left_m, status: "driving"|"arrived"|"ended"} -> {"ok": true}
+  GET  /api/eta/<token>    -> HTML «будет примерно в 18:40» (см. «Поделиться прибытием» ниже)
 
 Правила передвижных радаров (жизненный цикл доверия):
   * новая отметка — на испытательном сроке (радар/тренога 75 мин, пост 2 ч):
@@ -552,6 +554,114 @@ def lifecycle_expires(created, expires, rtype, confirmed, now):
                   created + REPORT_TTLS.get(rtype, TTL))
     return min(created + MAX_LIFE, new_exp)
 
+# --- Поделиться прибытием -------------------------------------------------
+#
+# Водитель отправляет знакомому ссылку «буду примерно в 18:40». Приватно по
+# построению: телефон шлёт только время прибытия, остаток пути и статус — ни
+# точки, ни цели, ни устройства; хранится всё в ПАМЯТИ процесса по случайной
+# ссылке (128 бит) и гаснет само: без обновлений — через ETA_TTL, после «на
+# месте» — через ETA_ARRIVED_TTL. Рестарт сервиса стирает все ссылки — это
+# цена того, что на диске нет ничего.
+
+ETA_TTL = 2 * 3600
+ETA_ARRIVED_TTL = 30 * 60
+ETA_MAX_LINKS = 5000
+ETA_UPDATES_PER_IP_DAY = 2000
+ETA_HORIZON = 48 * 3600
+_ETA_TOKEN = re.compile(r"^[A-Za-z0-9_-]{22,64}$")
+_eta_links = {}
+_eta_lock = threading.Lock()
+
+
+def clean_eta(data, now):
+    """Чистое обновление или None. Берутся только четыре поля — всё остальное,
+    что пришло (координаты, имя, устройство), не сохраняется вовсе."""
+    if not isinstance(data, dict):
+        return None
+    token = data.get("token")
+    status = data.get("status")
+    if not isinstance(token, str) or not _ETA_TOKEN.match(token):
+        return None
+    if status not in ("driving", "arrived", "ended"):
+        return None
+    eta = data.get("eta")
+    left = data.get("left_m", 0)
+    if not isinstance(eta, (int, float)) or isinstance(eta, bool) or not math.isfinite(eta):
+        return None
+    if not isinstance(left, (int, float)) or isinstance(left, bool) or not math.isfinite(left):
+        return None
+    if not (now - 3600 <= eta <= now + ETA_HORIZON) or not (0 <= left <= 2_000_000):
+        return None
+    return token, {"eta": float(eta), "left_m": int(left), "status": status, "updated": now}
+
+
+def eta_put(token, item, now):
+    with _eta_lock:
+        for key in [k for k, v in _eta_links.items() if _eta_expired(v, now)]:
+            del _eta_links[key]
+        if token not in _eta_links and len(_eta_links) >= ETA_MAX_LINKS:
+            return False
+        _eta_links[token] = item
+        return True
+
+
+def eta_get(token, now):
+    with _eta_lock:
+        item = _eta_links.get(token)
+        if item and _eta_expired(item, now):
+            del _eta_links[token]
+            return None
+        return dict(item) if item else None
+
+
+def _eta_expired(item, now):
+    ttl = ETA_TTL if item["status"] == "driving" else ETA_ARRIVED_TTL
+    return now - item["updated"] > ttl
+
+
+def eta_page(item, now, uz=False):
+    """Страница для знакомого: время прибытия по Ташкенту, сколько осталось,
+    когда обновлено. Без скриптов и внешних ресурсов; обновляется сама."""
+    def clock(ts):
+        return time.strftime("%H:%M", time.gmtime(ts + 5 * 3600))   # Узбекистан — UTC+5 круглый год
+    if item is None:
+        title = "Havola eskirgan" if uz else "Ссылка устарела"
+        line = ("Safar tugagan yoki yangilanmayapti." if uz
+                else "Поездка закончилась или больше не обновляется.")
+        sub = ""
+    elif item["status"] == "ended":
+        title = "Kuzatish tugadi" if uz else "Поездка больше не отслеживается"
+        line = ("Haydovchi ulashishni to‘xtatdi." if uz
+                else "Водитель перестал делиться временем прибытия.")
+        sub = ""
+    elif item["status"] == "arrived":
+        title = "Yetib keldi" if uz else "На месте"
+        line = (f"{clock(item['updated'])} da yetib keldi" if uz
+                else f"На месте с {clock(item['updated'])}")
+        sub = ""
+    else:
+        minutes = max(0, round((item["eta"] - now) / 60))
+        title = (f"Taxminan {clock(item['eta'])} da" if uz
+                 else f"Будет примерно в {clock(item['eta'])}")
+        line = (f"{minutes} daqiqadan keyin" if uz else f"через {minutes} мин")
+        km = item["left_m"] / 1000
+        if km >= 0.1:
+            line += (f" · {km:.1f} km qoldi" if uz else f" · осталось {km:.1f} км".replace(".", ","))
+        ago = max(0, round((now - item["updated"]) / 60))
+        sub = (f"Yangilandi: {ago} daqiqa oldin" if uz else f"Обновлено {ago} мин назад")
+    refresh = "" if item is None else '<meta http-equiv="refresh" content="30">'
+    return f"""<!doctype html><html lang="{'uz' if uz else 'ru'}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">{refresh}<title>RadarMap</title>
+<style>body{{margin:0;font:17px -apple-system,system-ui,sans-serif;background:#f4f6f9;color:#14181f;
+display:flex;min-height:100vh;align-items:center;justify-content:center}}
+main{{background:#fff;border-radius:20px;padding:28px 24px;max-width:360px;width:calc(100% - 32px);
+box-shadow:0 6px 24px rgba(0,0,0,.08);text-align:center}}h1{{font-size:26px;margin:0 0 8px}}
+p{{margin:4px 0;color:#4a5260}}small{{color:#8a929c}}
+@media(prefers-color-scheme:dark){{body{{background:#14181f;color:#eef1f5}}main{{background:#1e232a}}p{{color:#b8c0cc}}}}
+</style></head><body><main><h1>{title}</h1><p>{line}</p><p><small>{sub}</small></p>
+<p><small>RadarMap</small></p></main></body></html>"""
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "RadarMapAPI/1.3"
     timeout = 10  # slow-POST не должен держать поток вечно
@@ -622,6 +732,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         global _last_cleanup, _mobile_cache
         path = self.path.split("?", 1)[0].rstrip("/")   # /api/mobile/?x — тот же эндпоинт
+        if path.startswith("/api/eta/"):
+            return self._eta_page(path[len("/api/eta/"):])
         if path == "/api/health":
             return self._json(200, {"ok": True})
         if path == "/api/mobile":
@@ -694,7 +806,36 @@ class Handler(BaseHTTPRequestHandler):
             return self._stat()
         if path == "/api/traffic":
             return self._traffic()
+        if path == "/api/eta":
+            return self._eta()
         self._json(404, {"error": "not found"})
+
+    def _eta(self):
+        now = time.time()
+        cleaned = clean_eta(self._body(), now)
+        if cleaned is None:
+            return self._json(400, {"error": "bad json"})
+        if ip_quota_exceeded("eta", self._ip(), ETA_UPDATES_PER_IP_DAY):
+            return self._json(429, {"error": "too many"})
+        token, item = cleaned
+        if not eta_put(token, item, now):
+            return self._json(503, {"error": "busy"})
+        self._json(200, {"ok": True})
+
+    def _eta_page(self, token):
+        now = time.time()
+        item = eta_get(token, now) if _ETA_TOKEN.match(token or "") else None
+        uz = (self.headers.get("Accept-Language", "") or "").lower().startswith("uz")
+        body = eta_page(item, now, uz=uz).encode()
+        self.send_response(200 if item else 404)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Robots-Tag", "noindex")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _traffic(self):
         """Куски следа для пробок. Плохой кусок пропускается, а не роняет

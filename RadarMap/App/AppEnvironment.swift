@@ -67,6 +67,8 @@ final class AppEnvironment {
     /// классы дорог и мосты. Пустой источник, пока не приехали, — схема тогда
     /// берёт сеть из индекса лимитов (FallbackRoadNetwork).
     let roads = RoadNetworkService()
+    /// «Поделиться прибытием» — ссылка с временем прибытия для знакомого.
+    let etaShare = EtaShareService()
     /// Горячие точки треног: подписанный список мест, где водители отмечали
     /// радар снова и снова. Не камеры и не отметки — память, поэтому и живут
     /// отдельным сервисом с недельным обновлением и своим тихим тоном.
@@ -257,6 +259,8 @@ final class AppEnvironment {
         // Пробки: пульт и сеть — отсюда; приватные зоны — дом, работа (ручные и
         // выученные) и все сохранённые места: рядом с ними след не собирается.
         traffic.allowedByConfig = { [weak config] in config?.current.isTrafficEnabled ?? true }
+        etaShare.route = route
+        etaShare.allowedByConfig = { [weak config] in config?.current.isEtaShareEnabled ?? true }
         traffic.isOnline = { [weak network] in network?.isOnline ?? false }
         traffic.privacyZones = { [weak self] in
             guard let self else { return [] }

@@ -1027,3 +1027,84 @@ class TrafficTest(ServerTestBase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class EtaShareTest(ServerTestBase):
+    """«Поделиться прибытием». Важнее формы — что сервер НЕ хранит: ни точки,
+    ни цели, ни устройства; и что ссылка гаснет сама."""
+
+    TOKEN = "Q2xhdWRlU2hhcmVkRVRBdGVzdA"
+
+    def setUp(self):
+        super().setUp()
+        with api._eta_lock:
+            api._eta_links.clear()
+
+    def post(self, **fields):
+        payload = {"token": self.TOKEN, "eta": time.time() + 25 * 60, "left_m": 12400, "status": "driving"}
+        payload.update(fields)
+        return _call(self.port, "POST", "/api/eta", payload)
+
+    def page(self, token=None):
+        status, headers, body = _get_raw(self.port, f"/api/eta/{token or self.TOKEN}")
+        return status, headers, body.decode()
+
+    def test_driver_update_shows_arrival_page(self):
+        self.assertEqual(self.post()[0], 200)
+        status, headers, html = self.page()
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", headers.get("Content-Type", ""))
+        self.assertEqual(headers.get("Cache-Control"), "no-store")
+        self.assertIn("Будет примерно в", html)
+        self.assertIn("через 25 мин", html)
+        self.assertIn("12,4 км", html)
+        self.assertNotIn("<script", html)
+
+    def test_stores_only_four_numbers(self):
+        self.post(lat=41.31, lon=69.28, name="Дом", device="abc", dest="Мустакиллик 5")
+        with api._eta_lock:
+            stored = dict(api._eta_links)
+        self.assertEqual(set(stored[self.TOKEN]), {"eta", "left_m", "status", "updated"})
+        raw = json.dumps(stored, ensure_ascii=False)
+        for leak in ("41.31", "69.28", "Дом", "abc", "Мустакиллик"):
+            self.assertNotIn(leak, raw)
+
+    def test_rejects_bad_updates(self):
+        for fields in ({"token": "short"}, {"token": "../../etc/passwd" + "x" * 20},
+                       {"status": "flying"}, {"eta": time.time() + 10 * 86400},
+                       {"eta": "soon"}, {"left_m": -5}, {"eta": True}):
+            self.assertEqual(self.post(**fields)[0], 400, fields)
+
+    def test_unknown_or_stale_link_says_so(self):
+        status, _, html = self.page("A" * 26)
+        self.assertEqual(status, 404)
+        self.assertIn("Ссылка устарела", html)
+        self.post()
+        with api._eta_lock:
+            api._eta_links[self.TOKEN]["updated"] -= api.ETA_TTL + 1
+        self.assertEqual(self.page()[0], 404, "без обновлений два часа — ссылка гаснет")
+
+    def test_arrival_and_its_short_tail(self):
+        self.post(status="arrived", left_m=0)
+        status, _, html = self.page()
+        self.assertEqual(status, 200)
+        self.assertIn("На месте с", html)
+        with api._eta_lock:
+            api._eta_links[self.TOKEN]["updated"] -= api.ETA_ARRIVED_TTL + 1
+        self.assertEqual(self.page()[0], 404)
+
+    def test_uzbek_viewer(self):
+        self.post()
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/eta/{self.TOKEN}",
+                                     headers={"Accept-Language": "uz-UZ"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            html = resp.read().decode()
+        self.assertIn("daqiqadan keyin", html)
+
+    def test_driver_can_stop_sharing(self):
+        self.post()
+        self.post(status="ended")
+        status, _, html = self.page()
+        self.assertEqual(status, 200)
+        self.assertIn("больше не отслеживается", html)
+

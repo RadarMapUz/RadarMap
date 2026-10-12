@@ -1121,6 +1121,13 @@ nonisolated enum AppConfig {
     static let limitAheadMinSpeedKmh: Double = 25
     /// Как часто пробовать дорогу впереди.
     static let limitAheadCheckSeconds: TimeInterval = 3
+
+    // MARK: - «Поделиться прибытием» (EtaShare)
+
+    /// Обновление ссылки раз в минуту; «на месте» — если прибытие было не
+    /// раньше двух минут назад, иначе маршрут сняли — «больше не отслеживается».
+    static let etaShareIntervalSeconds: TimeInterval = 60
+    static let etaShareArrivalFreshSeconds: TimeInterval = 120
     /// Шаг обновления «пройденной» части маршрута: перекладывать оверлей на
     /// каждый фикс GPS — лишняя работа рендера, глазу хватает и таких шагов.
     static let carPlayTraveledStepMeters: CLLocationDistance = 25

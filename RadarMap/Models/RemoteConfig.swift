@@ -55,6 +55,9 @@ nonisolated struct RemoteConfig: Codable, Equatable, Sendable {
         /// Пробки: и отправка кусков следа, и показ (рубильник на случай, если
         /// с данными что-то не так). Нет поля — включено, как у остальных.
         var traffic: Bool?
+        /// «Поделиться прибытием» — рубильник на случай, если страница на
+        /// сервере сломалась. Нет поля — включено.
+        var etaShare: Bool?
     }
 
     /// Значения сборки: то, к чему мы возвращаемся всегда, когда пульту нельзя верить.
@@ -66,6 +69,7 @@ nonisolated struct RemoteConfig: Codable, Equatable, Sendable {
     var areMobileReportsEnabled: Bool { features?.mobileReports ?? true }
     var areMetricsEnabled: Bool { features?.metrics ?? true }
     var isTrafficEnabled: Bool { features?.traffic ?? true }
+    var isEtaShareEnabled: Bool { features?.etaShare ?? true }
 
     /// Интервал опроса с зажимом в разумные границы: присланные 0 или 86400 —
     /// это не «настройка», а испорченный файл.

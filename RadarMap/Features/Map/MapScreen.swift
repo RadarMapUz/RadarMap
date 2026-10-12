@@ -43,6 +43,8 @@ struct MapScreen: View {
     /// Итог только что завершённой поездки («Поездка сохранена») и деталка из него.
     @State private var tripEndRecord: TripRecord?
     @State private var tripEndDetail: TripRecord?
+    /// Текст ссылки «Поделиться прибытием» для системного листа.
+    @State private var etaSharePayload: ActivityTextPayload?
     @Environment(\.scenePhase) private var scenePhase
     /// Пикер типа отметки (радар/тренога/пост/ДТП) для выбранной точки.
     @State private var reportPoint: MapPoint?
@@ -207,6 +209,14 @@ struct MapScreen: View {
             })
         }
         // Деталка из карточки «Поездка сохранена» — без захода в Итоги.
+        // «Поделиться прибытием»: ссылка начинает обновляться, только если
+        // её действительно отправили.
+        .sheet(item: $etaSharePayload) { payload in
+            ActivityTextSheet(text: payload.text) { sent in
+                sent ? env.etaShare.confirmShared() : env.etaShare.cancelPrepared()
+            }
+            .presentationDetents([.medium, .large])
+        }
         .sheet(item: $tripEndDetail) { record in
             TripDetailSheet(record: record,
                             onRoute: !env.location.hasLocation ? nil : { coord, name in
@@ -1135,6 +1145,18 @@ struct MapScreen: View {
         }
         Button { map.showStats = true } label: {
             Label("Итоги", systemImage: "chart.bar.fill")
+        }
+        // Время прибытия знакомому — пока идёт маршрут (EtaShareService).
+        if env.etaShare.isSharing {
+            Button { env.etaShare.stop() } label: {
+                Label("Перестать делиться прибытием", systemImage: "person.crop.circle.badge.xmark")
+            }
+        } else if env.etaShare.isAvailable {
+            Button {
+                if let share = env.etaShare.prepare() { etaSharePayload = ActivityTextPayload(text: share.message) }
+            } label: {
+                Label("Поделиться прибытием", systemImage: "square.and.arrow.up")
+            }
         }
         moreActionItems
     }

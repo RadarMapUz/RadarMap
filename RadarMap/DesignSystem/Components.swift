@@ -501,6 +501,30 @@ struct ActivityShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
+/// Текст для системного «Поделиться» — с ответом, отправил ли человек его
+/// («Поделиться прибытием» начинает обновлять ссылку только после отправки).
+struct ActivityTextPayload: Identifiable {
+    let id = UUID()
+    let text: String
+}
+
+struct ActivityTextSheet: UIViewControllerRepresentable {
+    let text: String
+    let onDone: (Bool) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, completed, _, _ in
+            onDone(completed)
+            dismiss()
+        }
+        return controller
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
 /// Файл для системного «Поделиться» (GPX трека поездки).
 struct ShareFilePayload: Identifiable {
     let id = UUID()

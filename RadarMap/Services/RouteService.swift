@@ -317,6 +317,24 @@ final class RouteService {
     }
     var arrivalDate: Date { Date().addingTimeInterval(remainingTime) }
 
+    /// Путь впереди от машины до `meters` (для проб лимита): от текущей
+    /// точки по линии маршрута. nil — маршрута нет.
+    func pathAhead(from coordinate: CLLocationCoordinate2D, meters: CLLocationDistance) -> [CLLocationCoordinate2D]? {
+        guard let selected else { return nil }
+        let rest = Self.remaining(selected.points, after: progressAlong)
+        guard rest.count >= 2 else { return nil }
+        var path = [coordinate]
+        var total: CLLocationDistance = 0
+        for point in rest.dropFirst() {
+            if let last = path.last {
+                total += GeoMath.fastDistance(last.latitude, last.longitude, point.latitude, point.longitude)
+            }
+            path.append(point)
+            if total >= meters { break }
+        }
+        return path
+    }
+
     // MARK: - Построение
 
     /// Живой точки нет — маршрут не строим вовсе, и говорим об этом.

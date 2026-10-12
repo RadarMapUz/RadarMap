@@ -392,6 +392,9 @@ final class AppEnvironment {
         speedLimits.onOverspeed = { [weak alerts] in
             alerts?.speak(String(localized: "Превышение скорости"))
         }
+        speedLimits.onLimitAhead = { [weak alerts] notice in
+            alerts?.speak(notice.spoken)
+        }
         // Тема интерфейса — до первого кадра: днём приложение не должно
         // мигнуть тёмным при запуске.
         refreshInterfaceAppearance()

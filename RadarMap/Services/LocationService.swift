@@ -1133,6 +1133,13 @@ final class LocationService: NSObject {
                 // штрафного, а подтверждение короче: предупреждение обязано
                 // успеть раньше фиксации.
                 cameraAhead: cameraAhead)
+            // Смена лимита впереди — заранее, а не «превышение» после знака:
+            // по линии маршрута или по оси текущей дороги (LimitAhead). Та же
+            // тишина, что у фразы о превышении: «Молча», камера говорит сама.
+            speedLimits?.checkLimitAhead(
+                coordinate: coordinate, course: course, speedKmh: speedKmh,
+                path: route?.pathAhead(from: coordinate, meters: AppConfig.limitAheadMaxMeters + 100),
+                announce: isTripActive && settings.voiceEnabled && !willSpeakAboutCameraAhead)
             // Память о треногах — строго ПОСЛЕ speedLimits.update: подсказка
             // звучит только при превышении, а знает о нём именно он.
             announceHotspotIfNeeded(from: coordinate)

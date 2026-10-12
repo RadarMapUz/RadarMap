@@ -380,6 +380,76 @@ final class SpeedLimitService {
         }
     }
 
+    // MARK: - Смена лимита впереди (LimitAhead)
+
+    /// «Ограничение 40 через 200 м» — сказать заранее, а не «превышение»
+    /// после знака.
+    @ObservationIgnored var onLimitAhead: ((LimitAhead.Notice) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onLimitAhead,
+                                               "SpeedLimitService.onLimitAhead") }
+    }
+    @ObservationIgnored private var limitAheadAnnouncer = LimitAhead.Announcer()
+    @ObservationIgnored private var limitAheadCheckedAt: Date?
+
+    /// - Parameter path: точки пути впереди от машины (маршрут); nil — по оси
+    ///   текущей дороги прямо.
+    func checkLimitAhead(coordinate: CLLocationCoordinate2D, course: CLLocationDirection,
+                         speedKmh: Double, path: [CLLocationCoordinate2D]?, announce: Bool,
+                         now: Date = Date()) {
+        // Предполагаемый лимит (по классу дороги) — не повод для фразы «через
+        // 200 м»: это догадка, а не знак.
+        guard announce, settings.speedLimitsEnabled, let index, course >= 0,
+              speedKmh >= AppConfig.limitAheadMinSpeedKmh,
+              let current = currentLimit, !isCurrentLimitAssumed else { return }
+        if let at = limitAheadCheckedAt, now.timeIntervalSince(at) < AppConfig.limitAheadCheckSeconds { return }
+        limitAheadCheckedAt = now
+        let probes = Self.probes(index: index, from: coordinate, course: course, path: path)
+        guard let notice = LimitAhead.notice(current: current, speedKmh: speedKmh,
+                                             tolerance: settings.overspeedTolerance, probes: probes),
+              limitAheadAnnouncer.shouldAnnounce(notice, at: now) else { return }
+        Log.route.notice("лимит впереди: \(notice.limit, privacy: .public) через \(Int(notice.distance), privacy: .public) м")
+        onLimitAhead?(notice)
+    }
+
+    /// Пробы лимита впереди через `limitAheadStepMeters`: по линии пути или
+    /// прямо по курсу — и тогда только пока ось дороги рядом (дальше
+    /// изгиба проба ушла бы на соседнюю улицу — там проб нет).
+    nonisolated static func probes(index: LimitIndex, from start: CLLocationCoordinate2D,
+                                   course: CLLocationDirection,
+                                   path: [CLLocationCoordinate2D]?) -> [LimitAhead.Probe] {
+        let step = AppConfig.limitAheadStepMeters
+        let targets = Array(stride(from: step, through: AppConfig.limitAheadMaxMeters + step, by: step))
+        var out: [LimitAhead.Probe] = []
+        if let path, path.count >= 2 {
+            var travelled: CLLocationDistance = 0
+            var target = targets.makeIterator()
+            var next = target.next()
+            for (p, q) in zip(path, path.dropFirst()) {
+                let length = GeoMath.fastDistance(p.latitude, p.longitude, q.latitude, q.longitude)
+                guard length > 0 else { continue }
+                let bearing = GeoMath.bearing(from: p, to: q)
+                while let along = next, along <= travelled + length {
+                    let t = (along - travelled) / length
+                    let point = CLLocationCoordinate2D(latitude: p.latitude + (q.latitude - p.latitude) * t,
+                                                       longitude: p.longitude + (q.longitude - p.longitude) * t)
+                    out.append(LimitAhead.Probe(along: along,
+                                                limit: index.matchHit(point, courseDegrees: bearing)?.limit,
+                                                coordinate: point))
+                    next = target.next()
+                }
+                travelled += length
+            }
+            return out
+        }
+        for along in targets {
+            let point = GeoMath.destination(from: start, bearing: course, distanceMeters: along)
+            guard let hit = index.matchHit(point, courseDegrees: course),
+                  hit.distanceMeters <= AppConfig.limitAheadSnapMeters else { break }
+            out.append(LimitAhead.Probe(along: along, limit: hit.limit, coordinate: point))
+        }
+        return out
+    }
+
     private func clearOverspeed() {
         isOverspeeding = false
         isOverspeedingSustained = false

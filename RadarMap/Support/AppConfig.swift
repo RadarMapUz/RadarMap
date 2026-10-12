@@ -1087,6 +1087,23 @@ nonisolated enum AppConfig {
     static let jamSameJamMeters: Double = 400
     /// Как часто смотреть, нет ли пробки впереди.
     static let jamCheckIntervalSeconds: TimeInterval = 10
+
+    // MARK: - «Ограничение 40 через 200 м» (LimitAhead)
+
+    /// Окно проб впереди: смену ближе 100 м не объявляем (поздно, скажет
+    /// «превышение»), дальше 400 м — рано. Шаг проб — 50 м.
+    static let limitAheadMinMeters: Double = 100
+    static let limitAheadMaxMeters: Double = 400
+    static let limitAheadStepMeters: Double = 50
+    /// Без маршрута проба засчитывается, только пока ось дороги рядом.
+    static let limitAheadSnapMeters: Double = 12
+    /// Не чаще раза в минуту; та же смена (то же значение в 150 м) — один раз.
+    static let limitAheadGapSeconds: TimeInterval = 60
+    static let limitAheadSameMeters: Double = 150
+    /// Не ниже этой скорости — стоя и ползком говорить незачем.
+    static let limitAheadMinSpeedKmh: Double = 25
+    /// Как часто пробовать дорогу впереди.
+    static let limitAheadCheckSeconds: TimeInterval = 3
     /// Шаг обновления «пройденной» части маршрута: перекладывать оверлей на
     /// каждый фикс GPS — лишняя работа рендера, глазу хватает и таких шагов.
     static let carPlayTraveledStepMeters: CLLocationDistance = 25

@@ -17704,6 +17704,16 @@
           }
         }
       }
+    },
+    "Ограничение %1$lld через %2$@": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$@ dan so‘ng tezlik cheklovi %1$lld"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

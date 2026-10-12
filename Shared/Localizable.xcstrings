@@ -583,9 +583,33 @@
     "%lld камер": {
       "localizations": {
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld камер"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld камера"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld камеры"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld камер"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld камеры"
+                }
+              }
+            }
           }
         },
         "uz": {
@@ -599,9 +623,33 @@
     "%lld камер на маршруте": {
       "localizations": {
         "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld камер на маршруте"
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld камера на маршруте"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld камеры на маршруте"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld камер на маршруте"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld камеры на маршруте"
+                }
+              }
+            }
           }
         },
         "uz": {
@@ -17841,6 +17889,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yo‘lda"
+          }
+        }
+      }
+    },
+    "По вашим поездкам": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlaringiz bo‘yicha"
+          }
+        }
+      }
+    },
+    "Задать адрес": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzilni belgilash"
           }
         }
       }

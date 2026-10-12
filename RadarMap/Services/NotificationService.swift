@@ -169,7 +169,7 @@ final class NotificationService: NSObject {
         let content = UNMutableNotificationContent()
         content.title = String(localized: "Итоги недели 🚗")
         var parts = [Formatting.distance(week.distance),
-                     String(format: String(localized: "%lld камер"), week.cameras)]
+                     String(localized: "\(week.cameras) камер")]
         if let rating = week.rating {
             if let previousRating, rating != previousRating {
                 let delta = rating - previousRating

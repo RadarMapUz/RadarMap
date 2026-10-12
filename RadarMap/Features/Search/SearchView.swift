@@ -307,12 +307,18 @@ struct SearchView: View {
 
     private func placeRow(_ slot: PlaceSlot) -> some View {
         let place = env.settings.place(for: slot)
+        // Выученное по поездкам — как в «Моих местах»: «Не задано» при
+        // известном доме противоречило соседнему экрану (обзор экранов, 12.10).
+        let learned = place == nil && env.settings.destinationSuggestions
+            ? env.learnedPlaces.first { $0.kind.rawValue == slot.rawValue } : nil
+        let target = place?.coordinate ?? learned?.coordinate
+        let usual = env.commute.first { $0.direction == (slot == .work ? .toWork : .toHome) }?.usual
         return Button {
-            if let place {
+            if let target {
                 if let onRoute {
-                    onRoute(place.coordinate, slot.name)
+                    onRoute(target, slot.name)
                 } else {
-                    onSelect?(place.coordinate, slot.name)
+                    onSelect?(target, slot.name)
                 }
                 dismiss()
             } else {
@@ -332,14 +338,16 @@ struct SearchView: View {
                     Text(slot.name)
                         .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.textPrimary)
-                    Text(place?.title ?? String(localized: "Не задано — нажмите, чтобы настроить"))
+                    Text(place?.title
+                         ?? (learned != nil ? MyPlacesSheet.learnedSubtitle(usual: usual)
+                                            : String(localized: "Не задано — нажмите, чтобы настроить")))
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
-                if place != nil, onRoute != nil {
+                if target != nil, onRoute != nil {
                     Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
                         .font(.rounded(24))
                         .foregroundStyle(Theme.accent)
@@ -347,6 +355,11 @@ struct SearchView: View {
             }
         }
         .contextMenu {
+            if place == nil, learned != nil {
+                Button { assigning = slot } label: {
+                    Label("Задать адрес", systemImage: "pencil")
+                }
+            }
             if place != nil {
                 Button { assigning = slot } label: {
                     Label("Изменить адрес", systemImage: "pencil")

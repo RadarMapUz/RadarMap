@@ -1312,6 +1312,25 @@ struct MapScreen: View {
                 env.traffic.seedDemo()
             }
         }
+        // Снимки экранов для обзора вёрстки: -openScreen settings|search|
+        // places|nearby|stats|camera — открыть экран сразу после запуска.
+        if let index = args.firstIndex(of: "-openScreen"), index + 1 < args.count {
+            let screen = args[index + 1]
+            Task {
+                await Task.pause(seconds: 2)
+                switch screen {
+                case "settings": map.showSettings = true
+                case "search": map.showSearch = true
+                case "places": showMyPlaces = true
+                case "nearby": map.showNearbySheet = true
+                case "stats": map.showStats = true
+                case "camera":
+                    let here = env.location.currentCoordinate
+                    map.selectedCamera = here.flatMap { env.cameras.nearest(to: $0, limit: 1).first } ?? env.cameras.cameras.first
+                default: break
+                }
+            }
+        }
         // Карточка объезда пробки — на снимок экрана без настоящей пробки.
         if args.contains("-demoDetour") {
             Task {

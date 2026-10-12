@@ -41,9 +41,11 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
             switch self {
             case .fuel:        return "fuelpump.fill"
             case .parking:     return "parkingsign"
-            case .carWash:     return "car.side.and.exclamationmark"
+            // Пена, а не машина с «!»: та читалась как поломка.
+            case .carWash:     return "bubbles.and.sparkles.fill"
             case .carRepair:   return "wrench.and.screwdriver.fill"
-            case .tyres:       return "circle.circle"
+            // Колесо, а не мишень.
+            case .tyres:       return "tirepressure"
             case .charging:    return "bolt.car.fill"
             case .food:        return "fork.knife"
             case .pharmacy:    return "cross.case.fill"

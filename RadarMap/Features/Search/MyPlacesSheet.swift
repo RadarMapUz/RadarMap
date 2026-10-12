@@ -76,9 +76,11 @@ struct MyPlacesSheet: View {
                 Button {
                     go(to: target, name: slot.name)
                 } label: {
+                    // Выученное — коротко и с пользой: «По вашим поездкам ·
+                    // обычно 39 мин». Прежнее «Выучено по поездкам — адрес не
+                    // задан» не помещалось и обрезалось (обзор экранов, 12.10).
                     slotLabel(slot, isSet: place != nil,
-                              subtitle: place?.title
-                                ?? String(localized: "Выучено по поездкам — адрес не задан"),
+                              subtitle: place?.title ?? Self.learnedSubtitle(usual: usualTime(for: slot)),
                               showsRoute: onRoute != nil)
                 }
                 .buttonStyle(.borderless)
@@ -110,6 +112,19 @@ struct MyPlacesSheet: View {
         }
     }
 
+    /// «По вашим поездкам · обычно 39 мин».
+    static func learnedSubtitle(usual: TimeInterval?) -> String {
+        [String(localized: "По вашим поездкам"),
+         usual.map { String(format: String(localized: "обычно %@"),
+                            Formatting.unbreakable(Formatting.duration($0))) }]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// Медиана своих поездок к месту (Commute); nil — истории мало.
+    private func usualTime(for slot: PlaceSlot) -> TimeInterval? {
+        env.commute.first { $0.direction == (slot == .work ? .toWork : .toHome) }?.usual
+    }
+
     private func slotLabel(_ slot: PlaceSlot, isSet: Bool, subtitle: String,
                            showsRoute: Bool) -> some View {
         HStack(spacing: 12) {
@@ -127,8 +142,8 @@ struct MyPlacesSheet: View {
                 Text(subtitle)
                     .font(.rounded(12))
                     .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
             if showsRoute {

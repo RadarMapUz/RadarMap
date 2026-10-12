@@ -139,8 +139,8 @@ extension CarPlaySceneDelegate {
 
     /// Короткое подтверждение без единого тапа: само гаснет через пару секунд —
     /// водителю нечего нажимать.
-    func showToast(_ text: String) {
-        let alert = CPAlertTemplate(titleVariants: [text],
+    func showToast(_ text: String, variants: [String]? = nil) {
+        let alert = CPAlertTemplate(titleVariants: variants ?? [text],
                                     actions: [CPAlertAction(title: String(localized: "ОК"),
                                                             style: .default) { [weak self] _ in
             self?.dismissTopTemplate()

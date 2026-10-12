@@ -148,6 +148,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         resendButtons()
         observePendingConfirm()
         observeDetour()
+        observeTripSaved()
         startFreezeWatch(scene: scene)
         Log.carplay.notice("CarPlay подключён, сцена \(Self.stateName(scene), privacy: .public)")
         // Без анимации: анимированная установка корня у сцены в фоне
@@ -612,6 +613,37 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         mapTemplate.dismissNavigationAlert(animated: false) { [weak mapTemplate] _ in
             Task { @MainActor in mapTemplate?.present(navigationAlert: alert, animated: true) }
         }
+    }
+
+    // MARK: - Итог поездки
+
+    /// Сохранение, о котором уже сказали (момент сохранения в TripStats).
+    private var summarizedSave: Date?
+
+    /// Поездка сохранилась — итог одной строкой, пока машина стоит и экран
+    /// наш (CarPlayTripSummary). Подробности — на телефоне.
+    private func observeTripSaved() {
+        let session = session
+        withObservationTracking {
+            _ = env.trip.lastSavedAt
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.session == session else { return }
+                self.showTripSummaryIfFresh()
+                self.observeTripSaved()
+            }
+        }
+    }
+
+    private func showTripSummaryIfFresh() {
+        guard let saved = env.trip.lastSavedAt, saved != summarizedSave,
+              Date().timeIntervalSince(saved) < AppConfig.tripEndCardFreshSeconds,
+              Self.activeDelegate === self, model.isOnScreen, shownTemplate == nil,
+              env.location.speedKmh < AppConfig.carPlayPreviewMaxKmh,
+              let record = env.trip.history.first else { return }
+        summarizedSave = saved
+        Log.carplay.notice("итог поездки в машине")
+        showToast(CarPlayTripSummary.lines(for: record)[0], variants: CarPlayTripSummary.lines(for: record))
     }
 
     // MARK: - «Куда едем?»

@@ -179,7 +179,7 @@ struct MapStatusBanner: View {
             }
             Spacer(minLength: 0)
             Button {
-                withMotion(.easeOut(duration: 0.2)) { _ = dismissed.insert(id) }
+                withMotion(Motion.quick) { _ = dismissed.insert(id) }
             } label: {
                 Image(systemName: "xmark")
                     .font(.rounded(12, .bold))

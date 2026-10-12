@@ -396,7 +396,7 @@ struct CameraDetailSheet: View {
                 .buttonStyle(.plain)
             }
         }
-        .motionAnimation(.spring(duration: 0.35), value: reportState)
+        .motionAnimation(Motion.standard, value: reportState)
     }
 
     /// Плитка репорта: фиксированная высота и две строки текста — три плитки в ряду

@@ -297,7 +297,7 @@ struct PressableStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .motionAnimation(.spring(duration: 0.25), value: configuration.isPressed)
+            .motionAnimation(Motion.quick, value: configuration.isPressed)
     }
 }
 

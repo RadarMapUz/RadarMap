@@ -178,7 +178,7 @@ struct MapScreen: View {
             // оставалось угадывать.
             SearchView(onSelect: { coordinate, title in
                            map.move(to: coordinate)
-                           withMotion(.spring(duration: 0.3)) {
+                           withMotion(Motion.standard) {
                                map.pressedPoint = MapPoint(coordinate: coordinate, title: title)
                            }
                        },
@@ -197,7 +197,7 @@ struct MapScreen: View {
                               : { coord, name in buildRoute(to: coord, name: name) },
                           onShow: { coordinate, title in
                               map.move(to: coordinate)
-                              withMotion(.spring(duration: 0.3)) {
+                              withMotion(Motion.standard) {
                                   map.pressedPoint = MapPoint(coordinate: coordinate, title: title)
                               }
                           })
@@ -408,7 +408,7 @@ struct MapScreen: View {
         case .radar:     Storage.set(true, for: .hintRadarShown)
         case .smartSilence: Storage.set(true, for: .hintSilenceShown)
         }
-        withMotion(.spring(duration: 0.3)) { activeHint = hint }
+        withMotion(Motion.standard) { activeHint = hint }
         Task {
             await Task.pause(seconds: 7)
             withMotion(.easeOut(duration: 0.3)) { activeHint = nil }
@@ -426,7 +426,7 @@ struct MapScreen: View {
         guard env.location.authorizationStatus == .authorizedAlways else { return }
         let battery = BatteryProbe.snapshot()
         guard let percent = battery.percent, percent < 30, !battery.isCharging else { return }
-        withMotion(.spring(duration: 0.3)) { showBatterySaverHint = true }
+        withMotion(Motion.standard) { showBatterySaverHint = true }
         Task {
             await Task.pause(seconds: 8)
             withMotion(.easeOut(duration: 0.3)) { showBatterySaverHint = false }
@@ -517,7 +517,7 @@ struct MapScreen: View {
             // (plan_app_ui.md, У11).
             if showQuickToggles {
                 QuickTogglesBar {
-                    withMotion(.spring(duration: 0.3)) { showQuickToggles = false }
+                    withMotion(Motion.standard) { showQuickToggles = false }
                 }
             }
         }
@@ -578,7 +578,7 @@ struct MapScreen: View {
 
     private func toggleQuickToggles() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        withMotion(.spring(duration: 0.3)) { showQuickToggles.toggle() }
+        withMotion(Motion.standard) { showQuickToggles.toggle() }
     }
 
     /// Баннер пассажирского режима: молчание — осознанное, выход — один тап.
@@ -624,7 +624,7 @@ struct MapScreen: View {
             }
             // Зум — щипком, как в Apple Maps: кнопки только занимали место.
         }
-        .motionAnimation(.spring(duration: 0.3), value: mode.keepsMapToolsInMenu)
+        .motionAnimation(Motion.standard, value: mode.keepsMapToolsInMenu)
     }
 
     /// В поездке — три кнопки: звук, ориентация, «…». Слои, 3D, «весь
@@ -862,12 +862,12 @@ struct MapScreen: View {
                     TripEndCard(
                         record: record,
                         onDetail: { chosen in
-                            withMotion(.spring(duration: 0.3)) { tripEndRecord = nil }
+                            withMotion(Motion.standard) { tripEndRecord = nil }
                             tripEndDetail = chosen
                         },
                         onMerged: { tripEndRecord = env.trip.history.first },
                         onDismiss: {
-                            withMotion(.spring(duration: 0.3)) { tripEndRecord = nil }
+                            withMotion(Motion.standard) { tripEndRecord = nil }
                         })
                 }
                 if arrivalShown, let arrival = env.route.lastArrival {
@@ -875,7 +875,7 @@ struct MapScreen: View {
                     // экрана: у карточки своя «Завершить поездку», и второй
                     // «стоп» рядом с ней означал бы вопрос, какой настоящий.
                     ArrivalCardView(arrival: arrival, onDismiss: {
-                        withMotion(.spring(duration: 0.3)) { env.route.dismissArrival() }
+                        withMotion(Motion.standard) { env.route.dismissArrival() }
                     })
                 } else if TripScreenLayout.showsTripBar(mode: mode, arrivalShown: arrivalShown) {
                     // Панель поездки — ниже, после всей цепочки: одна на все
@@ -986,17 +986,17 @@ struct MapScreen: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .motionAnimation(.spring(duration: 0.3), value: map.isAddingCamera)
-        .motionAnimation(.spring(duration: 0.3), value: map.pressedPoint)
-        .motionAnimation(.spring(duration: 0.3), value: reportPoint)
-        .motionAnimation(.spring(duration: 0.3), value: arrivalShown)
+        .motionAnimation(Motion.standard, value: map.isAddingCamera)
+        .motionAnimation(Motion.standard, value: map.pressedPoint)
+        .motionAnimation(Motion.standard, value: reportPoint)
+        .motionAnimation(Motion.standard, value: arrivalShown)
     }
 
     /// Долгий тап: маркер + бар действий (кроме режима прицела добавления камеры).
     private func selectPoint(at coordinate: CLLocationCoordinate2D) {
         guard !map.isAddingCamera else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        withMotion(.spring(duration: 0.3)) {
+        withMotion(Motion.standard) {
             map.pressedPoint = MapPoint(coordinate: coordinate)
         }
     }

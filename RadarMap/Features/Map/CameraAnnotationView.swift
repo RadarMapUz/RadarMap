@@ -172,7 +172,7 @@ struct CameraAnnotationView: View {
                     .offset(x: 13, y: -13)
             }
         }
-        .motionAnimation(.spring(duration: 0.25), value: selected)
+        .motionAnimation(Motion.quick, value: selected)
     }
 
     /// Клин по направлению съёмки. Направление камеры — свойство дороги, а

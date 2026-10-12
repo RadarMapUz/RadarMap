@@ -77,7 +77,7 @@ struct RootView: View {
         // и конец поездки (единственный триггер) никто не видел — просьба об
         // оценке была недостижима ровно для самого лояльного сегмента.
         .modifier(ReviewPromptModifier())
-        .motionAnimation(.easeInOut(duration: 0.3), value: env.isCarPlayConnected)
+        .motionAnimation(Motion.standard, value: env.isCarPlayConnected)
         // Вышли из машины — следующее подключение снова начнёт с экрана передачи.
         .onChange(of: env.isCarPlayConnected) { _, connected in
             if !connected { phoneMapOverride = false }

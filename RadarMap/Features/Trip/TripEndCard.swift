@@ -230,7 +230,7 @@ struct TripEndCard: View {
 
     private func merge() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        withMotion(.snappy(duration: 0.35)) {
+        withMotion(Motion.standard) {
             env.trip.mergeWithPrevious(id: record.id)
             onMerged()
         }

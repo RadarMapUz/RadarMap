@@ -36,7 +36,7 @@ struct PeriodMapSheet: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .motionAnimation(.spring(duration: 0.3), value: selected)
+            .motionAnimation(Motion.standard, value: selected)
             .navigationTitle("Карта проездов")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

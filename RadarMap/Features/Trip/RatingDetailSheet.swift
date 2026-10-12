@@ -264,7 +264,7 @@ struct RatingDetailSheet: View {
                 ContributionBar(rating: rating, items: data.contributions,
                                 highlighted: highlighted) { id in
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    withMotion(.snappy(duration: 0.3)) {
+                    withMotion(Motion.standard) {
                         highlighted = highlighted == id ? nil : id
                         if highlighted != nil { proxy.scrollTo(id, anchor: .center) }
                     }
@@ -900,7 +900,7 @@ private struct AllContributionsView: View {
                 ForEach(Sort.allCases) { item in
                     let selected = sort == item
                     Button {
-                        withMotion(.snappy(duration: 0.25)) { sort = item }
+                        withMotion(Motion.quick) { sort = item }
                     } label: {
                         Text(item.title)
                             .font(.rounded(15, .semibold))
@@ -925,7 +925,7 @@ private struct AllContributionsView: View {
             .background(Theme.surface, in: Capsule())
 
             Button {
-                withMotion(.snappy(duration: 0.25)) { onlyViolations.toggle() }
+                withMotion(Motion.quick) { onlyViolations.toggle() }
             } label: {
                 Label("Только с превышениями",
                       systemImage: onlyViolations ? "checkmark.circle.fill" : "circle")
@@ -958,7 +958,7 @@ private struct AllContributionsView: View {
         if item.isTrip {
             onOpenTrip(item.id)
         } else {
-            withMotion(.snappy(duration: 0.25)) {
+            withMotion(Motion.quick) {
                 expandedDay = expandedDay == item.id ? nil : item.id
             }
         }

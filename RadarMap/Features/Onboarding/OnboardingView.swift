@@ -48,7 +48,7 @@ struct OnboardingView: View {
                     permissionsPage.tag(3)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .motionAnimation(.easeInOut(duration: 0.3), value: page)
+                .motionAnimation(Motion.standard, value: page)
 
                 pageDots
                     .padding(.bottom, 18)
@@ -215,7 +215,7 @@ struct OnboardingView: View {
                     .frame(width: index == page ? 22 : 7, height: 7)
             }
         }
-        .motionAnimation(.spring(duration: 0.3), value: page)
+        .motionAnimation(Motion.standard, value: page)
     }
 
     // MARK: - Состояния разрешений

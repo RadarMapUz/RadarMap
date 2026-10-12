@@ -222,7 +222,7 @@ struct MapPictureView: View {
                 picture, size: CGSize(width: width, height: height),
                 dark: scheme == .dark, scale: displayScale) else { return }
             Self.cache.setObject(rendered, forKey: name)
-            withMotion(.easeOut(duration: 0.2)) { image = rendered }
+            withMotion(Motion.quick) { image = rendered }
         }
         .accessibilityHidden(true)
     }

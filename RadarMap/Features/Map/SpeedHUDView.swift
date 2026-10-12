@@ -70,7 +70,7 @@ struct SpeedHUDView: View {
         // Синего значка «город/трасса» в углу больше нет: его смысла с дороги
         // никто не прочёл (docs/plan_drive_ux_2026-10-07.md, п. 5). Режим
         // по-прежнему виден и меняется в быстрых тумблерах (долгий тап по HUD).
-        .motionAnimation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
+        .motionAnimation(Motion.standard, value: env.speedLimits.currentLimit)
         // VoiceOver: весь HUD — одна связная фраза, а не россыпь цифр.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilitySummary)

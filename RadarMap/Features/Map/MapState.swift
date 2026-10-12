@@ -397,7 +397,7 @@ final class MapState {
         case .following:
             followsDeviceHeading = false
             setMapHeading(0)   // .userLocation ставит карту на север
-            withMotion(.easeInOut(duration: 0.35)) {
+            withMotion(Motion.standard) {
                 position = .userLocation(fallback: .region(AppConfig.uzbekistanRegion))
             }
         case .heading:
@@ -410,7 +410,7 @@ final class MapState {
             } else {
                 followsDeviceHeading = true
                 setMapHeading(nil)   // карту крутит компас телефона — угла мы не знаем
-                withMotion(.easeInOut(duration: 0.35)) {
+                withMotion(Motion.standard) {
                     position = .userLocation(followsHeading: true,
                                              fallback: .region(AppConfig.uzbekistanRegion))
                 }
@@ -519,7 +519,7 @@ final class MapState {
             longitudeDelta: min(80, max(0.002, region.span.longitudeDelta * factor))
         )
         let zoomed = MKCoordinateRegion(center: region.center, span: span)
-        withMotion(.easeInOut(duration: 0.3)) {
+        withMotion(Motion.standard) {
             position = .region(zoomed)
         }
         updateVisible(for: zoomed)

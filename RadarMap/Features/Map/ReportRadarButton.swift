@@ -74,7 +74,7 @@ struct ReportRadarButton: View {
         .overlay(alignment: .bottomTrailing) { fanOverlay }
         .allowsHitTesting(!isSending)
         .motionAnimation(.easeOut(duration: 0.25), value: flash)
-        .motionAnimation(.easeOut(duration: 0.2), value: isSending)
+        .motionAnimation(Motion.quick, value: isSending)
         .motionAnimation(.spring(response: 0.28, dampingFraction: 0.82), value: fan)
         .accessibilityLabel(Text("Отметить радар"))
         .accessibilityHint(Text("Отправляет отметку другим водителям. Удержание — выбор типа"))

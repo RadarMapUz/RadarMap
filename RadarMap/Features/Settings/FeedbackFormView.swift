@@ -133,7 +133,7 @@ struct FeedbackFormView: View {
         Task {
             // Очередь не теряет сообщение: нет связи → уйдёт при следующем запуске.
             let outcome = await env.feedback.sendMessage(message, contact: contact)
-            withMotion(.spring(duration: 0.35)) {
+            withMotion(Motion.standard) {
                 state = outcome == .queued ? .queued : .sent
             }
             await Task.pause(seconds: 1.6)

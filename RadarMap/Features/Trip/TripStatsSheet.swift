@@ -154,7 +154,7 @@ struct TripStatsSheet: View {
                         // столбиках, а месяц по клеткам читается одним взглядом.
                         if period == .month {
                             MonthCalendarCard(days: trip.days, anchor: anchor) { day in
-                                withMotion(.snappy(duration: 0.3)) {
+                                withMotion(Motion.standard) {
                                     period = .day
                                     anchor = day
                                 }
@@ -287,13 +287,13 @@ struct TripStatsSheet: View {
             .onChange(of: period) {
                 // Выбранная поездка могла не попасть в новый период; раскрытый
                 // список — тоже атрибут конкретного окна.
-                withMotion(.snappy(duration: 0.3)) {
+                withMotion(Motion.standard) {
                     clearMapSelection()
                     tripsExpanded = false
                 }
             }
             .onChange(of: anchor) {
-                withMotion(.snappy(duration: 0.3)) {
+                withMotion(Motion.standard) {
                     clearMapSelection()
                     tripsExpanded = false
                 }
@@ -412,7 +412,7 @@ struct TripStatsSheet: View {
             ForEach(StatsPeriod.allCases) { item in
                 let selected = period == item
                 Button {
-                    withMotion(.snappy(duration: 0.3)) { period = item }
+                    withMotion(Motion.standard) { period = item }
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 } label: {
                     Text(item.title)
@@ -449,7 +449,7 @@ struct TripStatsSheet: View {
                 .foregroundStyle(Theme.textPrimary)
                 .frame(maxWidth: .infinity)
                 .contentTransition(.numericText())
-                .motionAnimation(.snappy(duration: 0.25), value: anchor)
+                .motionAnimation(Motion.quick, value: anchor)
             // Вперёд из текущего периода некуда: будущего в статистике нет.
             navArrow("chevron.right", enabled: period.canGoForward(from: anchor)) { step(1) }
         }
@@ -479,7 +479,7 @@ struct TripStatsSheet: View {
 
     private func step(_ direction: Int) {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        withMotion(.snappy(duration: 0.3)) {
+        withMotion(Motion.standard) {
             anchor = period.shifted(anchor, by: direction)
         }
     }
@@ -737,7 +737,7 @@ struct TripStatsSheet: View {
         if let nudge = TripHistory.pendingFineNudge(env.trip.history) {
             Button {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                withMotion(.snappy(duration: 0.3)) {
+                withMotion(Motion.standard) {
                     period = .month
                     anchor = nudge.oldest
                 }
@@ -914,7 +914,7 @@ struct TripStatsSheet: View {
         if let selected = mapSelection {
             HStack(spacing: 10) {
                 Button {
-                    withMotion(.snappy(duration: 0.3)) { clearMapSelection() }
+                    withMotion(Motion.standard) { clearMapSelection() }
                 } label: {
                     // 11 pt подписи — это ~15 pt в высоту; мишень дотягиваем
                     // до 44 внутри label, иначе область касания не растёт.
@@ -983,7 +983,7 @@ struct TripStatsSheet: View {
     private func showOnMap(_ record: TripRecord, proxy: ScrollViewProxy) {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         let same = mapSelection?.id == record.id
-        withMotion(.snappy(duration: 0.35)) {
+        withMotion(Motion.standard) {
             if same {
                 clearMapSelection()
             } else {
@@ -1091,7 +1091,7 @@ struct TripStatsSheet: View {
     private func lifetimeSection(trip: TripStats) -> some View {
         VStack(spacing: 16) {
             Button {
-                withMotion(.snappy(duration: 0.3)) { lifetimeExpanded.toggle() }
+                withMotion(Motion.standard) { lifetimeExpanded.toggle() }
             } label: {
                 HStack(spacing: 12) {
                     IconBadge(symbol: "infinity", tint: Theme.accent, size: 30)
@@ -1128,7 +1128,7 @@ struct TripStatsSheet: View {
     private func periodDetails(summary: PeriodSummary) -> some View {
         VStack(spacing: 16) {
             Button {
-                withMotion(.snappy(duration: 0.3)) { detailsExpanded.toggle() }
+                withMotion(Motion.standard) { detailsExpanded.toggle() }
             } label: {
                 HStack(spacing: 12) {
                     IconBadge(symbol: "chart.bar.xaxis", tint: Theme.accent, size: 30)
@@ -1196,7 +1196,7 @@ struct TripStatsSheet: View {
                 onMerge: { merge(next: $0) })
             if !tripsExpanded, all.count > AppConfig.statsTripsPreview {
                 Button {
-                    withMotion(.snappy(duration: 0.3)) { tripsExpanded = true }
+                    withMotion(Motion.standard) { tripsExpanded = true }
                 } label: {
                     HStack(spacing: 6) {
                         Text(String(format: String(localized: "Показать все поездки (%lld)"),
@@ -1272,7 +1272,7 @@ struct TripStatsSheet: View {
                 .buttonStyle(PressableStyle())
                 Button {
                     Storage.set(pair.next.id, for: .mergeSuggestDismissedID)
-                    withMotion(.snappy(duration: 0.3)) { mergeSuggestionHidden = true }
+                    withMotion(Motion.standard) { mergeSuggestionHidden = true }
                 } label: {
                     Text("Это разные")
                         .font(.rounded(15, .semibold))
@@ -1292,7 +1292,7 @@ struct TripStatsSheet: View {
     /// Объединение из карточки и из контекстного меню — одним путём.
     private func merge(next record: TripRecord) {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        withMotion(.snappy(duration: 0.35)) {
+        withMotion(Motion.standard) {
             // Любая из двух записей могла быть «применена» к карте — слепок
             // после склейки не существует, выбор снимаем.
             clearMapSelection()
@@ -1527,7 +1527,7 @@ struct TripStatsSheet: View {
                 .foregroundStyle(Theme.textPrimary)
             if let nearest = nearestNonEmptyAnchor() {
                 Button {
-                    withMotion(.snappy(duration: 0.3)) { anchor = nearest }
+                    withMotion(Motion.standard) { anchor = nearest }
                 } label: {
                     Text(String(format: String(localized: "Показать: %@"),
                                 period.rangeTitle(containing: nearest)))
@@ -1604,7 +1604,7 @@ private struct LiveTripCard: View {
                         .font(.rounded(26, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                         .contentTransition(.numericText())
-                        .motionAnimation(.snappy(duration: 0.35), value: Int(env.location.speedKmh))
+                        .motionAnimation(Motion.standard, value: Int(env.location.speedKmh))
                     Text("км/ч")
                         .font(.rounded(10, .medium))
                         .foregroundStyle(Theme.textTertiary)

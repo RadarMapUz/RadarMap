@@ -60,7 +60,7 @@ struct TripSpeedCluster: View {
                     .transition(.scale.combined(with: .opacity))
             }
         }
-        .motionAnimation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
+        .motionAnimation(Motion.standard, value: env.speedLimits.currentLimit)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilitySummary)
     }
@@ -95,7 +95,7 @@ struct TripCameraChip: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .motionAnimation(.spring(duration: 0.3), value: shown)
+        .motionAnimation(Motion.standard, value: shown)
     }
 
     private func chip(camera: Camera?, distance: Double?) -> some View {

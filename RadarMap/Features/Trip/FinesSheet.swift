@@ -127,7 +127,7 @@ struct FinesSheet: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .statCard()
-        .motionAnimation(.snappy(duration: 0.3), value: sum)
+        .motionAnimation(Motion.standard, value: sum)
     }
 
     // MARK: - Строка проезда
@@ -233,7 +233,7 @@ struct FinesSheet: View {
                                hint: String) -> some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            withMotion(.snappy(duration: 0.3)) {
+            withMotion(Motion.standard) {
                 env.trip.setFineOutcome(outcome, passID: item.pass.id,
                                         tripID: item.record.id)
             }

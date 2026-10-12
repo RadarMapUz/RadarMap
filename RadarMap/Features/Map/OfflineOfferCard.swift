@@ -93,6 +93,6 @@ struct OfflineOfferCard: View {
 
     private func answer() {
         Storage.set(true, for: .offlineOfferAnswered)
-        withMotion(.spring(duration: 0.3)) { answered = true }
+        withMotion(Motion.standard) { answered = true }
     }
 }

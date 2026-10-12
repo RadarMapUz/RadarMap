@@ -182,7 +182,7 @@ struct PlacePickerMap: View {
             // Остриё — ровно в центре карты: фигура поднята на полувысоту.
             .offset(y: -(Self.pinHead + Self.pinStem) / 2 - (isMoving ? Self.pinLift : 0))
         }
-        .motionAnimation(.spring(duration: 0.25), value: isMoving)
+        .motionAnimation(Motion.quick, value: isMoving)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

@@ -97,7 +97,7 @@ struct SharePreviewSheet: View {
                 let selected = format == item
                 Button {
                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    withMotion(.snappy(duration: 0.25)) { format = item }
+                    withMotion(Motion.quick) { format = item }
                 } label: {
                     Label(item.title, systemImage: item.symbol)
                         .font(.rounded(14, .semibold))

@@ -400,7 +400,7 @@ struct PassDetailView: View {
         Button {
             guard let record else { return }
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            withMotion(.snappy(duration: 0.3)) {
+            withMotion(Motion.standard) {
                 env.trip.setFineOutcome(outcome, passID: pass.id, tripID: record.id)
                 fineOutcome = outcome
             }

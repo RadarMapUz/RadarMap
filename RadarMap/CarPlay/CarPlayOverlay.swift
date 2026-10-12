@@ -67,8 +67,8 @@ struct CarPlayOverlay: View {
         .safeAreaPadding()
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safe = $0 }
-        .motionAnimation(.spring(duration: 0.35), value: env.location.isApproachingCamera)
-        .motionAnimation(.spring(duration: 0.35), value: env.route.isActive)
+        .motionAnimation(Motion.standard, value: env.location.isApproachingCamera)
+        .motionAnimation(Motion.standard, value: env.route.isActive)
         // HUD — только показывает: жесты карты (тап, панорама, щипок) должны
         // проходить сквозь него в MKMapView.
         .allowsHitTesting(false)
@@ -149,7 +149,7 @@ struct CarPlayOverlay: View {
         // легла на знак.
         .padding(.trailing, limit == nil ? 0 : 16)
         .padding(.top, limit == nil ? 0 : 12)
-        .motionAnimation(.spring(duration: 0.3), value: env.speedLimits.currentLimit)
+        .motionAnimation(Motion.standard, value: env.speedLimits.currentLimit)
     }
 
     /// Камера — капсулой по размеру текста; кромка и тень в тон тревоги.

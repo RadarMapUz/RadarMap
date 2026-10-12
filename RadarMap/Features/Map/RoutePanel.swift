@@ -92,8 +92,8 @@ struct RoutePanel: View {
                 .padding(14)
             }
         }
-        .motionAnimation(.spring(duration: 0.3), value: route.selectedID)
-        .motionAnimation(.spring(duration: 0.3), value: env.location.isTripActive)
+        .motionAnimation(Motion.standard, value: route.selectedID)
+        .motionAnimation(Motion.standard, value: env.location.isTripActive)
     }
 
     // MARK: - Варианты маршрута

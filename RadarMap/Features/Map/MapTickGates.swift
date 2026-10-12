@@ -88,7 +88,7 @@ struct ManeuverBannerGate: View {
                 }
             }
         }
-        .motionAnimation(.spring(duration: 0.3), value: env.route.nextStep?.distanceAlong)
+        .motionAnimation(Motion.standard, value: env.route.nextStep?.distanceAlong)
     }
 }
 

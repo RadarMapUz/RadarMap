@@ -175,3 +175,22 @@
 | 18 | Мобильные отметки | частично (ETag) — в очереди |
 | 19 | `MobilePassWatch` | сделано |
 | 20 | Крейсерская ступень GPS | частично; CarPlay без поездки — сделано сейчас |
+
+## Замер 13.10 (симулятор, Time Profiler, 40 с поездки на 50 км/ч)
+
+9161 выборок по 1 мс, 7666 на главном потоке. Листья главного потока по
+бинарям: MapLibre 2095 (27 %, в симуляторе Metal программный — на телефоне
+эта доля у GPU), libsystem (mach_msg, malloc, memmove) ~1900, objc 564,
+SwiftUI + AttributeGraph ~650 (8 %), UIKit 318. **Кадры самого приложения
+как лист — 37 из 7666 (0,5 %).** Включительно (символизировано atos по
+`RadarMap.debug.dylib`): `EngineNativeMapView.layoutSubviews` 260,
+`LocationService.handleLocation` 108, ход стрелки (`stepPositionGlide` /
+`layoutPositionView`) ~100, `EngineMapView.apply` 98, `LimitIndex.matchHit`
+95 (тик + 9 проб LimitAhead раз в 3 с → ~0,6 мс на вызов),
+`recomputeNearest` 47, `SpeedHUDView.body` 47.
+
+Вывод: узких мест в нашем коде на тике нет; следующий шаг измеримого
+выигрыша — только на телефоне (GPU движка, нагрев), не в симуляторе.
+Сделано в тот же день из очереди выше: п. 3 (`driving` без перезагрузки
+стиля), п. 6 (`MapPicture` вне главного потока), п. 8 (`TripLiveBar` без
+`ViewThatFits`).

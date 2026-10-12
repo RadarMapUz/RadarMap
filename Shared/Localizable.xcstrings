@@ -1636,6 +1636,22 @@
         }
       }
     },
+    "Болид": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Болид"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bolid"
+          }
+        }
+      }
+    },
     "Больше всего — %@": {
       "localizations": {
         "ru": {
@@ -9187,6 +9203,22 @@
         }
       }
     },
+    "Ралли": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ралли"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ralli"
+          }
+        }
+      }
+    },
     "Расстояние пока приблизительное": {
       "extractionState": "manual",
       "localizations": {
@@ -10212,6 +10244,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Summa — tezlikni oshirish jarimalari pog'onalari bo'yicha baho (BHM hisobida), faqat limiti aniq kameralar bo'yicha. Qaror odatda bir necha kun ichida keladi; kelmasa — belgilang, summa Yakunlardan chiqadi. Reytingga bu ta'sir qilmaydi."
+          }
+        }
+      }
+    },
+    "Суперкар": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Суперкар"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Superkar"
           }
         }
       }

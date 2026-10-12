@@ -354,8 +354,9 @@ struct EngineMapView: UIViewRepresentable {
         /// же, что была у стрелки: значки вписаны в неё сами, а поля — под тень.
         private static func cursorImage(_ cursor: CursorStyle) -> UIImage? {
             if let cached = cursorCache[cursor] { return cached }
+            let frame = cursor.frameSize
             let renderer = ImageRenderer(content: MeCursor(scale: 1, style: cursor)
-                .frame(width: 30, height: 36).padding(8))
+                .frame(width: frame.width, height: frame.height).padding(8))
             renderer.scale = 3
             let image = renderer.uiImage
             cursorCache[cursor] = image

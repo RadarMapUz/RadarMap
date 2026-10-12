@@ -2,7 +2,7 @@
 //  CursorStylePicker.swift
 //  RadarMap
 //
-//  Выбор значка «я»: ряд плиток, на каждой — живой курсор на кусочке дороги.
+//  Выбор значка «я»: сетка плиток, на каждой — живой курсор на кусочке дороги.
 //
 //  Плитка показывает тот же MeCursor, что поедет по карте, а не картинку
 //  «примерно такого вида»: выбирают глазами, и обещание на плитке обязано
@@ -17,8 +17,12 @@ import SwiftUI
 struct CursorStylePicker: View {
     @Binding var selection: CursorStyle
 
+    /// Четыре в ряд: семь значков в одну строку на SE — плитки по 40 pt и
+    /// подписи в многоточие. Сетка держит плитку крупной на любом экране.
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
+
     var body: some View {
-        HStack(spacing: 10) {
+        LazyVGrid(columns: columns, spacing: 12) {
             ForEach(CursorStyle.allCases) { style in
                 CursorStyleTile(style: style, isSelected: style == selection) {
                     withMotion(.spring(response: 0.35, dampingFraction: 0.6)) {
@@ -46,7 +50,7 @@ private struct CursorStyleTile: View {
                         .fill(Theme.background)
                     road
                     MeCursor(style: style)
-                        .frame(width: 30, height: 36)
+                        .frame(width: style.frameSize.width, height: style.frameSize.height)
                         // Выбранный подаётся вперёд и чуть крупнее — «поехали».
                         .scaleEffect(isSelected ? 1.12 : 1)
                         .offset(y: isSelected ? -4 : 0)

@@ -441,4 +441,26 @@ nonisolated enum SketchPalette {
     static let flameCore = Color(red: 1.00, green: 0.97, blue: 0.78)
     static let flameMid = Color(red: 1.00, green: 0.70, blue: 0.18)
     static let flameTail = Color(red: 1.00, green: 0.36, blue: 0.10)
+    /// Болид — бирюза с карбоном, как у команд «Формулы»: не красный
+    /// (камера), не оранжевый (спорткар), не синий (стрелка).
+    static let formulaTop = Color(red: 0.36, green: 0.90, blue: 0.84)
+    static let formulaBody = Color(red: 0.00, green: 0.64, blue: 0.60)
+    static let formulaBase = Color(red: 0.00, green: 0.40, blue: 0.38)
+    /// Шлем пилота — жёлтая точка в кокпите: по ней болид узнают сразу.
+    static let helmet = Color(red: 1.00, green: 0.84, blue: 0.22)
+    /// Суперкар — лайм.
+    static let limeTop = Color(red: 0.80, green: 0.96, blue: 0.42)
+    static let limeBody = Color(red: 0.55, green: 0.83, blue: 0.16)
+    static let limeBase = Color(red: 0.32, green: 0.54, blue: 0.06)
+    /// Ралли — синий кузов, белая крыша, золотые полосы: «я» по-прежнему синий.
+    static let rallyTop = Color(red: 0.38, green: 0.64, blue: 1.00)
+    static let rallyBody = Color(red: 0.10, green: 0.36, blue: 0.86)
+    static let rallyBase = Color(red: 0.05, green: 0.20, blue: 0.55)
+    static let rallyRoof = Color(red: 0.96, green: 0.97, blue: 0.99)
+    static let rallyGold = Color(red: 0.96, green: 0.76, blue: 0.27)
+    /// Шины гоночных значков: почти чёрные, с более светлым протектором.
+    static let tyre = Color(red: 0.09, green: 0.10, blue: 0.12)
+    static let tyreTread = Color(red: 0.34, green: 0.36, blue: 0.40)
+    /// Люстра раллийных фар.
+    static let spotlight = Color(red: 1.00, green: 0.94, blue: 0.66)
 }

@@ -2,7 +2,8 @@
 //  CursorVehicles.swift
 //  RadarMap
 //
-//  Выбираемые значки «я»: машина, спорткар, звездолёт. Вид строго сверху,
+//  Выбираемые значки «я»: машина, спорткар, звездолёт (гоночные — в
+//  CursorRacers.swift). Вид строго сверху,
 //  нос вверх — тот же уговор, что у стрелки, поэтому вращение по курсу во
 //  всех трёх рендерах работает без поправок.
 //
@@ -302,7 +303,7 @@ private struct ShipShape: Shape {
 /// Свет и стекло, одинаковые у всех значков: свет падает слева — как у
 /// стрелки, — и значки, поставленные рядом в настройках, освещены одним
 /// солнцем.
-private enum CursorLight {
+enum CursorLight {
     static let side = LinearGradient(stops: [
         .init(color: .white.opacity(0.32), location: 0),
         .init(color: .white.opacity(0.04), location: 0.45),
@@ -316,7 +317,7 @@ private enum CursorLight {
 /// Тень значка: тёмная и короткая — посадка на полотно и отделение от
 /// светлой карты; цветная и широкая — тот же ореол «я», что у стрелки. Обе
 /// без сдвига (см. шапку файла).
-private struct CursorShadow: ViewModifier {
+struct CursorShadow: ViewModifier {
     let glow: Color
     let scale: CGFloat
 
@@ -329,7 +330,7 @@ private struct CursorShadow: ViewModifier {
 
 /// Коробка значка в рамке: доли (0…1) → точки. Вписывается по центру с
 /// заданным соотношением сторон, так что значок не тянется вслед за рамкой.
-private struct CursorBox {
+struct CursorBox {
     let origin: CGPoint
     let size: CGSize
 
@@ -367,7 +368,7 @@ private struct CursorBox {
 
 /// Симметричный силуэт: правая половина кривыми Безье от носа (точка на оси)
 /// к корме (снова на оси), левая — её зеркало, пройденное обратно.
-private struct HalfOutline {
+struct HalfOutline {
     struct Curve {
         let to: CGPoint
         let control1: CGPoint

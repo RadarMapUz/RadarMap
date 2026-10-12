@@ -49,7 +49,8 @@ final class CursorStyleTests: XCTestCase {
     /// Значок в той же рамке, в какой его запекает движок карты.
     private func pixels(_ style: CursorStyle?) throws -> Bitmap {
         let cursor = style.map { MeCursor(scale: 1, style: $0) } ?? MeCursor(scale: 1)
-        let renderer = ImageRenderer(content: cursor.frame(width: 30, height: 36).padding(8))
+        let frame = (style ?? .arrow).frameSize
+        let renderer = ImageRenderer(content: cursor.frame(width: frame.width, height: frame.height).padding(8))
         renderer.scale = 2
         let image = try XCTUnwrap(renderer.uiImage?.cgImage)
         return Bitmap(image)
@@ -74,7 +75,9 @@ final class CursorStyleTests: XCTestCase {
     func testStylesLookDifferent() throws {
         let images = try CursorStyle.allCases.map { try pixels($0).alpha }
         for i in images.indices {
-            for j in images.indices where j > i {
+            // Разные рамки — разные картинки уже по размеру; сравниваем силуэты
+            // в одной рамке.
+            for j in images.indices where j > i && images[j].count == images[i].count {
                 let differing = zip(images[i], images[j]).filter { abs(Int($0) - Int($1)) > 64 }.count
                 XCTAssertGreaterThan(differing, 200,
                                      "\(CursorStyle.allCases[i]) и \(CursorStyle.allCases[j]) неразличимы")

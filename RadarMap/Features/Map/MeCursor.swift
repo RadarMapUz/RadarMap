@@ -37,6 +37,9 @@ struct MeCursor: View {
         case .arrow:     ArrowCursor(scale: scale)
         case .car:       CarCursor(scale: scale)
         case .sport:     SportCursor(scale: scale)
+        case .formula:   FormulaCursor(scale: scale)
+        case .supercar:  SupercarCursor(scale: scale)
+        case .rally:     RallyCursor(scale: scale)
         case .spaceship: SpaceshipCursor(scale: scale)
         }
     }

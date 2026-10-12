@@ -28,6 +28,12 @@ nonisolated enum CursorStyle: String, CaseIterable, Identifiable, Sendable {
     case car
     /// Спорткар: ниже, шире, с полосами — другой силуэт и другой цвет.
     case sport
+    /// Болид «Формулы»: открытые колёса, переднее и заднее антикрылья.
+    case formula
+    /// Суперкар-клин: кабина вперёд, жалюзи мотора, воздухозаборники.
+    case supercar
+    /// Раллийный хэтчбек: люстра фар, воздухозаборник на крыше, антикрыло.
+    case rally
     /// Звездолёт с маленьким пламенем двигателя.
     case spaceship
 
@@ -38,7 +44,20 @@ nonisolated enum CursorStyle: String, CaseIterable, Identifiable, Sendable {
         case .arrow:     return String(localized: "Стрелка")
         case .car:       return String(localized: "Машина")
         case .sport:     return String(localized: "Спорткар")
+        case .formula:   return String(localized: "Болид")
+        case .supercar:  return String(localized: "Суперкар")
+        case .rally:     return String(localized: "Ралли")
         case .spaceship: return String(localized: "Звездолёт")
+        }
+    }
+
+    /// Рамка значка, точки. Гоночные — крупнее и длиннее: колёса, крылья и
+    /// ливрея в рамке 30×36 сливались в пятно («иконка детализированная»,
+    /// владелец, 12.10). Остальные — в прежней рамке, пиксель в пиксель.
+    var frameSize: CGSize {
+        switch self {
+        case .formula, .supercar, .rally: return CGSize(width: 32, height: 44)
+        default:                          return CGSize(width: 30, height: 36)
         }
     }
 

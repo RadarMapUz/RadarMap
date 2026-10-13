@@ -137,7 +137,37 @@ class StyleTests(unittest.TestCase):
         # Длины — только движком: на телефоне строка меряется в байтах UTF-8.
         self.assertIn('"index-of"', field)
         self.assertNotIn('"slice", ["var", "n"], ["-"', field)
-        self.assertEqual(layers["highway-name-major"]["layout"]["text-transform"], "uppercase")
+        # Обычным регистром: капс с разрядкой был длиннее на треть (13.10.2026).
+        self.assertEqual(layers["highway-name-major"]["layout"]["text-transform"], "none")
+
+    def test_street_label_halo_is_the_asphalt(self):
+        # Ореол цвета фона ночью лежал чёрной наклейкой поверх разметки
+        # (снимок CarPlay 13.10.2026): вблизи ореол — цвет полотна.
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        palette = make_style.PALETTES[self.theme]
+        for layer_id in ("highway-name-major", "highway-name-minor"):
+            halo = layers[layer_id]["paint"]["text-halo-color"]
+            self.assertEqual(halo[0], "interpolate", layer_id)
+            self.assertEqual(halo[-1], palette["road"], "вблизи — один асфальт, как у полотна")
+            self.assertEqual(halo[4], palette["halo"], "до нашего полотна — фон")
+
+    def test_waterway_in_a_pipe_is_not_labelled(self):
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        if "waterway-name" in layers:
+            self.assertIn(["!=", "brunnel", "tunnel"], layers["waterway-name"]["filter"])
+
+    def test_lane_arrow_fits_its_lane(self):
+        # Значок стрелки при свойстве lw — не шире своей полосы на любом зуме.
+        arrows = next(l for l in self.style["layers"] if l["id"] == "radar-arrows")
+        size = arrows["layout"]["icon-size"]
+        self.assertEqual(size[:3], ["interpolate", ["exponential", 2], ["zoom"]])
+        for zoom, stop in zip(size[3::2], size[4::2]):
+            self.assertEqual(stop[0], "case")
+            factor = stop[2][2]
+            lane = 3.0
+            icon_points = factor * lane * make_style.ARROW_ICON_POINTS
+            lane_points = lane * (2 ** zoom) * make_style.M
+            self.assertLessEqual(icon_points, lane_points + 1e-9, f"z{zoom}")
 
     def test_poi_labels_coloured_by_kind(self):
         layers = {layer["id"]: layer for layer in self.style["layers"] if layer["id"].startswith("poi-level")}

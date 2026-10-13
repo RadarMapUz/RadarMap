@@ -10444,9 +10444,39 @@
       "zoom"
      ],
      17,
-     0.55,
+     [
+      "case",
+      [
+       "has",
+       "lw"
+      ],
+      [
+       "*",
+       [
+        "get",
+        "lw"
+       ],
+       0.11141119999999999
+      ],
+      0.55
+     ],
      20,
-     2.2
+     [
+      "case",
+      [
+       "has",
+       "lw"
+      ],
+      [
+       "*",
+       [
+        "get",
+        "lw"
+       ],
+       0.8912895999999999
+      ],
+      2.2
+     ]
     ]
    },
    "minzoom": 17,
@@ -12012,6 +12042,11 @@
   {
    "filter": [
     "all",
+    [
+     "!=",
+     "brunnel",
+     "tunnel"
+    ],
     [
      "==",
      "$type",
@@ -13624,7 +13659,7 @@
     "text-font": [
      "Noto Sans Bold"
     ],
-    "text-letter-spacing": 0.1,
+    "text-letter-spacing": 0.02,
     "text-padding": 50,
     "text-rotation-alignment": "map",
     "text-size": [
@@ -13636,22 +13671,55 @@
       "zoom"
      ],
      13,
-     10,
+     10.5,
      16,
-     11.5,
+     12,
      18,
-     13.5,
+     14,
      20,
-     15
+     16
     ],
-    "text-transform": "uppercase"
+    "text-transform": "none"
    },
    "minzoom": 15.5,
    "paint": {
-    "text-color": "#3f3f42",
-    "text-halo-blur": 0.6,
-    "text-halo-color": "#ffffff",
-    "text-halo-width": 2.0
+    "text-color": "#363b43",
+    "text-halo-blur": 0.2,
+    "text-halo-color": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     14.5,
+     "#ffffff",
+     15.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      [
+       "motorway",
+       "trunk"
+      ],
+      "#aab3c4",
+      [
+       "primary",
+       "secondary"
+      ],
+      "#b4bccb",
+      "tertiary",
+      "#c3cad6",
+      "#d5dae2"
+     ],
+     16.5,
+     "#b4bccb"
+    ],
+    "text-halo-width": 1.8
    },
    "source": "openmaptiles",
    "source-layer": "transportation_name",
@@ -14418,7 +14486,7 @@
     "text-font": [
      "Noto Sans Bold"
     ],
-    "text-letter-spacing": 0.1,
+    "text-letter-spacing": 0.02,
     "text-padding": 50,
     "text-rotation-alignment": "map",
     "text-size": [
@@ -14430,22 +14498,55 @@
       "zoom"
      ],
      13,
-     10,
+     10.5,
      16,
-     11.5,
+     12,
      18,
-     13.5,
+     14,
      20,
-     15
+     16
     ],
-    "text-transform": "uppercase"
+    "text-transform": "none"
    },
    "minzoom": 15,
    "paint": {
-    "text-color": "#3f3f42",
-    "text-halo-blur": 0.6,
-    "text-halo-color": "#ffffff",
-    "text-halo-width": 2.0
+    "text-color": "#363b43",
+    "text-halo-blur": 0.2,
+    "text-halo-color": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     14.5,
+     "#ffffff",
+     15.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      [
+       "motorway",
+       "trunk"
+      ],
+      "#aab3c4",
+      [
+       "primary",
+       "secondary"
+      ],
+      "#b4bccb",
+      "tertiary",
+      "#c3cad6",
+      "#d5dae2"
+     ],
+     16.5,
+     "#b4bccb"
+    ],
+    "text-halo-width": 1.8
    },
    "source": "openmaptiles",
    "source-layer": "transportation_name",
@@ -15205,7 +15306,7 @@
     "text-font": [
      "Noto Sans Bold"
     ],
-    "text-letter-spacing": 0.1,
+    "text-letter-spacing": 0.02,
     "text-padding": 50,
     "text-rotation-alignment": "map",
     "text-size": [
@@ -15217,22 +15318,55 @@
       "zoom"
      ],
      13,
-     10,
+     10.5,
      16,
-     11.5,
+     12,
      18,
-     13.5,
+     14,
      20,
-     15
+     16
     ],
-    "text-transform": "uppercase"
+    "text-transform": "none"
    },
    "minzoom": 12.2,
    "paint": {
-    "text-color": "#3f3f42",
-    "text-halo-blur": 0.6,
-    "text-halo-color": "#ffffff",
-    "text-halo-width": 2.0
+    "text-color": "#363b43",
+    "text-halo-blur": 0.2,
+    "text-halo-color": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     14.5,
+     "#ffffff",
+     15.5,
+     [
+      "match",
+      [
+       "get",
+       "class"
+      ],
+      [
+       "motorway",
+       "trunk"
+      ],
+      "#aab3c4",
+      [
+       "primary",
+       "secondary"
+      ],
+      "#b4bccb",
+      "tertiary",
+      "#c3cad6",
+      "#d5dae2"
+     ],
+     16.5,
+     "#b4bccb"
+    ],
+    "text-halo-width": 1.8
    },
    "source": "openmaptiles",
    "source-layer": "transportation_name",

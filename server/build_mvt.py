@@ -110,33 +110,53 @@ def arrow_setback(flags, point, signals):
         if stop_line - ARROW_BEFORE_STOP_METERS < -ARROW_SETBACK_METERS else ARROW_SETBACK_METERS
 
 
-def lane_arrows(code, flags, point, setback=None):
+def lane_arrows(code, flags, point, setback=None, carriageway=None):
     """Стрелки полос по одной на полосу, поперёк проезжей части.
 
     turn:lanes в OSM перечисляет полосы слева направо по ходу движения, поэтому
     первая стрелка — у левой кромки. Полос столько, сколько записано до
     последней непустой: хвост «без стрелки» справа ничего не рисует.
+
+    Ряд делит НАРИСОВАННУЮ ленту под собой (`carriageway(центр, азимут)` →
+    точка на оси, ширина, односторонняя?), а не ширину из записи полос: по
+    записи 4 × 3,5 м ряд выходил шире ленты в 10,6 м, и крайние стрелки
+    ложились на бордюр и за кромку (снимок CarPlay 13.10.2026). У двусторонней
+    ленты ряд — на правой половине: стрелки нашего направления. `lw` —
+    ширина полосы в метрах: по ней стиль подбирает размер значка, чтобы он
+    не был шире своей полосы.
     """
     if code != POINT_LANE_ARROWS:
         return
     width = point_width(flags)
     turns = unpack_turns(flags, MAX_ARROW_LANES)
     used = max((i + 1 for i, turn in enumerate(turns) if turn), default=0)
-    if width <= 0 or used == 0:
+    if used == 0:
         return
     bearing = point_azimuth(flags)
     angle = math.radians(bearing)
+    fx, fy = math.sin(angle), math.cos(angle)     # вперёд по ходу
+    rx, ry = math.cos(angle), -math.sin(angle)    # вправо
     lon, lat = point
+    kx = 111_320 * math.cos(math.radians(lat))
+    along = -(ARROW_SETBACK_METERS if setback is None else setback)
+    centre = (lon + fx * along / kx, lat + fy * along / 111_320)
+    oneway = bool(flags & PFLAG_ONEWAY)
+    found = carriageway(centre, bearing) if carriageway else None
+    if found:
+        centre, width, oneway = found
+    if width <= 0:
+        return
+    if not oneway:
+        # Правая половина двусторонней дороги — наше направление.
+        width /= 2.0
+        centre = (centre[0] + rx * width / 2 / kx, centre[1] + ry * width / 2 / 111_320)
     lane = width / used
     for index, turn in enumerate(turns[:used]):
         if not turn:
             continue
         across = -width / 2 + lane * (index + 0.5)
-        along = -(ARROW_SETBACK_METERS if setback is None else setback)
-        yield ((lon + (math.cos(angle) * across + math.sin(angle) * along)
-                / (111_320 * math.cos(math.radians(lat))),
-                lat + (-math.sin(angle) * across + math.cos(angle) * along) / 111_320),
-               {"turn": turn, "bearing": round(bearing)})
+        yield ((centre[0] + rx * across / kx, centre[1] + ry * across / 111_320),
+               {"turn": turn, "bearing": round(bearing), "lw": round(lane, 1)})
 
 
 # Ряд стрелок, упавший в площадь перекрёстка или на зебру, отодвигается назад
@@ -159,7 +179,7 @@ def _arrow_body(arrow, bearing):
             for d in (-ARROW_HALF_LENGTH_METERS, 0.0, ARROW_HALF_LENGTH_METERS)]
 
 
-def placed_arrows(code, flags, point, setback, mask=None, asphalt=None):
+def placed_arrows(code, flags, point, setback, mask=None, asphalt=None, carriageway=None):
     """Стрелки ряда, поставленные до перекрёстка и только на полотно.
 
     Сначала ищется место, где ряд целиком на асфальте и не задевает узел.
@@ -175,10 +195,10 @@ def placed_arrows(code, flags, point, setback, mask=None, asphalt=None):
     def paved(arrow):
         return asphalt is None or asphalt.covers(arrow)
 
-    first = list(lane_arrows(code, flags, point, base))
+    first = list(lane_arrows(code, flags, point, base, carriageway))
     extra = 0.0
     while extra <= ARROW_PULLBACK_MAX_METERS:
-        row = first if extra == 0.0 else list(lane_arrows(code, flags, point, base + extra))
+        row = first if extra == 0.0 else list(lane_arrows(code, flags, point, base + extra, carriageway))
         if all(clear(arrow) and paved(arrow) for arrow, _props in row):
             return row
         extra += ARROW_PULLBACK_STEP_METERS
@@ -660,6 +680,12 @@ CENTRE_SOLID_WIDTH_METERS = 13.0
 CENTRE_DASHED, CENTRE_SOLID = 1, 2
 
 
+# Лента под рядом стрелок: идёт вдоль хода (cos угла ≥ 0,82 — до 35°), и ряд
+# лежит на её полотне с запасом на посадку точки.
+CARRIAGEWAY_COS = math.cos(math.radians(35))
+CARRIAGEWAY_SLACK_METERS = 1.5
+
+
 class OverlapIndex:
     """Оси лент по клеткам: лежит ли точка разметки на ЧУЖОЙ ленте того же уровня."""
 
@@ -703,7 +729,7 @@ class OverlapIndex:
                 y0, y1 = sorted((a[1], b[1]))
                 # Один кортеж на отрезок, в клетки — ссылка на него: копия на
                 # каждую клетку держала страну в 30 ГБ (07.10.2026).
-                entry = (key, level, a, b, half)
+                entry = (key, level, a, b, half, bool(flags & FLAG_ONEWAY))
                 for gx in range(int((x0 - pad * 1.4) / self.CELL), int((x1 + pad * 1.4) / self.CELL) + 1):
                     for gy in range(int((y0 - pad) / self.CELL), int((y1 + pad) / self.CELL) + 1):
                         self._grid[(gx, gy)].append(entry)
@@ -713,7 +739,7 @@ class OverlapIndex:
         own_ends = self._ends.get(id(road), set())
         own_rank = self._rank.get(id(road))
         kx = 111_320 * math.cos(math.radians(point[1]))
-        for key, lvl, a, b, half in self._grid.get((int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
+        for key, lvl, a, b, half, _oneway in self._grid.get((int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
             if key == id(road) or lvl != level:
                 continue
             shared = own_ends & self._ends.get(key, set())
@@ -727,6 +753,40 @@ class OverlapIndex:
             if math.hypot(ax + t * dx, ay + t * dy) < half - self.MARGIN_METERS:
                 return True
         return False
+
+    def carriageway(self, point, bearing):
+        """(точка на оси, ширина нарисованной ленты, односторонняя?) под точкой или None.
+
+        Лента — ближайшая наземная, идущая по ходу `bearing` (односторонняя —
+        в ту же сторону, двусторонняя — вдоль), и точка лежит на её полотне.
+        Ширина — та, которой лента НАРИСОВАНА (ширина цепочки и сужение под
+        разделительную), а не записанная в OSM: по записанной ряд стрелок
+        выходил шире асфальта (Нурафшон, снимок CarPlay 13.10.2026).
+        """
+        kx = 111_320 * math.cos(math.radians(point[1]))
+        fx, fy = math.sin(math.radians(bearing)), math.cos(math.radians(bearing))
+        best = None
+        for _key, level, a, b, half, oneway in self._grid.get(
+                (int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
+            if level:
+                continue
+            ax, ay = (a[0] - point[0]) * kx, (a[1] - point[1]) * 111_320
+            bx, by = (b[0] - point[0]) * kx, (b[1] - point[1]) * 111_320
+            dx, dy = bx - ax, by - ay
+            length = math.hypot(dx, dy)
+            if length == 0:
+                continue
+            cos = (dx * fx + dy * fy) / length
+            if (cos if oneway else abs(cos)) < CARRIAGEWAY_COS:
+                continue
+            t = max(0.0, min(1.0, -(ax * dx + ay * dy) / (length * length)))
+            px, py = ax + t * dx, ay + t * dy
+            lateral = math.hypot(px, py)
+            if lateral > half + CARRIAGEWAY_SLACK_METERS:
+                continue
+            if best is None or lateral < best[0]:
+                best = (lateral, (point[0] + px / kx, point[1] + py / 111_320), 2.0 * half, oneway)
+        return None if best is None else best[1:]
 
     def clip(self, line, road, step_meters=MARKING_CLIP_STEP_METERS):
         """Куски линии вне чужих лент; короче MARKING_MIN_METERS — выбрасываются."""
@@ -1238,9 +1298,63 @@ class StopIndex:
         return behind if behind is not None else ahead
 
 
+    def passed(self, point, bearing, width, reach):
+        """Позади точки по ходу, ближе `reach` м, лежит линия поперёк ряда."""
+        return self._crossing(point, bearing, width, -reach, -ARROW_HALF_LENGTH_METERS)
+
+    def before(self, point, bearing, width, reach):
+        """Впереди точки по ходу, ближе `reach` м, лежит линия поперёк ряда."""
+        return self._crossing(point, bearing, width, ARROW_HALF_LENGTH_METERS, reach)
+
+    def _crossing(self, point, bearing, width, low, high):
+        lon, lat = point
+        kx = 111_320 * math.cos(math.radians(lat))
+        fx, fy = math.sin(math.radians(bearing)), math.cos(math.radians(bearing))
+        cell = (int(lon / _SIGNAL_CELL), int(lat / _SIGNAL_CELL))
+        for gx in range(cell[0] - 1, cell[0] + 2):
+            for gy in range(cell[1] - 1, cell[1] + 2):
+                for a, b in self._grid.get((gx, gy), ()):
+                    ax, ay = (a[0] - lon) * kx, (a[1] - lat) * 111_320
+                    bx, by = (b[0] - lon) * kx, (b[1] - lat) * 111_320
+                    lx, ly = bx - ax, by - ay
+                    length = math.hypot(lx, ly)
+                    if length == 0 or abs(lx * fx + ly * fy) / length > 0.5:
+                        continue
+                    along = ((ax + bx) / 2) * fx + ((ay + by) / 2) * fy
+                    if not low <= along <= high:
+                        continue
+                    la = ax * fy - ay * fx
+                    lb = bx * fy - by * fx
+                    if min(la, lb) > width / 2 or max(la, lb) < -width / 2:
+                        continue
+                    return True
+        return False
+
+
 ARROW_STOP_REACH_METERS = 60.0
 ARROW_STOP_BEHIND_METERS = 40.0
 ARROW_STOP_SAME_POINT_METERS = 3.0
+# Ряд, за которым (позади по ходу) ближе этого стоит стоп-линия или зебра, а
+# впереди своей стоп-линии нет, — стоит уже в перекрёстке: ряд ↑↑↑↑ ложился
+# между зеброй и узлом, поверх светофора (снимок CarPlay 13.10.2026).
+ARROW_PASSED_REACH_METERS = 30.0
+
+
+def row_past_stop(row, bearing, stops, crossings):
+    """Ряд стоит за стоп-линией или зеброй своего подхода, а не перед ними."""
+    if not row:
+        return False
+    lon = sum(p[0] for p, _props in row) / len(row)
+    lat = sum(p[1] for p, _props in row) / len(row)
+    kx = 111_320 * math.cos(math.radians(lat))
+    first, last = row[0][0], row[-1][0]
+    # Ширина ряда — от крайней стрелки до крайней плюс полоса.
+    width = (math.hypot((last[0] - first[0]) * kx, (last[1] - first[1]) * 111_320)
+             + max(props.get("lw", 3.0) for _p, props in row))
+    if stops.before((lon, lat), bearing, width, ARROW_STOP_REACH_METERS):
+        return False
+    return any(index.passed((lon, lat), bearing, width, ARROW_PASSED_REACH_METERS)
+               for index in (stops, crossings))
 
 
 TREE_SIZES = 4
@@ -2631,7 +2745,9 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             if on_bridge:
                 props["bridge"] = True
             _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, props)
-        del overlap
+        # Индекс лент живёт до стрелок: ряд делит нарисованную ленту под собой.
+        crossings = StopIndex(line for line, _marked in fitted_zebras)
+        arrows_past_stop = 0
         for line, kind in stop_lines.get(-1, ()):
             _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": kind})
         for index, point in enumerate(points):
@@ -2656,12 +2772,18 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             ahead = stops.ahead(spot[0], point_azimuth(flags), point_width(flags))
             if ahead is not None:
                 row = placed_arrows(code, flags, spot[0], ARROW_BEFORE_STOP_METERS - ahead,
-                                    mask.zebras_only(), asphalt)
+                                    mask.zebras_only(), asphalt, overlap.carriageway)
             else:
                 row = placed_arrows(code, flags, spot[0], arrow_setback(flags, spot[0], signals),
-                                    mask, asphalt)
+                                    mask, asphalt, overlap.carriageway)
+            if row_past_stop(row, point_azimuth(flags), stops, crossings):
+                arrows_past_stop += 1
+                continue
             for arrow, props in row:
                 _put(buckets, zoom, LAYER_ARROWS, mvt.POINT, [arrow], props)
+        del overlap
+        if arrows_past_stop:
+            print(f"        рядов стрелок за стоп-линией (не рисуются): {arrows_past_stop}")
     finally:
         buckets.close()
 

@@ -388,6 +388,99 @@ class LaneArrowTests(unittest.TestCase):
         self.assertEqual(list(build_mvt.lane_arrows(1, self.point([1]), (LON, LAT))), [])
 
 
+class ArrowRowFitsDrawnRoadTests(unittest.TestCase):
+    """Ряд стрелок делит нарисованную ленту, а не ширину из записи полос.
+
+    Нурафшон, снимок CarPlay 13.10.2026: запись 4 полосы → 14 м, лента
+    нарисована в 10,6 м — крайние стрелки легли на бордюр и за кромку.
+    """
+
+    def point(self, turns, width=14, azimuth=90, oneway=True):
+        flags = build_roads.point_flags(azimuth, width) | (build_roads.PFLAG_ONEWAY if oneway else 0)
+        return build_roads.pack_turns(flags, turns)
+
+    def across(self, spot):
+        # Дорога на восток: «вбок» — по широте, плюс к северу (влево по ходу).
+        return (spot[1] - LAT) * sc.LAT_METERS
+
+    def test_row_spans_the_drawn_width_not_the_tagged_one(self):
+        turns = [build_roads.TURN_LEFT, build_roads.TURN_THROUGH, build_roads.TURN_THROUGH,
+                 build_roads.TURN_RIGHT]
+        drawn = 10.6
+        carriageway = lambda centre, bearing: ((centre[0], LAT), drawn, True)
+        arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns),
+                                            (LON, LAT), carriageway=carriageway))
+        self.assertEqual(len(arrows), 4)
+        lane = drawn / 4
+        for spot, props in arrows:
+            self.assertAlmostEqual(props["lw"], round(lane, 1))
+            # Значок не шире полосы: его край — внутри ленты.
+            self.assertLessEqual(abs(self.across(spot)) + lane / 2, drawn / 2 + 1e-6)
+        self.assertGreater(self.across(arrows[0][0]), self.across(arrows[-1][0]), "левая полоса — слева")
+
+    def test_row_sits_on_the_axis_of_the_ribbon(self):
+        # Точка посадки в метре от оси — ряд всё равно по центру ленты.
+        turns = [build_roads.TURN_THROUGH, build_roads.TURN_THROUGH]
+        carriageway = lambda centre, bearing: ((centre[0], LAT), 7.0, True)
+        arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns),
+                                            metres(0, 1.0), carriageway=carriageway))
+        mid = sum(self.across(spot) for spot, _p in arrows) / len(arrows)
+        self.assertAlmostEqual(mid, 0.0, delta=0.01)
+
+    def test_two_way_road_keeps_arrows_on_its_right_half(self):
+        turns = [build_roads.TURN_LEFT, build_roads.TURN_THROUGH]
+        carriageway = lambda centre, bearing: ((centre[0], LAT), 12.0, False)
+        arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns, oneway=False),
+                                            (LON, LAT), carriageway=carriageway))
+        for spot, props in arrows:
+            self.assertLess(self.across(spot), 0, "правая по ходу половина — южнее оси")
+            self.assertLessEqual(abs(self.across(spot)) + props["lw"] / 2, 6.0 + 1e-6)
+
+    def test_carriageway_lookup_finds_the_ribbon_under_the_row(self):
+        road = (3, build_roads.FLAG_ONEWAY, [metres(-50, 0), metres(50, 0)], "")
+        index = build_mvt.OverlapIndex([road], {id(road): 10.6})
+        found = index.carriageway(metres(0, 2.0), 90)
+        self.assertIsNotNone(found)
+        axis, width, oneway = found
+        self.assertAlmostEqual(width, 10.6, places=3)
+        self.assertTrue(oneway)
+        self.assertAlmostEqual((axis[1] - LAT) * sc.LAT_METERS, 0.0, delta=0.01)
+        self.assertIsNone(index.carriageway(metres(0, 2.0), 270), "встречное направление — не наша лента")
+        self.assertIsNone(index.carriageway(metres(0, 12.0), 90), "мимо полотна — ленты нет")
+
+
+class ArrowRowPastStopTests(unittest.TestCase):
+    """Ряд за стоп-линией или зеброй — уже в перекрёстке (снимок CarPlay 13.10.2026)."""
+
+    def row(self, x):
+        return [(metres(x, y), {"turn": 1, "lw": 3.0}) for y in (-4.5, -1.5, 1.5, 4.5)]
+
+    def line_at(self, x):
+        return [metres(x, -7), metres(x, 7)]
+
+    def test_row_between_the_stop_line_and_the_junction_is_dropped(self):
+        stops = build_mvt.StopIndex([self.line_at(-12)])
+        self.assertTrue(build_mvt.row_past_stop(self.row(0), 90, stops, build_mvt.StopIndex([])))
+
+    def test_row_past_a_zebra_is_dropped(self):
+        zebras = build_mvt.StopIndex([self.line_at(-8)])
+        self.assertTrue(build_mvt.row_past_stop(self.row(0), 90, build_mvt.StopIndex([]), zebras))
+
+    def test_row_before_its_stop_line_stays(self):
+        # Ряд перед стоп-линией, а позади — прежний светофор: ряд на месте.
+        stops = build_mvt.StopIndex([self.line_at(11), self.line_at(-20)])
+        self.assertFalse(build_mvt.row_past_stop(self.row(0), 90, stops, build_mvt.StopIndex([])))
+
+    def test_row_with_nothing_around_stays(self):
+        self.assertFalse(build_mvt.row_past_stop(self.row(0), 90, build_mvt.StopIndex([]),
+                                                 build_mvt.StopIndex([])))
+
+    def test_oncoming_stop_line_does_not_count(self):
+        # Стоп-линия встречных позади нас, на другой ленте — не наша.
+        far = build_mvt.StopIndex([[metres(-10, 12), metres(-10, 26)]])
+        self.assertFalse(build_mvt.row_past_stop(self.row(0), 90, far, build_mvt.StopIndex([])))
+
+
 class ArrowLeaderTests(unittest.TestCase):
     def arrow(self, x, y, bearing=90, width=10):
         turns = [1, 2]

@@ -79,7 +79,7 @@ PALETTES = {
         "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#c9ced8",
         "tree_crown": "#a3d184", "tree_crown_low": "#7fb565", "tree_crown_high": "#c2e3a2", "tree_light": "#c4e4a8", "tree_trunk": "#9b8a76", "tree_edge": "#94c676",
         "tree_shadow": "rgba(60,100,40,0.28)",
-        "label": "#3f3f42", "halo": "#ffffff", "oneway_opacity": 0.55, "housenumber": "#8a817b", "signal": "#3b3b3b", "signal_ring": "#f5d547",
+        "label": "#3f3f42", "street_label": "#363b43", "halo": "#ffffff", "oneway_opacity": 0.55, "housenumber": "#8a817b", "signal": "#3b3b3b", "signal_ring": "#f5d547",
     },
     "dark": {
         "bg": "#0f1216", "park": "#16241b", "wood": "#14221a", "water": "#1b3348",
@@ -107,7 +107,7 @@ PALETTES = {
         "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#2a2f37",
         "tree_crown": "#22402c", "tree_crown_low": "#18301f", "tree_crown_high": "#33593e", "tree_light": "#2e5238", "tree_trunk": "#3a332b", "tree_edge": "#2e5238",
         "tree_shadow": "rgba(0,0,0,0.5)",
-        "label": "#c9ced6", "halo": "#0f1216", "oneway_opacity": 0.7, "housenumber": "#7d838d", "signal": "#101318", "signal_ring": "#f0c64a",
+        "label": "#c9ced6", "street_label": "#e4e8ee", "halo": "#0f1216", "oneway_opacity": 0.7, "housenumber": "#7d838d", "signal": "#101318", "signal_ring": "#f0c64a",
     },
 }
 
@@ -182,6 +182,36 @@ POI_COLOURS = {
     "light": {"food": "#d9690a", "shop": "#2f63c9", "health": "#c8322a", "culture": "#7b48c8"},
     "dark": {"food": "#f0a24f", "shop": "#7aa5f2", "health": "#f08078", "culture": "#b694f0"},
 }
+
+
+# Значок стрелки полосы — 18 pt в ширину при размере 1 (make_arrows.W). Ширина
+# значка — эта доля ширины полосы: составная стрелка («прямо и налево») рисуется
+# во всю ширину значка, и при значке шире полосы крайние стрелки ложились на
+# бордюр и за кромку (снимок CarPlay 13.10.2026). Полосу в метрах тайл несёт в
+# свойстве lw; у тайлов до этой сборки его нет — прежний размер.
+ARROW_ICON_POINTS = 18
+ARROW_LANE_SHARE = 0.9
+
+
+def arrow_size():
+    def stop(z, legacy):
+        fit = ["*", ["get", "lw"], ARROW_LANE_SHARE * (2 ** z) * M / ARROW_ICON_POINTS]
+        return ["case", ["has", "lw"], fit, legacy]
+    return ["interpolate", ["exponential", 2], ["zoom"], 17, stop(17, 0.55), 20, stop(20, 2.2)]
+
+
+def street_halo(p):
+    """Ореол подписи улицы — цветом асфальта под ней.
+
+    Был цветом фона (#0f1216 ночью): на сером полотне подпись лежала чёрной
+    наклейкой поверх штрихов разметки и стрелок (снимок CarPlay 13.10.2026).
+    Ореол цвета асфальта прячет разметку под буквами, и имя читается
+    напечатанным на дороге, как у Яндекса. До нашего полотна (15-й) дорога
+    тонкая, имя лежит на фоне — ореол фоновый.
+    """
+    asphalt = ["match", ["get", "class"], ["motorway", "trunk"], p["road_trunk"],
+               ["primary", "secondary"], p["road"], "tertiary", p["road_tertiary"], p["minor"]]
+    return ["interpolate", ["linear"], ["zoom"], 14.5, p["halo"], 15.5, asphalt, 16.5, p["road"]]
 
 
 def poi_colour(p, theme):
@@ -398,8 +428,12 @@ def _base_layer(layer, p, mode):
         lay = l.setdefault("layout", {})
         if "ref" not in json.dumps(lay.get("text-field")):
             lay["text-field"] = street_name()
-        # Капсом с разрядкой, как у Яндекса: «УЛ. ФУРКАТ» на самом асфальте.
-        lay.update({"text-transform": "uppercase", "text-letter-spacing": 0.1,
+        # Обычным регистром: «ул. Фуркат», а не «УЛ. ФУРКАТ». Капс с разрядкой
+        # был длиннее на треть, чаще не помещался и читался криком; Яндекс,
+        # Apple и 2ГИС пишут имя улицы обычными буквами (13.10.2026).
+        street = i.startswith("highway-name")
+        lay.update({"text-transform": "none" if street else "uppercase",
+                    "text-letter-spacing": 0.02 if street else 0.1,
                     # Реже и не впритык: каждая встречная лента подписана своей
                     # строкой, и при шаге по умолчанию одно имя стояло восемь раз.
                     # Каждая лента проспекта подписана отдельно: на Зарканаре
@@ -407,13 +441,22 @@ def _base_layer(layer, p, mode):
                     # отступ — чтобы улица читалась один-два раза.
                     "symbol-spacing": 900, "text-padding": 50, "text-font": ["Noto Sans Bold"],
                     # Крупнее вблизи: на асфальте в 11 px имя терялось.
-                    "text-size": ["interpolate", ["linear"], ["zoom"], 13, 10, 16, 11.5, 18, 13.5, 20, 15]})
-        # Мягкий ореол с размытием: тонкая жёсткая обводка на сером асфальте
-        # не отделяла буквы от разметки (06.10.2026).
-        paint.update({"text-color": p["label"], "text-halo-color": p["halo"],
-                      "text-halo-width": 2.0, "text-halo-blur": 0.6})
+                    "text-size": ["interpolate", ["linear"], ["zoom"], 13, 10.5, 16, 12, 18, 14, 20, 16]
+                    if street else ["interpolate", ["linear"], ["zoom"], 13, 10, 16, 11.5, 18, 13.5, 20, 15]})
+        if street:
+            paint.update({"text-color": p["street_label"], "text-halo-color": street_halo(p),
+                          "text-halo-width": 1.8, "text-halo-blur": 0.2})
+        else:
+            # Номер трассы лежит на своём щите — ореол фоновый, как был.
+            paint.update({"text-color": p["label"], "text-halo-color": p["halo"],
+                          "text-halo-width": 2.0, "text-halo-blur": 0.6})
     elif l["type"] == "symbol":
         lay = l.setdefault("layout", {})
+        if i == "waterway-name":
+            # Арык в трубе под дорогой не виден, а его имя ложилось наискось
+            # поперёк проспекта («Калькауз» у Нурафшон, снимок CarPlay
+            # 13.10.2026). Подписываем только открытую воду.
+            l["filter"] = _with(["!=", "brunnel", "tunnel"], l.get("filter"))
         if "name:latin" in json.dumps(lay.get("text-field", "")):
             lay["text-field"] = NAME
         paint["text-halo-color"] = p["halo"]
@@ -751,7 +794,7 @@ def _layers_in_draw_order(p):
                                    7, "lane-through_left", 8, "lane-through_right", 9, "lane-left_right", ""],
                     "icon-rotate": ["get", "bearing"], "icon-rotation-alignment": "map",
                     "icon-pitch-alignment": "map", "icon-allow-overlap": True, "icon-ignore-placement": True,
-                    "icon-size": ["interpolate", ["exponential", 2], ["zoom"], 17, 0.55, 20, 2.2]}},
+                    "icon-size": arrow_size()}},
         # Светофоры как у Яндекса: по значку на каждый подход, ромбом вокруг
         # центра регулируемого перекрёстка (build_mvt.approach_lights, вид 14).
         # Жёлтой «вафли» больше нет — у Яндекса её нет (снимок 05.10.2026).

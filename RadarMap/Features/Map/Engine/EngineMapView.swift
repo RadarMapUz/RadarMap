@@ -948,6 +948,9 @@ struct EngineMapView: UIViewRepresentable {
             "radar-parking", "radar-parking-kerb", "radar-parking-stall", "radar-poi-parking",
             "poi-level-1", "poi-level-2", "poi-level-3", "poi-railway",
             "radar-asphalt-grain",
+            // Имена арыков и каналов: за рулём не нужны, а у моста или трубы
+            // ложились наискось поперёк проспекта (снимок CarPlay 13.10.2026).
+            "waterway-name",
         ]
         private var hiddenLayers: Set<String>?
 

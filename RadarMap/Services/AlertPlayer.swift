@@ -262,6 +262,9 @@ final class AlertPlayer: NSObject {
         Self.audioQueue.async {
             let started = Date()
             let session = AVAudioSession.sharedInstance()
+            // Не активировалась — звучим как раньше, фразой: promptStyle
+            // неактивной сессии ничего не говорит, а молчание о камере хуже.
+            var mode = VoicePrompt.Mode.speech
             do {
                 // Режим голосовой подсказки навигатора (`.voicePrompt`): так
                 // Apple велит звучать навигации. В машине CarPlay ведёт такой
@@ -273,6 +276,7 @@ final class AlertPlayer: NSObject {
                 try session.setCategory(.playback, mode: .voicePrompt,
                                         options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
                 try session.setActive(true)
+                mode = VoicePrompt.mode(for: session.promptStyle)
             } catch {
                 // Сигнал всё равно попробуем сыграть — хуже не станет.
                 Log.alerts.error("аудиосессия не активировалась: \(error.localizedDescription, privacy: .public)")
@@ -283,8 +287,8 @@ final class AlertPlayer: NSObject {
             if elapsed > 0.25 {
                 Log.alerts.notice("активация аудиосессии: \(elapsed, format: .fixed(precision: 2), privacy: .public) с")
             }
-            let mode = VoicePrompt.mode(for: session.promptStyle)
-            Task { @MainActor in then(mode) }
+            let chosen = mode
+            Task { @MainActor in then(chosen) }
         }
     }
 

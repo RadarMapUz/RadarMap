@@ -87,6 +87,13 @@ final class CarPlayBanners {
     private var replacing: (kind: Kind, alert: CPNavigationAlert)?
     /// Экран освободился: владельцы ждущих (вопрос, объезд) показывают своё.
     var onIdle: (() -> Void)?
+    /// Баннер, который мы считали показанным, так и не встал: его замену
+    /// перебила более важная, пока прежний снимался. Владелец забывает, что
+    /// показывал, — иначе объезд или вопрос не вернулись бы никогда.
+    var onDropped: ((CPNavigationAlert) -> Void)?
+    /// Последний баннер, который водитель закрыл сам («Понятно», крестик): о
+    /// той же камере больше не напоминаем.
+    private weak var closedByDriver: CPNavigationAlert?
 
     init(template: CPMapTemplate) {
         self.template = template
@@ -111,10 +118,14 @@ final class CarPlayBanners {
         case .replace:
             // Новый при видимом прежнем CarPlay молча не покажет: сначала
             // снять, показать — из completion (через didDismiss onIdle не
-            // зовётся, пока замена ждёт).
-            let waiting = replacing != nil
+            // зовётся, пока замена ждёт). Ждущую замену перебивает более
+            // важная — та, ждавшая, не встанет: сказать владельцу.
+            let waiting = replacing
             replacing = (kind, alert)
-            guard !waiting else { return true }
+            if let waiting {
+                onDropped?(waiting.alert)
+                return true
+            }
             template.dismissNavigationAlert(animated: false) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.presentReplacement() }
             }
@@ -126,21 +137,37 @@ final class CarPlayBanners {
     }
 
     /// Снять свой баннер: камеру проехали, на вопрос ответили на телефоне.
+    /// Нового на его место владелец так не ставит — замену делает `show`.
     func dismiss(_ alert: CPNavigationAlert) {
         if replacing?.alert === alert {
             replacing = nil
             return
         }
         guard current?.alert === alert, let template else { return }
-        template.dismissNavigationAlert(animated: true) { _ in }
+        template.dismissNavigationAlert(animated: true) { [weak self] dismissed in
+            guard !dismissed else { return }   // событие didDismiss придёт от системы
+            Task { @MainActor [weak self] in
+                // Снимать было нечего: баннер уже ушёл, а события о нём не
+                // было — иначе очередь считала бы экран занятым навсегда.
+                guard let self, self.current?.alert === alert else { return }
+                self.current = nil
+                if self.replacing == nil { self.onIdle?() }
+            }
+        }
     }
 
     /// Система убрала баннер: истёк, нажата кнопка или снят нами.
-    func didDismiss(_ alert: CPNavigationAlert) {
+    func didDismiss(_ alert: CPNavigationAlert, context: CPNavigationAlert.DismissalContext) {
+        if context == .userDismissed { closedByDriver = alert }
         guard current?.alert === alert else { return }
         current = nil
         guard replacing == nil else { return }   // следующий покажет presentReplacement
         onIdle?()
+    }
+
+    /// Водитель закрыл этот баннер сам.
+    func wasClosedByDriver(_ alert: CPNavigationAlert) -> Bool {
+        closedByDriver === alert
     }
 
     /// Подключение кончилось — шаблона больше нет.
@@ -148,6 +175,7 @@ final class CarPlayBanners {
         current = nil
         replacing = nil
         onIdle = nil
+        onDropped = nil
     }
 
     private func presentReplacement() {

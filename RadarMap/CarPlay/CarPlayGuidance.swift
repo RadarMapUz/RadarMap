@@ -506,10 +506,11 @@ final class CarPlayGuidance {
         maneuver = next
         upcoming = [next] + (laneRow.map { [$0] } ?? [])
         // Каждый манёвр, попадающий в upcomingManeuvers, сначала регистрируется
-        // в сессии (CPNavigationSession.h, iOS 17.4+): без этого приборка и
-        // проекция на стекло могут не получить его вовсе. Ряд полос — не
-        // манёвр, в метаданные он не идёт.
-        session.add([next])
+        // в сессии — ряд полос тоже: заголовок требует этого для ВСЕХ
+        // элементов списка (CPNavigationSession.h, iOS 17.4+), а машина вправе
+        // отвергнуть список целиком. Ряд уходит, только пока метаданные
+        // выключены, так что приборка его вторым поворотом не прочтёт.
+        session.add(upcoming)
         session.upcomingManeuvers = upcoming
     }
 

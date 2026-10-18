@@ -63,6 +63,9 @@ final class CarPlayCameraBanner {
     private var presentedOnScreen = false
     private var shownText: CarPlayCameraBannerText.Text?
     private var updatedAt = Date.distantPast
+    /// Ограничение у камеры — одно на подъезд: поиск по индексу дорог на
+    /// каждом тике ради сравнения строк не нужен.
+    private var limit: (cameraID: Int, value: Int?)?
 
     private var env: AppEnvironment { .shared }
 
@@ -76,30 +79,29 @@ final class CarPlayCameraBanner {
             clear()
             return
         }
-        let text = CarPlayCameraBannerText.text(
-            name: camera.kind.shortName, kind: camera.kind.displayName,
-            distance: Formatting.distance(distance),
-            limit: env.speedLimits.limit(near: camera.coordinate))
 
         if let alert, cameraID == camera.id {
-            // Закрыли «Понятно» или истекло — о той же камере не напоминаем.
-            guard banners.isShowing(alert) else { return }
-            if presentedOnScreen == onScreen {
-                guard CarPlayCameraBannerText.shouldUpdate(shown: shownText, new: text,
-                                                           sinceLast: Date().timeIntervalSince(updatedAt))
+            let showing = banners.isShowing(alert)
+            if showing, presentedOnScreen == onScreen {
+                // Тот же подъезд — переписать цифру. Дешёвое первым: тик GPS
+                // приходит чаще, чем баннеру можно меняться.
+                let since = Date().timeIntervalSince(updatedAt)
+                guard since >= AppConfig.carPlayCameraBannerUpdateSeconds else { return }
+                let text = text(for: camera, distance: distance)
+                guard CarPlayCameraBannerText.shouldUpdate(shown: shownText, new: text, sinceLast: since)
                 else { return }
                 alert.updateTitleVariants(text.titles, subtitleVariants: text.subtitles)
                 shownText = text
                 updatedAt = Date()
                 return
             }
-            // Водитель ушёл с нашего экрана или вернулся посреди подъезда:
-            // длительность баннера другая — показать заново.
-            banners.dismiss(alert)
-        } else if let alert {
-            banners.dismiss(alert)   // следующая камера сменила прежнюю
+            // Закрыт водителем — о той же камере не напоминаем; истёк на том
+            // же экране — тоже. Экран сменился (вернулись к RadarMap после
+            // истёкшего уведомления, ушли в музыку) — показываем заново.
+            if !showing, banners.wasClosedByDriver(alert) || presentedOnScreen == onScreen { return }
         }
 
+        let text = text(for: camera, distance: distance)
         let next = CPNavigationAlert(
             titleVariants: text.titles,
             subtitleVariants: text.subtitles,
@@ -109,7 +111,10 @@ final class CarPlayCameraBanner {
             // На нашем экране — до конца подъезда (снимаем сами); поверх
             // чужого приложения — уведомление, как до 18.10.
             duration: onScreen ? 0 : AppConfig.carPlayCameraAlertSeconds)
-        clear()
+        // Прежний баннер не снимаем отдельно: камера заменяет всё, и замену
+        // делает очередь — два снятия подряд CarPlay мог бы сложить так, что
+        // новый баннер не встал бы вовсе.
+        alert = nil
         guard banners.show(next, kind: .camera) else { return }
         alert = next
         cameraID = camera.id
@@ -117,6 +122,15 @@ final class CarPlayCameraBanner {
         shownText = text
         updatedAt = Date()
         Log.carplay.notice("камера \(camera.id, privacy: .public): баннер \(onScreen ? "на нашем экране" : "поверх другого приложения", privacy: .public)")
+    }
+
+    private func text(for camera: Camera, distance: Double) -> CarPlayCameraBannerText.Text {
+        if limit?.cameraID != camera.id {
+            limit = (camera.id, env.speedLimits.limit(near: camera.coordinate))
+        }
+        return CarPlayCameraBannerText.text(name: camera.kind.shortName, kind: camera.kind.displayName,
+                                            distance: Formatting.distance(distance),
+                                            limit: limit?.value)
     }
 
     /// Подключение кончилось.
@@ -127,5 +141,6 @@ final class CarPlayCameraBanner {
         cameraID = nil
         shownText = nil
         updatedAt = .distantPast
+        limit = nil
     }
 }

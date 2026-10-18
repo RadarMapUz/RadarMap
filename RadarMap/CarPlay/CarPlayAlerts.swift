@@ -47,21 +47,19 @@ extension CarPlaySceneDelegate {
     func presentPendingConfirmIfNeeded() {
         env.mobile.expireStaleConfirm()
         guard let banners else { return }
-        // Вопрос на экране, а ответ уже не нужен (истёк, отвечен на телефоне)
-        // или теперь он про другую отметку — снять. Оставленный, он принимал
-        // бы «Нет» за отметку, о которой не спрашивал.
-        if let shown = confirmBanner, env.mobile.pendingConfirm?.id != confirmBannerID {
-            confirmBanner = nil
-            confirmBannerID = nil
-            banners.dismiss(shown)
+        let pending = env.mobile.pendingConfirm
+        // Показанный вопрос ещё про ту же отметку — всё на месте.
+        if confirmBanner != nil, pending?.id == confirmBannerID { return }
+        // Показан, а ответ уже не нужен (истёк, отвечен на телефоне) или
+        // вопрос теперь о другой отметке. Оставленный, он принимал бы «Нет»
+        // за отметку, о которой не спрашивал.
+        let stale = confirmBanner
+        confirmBanner = nil
+        confirmBannerID = nil
+        guard let camera = pending, camera.id != skippedConfirmID, canAskNow() else {
+            if let stale { banners.dismiss(stale) }
+            return
         }
-        guard let camera = env.mobile.pendingConfirm, confirmBanner == nil else { return }
-        // Пока впереди камера, вопрос ждёт: перекрывать предупреждение
-        // вопросом — ровно то, чего делать нельзя.
-        guard !env.location.isApproachingCamera else { return }
-        // Только стоя или ползком: ответ на ходу — второй взгляд на экран.
-        // Вопрос живёт `mobileConfirmMaxAgeSeconds` — до светофора доживает.
-        guard env.location.speedKmh < AppConfig.carPlayQuestionMaxKmh else { return waitToAsk() }
         let id = camera.id
         let alert = CPNavigationAlert(
             titleVariants: [String(format: String(localized: "%@ ещё на месте?"), camera.kind.displayName),
@@ -76,12 +74,33 @@ extension CarPlaySceneDelegate {
                 self?.env.mobile.answerConfirm(stillThere: false, for: id)
             },
             duration: AppConfig.carPlayQuestionSeconds)
-        // Занято важнее (камера, объезд) — вопрос вернётся, когда экран
-        // освободится (bannersFreed).
-        guard banners.show(alert, kind: .question) else { return }
+        // Прежний вопрос заменит новый сам (show). Занято важнее (камера,
+        // объезд) — вопрос вернётся, когда экран освободится (bannersFreed).
+        guard banners.show(alert, kind: .question) else {
+            if let stale { banners.dismiss(stale) }
+            return
+        }
         confirmBanner = alert
         confirmBannerID = id
         Log.carplay.notice("вопрос «ещё на месте?»: баннер")
+    }
+
+    /// Можно ли спросить сейчас. Баннер живёт на шаблоне карты: под «Куда»
+    /// или поиском, как и поверх чужого приложения, его не видно, и он истёк
+    /// бы непрочитанным — то есть «пропущенным». Вернёт вопрос возврат к
+    /// карте (templateDidAppear) или к RadarMap (sceneDidBecomeActive).
+    private func canAskNow() -> Bool {
+        guard shownTemplate == nil, model.isOnScreen,
+              // Пока впереди камера, вопрос ждёт: перекрывать предупреждение
+              // вопросом — ровно то, чего делать нельзя.
+              !env.location.isApproachingCamera else { return false }
+        // Только стоя или ползком: ответ на ходу — второй взгляд на экран.
+        // Вопрос живёт `mobileConfirmMaxAgeSeconds` — до светофора доживает.
+        guard env.location.speedKmh < AppConfig.carPlayQuestionMaxKmh else {
+            waitToAsk()
+            return false
+        }
+        return true
     }
 
     /// Вопрос висит, а машина едет: проверить остановку изредка, пока он жив.
@@ -141,8 +160,9 @@ extension CarPlaySceneDelegate {
     /// Короткое подтверждение («Поездка началась», итог поездки) — баннером
     /// поверх карты: гаснет сам, нажимать ничего не нужно, и карта видна.
     /// Уступает всему важнее: опоздавшее подтверждение не показывается.
-    func showToast(_ text: String, variants: [String]? = nil) {
-        guard let banners else { return }
+    /// `speakIfHidden` — ответ на тап водителя: если баннер не встал (впереди
+    /// камера), он звучит голосом — иначе тап остался бы без ответа.
+    func showToast(_ text: String, variants: [String]? = nil, speakIfHidden: Bool = false) {
         let alert = CPNavigationAlert(
             titleVariants: variants ?? [text],
             subtitleVariants: nil,
@@ -150,6 +170,7 @@ extension CarPlaySceneDelegate {
             primaryAction: CPAlertAction(title: String(localized: "ОК"), style: .cancel) { _ in },
             secondaryAction: nil,
             duration: AppConfig.carPlayToastSeconds)
-        banners.show(alert, kind: .info)
+        let shown = banners?.show(alert, kind: .info) ?? false
+        if !shown, speakIfHidden { env.alerts.speak(text) }
     }
 }

@@ -151,6 +151,9 @@ final class CarPlayMapModel {
         returnTask?.cancel()
         returnTask = nil
         isFollowing = true
+        // Интерфейс осмотра при этом может стоять (вернулись из музыки, окно
+        // пересоздал сторож): без таймера он остался бы с одной «Готово».
+        if browse.panning { armIdle() }
     }
 
     #if DEBUG

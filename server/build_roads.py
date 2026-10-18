@@ -2570,6 +2570,8 @@ AREA_DIVIDER = 15
 # ходу линии слева. Приложение вид 16 не знает и пропускает.
 AREA_KERB = 16
 MEDIAN_LINE_BELOW_METERS = 2.5
+# Торец полосы, повёрнутый к соседнему поперечнику сильнее этого, — кривой.
+MEDIAN_ROW_SKEW_DEGREES = 20.0
 # Уже этого между кромками — конец клина разделительной обрезается.
 MEDIAN_EDGE_MIN_METERS = 1.5
 FILLET_MAJOR = 2
@@ -4408,12 +4410,14 @@ MOUTH_ARC_STEP_DEGREES = 15.0
 MOUTH_MAX_TANGENT_METERS = 30.0
 
 
-def mouth_outline(legs, kerbs=None):
+def mouth_outline(legs, kerbs=None, uniform=False):
     """Кольцо узла по устьям подходов с дугами бордюра или None (не вышло).
 
     kerbs (список) — сюда кладутся бордюры углов: (магистральный?, линия от
     устья через дугу к устью соседа), асфальт по ходу линии слева. Только
     если контур вышел; вызывающий берёт их, лишь когда контур принят.
+    uniform — один радиус на все углы (kerb_radius узла), как до 18.10.2026:
+    запасной ход, когда с радиусами по углам контур не вышел.
     """
     nodes = {}
     for node, _neighbour, _width in legs:
@@ -4507,7 +4511,7 @@ def mouth_outline(legs, kerbs=None):
         s = (rx * (-b["d"][1]) - ry * (-b["d"][0])) / det
         t = (a["d"][0] * ry - a["d"][1] * rx) / det
         corner = (pa[0] + a["d"][0] * s, pa[1] + a["d"][1] * s)
-        radius = corner_radius(a["half"] * 2, b["half"] * 2)
+        radius = kerb_radius(legs) if uniform else corner_radius(a["half"] * 2, b["half"] * 2)
         tangent = radius / math.tan(turn / 2)
         ta, tb = s + tangent, t + tangent
         if ta > MOUTH_MAX_TANGENT_METERS or tb > MOUTH_MAX_TANGENT_METERS:
@@ -4562,7 +4566,10 @@ def mouth_outline(legs, kerbs=None):
     reverse = signed_area_meters(out) < 0
     if reverse:
         out.reverse()
-    if surface_check.defect(out) is not None:
+    # И в том виде, в каком ляжет в тайл: после округления до 1e-5° малый
+    # контур с дугами бывает перекручен, и ворота выбрасывали узел целиком —
+    # дыра в перекрёстке хуже прежнего острого угла.
+    if surface_check.defect(out) is not None or surface_check.defect(quantized(out)) is not None:
         return None
     # Звезда: острый угол контура — устье узкого примыкания вылезло лучом
     # (Чиланзар, 07.10.2026). Такой контур не годится — прежняя оболочка.
@@ -4642,12 +4649,13 @@ def _mouth_figure(legs, kerbs=None):
     kerbs (список) получает бордюры углов — только у принятого контура."""
     if len(legs) < MIN_JUNCTION_ARMS:
         return None
-    found = []
-    outline = mouth_outline(legs, found)
-    if outline and len(outline) >= 3 and _mouth_fits(legs, outline):
-        if kerbs is not None:
-            kerbs.extend(found)
-        return outline
+    for uniform in (False, True):
+        found = []
+        outline = mouth_outline(legs, found, uniform)
+        if outline and len(outline) >= 3 and _mouth_fits(legs, outline):
+            if kerbs is not None:
+                kerbs.extend(found)
+            return outline
     return None
 
 
@@ -5382,6 +5390,23 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
         return (_shift(left, (-toward[0], -toward[1]), half_one, scale),
                 _shift(right, toward, half_two, scale), refined)
 
+    def straighten(row, ref):
+        """Торец, легший наискосок, — параллельно соседнему поперечнику.
+
+        Уточнённый конец ищет ближайшую точку встречной ленты, и у разворота
+        она уезжает за изгиб: торец ложился на 15 м вдоль, нос выходил
+        плоским со ступенькой (Нурафшон, 18.10.2026). Левая точка остаётся,
+        правая — со сдвигом соседнего поперечника."""
+        if row is None or ref is None:
+            return row
+        left, right = row[0], row[1]
+        scale = _lon_scale([left]) or 1.0
+        here = math.degrees(math.atan2(right[1] - left[1], (right[0] - left[0]) * scale))
+        there = math.degrees(math.atan2(ref[1][1] - ref[0][1], (ref[1][0] - ref[0][0]) * scale))
+        if _angle_between(here, there) <= MEDIAN_ROW_SKEW_DEGREES:
+            return row
+        return (left, (left[0] + ref[1][0] - ref[0][0], left[1] + ref[1][1] - ref[0][1])) + tuple(row[2:])
+
     def emit_fill(rows):
         if fills is not None:
             emit([to_axes(row) for row in rows], fills, _strip_defect)
@@ -5464,7 +5489,7 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
             # У узла и у расхождения конец уточняется до метра; у прыжка
             # проекции — нет: там между шагами неизвестно, что годно.
             if previous_good and rows and not jumped:
-                refined = boundary(previous_distance, distance)
+                refined = straighten(boundary(previous_distance, distance), rows[-1])
                 if refined:
                     rows.append((refined[0], refined[1], True))
                     if opening:
@@ -5485,7 +5510,7 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
             continue
         if not rows and previous_distance is not None and not previous_good:
             # Начало после разрыва — тоже с точностью до метра.
-            refined = boundary(distance, previous_distance)
+            refined = straighten(boundary(distance, previous_distance), edges)
             if refined:
                 rows.append((refined[0], refined[1], True))
                 if fill_rows:
@@ -5508,12 +5533,12 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
                     last_bad = probe_at
                 probe_at += MEDIAN_SCAN_METERS
             if first_bad is not None:
-                closed = boundary(previous_distance, first_bad)
+                closed = straighten(boundary(previous_distance, first_bad), rows[-1])
                 if closed:
                     rows.append((closed[0], closed[1], True))
                 emit(rows, strips, _strip_defect, noses=True)
                 rows = []
-                refined = boundary(distance, last_bad)
+                refined = straighten(boundary(distance, last_bad), edges)
                 if refined:
                     rows.append((refined[0], refined[1], True))
                 # Проезд поперёк (разворот) — разрыв между носами асфальтом.
@@ -5536,6 +5561,8 @@ MEDIAN_SCAN_METERS = 5.0
 # MEDIAN_NOSE_MAX_METERS: у широкого газона нос — пологая дуга, а не купол.
 MEDIAN_NOSE_MAX_METERS = 3.0
 MEDIAN_NOSE_STEPS = 6
+# Между точками носа не ближе этого: мельче квантование тайла даёт лесенку.
+MEDIAN_NOSE_SPACING_METERS = 1.8
 
 
 def _nose(a, b, a_prev, b_prev):
@@ -5557,9 +5584,14 @@ def _nose(a, b, a_prev, b_prev):
     ox, oy = ox / length, oy / length
     depth = min(half, MEDIAN_NOSE_MAX_METERS)
     ux, uy = ax / half, ay / half
+    # Точек — по длине дуги: на узкой бетонной полосе (2,5 м) полукруг из
+    # MEDIAN_NOSE_STEPS точек квантование тайла (≈1 м) складывало лесенкой
+    # со ступенькой у носа (Нурафшон у разворота, 18.10.2026).
+    arc = math.pi * (half + depth) / 2
+    steps = max(2, min(MEDIAN_NOSE_STEPS, int(arc / MEDIAN_NOSE_SPACING_METERS)))
     points = []
-    for step in range(1, MEDIAN_NOSE_STEPS):
-        angle = math.pi * step / MEDIAN_NOSE_STEPS
+    for step in range(1, steps):
+        angle = math.pi * step / steps
         x = ux * half * math.cos(angle) + ox * depth * math.sin(angle)
         y = uy * half * math.cos(angle) + oy * depth * math.sin(angle)
         points.append((centre[0] + x / (scale * LAT_METERS), centre[1] + y / LAT_METERS))

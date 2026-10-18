@@ -2929,6 +2929,17 @@ class JunctionKerbTests(unittest.TestCase):
         self.assertTrue(kerbs)
         self.assertTrue(all(not flags & build_roads.FILLET_MAJOR for _k, flags, _l in kerbs))
 
+    def test_outline_never_dies_at_the_tile_gate(self):
+        # Малый контур с дугами после округления до 1e-5° бывал перекручен, и
+        # ворота выбрасывали узел целиком — дыра в перекрёстке (18.10.2026).
+        # Узел, что построен, обязан пройти ворота.
+        for widths in ((4.0, 9.5, 4.0), (6.0, 10.0, 6.0, 10.0), (3.5, 12.0, 3.5, 9.0)):
+            for turn in (60, 75, 90, 120):
+                legs = [self.leg(i * turn, w) for i, w in enumerate(widths)]
+                for figure in self.made(legs):
+                    if figure[0] == build_roads.AREA_JUNCTION:
+                        self.assertTrue(build_roads.surface_gate(figure), (widths, turn))
+
     def test_plain_tuples_still_work(self):
         legs = [(self.node, l[1], l[2]) for l in (self.leg(a, 12.0) for a in (0, 90, 180, 270))]
         made = self.made(legs)
@@ -2966,6 +2977,17 @@ class MedianOpeningTests(unittest.TestCase):
         self.assertGreater(max(lats), 41.30 + self.gap - 0.5 / 111_320)
         lons = [p[0] for ring in fills for p in ring]
         self.assertTrue(min(lons) < 69.2551 < max(lons), "заливка мимо разворота")
+
+    def test_narrow_strip_gets_a_nose_without_a_staircase(self):
+        # Полукруг из шести точек на 2,5 м квантование тайла (≈1 м) складывало
+        # лесенкой; на узкой полосе точек носа меньше, на широкой — полный.
+        def nose(width):
+            k = 111_320 * math.cos(math.radians(41.30))
+            a, b = (69.25, 41.30), (69.25, 41.30 + width / 111_320)
+            back = 25 / k
+            return build_roads._nose(a, b, (a[0] - back, a[1]), (b[0] - back, b[1]))
+        self.assertLessEqual(len(nose(2.5)), 2)
+        self.assertEqual(len(nose(12.0)), build_roads.MEDIAN_NOSE_STEPS - 1)
 
     def test_turn_pocket_along_the_median_is_not_filled(self):
         # Карман поворота идёт ВДОЛЬ разделительной: там тонкая разделительная,

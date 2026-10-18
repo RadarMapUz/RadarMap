@@ -72,9 +72,11 @@ struct CarPlayEngineLayer: View {
                                 bottom: Double(safe.bottom + 12) / max(1, height),
                                 width: width,
                                 side: Double(max(safe.leading, safe.trailing)) + AppConfig.engineKeepSidePoints)
+        // Профиль экрана машины: впереди секунды пути, а не 100 м разметки
+        // (аудит 18.10, «при езде нормального вида нет»).
         let target = DriveCamera.target(
             speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
-            pitchAllowed: env.thermal.mode == .full, keep: keep,
+            pitchAllowed: env.thermal.mode == .full, screen: .car, keep: keep,
             viewHeight: height, latitude: me.latitude, clear: clear,
             carY: { compact ? AppConfig.carPlayDashboardMeY : Self.meY(size: size, safe: safe, share: $0) })
         let frame = model.cameraSmoother.step(toward: target, at: Date())
@@ -142,14 +144,14 @@ struct CarPlayEngineLayer: View {
                                           right: model.mapButtonInsets.trailing + 30),
             panTotal: model.panTotal,
             onHeading: { model.mapDirection = $0 },
-            onBrowse: { if model.isFollowing { model.isFollowing = false } })
+            onBrowse: { model.mapStartedBrowsing() })
     }
 
     /// Новая карта (вернулись из музыки, из схемы) стартует со слежения —
     /// модель обязана сказать то же: иначе после давней панорамы «+/−» шли
     /// в «свободную карту», которой нет, а «к себе» показывал «не следим».
     private func adopt() {
-        if !model.isFollowing { model.isFollowing = true }
+        model.adoptFollowing()
     }
 
     /// Подпись данных: пять секунд при показе карты, затем тает

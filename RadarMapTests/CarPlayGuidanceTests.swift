@@ -157,6 +157,36 @@ final class CarPlayGuidanceTests: XCTestCase {
         XCTAssertGreaterThan(dark, 0.8, "на тёмной карточке — светлая стрелка")
     }
 
+    // MARK: - Ряд полос на экране машины
+
+    func testLaneRowImageFitsTheCardLimit() throws {
+        // Руководство CarPlay, стр. 48: ряд полос — картинка не больше 120×18 pt.
+        let lanes = [LaneHint(arrows: [.left], isValid: false),
+                     LaneHint(arrows: [.straight], isValid: false),
+                     LaneHint(arrows: [.straight, .right], isValid: true),
+                     LaneHint(arrows: [.right], isValid: true)]
+        let image = try XCTUnwrap(CarPlayGuidance.laneImage(lanes, kind: .right))
+        XCTAssertNotNil(image.cgImage)
+        XCTAssertLessThanOrEqual(image.size.width, 120)
+        XCTAssertLessThanOrEqual(image.size.height, 18)
+    }
+
+    func testLaneRowIsATextlessSecondManeuver() throws {
+        // До 18.10 полосы уходили только в метаданные приборки (выключены) —
+        // на экране машины их не было нигде.
+        let lanes = [LaneHint(arrows: [.straight], isValid: false), LaneHint(arrows: [.right], isValid: true)]
+        let row = try XCTUnwrap(CarPlayGuidance.laneRow(lanes, kind: .right))
+        XCTAssertTrue(CarPlayGuidance.isLaneRow(row))
+        XCTAssertEqual(row.instructionVariants, [])
+        XCTAssertNotNil(row.symbolImage)
+        XCTAssertFalse(CarPlayGuidance.isLaneRow(CPManeuver()), "обычный манёвр — не ряд полос")
+    }
+
+    func testNoLanesNoRow() {
+        XCTAssertNil(CarPlayGuidance.laneImage([], kind: .right))
+        XCTAssertNil(CarPlayGuidance.laneRow([], kind: .right))
+    }
+
     /// Средняя яркость непрозрачных пикселей картинки (0 — чёрный, 1 — белый).
     private static func inkBrightness(_ image: UIImage?) -> Double? {
         guard let cg = image?.cgImage else { return nil }

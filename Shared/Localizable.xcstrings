@@ -18584,6 +18584,70 @@
           }
         }
       }
+    },
+    "Ограничение %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ограничение %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlik cheklovi %lld"
+          }
+        }
+      }
+    },
+    "Поиск на стоянке": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск на стоянке"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To‘xtaganda qidiruv"
+          }
+        }
+      }
+    },
+    "«%@» — на стоянке": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» — на стоянке"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» — to‘xtaganda"
+          }
+        }
+      }
+    },
+    "Поиск адреса на ходу недоступен — задайте место, когда машина остановится.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск адреса на ходу недоступен — задайте место, когда машина остановится."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Harakatda manzil qidirib bo‘lmaydi — mashina to‘xtaganda joyni belgilang."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

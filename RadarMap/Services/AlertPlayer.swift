@@ -140,18 +140,31 @@ final class AlertPlayer: NSObject {
     func beep(count: Int) {
         preparePlayerIfNeeded()
         guard player != nil else { return }
-        let volume = Float(settings.alertVolume)
         let loops = max(1, count) - 1
-        withActiveSession { [weak self] in
-            MainWork.during(MainWork.Name.beep) {
-                guard let player = self?.player else { return }
-                player.stop()
-                player.volume = volume
-                player.numberOfLoops = loops
-                player.currentTime = 0
-                player.play()
-            }
+        withActiveSession { [weak self] mode in
+            guard let self else { return }
+            // Тон — уже короткая подсказка: молчит он только пока Siri слушает.
+            guard mode != .silent else { return self.stayQuiet(.beep) }
+            self.playBeep(loops: loops)
         }
+    }
+
+    private func playBeep(loops: Int) {
+        let volume = Float(settings.alertVolume)
+        MainWork.during(MainWork.Name.beep) {
+            guard let player else { return }
+            player.stop()
+            player.volume = volume
+            player.numberOfLoops = loops
+            player.currentTime = 0
+            player.play()
+        }
+    }
+
+    /// Подсказку не играем: Siri слушает водителя (promptStyle = none).
+    private func stayQuiet(_ what: VoicePrompt.Kind) {
+        Log.alerts.notice("подсказка (\(what.rawValue, privacy: .public)) промолчала: система просит тишины")
+        deactivateSoon()
     }
 
     func speak(_ text: String) {
@@ -173,8 +186,20 @@ final class AlertPlayer: NSObject {
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         utterance.volume = Float(settings.alertVolume)
         utterance.postUtteranceDelay = 0.1
-        withActiveSession { [weak self] in
-            MainWork.during(MainWork.Name.voice) { self?.synthesizer.speak(utterance) }
+        withActiveSession { [weak self] mode in
+            guard let self else { return }
+            switch mode {
+            case .speech:
+                MainWork.during(MainWork.Name.voice) { self.synthesizer.speak(utterance) }
+            case .tone:
+                // Идёт звонок (или Siri не пишет): Apple просит короткую
+                // неречевую подсказку — фраза о камере в ухо поверх
+                // разговора мешает обоим (Руководство CarPlay, стр. 53).
+                preparePlayerIfNeeded()
+                playBeep(loops: 0)
+            case .silent:
+                stayQuiet(.voice)
+            }
         }
     }
 
@@ -231,11 +256,16 @@ final class AlertPlayer: NSObject {
     /// Активировать сессию в фоне и выполнить `then` на главном акторе.
     /// Задержка старта звука на хоп очереди — миллисекунды; блокировка main на
     /// переговоры с магнитолой — секунды. Обмен в пользу живого экрана.
-    private func withActiveSession(_ then: @escaping @MainActor () -> Void) {
+    /// `then` получает, КАК звучать сейчас: `promptStyle` читается уже у
+    /// активной сессии и тоже вне main (VoicePrompt).
+    private func withActiveSession(_ then: @escaping @MainActor (VoicePrompt.Mode) -> Void) {
         Self.audioQueue.async {
             let started = Date()
+            let session = AVAudioSession.sharedInstance()
+            // Не активировалась — звучим как раньше, фразой: promptStyle
+            // неактивной сессии ничего не говорит, а молчание о камере хуже.
+            var mode = VoicePrompt.Mode.speech
             do {
-                let session = AVAudioSession.sharedInstance()
                 // Режим голосовой подсказки навигатора (`.voicePrompt`): так
                 // Apple велит звучать навигации. В машине CarPlay ведёт такой
                 // звук как подсказку навигатора — поверх музыки и рядом с
@@ -246,6 +276,7 @@ final class AlertPlayer: NSObject {
                 try session.setCategory(.playback, mode: .voicePrompt,
                                         options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
                 try session.setActive(true)
+                mode = VoicePrompt.mode(for: session.promptStyle)
             } catch {
                 // Сигнал всё равно попробуем сыграть — хуже не станет.
                 Log.alerts.error("аудиосессия не активировалась: \(error.localizedDescription, privacy: .public)")
@@ -256,7 +287,8 @@ final class AlertPlayer: NSObject {
             if elapsed > 0.25 {
                 Log.alerts.notice("активация аудиосессии: \(elapsed, format: .fixed(precision: 2), privacy: .public) с")
             }
-            Task { @MainActor in then() }
+            let chosen = mode
+            Task { @MainActor in then(chosen) }
         }
     }
 
@@ -287,5 +319,34 @@ extension AlertPlayer: AVSpeechSynthesizerDelegate {
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
                                        didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor in self.deactivateSoon() }
+    }
+}
+
+/// Как звучать подсказке прямо сейчас — по `AVAudioSession.promptStyle`.
+///
+/// До 18.10 приложение его не читало, и фраза «Камера, 300 метров» звучала
+/// поверх телефонного разговора в машине (аудит CarPlay 18.10, п. 7). Apple:
+/// `none` — Siri слушает водителя, подсказки не играть; `short` — звонок,
+/// голосовая почта или Siri, которая не пишет: короткий неречевой сигнал;
+/// `normal` — обычная фраза. Чистая логика — покрыто VoicePromptTests.
+nonisolated enum VoicePrompt {
+
+    enum Mode: Equatable, Sendable {
+        case speech, tone, silent
+    }
+
+    /// Что промолчало — для журнала.
+    enum Kind: String, Sendable {
+        case beep = "сигнал"
+        case voice = "фраза"
+    }
+
+    static func mode(for style: AVAudioSession.PromptStyle) -> Mode {
+        switch style {
+        case .none:   return .silent
+        case .short:  return .tone
+        case .normal: return .speech
+        @unknown default: return .speech
+        }
     }
 }

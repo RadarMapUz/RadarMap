@@ -2967,6 +2967,17 @@ class MedianOpeningTests(unittest.TestCase):
         lons = [p[0] for ring in fills for p in ring]
         self.assertTrue(min(lons) < 69.2551 < max(lons), "заливка мимо разворота")
 
+    def test_narrow_strip_gets_a_nose_without_a_staircase(self):
+        # Полукруг из шести точек на 2,5 м квантование тайла (≈1 м) складывало
+        # лесенкой; на узкой полосе точек носа меньше, на широкой — полный.
+        def nose(width):
+            k = 111_320 * math.cos(math.radians(41.30))
+            a, b = (69.25, 41.30), (69.25, 41.30 + width / 111_320)
+            back = 25 / k
+            return build_roads._nose(a, b, (a[0] - back, a[1]), (b[0] - back, b[1]))
+        self.assertLessEqual(len(nose(2.5)), 2)
+        self.assertEqual(len(nose(12.0)), build_roads.MEDIAN_NOSE_STEPS - 1)
+
     def test_turn_pocket_along_the_median_is_not_filled(self):
         # Карман поворота идёт ВДОЛЬ разделительной: там тонкая разделительная,
         # а не асфальт поперёк.

@@ -296,9 +296,6 @@ struct MapSettingsPage: View {
             }
 
             Section {
-                #if DEBUG && canImport(MapLibre)
-                NavigationLink("Пилот дорог · черновик") { RoadPilotPreview() }
-                #endif
                 Toggle("Кнопки масштаба", isOn: $settings.mapZoomButtons)
                 NavigationLink {
                     OfflineMapsView().settingsPage()

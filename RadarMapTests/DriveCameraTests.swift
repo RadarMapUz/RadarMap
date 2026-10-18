@@ -226,6 +226,82 @@ final class DriveCameraTests: XCTestCase {
         XCTAssertEqual(unknown.distance, 100, accuracy: 0.5)
     }
 
+    // MARK: - Экран машины
+
+    /// CarPlay 1920×720 (382 pt) и 800×480.
+    private let carHeights: [Double] = [382, 480]
+
+    private func carFrame(_ kmh: Double, turn: Double? = nil, height: Double,
+                          carY: Double = 0.7, pitch: Bool = true) -> Cam.Frame {
+        Cam.target(speedKmh: kmh, maneuverDistance: turn, pitchAllowed: pitch, maxPitch: maxPitch,
+                   screen: .car, viewHeight: height, latitude: tashkent, carY: { _ in carY })
+    }
+
+    func testCarSeesTheRoadAheadInTown() {
+        // 18.10, «при езде нормального вида нет»: на экране машины впереди
+        // было 106 м на 40 км/ч и 175 м на 60 — перекрёсток за краем.
+        for height in carHeights {
+            XCTAssertGreaterThanOrEqual(ahead(carFrame(40, height: height), height: height), 250, "40 км/ч, \(height) pt")
+            XCTAssertGreaterThanOrEqual(ahead(carFrame(60, height: height), height: height), 380, "60 км/ч, \(height) pt")
+            XCTAssertGreaterThan(ahead(carFrame(60, height: height), height: height),
+                                 ahead(frame(60, height: height), height: height) * 2, "вдвое дальше прежнего")
+        }
+    }
+
+    func testCarStandingIsTopDownOnTheLanes() {
+        for height in carHeights {
+            for kmh in [0.0, 5, 10, 15] {
+                let f = carFrame(kmh, height: height)
+                XCTAssertEqual(f.pitchDegrees, 0, "\(kmh) км/ч — сверху")
+                XCTAssertGreaterThanOrEqual(f.zoom, Cam.laneZoom, "\(kmh) км/ч, \(height) pt — полосы")
+                XCTAssertGreaterThanOrEqual(ahead(f, height: height), Cam.carMinLookaheadMeters * 0.99,
+                                            "перекрёсток впереди целиком")
+            }
+        }
+    }
+
+    func testCarTurnBringsTheLanesBack() {
+        // На ходу в городе разметки нет — у манёвра она обязана вернуться.
+        for height in carHeights {
+            for kmh in stride(from: 20.0, through: 130, by: 10) {
+                for d in [0.0, 40, 80] {
+                    let f = carFrame(kmh, turn: d, height: height)
+                    XCTAssertGreaterThanOrEqual(f.zoom, Cam.laneZoom, "\(kmh) км/ч, \(d) м, \(height) pt")
+                    XCTAssertLessThanOrEqual(f.pitchDegrees, Cam.maneuverPitch + 1e-9)
+                }
+            }
+        }
+    }
+
+    func testCarTurnStaysInFrameAllTheWayIn() {
+        for height in carHeights {
+            for kmh in stride(from: 30.0, through: 130, by: 10) {
+                let window = min(Cam.maneuverWindowMax, max(Cam.maneuverWindowMin, kmh / 3.6 * Cam.maneuverLeadSeconds))
+                for d in stride(from: 0.0, to: window, by: 10) {
+                    XCTAssertGreaterThanOrEqual(ahead(carFrame(kmh, turn: d, height: height), height: height), d,
+                                                "\(kmh) км/ч, развилка в \(d) м, \(height) pt")
+                }
+            }
+        }
+    }
+
+    func testCarPitchNeverPassesTheEngineLimitAndFlatHasNone() {
+        for kmh in stride(from: 0.0, through: 200, by: 5) {
+            XCTAssertLessThanOrEqual(carFrame(kmh, height: 382).pitchDegrees, maxPitch, "\(kmh) км/ч")
+            XCTAssertEqual(carFrame(kmh, height: 382, pitch: false).pitchDegrees, 0, "\(kmh) км/ч плоско")
+        }
+        // Плоско (горячий телефон) обзор добирает отдалением.
+        XCTAssertGreaterThanOrEqual(ahead(carFrame(60, height: 382, pitch: false), height: 382), 280)
+    }
+
+    func testCarBiggerScreenShowsMoreNotBigger() {
+        for kmh in stride(from: 0.0, through: 130, by: 10) {
+            let small = carFrame(kmh, height: 382), big = carFrame(kmh, height: 480)
+            XCTAssertGreaterThanOrEqual(big.zoom, small.zoom - 1e-9, "\(kmh) км/ч")
+            XCTAssertGreaterThan(ahead(big, height: 480), ahead(small, height: 382) - 1e-6, "\(kmh) км/ч")
+        }
+    }
+
     // MARK: - Геометрия
 
     func testTopDownGeometryIsThePlainFormula() {

@@ -64,7 +64,13 @@ final class CarPlayMapModel {
     /// «Весь маршрут» — вписать линию в экран (выбор маршрута).
     var overviewCommand = 0
 
-    func showOverview() { overviewCommand &+= 1 }
+    /// Обзор маршрута — это уже не слежение: «+/−» в нём приближают саму
+    /// карту. До 18.10 модель считала, что следит, и «+/−» на экране выбора
+    /// маршрута меняли только автозум, которого не видно.
+    func showOverview() {
+        overviewCommand &+= 1
+        send(.overview)
+    }
     var zoomDelta = 0.0
     /// День или ночь на экране машины — ОДНО значение на карту и HUD.
     /// Раньше HUD брал тему окна машины, а подложка — солнце, и первый кадр
@@ -91,10 +97,14 @@ final class CarPlayMapModel {
     /// от тика GPS бьёт и у стоящей машины, поэтому сторож видит застывание
     /// и тогда, когда фиксов нет минутами.
     @ObservationIgnored var lastHeartbeat = Date()
-    /// Едет ли карта за машиной. Пишет координатор карты (система сама снимает
-    /// слежение, как только водитель тронул карту пальцем или крутилкой),
-    /// читает значок кнопки «к себе»: залитый — следим, контурный — стоим.
-    var isFollowing = true
+    /// Едет ли карта за машиной — зеркало `browse.following` для значка
+    /// кнопки «к себе»: залитый — следим, контурный — стоим.
+    private(set) var isFollowing = true
+    /// Осмотр карты: следим ли, открыт ли интерфейс осмотра (CarPlayBrowse).
+    @ObservationIgnored private var browse = CarPlayBrowse.State()
+    /// Закрыть интерфейс осмотра шаблона — ставит делегат сцены. Без этого
+    /// возврат к машине оставлял в баре одну «Готово» (аудит 18.10, п. 1).
+    @ObservationIgnored var onClosePanning: (() -> Void)?
     /// Сколько занимают кнопки карты по краям окна (mapButtonSafeAreaLayoutGuide):
     /// HUD у правого края встаёт левее них. Меняется со сменой экрана.
     var mapButtonInsets = EdgeInsets()
@@ -103,29 +113,74 @@ final class CarPlayMapModel {
         guard translation != .zero else { return }
         panTotal = CGSize(width: panTotal.width + translation.width,
                           height: panTotal.height + translation.height)
-        if isFollowing { isFollowing = false }
-        scheduleReturn()
+        send(.moved)
     }
 
     /// «+ / −». При слежении меняется автозум (масштаб по скорости остаётся,
     /// сдвигается его уровень), на свободной карте — сам вид.
     func zoom(in zoomIn: Bool) {
-        if isFollowing {
+        if browse.following {
             zoomBias = min(AppConfig.carPlayZoomBiasLimit,
                            max(-AppConfig.carPlayZoomBiasLimit, zoomBias + (zoomIn ? 1 : -1)))
         } else {
             zoomDelta = zoomIn ? 1 : -1
             zoomCommand &+= 1
-            scheduleReturn()
         }
+        send(.zoomed)
     }
 
     /// «К себе»: карта снова едет за машиной.
-    func recenter() {
-        recenterRequests += 1
-        if !isFollowing { isFollowing = true }
+    func recenter() { send(.recenter) }
+
+    /// Интерфейс осмотра шаблона открылся / закрылся (делегат сцены).
+    func panningShown() { send(.panningShown) }
+    func panningHidden() { send(.panningHidden) }
+
+    /// Карта ушла в осмотр сама (движок получил панораму): модель обязана
+    /// знать, иначе «+/−» шли бы в автозум карты, которая стоит.
+    func mapStartedBrowsing() {
+        if browse.following { send(.moved) }
+    }
+
+    /// Новая карта (вернулись из музыки) стартует со слежения — модель
+    /// обязана сказать то же, иначе после давней панорамы «+/−» шли бы в
+    /// «свободную карту», которой нет, а «к себе» показывал «не следим».
+    func adoptFollowing() {
+        guard !browse.following else { return }
+        browse.following = true
         returnTask?.cancel()
         returnTask = nil
+        isFollowing = true
+    }
+
+    #if DEBUG
+    /// Только для тестов: слежение без таймеров и команд карте (CarPlayEngineTests
+    /// держат одну модель на класс — таймер прошлого теста не должен сработать
+    /// посреди следующего).
+    func setFollowingForTesting(_ following: Bool) {
+        returnTask?.cancel()
+        returnTask = nil
+        browse = CarPlayBrowse.State(following: following, panning: false)
+        isFollowing = following
+    }
+    #endif
+
+    /// Одно решение на событие (CarPlayBrowse), здесь — только исполнение.
+    private func send(_ event: CarPlayBrowse.Event) {
+        for effect in CarPlayBrowse.reduce(&browse, event, previewing: isPreviewing) {
+            switch effect {
+            case .armIdle:
+                armIdle()
+            case .cancelIdle:
+                returnTask?.cancel()
+                returnTask = nil
+            case .recenter:
+                recenterRequests &+= 1
+            case .closePanning:
+                onClosePanning?()
+            }
+        }
+        if isFollowing != browse.following { isFollowing = browse.following }
     }
 
     /// Щипок: масштаб текущего вида на свободной карте, сдвиг автозума при
@@ -142,26 +197,25 @@ final class CarPlayMapModel {
     /// Новый жест щипка — остаток прошлого не переносится.
     func pinchBegan() { pinchAccumulated = 1 }
 
-    /// Автовозврат к слежению: водитель отпанорамировал и забыл — карта не
-    /// должна стоять, пока он едет. Таймер взводится каждым сдвигом и гасится
-    /// «к себе»; тревога камеры возвращает карту сразу (returnOnAlert).
+    /// Автовозврат: водитель отпанорамировал или открыл осмотр и забыл —
+    /// карта не должна стоять, а бар — оставаться «осмотровым», пока он едет.
+    /// Таймер взводится каждым движением и гасится «к себе»; камера впереди
+    /// возвращает всё сразу (returnOnAlert).
     @ObservationIgnored private var returnTask: Task<Void, Never>?
 
-    private func scheduleReturn() {
+    private func armIdle() {
         returnTask?.cancel()
         returnTask = Task { @MainActor [weak self] in
             await Task.pause(seconds: AppConfig.carPlayFollowReturnSeconds)
-            guard !Task.isCancelled, let self, !isFollowing else { return }
-            Log.carplay.notice("карта: возврат к слежению по бездействию")
-            recenter()
+            guard !Task.isCancelled, let self else { return }
+            Log.carplay.notice("карта: возврат к машине по бездействию")
+            self.send(.idleTimeout)
         }
     }
 
-    /// Камера впереди — карта обязана ехать за машиной, где бы её ни оставили.
-    func returnOnAlert() {
-        guard !isFollowing else { return }
-        recenter()
-    }
+    /// Камера впереди — карта обязана ехать за машиной, где бы её ни оставили,
+    /// и осмотр закрывается вместе с ней.
+    func returnOnAlert() { send(.cameraAhead) }
 
     /// Пересчитать день/ночь. Ручной выбор старше всего; в «Авто» — машина,
     /// а без её ответа — солнце в точке водителя.

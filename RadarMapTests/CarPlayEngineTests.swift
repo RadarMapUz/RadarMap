@@ -25,7 +25,7 @@ final class CarPlayEngineTests: XCTestCase {
 
     private func model(following: Bool = true) -> CarPlayMapModel {
         let model = Self.shared
-        model.isFollowing = following
+        model.setFollowingForTesting(following)
         model.zoomBias = 0
         model.carIsDark = nil
         return model

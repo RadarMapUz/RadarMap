@@ -54,6 +54,12 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
 
     private var env: AppEnvironment { .shared }
 
+    /// Сколько строк покажет список машины: CarPlay сам режет лишнее молча,
+    /// а на ходу многие машины держат всего 12 (Руководство CarPlay, стр. 19).
+    private static var listLimit: Int {
+        min(AppConfig.carPlaySearchLimit, Int(CPListTemplate.maximumItemCount))
+    }
+
     init(onPick: @escaping (SavedPlace) -> Void) {
         self.onPick = onPick
     }
@@ -67,10 +73,11 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         await ensureLoaded(near: near)
         // С маршрутом — то, что встретится по пути, а не ближайшее вообще.
         // Проекция на линию — не для main: маршрут бывает междугородним.
+        let limit = Self.listLimit
         if let route = env.route.selected, let venues {
             let points = route.points, progress = env.route.progressAlong
             let along = await Task.detached(priority: .userInitiated) {
-                venues.alongRoute(kind, points: points, progress: progress, limit: AppConfig.carPlaySearchLimit)
+                venues.alongRoute(kind, points: points, progress: progress, limit: limit)
             }.value
             if !along.isEmpty {
                 return along.map { venue, ahead in
@@ -80,7 +87,7 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
                 }
             }
         }
-        let own = venues?.nearest(kind, to: near, limit: AppConfig.carPlaySearchLimit) ?? []
+        let own = venues?.nearest(kind, to: near, limit: limit) ?? []
         if !own.isEmpty {
             return own.map { venue in
                 (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
@@ -91,7 +98,7 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         // Apple — категорией POI, а не словом: «AYOQSH» на узбекском Apple
         // не поймёт.
         do {
-            return try await VenueBook.apple(kind, near: near).prefix(AppConfig.carPlaySearchLimit).map { venue in
+            return try await VenueBook.apple(kind, near: near).prefix(limit).map { venue in
                 (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
                  Self.detail(near: near, point: venue.point, offline: false), false)
             }
@@ -214,8 +221,9 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
                 places += await self.apple(query, near: near)
             }
             guard !Task.isCancelled else { return }
-            self.lastResults = Array(places.prefix(AppConfig.carPlaySearchLimit))
-            reply(places.prefix(AppConfig.carPlaySearchLimit).map { place, detail in
+            let limit = Self.listLimit
+            self.lastResults = Array(places.prefix(limit))
+            reply(places.prefix(limit).map { place, detail in
                 let item = CPListItem(text: place.title, detailText: detail)
                 item.userInfo = place
                 return item
@@ -232,7 +240,7 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         }
         do {
             let items = try await MKLocalSearch(request: request).start().mapItems
-            return items.prefix(AppConfig.carPlaySearchLimit).compactMap { item in
+            return items.prefix(Self.listLimit).compactMap { item in
                 let point = item.placemark.coordinate
                 guard CLLocationCoordinate2DIsValid(point) else { return nil }
                 let title = item.name ?? query

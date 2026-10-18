@@ -179,6 +179,8 @@ final class CarPlayGuidance {
     private var trip: CPTrip?
     private var tripDestination: CLLocationCoordinate2D?
     private var maneuver: CPManeuver?
+    /// Что ушло в `upcomingManeuvers`: манёвр и, если есть, ряд полос под ним.
+    private var upcoming: [CPManeuver] = []
     private var maneuverStep: RouteStep?
     /// CPManeuver держит связанные полосы ссылкой `assign` (не удерживает):
     /// отпустить ряд, пока на него смотрит ещё живой манёвр, значит оставить
@@ -188,17 +190,21 @@ final class CarPlayGuidance {
     private var sentStepTime = Date.distantPast
     private var sentTripDistance: Double?
     private var sentTripTime = Date.distantPast
-    private var alertedCameraID: Int?
+    /// Баннеры поверх карты — общая очередь подключения (CarPlayBanners).
+    private weak var banners: CarPlayBanners?
+    /// Камера впереди — системным баннером, на нашем экране тоже.
+    private let cameraBanner = CarPlayCameraBanner()
     /// Когда показан текущий манёвр — для состояния «начальный».
     private var maneuverShownAt = Date.distantPast
     private var sentManeuverState: CPManeuverState?
     /// Ведение на паузе «Перестраиваю маршрут» (CPTripPauseReason.rerouting).
     private var pausedForReroute = false
     private var generation = 0
-    /// Наше приложение на экране машины. Пока да — камеру показывает док и
-    /// баннер приближения, а системный баннер был бы вторым о том же.
-    /// Изначально «нет»: сцена может подключиться в фоне и так и не стать
-    /// активной, а `sceneDidBecomeActive` ставит «да» сам.
+    /// Наше приложение на экране машины. От этого зависит, как долго висит
+    /// баннер камеры: на нашем экране — весь подъезд, поверх чужого
+    /// приложения — уведомление на несколько секунд. Изначально «нет»: сцена
+    /// может подключиться в фоне и так и не стать активной, а
+    /// `sceneDidBecomeActive` ставит «да» сам.
     var isOnScreen = false
 
     private var env: AppEnvironment { .shared }
@@ -207,8 +213,9 @@ final class CarPlayGuidance {
         self.model = model
     }
 
-    func attach(to template: CPMapTemplate) {
+    func attach(to template: CPMapTemplate, banners: CarPlayBanners) {
         self.template = template
+        self.banners = banners
         generation &+= 1
         observe()
     }
@@ -231,8 +238,8 @@ final class CarPlayGuidance {
         guard template != nil else { return }
         sentStepDistance = nil
         sentTripDistance = nil
-        if let session, let maneuver {
-            session.upcomingManeuvers = [maneuver]
+        if let session, !upcoming.isEmpty {
+            session.upcomingManeuvers = upcoming
         }
         // Запускает сессию, если её нет, и шлёт оценки (сброшены выше).
         sync()
@@ -245,6 +252,7 @@ final class CarPlayGuidance {
         session = nil
         trip = nil
         maneuver = nil
+        upcoming = []
         maneuverStep = nil
         laneGuidances = []
         pausedForReroute = false
@@ -259,10 +267,13 @@ final class CarPlayGuidance {
         session = nil
         trip = nil
         maneuver = nil
+        upcoming = []
         maneuverStep = nil
         laneGuidances = []
         pausedForReroute = false
         template = nil
+        banners = nil
+        cameraBanner.reset()
         themedDaylight = nil
         model.hasSystemGuidance = false
     }
@@ -313,12 +324,13 @@ final class CarPlayGuidance {
                 self.session = nil
                 trip = nil
                 maneuver = nil
+                upcoming = []
                 maneuverStep = nil
                 laneGuidances = []
                 pausedForReroute = false
                 model.hasSystemGuidance = false
             }
-            alertCamera(on: template)
+            updateCameraBanner()
             return
         }
         // Ведём только в поездке (NavigationFlow): маршрут без поездки — это
@@ -366,12 +378,13 @@ final class CarPlayGuidance {
             self.session = nil
             trip = nil
             maneuver = nil
+            upcoming = []
             maneuverStep = nil
             laneGuidances = []
             pausedForReroute = false
             model.hasSystemGuidance = false
         }
-        alertCamera(on: template)
+        updateCameraBanner()
     }
 
     // MARK: - Сессия
@@ -394,8 +407,13 @@ final class CarPlayGuidance {
         let trip = CPTrip(origin: origin, destination: target, routeChoices: [choice])
         self.trip = trip
         tripDestination = destination
-        session = template.startNavigationSession(for: trip)
+        let started = template.startNavigationSession(for: trip)
+        // Пока манёвра нет — «загружаю», а не пустая карточка (Руководство
+        // CarPlay, стр. 47): снимает паузу первый же upcomingManeuvers.
+        started.pauseTrip(for: .loading, description: nil)
+        session = started
         maneuver = nil
+        upcoming = []
         maneuverStep = nil
         laneGuidances = []
         pausedForReroute = false
@@ -416,10 +434,9 @@ final class CarPlayGuidance {
             // метры): прежний манёвр ОСТАЁТСЯ. Пустой список манёвров при живой
             // сессии машина читает как «ведения нет» — и плитка главного экрана
             // показывает «Дом / Работа» вместо поворота (carplay12, 12.10).
-            if maneuver == nil {
-                session.upcomingManeuvers = []
-                session.currentLaneGuidance = nil
-            }
+            // Манёвра ещё не было — сессия так и стоит на паузе «загружаю»
+            // (start): пустой список Руководство CarPlay запрещает (стр. 47).
+            if maneuver == nil { session.currentLaneGuidance = nil }
             Log.carplay.notice("манёвра нет — в машине остаётся прежний: \(self.maneuver != nil, privacy: .public)")
             return
         }
@@ -477,14 +494,76 @@ final class CarPlayGuidance {
             seconds: CarPlayGuidanceMapping.timeToManeuver(stepDistance: distance,
                                                            remainingDistance: env.route.remainingDistance,
                                                            remainingTime: env.route.remainingTime))
+        // Ряд полос на экране машины — вторым «манёвром» из одной картинки
+        // (Руководство CarPlay, стр. 48; стиль — mapTemplate(_:displayStyleFor:)).
+        // CPLaneGuidance выше уходит только в метаданные для приборки, а они
+        // выключены: до 18.10 полос в машине не было нигде (аудит, п. 5).
+        // С метаданными ряд не шлём: приборка прочла бы его вторым поворотом.
+        let laneRow = AppConfig.carPlayNavigationMetadata || !CarPlayGuidanceMapping.isUseful(lanes)
+            ? nil : Self.laneRow(step.lanes, kind: step.kind)
         // Улика на случай пустой карточки: что именно ушло в машину.
-        Log.carplay.notice("манёвр в машину: вариантов \(next.instructionVariants.count, privacy: .public), первый \(next.instructionVariants.first?.count ?? 0, privacy: .public) симв., стрелка \(next.symbolImage != nil, privacy: .public), \(Int(distance), privacy: .public) м")
+        Log.carplay.notice("манёвр в машину: вариантов \(next.instructionVariants.count, privacy: .public), первый \(next.instructionVariants.first?.count ?? 0, privacy: .public) симв., стрелка \(next.symbolImage != nil, privacy: .public), полосы \(laneRow != nil, privacy: .public), \(Int(distance), privacy: .public) м")
         maneuver = next
+        upcoming = [next] + (laneRow.map { [$0] } ?? [])
         // Каждый манёвр, попадающий в upcomingManeuvers, сначала регистрируется
         // в сессии (CPNavigationSession.h, iOS 17.4+): без этого приборка и
-        // проекция на стекло могут не получить его вовсе.
+        // проекция на стекло могут не получить его вовсе. Ряд полос — не
+        // манёвр, в метаданные он не идёт.
         session.add([next])
-        session.upcomingManeuvers = [next]
+        session.upcomingManeuvers = upcoming
+    }
+
+    // MARK: - Ряд полос на экране машины
+
+    /// Метка ряда полос среди upcomingManeuvers — по ней делегат шаблона
+    /// отдаёт ему стиль «только картинка».
+    static let laneRowTag = "radarmap.lanes"
+
+    static func isLaneRow(_ maneuver: CPManeuver) -> Bool {
+        (maneuver.userInfo as? String) == laneRowTag
+    }
+
+    /// Второй «манёвр» карточки: картинка ряда полос без текста.
+    static func laneRow(_ hints: [LaneHint], kind: ManeuverKind?) -> CPManeuver? {
+        guard let image = laneImage(hints, kind: kind) else { return nil }
+        let row = CPManeuver()
+        row.symbolImage = image
+        row.instructionVariants = []
+        row.userInfo = laneRowTag
+        return row
+    }
+
+    /// Картинка ряда: полоса, которая ведёт по маршруту, — белая, остальные —
+    /// приглушённые; между полосами — тонкий разделитель. Не больше
+    /// `carPlayLaneRowSize` (Руководство CarPlay: 120×18 pt), фон прозрачный —
+    /// под ним синяя карточка манёвра.
+    static func laneImage(_ hints: [LaneHint], kind: ManeuverKind?) -> UIImage? {
+        guard !hints.isEmpty else { return nil }
+        let size = AppConfig.carPlayLaneRowSize
+        let cell = min(size.height * AppConfig.carPlayLaneCellAspect, size.width / CGFloat(hints.count))
+        let left = (size.width - cell * CGFloat(hints.count)) / 2
+        let configuration = UIImage.SymbolConfiguration(pointSize: size.height * 0.72, weight: .bold)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = AppConfig.carPlaySymbolScale
+        format.opaque = false
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            for (index, hint) in hints.enumerated() {
+                let x = left + cell * CGFloat(index)
+                if index > 0 {
+                    context.cgContext.setFillColor(UIColor(white: 1, alpha: 0.3).cgColor)
+                    context.cgContext.fill(CGRect(x: x - 0.5, y: size.height * 0.15, width: 1, height: size.height * 0.7))
+                }
+                guard let symbol = UIImage(systemName: hint.primaryArrow(for: kind).symbolName,
+                                           withConfiguration: configuration) else { continue }
+                let color = hint.isValid ? UIColor.white : UIColor(white: 1, alpha: 0.35)
+                let fit = min(1, (cell - 2) / max(1, symbol.size.width), size.height / max(1, symbol.size.height))
+                let drawn = CGSize(width: symbol.size.width * fit, height: symbol.size.height * fit)
+                symbol.withTintColor(color, renderingMode: .alwaysOriginal)
+                    .draw(in: CGRect(x: x + (cell - drawn.width) / 2, y: (size.height - drawn.height) / 2,
+                                     width: drawn.width, height: drawn.height))
+            }
+        }
+        return image.withRenderingMode(.alwaysOriginal)
     }
 
     private func updateEstimates(on template: CPMapTemplate) {
@@ -522,40 +601,14 @@ final class CarPlayGuidance {
         }
     }
 
-    // MARK: - Камера, когда на экране машины не мы
+    // MARK: - Камера впереди
 
-    /// Системный баннер о камере — только когда водитель смотрит не на нас
-    /// (музыка, звонок): на нашем экране о ней уже говорит док. Один раз на
-    /// камеру; решение «предупреждать ли» уже приняли гейты оповещений.
-    private func alertCamera(on template: CPMapTemplate) {
-        let location = env.location
-        guard location.isApproachingCamera, let camera = location.nearestCamera,
-              let distance = location.distanceToNearest else {
-            if !location.isApproachingCamera { alertedCameraID = nil }
-            return
-        }
-        guard camera.id != alertedCameraID, !isOnScreen else { return }
-        // Отмечаем только показанное: ушёл водитель в музыку посреди подхода —
-        // баннер о той же камере должен появиться, а не считаться отданным.
-        alertedCameraID = camera.id
-        let far = Formatting.distance(distance)
-        let alert = CPNavigationAlert(
-            titleVariants: [String(format: String(localized: "%1$@ через %2$@"), camera.kind.shortName, far),
-                            camera.kind.shortName],
-            subtitleVariants: [camera.kind.displayName],
-            image: Self.symbol(camera.kind.symbolName, pointSize: 30,
-                               onDark: model.carIsDark ?? !model.isDaylight),
-            primaryAction: CPAlertAction(title: String(localized: "Понятно"), style: .cancel) { _ in },
-            secondaryAction: nil,
-            duration: AppConfig.carPlayCameraAlertSeconds)
-        // Пока виден прежний баннер, новый CarPlay молча не покажет (минимум
-        // показа — 8 с): вторая камера подряд терялась бы. Убираем прежний.
-        guard template.currentNavigationAlert != nil else {
-            return template.present(navigationAlert: alert, animated: true)
-        }
-        template.dismissNavigationAlert(animated: false) { [weak template] _ in
-            Task { @MainActor in template?.present(navigationAlert: alert, animated: true) }
-        }
+    /// Баннер камеры — на каждом пересчёте (CarPlayCameraBanner). Решение
+    /// «предупреждать ли» уже приняли гейты оповещений.
+    private func updateCameraBanner() {
+        guard let banners else { return }
+        cameraBanner.update(banners: banners, onScreen: isOnScreen,
+                            onDark: model.carIsDark ?? !model.isDaylight)
     }
 
     // MARK: - Картинки и оценки

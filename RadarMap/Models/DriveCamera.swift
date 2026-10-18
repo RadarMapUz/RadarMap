@@ -31,6 +31,13 @@
 //  место машины на наклонной карте (`centreAhead`): прежняя формула для вида
 //  сверху на наклоне ставила машину на 5 % высоты выше задуманного.
 //
+//  Экран машины — свой профиль (18.10, «при езде нормального вида нет»):
+//  порог полос z17 на всей городской скорости давал на экране машины 106 м
+//  дороги впереди на 40 км/ч и 175 м на 60 — следующий перекрёсток за краем.
+//  В машине впереди видно секунды пути, как у больших навигаторов (261 м на
+//  40 км/ч, 408 м на 60 на экране 382 pt), полосы — стоя, ползком и на
+//  подъезде к манёвру; телефон не меняется.
+//
 //  Чистая логика, время — параметром; покрыто DriveCameraTests.
 //
 
@@ -38,6 +45,11 @@ import CoreLocation
 import Foundation
 
 nonisolated enum DriveCamera {
+
+    /// Чей экран: у машины свой профиль — обзор впереди важнее разметки.
+    enum Screen: Sendable {
+        case phone, car
+    }
 
     /// Что задаёт скорость: наклон, нужный обзор и пределы масштаба.
     struct Profile: Equatable, Sendable {
@@ -132,8 +144,40 @@ nonisolated enum DriveCamera {
         Knot(kmh: 130, pitch: 0, seconds: 12, minZoom: 15.0, maxZoom: 16.8, share: 0.75),
     ]
 
+    /// Экран машины с наклоном. Стоя и ползком — сверху и на полосах
+    /// (z17, около 100 м вперёд); с 30 км/ч впереди 20–25 секунд пути, как у
+    /// Apple и Яндекса на том же экране: на 40 км/ч — 261 м, на 60 — 408 м
+    /// (382 pt, расчёт DriveCameraTests). Разметка полос с z17 на ходу в
+    /// городе не видна — её возвращает подъезд к манёвру (порог z17.3).
+    private static let carPitched: [Knot] = [
+        Knot(kmh: 0, pitch: 0, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
+        Knot(kmh: 15, pitch: 0, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
+        Knot(kmh: 30, pitch: 25, seconds: 22, minZoom: 16.4, maxZoom: 17.4, share: 0.66),
+        Knot(kmh: 50, pitch: 40, seconds: 25, minZoom: 16.0, maxZoom: 17.2, share: 0.70),
+        Knot(kmh: 70, pitch: 45, seconds: 24, minZoom: 15.7, maxZoom: 17.0, share: 0.72),
+        Knot(kmh: 90, pitch: 52, seconds: 22, minZoom: 15.5, maxZoom: 16.8, share: 0.74),
+        Knot(kmh: 110, pitch: 56, seconds: 21, minZoom: 15.3, maxZoom: 16.6, share: 0.75),
+        Knot(kmh: 130, pitch: 58, seconds: 20, minZoom: 15.1, maxZoom: 16.4, share: 0.75),
+    ]
+
+    /// Экран машины плоско (горячий телефон): обзор — только отдалением.
+    private static let carFlat: [Knot] = [
+        Knot(kmh: 0, pitch: 0, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
+        Knot(kmh: 15, pitch: 0, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
+        Knot(kmh: 40, pitch: 0, seconds: 18, minZoom: 16.0, maxZoom: 17.2, share: 0.70),
+        Knot(kmh: 70, pitch: 0, seconds: 18, minZoom: 15.4, maxZoom: 16.8, share: 0.74),
+        Knot(kmh: 100, pitch: 0, seconds: 16, minZoom: 15.0, maxZoom: 16.4, share: 0.75),
+        Knot(kmh: 130, pitch: 0, seconds: 15, minZoom: 14.8, maxZoom: 16.2, share: 0.75),
+    ]
+
     /// Обзор впереди не короче этого и стоя.
     static let minLookaheadMeters = 60.0
+    /// На экране машины стоя — перекрёсток впереди целиком, а не 60 м.
+    static let carMinLookaheadMeters = 100.0
+
+    static func minLookahead(_ screen: Screen) -> Double {
+        screen == .car ? carMinLookaheadMeters : minLookaheadMeters
+    }
     /// Развилка: с какого времени до неё камера начинает подтягиваться, и
     /// не дальше/не ближе каких расстояний.
     static let maneuverLeadSeconds = 15.0
@@ -155,8 +199,12 @@ nonisolated enum DriveCamera {
     static let maneuverMarginMeters = 40.0
 
     static func profile(speedKmh: Double, pitchAllowed: Bool,
-                        maxPitch: Double = AppConfig.engineMapPitchDegrees) -> Profile {
-        let knots = pitchAllowed ? pitched : flat
+                        maxPitch: Double = AppConfig.engineMapPitchDegrees,
+                        screen: Screen = .phone) -> Profile {
+        let knots = switch screen {
+        case .phone: pitchAllowed ? pitched : flat
+        case .car:   pitchAllowed ? carPitched : carFlat
+        }
         let v = max(0, speedKmh.isFinite ? speedKmh : 0)
         func value(_ key: (Knot) -> Double) -> Double {
             guard let first = knots.first, let last = knots.last else { return 0 }
@@ -188,14 +236,17 @@ nonisolated enum DriveCamera {
     ///     кромки нижней и до кнопок сбоку.
     static func target(speedKmh: Double, maneuverDistance: Double?, pitchAllowed: Bool,
                        maxPitch: Double = AppConfig.engineMapPitchDegrees,
+                       screen: Screen = .phone,
                        keep: Keep? = nil,
                        viewHeight: Double, latitude: Double, clear: Clear = Clear(),
                        carY: (Double) -> Double) -> Frame {
-        let profile = profile(speedKmh: speedKmh, pitchAllowed: pitchAllowed, maxPitch: maxPitch)
+        let profile = profile(speedKmh: speedKmh, pitchAllowed: pitchAllowed, maxPitch: maxPitch,
+                              screen: screen)
         let mps = max(0, speedKmh.isFinite ? speedKmh : 0) / 3.6
         var pitch = profile.pitchDegrees
         var minZoom = profile.minZoom
-        var lookahead = max(minLookaheadMeters, mps * profile.lookaheadSeconds)
+        let nearest = minLookahead(screen)
+        var lookahead = max(nearest, mps * profile.lookaheadSeconds)
 
         // Развилка в окне подъезда: обзор — ровно до неё с запасом (поворот
         // обязан быть в кадре, пока камера приближается), наклон уходит к
@@ -209,7 +260,7 @@ nonisolated enum DriveCamera {
                 let late = ramp(d, from: window * maneuverPitchShare, to: maneuverCloseMeters)
                 pitch += (min(pitch, maneuverPitch) - pitch) * late
                 minZoom += (max(minZoom, maneuverMinZoom) - minZoom) * w
-                lookahead = max(minLookaheadMeters, d + maneuverMarginMeters)
+                lookahead = max(nearest, d + maneuverMarginMeters)
                 visibilityCap = lookahead
             }
         }

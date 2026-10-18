@@ -1150,8 +1150,29 @@ nonisolated enum AppConfig {
     static let carPlayPanStep: CGFloat = 120
     /// Удержанная стрелка панорамы повторяет шаг с этим интервалом.
     static let carPlayPanHoldInterval: TimeInterval = 0.15
-    /// Сколько висит тост в машине («Отметка принята»).
-    static let carPlayToastSeconds: TimeInterval = 2.5
+    /// Сколько висит подтверждение в машине («Поездка началась») — баннером
+    /// навигатора с 18.10. Не меньше CPNavigationAlertMinimumDuration (5 с):
+    /// короче система всё равно не покажет.
+    static let carPlayToastSeconds: TimeInterval = 5
+    /// Закрытие осмотра не подтвердилось за столько — бар возвращаем сами:
+    /// застрявшая «Готово» и есть пропажа кнопок (аудит 18.10, п. 1).
+    static let carPlayPanningDismissFallbackSeconds: TimeInterval = 1.5
+    /// Вопрос «радар ещё на месте?» — только стоя или ползком: ответ на ходу —
+    /// второй взгляд на экран. Тот же порог, что у выбора маршрута.
+    static let carPlayQuestionMaxKmh: Double = 10
+    /// Сколько висит вопрос — как плашка на телефоне: двадцать секунд и уйти.
+    static let carPlayQuestionSeconds: TimeInterval = 20
+    /// Как часто проверять, остановилась ли машина, пока вопрос ждёт: скорость
+    /// не событие, а подписка на неё будила бы делегат на каждом фиксе.
+    static let carPlayQuestionPollSeconds: TimeInterval = 3
+    /// Баннер вопроса закрыт: столько ждём обработчик кнопки «Да»/«Нет», прежде
+    /// чем засчитать «Пропустить» — порядок событий CarPlay не обещает.
+    static let carPlayQuestionAnswerGraceSeconds: TimeInterval = 0.5
+    /// Ряд полос под манёвром: картинка не больше 120×18 pt (Руководство
+    /// CarPlay, стр. 48), клетка полосы не шире 1,4 высоты — иначе две полосы
+    /// растягивались бы на всю карточку.
+    static let carPlayLaneRowSize = CGSize(width: 120, height: 18)
+    static let carPlayLaneCellAspect: CGFloat = 1.4
     /// Сетка «Куда»: мест всего (предел CPGridTemplate) и радиус, в котором
     /// недавнее место считается тем же, что Дом/Работа.
     static let carPlayGridLimit = 8
@@ -1217,7 +1238,11 @@ nonisolated enum AppConfig {
     static let carPlayEstimateMinStepMeters: Double = 10
     /// Сколько держится системный баннер о камере, когда на экране машины не
     /// мы (музыка, звонок): хватит прочитать «Камера через 400 м» и не мешать.
+    /// На нашем экране баннер висит весь подъезд (CarPlayCameraBanner).
     static let carPlayCameraAlertSeconds: TimeInterval = 8
+    /// Расстояние в баннере камеры переписывается не чаще этого: каждое
+    /// обновление — сообщение в машину, а цифра меняется на каждом фиксе.
+    static let carPlayCameraBannerUpdateSeconds: TimeInterval = 1
 
     // MARK: - Дороги и карта на движке
 

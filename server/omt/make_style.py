@@ -738,7 +738,9 @@ def _layers_in_draw_order(p):
          "minzoom": 16.5,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["in", ["get", "kind"], ["literal", [7, 8, 10, 13]]]],
          "paint": {"fill-pattern": p["asphalt"],
-                   "fill-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.5, 0.18, 20, 0.28]}},
+                   # Вблизи (z19–20) тише: на площади перекрёстка зерно читалось
+                   # грязью поверх асфальта (18.10.2026).
+                   "fill-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.5, 0.18, 19, 0.16, 20, 0.14]}},
         # Сплошная перед перекрёстком (последние 25 м подхода) — без штриха.
         {"id": "radar-markings-solid", "type": "line", "source": "radar", "source-layer": "markings",
          "minzoom": LANE_MARKINGS_FROM, "filter": ["all", ["!", ["has", "centre"]], ["has", "solid"]],

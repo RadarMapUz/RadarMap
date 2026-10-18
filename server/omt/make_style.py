@@ -300,6 +300,11 @@ def tree_radius(scale=1.0):
 
 
 GUTTER_SHARE = 0.07
+# Кайма ленты: полотно шире на столько пикселей (по половине с каждой
+# стороны) — жёлтый бордюр магистрали. Бордюр угла перекрёстка — та же
+# половина, чтобы кромка шла по углу без ступеньки.
+ROAD_KERB_EXTRA_PX = 2.4
+KERB_LINE_PX = ROAD_KERB_EXTRA_PX / 2
 
 
 def scaled_width(share):
@@ -614,7 +619,7 @@ def _layers_in_draw_order(p):
          # у tertiary — нейтральная, у мелких — цвет края мелкой улицы.
          "paint": {"line-color": ["case", ["<=", ["get", "cls"], 4], p["kerb"],
                                   ["<=", ["get", "cls"], 5], p["casing"], p["minor_edge"]],
-                   "line-width": measured(2.4)}},
+                   "line-width": measured(ROAD_KERB_EXTRA_PX)}},
         {"id": "radar-roads", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7], ["!", ["has", "stub"]]],
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
@@ -674,6 +679,17 @@ def _layers_in_draw_order(p):
          "minzoom": OUR_ROADS_FROM,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["in", ["get", "kind"], ["literal", [8, 10]]]],
          "paint": {"fill-color": p["road"], "fill-antialias": False}},
+        # Бордюр угла перекрёстка (вид 16): продолжение кромки полотна по дуге
+        # от устья подхода к устью соседа. Кромка лент под площадью узла не
+        # видна, и бордюр проспекта обрывался, не дойдя до угла (18.10.2026).
+        # Асфальт по ходу линии слева: сдвиг вправо кладёт бордюр снаружи,
+        # ровно как кайму ленты (на 1,2 px за кромкой).
+        {"id": "radar-junction-kerb", "type": "line", "source": "radar", "source-layer": "surface",
+         "minzoom": OUR_ROADS_FROM,
+         "filter": ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "kind"], 16]],
+         "layout": {"line-join": "round", "line-cap": "butt"},
+         "paint": {"line-color": ["case", ["get", "major"], p["kerb"], p["casing"]],
+                   "line-width": KERB_LINE_PX, "line-offset": KERB_LINE_PX / 2}},
         # Разделительная ПОЛОСА между встречными лентами — поверх асфальта и площади узла: она
         # построена по тем же ширинам, что и полотно, а под полотном узкий
         # бетонный разделитель (Мукими: 2,5 м между лентами по 5 полос) целиком

@@ -4410,12 +4410,14 @@ MOUTH_ARC_STEP_DEGREES = 15.0
 MOUTH_MAX_TANGENT_METERS = 30.0
 
 
-def mouth_outline(legs, kerbs=None):
+def mouth_outline(legs, kerbs=None, uniform=False):
     """Кольцо узла по устьям подходов с дугами бордюра или None (не вышло).
 
     kerbs (список) — сюда кладутся бордюры углов: (магистральный?, линия от
     устья через дугу к устью соседа), асфальт по ходу линии слева. Только
     если контур вышел; вызывающий берёт их, лишь когда контур принят.
+    uniform — один радиус на все углы (kerb_radius узла), как до 18.10.2026:
+    запасной ход, когда с радиусами по углам контур не вышел.
     """
     nodes = {}
     for node, _neighbour, _width in legs:
@@ -4509,7 +4511,7 @@ def mouth_outline(legs, kerbs=None):
         s = (rx * (-b["d"][1]) - ry * (-b["d"][0])) / det
         t = (a["d"][0] * ry - a["d"][1] * rx) / det
         corner = (pa[0] + a["d"][0] * s, pa[1] + a["d"][1] * s)
-        radius = corner_radius(a["half"] * 2, b["half"] * 2)
+        radius = kerb_radius(legs) if uniform else corner_radius(a["half"] * 2, b["half"] * 2)
         tangent = radius / math.tan(turn / 2)
         ta, tb = s + tangent, t + tangent
         if ta > MOUTH_MAX_TANGENT_METERS or tb > MOUTH_MAX_TANGENT_METERS:
@@ -4564,7 +4566,10 @@ def mouth_outline(legs, kerbs=None):
     reverse = signed_area_meters(out) < 0
     if reverse:
         out.reverse()
-    if surface_check.defect(out) is not None:
+    # И в том виде, в каком ляжет в тайл: после округления до 1e-5° малый
+    # контур с дугами бывает перекручен, и ворота выбрасывали узел целиком —
+    # дыра в перекрёстке хуже прежнего острого угла.
+    if surface_check.defect(out) is not None or surface_check.defect(quantized(out)) is not None:
         return None
     # Звезда: острый угол контура — устье узкого примыкания вылезло лучом
     # (Чиланзар, 07.10.2026). Такой контур не годится — прежняя оболочка.
@@ -4644,12 +4649,13 @@ def _mouth_figure(legs, kerbs=None):
     kerbs (список) получает бордюры углов — только у принятого контура."""
     if len(legs) < MIN_JUNCTION_ARMS:
         return None
-    found = []
-    outline = mouth_outline(legs, found)
-    if outline and len(outline) >= 3 and _mouth_fits(legs, outline):
-        if kerbs is not None:
-            kerbs.extend(found)
-        return outline
+    for uniform in (False, True):
+        found = []
+        outline = mouth_outline(legs, found, uniform)
+        if outline and len(outline) >= 3 and _mouth_fits(legs, outline):
+            if kerbs is not None:
+                kerbs.extend(found)
+            return outline
     return None
 
 

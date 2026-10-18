@@ -2929,6 +2929,17 @@ class JunctionKerbTests(unittest.TestCase):
         self.assertTrue(kerbs)
         self.assertTrue(all(not flags & build_roads.FILLET_MAJOR for _k, flags, _l in kerbs))
 
+    def test_outline_never_dies_at_the_tile_gate(self):
+        # Малый контур с дугами после округления до 1e-5° бывал перекручен, и
+        # ворота выбрасывали узел целиком — дыра в перекрёстке (18.10.2026).
+        # Узел, что построен, обязан пройти ворота.
+        for widths in ((4.0, 9.5, 4.0), (6.0, 10.0, 6.0, 10.0), (3.5, 12.0, 3.5, 9.0)):
+            for turn in (60, 75, 90, 120):
+                legs = [self.leg(i * turn, w) for i, w in enumerate(widths)]
+                for figure in self.made(legs):
+                    if figure[0] == build_roads.AREA_JUNCTION:
+                        self.assertTrue(build_roads.surface_gate(figure), (widths, turn))
+
     def test_plain_tuples_still_work(self):
         legs = [(self.node, l[1], l[2]) for l in (self.leg(a, 12.0) for a in (0, 90, 180, 270))]
         made = self.made(legs)

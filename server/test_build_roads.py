@@ -2376,7 +2376,8 @@ class SlipNodeTests(unittest.TestCase):
 
     def test_lone_slip_patch_is_asphalt_not_a_junction(self):
         legs = [self.leg(0, 11.5), self.leg(180, 11.5), self.leg(20, 7.0)]
-        made = build_roads.build_junctions({build_roads._node_key(self.node): legs})
+        made = [f for f in build_roads.build_junctions({build_roads._node_key(self.node): legs})
+                if f[0] != build_roads.AREA_KERB]
         self.assertTrue(made)
         for _kind, flags, _ring in made:
             self.assertTrue(flags & build_roads.AREA_FLAG_STRIP, "бит полосы — не центр для стоп-линий")
@@ -2487,7 +2488,7 @@ class JunctionTests(unittest.TestCase):
         return {build_roads._node_key(node): [a[0] for a in arms]}
 
     def test_three_arms_give_a_polygon(self):
-        made = build_roads.build_junctions(self.cross())
+        made = [f for f in build_roads.build_junctions(self.cross()) if f[0] != build_roads.AREA_KERB]
         self.assertEqual(len(made), 1)
         kind, flags, ring = made[0]
         self.assertEqual(kind, build_roads.AREA_JUNCTION)
@@ -2857,6 +2858,122 @@ class MedianTests(unittest.TestCase):
     def test_record_stays_three_long(self):
         for record in build_roads.build_medians(self.pair(20 / 111_320.0)):
             self.assertEqual(len(record), 3)
+
+
+class JunctionKerbTests(unittest.TestCase):
+    """Углы перекрёстка: радиус по двум дорогам угла и бордюр по дуге (18.10.2026).
+
+    У Нурафшон × Фаробий узкой ногой узла была внутренняя связка 4,6 м, и по
+    ней все углы двух проспектов скруглялись на 2,3 м — острые углы со
+    ступенькой; жёлтая кромка лент под площадью узла обрывалась до угла.
+    """
+
+    node = (69.25, 41.30)
+
+    def leg(self, degrees, width, code=3):
+        kx = 111_320 * math.cos(math.radians(self.node[1]))
+        dx, dy = 60 * math.cos(math.radians(degrees)), 60 * math.sin(math.radians(degrees))
+        return build_roads.Leg(self.node, (self.node[0] + dx / kx, self.node[1] + dy / 111_320), width, code)
+
+    def metric(self, points):
+        kx = 111_320 * math.cos(math.radians(self.node[1]))
+        return [((p[0] - self.node[0]) * kx, (p[1] - self.node[1]) * 111_320) for p in points]
+
+    def made(self, legs):
+        return build_roads.build_junctions({build_roads._node_key(self.node): legs})
+
+    def test_leg_unpacks_into_three_and_keeps_its_class(self):
+        leg = self.leg(0, 12.0, code=2)
+        node, neighbour, width = leg
+        self.assertEqual((node, width, leg.code), (self.node, 12.0, 2))
+        self.assertEqual(leg[2], 12.0)
+
+    def test_corner_radius_follows_the_two_roads_of_the_corner(self):
+        self.assertEqual(build_roads.corner_radius(12.0, 12.0), 9.0)
+        self.assertEqual(build_roads.corner_radius(40.0, 40.0), build_roads.KERB_RADIUS_MAX)
+        self.assertEqual(build_roads.corner_radius(12.0, 2.0), build_roads.KERB_RADIUS_MIN)
+
+    def test_a_narrow_arm_does_not_sharpen_the_avenue_corners(self):
+        legs = [self.leg(0, 12.0), self.leg(90, 12.0), self.leg(180, 12.0), self.leg(270, 12.0),
+                self.leg(225, 4.6)]
+        kerbs = [f for f in self.made(legs) if f[0] == build_roads.AREA_KERB]
+        def length(line):
+            pts = self.metric(line)
+            return sum(math.dist(a, b) for a, b in zip(pts, pts[1:]))
+        # Угол между двумя проспектами (0° и 90°): дуга радиуса 9 м, а не 2,3.
+        wide = max(kerbs, key=lambda f: length(f[2]))
+        self.assertGreater(length(wide[2]), 12.0, "угол проспектов скруглён по узкой ноге")
+
+    def test_every_corner_gets_a_kerb_line_with_asphalt_on_the_left(self):
+        legs = [self.leg(0, 12.0), self.leg(90, 10.0), self.leg(180, 12.0), self.leg(270, 10.0)]
+        made = self.made(legs)
+        rings = [f for f in made if f[0] == build_roads.AREA_JUNCTION]
+        kerbs = [f for f in made if f[0] == build_roads.AREA_KERB]
+        self.assertEqual(len(rings), 1)
+        self.assertEqual(len(kerbs), 4)
+        ring = rings[0][2]
+        for kind, flags, line in kerbs:
+            self.assertFalse(flags & build_roads.AREA_FLAG_CLOSED, "бордюр — линия, не площадь")
+            self.assertTrue(flags & build_roads.FILLET_MAJOR, "у магистралей бордюр жёлтый")
+            # Концы бордюра лежат на контуре узла — кромка лент не рвётся.
+            for end in (line[0], line[-1]):
+                self.assertLess(min(build_roads.meters_between(end, p) for p in ring), 0.01)
+            # Асфальт (центр узла) — слева по ходу линии.
+            (ax, ay), (bx, by) = self.metric([line[0], line[-1]])
+            self.assertGreater((bx - ax) * (0 - ay) - (by - ay) * (0 - ax), 0)
+
+    def test_corner_with_a_minor_road_gets_a_neutral_kerb(self):
+        # Проспект и дворовая улица: у двора кромка не жёлтая — и угол тоже.
+        legs = [self.leg(0, 12.0), self.leg(180, 12.0), self.leg(90, 8.0, code=6), self.leg(270, 8.0, code=6)]
+        kerbs = [f for f in self.made(legs) if f[0] == build_roads.AREA_KERB]
+        self.assertTrue(kerbs)
+        self.assertTrue(all(not flags & build_roads.FILLET_MAJOR for _k, flags, _l in kerbs))
+
+    def test_plain_tuples_still_work(self):
+        legs = [(self.node, l[1], l[2]) for l in (self.leg(a, 12.0) for a in (0, 90, 180, 270))]
+        made = self.made(legs)
+        self.assertEqual(sum(1 for f in made if f[0] == build_roads.AREA_JUNCTION), 1)
+        self.assertTrue(all(not f[1] & build_roads.FILLET_MAJOR for f in made if f[0] == build_roads.AREA_KERB))
+
+
+class MedianOpeningTests(unittest.TestCase):
+    """Разрыв разделительной на развороте — асфальт от оси до оси (18.10.2026).
+
+    Связка разворота наискосок не попадала узлами на обе кромки сразу, и между
+    носами разделительной оставалась щель фона; лента у разворота бывает уже
+    своей улицы, и заливка по кромке широкой оставляла клин.
+    """
+
+    gap = 20 / 111_320.0
+
+    def street(self, points, name="Проспект", oneway=True, width=11.0, code=3):
+        flags = build_roads.FLAG_ONEWAY if oneway else 0
+        return ((code, flags, points, name, width, True), [])
+
+    def pair(self):
+        south = [(69.25 + i * 0.002, 41.30) for i in range(6)]
+        north = [(69.25 + (5 - i) * 0.002, 41.30 + self.gap) for i in range(6)]
+        return [self.street(south), self.street(north)]
+
+    def test_u_turn_link_opens_the_median_with_asphalt(self):
+        link = self.street([(69.255, 41.30), (69.2552, 41.30 + self.gap)], name="", oneway=False, width=4.0)
+        made = build_roads.build_medians(self.pair() + [link])
+        fills = [r for k, f, r in made if k == build_roads.AREA_JUNCTION]
+        self.assertTrue(fills, "разрыв разделительной без асфальта — щель фона")
+        lats = [p[1] for ring in fills for p in ring]
+        # От оси до оси: заливка дотягивается до осей обеих лент.
+        self.assertLess(min(lats), 41.30 + 0.5 / 111_320)
+        self.assertGreater(max(lats), 41.30 + self.gap - 0.5 / 111_320)
+        lons = [p[0] for ring in fills for p in ring]
+        self.assertTrue(min(lons) < 69.2551 < max(lons), "заливка мимо разворота")
+
+    def test_turn_pocket_along_the_median_is_not_filled(self):
+        # Карман поворота идёт ВДОЛЬ разделительной: там тонкая разделительная,
+        # а не асфальт поперёк.
+        mid = 41.30 + self.gap / 2
+        pocket = self.street([(69.253, mid), (69.257, mid)], name="", oneway=True, width=3.5)
+        made = build_roads.build_medians(self.pair() + [pocket])
+        self.assertFalse([r for k, f, r in made if k == build_roads.AREA_JUNCTION])
 
 
 class IslandTests(unittest.TestCase):

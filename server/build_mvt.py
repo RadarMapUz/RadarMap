@@ -17,7 +17,7 @@ import shutil
 from collections import OrderedDict, defaultdict
 
 import mvt
-from build_roads import (AREA_DIVIDER, FLAG_LANES_INFERRED, AREA_FILLET, AREA_HOUSE, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_MEDIAN, AREA_ROAD,
+from build_roads import (AREA_DIVIDER, AREA_KERB, FLAG_LANES_INFERRED, AREA_FILLET, AREA_HOUSE, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_MEDIAN, AREA_ROAD,
                          clip_ring,
                          FLAG_BRIDGE,
                          FLAG_LANES_TAGGED, FLAG_ONEWAY, FLAG_TUNNEL,
@@ -2289,7 +2289,7 @@ def is_concrete(flags, ring):
 
 def _area_props(kind, flags):
     props = {"kind": kind}
-    if kind == AREA_FILLET:
+    if kind in (AREA_FILLET, AREA_KERB):
         props["major"] = bool(flags & 2)
     if kind == AREA_ROAD:
         props["cls"] = (flags >> SURFACE_CLASS_SHIFT) & SURFACE_CLASS_MASK
@@ -2303,7 +2303,8 @@ def _area_props(kind, flags):
 
 
 def _layer_of(kind):
-    if kind in (AREA_ROAD, AREA_JUNCTION, AREA_MEDIAN, AREA_JUNCTION_BOX, AREA_FILLET, AREA_DIVIDER):
+    if kind in (AREA_ROAD, AREA_JUNCTION, AREA_MEDIAN, AREA_JUNCTION_BOX, AREA_FILLET, AREA_DIVIDER,
+                AREA_KERB):
         return LAYER_SURFACE
     if kind == AREA_HOUSE:
         return LAYER_HOUSES

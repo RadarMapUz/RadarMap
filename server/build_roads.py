@@ -2563,6 +2563,12 @@ AREA_FILLET = 13
 # Яндекса на Беруни (05.10.2026). Линия, а не многоугольник; приложение вид 15
 # не знает и пропускает.
 AREA_DIVIDER = 15
+# Бордюр угла перекрёстка — ЛИНИЯ от устья подхода по дуге к устью соседа
+# (контур по устьям, mouth_outline): кромка полотна под площадью узла не
+# видна, и без этой линии жёлтый бордюр проспекта обрывался, не дойдя до
+# угла (18.10.2026). Бит FILLET_MAJOR — оба подхода магистральные. Асфальт по
+# ходу линии слева. Приложение вид 16 не знает и пропускает.
+AREA_KERB = 16
 MEDIAN_LINE_BELOW_METERS = 2.5
 # Уже этого между кромками — конец клина разделительной обрезается.
 MEDIAN_EDGE_MIN_METERS = 1.5
@@ -2970,6 +2976,34 @@ def _length_of(points):
     return sum(meters_between(a, b) for a, b in zip(points, points[1:]))
 
 
+# Встречные ленты одной улицы: направления расходятся не меньше чем на столько.
+MEDIAN_FACE_OPPOSITE_DEGREES = 150.0
+
+
+def _overall_bearing(points):
+    """Направление линии от первой точки к последней, градусы."""
+    (x0, y0), (x1, y1) = points[0], points[-1]
+    return math.degrees(math.atan2(y1 - y0, (x1 - x0) * math.cos(math.radians(y0))))
+
+
+def _is_median_face(face_roads):
+    """Грань между двумя встречными лентами ОДНОЙ улицы — разделительная.
+
+    Её рисует полоса с бордюром (build_medians) или двойная линия; островок
+    по грани лежал под асфальтом и вылезал там, где полоса кончается: светлой
+    щелью поперёк разворота и клином у носа разделительной (Нурафшон,
+    18.10.2026). Короткие связки разворотов безымянны, поэтому раньше такая
+    грань проходила как «островок одной улицы».
+    """
+    named = [road for road in face_roads if len(road) > 3 and road[3]]
+    if not named or len({road[3] for road in named}) != 1:
+        return False
+    oneway = [road for road in named if road[1] & FLAG_ONEWAY and len(road[2]) >= 2]
+    bearings = [_overall_bearing(road[2]) for road in oneway]
+    return any(abs((a - b + 180.0) % 360.0 - 180.0) >= MEDIAN_FACE_OPPOSITE_DEGREES
+               for i, a in enumerate(bearings) for b in bearings[i + 1:])
+
+
 def is_island_face(face_roads):
     """Грань — островок, а не середина перекрёстка.
 
@@ -2981,6 +3015,8 @@ def is_island_face(face_roads):
     безымянного в обводе — от силы короткая связка. У настоящего островка
     безымянный съезд — заметная часть обвода.
     """
+    if _is_median_face(face_roads):
+        return False
     names = {road[3] for road in face_roads if len(road) > 3 and road[3]}
     if len(names) < 2:
         return True
@@ -3877,6 +3913,20 @@ def _node_key(point):
     return (round(point[0] / SPOT_EPSILON), round(point[1] / SPOT_EPSILON))
 
 
+class Leg(tuple):
+    """Нога узла: (точка, направление наружу, ширина) и класс дороги атрибутом.
+
+    Распаковывается в три поля, как раньше, — все прежние места чтения не
+    меняются; класс нужен только бордюру угла (жёлтый у магистралей, как
+    кромка их полотна). Нога из простого кортежа (тесты) класса не знает.
+    """
+
+    def __new__(cls, node, neighbour, width, code=None):
+        leg = super().__new__(cls, (node, neighbour, width))
+        leg.code = code
+        return leg
+
+
 def junction_arms(chains):
     """Что сходится в каждом узле сети: (точка, направление наружу, ширина)."""
     arms = defaultdict(list)
@@ -3888,7 +3938,7 @@ def junction_arms(chains):
             points = piece[2]
             for node, neighbour in ((points[0], points[1]),
                                     (points[-1], points[-2])):
-                arms[_node_key(node)].append((node, neighbour, width))
+                arms[_node_key(node)].append(Leg(node, neighbour, width, street[0]))
     return arms
 
 
@@ -4217,6 +4267,23 @@ def kerb_radius(legs):
     return max(KERB_RADIUS_MIN, min(KERB_RADIUS_MAX, narrow / 2))
 
 
+# Радиус угла в контуре по устьям — по ДВУМ дорогам этого угла, а не по самой
+# узкой ноге всего узла. Узкой ногой узла бывает внутренняя связка между
+# лентами (4,6 м у Нурафшон × Фаробий), и по ней все четыре угла двух
+# проспектов скруглялись на 2,3 м — острые углы со ступенькой (18.10.2026).
+# Дуга контура по устьям — галтель: она ДОБАВЛЯЕТ асфальт в угол квартала и
+# полотна не съедает, поэтому радиус может быть больше половины ширины.
+# Доля — по замеру у проспектов Ташкента (скругление 8–12 м при лентах 9–12 м).
+KERB_CORNER_SHARE = 0.75
+# Магистраль (trunk…secondary): бордюр угла жёлтый, как кромка её полотна.
+KERB_MAJOR_MAX_CLASS = 4
+
+
+def corner_radius(width_a, width_b):
+    """Радиус бордюра угла между двумя подходами, м."""
+    return max(KERB_RADIUS_MIN, min(KERB_RADIUS_MAX, KERB_CORNER_SHARE * min(width_a, width_b)))
+
+
 def _hull_fits(legs, ring):
     want = max(leg[2] for leg in legs) ** 2
     if want > 0 and abs(signed_area_meters(ring)) > want * JUNCTION_MAX_AREA:
@@ -4341,8 +4408,13 @@ MOUTH_ARC_STEP_DEGREES = 15.0
 MOUTH_MAX_TANGENT_METERS = 30.0
 
 
-def mouth_outline(legs):
-    """Кольцо узла по устьям подходов с дугами бордюра или None (не вышло)."""
+def mouth_outline(legs, kerbs=None):
+    """Кольцо узла по устьям подходов с дугами бордюра или None (не вышло).
+
+    kerbs (список) — сюда кладутся бордюры углов: (магистральный?, линия от
+    устья через дугу к устью соседа), асфальт по ходу линии слева. Только
+    если контур вышел; вызывающий берёт их, лишь когда контур принят.
+    """
     nodes = {}
     for node, _neighbour, _width in legs:
         nodes[_node_key(node)] = node
@@ -4360,7 +4432,8 @@ def mouth_outline(legs):
     others = [xy(p) for p in nodes.values()]
     approaches = []
     seen = set()
-    for node, neighbour, width in legs:
+    for leg in legs:
+        node, neighbour, width = leg
         n, q = xy(node), xy(neighbour)
         d = _unit(q[0] - n[0], q[1] - n[1])
         if d == (0.0, 0.0):
@@ -4385,11 +4458,11 @@ def mouth_outline(legs):
         probe = (n[0] + d[0] * (span / 2 + 15), n[1] + d[1] * (span / 2 + 15))
         approaches.append({"n": n, "d": d, "half": width / 2.0,
                            "angle": math.atan2(probe[1], probe[0]),
-                           "heading": math.atan2(d[1], d[0])})
+                           "heading": math.atan2(d[1], d[0]),
+                           "code": getattr(leg, "code", None)})
     if len(approaches) < 2:
         return None
     approaches.sort(key=lambda a: a["angle"])
-    radius = kerb_radius(legs)
 
     def edge(a, side):
         # side +1 — левая кромка (против часовой от хода наружу), −1 — правая.
@@ -4434,6 +4507,7 @@ def mouth_outline(legs):
         s = (rx * (-b["d"][1]) - ry * (-b["d"][0])) / det
         t = (a["d"][0] * ry - a["d"][1] * rx) / det
         corner = (pa[0] + a["d"][0] * s, pa[1] + a["d"][1] * s)
+        radius = corner_radius(a["half"] * 2, b["half"] * 2)
         tangent = radius / math.tan(turn / 2)
         ta, tb = s + tangent, t + tangent
         if ta > MOUTH_MAX_TANGENT_METERS or tb > MOUTH_MAX_TANGENT_METERS:
@@ -4448,27 +4522,45 @@ def mouth_outline(legs):
         a0 = math.atan2(start[1] - centre_arc[1], start[0] - centre_arc[0])
         a1 = math.atan2(end[1] - centre_arc[1], end[0] - centre_arc[0])
         sweep = (a1 - a0 + math.pi) % (2 * math.pi) - math.pi
-        steps = max(2, int(abs(math.degrees(sweep)) / MOUTH_ARC_STEP_DEGREES))
+        # Точки дуги — по длине, как у галтелей (FILLET_ARC_SPACING): шаг по
+        # углу давал на радиусе 7–10 м точки через 1,5–2 м, а квантование
+        # тайла (1e-5°, ≈1 м) делало из дуги пилу (18.10.2026).
+        steps = max(2, min(int(abs(math.degrees(sweep)) / MOUTH_ARC_STEP_DEGREES),
+                           int(radius * abs(sweep) / FILLET_ARC_SPACING)))
         arc = [(centre_arc[0] + radius * math.cos(a0 + sweep * k / steps),
                 centre_arc[1] + radius * math.sin(a0 + sweep * k / steps)) for k in range(steps + 1)]
         corners.append(arc)
         reach[i] = max(reach[i], ta + 1.0)
         reach[(i + 1) % len(approaches)] = max(reach[(i + 1) % len(approaches)], tb + 1.0)
 
-    ring = []
+    mouths = []
     for i, group in enumerate(approaches):
         m = reach[i]
         first, last = group["first"], group["last"]
         right = edge(first, -1)
         left = edge(last, 1)
-        ring.append((right[0] + first["d"][0] * m, right[1] + first["d"][1] * m))
-        ring.append((left[0] + last["d"][0] * m, left[1] + last["d"][1] * m))
+        mouths.append(((right[0] + first["d"][0] * m, right[1] + first["d"][1] * m),
+                       (left[0] + last["d"][0] * m, left[1] + last["d"][1] * m)))
+    ring = []
+    chains = []
+    for i, (right, left) in enumerate(mouths):
+        ring.append(right)
+        ring.append(left)
         if corners[i]:
             ring.extend(corners[i])
+            # Бордюр угла: от устья вдоль кромки, по дуге, к устью соседа.
+            # Кромка полотна (жёлтая у магистралей) доходит ровно до устья —
+            # дальше её накрывает площадь узла, и без этой линии бордюр
+            # обрывался, не дойдя до угла.
+            a = approaches[i]["last"]
+            b = approaches[(i + 1) % len(approaches)]["first"]
+            major = all(x["code"] is not None and x["code"] <= KERB_MAJOR_MAX_CLASS for x in (a, b))
+            chains.append((major, [left] + corners[i] + [mouths[(i + 1) % len(mouths)][0]]))
     if len(ring) < 3:
         return None
     out = [back(p) for p in ring]
-    if signed_area_meters(out) < 0:
+    reverse = signed_area_meters(out) < 0
+    if reverse:
         out.reverse()
     if surface_check.defect(out) is not None:
         return None
@@ -4476,6 +4568,10 @@ def mouth_outline(legs):
     # (Чиланзар, 07.10.2026). Такой контур не годится — прежняя оболочка.
     if _sharpest_degrees(ring) < MOUTH_MIN_CORNER_DEGREES:
         return None
+    if kerbs is not None:
+        for major, chain in chains:
+            line = [back(p) for p in chain]
+            kerbs.append((major, line[::-1] if reverse else line))
     return out
 
 
@@ -4541,12 +4637,16 @@ def iter_junctions(arms, outlined=None):
         yield from _junction_figures(legs, outlined)
 
 
-def _mouth_figure(legs):
-    """Контур узла по устьям, если он вышел и годится по площади, иначе None."""
+def _mouth_figure(legs, kerbs=None):
+    """Контур узла по устьям, если он вышел и годится по площади, иначе None.
+    kerbs (список) получает бордюры углов — только у принятого контура."""
     if len(legs) < MIN_JUNCTION_ARMS:
         return None
-    outline = mouth_outline(legs)
+    found = []
+    outline = mouth_outline(legs, found)
     if outline and len(outline) >= 3 and _mouth_fits(legs, outline):
+        if kerbs is not None:
+            kerbs.extend(found)
         return outline
     return None
 
@@ -4575,11 +4675,14 @@ def _junction_figures(legs, outlined, retry=True):
     flags = AREA_FLAG_CLOSED
     if retry and len(keys) == 1 and _slip_nodes(legs):
         flags |= AREA_FLAG_STRIP
-    outline = _mouth_figure(legs)
+    kerbs = []
+    outline = _mouth_figure(legs, kerbs)
     if outline:
         if outlined is not None:
             outlined.update(keys)
         yield (AREA_JUNCTION, flags, outline)
+        for major, line in kerbs:
+            yield (AREA_KERB, FILLET_MAJOR if major else 0, line)
         return
     # Ядро, оставшееся без съездов, — только контуром по устьям: оболочка
     # такого ядра тянулась бы вдоль проспекта на сотню метров через
@@ -4998,6 +5101,31 @@ class RoadIndex:
             return False
         return blocked
 
+    def crossing(self, *exclude):
+        """Функция (кромка, кромка) → True, если поперечник пересекает чужая
+        лента того же уровня, идущая ПОПЕРЁК (не вдоль) — связка разворота
+        или улица перекрёстка. Место между кромками там — асфальт проезда, а
+        не карман поворота вдоль разделительной (тот остаётся `pocket`)."""
+        skip = {id(street) for street in exclude}
+        level = (exclude[0][1] & (FLAG_BRIDGE | FLAG_TUNNEL)) if exclude else 0
+        cell = self.CELL_METERS / LAT_METERS
+
+        def crossed(left, right):
+            across = _heading(left, right)
+            for share in (0.1, 0.3, 0.5, 0.7, 0.9):
+                point = (left[0] + (right[0] - left[0]) * share, left[1] + (right[1] - left[1]) * share)
+                for key, a, b, half, lvl, _link in self._grid.get((int(point[0] / cell), int(point[1] / cell)), ()):
+                    if key in skip or lvl != level or a == b:
+                        continue
+                    if _point_segment_meters(point, a, b) >= half:
+                        continue
+                    off = _angle_between(_heading(a, b), across)
+                    # Вдоль улицы — это поперёк поперечника (около 90°).
+                    if min(off, 180 - off) < 90 - POCKET_DEGREES:
+                        return True
+            return False
+        return crossed
+
     def pocket(self, *exclude):
         """Функция (кромка, кромка, курс) → True, если поперечник занят ТОЛЬКО
         безымянным съездом, идущим вдоль, — карманом поворота в разделительной."""
@@ -5079,7 +5207,8 @@ def build_medians(chains, junctions=()):
                     continue
                 fills, dividers = [], []
                 blocked = roads_index.blocker(one, other)
-                for strip in _median_strips(one, other, junctions, fills, dividers, blocked):
+                crossing = roads_index.crossing(one, other)
+                for strip in _median_strips(one, other, junctions, fills, dividers, blocked, crossing):
                     out.append((AREA_MEDIAN, AREA_FLAG_CLOSED | AREA_FLAG_STRIP, strip))
                 for line in dividers:
                     out.append((AREA_DIVIDER, 0, line))
@@ -5171,7 +5300,7 @@ def _median_strip(one, other, junctions=()):
     return strips[0] if strips else []
 
 
-def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=None):
+def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=None, crossing=None):
     """Многоугольники между внутренними кромками двух встречных проезжих.
 
     Три условия продолжения, кроме расстояния: не перекрёсток; проекция на
@@ -5185,8 +5314,20 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
     кромками ВНУТРИ узла. Там в жизни проезжая часть пересекающей улицы, а у
     нас был белый клин фона между лентами от перехода до центра перекрёстка;
     его заливают асфальтом (вид узла).
+
+    `crossing` — функция (кромка, кромка): поперечник пересекает дорога,
+    идущая поперёк, — связка разворота. Разрыв полосы там тоже заливается:
+    связка наискосок (Нурафшон, 18.10.2026) не попадала узлами на обе кромки
+    сразу, и между носами разделительной оставалась щель фона.
     """
     strips = []
+
+    def edges_at(distance):
+        spot = _point_along(one[2], distance)
+        near, gap, _along = _nearest_along(spot, other[2])
+        if near is None or not (MEDIAN_MIN_METERS <= gap <= MEDIAN_MAX_METERS):
+            return None
+        return edges_for(spot, near)
     half_one = one[4] / 2.0 / LAT_METERS
     half_two = other[4] / 2.0 / LAT_METERS
 
@@ -5225,6 +5366,25 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
             else:
                 bad = middle
         return found
+
+    def to_axes(row):
+        """Кромки поперечника → оси лент: заливка разрыва — от оси до оси.
+
+        Лента у разворота бывает уже ширины своей улицы (карман кончился:
+        12 м → 9,6 м у Нурафшон, 18.10.2026), и заливка от кромки широкой
+        ленты оставляла клин фона до кромки узкой. От оси до оси ленты сами
+        ложатся поверх, нос разделительной — выше заливки."""
+        left, right, refined = row
+        scale = _lon_scale([left]) or 1.0
+        toward = _unit((right[0] - left[0]) * scale, right[1] - left[1])
+        if toward == (0.0, 0.0):
+            return row
+        return (_shift(left, (-toward[0], -toward[1]), half_one, scale),
+                _shift(right, toward, half_two, scale), refined)
+
+    def emit_fill(rows):
+        if fills is not None:
+            emit([to_axes(row) for row in rows], fills, _strip_defect)
 
     def emit(rows, sink, check, noses=False):
         """rows — [(левая, правая, уточнённая?)]; сначала с уточнёнными концами
@@ -5291,8 +5451,14 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
         edges = edges_for(spot, near) if in_range else None
         # Между кромками проходит ДРУГАЯ дорога (пандус эстакады, средняя
         # лента) — здесь не разделительная: полоса легла бы на полосы движения.
+        crossed = False
         if good and edges and blocked is not None and blocked(edges[0], edges[1]):
-            good, edges = False, None
+            crossed = crossing is not None and crossing(edges[0], edges[1])
+            good = False
+            if not crossed:
+                edges = None
+        # Разрыв, где между кромками в жизни асфальт: узел или связка поперёк.
+        opening = at_node or crossed
         if not good:
             # Разрыв — конец полосы: проспект расходится или идёт узел.
             # У узла и у расхождения конец уточняется до метра; у прыжка
@@ -5301,17 +5467,16 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
                 refined = boundary(previous_distance, distance)
                 if refined:
                     rows.append((refined[0], refined[1], True))
-                    if at_node:
+                    if opening:
                         fill_rows.append((refined[0], refined[1], True))
             emit(rows, strips, _strip_defect, noses=True)
             rows = []
             direction = 0
             previous_along = previous_gap = None
-            if at_node and edges:
+            if opening and edges:
                 fill_rows.append((edges[0], edges[1], False))
             else:
-                if fills is not None:
-                    emit(fill_rows, fills, _strip_defect)
+                emit_fill(fill_rows)
                 fill_rows = []
             previous_distance, previous_good = distance, False
             continue
@@ -5325,8 +5490,8 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
                 rows.append((refined[0], refined[1], True))
                 if fill_rows:
                     fill_rows.append((refined[0], refined[1], True))
-        if fill_rows and fills is not None:
-            emit(fill_rows, fills, _strip_defect)
+        if fill_rows:
+            emit_fill(fill_rows)
         fill_rows = []
         # Проезд через разделительную (перемычка в 15 м) целиком умещается
         # между шагами в 25 м, и его никто не видел — полоса шла через
@@ -5343,14 +5508,19 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
                     last_bad = probe_at
                 probe_at += MEDIAN_SCAN_METERS
             if first_bad is not None:
-                refined = boundary(previous_distance, first_bad)
-                if refined:
-                    rows.append((refined[0], refined[1], True))
+                closed = boundary(previous_distance, first_bad)
+                if closed:
+                    rows.append((closed[0], closed[1], True))
                 emit(rows, strips, _strip_defect, noses=True)
                 rows = []
                 refined = boundary(distance, last_bad)
                 if refined:
                     rows.append((refined[0], refined[1], True))
+                # Проезд поперёк (разворот) — разрыв между носами асфальтом.
+                cut = edges_at(first_bad)
+                if (fills is not None and crossing is not None and closed and refined
+                        and cut and crossing(cut[0], cut[1])):
+                    emit_fill([(closed[0], closed[1], True), (refined[0], refined[1], True)])
         rows.append((edges[0], edges[1], False))
         previous_distance, previous_good = distance, True
     emit(rows, strips, _strip_defect, noses=True)

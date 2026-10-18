@@ -142,6 +142,12 @@ struct EngineMapView: UIViewRepresentable {
     /// постановки камеры (центр) и зума точек/кластеров.
     var onRegion: (MKCoordinateRegion) -> Void = { _ in }
 
+    #if DEBUG
+    /// Экспериментальный слой доступен только на экране сверки (DEBUG).
+    var roadPilot: RoadPilotFrame? = nil
+    var roadPilotOpacity: Double = 0.7
+    #endif
+
     func makeUIView(context: Context) -> MLNMapView {
         // Сторож тайлов — ДО первой карты: движок начинает качать сразу, и
         // поставить проверку после значило бы пропустить первые тайлы без неё.
@@ -264,6 +270,10 @@ struct EngineMapView: UIViewRepresentable {
         private static var cursorCache: [CursorStyle: UIImage] = [:]
         /// Какой значок сейчас лежит в стиле под именем "radar-user".
         private var lastCursor: CursorStyle?
+        #if DEBUG
+        /// Черновой слой «Пилота дорог» сейчас на карте (экран сверки, DEBUG).
+        private var roadPilotShown = false
+        #endif
         private let performanceLog = OSLog(subsystem: "uz.radarmap", category: "MapPerformance")
         private var lastProgress = -Double.infinity
         private var lastManeuverAlong: Double?
@@ -746,6 +756,15 @@ struct EngineMapView: UIViewRepresentable {
                 return
             }
             pending = nil
+            #if DEBUG
+            // Черновой слой «Пилота дорог» — только на экране сверки: на
+            // обычной карте его нет, и лезть в стиль на каждом тике GPS — на
+            // телефоне и в машине — незачем.
+            if model.roadPilot != nil || roadPilotShown, let style = view.style {
+                RoadPilotOverlay.apply(model.roadPilot, opacity: model.roadPilotOpacity, to: style)
+                roadPilotShown = model.roadPilot != nil
+            }
+            #endif
             if lastCursor != model.cursorStyle {
                 installCursor(model.cursorStyle)
             }

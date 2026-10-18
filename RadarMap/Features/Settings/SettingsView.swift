@@ -126,6 +126,9 @@ struct SettingsView: View {
         case "trip": TripSettingsPage()
         case "route": RouteSettingsPage()
         case "map": MapSettingsPage()
+        #if DEBUG && canImport(MapLibre)
+        case "roadpilot": RoadPilotPreview()
+        #endif
         case "places": PlacesSettingsPage()
         case "learning": LearningSettingsPage()
         case "battery": BatterySettingsPage()

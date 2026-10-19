@@ -64,6 +64,8 @@ struct RootView: View {
                     // смене флага не меняется. Без этого ПЕРВАЯ сессия жила в
                     // тихом фоне: без опроса отметок, без CoreMotion и без
                     // отметки «экран на виду».
+                    // Прошедший онбординг «нового» не видит: ему всё рассказали.
+                    Storage.set(WhatsNew.edition, for: .whatsNewEdition)
                     env.startDrivingServices()
                     env.location.setForeground(true)
                     env.setPhoneSceneActive(true)
@@ -77,6 +79,7 @@ struct RootView: View {
         // и конец поездки (единственный триггер) никто не видел — просьба об
         // оценке была недостижима ровно для самого лояльного сегмента.
         .modifier(ReviewPromptModifier())
+
         .motionAnimation(Motion.standard, value: env.isCarPlayConnected)
         // Вышли из машины — следующее подключение снова начнёт с экрана передачи.
         .onChange(of: env.isCarPlayConnected) { _, connected in

@@ -230,6 +230,10 @@ struct SearchView: View {
     var onAddStop: ((CLLocationCoordinate2D, String) -> Void)? = nil
     /// Открытие сразу в режиме «выбрать адрес для Дом/Работа» (из Настроек).
     var initialAssign: PlaceSlot? = nil
+    /// Секция «Мои места». Нет — когда поиск выбирает точку для «Избранного»:
+    /// тап по «Дому» предложил бы избранное «Дом», а пустой слот назначил бы
+    /// Дом вместо выбора (ревью 19.10).
+    var showsPlaces = true
 
     @State private var assigning: PlaceSlot? = nil
     /// «Выбрать на карте» для назначаемого места — когда адрес словами не
@@ -247,7 +251,7 @@ struct SearchView: View {
                 if let slot = assigning {
                     assignBanner(slot)
                 } else {
-                    placesSection
+                    if showsPlaces { placesSection }
                     if model.query.isEmpty {
                         categoriesSection
                         recentsSection
@@ -265,8 +269,12 @@ struct SearchView: View {
             .navigationTitle(assigning == nil ? Text("Поиск") : Text("Выбор адреса"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Отмена") { dismiss() }
+                // «Готово», как на всех листах приложения (7.1): «Отмена»
+                // здесь ничего не отменяла — лист просто закрывался.
+                ToolbarItem(placement: .confirmationAction) {
+                    // В режиме назначения это выход без сохранения — так и
+                    // называется.
+                    Button(initialAssign != nil ? "Отмена" : "Готово") { dismiss() }
                 }
             }
         }
@@ -418,7 +426,8 @@ struct SearchView: View {
                 }
             }
         } header: {
-            Text("Рядом")
+            // «Заведения»: «рядом» обещало расстояние, а плитки — это виды мест.
+            Text("Заведения")
         } footer: {
             if model.category != nil, !model.categoryResults.isEmpty {
                 Text(model.categoryFromApple ? "По данным Apple" : "Из своей карты · без сети")
@@ -551,29 +560,45 @@ struct SearchView: View {
         if !env.settings.recentPlaces.isEmpty {
             Section("Недавние") {
                 ForEach(env.settings.recentPlaces, id: \.title) { place in
-                    Button {
-                        if let onRoute {
-                            onRoute(place.coordinate, place.title)
-                        } else {
-                            onSelect?(place.coordinate, place.title)
-                        }
-                        dismiss()
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "clock.arrow.circlepath")
-                                .font(.rounded(14, .semibold))
-                                .foregroundStyle(Theme.textSecondary)
-                                .frame(width: 24)
-                            Text(place.title)
-                                .font(.rounded(14, .medium))
-                                .foregroundStyle(Theme.textPrimary)
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
-                            if onRoute != nil {
-                                Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
-                                    .font(.rounded(20))
-                                    .foregroundStyle(Theme.accent.opacity(0.75))
+                    // Как у любой строки поиска (7.1): тап показывает точку на
+                    // карте, стрелка строит маршрут. Недавние одни строили
+                    // маршрут на тап — и одно и то же касание в одном списке
+                    // делало две разные вещи.
+                    HStack(spacing: 12) {
+                        Button {
+                            if let onSelect {
+                                onSelect(place.coordinate, place.title)
+                            } else {
+                                onRoute?(place.coordinate, place.title)
                             }
+                            dismiss()
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .font(.rounded(14, .semibold))
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .frame(width: 24)
+                                Text(place.title)
+                                    .font(.rounded(14, .medium))
+                                    .foregroundStyle(Theme.textPrimary)
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.borderless)
+                        if let onRoute {
+                            Button {
+                                onRoute(place.coordinate, place.title)
+                                dismiss()
+                            } label: {
+                                Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
+                                    .font(.rounded(24))
+                                    .foregroundStyle(Theme.accent)
+                                    .tapTarget()
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel(Text("Маршрут сюда"))
                         }
                     }
                 }

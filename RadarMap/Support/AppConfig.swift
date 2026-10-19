@@ -441,6 +441,10 @@ nonisolated enum AppConfig {
     /// Сколько первых поездок у «Радар!» подпись под значком (5.6): дальше
     /// кнопку узнают по месту и цвету, а слово только теснит значок.
     nonisolated static let radarCaptionTrips = 5
+    /// «Избранное» (7.2): сколько мест держим и что считать тем же местом.
+    nonisolated static let favoritePlacesMax = 12
+    /// 40 м — та же точка; садик в 120 м от школы — уже другое место.
+    nonisolated static let favoriteSameMeters: Double = 40
     /// Снимок проезда камеры: участок трека в этом радиусе от неё (6.7).
     nonisolated static let passPictureTrackMeters: Double = 900
 

@@ -56,17 +56,6 @@ struct SettingsView: View {
                     link(.learning) { LearningSettingsPage() }
                     link(.battery, value: settings.adaptiveGPS
                          ? String(localized: "Адаптивный GPS") : nil) { BatterySettingsPage() }
-                    link(.privacy) { PrivacySettingsPage() }
-                }
-
-                Section {
-                    link(.database, value: "v\(env.cameras.dbVersion)") { DatabaseSettingsPage() }
-                    // Резервная копия поездок. Ссылка пропала 28.08 при
-                    // переделке настроек («экран за рулём»), и полтора месяца
-                    // сохранить историю перед сменой телефона было нечем:
-                    // она живёт только здесь.
-                    link(.backup) { BackupSettingsPage() }
-                    link(.language, value: settings.appLanguage.title) { LanguageSettingsPage() }
                 }
 
                 Section {
@@ -77,24 +66,11 @@ struct SettingsView: View {
                         SettingsRow(.feedback)
                     }
                     .tint(Theme.textPrimary)
-                    // Страница проекта: что это, откуда данные, политика,
-                    // возможность помочь. Внутрь приложения платёжная кнопка
-                    // не ставится намеренно — App Review отдельно смотрит на
-                    // ссылки, уводящие на стороннюю оплату (Guideline 3.1.1).
-                    // Здесь — обычная ссылка на сайт проекта.
-                    Link(destination: AppConfig.projectPageURL) {
-                        SettingsRow(.project, accessory: "arrow.up.right")
-                    }
-                    .tint(Theme.textPrimary)
-                    SettingsRow(.version, value: Self.appVersion)
-                    // Условие лицензии CC BY-SA 4.0 портала: ссылка на источник.
-                    Link(destination: AppConfig.openDataURL) {
-                        SettingsRow(.openData, accessory: "arrow.up.right")
-                    }
-                    .tint(Theme.textPrimary)
-                } footer: {
-                    Text("Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Приложение бесплатное, без рекламы и без слежки.")
-                        .fixedSize(horizontal: false, vertical: true)
+                    // Второй этаж (7.4): то, что меняют раз в год или не
+                    // меняют никогда, — база, данные, язык, приватность,
+                    // источники и версия. В корне было 19 строк, и нужная
+                    // терялась среди справочных.
+                    link(.about, value: Self.appVersionShort) { aboutPage }
                 }
             }
             .settingsPage("Настройки")
@@ -117,6 +93,49 @@ struct SettingsView: View {
                 FeedbackFormView()
             }
         }
+    }
+
+    /// «О приложении» — второй этаж настроек.
+    private var aboutPage: some View {
+        let settings = env.settings
+        return List {
+            Section {
+                link(.database, value: "v\(env.cameras.dbVersion)") { DatabaseSettingsPage() }
+                // Резервная копия поездок. Ссылка пропала 28.08 при
+                // переделке настроек («экран за рулём»), и полтора месяца
+                // сохранить историю перед сменой телефона было нечем:
+                // она живёт только здесь.
+                link(.backup) { BackupSettingsPage() }
+                link(.language, value: settings.appLanguage.title) { LanguageSettingsPage() }
+                link(.privacy) { PrivacySettingsPage() }
+            }
+            Section {
+                // Страница проекта: что это, откуда данные, политика,
+                // возможность помочь. Внутрь приложения платёжная кнопка
+                // не ставится намеренно — App Review отдельно смотрит на
+                // ссылки, уводящие на стороннюю оплату (Guideline 3.1.1).
+                // Здесь — обычная ссылка на сайт проекта.
+                Link(destination: AppConfig.projectPageURL) {
+                    SettingsRow(.project, accessory: "arrow.up.right")
+                }
+                .tint(Theme.textPrimary)
+                // Условие лицензии CC BY-SA 4.0 портала: ссылка на источник.
+                Link(destination: AppConfig.openDataURL) {
+                    SettingsRow(.openData, accessory: "arrow.up.right")
+                }
+                .tint(Theme.textPrimary)
+                SettingsRow(.version, value: Self.appVersion)
+            } footer: {
+                Text("Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Приложение бесплатное, без рекламы и без слежки.")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .settingsPage("О приложении")
+    }
+
+    /// Версия без номера сборки — справа у «О приложении».
+    static var appVersionShort: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
     }
 
     @ViewBuilder private static func debugPage(_ name: String) -> some View {
@@ -169,7 +188,7 @@ enum SettingsItem {
     case map, offline, places
     case learning, battery, privacy
     case database, backup, language
-    case help, feedback, project, version, openData
+    case help, feedback, project, version, openData, about
 
     var title: LocalizedStringKey {
         switch self {
@@ -191,6 +210,7 @@ enum SettingsItem {
         case .project:  return "Страница проекта"
         case .version:  return "Версия"
         case .openData: return "Источники данных"
+        case .about:    return "О приложении"
         }
     }
 
@@ -214,6 +234,7 @@ enum SettingsItem {
         case .project:  return "safari.fill"
         case .version:  return "info.circle.fill"
         case .openData: return "doc.text.fill"
+        case .about:    return "info.circle.fill"
         }
     }
 
@@ -239,6 +260,7 @@ enum SettingsItem {
         case .project:  return Color(uiColor: .systemCyan)
         case .version:  return Color(uiColor: .systemGray)
         case .openData: return Color(uiColor: .systemGray)
+        case .about:    return Color(uiColor: .systemGray)
         }
     }
 }

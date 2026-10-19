@@ -504,6 +504,10 @@ final class AppSettings {
     var showNextCamera: Bool { didSet { store.set(showNextCamera, forKey: Keys.nextCamera) } }
     var weeklyDigest: Bool { didSet { store.set(weeklyDigest, forKey: Keys.digest) } }
     var recentPlaces: [SavedPlace] { didSet { saveRecents() } }
+    /// «Избранное» в «Моих местах» (7.2): свои места с именем — дача, школа,
+    /// мама. Звезда на кнопке «Мои места» это обещала, а внутри были только
+    /// Дом и Работа. Не уходят никуда, кроме этого телефона.
+    var favoritePlaces: [SavedPlace] { didSet { saveFavorites() } }
 
     /// Фоновые баннеры о камерах (Центр уведомлений). Звука в поездке не касается.
     var backgroundAlerts: BackgroundAlertMode {
@@ -673,6 +677,7 @@ final class AppSettings {
         static let nextCamera = "showNextCamera"
         static let digest = "weeklyDigest"
         static let recents = "recentPlaces"
+        static let favorites = "favoritePlaces"
         static let language = "appLanguage"
         static let backgroundAlerts = "backgroundAlerts"
         static let haptics = "hapticsEnabled"
@@ -810,6 +815,13 @@ final class AppSettings {
         hapticsEnabled = store.bool(forKey: Keys.haptics)
         mapAppearance = MapAppearance(rawValue: store.string(forKey: Keys.mapAppearance) ?? "") ?? .dark
         do {
+            let data = store.data(forKey: Keys.favorites)
+            favoritePlaces = try data.map { try JSONDecoder().decode([SavedPlace].self, from: $0) } ?? []
+        } catch {
+            Log.app.error("favoritePlaces не декодировались: \(error.localizedDescription, privacy: .public)")
+            favoritePlaces = []
+        }
+        do {
             let data = store.data(forKey: Keys.recents)
             recentPlaces = try data.map { try JSONDecoder().decode([SavedPlace].self, from: $0) } ?? []
         } catch {
@@ -829,6 +841,28 @@ final class AppSettings {
         }
         list.insert(SavedPlace(title: title, lat: lat, lon: lon), at: 0)
         recentPlaces = Array(list.prefix(8))
+    }
+
+    /// Добавить в «Избранное»: то же место (ближе 150 м) не дублируется —
+    /// имя обновляется, место поднимается наверх.
+    func addFavorite(_ place: SavedPlace) {
+        favoritePlaces = Self.favorites(adding: place, to: favoritePlaces)
+    }
+
+    nonisolated static func favorites(adding place: SavedPlace, to list: [SavedPlace]) -> [SavedPlace] {
+        var next = list.filter {
+            GeoMath.fastDistance($0.lat, $0.lon, place.lat, place.lon) > AppConfig.favoriteSameMeters
+        }
+        next.insert(place, at: 0)
+        return Array(next.prefix(AppConfig.favoritePlacesMax))
+    }
+
+    private func saveFavorites() {
+        do {
+            store.set(try JSONEncoder().encode(favoritePlaces), forKey: Keys.favorites)
+        } catch {
+            Log.app.error("favoritePlaces не сохранились: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func saveRecents() {

@@ -1443,6 +1443,22 @@
         }
       }
     },
+    "«Начать поездку» одним нажатием": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Начать поездку» одним нажатием"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Safarni boshlash» bir bosishda"
+          }
+        }
+      }
+    },
     "«Радар!» — отметка для других. Удержите — тренога или ДТП": {
       "localizations": {
         "ru": {
@@ -1971,6 +1987,22 @@
         }
       }
     },
+    "В Пункте управления и на кнопке действия — не открывая приложение.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В Пункте управления и на кнопке действия — не открывая приложение."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqaruv markazida va harakat tugmasida — ilovani ochmasdan."
+          }
+        }
+      }
+    },
     "В городе — коротко, на трассе — полностью. О камерах, которые вы проезжаете спокойно каждый день, молчит.": {
       "localizations": {
         "ru": {
@@ -2339,6 +2371,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vibro"
+          }
+        }
+      }
+    },
+    "Виджет в цветах приложения: километры, балл, дни и где теряете баллы.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Виджет в цветах приложения: километры, балл, дни и где теряете баллы."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ilova ranglaridagi vidjet: kilometrlar, ball, kunlar va ball qayerda yo‘qotiladi."
           }
         }
       }
@@ -3682,6 +3730,22 @@
         }
       }
     },
+    "Добавить место": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить место"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joy qo‘shish"
+          }
+        }
+      }
+    },
     "Добавлено вручную": {
       "localizations": {
         "ru": {
@@ -4164,6 +4228,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameradan necha metr oldin ogohlantirish. Ovoz yaqinlashgan sari bosqichlarni aytib boradi."
+          }
+        }
+      }
+    },
+    "Заведения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заведения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muassasalar"
           }
         }
       }
@@ -4723,6 +4803,22 @@
         }
       }
     },
+    "Избранное": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Избранное"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sevimlilar"
+          }
+        }
+      }
+    },
     "Изменить": {
       "localizations": {
         "ru": {
@@ -4880,6 +4976,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hafta natijalari"
+          }
+        }
+      }
+    },
+    "Итоги недели на домашнем экране": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Итоги недели на домашнем экране"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bosh ekranda hafta natijalari"
           }
         }
       }
@@ -6403,6 +6515,22 @@
         }
       }
     },
+    "Название места": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Название места"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joy nomi"
+          }
+        }
+      }
+    },
     "Найдите и выберите адрес для «%@»": {
       "localizations": {
         "ru": {
@@ -6458,6 +6586,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yo‘nalish hozircha noma’lum"
+          }
+        }
+      }
+    },
+    "Например, Дача": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Например, Дача"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masalan, Dacha"
           }
         }
       }
@@ -6522,6 +6666,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sozlamalar"
+          }
+        }
+      }
+    },
+    "Настройки → О приложении → Мои данные → «Сохранить копию», затем на новом телефоне — «Восстановить из файла». История хранится только на телефоне, на сервер мы её не отправляем.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки → О приложении → Мои данные → «Сохранить копию», затем на новом телефоне — «Восстановить из файла». История хранится только на телефоне, на сервер мы её не отправляем."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sozlamalar → Ilova haqida → Mening ma’lumotlarim → «Nusxani saqlash», so‘ng yangi telefonda — «Fayldan tiklash». Tarix faqat telefonda saqlanadi, biz uni serverga yubormaymiz."
           }
         }
       }
@@ -7385,6 +7545,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tezlik cheklovlari yuklanmadi"
+          }
+        }
+      }
+    },
+    "Одно расстояние до камеры, объявления ждут остановки, «Радар!» подписан в первых поездках.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Одно расстояние до камеры, объявления ждут остановки, «Радар!» подписан в первых поездках."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameragacha bitta masofa, e’lonlar to‘xtashni kutadi, «Radar!» birinchi safarlarda yozilgan."
           }
         }
       }
@@ -9510,6 +9686,22 @@
         }
       }
     },
+    "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → О приложении → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила о камере» у этого проезда в Итогах, мы разберём случай.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → О приложении → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила о камере» у этого проезда в Итогах, мы разберём случай."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovozni tekshiring — xaritadagi karnay tugmasi. Tez-tez tezlikni oshirmay o‘tadigan kameralaringiz haqida ilova ataylab jim turadi: xaritada ularda yashil belgi bor (Sozlamalar → Ilova o‘rganadi). Yashirilgan kamerani Sozlamalar → Ilova haqida → Kameralar bazasi → Yashirilgan kameralar bo‘limida qaytarish mumkin. Hech biri to‘g‘ri kelmasa — Natijalardagi shu o‘tish yonidagi «Kamera haqida ogohlantirmadi» tugmasini bosing, holatni ko‘rib chiqamiz."
+          }
+        }
+      }
+    },
     "Проверьте связь и попробуйте ещё раз.": {
       "extractionState": "manual",
       "localizations": {
@@ -10899,6 +11091,22 @@
         }
       }
     },
+    "Скрытая камера не показывается и не предупреждает. Вернуть её можно в Настройках → О приложении → База камер → Скрытые камеры.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрытая камера не показывается и не предупреждает. Вернуть её можно в Настройках → О приложении → База камер → Скрытые камеры."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yashirilgan kamera ko‘rinmaydi va ogohlantirmaydi. Uni Sozlamalar → Ilova haqida → Kameralar bazasi → Yashirilgan kameralar bo‘limida qaytarish mumkin."
+          }
+        }
+      }
+    },
     "Скрыто": {
       "localizations": {
         "ru": {
@@ -11007,6 +11215,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safar balidan olindi"
+          }
+        }
+      }
+    },
+    "Сохранить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saqlash"
           }
         }
       }
@@ -11121,6 +11345,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "IIV har bir kamera uchun ro'yxat e'lon qilmaydi — turi imkoniyatlarini ko'rsatamiz"
+          }
+        }
+      }
+    },
+    "Спокойнее за рулём": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Спокойнее за рулём"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rulda xotirjamroq"
           }
         }
       }
@@ -11428,6 +11668,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tezlikka bosish — tezkor tugmalar"
+          }
+        }
+      }
+    },
+    "Текущее место": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текущее место"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joriy joy"
           }
         }
       }
@@ -12291,6 +12547,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameralar va tezlik oshishi haqida nima va qanday aytish."
+          }
+        }
+      }
+    },
+    "Что нового": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что нового"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nima yangi"
           }
         }
       }
@@ -17104,22 +17376,6 @@
         }
       }
     },
-    "Скрытая камера не показывается и не предупреждает. Вернуть её можно в Настройках → База камер → Скрытые камеры.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Скрытая камера не показывается и не предупреждает. Вернуть её можно в Настройках → База камер → Скрытые камеры."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yashirilgan kamera ko‘rinmaydi va ogohlantirmaydi. Uni Sozlamalar → Kameralar bazasi → Yashirilgan kameralar bo‘limida qaytarish mumkin."
-          }
-        }
-      }
-    },
     "Своя камера исчезнет с карты и перестанет предупреждать.": {
       "localizations": {
         "ru": {
@@ -18304,22 +18560,6 @@
         }
       }
     },
-    "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила о камере» у этого проезда в Итогах, мы разберём случай.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила о камере» у этого проезда в Итогах, мы разберём случай."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ovozni tekshiring — xaritadagi karnay tugmasi. Tez-tez tezlikni oshirmay o‘tadigan kameralaringiz haqida ilova ataylab jim turadi: xaritada ularda yashil belgi bor (Sozlamalar → Ilova o‘rganadi). Yashirilgan kamerani Sozlamalar → Kameralar bazasi → Yashirilgan kameralar bo‘limida qaytarish mumkin. Hech biri to‘g‘ri kelmasa — Natijalardagi shu o‘tish yonidagi «Kamera haqida ogohlantirmadi» tugmasini bosing, holatni ko‘rib chiqamiz."
-          }
-        }
-      }
-    },
     "Зачем доступ к геопозиции «Всегда»?": {
       "localizations": {
         "ru": {
@@ -18428,22 +18668,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safarlarni yangi telefonga qanday ko‘chirish mumkin?"
-          }
-        }
-      }
-    },
-    "Настройки → Мои данные → «Сохранить копию», затем на новом телефоне — «Восстановить из файла». История хранится только на телефоне, на сервер мы её не отправляем.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Настройки → Мои данные → «Сохранить копию», затем на новом телефоне — «Восстановить из файла». История хранится только на телефоне, на сервер мы её не отправляем."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sozlamalar → Mening ma’lumotlarim → «Nusxani saqlash», so‘ng yangi telefonda — «Fayldan tiklash». Tarix faqat telefonda saqlanadi, biz uni serverga yubormaymiz."
           }
         }
       }

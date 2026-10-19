@@ -29,6 +29,12 @@ struct MyPlacesSheet: View {
 
     @State private var searchSlot: PlaceSlot?
     @State private var pickSlot: PlaceSlot?
+    /// «Избранное»: поиск адреса для нового места и имя перед сохранением.
+    @State private var searchingFavorite = false
+    @State private var pendingFavorite: SavedPlace?
+    @State private var favoriteName = ""
+    /// Выбранное в поиске — имя спросим, когда лист поиска закроется.
+    @State private var pickedFavorite: SavedPlace?
 
     var body: some View {
         NavigationStack {
@@ -39,6 +45,7 @@ struct MyPlacesSheet: View {
                     }
                 }
                 .listRowBackground(Theme.surface)
+                favoritesSection
                 recentsSection
             }
             .listStyle(.insetGrouped)
@@ -57,6 +64,33 @@ struct MyPlacesSheet: View {
         .onAppear { env.usage.noteScreen("places") }
         .sheet(item: $searchSlot) { slot in
             SearchView(initialAssign: slot)
+        }
+        .sheet(isPresented: $searchingFavorite, onDismiss: {
+            // После закрытия, а не по таймеру: алерт поверх уходящего листа
+            // не показывается, и выбор пропадал на медленной анимации.
+            if let picked = pickedFavorite {
+                pickedFavorite = nil
+                favoriteName = picked.title
+                pendingFavorite = picked
+            }
+        }) {
+            SearchView(onSelect: { coordinate, title in
+                pickedFavorite = SavedPlace(title: title, lat: coordinate.latitude,
+                                            lon: coordinate.longitude)
+            }, showsPlaces: false)
+        }
+        .alert("Название места", isPresented: Binding(get: { pendingFavorite != nil },
+                                                      set: { if !$0 { pendingFavorite = nil } })) {
+            TextField("Например, Дача", text: $favoriteName)
+            Button("Сохранить") {
+                if var place = pendingFavorite {
+                    let name = favoriteName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !name.isEmpty { place.title = name }
+                    env.settings.addFavorite(place)
+                }
+                pendingFavorite = nil
+            }
+            Button("Отмена", role: .cancel) { pendingFavorite = nil }
         }
         .fullScreenCover(item: $pickSlot) { slot in
             PlacePickerMap(slot: slot, start: .init(for: slot, env: env))
@@ -85,7 +119,8 @@ struct MyPlacesSheet: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityHint(onRoute != nil ? Text("Маршрут сюда") : Text(verbatim: ""))
-                PlaceAssignMenu(onSearch: { searchSlot = slot }, onMap: { pickSlot = slot }) {
+                PlaceAssignMenu(onSearch: { searchSlot = slot }, onMap: { pickSlot = slot },
+                            onCurrent: currentAssigner(slot)) {
                     PlaceAssignLabel(isSet: place != nil)
                 }
             }
@@ -101,7 +136,8 @@ struct MyPlacesSheet: View {
         } else {
             // Ни адреса, ни догадки — строка целиком и есть «Задать»: тап
             // мимо маленькой кнопки не должен уходить в пустоту.
-            PlaceAssignMenu(onSearch: { searchSlot = slot }, onMap: { pickSlot = slot }) {
+            PlaceAssignMenu(onSearch: { searchSlot = slot }, onMap: { pickSlot = slot },
+                            onCurrent: currentAssigner(slot)) {
                 HStack(spacing: 8) {
                     slotLabel(slot, isSet: false,
                               subtitle: String(localized: "Не задано — нажмите, чтобы настроить"),
@@ -143,6 +179,8 @@ struct MyPlacesSheet: View {
                     .font(.rounded(12))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(2)
+                    // Внутри Menu многострочная подпись центрировалась.
+                    .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -199,6 +237,79 @@ struct MyPlacesSheet: View {
         }
     }
 
+    // MARK: - Избранное
+
+    /// Свои места с именем (7.2). Добавить — текущее место или адрес из
+    /// поиска; имя спрашиваем сразу, адрес остаётся подсказкой в поле.
+    @ViewBuilder private var favoritesSection: some View {
+        Section {
+            // По позиции, не по имени: два «Текущих места» в разных
+            // концах страны давали одинаковый id (ревью 19.10).
+            ForEach(Array(env.settings.favoritePlaces.enumerated()), id: \.offset) { _, place in
+                Button {
+                    go(to: place.coordinate, name: place.title)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: Icon.myPlaces)
+                            .font(.rounded(15, .bold))
+                            .foregroundStyle(Theme.warning)
+                            .frame(width: 36, height: 36)
+                            .background(Theme.warning.opacity(0.14), in: Circle())
+                        Text(place.title)
+                            .font(.rounded(15, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        if onRoute != nil {
+                            Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
+                                .font(.rounded(24))
+                                .foregroundStyle(Theme.accent)
+                        }
+                    }
+                    .frame(minHeight: Theme.controlSize)
+                    .contentShape(Rectangle())
+                }
+                .accessibilityHint(onRoute != nil ? Text("Маршрут сюда") : Text(verbatim: ""))
+            }
+            .onDelete { offsets in
+                env.settings.favoritePlaces.remove(atOffsets: offsets)
+            }
+            Menu {
+                if env.location.hasLocation {
+                    Button { addCurrentAsFavorite() } label: {
+                        Label("Текущее место", systemImage: "location.fill")
+                    }
+                }
+                Button { searchingFavorite = true } label: {
+                    Label("Найти адрес", systemImage: "magnifyingglass")
+                }
+            } label: {
+                Label("Добавить место", systemImage: "plus.circle.fill")
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(minHeight: Theme.controlSize)
+            }
+        } header: {
+            Text("Избранное")
+        }
+        .listRowBackground(Theme.surface)
+    }
+
+    /// Задать Дом/Работу текущим местом; без положения пункта нет.
+    private func currentAssigner(_ slot: PlaceSlot) -> (() -> Void)? {
+        PlaceTitle.currentAssigner(slot, env: env)
+    }
+
+    /// «Текущее место» — с адресом из своего адресника, если он рядом.
+    private func addCurrentAsFavorite() {
+        guard let point = env.location.currentCoordinate else { return }
+        Task {
+            let title = await PlaceTitle.resolve(point, env: env)
+            favoriteName = title
+            pendingFavorite = SavedPlace(title: title, lat: point.latitude, lon: point.longitude)
+        }
+    }
+
     // MARK: - Действие
 
     private func go(to coordinate: CLLocationCoordinate2D, name: String) {
@@ -221,10 +332,17 @@ struct MyPlacesSheet: View {
 struct PlaceAssignMenu<Content: View>: View {
     let onSearch: () -> Void
     let onMap: () -> Void
+    /// «Текущее место» (7.2) — стоя у дома, его не ищут словами.
+    var onCurrent: (() -> Void)? = nil
     @ViewBuilder var label: Content
 
     var body: some View {
         Menu {
+            if let onCurrent {
+                Button(action: onCurrent) {
+                    Label("Текущее место", systemImage: "location.fill")
+                }
+            }
             Button(action: onSearch) {
                 Label("Найти адрес", systemImage: "magnifyingglass")
             }

@@ -100,6 +100,41 @@ final class CommuteProfileStore {
                                    now: Date())
     }
 
+    #if DEBUG
+    /// Снимок `-demoCommutes`: профиль пути дом↔работа по прямой, пять будних
+    /// утр и вечеров — «сейчас ~44 мин» без настоящих поездок. Только в
+    /// памяти, на диск не пишется.
+    func seedDemo(home: CLLocationCoordinate2D, work: CLLocationCoordinate2D, now: Date = Date()) {
+        func variant(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D, hour: Int,
+                     minutes: [Double]) -> CommuteProfile.Variant {
+            let length = GeoMath.fastDistance(a.latitude, a.longitude, b.latitude, b.longitude)
+            let count = max(1, Int(length / 200))
+            var line: [Int32] = []
+            for k in 0...count {
+                let t = Double(k) / Double(count)
+                line.append(Int32(((a.latitude + (b.latitude - a.latitude) * t) * 1e5).rounded()))
+                line.append(Int32(((a.longitude + (b.longitude - a.longitude) * t) * 1e5).rounded()))
+            }
+            let ends = (1...count).map { Float(length * Double($0) / Double(count)) }
+            let rows = minutes.enumerated().map { i, total in
+                let day = Calendar.current.date(byAdding: .day, value: -(i + 1) * 7 / 5 - 1, to: now) ?? now
+                let departure = Calendar.current.date(bySettingHour: hour, minute: 20, second: 0, of: day) ?? day
+                return CommuteProfile.Row(tripID: departure.timeIntervalSince1970, departure: departure,
+                                          weekend: false, arrivalMinute: 0,
+                                          seconds: [UInt16](repeating: UInt16(total * 60 / Double(count)),
+                                                            count: count))
+            }
+            return CommuteProfile.Variant(id: UUID(), line: line, ends: ends, limitKmh: [], rows: rows,
+                                          lastUsed: now)
+        }
+        var book = CommuteProfile.Book()
+        book.toWork = [variant(home, work, hour: 8, minutes: [44, 41, 47, 43, 45])]
+        book.toHome = [variant(work, home, hour: 18, minutes: [39, 37, 42, 38, 40])]
+        self.book = book
+        isLoaded = true
+    }
+    #endif
+
     // MARK: - Журнал
 
     /// Журнал после изменившейся истории (финиш, склейка): новый журнал —

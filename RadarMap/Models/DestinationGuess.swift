@@ -27,17 +27,29 @@ struct DestinationGuess: Equatable {
     let placeTitle: String?
     /// Медиана своих поездок туда за 30 дней; nil — истории мало.
     let usual: TimeInterval?
+    /// При выезде сейчас (8.8.6): медиана на этот час по профилю пути плюс
+    /// сегодняшние пробки сверх обычного; nil — профиль на этот час не набран.
+    var estimate: CommuteEstimate.Estimate?
 
     static func == (a: DestinationGuess, b: DestinationGuess) -> Bool {
-        a.kind == b.kind && a.placeTitle == b.placeTitle && a.usual == b.usual
+        a.kind == b.kind && a.placeTitle == b.placeTitle && a.usual == b.usual && a.estimate == b.estimate
             && a.coordinate.latitude == b.coordinate.latitude
             && a.coordinate.longitude == b.coordinate.longitude
     }
 
-    /// «обычно 39 мин».
+    /// «сейчас ~52 мин, пробки +8 мин» — если есть оценка на этот час, иначе
+    /// «обычно 39 мин». Пробки — только заметные (от 3 мин): меньше — шум, и
+    /// строка не должна прыгать каждые две минуты вместе с now.json.
     var usualText: String? {
-        usual.map { String(format: String(localized: "обычно %@"),
-                           Formatting.unbreakable(Formatting.duration($0))) }
+        if let estimate {
+            let now = String(format: String(localized: "сейчас ~%@"),
+                             Formatting.unbreakable(Formatting.duration(estimate.seconds)))
+            let jam = Int((estimate.jamSeconds / 60).rounded())
+            guard jam >= AppConfig.commuteJamShowMinutes else { return now }
+            return now + ", " + String(localized: "пробки +\(jam) мин")
+        }
+        return usual.map { String(format: String(localized: "обычно %@"),
+                                  Formatting.unbreakable(Formatting.duration($0))) }
     }
 
     /// Строка под заголовком: адрес и «обычно», что есть.
@@ -55,6 +67,7 @@ struct DestinationGuess: Equatable {
     static func make(learned: [FrequentPlaces.Place],
                      manual: (FrequentPlaces.Kind) -> SavedPlace?,
                      usual: (Commute.Direction) -> TimeInterval?,
+                     estimate: (Commute.Direction) -> CommuteEstimate.Estimate? = { _ in nil },
                      from coordinate: CLLocationCoordinate2D?,
                      now: Date,
                      calendar: Calendar = .current) -> DestinationGuess? {
@@ -67,12 +80,14 @@ struct DestinationGuess: Equatable {
         }
         guard let place = FrequentPlaces.suggestion(places: places, from: coordinate,
                                                     now: now, calendar: calendar) else { return nil }
-        let typical = usual(place.kind == .work ? .toWork : .toHome)
+        let direction: Commute.Direction = place.kind == .work ? .toWork : .toHome
+        let typical = usual(direction)
+        let now = estimate(direction)
         if let hand = manual(place.kind) {
             return DestinationGuess(kind: place.kind, coordinate: hand.coordinate,
-                                    placeTitle: hand.title, usual: typical)
+                                    placeTitle: hand.title, usual: typical, estimate: now)
         }
         return DestinationGuess(kind: place.kind, coordinate: place.coordinate,
-                                placeTitle: nil, usual: typical)
+                                placeTitle: nil, usual: typical, estimate: now)
     }
 }

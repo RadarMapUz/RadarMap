@@ -588,6 +588,11 @@ final class AppEnvironment {
     /// Срок, о котором можно спросить («вам нужно быть к 9:00?», 8.6), —
     /// минута суток или nil. Пересчитывается вместе с «дорогой», не в body.
     private(set) var workTargetSuggestion: Int?
+    /// «Сейчас на работу ~44 мин» до выезда (8.8.6): профиль пути на этот час
+    /// плюс пробки now.json сверх обычного — всё на телефоне. Считается по
+    /// событиям (refreshDepartureEstimates), не в body.
+    private(set) var departureEstimates: [Commute.Direction: CommuteEstimate.Estimate] = [:]
+    @ObservationIgnored private var departureEstimatesKey: (at: Date, traffic: Int)?
 
     /// Разовая чистка проездов, засчитанных с моста над камерой. Нужны и оси
     /// камер, и прочитанная история; порядок их прихода не определён.
@@ -656,7 +661,39 @@ final class AppEnvironment {
             learned: learnedPlaces,
             manual: { [settings] kind in settings.place(for: kind == .home ? .home : .work) },
             usual: { [commute] direction in commute.first { $0.direction == direction }?.usual },
+            estimate: { [departureEstimates] direction in departureEstimates[direction] },
             from: location.currentCoordinate, now: now)
+    }
+
+    /// Пересчитать «сейчас ~44 мин»: не чаще раза в `commuteEstimateRefreshSeconds`
+    /// и сразу — на новых пробках. Профиль и now.json уже в памяти; сама
+    /// сверка линии с рёбрами — вне main.
+    func refreshDepartureEstimates() {
+        guard settings.commuteLearning, commuteProfiles.isLoaded else {
+            if !departureEstimates.isEmpty { departureEstimates = [:] }
+            return
+        }
+        let now = Date()
+        if let key = departureEstimatesKey, key.traffic == traffic.revision,
+           now.timeIntervalSince(key.at) < AppConfig.commuteEstimateRefreshSeconds { return }
+        departureEstimatesKey = (now, traffic.revision)
+        let book = commuteProfiles.book
+        let snapshot = traffic.snapshot
+        Task {
+            let next = await Self.departureEstimates(book: book, snapshot: snapshot, now: now)
+            if next != departureEstimates { departureEstimates = next }
+        }
+    }
+
+    @concurrent
+    private static func departureEstimates(book: CommuteProfile.Book, snapshot: TrafficSnapshot?,
+                                           now: Date) async -> [Commute.Direction: CommuteEstimate.Estimate] {
+        var result: [Commute.Direction: CommuteEstimate.Estimate] = [:]
+        for direction in Commute.Direction.allCases {
+            result[direction] = CommuteEstimate.beforeDeparture(variants: book[direction], now: now,
+                                                                snapshot: snapshot)
+        }
+        return result
     }
 
     /// Голос призрака — ниже камеры и манёвра; с маршрутом время прибытия
@@ -714,6 +751,8 @@ final class AppEnvironment {
             commuteGhostPending = false
             commuteLive.stop()
             commuteProfiles.clear()
+            departureEstimates = [:]
+            departureEstimatesKey = nil
         }
         refreshCommute()
     }

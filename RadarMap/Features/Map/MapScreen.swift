@@ -1437,6 +1437,7 @@ struct MapScreen: View {
         // Дорога на работу и домой: четыре недели будней поверх истории.
         if args.contains("-demoCommutes") {
             env.trip.seedDemoCommutes()
+            env.commuteProfiles.seedDemo(home: TripStats.demoHome, work: TripStats.demoWork)
             env.refreshLearnedPlaces()
         }
         // Демо-история двухнедельной давности: проверка «в этом периоде поездок нет».

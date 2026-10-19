@@ -38,6 +38,23 @@ final class DestinationGuessTests: XCTestCase {
         XCTAssertTrue(guess.subtitle.contains(Formatting.unbreakable(Formatting.duration(39 * 60))), guess.subtitle)
     }
 
+    /// Есть профиль на этот час — «сейчас ~44 мин» вместо месячной медианы;
+    /// пробки — словом, только от 3 минут.
+    func testEstimateForNowOutranksTheMonthlyMedian() throws {
+        func subtitle(_ seconds: Double, jam: Double) throws -> String {
+            try XCTUnwrap(DestinationGuess.make(
+                learned: [home, work], manual: { _ in nil }, usual: { _ in 39 * 60 },
+                estimate: { $0 == .toWork ? .init(seconds: seconds, jamSeconds: jam) : nil },
+                from: atHome, now: monday(8), calendar: calendar)).subtitle
+        }
+        let calm = try subtitle(44 * 60, jam: 60)
+        XCTAssertTrue(calm.contains(Formatting.unbreakable(Formatting.duration(44 * 60))), calm)
+        XCTAssertFalse(calm.contains(Formatting.unbreakable(Formatting.duration(39 * 60))), calm)
+        XCTAssertFalse(calm.contains("+"), "минута пробок — шум: \(calm)")
+        let jammed = try subtitle(52 * 60, jam: 8 * 60)
+        XCTAssertTrue(jammed.contains("+8"), jammed)
+    }
+
     func testManualAddressOutranksLearned() throws {
         let office = SavedPlace(title: "Офис, Мустакиллик 5", lat: 41.350, lon: 69.300)
         let guess = try XCTUnwrap(DestinationGuess.make(

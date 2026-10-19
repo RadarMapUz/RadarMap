@@ -102,8 +102,9 @@ final class CameraStore: CameraRepository {
     /// меняли только тип и `mobileConfirmed`, а id оставляли прежним. Для
     /// такого списка `==` возвращал true, и обновление до карты не доезжало:
     /// призрак-маркер оставался призраком, а «тренога» на экране — «радаром».
-    /// Возвращает «список изменился»: по этому ответу служба отметок будит
-    /// пересчёт ближайшей камеры, не дожидаясь ни экрана, ни ретайла.
+    /// Изменение двигает и `revision`, и `mobileRevision`: по второй
+    /// AppEnvironment.observeCameraRevision оценивает тревогу сразу — новая
+    /// чужая отметка не ждёт ни экрана, ни ретайла.
     @discardableResult
     func setMobileCameras(_ cameras: [Camera]) -> Bool {
         let changed = cameras.count != mobile.count
@@ -114,9 +115,13 @@ final class CameraStore: CameraRepository {
             }
         guard changed else { return false }
         mobile = cameras
+        mobileRevision &+= 1
         dataChanged()
         return true
     }
+
+    /// Растёт только при смене чужих отметок (см. setMobileCameras).
+    @ObservationIgnored private(set) var mobileRevision = 0
 
     private static let firstCustomID = 1_000_001
 

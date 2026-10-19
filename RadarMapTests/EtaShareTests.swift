@@ -34,4 +34,26 @@ final class EtaShareTests: XCTestCase {
             XCTAssertFalse(raw.contains(leak), leak)
         }
     }
+
+    /// В пробке с тем же прибытием ссылка не дёргает радио каждую минуту;
+    /// сдвиг прибытия, остатка или долгая тишина — шлём (аудит энергии 19.10).
+    func testUpdateIsSentOnlyWhenSomethingChanged() {
+        let t0 = Date(timeIntervalSince1970: 1_760_900_000)
+        let eta = t0.addingTimeInterval(1800)
+        XCTAssertTrue(EtaShare.shouldSend(lastArrival: nil, lastRemaining: nil, lastSentAt: nil,
+                                          arrival: eta, remaining: 9000, now: t0), "первое — всегда")
+        XCTAssertFalse(EtaShare.shouldSend(lastArrival: eta, lastRemaining: 9000, lastSentAt: t0,
+                                           arrival: eta.addingTimeInterval(20), remaining: 8800,
+                                           now: t0.addingTimeInterval(60)))
+        XCTAssertTrue(EtaShare.shouldSend(lastArrival: eta, lastRemaining: 9000, lastSentAt: t0,
+                                          arrival: eta.addingTimeInterval(150), remaining: 8800,
+                                          now: t0.addingTimeInterval(60)), "прибытие сдвинулось")
+        XCTAssertTrue(EtaShare.shouldSend(lastArrival: eta, lastRemaining: 9000, lastSentAt: t0,
+                                          arrival: eta, remaining: 8400,
+                                          now: t0.addingTimeInterval(60)), "проехали полкилометра")
+        XCTAssertTrue(EtaShare.shouldSend(lastArrival: eta, lastRemaining: 9000, lastSentAt: t0,
+                                          arrival: eta, remaining: 9000,
+                                          now: t0.addingTimeInterval(AppConfig.etaShareKeepAliveSeconds)),
+                      "ссылка не должна погаснуть")
+    }
 }

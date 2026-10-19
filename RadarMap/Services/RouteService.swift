@@ -79,8 +79,11 @@ final class RouteService {
         case serverUnreachable
     }
 
-    private(set) var variants: [Variant] = []
-    private(set) var selectedID = 0
+    /// Кумулятивная длина считается по ВЫБРАННОЙ линии: смена набора или
+    /// выбора её сбрасывает (до 19.10 сверялось только число точек, и вариант
+    /// с тем же числом точек брал чужие длины — ревью энергии).
+    private(set) var variants: [Variant] = [] { didSet { selectedCumulative = [] } }
+    private(set) var selectedID = 0 { didSet { selectedCumulative = [] } }
     private(set) var destinationName: String = ""
     private(set) var destinationCoordinate: CLLocationCoordinate2D?
 
@@ -324,18 +327,41 @@ final class RouteService {
     /// точки по линии маршрута. nil — маршрута нет.
     func pathAhead(from coordinate: CLLocationCoordinate2D, meters: CLLocationDistance) -> [CLLocationCoordinate2D]? {
         guard let selected else { return nil }
-        let rest = Self.remaining(selected.points, after: progressAlong)
-        guard rest.count >= 2 else { return nil }
+        if selectedCumulative.count != selected.points.count {
+            selectedCumulative = Self.cumulative(of: selected.points)
+        }
+        return Self.ahead(selected.points, cumulative: selectedCumulative, after: progressAlong,
+                          from: coordinate, meters: meters)
+    }
+
+    /// Путь от `coordinate` вперёд по линии на `meters`: точка начала —
+    /// двоичным поиском по кумулятивной длине, дальше только нужный кусок.
+    /// До 19.10 весь хвост маршрута проходился от старта и копировался в
+    /// массив координат на каждом GPS-тике (аудит энергии), хотя нужны были
+    /// первые ~600 м.
+    nonisolated static func ahead(_ points: [MKMapPoint], cumulative: [CLLocationDistance],
+                                  after along: CLLocationDistance, from coordinate: CLLocationCoordinate2D,
+                                  meters: CLLocationDistance) -> [CLLocationCoordinate2D]? {
+        guard points.count >= 2, cumulative.count == points.count else { return nil }
+        // Первый индекс, где пройденное ≥ along; сегмент, в котором машина, — с предыдущей точки.
+        var low = 0, high = cumulative.count - 1
+        while low < high {
+            let mid = (low + high) / 2
+            if cumulative[mid] >= along { high = mid } else { low = mid + 1 }
+        }
+        guard cumulative[low] >= along else { return nil }
+        let start = max(1, low)
         var path = [coordinate]
         var total: CLLocationDistance = 0
-        for point in rest.dropFirst() {
+        for i in start..<points.count {
+            let point = points[i].coordinate
             if let last = path.last {
                 total += GeoMath.fastDistance(last.latitude, last.longitude, point.latitude, point.longitude)
             }
             path.append(point)
             if total >= meters { break }
         }
-        return path
+        return path.count >= 2 ? path : nil
     }
 
     // MARK: - Построение

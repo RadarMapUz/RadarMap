@@ -154,9 +154,8 @@ struct MapScreen: View {
         }
         .onChange(of: env.cameras.revision) { _, _ in
             // Любое изменение данных (загрузка базы, свои камеры, скрытие) —
-            // одна точка обновления карты и region-мониторинга.
+            // карта; region-мониторинг пересобирает AppEnvironment.
             map.invalidateVisible()
-            env.location.refreshMonitoring()
         }
         .onChange(of: env.speedLimits.indexRevision) { _, _ in
             // База лимитов приехала позже первого слоя — пересобираем маркеры,

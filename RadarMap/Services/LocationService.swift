@@ -817,7 +817,7 @@ final class LocationService: NSObject {
             return
         }
         geofencesArmed = true
-        // Хук доставки отметок зовёт refreshMonitoring на каждое изменение
+        // Наблюдатель ревизии базы (AppEnvironment) зовёт refreshMonitoring на каждое изменение
         // списка, а изменением считается и чужая отметка за пять километров —
         // в двадцатку ближайших она не попадает, и переставлять из-за неё
         // сорок геозон значит платить за краудсорс батареей стоящего телефона.
@@ -1084,7 +1084,7 @@ final class LocationService: NSObject {
             refreshDrivingFlag()
         }
         if speedKmh >= 3 { lastMovementAt = Date() }
-        currentCourse = course
+        if currentCourse != course { currentCourse = course }
         locationTick &+= 1
         onAcceptedFix?(coordinate)
         retileIfNeeded(around: coordinate)
@@ -1149,7 +1149,10 @@ final class LocationService: NSObject {
             // тишина, что у фразы о превышении: «Молча», камера говорит сама.
             speedLimits?.checkLimitAhead(
                 coordinate: coordinate, course: course, speedKmh: speedKmh,
-                path: route?.pathAhead(from: coordinate, meters: AppConfig.limitAheadMaxMeters + 100),
+                // Лениво: путь нужен раз в limitAheadCheckSeconds, а не на каждом тике.
+                path: { [weak self] in
+                    self?.route?.pathAhead(from: coordinate, meters: AppConfig.limitAheadMaxMeters + 100)
+                },
                 announce: isTripActive && settings.voiceEnabled && !willSpeakAboutCameraAhead)
             // Память о треногах — строго ПОСЛЕ speedLimits.update: подсказка
             // звучит только при превышении, а знает о нём именно он.
@@ -1160,8 +1163,12 @@ final class LocationService: NSObject {
             // отработали по сырому фиксу.
             let snapped = roadSnapper.update(course: currentCourse,
                                              hit: speedLimits?.currentRoadHit)
-            displayCoordinate = snapped?.coordinate ?? coordinate
-            displayCourse = snapped?.courseDegrees ?? currentCourse
+            let shown = snapped?.coordinate ?? coordinate
+            if displayCoordinate.map({ $0.latitude != shown.latitude || $0.longitude != shown.longitude }) ?? true {
+                displayCoordinate = shown
+            }
+            let shownCourse = snapped?.courseDegrees ?? currentCourse
+            if displayCourse != shownCourse { displayCourse = shownCourse }
             // Стоянка: точка не сдвинулась — прогресс маршрута не мог
             // измениться, пересчёт (проекция, манёвры, префикс) пропускаем.
             // Порог накопительный от последней ОБРАБОТАННОЙ точки: ползание
@@ -1313,12 +1320,14 @@ final class LocationService: NSObject {
         guard isDirectionalFilteringActive,
               let camera = nearestCamera,
               let coordinate = currentCoordinate else {
-            relativeBearingToNearest = nil
+            // Пишем только на изменение: @Observable будит читателей на каждую
+            // запись, даже того же nil (аудит энергии 19.10).
+            if relativeBearingToNearest != nil { relativeBearingToNearest = nil }
             bearingSmoother.reset()
             return
         }
         if isCameraOnRoute(camera) {
-            relativeBearingToNearest = 0   // на маршруте — прямо по ходу
+            if relativeBearingToNearest != 0 { relativeBearingToNearest = 0 }   // на маршруте — прямо по ходу
             bearingSmoother.reset()
             return
         }

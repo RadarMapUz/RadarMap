@@ -265,4 +265,22 @@ final class WidgetSnapshotTests: XCTestCase {
         XCTAssertTrue(WidgetWeek.needsRefresh(previous: SharedDefaults.Snapshot(hasAccess: false),
                                               next: snapshot(km: 0, updated: nil), now: now))
     }
+
+    /// Виджет сам просыпается раз в сутки — сразу после полуночи (смена дня
+    /// и недели), а не каждый час (аудит энергии 19.10).
+    func testWidgetWakesOnceADayRightAfterMidnight() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Tashkent")!
+        let evening = calendar.date(from: DateComponents(year: 2026, month: 10, day: 19, hour: 23, minute: 30))!
+        let next = WidgetWeek.nextRefresh(after: evening, calendar: calendar)
+        XCTAssertEqual(next, calendar.date(from: DateComponents(year: 2026, month: 10, day: 20, hour: 0, minute: 1)))
+        let morning = calendar.date(from: DateComponents(year: 2026, month: 10, day: 20, hour: 0, minute: 0, second: 30))!
+        XCTAssertEqual(WidgetWeek.nextRefresh(after: morning, calendar: calendar),
+                       calendar.date(from: DateComponents(year: 2026, month: 10, day: 21, hour: 0, minute: 1)))
+        // Снимок станет «старым» раньше полуночи — проснуться тогда, чтобы
+        // приглушить подпись.
+        let snapshotAt = evening.addingTimeInterval(-WidgetWeek.staleAfter + 600)
+        XCTAssertEqual(WidgetWeek.nextRefresh(after: evening, updatedAt: snapshotAt, calendar: calendar),
+                       snapshotAt.addingTimeInterval(WidgetWeek.staleAfter + 60))
+    }
 }

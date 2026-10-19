@@ -298,7 +298,9 @@ final class MobileCameraService {
                 )
             }
             confirmations = fresh
-            if store?.setMobileCameras(reports) == true { onReportsChanged?() }
+            // Окно ближайших камер пересоберёт наблюдатель ревизии базы
+            // (AppEnvironment.observeCameraRevision) — сразу, и без экрана.
+            store?.setMobileCameras(reports)
             for confirmed in reconcileMine(live: fresh) {
                 onMyReportConfirmed?(confirmed)
             }
@@ -514,21 +516,6 @@ final class MobileCameraService {
     @ObservationIgnored var onMyReportConfirmed: ((MyReport) -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onMyReportConfirmed,
                                                "MobileCameraService.onMyReportConfirmed") }
-    }
-
-    /// Список отметок изменился — есть о чём предупредить ПРЯМО СЕЙЧАС.
-    ///
-    /// До этого хука новая чужая отметка доезжала до оповещения через экран:
-    /// `dataChanged()` двигал ревизию, ревизию слушали карта и экран машины, и
-    /// уже они звали `refreshMonitoring`. Со сложенным телефоном ни одно тело
-    /// вью не исполняется — окно из двадцати ближайших камер оставалось
-    /// прежним до следующего ретайла, а он приходит раз в 300–1500 м. На
-    /// трассе это до сорока девяти секунд молчания о радаре, который стоит в
-    /// километре и о котором сервер уже рассказал. Тот, кто едет сзади, —
-    /// главный адресат краудсорса, и именно он узнавал последним.
-    @ObservationIgnored var onReportsChanged: (() -> Void)? {
-        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onReportsChanged,
-                                               "MobileCameraService.onReportsChanged") }
     }
 
     // MARK: - Кнопка «Радар!» за рулём

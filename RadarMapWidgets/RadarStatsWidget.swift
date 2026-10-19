@@ -84,9 +84,9 @@ struct RadarStatsProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<RadarStatsEntry>) -> Void) {
         let entry = RadarStatsEntry(date: .now, snapshot: SharedDefaults.read())
-        // Час — не ради новых цифр (их приносит приложение), а чтобы виджет
-        // сам заметил смену недели и перестал называть прошлую текущей.
-        completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(3600))))
+        // Не ради новых цифр (их приносит приложение), а чтобы виджет сам
+        // заметил смену дня и недели — раз в сутки, не раз в час.
+        completion(Timeline(entries: [entry], policy: .after(WidgetWeek.nextRefresh(after: .now, updatedAt: entry.snapshot.updatedAt))))
     }
 }
 

@@ -49,4 +49,16 @@ nonisolated enum EtaShare {
          "left_m": Int(max(0, remainingMeters).rounded()),
          "status": status.rawValue]
     }
+
+    /// Слать ли обновление в пути. До 19.10 — каждую минуту, даже стоя в
+    /// пробке с тем же прибытием: радио будилось ради тех же байтов. Теперь
+    /// — когда прибытие сдвинулось на минуту, остаток на полкилометра, или
+    /// для «живости» ссылки (сервер гасит её через 2 ч без обновлений).
+    static func shouldSend(lastArrival: Date?, lastRemaining: Double?, lastSentAt: Date?,
+                           arrival: Date, remaining: Double, now: Date) -> Bool {
+        guard let lastArrival, let lastRemaining, let lastSentAt else { return true }
+        if now.timeIntervalSince(lastSentAt) >= AppConfig.etaShareKeepAliveSeconds { return true }
+        if abs(arrival.timeIntervalSince(lastArrival)) >= AppConfig.etaShareArrivalStepSeconds { return true }
+        return abs(remaining - lastRemaining) >= AppConfig.etaShareRemainingStepMeters
+    }
 }

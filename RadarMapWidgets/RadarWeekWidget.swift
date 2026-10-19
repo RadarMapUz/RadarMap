@@ -34,8 +34,9 @@ struct RadarWeekProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<RadarWeekEntry>) -> Void) {
-        completion(Timeline(entries: [RadarWeekEntry(date: .now, snapshot: SharedDefaults.read())],
-                            policy: .after(.now.addingTimeInterval(3600))))
+        let snapshot = SharedDefaults.read()
+        completion(Timeline(entries: [RadarWeekEntry(date: .now, snapshot: snapshot)],
+                            policy: .after(WidgetWeek.nextRefresh(after: .now, updatedAt: snapshot.updatedAt))))
     }
 }
 

@@ -14,7 +14,9 @@ nonisolated struct PassedCamera: Codable, Identifiable {
     let id: UUID
     let cameraID: Int
     let typeRaw: String
-    let location: String
+    /// var — разовая чистка снимает с отметок водителей подпись «исчезнет
+    /// ~14:05», бессмысленную после проезда (S30).
+    var location: String
     let speedKmh: Double
     let date: Date
     // Координаты камеры и лимит дороги в момент проезда (у старых записей отсутствуют).

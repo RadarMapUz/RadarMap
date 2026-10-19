@@ -47,16 +47,29 @@ nonisolated struct APIClient {
     /// Кэш URLSession здесь обходим намеренно: он ответил бы нам двухсоткой из
     /// своей памяти, и мы бы заново разбирали тот же JSON, не узнав, что
     /// ничего не изменилось.
+    /// `serverDate` — заголовок `Date` ответа: часы сервера, по ним сроки из
+    /// ответа переводятся на часы телефона (S31).
     func getIfChanged<T: Decodable>(_ path: String, as type: T.Type,
-                                    etag: String?) async throws -> (value: T, etag: String?)? {
+                                    etag: String?) async throws -> (value: T, etag: String?, serverDate: Date?)? {
         var req = request(path)
         req.cachePolicy = .reloadIgnoringLocalCacheData
         if let etag { req.setValue(etag, forHTTPHeaderField: "If-None-Match") }
         let (data, response) = try await transport(req)
         if let http = response as? HTTPURLResponse, http.statusCode == 304 { return nil }
         try Self.checkStatus(response, path: path)
-        let fresh = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag")
-        return (try decode(data, path: path), fresh)
+        let http = response as? HTTPURLResponse
+        let fresh = http?.value(forHTTPHeaderField: "ETag")
+        return (try decode(data, path: path), fresh,
+                http?.value(forHTTPHeaderField: "Date").flatMap(Self.httpDate))
+    }
+
+    /// RFC 7231 IMF-fixdate: «Tue, 20 Oct 2026 10:15:30 GMT».
+    nonisolated static func httpDate(_ text: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter.date(from: text)
     }
 
     /// Сырые данные «только если изменилось» — для файлов, которые разбирает

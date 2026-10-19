@@ -1222,13 +1222,29 @@ struct EngineMapView: UIViewRepresentable {
         /// направление карты: как у прежнего символа с `icon-rotation-alignment:
         /// map`. Вид стоит лицом к экрану при наклоне — как `icon-pitch-alignment:
         /// viewport`.
+        /// Стрелка «я» на экране. Зовётся дважды за кадр (кадр камеры и шаг
+        /// глайда) — второй раз с тем же результатом, поэтому сдвиг меньше
+        /// четверти пункта и поворот меньше 0,2° пропускаются. Ставится слоем,
+        /// а не `center`/`transform` вида: UIKit на них пересобирает раскладку
+        /// карты (`layoutSubviews` движка — половина кода приложения на main
+        /// в замере 19.10, perf_audit_2026-10-19.md).
         private func layoutPositionView(in view: MLNMapView) {
             guard let coordinate = displayedPosition else { return }
             let marker = positionView ?? makePositionView(in: view)
-            marker.center = view.convert(coordinate, toPointTo: view)
-            marker.transform = CGAffineTransform(
-                rotationAngle: (positionHeading - view.direction) * .pi / 180)
+            let point = view.convert(coordinate, toPointTo: view)
+            let angle = (positionHeading - view.direction) * .pi / 180
+            if let shown = shownPosition,
+               abs(shown.point.x - point.x) < 0.25, abs(shown.point.y - point.y) < 0.25,
+               abs(shown.angle - angle) < 0.0035 { return }
+            shownPosition = (point, angle)
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            marker.layer.position = point
+            marker.layer.setAffineTransform(CGAffineTransform(rotationAngle: angle))
+            CATransaction.commit()
         }
+        /// Что стрелка показывает сейчас (точка и угол) — для пропуска повторов.
+        private var shownPosition: (point: CGPoint, angle: Double)?
 
         private func makePositionView(in view: MLNMapView) -> UIImageView {
             let marker = UIImageView()
@@ -1236,6 +1252,7 @@ struct EngineMapView: UIViewRepresentable {
             marker.isAccessibilityElement = false
             view.addSubview(marker)
             positionView = marker
+            shownPosition = nil   // новый вид — поставить заново, а не «уже стоит»
             installCursor(current?.cursorStyle ?? lastCursor ?? .arrow)
             return marker
         }

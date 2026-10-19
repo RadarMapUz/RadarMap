@@ -544,14 +544,19 @@ nonisolated enum AppConfig {
     /// кусок рвётся.
     nonisolated static let trafficMaxStepMeters: CLLocationDistance = 500
     nonisolated static let trafficMaxGapSeconds: TimeInterval = 120
-    /// Отправка — пачкой раз в столько, пока идёт поездка.
-    static let trafficUploadInterval: TimeInterval = 120
     /// Не отправленные (нет сети) куски копятся не больше этого — старые
     /// выбрасываются: пробка часовой давности серверу уже не нужна.
     static let trafficQueueCap = 30
     /// Пробки с сервера: как часто перечитывать, пока карта на экране или идёт
     /// поездка, и с какого возраста файла считать данных нет вовсе.
     static let trafficRefreshInterval: TimeInterval = 120
+    /// Экран погашен и маршрута нет — пробки нужны только «впереди пробка».
+    static let trafficQuietInterval: TimeInterval = 300
+    /// Радио уже проснулось ради другого запроса — пробки, чей срок подойдёт
+    /// в ближайшие столько секунд, идут вместе с ним (NetworkRhythm).
+    static let radioJoinSlackSeconds: TimeInterval = 60
+    /// Шаг проверки такта пробок (сон без радио — дёшево).
+    static let trafficLoopStepSeconds: TimeInterval = 15
     static let trafficStaleSeconds: TimeInterval = 10 * 60
     /// Участок маршрута совпал с ребром пробки: ближе этого и почти тем же
     /// направлением (иначе встречная полоса проспекта красила бы нашу).

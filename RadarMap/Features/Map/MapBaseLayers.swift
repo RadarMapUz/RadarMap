@@ -66,7 +66,10 @@ struct EngineBaseLayer: View {
                         spanMeters: camera.spanMeters,
                         anchorY: insets.meY,
                         pitchDegrees: camera.pitchDegrees,
-                        daylight: env.settings.mapAppearance.isDaylight(at: me, now: Date()),
+                        // Тот же день/ночь, что у интерфейса (пересчёт раз в
+                        // 5 мин и на смене настройки), а не расчёт солнца по
+                        // живой координате на каждом фиксе (аудит энергии 19.10).
+                        daylight: env.interfaceIsDaylight,
                         houses: env.settings.mapHouses,
                         cameras: [],
                         cameraRevision: env.cameras.revision,

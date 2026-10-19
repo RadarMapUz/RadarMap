@@ -1400,6 +1400,8 @@ final class LocationService: NSObject {
         if !clusteredCameras.isEmpty { clusteredCameras = [] }
     }
 
+    @ObservationIgnored private var nearestBuffer: [(camera: Camera, distance: CLLocationDistance)] = []
+
     private func recomputeNearest(from coordinate: CLLocationCoordinate2D) {
         guard !trackedCameras.isEmpty else { clearNearest(); return }
         // Сначала дешёвая дистанция по всему окну, и только потом дорогая проверка
@@ -1408,8 +1410,14 @@ final class LocationService: NSObject {
         // (кусок дороги, ось, коридор) считаем раз-два на тик, а не 150 раз.
         // fastDistance вместо CLLocation: без аллокаций, и PassTracking меряет
         // траверз тем же способом — цифры на HUD и в проездах сходятся.
-        var candidates: [(camera: Camera, distance: CLLocationDistance)] = []
-        candidates.reserveCapacity(trackedCameras.count)
+        // Буфер переиспользуется между тиками (без новой аллокации на фикс).
+        // Полная сортировка оставлена сознательно: окно ≤ trackedCamerasLimit,
+        // это микросекунды, а частичный выбор на пути тревоги — лишний риск
+        // (аудит энергии 19.10, 2.12).
+        var candidates = nearestBuffer
+        nearestBuffer = []   // единственная ссылка — иначе removeAll скопирует буфер
+        candidates.removeAll(keepingCapacity: true)
+        defer { nearestBuffer = candidates }
         // Охват предупреждений меряется по ГЕОГРАФИИ: проехали ближе порога
         // траверса — камера была наша, и молчание о ней обязано попасть в счёт.
         // Ни маршрут, ни гейты, ни правила записи проезда здесь не участвуют:

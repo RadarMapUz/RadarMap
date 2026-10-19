@@ -126,6 +126,17 @@ final class AppEnvironment {
         traffic.setWanted(isPhoneSceneActive || isCarPlayConnected || location.isTripActive)
     }
 
+    /// Ритм сети в поездке (NetworkRhythm): пробки — одним тактом и вместе с
+    /// опросом отметок, реже при погашенном экране без маршрута.
+    private func wireNetworkRhythm() {
+        traffic.interval = { [weak self] in
+            guard let self else { return AppConfig.trafficRefreshInterval }
+            return NetworkRhythm.trafficInterval(screenOn: self.isPhoneSceneActive || self.isCarPlayConnected,
+                                                 hasRoute: self.route.isActive)
+        }
+        mobile.onRadioAwake = { [weak traffic] in traffic?.radioIsAwake() }
+    }
+
     /// Ставит RootView по scenePhase телефона.
     func setPhoneSceneActive(_ active: Bool) {
         isPhoneSceneActive = active
@@ -431,6 +442,7 @@ final class AppEnvironment {
         // мигнуть тёмным при запуске.
         refreshInterfaceAppearance()
         observeCameraRevision()
+        wireNetworkRhythm()
     }
 
     /// База камер изменилась (загрузка, своя камера, скрытие, чужая отметка) —

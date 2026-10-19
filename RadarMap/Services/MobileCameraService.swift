@@ -186,6 +186,8 @@ final class MobileCameraService {
                     // секунду, своя ждала связи и может протухнуть.
                     await self.flushPending()
                     await self.refresh()
+                    // Радио проснулось — пробки, чей срок близок, идут сейчас же.
+                    self.onRadioAwake?()
                 }
                 // Спим короткими шагами, а не на весь интервал: расписание
                 // зависит от скорости, и заснувший на стоянке цикл проспал бы
@@ -196,6 +198,11 @@ final class MobileCameraService {
     }
 
     @ObservationIgnored private var lastRefreshAt: Date = .distantPast
+    /// Опрос отметок только что сходил в сеть (NetworkRhythm). Ставит AppEnvironment.
+    @ObservationIgnored var onRadioAwake: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onRadioAwake,
+                                               "MobileCameraService.onRadioAwake") }
+    }
 
     func stopPolling() {
         pollTask?.cancel()

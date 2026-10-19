@@ -23,7 +23,7 @@ final class CommuteLiveService {
 
     struct Display: Equatable, Sendable {
         let direction: Commute.Direction
-        /// Прибытие, округлённое вниз до минуты.
+        /// Прибытие, округлённое до ближайшей минуты.
         let arrival: Date
         /// Отклонение от обычного всего пути, мин (0 — «как обычно»).
         let deltaMinutes: Int
@@ -35,8 +35,9 @@ final class CommuteLiveService {
     @ObservationIgnored private var direction: Commute.Direction?
     @ObservationIgnored private var announcer = CommuteGhost.Announcer()
     /// Фраза призрака (8.7) — голос решает, можно ли сейчас говорить
-    /// (оповещение о камере и манёвр важнее).
-    @ObservationIgnored var onAnnounce: ((String) -> Void)? {
+    /// (оповещение о камере и манёвр важнее); true — сказана. Несказанная
+    /// не засчитывается и прозвучит на следующем пересчёте.
+    @ObservationIgnored var onAnnounce: ((String) -> Bool)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onAnnounce,
                                                "CommuteLiveService.onAnnounce") }
     }
@@ -63,22 +64,23 @@ final class CommuteLiveService {
         let output = session.note(lat: coordinate.latitude, lon: coordinate.longitude,
                                   accuracy: accuracy, at: now)
         self.session = session
-        if output.isOff {
-            // «Сегодня другой дорогой»: прогноз и голос молчат до возврата.
+        if output.isOff || !output.hasLead {
+            // «Сегодня другой дорогой» или ведущий сошёл, а другой путь ещё
+            // не подтверждён: прогноз и голос молчат до возврата.
             if display != nil { display = nil }
             return
         }
         guard let forecast = output.forecast else { return }
-        let minute = (forecast.arrival.timeIntervalSince1970 / 60).rounded(.down) * 60
+        let minute = (forecast.arrival.timeIntervalSince1970 / 60).rounded() * 60
         let next = Display(direction: direction, arrival: Date(timeIntervalSince1970: minute),
                            deltaMinutes: forecast.deltaMinutes)
-        if next != display {
-            display = next
-            if announcer.shouldSpeak(deltaMinutes: next.deltaMinutes,
-                                     remainingMeters: output.remainingMeters, now: now) {
-                onAnnounce?(CommuteGhost.phrase(direction: direction, arrival: next.arrival,
-                                                deltaMinutes: next.deltaMinutes))
-            }
+        if next != display { display = next }
+        // Голос — на каждом пересчёте (≤ раз в 30 с), а не только при смене
+        // строки: фраза, отложенная из-за камеры, не ждёт сдвига на 3 мин.
+        if announcer.wants(deltaMinutes: next.deltaMinutes, remainingMeters: output.remainingMeters, now: now),
+           onAnnounce?(CommuteGhost.phrase(direction: direction, arrival: next.arrival,
+                                           deltaMinutes: next.deltaMinutes)) == true {
+            announcer.commit(deltaMinutes: next.deltaMinutes, now: now)
         }
     }
 
@@ -92,6 +94,7 @@ final class CommuteLiveService {
     func stop() {
         session = nil
         direction = nil
+        announcer = CommuteGhost.Announcer()
         if display != nil { display = nil }
     }
 

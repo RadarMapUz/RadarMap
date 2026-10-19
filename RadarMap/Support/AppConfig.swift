@@ -673,6 +673,15 @@ nonisolated enum AppConfig {
     /// дальше 150 м от окна — полный проход (машина «потерялась»).
     nonisolated static let commuteGhostWindowSegments = 40
     nonisolated static let commuteGhostRescanMeters: Double = 150
+    /// Далёкая линия (едем другим вариантом) — полный проход по ней не чаще
+    /// раза в столько метров пути: окно и так поймает возврат.
+    nonisolated static let commuteGhostRescanStepMeters: Double = 200
+    /// Ведущий вариант меняется, только если другой ближе к машине на столько
+    /// (сглаженное отклонение): на общем участке двух путей призрак не скачет.
+    nonisolated static let commuteGhostSwitchMeters: Double = 15
+    /// Сколько ждать, пока будет из чего решать (позиция, профиль с диска,
+    /// дом и работа), если поездка началась раньше — запуск Siri, фон.
+    nonisolated static let commuteGhostStartWaitSeconds: TimeInterval = 180
     /// Поездка — «дорога на работу», если началась не дальше 1 км от дома
     /// (и наоборот): автостарт CoreMotion срабатывает уже на ходу.
     nonisolated static let commuteGhostStartRadiusMeters: Double = 1000

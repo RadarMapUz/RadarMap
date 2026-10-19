@@ -428,11 +428,20 @@ final class PerformanceBudgetTests: XCTestCase {
                                weekend: false, arrivalMinute: 0,
                                seconds: [UInt16](repeating: 20, count: 150))
         }
-        let variant = CommuteProfile.Variant(id: UUID(), line: line,
-                                             ends: (1...150).map { Float($0 * 200) },
-                                             limitKmh: [], rows: rows, lastUsed: start)
-        var session = try XCTUnwrap(CommuteLiveSession(variants: [variant], weekend: false,
-                                                        departure: start, calendar: utc))
+        func variant(north: Double) -> CommuteProfile.Variant {
+            var shifted = line
+            for i in stride(from: 0, to: shifted.count, by: 2) {
+                shifted[i] = Int32(((lat + north / 111_320) * 1e5).rounded())
+            }
+            return CommuteProfile.Variant(id: UUID(), line: shifted,
+                                          ends: (1...150).map { Float($0 * 200) },
+                                          limitKmh: [], rows: rows, lastUsed: start)
+        }
+        // Три варианта, два из них — параллельно в километре: далёкие линии
+        // не сканируются, пока до них заведомо дальше порога.
+        var session = try XCTUnwrap(CommuteLiveSession(variants: [variant(north: 1000), variant(north: 0),
+                                                                  variant(north: -1000)],
+                                                        weekend: false, departure: start, calendar: utc))
         let clock = ContinuousClock()
         let began = clock.now
         for k in 0..<2000 {
@@ -440,6 +449,6 @@ final class PerformanceBudgetTests: XCTestCase {
             _ = session.note(lat: lat, lon: lon0 + x / kx, accuracy: 10,
                              at: start.addingTimeInterval(Double(k)))
         }
-        XCTAssertLessThan(clock.now - began, .milliseconds(50), "призрак дорожает на фикс")
+        XCTAssertLessThan(clock.now - began, .milliseconds(100), "призрак дорожает на фикс")
     }
 }

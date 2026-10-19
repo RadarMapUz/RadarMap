@@ -103,6 +103,25 @@ final class CommuteGhostTests: XCTestCase {
         XCTAssertGreaterThan(rho, 1, "сглажено к прежнему, но в сторону пробки")
     }
 
+    /// Стоянка у обочины на одном участке — время в пути, а не темп всего
+    /// остального: один участок весит не больше 2,5 своих медиан.
+    func testOneStopDoesNotSetThePace() {
+        var live = [(seconds: Double, median: Double, length: Double)](repeating: (20, 20, 200), count: 9)
+        live.insert((600, 20, 200), at: 4)
+        XCTAssertLessThan(G.pace(live: live, previous: 1), 1.1)
+    }
+
+    /// Меньше минуты в любую сторону — «как обычно», не «на 1 минуту дольше».
+    func testUnderAMinuteIsUsual() {
+        func delta(_ d: Double) -> Int {
+            G.Forecast(remaining: 0, delta: d, sigma: 0, arrival: now).deltaMinutes
+        }
+        XCTAssertEqual(delta(30), 0)
+        XCTAssertEqual(delta(-45), 0)
+        XCTAssertEqual(delta(90), 2)
+        XCTAssertEqual(delta(61), 1)
+    }
+
     func testForecastWaitsForOnePointFiveKilometres() {
         XCTAssertFalse(G.isConfirmed(along: 800), "заезд в магазин у дома — ещё не дорога на работу")
         XCTAssertTrue(G.isConfirmed(along: 1600))
@@ -167,6 +186,15 @@ final class CommuteGhostTests: XCTestCase {
         XCTAssertTrue(a.shouldSpeak(deltaMinutes: 9, remainingMeters: 5000, now: now.addingTimeInterval(700)))
         XCTAssertFalse(a.shouldSpeak(deltaMinutes: 15, remainingMeters: 5000, now: now.addingTimeInterval(1200)),
                        "больше трёх фраз за поездку — нет")
+    }
+
+    /// `wants` ничего не засчитывает: несказанная фраза не съедает лимит.
+    func testAnnouncerCountsOnlyCommittedPhrases() {
+        var a = G.Announcer()
+        for _ in 0..<5 { XCTAssertTrue(a.wants(deltaMinutes: 0, remainingMeters: 9000, now: now)) }
+        XCTAssertEqual(a.spoken, 0)
+        a.commit(deltaMinutes: 0, now: now)
+        XCTAssertFalse(a.wants(deltaMinutes: 0, remainingMeters: 9000, now: now.addingTimeInterval(600)))
     }
 
     /// Быстрее обычного — «как обычно»: никаких «вы быстрее на…».

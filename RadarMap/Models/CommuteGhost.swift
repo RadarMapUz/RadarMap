@@ -17,7 +17,7 @@
 //  - Всё считается на телефоне; модуль чистый и не знает ни о GPS, ни о
 //    сервере — его входы приходят от CommuteLiveService.
 //
-//  Модель остатка: R = m_k·(1−f) + S_{k+1} + (ρ−1)·Σ_{j>k} m_j·e^{−(b_j−a)/D}.
+//  Модель остатка: R = m_k·(1−f)·ρ + S_{k+1} + (ρ−1)·Σ_{j>k} m_j·e^{−(b_j−a)/D}.
 //  Сегодняшний темп ρ действует рядом и затухает с расстоянием D: пробка на
 //  первом километре не означает пробку на десятом. Суффиксные суммы считаются
 //  один раз на базу — на фикс O(1) после поиска участка.
@@ -53,6 +53,12 @@ nonisolated enum CommuteGhost {
         func length(of segment: Int) -> Double { ends[segment] - start(of: segment) }
 
         /// Участок, в котором точка `along`, и доля пройденного в нём.
+        /// Обычное время от точки `along` до конца линии, с (без сегодняшнего темпа).
+        func usualRemaining(at along: Double) -> Double {
+            let (k, f) = locate(along)
+            return median[k] * (1 - f) + suffix[k + 1]
+        }
+
         func locate(_ along: Double) -> (segment: Int, fraction: Double) {
             let a = min(max(0, along), length)
             // Двоичный поиск первой границы ≥ a.
@@ -155,13 +161,15 @@ nonisolated enum CommuteGhost {
 
     /// ρ = Σ живых секунд / Σ медиан по последним участкам (≈ 2 км, не меньше
     /// трёх), сглаженный к прежнему и ограниченный [0,7; 2,5]. Меньше трёх
-    /// пройденных участков — темп не известен, ρ = 1 (как обычно).
+    /// пройденных участков — темп не известен, ρ = 1 (как обычно). Один
+    /// участок весит не больше `commuteGhostPaceMax` своих медиан: стоянка у
+    /// обочины — это время в пути, а не темп всего остального пути.
     static func pace(live: [(seconds: Double, median: Double, length: Double)],
                      previous: Double = 1,
                      windowMeters: Double = AppConfig.commuteGhostPaceWindowMeters) -> Double {
         var seconds = 0.0, usual = 0.0, meters = 0.0, count = 0
         for entry in live.reversed() {
-            seconds += entry.seconds
+            seconds += min(entry.seconds, entry.median * AppConfig.commuteGhostPaceMax)
             usual += entry.median
             meters += entry.length
             count += 1
@@ -183,8 +191,9 @@ nonisolated enum CommuteGhost {
         let sigma: Double
         let arrival: Date
 
-        /// Округлённое до минуты отклонение — «+4 мин», «как обычно» при |Δ| < 1.
-        var deltaMinutes: Int { Int((delta / 60).rounded()) }
+        /// Округлённое до минуты отклонение — «+4 мин»; меньше минуты в любую
+        /// сторону — 0, «как обычно» (30 с не повод для «на 1 минуту дольше»).
+        var deltaMinutes: Int { abs(delta) < 60 ? 0 : Int((delta / 60).rounded()) }
     }
 
     /// Остаток пути от точки `along` при сегодняшнем темпе `rho`, и прибытие.
@@ -254,7 +263,9 @@ nonisolated enum CommuteGhost {
     /// подтверждения пути; повтор — только если отклонение сдвинулось на
     /// 3+ мин, с прошлой фразы прошло 4+ мин и до финиша больше 2 км; не
     /// больше трёх фраз за поездку. Голос призрака — ниже камеры и манёвра:
-    /// это решает вызывающий (не говорить поверх оповещения).
+    /// это решает вызывающий, и фраза засчитывается только СКАЗАННОЙ —
+    /// `wants`, затем `commit`, когда голос был свободен. Иначе первая фраза
+    /// терялась под оповещением о камере, а следующая ждала сдвига на 3 мин.
     struct Announcer: Equatable, Sendable {
         private(set) var spoken = 0
         private var lastDelta: Int?
@@ -262,17 +273,25 @@ nonisolated enum CommuteGhost {
 
         init() {}
 
-        mutating func shouldSpeak(deltaMinutes: Int, remainingMeters: Double, now: Date) -> Bool {
+        func wants(deltaMinutes: Int, remainingMeters: Double, now: Date) -> Bool {
             guard spoken < AppConfig.commuteGhostMaxPhrases else { return false }
-            if let lastDelta, let lastAt {
-                guard abs(deltaMinutes - lastDelta) >= AppConfig.commuteGhostRepeatDeltaMinutes,
-                      now.timeIntervalSince(lastAt) >= AppConfig.commuteGhostRepeatSeconds,
-                      remainingMeters >= AppConfig.commuteGhostRepeatMinRemainingMeters
-                else { return false }
-            }
+            guard let lastDelta, let lastAt else { return true }
+            return abs(deltaMinutes - lastDelta) >= AppConfig.commuteGhostRepeatDeltaMinutes
+                && now.timeIntervalSince(lastAt) >= AppConfig.commuteGhostRepeatSeconds
+                && remainingMeters >= AppConfig.commuteGhostRepeatMinRemainingMeters
+        }
+
+        mutating func commit(deltaMinutes: Int, now: Date) {
             spoken += 1
             lastDelta = deltaMinutes
             lastAt = now
+        }
+
+        /// `wants` и сразу `commit` — когда голос заведомо свободен.
+        mutating func shouldSpeak(deltaMinutes: Int, remainingMeters: Double, now: Date) -> Bool {
+            guard wants(deltaMinutes: deltaMinutes, remainingMeters: remainingMeters, now: now)
+            else { return false }
+            commit(deltaMinutes: deltaMinutes, now: now)
             return true
         }
     }

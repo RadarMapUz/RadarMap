@@ -394,9 +394,8 @@ struct LearningSettingsPage: View {
                         env.refreshLearnedPlaces()
                     }
                 Toggle("Время дороги на работу", isOn: $settings.commuteLearning)
-                    .onChange(of: settings.commuteLearning) { _, enabled in
-                        if !enabled { env.commuteProfiles.clear() }
-                        env.refreshCommute()
+                    .onChange(of: settings.commuteLearning) { _, _ in
+                        env.commuteLearningChanged()
                     }
                 // Выключенная настройка не должна оставлять данные лежать:
                 // человек выключил подсказки — значит и списку мест на

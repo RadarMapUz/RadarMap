@@ -47,47 +47,57 @@ struct CameraActivityWidget: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    typeIcon(context.state)
+                    typeIcon(context.state, isStale: context.isStale)
                         .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    if let distance = context.state.distanceMeters {
+                    // Без сигнала расстояние уже неправда — его нет вовсе,
+                    // как и на локскрине (ревью 19.10: остров держал «300 м»).
+                    if !context.isStale, let distance = context.state.distanceMeters {
                         Text(format(distance))
                             .font(.system(.title3, design: .rounded).bold())
                             .foregroundStyle(WTheme.accent)
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    ApproachBar(state: context.state)
+                    if !context.isStale { ApproachBar(state: context.state) }
                     // `?? "…"` дал бы String — мимо каталога, на узбекском
                     // осталось бы по-русски.
                     Group {
-                        if let title = context.state.nearestTitle { Text(title) } else { Text("Камер рядом нет") }
+                        if context.isStale {
+                            Text("Нет сигнала GPS")
+                        } else if let title = context.state.nearestTitle {
+                            Text(title)
+                        } else {
+                            Text("Камер рядом нет")
+                        }
                     }
                         .font(.system(.footnote, design: .rounded))
                         .foregroundStyle(WTheme.secondary)
                         .lineLimit(2)
                 }
             } compactLeading: {
-                typeIcon(context.state)
+                typeIcon(context.state, isStale: context.isStale)
             } compactTrailing: {
-                if let distance = context.state.distanceMeters {
+                if !context.isStale, let distance = context.state.distanceMeters {
                     Text(format(distance))
                         .font(.system(.caption2, design: .rounded).bold())
                         .foregroundStyle(WTheme.accent)
                 }
             } minimal: {
-                typeIcon(context.state)
+                typeIcon(context.state, isStale: context.isStale)
             }
             .keylineTint(WTheme.accent)
         }
     }
 
     @ViewBuilder
-    private func typeIcon(_ state: CameraActivityAttributes.ContentState) -> some View {
-        Image(systemName: state.nearestTitle == nil ? "checkmark.shield.fill" : state.nearestSymbol)
+    private func typeIcon(_ state: CameraActivityAttributes.ContentState, isStale: Bool) -> some View {
+        Image(systemName: isStale ? "location.slash.fill"
+              : state.nearestTitle == nil ? "checkmark.shield.fill" : state.nearestSymbol)
             .font(.system(size: 14, weight: .bold))
-            .foregroundStyle(state.nearestTitle == nil ? WTheme.clear : WTheme.camera)
+            .foregroundStyle(isStale ? WTheme.secondary
+                             : state.nearestTitle == nil ? WTheme.clear : WTheme.camera)
     }
 }
 

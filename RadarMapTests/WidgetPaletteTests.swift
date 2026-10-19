@@ -70,9 +70,16 @@ final class WidgetPaletteTests: XCTestCase {
         }
     }
 
-    /// Белый значок на синей и жёлтой плашке пустого состояния.
-    func testWhiteGlyphOnAccentBadgeInDaylight() {
-        XCTAssertGreaterThanOrEqual(contrast(0xFFFFFF, WidgetPalette.accent.light), 4.5)
+    /// Белый значок кладётся только на заливки — и днём, и ночью. Ночные
+    /// accent/danger — цвета ТЕКСТА, светлые: белый на них 2,5:1 (ревью 19.10).
+    func testWhiteGlyphsSitOnFillsInBothThemes() {
+        XCTAssertEqual(WidgetPalette.accentFill.light, hex(Theme.accentFill, .light))
+        XCTAssertEqual(WidgetPalette.accentFill.dark, hex(Theme.accentFill, .dark))
+        XCTAssertEqual(WidgetPalette.dangerFill.light, hex(Theme.dangerFill, .light))
+        for fill in [WidgetPalette.accentFill, WidgetPalette.dangerFill, WidgetPalette.successFill] {
+            XCTAssertGreaterThanOrEqual(contrast(0xFFFFFF, fill.light), 4.5, "днём")
+            XCTAssertGreaterThanOrEqual(contrast(0xFFFFFF, fill.dark), 4.5, "ночью")
+        }
     }
 
     /// Плашка поездки (Live Activity) — ночные значения палитры: заливки

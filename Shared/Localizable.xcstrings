@@ -399,6 +399,22 @@
         }
       }
     },
+    "%@%lld%% к прошлой неделе": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%lld%% к прошлой неделе"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘tgan haftaga %@%lld%%"
+          }
+        }
+      }
+    },
     "%@, ": {
       "localizations": {
         "ru": {
@@ -12400,6 +12416,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "yo‘lda"
+          }
+        }
+      }
+    },
+    "в среднем %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "в среднем %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘rtacha %@"
           }
         }
       }

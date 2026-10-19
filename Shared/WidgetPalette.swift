@@ -28,7 +28,9 @@ nonisolated enum WidgetPalette {
     static let success = Pair(light: 0x177A41, dark: 0x4CC27A)
     static let warning = Pair(light: 0x9A5800, dark: 0xFFB020)
 
-    /// Заливки под белым значком (Theme.dangerFill / successFill).
+    /// Заливки под белым значком (Theme.accentFill / dangerFill / successFill):
+    /// ночные accent/danger светлые — белый на них 2,5:1 (ревью 19.10).
+    static let accentFill = Pair(light: 0x2563D9, dark: 0x2A62D6)
     static let dangerFill = Pair(light: 0xC62828, dark: 0xD0362C)
     static let successFill = Pair(light: 0x177A41, dark: 0x1A7F45)
     /// Подложка плашки поездки — графит экрана тревоги (Theme.alertSurface):

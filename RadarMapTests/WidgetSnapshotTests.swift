@@ -204,6 +204,17 @@ final class WidgetSnapshotTests: XCTestCase {
         XCTAssertTrue(WidgetWeek.marksOverspeedDays([12_400, 8_000, 0, 0, 0, 0, 0]))
     }
 
+    /// Столбики — с двух ездовых дней, даже без нормы: первая неделя после
+    /// установки — это `.few` все семь дней, а форма недели уже есть.
+    func testBarsShowFromTheSecondDrivingDayEvenWithoutANorm() {
+        let week = SharedDefaults.Snapshot(weekStart: thisWeekStart, weekDistance: 30_000, weekTrips: 4,
+                                           dayDistances: [10_000, 12_000, 8_000, 0, 0, 0, 0],
+                                           updatedAt: now)
+        XCTAssertEqual(WidgetWeek.state(week), .few, "нормы нет — состояние «мало данных»")
+        XCTAssertTrue(WidgetWeek.showsBars(week.dayDistances))
+        XCTAssertFalse(WidgetWeek.showsBars([12_400, 0, 0, 0, 0, 0, 0]))
+    }
+
     func testLifetimeTileHiddenWhileItRepeatsTheMonth() {
         // У нового пользователя пожизненный счёт начался с установки: «всего»
         // равно месяцу и занимает место, ничего не добавляя.

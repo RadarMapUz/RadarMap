@@ -7678,6 +7678,22 @@
         }
       }
     },
+    "Откуда сумма и как считаем": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Откуда сумма и как считаем"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summa qayerdan va qanday hisoblaymiz"
+          }
+        }
+      }
+    },
     "Отмена": {
       "localizations": {
         "ru": {

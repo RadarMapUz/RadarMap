@@ -380,9 +380,8 @@ struct TripStatsSheet: View {
                               anchor: anchor)
         }
         .sheet(isPresented: $showFinesInfo) {
-            SavingsInfoSheet(summary: current.summary,
-                             period: period,
-                             interval: period.interval(containing: anchor))
+            // Один экран штрафов (6.9): вход через (i) раскрывает «Откуда сумма».
+            FinesSheet(period: period, anchor: anchor, explainsFirst: true)
         }
         .sheet(isPresented: $showFines) {
             FinesSheet(period: period, anchor: anchor)

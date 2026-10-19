@@ -14,6 +14,8 @@ import os
 
 protocol CameraRepository {
     var cameras: [Camera] { get }
+    /// База прочитана: до этого пустой `cameras` не значит «камер нет».
+    var isDatabaseLoaded: Bool { get }
     func nearest(to coordinate: CLLocationCoordinate2D, limit: Int) -> [Camera]
     func cameras(in region: MKCoordinateRegion, limit: Int) -> [Camera]
 }
@@ -129,6 +131,10 @@ final class CameraStore: CameraRepository {
     private(set) var dbVersion: Int =
         Storage.intIfPresent(.cameraDBVersion) ?? AppConfig.bundledDBVersion
 
+    /// База прочитана (декод асинхронный): до этого `cameras` пуст не потому,
+    /// что камер нет.
+    @ObservationIgnored private(set) var isDatabaseLoaded = false
+
     /// Первая загрузка базы завершена (декод асинхронный). Для одноразовых
     /// миграций, которым нужны данные камер: вызов в момент сборки сервисов
     /// пришёлся бы на пустой список.
@@ -154,6 +160,7 @@ final class CameraStore: CameraRepository {
                 Storage.remove(.cameraDBVersion)
             }
             self.dataChanged()
+            self.isDatabaseLoaded = true
             self.onDatabaseLoaded?()
         }
     }

@@ -99,7 +99,7 @@ final class LocationService: NSObject {
     private(set) var distanceToNearest: CLLocationDistance? { didSet { refreshApproachFlags() } }
     /// false = пользователь дал только «приблизительную» геолокацию — оповещения ненадёжны.
     private(set) var hasFullAccuracy = true
-    /// Режим энергосбережения iOS: снижаем точность GPS и отключаем голос.
+    /// Режим энергосбережения iOS: снижаем точность GPS (голос о камерах — как всегда).
     private(set) var isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
     /// Режим «Поездка»: непрерывная геолокация + активные оповещения даже в свёрнутом виде.
     private(set) var isTripActive = false { didSet { refreshApproachFlags() } }
@@ -626,15 +626,22 @@ final class LocationService: NSObject {
         // относительно себя, а система считает это «пользователь остановился».
         manager.pausesLocationUpdatesAutomatically = !(isTripActive || isCarPlayConnected)
         if isTripActive || isCarPlayConnected {
-            // Поездка: высокая точность, разрешаем работу в фоне (нужен доступ
-            // «Всегда»). Экран машины без начатой поездки — это тоже вождение:
+            // Поездка: высокая точность, разрешаем работу в фоне (с «Всегда» —
+            // всегда, с «При использовании» — если начата на экране). Экран
+            // машины без начатой поездки — это тоже вождение:
             // цифры на нём обязаны быть живыми, а телефон при этом обычно
             // заблокирован в держателе, и без флага фона система вправе
             // перестать слать фиксы. Дальше точность ведёт лестница
             // (tuneAdaptiveAccuracy).
             manager.desiredAccuracy = isLowPowerMode ? kCLLocationAccuracyNearestTenMeters : kCLLocationAccuracyBest
             manager.distanceFilter = isLowPowerMode ? 20 : 5
-            manager.allowsBackgroundLocationUpdates = (manager.authorizationStatus == .authorizedAlways)
+            // И при «При использовании»: поездка, начатая на экране, вправе
+            // жить в фоне (iOS показывает синий индикатор). До 20.10 флаг
+            // ставился только для «Всегда», и поездка с «При использовании»
+            // молчала, стоило заблокировать телефон или открыть Яндекс
+            // (сценарий S2). Автостарт и геозоны «Всегда» по-прежнему требуют.
+            manager.allowsBackgroundLocationUpdates =
+                [.authorizedAlways, .authorizedWhenInUse].contains(manager.authorizationStatus)
             manager.showsBackgroundLocationIndicator = true
         } else {
             // Просто открытое приложение: точный GPS для HUD, фон не держим.
@@ -841,6 +848,14 @@ final class LocationService: NSObject {
         // последний кадр: он нарисован, но не живой.
         //
         // Возвращает геозоны applyLocationMode при уходе в тихий фон.
+        // База камер ещё читается (процесс подняли в фоне): с пустой базой
+        // план «ноль геозон» снял бы все двадцать, и вход, который iOS ещё не
+        // доставила, пропал бы. Первую настоящую расстановку сделает загрузка
+        // базы (refreshMonitoring по ревизии) — ревью S3, 20.10.
+        guard repository.isDatabaseLoaded else {
+            geofencesArmed = false
+            return
+        }
         guard !isTripActive, !isForeground else {
             // Пока идёт непрерывный GPS, геозоны заведомо устаревают: машина
             // уезжает, а они остаются вокруг точки, где экран открыли. Помним
@@ -1616,8 +1631,11 @@ final class LocationService: NSObject {
         if !isForeground, settings.backgroundAlerts.allows(camera) {
             notifier.notifyApproaching(camera, distanceMeters: distance)
         }
-        // Голос — самая дорогая часть оповещения, в энергосбережении пропускаем.
-        guard settings.voiceEnabled, !isLowPowerMode else { return }
+        // Голос о камере — и в энергосбережении (сценарий S1, 20.10): до этого
+        // режим Low Power глушил именно камеры, а манёвры, лимиты и пробки
+        // говорили. Фраза стоит секунды синтеза; экономит энергосбережение
+        // на GPS и карте, а оповещения о камерах не трогает ничто.
+        guard settings.voiceEnabled else { return }
         guard policy.voice != .none else {
             // Промолчали из-за пробки — это ОТСРОЧКА, а не отмена: камера,
             // вошедшая в радиус пока мы разгоняемся от светофора, иначе осталась
@@ -1641,7 +1659,7 @@ final class LocationService: NSObject {
         }
         guard !isCrawling else { return }   // всё ещё стоим
         postponedVoice = nil
-        guard settings.voiceEnabled, !isLowPowerMode else { return }
+        guard settings.voiceEnabled else { return }
         let policy = voicePlan(for: camera, crawling: false)
         guard policy.voice != .none else { return }
         speak(about: camera, distance: distance, policy: policy)
@@ -1742,11 +1760,25 @@ final class LocationService: NSObject {
         return phrase
     }
 
+    /// Входы в геозоны, пришедшие раньше базы камер: приложение подняли в
+    /// фоне именно этим событием, а база ещё читается (декод асинхронный).
+    /// Вход второй раз не придёт — телефон уже внутри (сценарий S3, 20.10).
+    @ObservationIgnored private var pendingRegionEnters = RegionEnterQueue()
+
+    /// База камер прочитана — разобрать входы, пришедшие до неё.
+    func processPendingRegionEnters() {
+        for id in pendingRegionEnters.drain() { handleEnter(regionID: id) }
+    }
+
     private func handleEnter(regionID: String) {
         // Пока идёт непрерывный GPS — в поездке или при открытом экране, включая
         // экран машины, — о камере говорит движок по точному расстоянию. Геозона
         // дала бы вторым, отставшим на сотни метров, пуш о том же самом.
         guard !isTripActive, !isForeground else { return }
+        guard repository.isDatabaseLoaded else {
+            pendingRegionEnters.enter(regionID)
+            return
+        }
         guard let id = Self.cameraID(from: regionID),
               !alertedCameraIDs.contains(id),
               let camera = repository.cameras.first(where: { $0.id == id }),
@@ -1760,6 +1792,8 @@ final class LocationService: NSObject {
     }
 
     private func handleExit(regionID: String) {
+        // Вошли и вышли, пока читалась база, — камера уже позади, не пугаем.
+        pendingRegionEnters.exit(regionID)
         guard let id = Self.cameraID(from: regionID) else { return }
         alertedCameraIDs.remove(id)
     }

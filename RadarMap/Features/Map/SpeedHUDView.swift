@@ -147,7 +147,7 @@ struct SpeedHUDView: View {
                     .font(.rounded(11, .medium))
                     .foregroundStyle(Theme.textSecondary)
                 if env.location.isLowPowerMode {
-                    // Энергосбережение iOS: точность GPS снижена, голос отключён.
+                    // Энергосбережение iOS: точность GPS снижена (голос о камерах — как всегда).
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 9))
                         .foregroundStyle(Theme.warning)

@@ -149,3 +149,24 @@ nonisolated enum LocationGates {
             .along >= -AppConfig.corridorBehindToleranceMeters
     }
 }
+
+/// Входы в геозоны до загрузки базы камер (сценарий S3, 20.10): по одному на
+/// геозону, выход снимает вход — вошли и вышли, пока читалась база, значит
+/// камера уже позади.
+nonisolated struct RegionEnterQueue: Equatable, Sendable {
+    private(set) var pending: [String] = []
+
+    mutating func enter(_ regionID: String) {
+        guard !pending.contains(regionID) else { return }
+        pending.append(regionID)
+    }
+
+    mutating func exit(_ regionID: String) {
+        pending.removeAll { $0 == regionID }
+    }
+
+    mutating func drain() -> [String] {
+        defer { pending = [] }
+        return pending
+    }
+}

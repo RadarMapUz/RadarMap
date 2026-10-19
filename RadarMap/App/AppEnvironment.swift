@@ -249,9 +249,13 @@ final class AppEnvironment {
 
         // Автостарт/стоп поездки по движению (режим старта — в настройках).
         let location = self.location
-        motion.onDrivingStart = { [weak location] in
+        motion.onDrivingStart = { [weak self, weak location] in
             guard settings.tripStartMode.usesMotion, let location,
                   !location.isTripActive else { return }
+            guard self?.trip.isLoaded ?? true else {
+                self?.pendingAutoStart = true
+                return
+            }
             location.startTrip(auto: true)   // незнакомая машина → вопрос «вы за рулём?»
         }
         motion.onDrivingStop = { [weak location] in
@@ -417,6 +421,13 @@ final class AppEnvironment {
             notifications?.notifyReportConfirmed(kind: kind)
         }
         trip.onHistoryLoaded = { [weak self] in
+            // Автостарт, ждавший историю, — сейчас, если всё ещё едем.
+            if let self, self.pendingAutoStart {
+                self.pendingAutoStart = false
+                if self.motion.isDriving, self.settings.tripStartMode.usesMotion, !self.location.isTripActive {
+                    self.location.startTrip(auto: true)
+                }
+            }
             self?.refreshLearnedPlaces()
             self?.refreshWidgetSnapshot()
             // «Свои камеры» считаются ПО ИСТОРИИ, а bootstrap() успевает
@@ -432,6 +443,8 @@ final class AppEnvironment {
         }
         cameras.onDatabaseLoaded = { [weak self] in
             self?.runAxisCleanupIfPossible()
+            // Вход в геозону, разбудивший приложение раньше базы, — сейчас.
+            self?.location.processPendingRegionEnters()
         }
 
         // Конец поездки: обезличенные счётчики и недельный дайджест.
@@ -522,7 +535,54 @@ final class AppEnvironment {
         observeAppearanceSetting()
         observeCommuteSettings()
         wireNetworkRhythm()
+        startCoreServices()
     }
+
+    /// То, что нужно при ЛЮБОМ запуске процесса, — и когда систему подняла его
+    /// в фоне (смена места, геозона после выгрузки), а окна нет: сцена не
+    /// поднимается, и startDrivingServices (его зовёт сцена) не звался — не
+    /// стартовал CoreMotion, автостарт поездки молчал до открытия приложения,
+    /// и вся поездка шла в тихом режиме геозон (сценарий S3, 20.10). Только
+    /// автостарт, лимиты и геопозиция: опрос отметок, сеть и прочее — по
+    /// сцене или поездке, иначе каждое фоновое пробуждение тихого режима
+    /// ходило бы на сервер. Повторные вызовы безопасны.
+    private func startCoreServices() {
+        Task { @MainActor [weak self] in
+            guard let self, Storage.bool(.hasCompletedOnboarding) else { return }
+            self.location.bootstrap()
+            self.motion.start()
+            self.speedLimits.start()
+            // Поднятые в фоне: окно ~10 с, а уверенный автостарт CoreMotion
+            // ждёт подтверждения 8 с — даём ему успеть (ревью S3).
+            if UIApplication.shared.applicationState == .background {
+                self.holdBackgroundWindow()
+            }
+        }
+    }
+
+    @ObservationIgnored private var launchBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+
+    private func holdBackgroundWindow() {
+        guard launchBackgroundTask == .invalid else { return }
+        launchBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "autostart") { [weak self] in
+            self?.endBackgroundWindow()
+        }
+        Task { @MainActor [weak self] in
+            await Task.pause(seconds: AppConfig.backgroundLaunchWindowSeconds)
+            self?.endBackgroundWindow()
+        }
+    }
+
+    private func endBackgroundWindow() {
+        guard launchBackgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(launchBackgroundTask)
+        launchBackgroundTask = .invalid
+    }
+
+    /// Автостарт пришёл раньше истории с диска (процесс подняли в фоне на
+    /// ходу): склейка с только что прерванной поездкой и восстановление
+    /// снимка ещё не видят её — ждём историю (ревью S3, 20.10).
+    @ObservationIgnored private var pendingAutoStart = false
 
     /// База камер изменилась (загрузка, своя камера, скрытие, чужая отметка) —
     /// пересобрать окно ближайших камер и оценить сразу. ОДНА точка: до 19.10

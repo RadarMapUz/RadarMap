@@ -114,11 +114,21 @@ struct TripStopsSection: View {
         return "\(place) · \(window)"
     }
 
-    /// Обратное геокодирование ≤6 остановок (потолок склейки) — по одной,
+    /// Название остановки — сначала из своего адресника на языке приложения
+    /// (как булавка «Мои места» и поиск, 6.5), Apple — только если своего
+    /// дома рядом нет и есть сеть. ≤6 остановок (потолок склейки) — по одной,
     /// последовательно: CLGeocoder не любит параллельные запросы.
     private func loadTitles() async {
         let geocoder = CLGeocoder()
         for stop in stops where titles[stop.id] == nil {
+            let point = CLLocationCoordinate2D(latitude: stop.lat, longitude: stop.lon)
+            if let book = await env.roads.addressBook(for: point),
+               let address = book.nearest(to: point, within: AppConfig.placePickerAddressMeters) {
+                let street = StreetName.display(address.street, language: env.settings.appLanguage.mapCode)
+                titles[stop.id] = address.house.isEmpty ? street : "\(street), \(address.house)"
+                continue
+            }
+            guard env.network.isOnline else { continue }
             let location = CLLocation(latitude: stop.lat, longitude: stop.lon)
             do {
                 let marks = try await geocoder.reverseGeocodeLocation(location)

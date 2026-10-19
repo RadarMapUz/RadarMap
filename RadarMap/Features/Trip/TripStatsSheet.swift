@@ -1688,7 +1688,7 @@ private struct LiveTripCard: View {
             HStack(spacing: 0) {
                 metric(Formatting.distance(trip.distanceMeters), "пройдено", Theme.success)
                 metric("\(trip.camerasPassed)", "камер", Theme.accent)
-                metric("\(Int(trip.maxSpeedKmh))", "макс. км/ч", Theme.danger)
+                metric("\(Int(trip.maxSpeedKmh))", "максимум, км/ч", Theme.danger)
                 metric("\(Int(trip.averageSpeedKmh))", "средняя", Theme.warning)
             }
         }

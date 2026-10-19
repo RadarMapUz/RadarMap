@@ -116,7 +116,7 @@ struct TripLiveBar: View {
                 .foregroundStyle(Theme.textSecondary)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text(Formatting.distance(env.trip.distanceMeters)))
-                .accessibilityValue(Text(verbatim: "\(env.trip.camerasPassed) ") + Text("камер пройдено"))
+                .accessibilityValue(Text("Пройдено камер: \(env.trip.camerasPassed)"))
             }
         }
         .lineLimit(1)

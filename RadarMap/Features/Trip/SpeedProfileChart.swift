@@ -75,6 +75,10 @@ struct SpeedProfileChart: View {
     /// меняет @State и прогоняет body десятки раз в секунду, а трек при этом
     /// не меняется никогда — он у записи в истории уже закрыт.
     @State private var samples: [SpeedSample] = []
+    /// Метки камер на графике — вместе с выборкой, а не в body: касание
+    /// графика пересобирает body на каждом сдвиге пальца, а поиск ближайшей
+    /// точки трека для каждой камеры — это проезды × точки (6.5).
+    @State private var marks: [PassMark] = []
 
     var body: some View {
         Group {
@@ -94,18 +98,17 @@ struct SpeedProfileChart: View {
                         AreaMark(x: .value("км", sample.km), y: .value("км/ч", sample.speedKmh))
                             .interpolationMethod(.monotone)
                             .foregroundStyle(
-                                LinearGradient(colors: [Theme.accent.opacity(0.30), .clear],
+                                LinearGradient(colors: [Theme.route.opacity(0.28), .clear],
                                                startPoint: .top, endPoint: .bottom)
                             )
                         LineMark(x: .value("км", sample.km), y: .value("км/ч", sample.speedKmh))
                             .interpolationMethod(.monotone)
                             .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                            .foregroundStyle(
-                                LinearGradient(colors: [Theme.accent, Theme.Types.intelligent],
-                                               startPoint: .leading, endPoint: .trailing)
-                            )
+                            // Один цвет маршрута (палитра А): переход в индиго
+                            // читался «вторым типом», а индиго — цвет камеры.
+                            .foregroundStyle(Theme.route)
                     }
-                    ForEach(passMarks(on: samples)) { mark in
+                    ForEach(marks) { mark in
                         PointMark(x: .value("км", mark.km), y: .value("км/ч", mark.speedKmh))
                             .symbol {
                                 ZStack {
@@ -182,7 +185,11 @@ struct SpeedProfileChart: View {
             .statCard()
         }
         }
-        .task(id: record.id) { samples = speedSamples() }
+        .task(id: record.id) {
+            let built = speedSamples()
+            samples = built
+            marks = passMarks(on: built)
+        }
     }
 
     private func nearestSample(to km: Double, in samples: [SpeedSample]) -> SpeedSample? {

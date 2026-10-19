@@ -1763,6 +1763,22 @@
         }
       }
     },
+    "Без штрафа: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без штрафа: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimasiz: %lld"
+          }
+        }
+      }
+    },
     "Без штрафов": {
       "localizations": {
         "ru": {
@@ -9575,6 +9591,22 @@
         }
       }
     },
+    "Пройдено камер: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пройдено камер: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘tilgan kameralar: %lld"
+          }
+        }
+      }
+    },
     "Пройди вы эту камеру на %lld км/ч:": {
       "localizations": {
         "ru": {
@@ -13358,22 +13390,6 @@
         }
       }
     },
-    "камер пройдено": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "камер пройдено"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "kamera o'tildi"
-          }
-        }
-      }
-    },
     "км": {
       "localizations": {
         "ru": {
@@ -13502,18 +13518,18 @@
         }
       }
     },
-    "макс. км/ч": {
+    "максимум, км/ч": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "макс. км/ч"
+            "value": "максимум, км/ч"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "maks. km/soat"
+            "value": "maksimal, km/soat"
           }
         }
       }
@@ -14136,6 +14152,22 @@
         }
       }
     },
+    "пройдено камер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пройдено камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘tilgan kameralar"
+          }
+        }
+      }
+    },
     "пройдено пути": {
       "localizations": {
         "ru": {
@@ -14506,18 +14538,18 @@
         }
       }
     },
-    "средняя км/ч": {
+    "средняя, км/ч": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "средняя км/ч"
+            "value": "средняя, км/ч"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o'rtacha km/soat"
+            "value": "o‘rtacha, km/soat"
           }
         }
       }

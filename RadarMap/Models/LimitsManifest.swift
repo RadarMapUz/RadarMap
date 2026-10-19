@@ -147,9 +147,15 @@ nonisolated enum LimitsTrust {
     /// мог с тем же успехом его удалить и получить старый путь — строгость тут
     /// не дала бы защиты, а свежие установки при ошибке публикации остались бы
     /// без лимитов. После храповика оба случая — «держим проверенное».
-    static func decide(signedIndex: IndexState, ratchetSet: Bool,
+    /// `lastSignedVersion` — версия последнего применённого подписанного
+    /// индекса: подписанный, но СТАРШЕ его — откат (сервер отдаёт прошлую
+    /// подписанную выкладку), держим проверенное (S18).
+    static func decide(signedIndex: IndexState, ratchetSet: Bool, lastSignedVersion: Int? = nil,
                        acceptUnsigned: Bool = AppConfig.speedLimitsAcceptUnsigned) -> Decision {
-        if case .valid(let manifest) = signedIndex { return .useSigned(manifest) }
+        if case .valid(let manifest) = signedIndex {
+            if let lastSignedVersion, manifest.version < lastSignedVersion { return .keepVerified }
+            return .useSigned(manifest)
+        }
         return allowsLegacy(ratchetSet: ratchetSet, acceptUnsigned: acceptUnsigned)
             ? .useLegacy : .keepVerified
     }

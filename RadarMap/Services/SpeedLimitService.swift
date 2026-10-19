@@ -207,9 +207,12 @@ final class SpeedLimitService {
             Log.route.error("индекс лимитов отвергнут: \(why.logDescription, privacy: .public)")
         }
         switch LimitsTrust.decide(signedIndex: state,
-                                  ratchetSet: Storage.bool(.speedLimitsSignedSeen)) {
+                                  ratchetSet: Storage.bool(.speedLimitsSignedSeen),
+                                  lastSignedVersion: Storage.intIfPresent(.speedLimitsSignedVersion)) {
         case .useSigned(let manifest):
             markSignedSeen()
+            Storage.set(max(manifest.version, Storage.intIfPresent(.speedLimitsSignedVersion) ?? 0),
+                        for: .speedLimitsSignedVersion)
             guard let indexData else { return }   // .valid без байтов не бывает
             await applySigned(manifest, envelope: indexData)
         case .useLegacy:

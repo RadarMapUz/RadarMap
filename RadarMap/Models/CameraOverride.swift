@@ -55,6 +55,12 @@ typealias CameraOverridesEnvelope = SignedPayload<CameraOverrides>
 /// целиком, что для кода, умеющего гасить оповещения, обязательно.
 nonisolated enum CameraOverrideEngine {
 
+    /// Не откат ли: версия правок растёт с каждой выкладкой (publish_overrides.sh
+    /// просит «предыдущая +1»); та же — повтор, меньше — прошлая выкладка.
+    static func isNotOlder(_ fresh: CameraOverrides, than current: CameraOverrides) -> Bool {
+        fresh.version >= current.version
+    }
+
     /// Результат применения: новый список камер и что именно сделали.
     struct Result: Equatable {
         var cameras: [Camera]

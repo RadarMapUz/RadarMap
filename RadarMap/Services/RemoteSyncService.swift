@@ -124,6 +124,42 @@ final class RemoteSyncService {
         /// sha256 опубликованного файла (sign_db.sh): по нему видно, что
         /// скачали не тот файл (кэш, недовыкладка, прокси), а не плохую базу.
         let sha256: String?
+        /// Подписанная версия (S18): версия, sha256 и число камер под одной
+        /// подписью. До неё версия в манифесте не подписана — сервер мог
+        /// отдать старую подписанную базу с версией 999999.
+        let release: SignedPayload<DBRelease>?
+    }
+
+    nonisolated struct DBRelease: Codable, Sendable, Equatable {
+        let version: Int
+        let sha256: String
+        let count: Int
+    }
+
+    /// Что делать с манифестом (S18). Чистая — покрыта тестами.
+    nonisolated enum VersionDecision: Equatable {
+        case download(version: Int, sha256: String?)
+        case upToDate
+        /// Манифест отвергнут: подписанная версия не сошлась, подписи нет после
+        /// храповика, или скачок версии без подписи.
+        case refuse(String)
+    }
+
+    nonisolated static func versionDecision(manifestVersion: Int, manifestSHA: String?,
+                                            releasePresent: Bool, release: DBRelease?,
+                                            signedSeen: Bool, current: Int,
+                                            acceptUnsigned: Bool = AppConfig.dbAcceptUnsignedVersion)
+        -> VersionDecision {
+        if releasePresent {
+            guard let release else { return .refuse("подписанная версия не прошла проверку") }
+            return release.version > current ? .download(version: release.version, sha256: release.sha256) : .upToDate
+        }
+        guard !signedSeen, acceptUnsigned else { return .refuse("манифест без подписанной версии") }
+        guard manifestVersion > current else { return .upToDate }
+        guard manifestVersion <= current + AppConfig.dbVersionMaxUnsignedJump else {
+            return .refuse("скачок версии без подписи: v\(current) → v\(manifestVersion)")
+        }
+        return .download(version: manifestVersion, sha256: manifestSHA)
     }
 
     /// `force` — кнопка «Проверить» в настройках: отказ, запомненный раньше,
@@ -134,18 +170,32 @@ final class RemoteSyncService {
         failure = nil
         do {
             let manifest = try await api.get("version.json", as: Manifest.self)
-
-            guard manifest.version > store.dbVersion else {
+            let release = manifest.release?.verified()
+            let target: Int, expectedSHA: String?
+            switch Self.versionDecision(manifestVersion: manifest.version, manifestSHA: manifest.sha256,
+                                        releasePresent: manifest.release != nil, release: release,
+                                        signedSeen: Storage.bool(.dbReleaseSignedSeen),
+                                        current: store.dbVersion) {
+            case .upToDate:
                 Storage.set(Date(), for: .lastSyncCheck)
                 state = .upToDate
                 return
+            case .refuse(let why):
+                Log.network.fault("синк базы: манифест отвергнут — \(why, privacy: .public)")
+                Storage.set(Date(), for: .lastSyncCheck)
+                failure = .signature
+                state = .failed
+                return
+            case .download(let version, let sha):
+                target = version
+                expectedSHA = sha
             }
             // Этот самый файл уже скачивали и отвергли (подпись, разбор):
             // мегабайт заново на каждой активации ничего не изменит (S23).
             // Ключ — сборка, версия И подпись: перевыпуск под тем же номером,
             // новая сборка или настоящая N+1 после чужого манифеста с N+1 —
             // новая попытка (ревью S23).
-            let key = Self.rejectionKey(version: manifest.version, sig: manifest.sig, build: Self.build)
+            let key = Self.rejectionKey(version: target, sig: manifest.sig, build: Self.build)
             if !force, Storage.string(.rejectedDB) == key {
                 Storage.set(Date(), for: .lastSyncCheck)
                 failure = .rejected
@@ -158,7 +208,7 @@ final class RemoteSyncService {
             // Байты не те, что опубликованы (устаревший кэш, файл ещё
             // выкладывается, прокси) — это сбой доставки, а не плохая база:
             // отказ не запоминаем, попробуем в следующий срок (ревью S23).
-            if let expected = manifest.sha256?.lowercased(), await Self.sha256(payload) != expected {
+            if let expected = expectedSHA?.lowercased(), await Self.sha256(payload) != expected {
                 Log.network.error("синк базы: sha256 скачанного не совпал с манифестом — не та выкладка")
                 Storage.set(Date(), for: .lastSyncCheck)
                 failure = .server
@@ -176,7 +226,7 @@ final class RemoteSyncService {
             }
             let count: Int
             do throws(RemoteDBError) {
-                count = try await store.applyRemote(data: payload, version: manifest.version)
+                count = try await store.applyRemote(data: payload, version: target)
             } catch {
                 Log.network.error("синк базы: не применена — \(String(describing: error), privacy: .public)")
                 if error.isPayloadDefect {
@@ -195,6 +245,11 @@ final class RemoteSyncService {
             }
 
             Storage.remove(.rejectedDB)
+            // Подписанная версия применена — неподписанная больше не берётся.
+            if release != nil, !Storage.bool(.dbReleaseSignedSeen) {
+                Storage.set(true, for: .dbReleaseSignedSeen)
+                Log.network.notice("синк базы: подписанная версия — путь без неё закрыт навсегда")
+            }
             Storage.set(Date(), for: .lastSyncCheck)
             state = .updated(count: count)
         } catch {

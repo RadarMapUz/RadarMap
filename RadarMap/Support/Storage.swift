@@ -40,6 +40,8 @@ enum Storage {
         // неподписанный путь закрыт НАВСЕГДА. Без него тот, кто срежет индекс
         // (404 вместо файла), вернул бы телефон на старые неподписанные лимиты.
         case speedLimitsSignedSeen
+        case speedLimitsSignedVersion   // версия последнего применённого подписанного индекса лимитов (S18)
+        case dbReleaseSignedSeen        // увидели подписанную версию базы камер — неподписанная больше не берётся (S18)
         case roadsIndexLastCheck    // дата последней проверки индекса дорожных тайлов
         case hotspotsLastCheck      // дата последней проверки горячих точек треног
         case hasCompletedOnboarding // онбординг пройден (@AppStorage)

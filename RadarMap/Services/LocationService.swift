@@ -389,7 +389,26 @@ final class LocationService: NSObject {
     }
 
     /// Пассажирская сессия («я в такси»): автостарт молчит до конца этой езды.
-    private(set) var isPassengerSession = false
+    /// Хранится со сроком: система перезапускает приложение посреди езды, и
+    /// в такси вопрос «вы за рулём?» звучал на каждом пробуждении (S29).
+    private(set) var isPassengerSession = LocationService.passengerSessionRestored(
+        until: Storage.date(.passengerSessionUntil), now: Date()) {
+        didSet {
+            guard isPassengerSession != oldValue else { return }
+            if isPassengerSession {
+                Storage.set(Date().addingTimeInterval(AppConfig.passengerSessionMaxSeconds),
+                            for: .passengerSessionUntil)
+            } else {
+                Storage.remove(.passengerSessionUntil)
+            }
+        }
+    }
+
+    /// Сессия пассажира, пережившая перезапуск: только пока срок не вышел.
+    nonisolated static func passengerSessionRestored(until: Date?, now: Date) -> Bool {
+        guard let until else { return false }
+        return until > now && until.timeIntervalSince(now) <= AppConfig.passengerSessionMaxSeconds
+    }
 
     /// Начать поездку. `auto` — старт от CoreMotion: в незнакомой машине зададим
     /// вопрос «вы за рулём?» (в своей — CarPlay/знакомая магнитола — молча).

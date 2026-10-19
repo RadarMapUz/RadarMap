@@ -29,6 +29,7 @@ enum Storage {
         case mobileDeviceID         // анонимный ID для голосований по камерам
         case feedbackDeviceID       // анонимный ID для обратной связи
         case lastSyncCheck          // дата последней проверки базы камер
+        case passengerSessionUntil  // «я пассажир» действует до (переживает перезапуск системой, S29)
         case rejectedDB             // «сборка|версия|подпись» базы, отвергнутой проверкой — не качать снова
         case remoteConfigCheck      // дата последней проверки «пульта» (config.json)
         case overridesCheck         // дата последней проверки правок модератора (overrides.json)

@@ -507,6 +507,9 @@ nonisolated enum AppConfig {
     /// Новый старт дальше этого от финиша прошлой — точно другая поездка
     /// (телефон приехал сюда не за рулём).
     nonisolated static let tripMergeMaxMeters: CLLocationDistance = 400
+    /// «Я пассажир» живёт до конца езды, но после перезапуска системой
+    /// конец езды мог пройти незамеченным — не дольше этого (S29).
+    nonisolated static let passengerSessionMaxSeconds: TimeInterval = 3 * 3600
     /// Поздний автостарт (S19): к пределу — путь с начала езды по CoreMotion
     /// со средней городской скоростью, но не больше потолка.
     nonisolated static let tripMergeLateStartSpeedMps: Double = 15

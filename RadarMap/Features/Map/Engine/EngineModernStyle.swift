@@ -120,6 +120,8 @@ nonisolated enum EngineModernStyle {
         // (снимки 12.10 — огни остались цветными). Своё имя спрайту не
         // перебить.
         layers = layers.map(Self.ownTrafficLight)
+        // АЗС и парковка — значками приложения (EnginePlaceIcons, план 4.7).
+        layers = layers.map(Self.ownPlaceIcons)
 
         // Маршрут — над дорогой и разметкой, под подписями основы.
         let labels = layers.firstIndex {
@@ -147,6 +149,31 @@ nonisolated enum EngineModernStyle {
               layout["icon-image"] as? String == "traffic-light" else { return layer }
         var own = layer
         layout["icon-image"] = trafficLightImage
+        own["layout"] = layout
+        return own
+    }
+
+    static func ownPlaceIcons(_ layer: [String: Any]) -> [String: Any] {
+        guard var layout = layer["layout"] as? [String: Any] else { return layer }
+        var own = layer
+        switch layer["id"] as? String {
+        case "radar-poi-fuel":
+            layout["icon-image"] = EnginePlaceIcons.fuel
+            layout["icon-size"] = ["interpolate", ["linear"], ["zoom"], 13, 0.7, 17, 0.95]
+            layout["text-offset"] = [0, 1.25]
+        case "radar-poi-parking":
+            // Была буква «P» на ореоле текста — теперь значок; подписи нет.
+            for key in ["text-field", "text-font", "text-size", "text-padding", "text-allow-overlap"] {
+                layout[key] = nil
+            }
+            layout["icon-image"] = EnginePlaceIcons.parking
+            layout["icon-size"] = ["interpolate", ["linear"], ["zoom"], 14.5, 0.6, 17, 0.85]
+            layout["icon-allow-overlap"] = false
+            layout["icon-padding"] = 4
+            own["paint"] = [String: Any]()
+        default:
+            return layer
+        }
         own["layout"] = layout
         return own
     }

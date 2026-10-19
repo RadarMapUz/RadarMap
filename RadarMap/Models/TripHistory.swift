@@ -207,6 +207,8 @@ nonisolated enum TripHistory {
     /// Зеркало CameraRepository.firstCustomID: с этого id начинаются точки,
     /// поставленные руками (свои камеры, за ними краудсорс с 2 000 000).
     static let firstHandPlacedCameraID = 1_000_001
+    /// Отметки водителей — id от этого (MobileCameraService.idOffset).
+    static let firstCrowdCameraID = 2_000_000
 
     /// Направление трека в ближайшей к точке (lat, lon) вершине — азимут
     /// сегмента, на который пришёлся минимум расстояния. nil — трека мало.
@@ -354,6 +356,43 @@ nonisolated enum TripHistory {
                               batteryDropPercent: record.batteryDropPercent)
         }
         return (cleaned, changed)
+    }
+
+    /// Разовая чистка после S6 (S30, 20.10): проезды мимо отметок «Пост ДПС»
+    /// и «ДТП» (скорость они не меряют, а стоили баллов и «возможных
+    /// штрафов») из истории снимаются; у отметок водителей — подпись
+    /// «Отмечен водителями, исчезнет ~14:05», бессмысленная после проезда.
+    /// Записи копируются, а не собираются заново: поля, добавленные позже
+    /// (старт поездки, «промолчало»), не теряются. Возвращает (история,
+    /// снятые проезды, менялось ли).
+    static func crowdCleaned(_ history: [TripRecord]) -> ([TripRecord], [PassedCamera], Bool) {
+        var changed = false
+        var removed: [PassedCamera] = []
+        let cleaned = history.map { record -> TripRecord in
+            guard record.passed.contains(where: { !$0.kind.recordsPasses || isCrowdCaption($0) }) else {
+                return record
+            }
+            changed = true
+            var copy = record
+            removed += record.passed.filter { !$0.kind.recordsPasses }
+            copy.passed = record.passed.filter(\.kind.recordsPasses).map { pass in
+                guard isCrowdCaption(pass) else { return pass }
+                var out = pass
+                out.location = ""
+                return out
+            }
+            if record.score != nil, copy.passed.count != record.passed.count {
+                copy.score = DrivingScore.tripScore(
+                    passes: copy.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+                    trackSpeeds: record.trackPoints.map(\.speedKmh))
+            }
+            return copy
+        }
+        return (cleaned, removed, changed)
+    }
+
+    private static func isCrowdCaption(_ pass: PassedCamera) -> Bool {
+        pass.cameraID >= firstCrowdCameraID && !pass.location.isEmpty
     }
 
     // MARK: - Ручное разделение склеенной поездки

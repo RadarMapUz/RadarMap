@@ -1364,6 +1364,31 @@ final class TripStats {
             Storage.set(true, for: .passGeoCleanup1)
             Storage.set(true, for: .passGeoCleanup2)
         }
+        // Разовая чистка после S6 (S30): проезды мимо «Поста»/«ДТП» — долой
+        // из истории, дней и «за всё время»; подписи отметок — пустые.
+        if isLifetimeTrusted, !Storage.bool(.passCrowdCleanup1) {
+            let before = history
+            let (cleaned, removed, changed) = TripHistory.crowdCleaned(history)
+            if changed {
+                // Хирургически, как гео-чистка: агрегаты переживают обрезку
+                // истории, пересборка из неё обнулила бы старые месяцы.
+                for (old, new) in zip(before, cleaned) where old.passed.count != new.passed.count {
+                    let key = Calendar.current.startOfDay(for: old.startedAt)
+                    if days.contains(where: { $0.day == key }) {
+                        days = TripDayBook.unfolded(old, from: days)
+                        days = TripDayBook.folded(new, into: days)
+                    }
+                }
+                history = cleaned
+                lifetime = LifetimeStats.subtractingPasses(
+                    removed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) }, from: lifetime)
+                persist()
+                persistLifetime()
+                persistDays()
+                Log.trips.info("чистка отметок: снято проездов мимо поста/ДТП — \(removed.count, privacy: .public)")
+            }
+            Storage.set(true, for: .passCrowdCleanup1)
+        }
         // Подъём лимитов до пола фиксации. Старые записи судились по тегу OSM
         // ниже 60 — в городе таких камер нет, и выставленные по ним штрафы и
         // снятые баллы были обвинением на пустом месте.

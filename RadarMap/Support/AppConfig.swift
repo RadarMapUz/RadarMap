@@ -380,6 +380,11 @@ nonisolated enum AppConfig {
     /// Гистерезис выхода из зоны оповещения: серия порогов сбрасывается только
     /// когда камера ушла заметно дальше радиуса — анти-дребезг на границе.
     static let alertExitHysteresisMeters: CLLocationDistance = 80
+    /// Камера, о которой сказали, считается проеханной, когда она за спиной
+    /// дальше этого (при достоверном курсе): следующий подъезд к ней — после
+    /// разворота или круга по кварталу — предупреждается заново. С запасом над
+    /// шумом траверза (`corridorBehindToleranceMeters`).
+    nonisolated static let alertPassedBehindMeters: CLLocationDistance = 60
     /// Ступени тревоги — доли радиуса (AlertEngine.level): ближе 0,6 —
     /// вторая, ближе 0,3 — третья.
     nonisolated static let alertLevel2Share = 0.6

@@ -1472,6 +1472,10 @@ final class LocationService: NSObject {
             candidates.append((camera, max(0, remaining)))
         }
         candidates.sort { $0.distance < $1.distance }
+        // Проеханные: о ком сказали и кто теперь явно позади — следующий
+        // подъезд к ним (разворот, круг) будет новым. Сказано о единицах камер.
+        let announced = trackedCameras.filter { alertEngine.isAnnounced($0.id) }
+        if !announced.isEmpty { alertEngine.notePassed(announced, in: gateSituation(at: coordinate)) }
         // В движении HUD показывает ближайшую камеру НА НАШЕЙ ДОРОГЕ впереди;
         // камеры позади и с соседних улиц не пугают зря.
         guard let index = candidates.firstIndex(where: { isOnOurRoad($0.camera, from: coordinate) })
@@ -1586,7 +1590,8 @@ final class LocationService: NSObject {
     private func runAlertEngine() {
         guard let camera = nearestCamera, let distance = distanceToNearest else { return }
         guard let decision = alertEngine.evaluate(cameraID: camera.id, distance: distance,
-                                                  radius: effectiveAlertRadius) else { return }
+                                                  radius: effectiveAlertRadius,
+                                                  approaching: isDirectionalFilteringActive) else { return }
 
         let policy = voicePlan(for: camera, crawling: isCrawling)
 

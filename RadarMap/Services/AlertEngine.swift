@@ -24,6 +24,13 @@ nonisolated struct AlertEngine {
 
     /// Достигнутый уровень по каждой камере — повторно на том же уровне не сигналим.
     private var announcedLevel: [Int: Int] = [:]
+    /// Камеры, о которых сказали и которые потом остались ЯВНО позади. Новый
+    /// подъезд к такой камере — разворот через 300 м, круг по кварталу — это
+    /// новое приближение, и о нём предупреждаем с начала (сценарий A6, 20.10).
+    /// До этого уровень жил всю поездку: сброс был только у ближайшей камеры
+    /// за радиусом, а проеханная ближайшей уже не бывала — и после разворота
+    /// на разделённом проспекте камера, снимающая обе стороны, молчала.
+    private var passed: Set<Int> = []
 
     /// Сколько секунд запаса даём: городские 22 внизу, трассовые 29 наверху,
     /// линейный переход между ними (см. AppConfig).
@@ -69,8 +76,14 @@ nonisolated struct AlertEngine {
 
     /// Оценить приближение: вернёт решение, если уровень вырос; nil — молчим.
     /// Выход за радиус с гистерезисом сбрасывает серию — при возврате сигналим заново.
+    /// `approaching` — едем к камере с достоверным курсом (гейты направления
+    /// работают): только тогда проеханная камера считается новым подъездом.
+    /// Стоим у светофора сразу за ней — курса нет, и она молчит, как и раньше.
     mutating func evaluate(cameraID: Int, distance: CLLocationDistance,
-                           radius: CLLocationDistance) -> Decision? {
+                           radius: CLLocationDistance, approaching: Bool = false) -> Decision? {
+        if approaching, passed.remove(cameraID) != nil {
+            announcedLevel[cameraID] = 0
+        }
         if distance > radius + AppConfig.alertExitHysteresisMeters {
             announcedLevel[cameraID] = 0
             return nil
@@ -84,6 +97,19 @@ nonisolated struct AlertEngine {
 
     mutating func reset() {
         announcedLevel.removeAll()
+        passed.removeAll()
+    }
+
+    /// О камере уже сказали (уровень > 0).
+    func isAnnounced(_ cameraID: Int) -> Bool { (announcedLevel[cameraID] ?? 0) > 0 }
+
+    /// Пометить проеханными камеры, о которых сказали и которые теперь явно
+    /// позади (LocationGates.isClearlyBehind). Звать на каждом тике с теми, о
+    /// ком сказали, — их единицы.
+    mutating func notePassed(_ cameras: [Camera], in situation: LocationGates.Situation) {
+        for camera in cameras where isAnnounced(camera.id) && !passed.contains(camera.id) {
+            if LocationGates.isClearlyBehind(camera, in: situation) { passed.insert(camera.id) }
+        }
     }
 
     /// Ступень тревоги по дистанции: 1 — в радиусе, 2 — ближе

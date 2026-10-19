@@ -148,4 +148,15 @@ nonisolated enum LocationGates {
                          to: camera.coordinate)
             .along >= -AppConfig.corridorBehindToleranceMeters
     }
+
+    /// Камера ЯВНО позади: едем с достоверным курсом, и она за спиной дальше
+    /// `alertPassedBehindMeters`. Не глушит ничего (позади и так не звучит) —
+    /// только говорит движку, что подъезд к ней закончен, и следующий
+    /// (после разворота или круга) — новый. Без курса — false: по случайному
+    /// курсу стоящей машины «проехали» не решается.
+    static func isClearlyBehind(_ camera: Camera, in situation: Situation) -> Bool {
+        guard isFilteringActive(situation) else { return false }
+        return RoadCorridor.fix(from: situation.coordinate, course: situation.course,
+                                to: camera.coordinate).along < -AppConfig.alertPassedBehindMeters
+    }
 }

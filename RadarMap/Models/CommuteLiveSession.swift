@@ -22,6 +22,8 @@ nonisolated struct CommuteLiveSession: Sendable {
     struct Output: Equatable, Sendable {
         let forecast: CommuteGhost.Forecast?
         let isOff: Bool
+        /// Осталось по линии варианта, м (для правила голоса «≥ 2 км»).
+        var remainingMeters: Double = 0
     }
 
     /// Вариант пути с базой и индексом линии для проекции.
@@ -132,7 +134,7 @@ nonisolated struct CommuteLiveSession: Sendable {
         let forecast = CommuteGhost.forecast(base, along: along,
                                              elapsed: now.timeIntervalSince(startedAt),
                                              rho: rho, now: now)
-        return Output(forecast: forecast, isOff: false)
+        return Output(forecast: forecast, isOff: false, remainingMeters: max(0, base.length - along))
     }
 
     /// Проекция в окне линии вокруг прошлой точки; потеряли — полный проход.

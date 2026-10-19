@@ -248,6 +248,47 @@ nonisolated enum CommuteGhost {
         }
     }
 
+    // MARK: - Голос
+
+    /// Когда призраку говорить (8.7): первая фраза — сразу после
+    /// подтверждения пути; повтор — только если отклонение сдвинулось на
+    /// 3+ мин, с прошлой фразы прошло 4+ мин и до финиша больше 2 км; не
+    /// больше трёх фраз за поездку. Голос призрака — ниже камеры и манёвра:
+    /// это решает вызывающий (не говорить поверх оповещения).
+    struct Announcer: Equatable, Sendable {
+        private(set) var spoken = 0
+        private var lastDelta: Int?
+        private var lastAt: Date?
+
+        init() {}
+
+        mutating func shouldSpeak(deltaMinutes: Int, remainingMeters: Double, now: Date) -> Bool {
+            guard spoken < AppConfig.commuteGhostMaxPhrases else { return false }
+            if let lastDelta, let lastAt {
+                guard abs(deltaMinutes - lastDelta) >= AppConfig.commuteGhostRepeatDeltaMinutes,
+                      now.timeIntervalSince(lastAt) >= AppConfig.commuteGhostRepeatSeconds,
+                      remainingMeters >= AppConfig.commuteGhostRepeatMinRemainingMeters
+                else { return false }
+            }
+            spoken += 1
+            lastDelta = deltaMinutes
+            lastAt = now
+            return true
+        }
+    }
+
+    /// «На работу к 9:12, как обычно» / «Домой к 18:40, на 4 минуты дольше
+    /// обычного». Быстрее обычного — тоже «как обычно»: не гонка.
+    static func phrase(direction: Commute.Direction, arrival: Date, deltaMinutes: Int,
+                       locale: Locale = NumberFormat.locale) -> String {
+        let clock = arrival.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(locale))
+        let head = direction == .toWork ? String(localized: "На работу к \(clock)")
+                                        : String(localized: "Домой к \(clock)")
+        let tail = deltaMinutes >= 1 ? String(localized: "на \(deltaMinutes) минут дольше обычного")
+                                     : String(localized: "как обычно")
+        return head + ", " + tail
+    }
+
     // MARK: - Запас до целевого времени
 
     enum Slack: Equatable, Sendable {

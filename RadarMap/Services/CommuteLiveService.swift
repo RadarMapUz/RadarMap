@@ -33,6 +33,13 @@ final class CommuteLiveService {
 
     @ObservationIgnored private var session: CommuteLiveSession?
     @ObservationIgnored private var direction: Commute.Direction?
+    @ObservationIgnored private var announcer = CommuteGhost.Announcer()
+    /// Фраза призрака (8.7) — голос решает, можно ли сейчас говорить
+    /// (оповещение о камере и манёвр важнее).
+    @ObservationIgnored var onAnnounce: ((String) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onAnnounce,
+                                               "CommuteLiveService.onAnnounce") }
+    }
 
     var isRunning: Bool { session != nil }
 
@@ -47,6 +54,7 @@ final class CommuteLiveService {
         else { return }
         self.session = session
         self.direction = direction
+        announcer = CommuteGhost.Announcer()
         Log.trips.info("призрак: \(direction.rawValue, privacy: .public), вариантов \(variants.count, privacy: .public)")
     }
 
@@ -64,8 +72,22 @@ final class CommuteLiveService {
         let minute = (forecast.arrival.timeIntervalSince1970 / 60).rounded(.down) * 60
         let next = Display(direction: direction, arrival: Date(timeIntervalSince1970: minute),
                            deltaMinutes: forecast.deltaMinutes)
-        if next != display { display = next }
+        if next != display {
+            display = next
+            if announcer.shouldSpeak(deltaMinutes: next.deltaMinutes,
+                                     remainingMeters: output.remainingMeters, now: now) {
+                onAnnounce?(CommuteGhost.phrase(direction: direction, arrival: next.arrival,
+                                                deltaMinutes: next.deltaMinutes))
+            }
+        }
     }
+
+    #if DEBUG
+    /// Скриншот-хук `-demoGhost`: строка призрака без настоящей истории.
+    func showDemo(direction: Commute.Direction, arrival: Date, deltaMinutes: Int) {
+        display = Display(direction: direction, arrival: arrival, deltaMinutes: deltaMinutes)
+    }
+    #endif
 
     func stop() {
         session = nil

@@ -661,6 +661,14 @@ nonisolated enum AppConfig {
     nonisolated static let commuteGhostSlackHoldSeconds: TimeInterval = 60
     /// Пересчёт призрака стоя или посреди длинного участка — раз в 30 с.
     nonisolated static let commuteGhostRecomputeSeconds: TimeInterval = 30
+    /// С какого отклонения строка призрака становится янтарной (мин).
+    nonisolated static let commuteGhostLateMinutes = 5
+    /// Голос призрака: не больше трёх фраз; повтор — при сдвиге на 3+ мин,
+    /// не чаще раза в 4 мин и не ближе 2 км к финишу.
+    nonisolated static let commuteGhostMaxPhrases = 3
+    nonisolated static let commuteGhostRepeatDeltaMinutes = 3
+    nonisolated static let commuteGhostRepeatSeconds: TimeInterval = 240
+    nonisolated static let commuteGhostRepeatMinRemainingMeters: Double = 2000
     /// Проекция фикса — в окне 40 отрезков линии вокруг прошлой точки;
     /// дальше 150 м от окна — полный проход (машина «потерялась»).
     nonisolated static let commuteGhostWindowSegments = 40

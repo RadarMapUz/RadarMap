@@ -151,4 +151,29 @@ final class CommuteGhostTests: XCTestCase {
         XCTAssertEqual(tracker.update(slackMinutes: -3, now: now.addingTimeInterval(400)), .tight)
         XCTAssertEqual(tracker.update(slackMinutes: -3, now: now.addingTimeInterval(470)), .late)
     }
+
+    // MARK: - Голос
+
+    func testAnnouncerSpeaksFirstThenOnlyOnRealShifts() {
+        var a = G.Announcer()
+        XCTAssertTrue(a.shouldSpeak(deltaMinutes: 0, remainingMeters: 9000, now: now), "первая — сразу")
+        XCTAssertFalse(a.shouldSpeak(deltaMinutes: 2, remainingMeters: 8000, now: now.addingTimeInterval(300)),
+                       "сдвиг на 2 мин — не повод")
+        XCTAssertFalse(a.shouldSpeak(deltaMinutes: 4, remainingMeters: 8000, now: now.addingTimeInterval(120)),
+                       "чаще раза в 4 мин — нет")
+        XCTAssertTrue(a.shouldSpeak(deltaMinutes: 4, remainingMeters: 8000, now: now.addingTimeInterval(300)))
+        XCTAssertFalse(a.shouldSpeak(deltaMinutes: 9, remainingMeters: 1500, now: now.addingTimeInterval(700)),
+                       "у финиша не говорим")
+        XCTAssertTrue(a.shouldSpeak(deltaMinutes: 9, remainingMeters: 5000, now: now.addingTimeInterval(700)))
+        XCTAssertFalse(a.shouldSpeak(deltaMinutes: 15, remainingMeters: 5000, now: now.addingTimeInterval(1200)),
+                       "больше трёх фраз за поездку — нет")
+    }
+
+    /// Быстрее обычного — «как обычно»: никаких «вы быстрее на…».
+    func testPhraseNeverBragsAboutBeingFaster() {
+        let ahead = G.phrase(direction: .toWork, arrival: now, deltaMinutes: -3)
+        let usual = G.phrase(direction: .toWork, arrival: now, deltaMinutes: 0)
+        XCTAssertEqual(ahead, usual)
+        XCTAssertFalse(ahead.contains("быстр"))
+    }
 }

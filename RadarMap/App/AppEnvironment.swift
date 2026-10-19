@@ -274,6 +274,7 @@ final class AppEnvironment {
                 self.mobile.stopPolling()
             }
         }
+        wireCommuteVoice()
         // Ответ на «Вы за рулём?»: пассажир — гасим поездку без следа,
         // водитель — запоминаем магнитолу машины, чтобы не переспрашивать.
         notifications.onPassengerConfirmed = { [weak location] in location?.markPassenger() }
@@ -648,6 +649,18 @@ final class AppEnvironment {
             manual: { [settings] kind in settings.place(for: kind == .home ? .home : .work) },
             usual: { [commute] direction in commute.first { $0.direction == direction }?.usual },
             from: location.currentCoordinate, now: now)
+    }
+
+    /// Голос призрака — ниже камеры и манёвра: при оповещении о камере
+    /// фраза пропускается (следующая — по правилу повтора); с маршрутом
+    /// время прибытия говорит навигация, а не призрак.
+    private func wireCommuteVoice() {
+        commuteLive.onAnnounce = { [weak self] phrase in
+            guard let self, self.settings.voiceEnabled, self.location.alertLevel == 0,
+                  !self.route.isActive
+            else { return }
+            self.alerts.speak(phrase)
+        }
     }
 
     /// Призрак на старте поездки: только при включённом «Время дороги на

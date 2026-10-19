@@ -94,6 +94,17 @@ struct TripLiveBar: View {
                     .font(.rounded(12, .medium).monospacedDigit())
                     .foregroundStyle(Theme.textSecondary)
                     .liveNumber()
+            } else if let ghost = env.commuteLive.display {
+                // Дорога на работу без маршрута (этап 8): прибытие по своим
+                // прошлым поездкам. Меняется раз в минуту — numericText можно.
+                Text(ghost.arrival, style: .time)
+                    .font(.rounded(22, .heavy).monospacedDigit())
+                    .foregroundStyle(Theme.success)
+                    .contentTransition(.numericText())
+                Text(verbatim: Self.ghostCaption(ghost))
+                    .font(.rounded(12, .medium).monospacedDigit())
+                    .foregroundStyle(ghost.deltaMinutes >= AppConfig.commuteGhostLateMinutes
+                                     ? Theme.warning : Theme.textSecondary)
             } else {
                 // Свободная поездка без маршрута: таймер + путь + камеры.
                 if let started = env.trip.startedAt {
@@ -159,5 +170,15 @@ struct TripLiveBar: View {
             .accessibilityLabel(Text("Камеры на маршруте"))
             .accessibilityValue(Text(Formatting.distance(route.nextCameraDistance)))
         }
+    }
+
+    /// «Работа · как обычно» / «Работа · +4 мин к обычному». Быстрее обычного
+    /// не говорим никогда — это не гонка: опережение видно по времени.
+    static func ghostCaption(_ ghost: CommuteLiveService.Display) -> String {
+        let place = ghost.direction == .toWork ? String(localized: "Работа") : String(localized: "Дом")
+        let delta = ghost.deltaMinutes >= 1
+            ? String(localized: "+\(ghost.deltaMinutes) мин к обычному")
+            : String(localized: "как обычно")
+        return "\(place) · \(delta)"
     }
 }

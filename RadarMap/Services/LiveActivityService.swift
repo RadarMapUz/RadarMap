@@ -38,7 +38,6 @@ final class LiveActivityService {
     /// пробуждений расширения виджета за час. Локскрин не нуждается в
     /// секундной точности дистанции — раз в 3 с достаточно.
     private var lastSentAt = Date.distantPast
-    private static let minInterval: TimeInterval = 3
 
     var isActive: Bool { activity != nil }
 
@@ -73,12 +72,13 @@ final class LiveActivityService {
         // Квантуем расстояние и не шлём одинаковые состояния — у Live Activity
         // ограниченный бюджет обновлений.
         let quantized = Self.quantize(state, nearMeters: nearMeters)
-        guard quantized != lastSentState else { return }
-        // Смена камеры (заголовка) — сразу; бегущая дистанция — не чаще
-        // minInterval.
+        let now = Date()
+        guard Self.differs(quantized, from: lastSentState, now: now) else { return }
+        // Смена камеры (заголовка) — сразу; бегущая дистанция и полоса — не
+        // чаще интервала ступени.
         if quantized.nearestTitle == lastSentState?.nearestTitle,
-           Date().timeIntervalSince(lastSentAt) < Self.interval(for: quantized,
-                                                                nearMeters: nearMeters) { return }
+           now.timeIntervalSince(lastSentAt) < Self.interval(for: quantized,
+                                                             nearMeters: nearMeters) { return }
         lastSentState = quantized
         lastSentAt = Date()
         Task { await activity.update(.init(state: quantized,
@@ -92,16 +92,16 @@ final class LiveActivityService {
         Task { await activity.end(nil, dismissalPolicy: .immediate) }
     }
 
-    /// Вблизи камеры — каждые 25 м и раз в 3 с, как раньше. Вдали — 100 м и
-    /// раз в 15 с: на трассе плашка обновлялась ~1 200 раз в час, и каждый раз
-    /// будила расширение виджета и экран блокировки, а дистанцию «4,3 км»
-    /// за рулём точнее сотни метров не читают (docs/perf_audit_2026-10-07.md).
+    /// Вблизи камеры — шаг 50 м и раз в 5 с, вдали — 200 м и раз в 30 с. До
+    /// 19.10 было 25 м / 3 с и 100 м / 15 с — до 20 пробуждений расширения в
+    /// минуту у камеры (аудит энергии); теперь между обновлениями полосу
+    /// приближения двигает сама система по `arrivesAt`.
     static func quantize(_ state: CameraActivityAttributes.ContentState,
                          nearMeters: CLLocationDistance = AppConfig.liveActivityNearMeters)
         -> CameraActivityAttributes.ContentState {
         var s = state
         if let d = s.distanceMeters {
-            let step = d > nearMeters ? 100.0 : 25.0
+            let step = d > nearMeters ? AppConfig.liveActivityFarStepMeters : AppConfig.liveActivityNearStepMeters
             s.distanceMeters = (d / step).rounded() * step
         }
         return s
@@ -112,7 +112,32 @@ final class LiveActivityService {
         guard let d = state.distanceMeters, d <= nearMeters else {
             return AppConfig.liveActivityFarInterval
         }
-        return minInterval
+        return AppConfig.liveActivityNearInterval
+    }
+
+    /// Когда машина будет у камеры на текущей скорости. Стоим (ниже 5 км/ч)
+    /// — nil: полоса не едет, а не «прибытие через час».
+    static func arrival(distance: CLLocationDistance?, speedKmh: Double, now: Date) -> Date? {
+        guard let distance, speedKmh >= 5 else { return nil }
+        return now.addingTimeInterval(distance / (speedKmh / 3.6))
+    }
+
+    /// Есть ли что отправлять: сменилась камера или дистанция по ступени, или
+    /// прибытие уехало больше чем на долю оставшегося времени (скорость
+    /// поменялась). Само течение времени поводом не является — полосу по
+    /// нему ведёт система.
+    static func differs(_ new: CameraActivityAttributes.ContentState,
+                        from old: CameraActivityAttributes.ContentState?, now: Date) -> Bool {
+        guard let old else { return true }
+        if new.nearestTitle != old.nearestTitle || new.nearestSymbol != old.nearestSymbol
+            || new.distanceMeters != old.distanceMeters { return true }
+        switch (old.arrivesAt, new.arrivesAt) {
+        case (nil, nil): return false
+        case let (sent?, fresh?):
+            let remaining = max(1, fresh.timeIntervalSince(now))
+            return abs(fresh.timeIntervalSince(sent)) > max(3, remaining * AppConfig.liveActivityArrivalDrift)
+        default: return true
+        }
     }
 
     /// Граница частых обновлений — по настоящей зоне оповещения, а не одна

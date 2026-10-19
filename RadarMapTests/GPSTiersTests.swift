@@ -150,4 +150,19 @@ final class GPSTiersTests: XCTestCase {
                        kCLLocationAccuracyBest)
         XCTAssertNil(GPSTiers.escalatedAccuracy(from: kCLLocationAccuracyBest))
     }
+
+    /// Открытый экран, телефон лежит с известной точкой — чип не на максимуме;
+    /// без точки или в движении — «Best» (аудит энергии 19.10).
+    func testOpenScreenOnATableRelaxesTheChip() {
+        let idle = GPSTiers.foreground(lowPower: false, idle: true)
+        XCTAssertEqual(idle.accuracy, kCLLocationAccuracyNearestTenMeters)
+        XCTAssertEqual(idle.distanceFilter, 30)
+        XCTAssertEqual(GPSTiers.foreground(lowPower: false).accuracy, kCLLocationAccuracyBest)
+        XCTAssertTrue(GPSTiers.foregroundIdle(idleSeconds: AppConfig.gpsIdleAfterSeconds, hasPosition: true))
+        XCTAssertFalse(GPSTiers.foregroundIdle(idleSeconds: AppConfig.gpsIdleAfterSeconds - 1, hasPosition: true))
+        XCTAssertFalse(GPSTiers.foregroundIdle(idleSeconds: 3600, hasPosition: false),
+                       "без точки — искать её на максимуме")
+        // «Лежачая» просьба не хуже порога фильтра фиксов: принятые фиксы возможны.
+        XCTAssertLessThanOrEqual(idle.accuracy, AppConfig.maxHorizontalAccuracyMeters)
+    }
 }

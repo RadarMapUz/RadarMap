@@ -105,6 +105,10 @@ struct EngineBaseLayer: View {
                         covered: env.location.isApproachingCamera
                             && !MapMode.current(isTripActive: env.location.isTripActive,
                                                 hasRoute: env.route.isActive).showsManeuver,
+                        cruise: EngineMapView.Coordinator.isCruise(
+                            tripActive: env.location.isTripActive, speedKmh: env.location.speedKmh,
+                            approachingCamera: env.location.isApproachingCamera,
+                            maneuverMeters: env.route.isActive && env.route.nextStep != nil ? env.route.nextStepDistance : nil),
                         // В поездке на ходу — только дорога (как в машине).
                         declutter: env.location.isTripActive
                             && map.declutter.update(speedKmh: env.location.speedKmh, at: Date()),

@@ -1412,20 +1412,33 @@ nonisolated enum AppConfig {
     static let engineFollowFPS = 30
     /// Телефон греется или включено энергосбережение.
     static let engineWarmFPS = 20
+    /// Крейсер (EngineMapView.isCruise): с какой скорости и как далеко от
+    /// манёвра карта может жить на engineWarmFPS.
+    static let engineCruiseMinKmh: Double = 50
+    static let engineCruiseManeuverMeters: Double = 1000
     /// Телефон горячий: карта почти статична, HUD и голос важнее картинки.
     static let engineHotFPS = 15
     /// Порог сдвига камеры на горячем телефоне, метры (на холодном — 2 м).
     static let engineCameraMoveThresholdWarm = 6.0
 
     /// Live Activity: ближе этой дистанции до камеры — частые обновления
-    /// (25 м / 3 с); дальше — 100 м и не чаще `liveActivityFarInterval`.
+    /// (`liveActivityNearStepMeters` / `liveActivityNearInterval`); дальше —
+    /// `liveActivityFarStepMeters` и не чаще `liveActivityFarInterval`.
     /// С запасом к самому большому эффективному радиусу оповещения (~800 м).
     static let liveActivityNearMeters = 1_200.0
     /// Нижняя граница частой ступени (город, малая скорость) и запас к
     /// эффективному радиусу оповещения (LiveActivityService.nearZone).
     static let liveActivityMinNearMeters = 400.0
     static let liveActivityNearMargin = 1.3
-    static let liveActivityFarInterval: TimeInterval = 15
+    static let liveActivityFarInterval: TimeInterval = 30
+    /// Вблизи камеры: шаг дистанции и не чаще раза в столько секунд. Между
+    /// обновлениями полосу приближения двигает система по `arrivesAt`.
+    static let liveActivityNearStepMeters = 50.0
+    static let liveActivityFarStepMeters = 200.0
+    static let liveActivityNearInterval: TimeInterval = 5
+    /// Прибытие к камере сдвинулось больше этой доли оставшегося времени
+    /// (скорость поменялась) — обновить полосу, хоть дистанция та же.
+    static let liveActivityArrivalDrift = 0.15
     /// Часы без тревоги: не чаще раза в столько секунд.
     static let watchCalmInterval: TimeInterval = 10
 

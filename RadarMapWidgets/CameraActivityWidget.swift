@@ -32,7 +32,7 @@ private func format(_ meters: Double) -> String {
 struct CameraActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CameraActivityAttributes.self) { context in
-            LockScreenView(state: context.state)
+            LockScreenView(state: context.state, isStale: context.isStale)
                 .activityBackgroundTint(WTheme.background.opacity(0.85))
                 .activitySystemActionForegroundColor(WTheme.accent)
         } dynamicIsland: { context in
@@ -49,6 +49,7 @@ struct CameraActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
+                    ApproachBar(state: context.state)
                     // `?? "…"` дал бы String — мимо каталога, на узбекском
                     // осталось бы по-русски.
                     Group {
@@ -81,8 +82,26 @@ struct CameraActivityWidget: Widget {
     }
 }
 
+/// Полоса приближения к камере. Её двигает система по времени прибытия
+/// (`arrivesAt`) — плашку не будят на каждые 25 м ради живой картинки.
+private struct ApproachBar: View {
+    let state: CameraActivityAttributes.ContentState
+
+    var body: some View {
+        if state.nearestTitle != nil, let since = state.since, let arrives = state.arrivesAt, arrives > since {
+            ProgressView(timerInterval: since...arrives, countsDown: false) { EmptyView() } currentValueLabel: { EmptyView() }
+                .progressViewStyle(.linear)
+                .tint(WTheme.camera)
+        }
+    }
+}
+
 private struct LockScreenView: View {
     let state: CameraActivityAttributes.ContentState
+    /// Обновлений давно не было (staleDate): GPS замолчал или приложение
+    /// выгружено — «300 м» больше не правда, и сказать это честнее, чем молча
+    /// держать цифру.
+    var isStale = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -93,7 +112,14 @@ private struct LockScreenView: View {
                 .background((state.nearestTitle == nil ? Color.green : WTheme.camera).gradient, in: Circle())
 
             VStack(alignment: .leading, spacing: 3) {
-                if let title = state.nearestTitle, let distance = state.distanceMeters {
+                if isStale {
+                    Text("Нет сигнала GPS")
+                        .font(.system(.headline, design: .rounded))
+                        .foregroundStyle(.white)
+                    Text("Откройте RadarMap, если поездка идёт")
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(WTheme.secondary)
+                } else if let title = state.nearestTitle, let distance = state.distanceMeters {
                     Text(format(distance))
                         .font(.system(.title3, design: .rounded).bold())
                         .foregroundStyle(WTheme.accent)
@@ -101,6 +127,7 @@ private struct LockScreenView: View {
                         .font(.system(.caption, design: .rounded))
                         .foregroundStyle(WTheme.secondary)
                         .lineLimit(1)
+                    ApproachBar(state: state)
                 } else {
                     Text("Камер рядом нет")
                         .font(.system(.headline, design: .rounded))

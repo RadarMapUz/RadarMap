@@ -129,9 +129,20 @@ nonisolated enum GPSTiers {
     /// разница в расходе с «до 10 м» на его фоне мала. В энергосбережении —
     /// десять метров: в пределах порога фильтра, а если и они бракуются,
     /// просьбу поднимет `escalatedAccuracy`.
-    static func foreground(lowPower: Bool) -> Request {
-        lowPower ? Request(accuracy: kCLLocationAccuracyNearestTenMeters, distanceFilter: 20)
-                 : Request(accuracy: kCLLocationAccuracyBest, distanceFilter: 10)
+    ///
+    /// `idle` — телефон лежит (нет движения `gpsIdleAfterSeconds`), а точка
+    /// уже есть: «Best» на столе дома держал GPS-чип на максимуме, пока
+    /// человек смотрит карту (аудит энергии 19.10). Тогда — «до 10 м» и фильтр
+    /// 30 м: первый же фикс в движении вернёт «Best» (LocationService).
+    static func foreground(lowPower: Bool, idle: Bool = false) -> Request {
+        if idle { return Request(accuracy: kCLLocationAccuracyNearestTenMeters, distanceFilter: 30) }
+        return lowPower ? Request(accuracy: kCLLocationAccuracyNearestTenMeters, distanceFilter: 20)
+                        : Request(accuracy: kCLLocationAccuracyBest, distanceFilter: 10)
+    }
+
+    /// Лежит ли телефон открытого экрана: стоим дольше порога и точка есть.
+    static func foregroundIdle(idleSeconds: TimeInterval, hasPosition: Bool) -> Bool {
+        hasPosition && idleSeconds >= AppConfig.gpsIdleAfterSeconds
     }
 
     /// Фикс открытого экрана забракован по точности: какую точность просить

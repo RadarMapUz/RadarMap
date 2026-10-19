@@ -638,6 +638,7 @@ final class LocationService: NSObject {
             // Просто открытое приложение: точный GPS для HUD, фон не держим.
             // Точность — как у Apple Карт (почему — GPSTiers.foreground).
             let request = GPSTiers.foreground(lowPower: isLowPowerMode)
+            foregroundIdle = false
             manager.desiredAccuracy = request.accuracy
             manager.distanceFilter = request.distanceFilter
             manager.allowsBackgroundLocationUpdates = false
@@ -689,7 +690,8 @@ final class LocationService: NSObject {
         // CarPlay без поездки — тоже вождение с живыми оповещениями, и лестница
         // ему положена: раньше он держал «Best» и фильтр 5 м всю сессию, в том
         // числе на стоянке и на трассе вдали от камер (аудит 11.10).
-        guard isTripActive || isCarPlayConnected, settings.adaptiveGPS else { return }
+        if !(isTripActive || isCarPlayConnected) { return tuneForegroundAccuracy() }
+        guard settings.adaptiveGPS else { return }
         let cameraDistance = distanceToNearest ?? .greatestFiniteMagnitude
         let stepDistance = (route?.isActive == true && route?.nextStep != nil)
             ? (route?.nextStepDistance ?? .greatestFiniteMagnitude)
@@ -714,6 +716,22 @@ final class LocationService: NSObject {
         manager.distanceFilter = request.distanceFilter
     }
     @ObservationIgnored private var accuracyWatched = false
+
+    /// Открытый экран без поездки: телефон лежит — чип на «до 10 м», тронулись
+    /// — снова «Best» (GPSTiers.foreground). Только на принятых фиксах.
+    private func tuneForegroundAccuracy() {
+        guard isForeground, settings.adaptiveGPS else { return }
+        let idle = GPSTiers.foregroundIdle(idleSeconds: Date().timeIntervalSince(lastMovementAt),
+                                           hasPosition: currentCoordinate != nil)
+        guard idle != foregroundIdle else { return }
+        foregroundIdle = idle
+        let request = GPSTiers.foreground(lowPower: isLowPowerMode, idle: idle)
+        manager.desiredAccuracy = request.accuracy
+        manager.distanceFilter = request.distanceFilter
+        Log.location.info("открытый экран: \(idle ? "лежит — точность до 10 м" : "движение — точность максимум", privacy: .public)")
+    }
+    /// Открытый экран сейчас на «лежачей» точности.
+    @ObservationIgnored private var foregroundIdle = false
 
     /// Попросить точную геопозицию на эту сессию (если дана «приблизительная»).
     func requestPreciseLocation() {
@@ -910,7 +928,9 @@ final class LocationService: NSObject {
             }
             // То же для открытого экрана без поездки: забракован по точности —
             // просим максимум, иначе метка так и стоит по грубой точке.
-            if reason == .accuracy, !isTripActive, isForeground,
+            // Телефон лежит, точка уже есть — грубый фикс в помещении не повод
+            // будить чип: иначе лежачая точность и подъём сменяли бы друг друга.
+            if reason == .accuracy, !isTripActive, isForeground, !foregroundIdle,
                let raised = GPSTiers.escalatedAccuracy(from: manager.desiredAccuracy) {
                 Log.location.notice("открытый экран: фикс \(fix.horizontalAccuracy, privacy: .public) м отброшен — поднимаем точность")
                 manager.desiredAccuracy = raised
@@ -1276,10 +1296,13 @@ final class LocationService: NSObject {
 
     /// Текущее состояние для Live Activity.
     var activityState: CameraActivityAttributes.ContentState {
-        CameraActivityAttributes.ContentState(
+        let now = Date()
+        return CameraActivityAttributes.ContentState(
             nearestTitle: nearestCamera?.displayTitle,
             nearestSymbol: nearestCamera?.kind.symbolName ?? "checkmark.shield.fill",
-            distanceMeters: distanceToNearest
+            distanceMeters: distanceToNearest,
+            arrivesAt: LiveActivityService.arrival(distance: distanceToNearest, speedKmh: speedKmh, now: now),
+            since: now
         )
     }
 

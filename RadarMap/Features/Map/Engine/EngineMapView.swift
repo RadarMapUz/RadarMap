@@ -90,6 +90,9 @@ struct EngineMapView: UIViewRepresentable {
     /// Карту накрыло полноэкранное предупреждение о камере (градиент до 96 %):
     /// рисовать её на полной частоте незачем (аудит 11.10).
     var covered: Bool = false
+    /// Крейсер вдали от камер и манёвра (EngineMapView.isCruise): кадров
+    /// меньше — картинка на трассе почти неподвижна (аудит энергии 19.10).
+    var cruise: Bool = false
     /// На ходу — только дорога (DrivingDeclutter): пешеходные тоннели и
     /// тротуары, деревья, тени, парковки, значки заведений прячутся видимостью
     /// слоёв; встали — возвращаются.
@@ -816,7 +819,8 @@ struct EngineMapView: UIViewRepresentable {
             } ?? true
             // Частота кадров: полная — только когда водитель сам двигает карту.
             let fps = Self.framesPerSecond(browsing: browsing, performance: model.performance,
-                                           lowPower: model.lowPower, covered: model.covered)
+                                           lowPower: model.lowPower, covered: model.covered,
+                                           cruise: model.cruise)
             if fps != lastFPS {
                 lastFPS = fps
                 view.preferredFramesPerSecond = fps > 0
@@ -1277,7 +1281,7 @@ struct EngineMapView: UIViewRepresentable {
 
         /// 0 — частота по умолчанию (движок сам выбирает, плавно для жестов).
         static func framesPerSecond(browsing: Bool, performance: PerformanceMode, lowPower: Bool,
-                                    covered: Bool = false) -> Int {
+                                    covered: Bool = false, cruise: Bool = false) -> Int {
             if browsing { return performance == .full && !lowPower ? 0 : AppConfig.engineWarmFPS }
             // Под предупреждением о камере — как у горячего телефона: видна
             // лишь верхняя полоска карты сквозь градиент.
@@ -1285,8 +1289,17 @@ struct EngineMapView: UIViewRepresentable {
             switch performance {
             case .minimal: return AppConfig.engineHotFPS
             case .reduced: return AppConfig.engineWarmFPS
-            case .full:    return lowPower ? AppConfig.engineWarmFPS : AppConfig.engineFollowFPS
+            case .full:    return lowPower || cruise ? AppConfig.engineWarmFPS : AppConfig.engineFollowFPS
             }
+        }
+
+        /// Крейсер: поездка на скорости трассы, камера не близко, манёвр
+        /// далеко. В городе (ниже порога) и у камеры/поворота — полные 30 к/с:
+        /// там картинка меняется и «рывками» замечают (поле 12.10).
+        static func isCruise(tripActive: Bool, speedKmh: Double, approachingCamera: Bool,
+                             maneuverMeters: Double?) -> Bool {
+            tripActive && speedKmh >= AppConfig.engineCruiseMinKmh && !approachingCamera
+                && (maneuverMeters ?? .infinity) > AppConfig.engineCruiseManeuverMeters
         }
 
         static func zoom(spanMeters: Double, height: Double, latitude: Double) -> Double {

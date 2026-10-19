@@ -6743,7 +6743,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "GPS signali yo'q"
+            "value": "GPS signali yo‘q"
           }
         }
       }
@@ -7163,6 +7163,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Telefonda RadarMap’ni oching va «Doim» ruxsatini bering — usiz men yo‘lni ko‘rmayman va kameralar haqida jim turaman."
+          }
+        }
+      }
+    },
+    "Откройте RadarMap, если поездка идёт": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Откройте RadarMap, если поездка идёт"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar davom etayotgan bo‘lsa, RadarMap’ni oching"
           }
         }
       }

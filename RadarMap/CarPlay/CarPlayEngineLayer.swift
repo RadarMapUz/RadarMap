@@ -126,6 +126,10 @@ struct CarPlayEngineLayer: View {
             // Режим «в поездке» всегда: без кафе, номеров домов и подписей
             // дорожек — экран машины читают боковым зрением.
             driving: true,
+            cruise: EngineMapView.Coordinator.isCruise(
+                tripActive: true, speedKmh: env.location.speedKmh,
+                approachingCamera: env.location.isApproachingCamera,
+                maneuverMeters: env.route.isActive && env.route.nextStep != nil ? env.route.nextStepDistance : nil),
             // На ходу — только дорога; встали — окрестность возвращается.
             declutter: model.declutter.update(speedKmh: env.location.speedKmh, at: Date()),
             // Плитка — только смотреть: случайный жест снимал слежение, а

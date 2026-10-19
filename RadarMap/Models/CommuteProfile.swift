@@ -47,8 +47,6 @@ nonisolated enum CommuteProfile {
         /// По участкам; `noData` — участок не измерен (стоянка, нет времени,
         /// сошли с линии).
         let seconds: [UInt16]
-        /// Время восстановлено, а не измерено (старые треки) — не для голоса.
-        let approx: Bool
 
         static let noData = UInt16.max
 
@@ -130,7 +128,7 @@ nonisolated enum CommuteProfile {
         let row = Row(tripID: tripID, departure: departure,
                       weekend: calendar.isDateInWeekend(departure),
                       arrivalMinute: Int16(minuteOfDay(arrival, calendar: calendar)),
-                      seconds: seconds, approx: false)
+                      seconds: seconds)
         if Double(row.validCount) >= Double(seconds.count) * AppConfig.commuteProfileMinValidShare {
             // Склейка финиширует ту же поездку второй раз — строка заменяется.
             variant.rows.removeAll { $0.tripID == tripID }
@@ -285,7 +283,10 @@ nonisolated enum CommuteProfile {
     /// процента, и считать на сфере каждую из тысяч точек незачем.
     struct Frame: Sendable {
         let kx: Double
-        let ky = 110_574.0
+        /// Те же 111 320 м на градус, что и вся остальная геометрия
+        /// приложения (GeoMath): одна и та же точка не должна оказаться на
+        /// разном расстоянии от линии в профиле и в остальном коде.
+        let ky = 111_320.0
 
         init(latitude: Double) {
             kx = 111_320.0 * cos(latitude * .pi / 180)

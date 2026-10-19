@@ -16,7 +16,7 @@ final class CommuteProfileTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_760_900_000)   // 19.10.2026
     private let lat0 = 41.30, lon0 = 69.20
     private var metersPerLon: Double { 111_320 * cos(lat0 * .pi / 180) }
-    private let metersPerLat = 110_574.0
+    private let metersPerLat = 111_320.0
 
     /// Трек по ломаной из точек (метры на восток/север от начала) с шагом
     /// 30 м и скоростью `speed` м/с; `stopAt` — стоянка на этой дистанции.
@@ -66,7 +66,6 @@ final class CommuteProfileTests: XCTestCase {
         let row = book.toWork[0].rows[0]
         XCTAssertEqual(row.seconds.count, 15)
         for s in row.seconds { XCTAssertEqual(Double(s), 20, accuracy: 1.5, "200 м на 10 м/с") }
-        XCTAssertFalse(row.approx)
     }
 
     func testSamePathAddsRowsToTheSameVariant() {

@@ -291,12 +291,17 @@ final class AppEnvironment {
         trip.onTripDropped = { [weak usage] reason in usage?.noteTripDropped(reason) }
         // Поездка дом↔работа — строкой в профиль участков (будущий «призрак»).
         // Направление — тем же правилом, что «Дорога на работу» в Итогах.
-        trip.onTrackFinished = { [weak self] record, track in
+        trip.onTrackFinished = { [weak self] record, track, times in
             guard let self, self.settings.commuteLearning, let ends = self.commuteEnds,
                   let direction = Commute.trips(history: [record], home: ends.home,
                                                 work: ends.work).first?.direction else { return }
-            self.commuteProfiles.ingest(track, record: record, direction: direction,
-                                        limits: self.speedLimits.limitIndex)
+            self.commuteProfiles.ingest(record: record, track: track, times: times,
+                                        direction: direction, limits: self.speedLimits.limitIndex)
+        }
+        // Стёртые человеком поездки забываются и в журнале, и в профиле.
+        trip.onRecordsErased = { [weak self] ids in
+            self?.commuteProfiles.forget(ids)
+            self?.refreshCommute()
         }
         commuteProfiles.onLoaded = { [weak self] in self?.refreshCommute() }
         trip.recordsTimedTrack = settings.recordTimedTrack
@@ -561,14 +566,13 @@ final class AppEnvironment {
     func refreshCommute() {
         // Журнал копит концы поездок 45 дней — история держит только 50
         // записей, и «медиана за 30 дней» на ней была медианой за 12–17.
-        let entries = CommuteLedger.updated(commuteProfiles.ledger, with: trip.history, now: Date())
-        if settings.commuteLearning { commuteProfiles.updateLedger(with: trip.history) }
         guard let ends = commuteEnds else {
             commute = []
             return
         }
         let trips = settings.commuteLearning
-            ? Commute.trips(history: entries, home: ends.home, work: ends.work)
+            ? Commute.trips(history: commuteProfiles.updateLedger(with: trip.history),
+                            home: ends.home, work: ends.work)
             : Commute.trips(history: trip.history, home: ends.home, work: ends.work)
         commute = Commute.summaries(trips: trips, now: Date())
     }

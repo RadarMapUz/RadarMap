@@ -10,6 +10,7 @@ import Foundation
 import Observation
 import UIKit
 import WidgetKit
+import os
 
 @MainActor
 @Observable
@@ -427,6 +428,8 @@ final class AppEnvironment {
         }
         cameras.onDatabaseLoaded = { [weak self] in
             self?.runAxisCleanupIfPossible()
+            // Вход в геозону, разбудивший приложение раньше базы, — сейчас.
+            self?.location.processPendingRegionEnters()
         }
 
         // Конец поездки: обезличенные счётчики и недельный дайджест.
@@ -512,6 +515,21 @@ final class AppEnvironment {
         observeCameraRevision()
         observeAppearanceSetting()
         wireNetworkRhythm()
+        startIfLaunchedInBackground()
+    }
+
+    /// Систему подняла процесс в фоне — смена места, геозона, после того как
+    /// iOS выгрузила приложение. Окна при таком запуске нет, сцена не
+    /// поднимается, и startDrivingServices (его зовёт сцена) не звался: не
+    /// стартовал CoreMotion — автостарт поездки молчал до открытия приложения,
+    /// и вся поездка шла в тихом режиме геозон (сценарий S3, 20.10). Задача —
+    /// после init: к её исполнению UIApplication уже запущен.
+    private func startIfLaunchedInBackground() {
+        Task { @MainActor [weak self] in
+            guard let self, UIApplication.shared.applicationState == .background else { return }
+            Log.app.notice("запуск в фоне — автостарт поездки и лимиты поднимаю без сцены")
+            self.startDrivingServices()
+        }
     }
 
     /// База камер изменилась (загрузка, своя камера, скрытие, чужая отметка) —

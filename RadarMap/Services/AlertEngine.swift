@@ -42,6 +42,18 @@ nonisolated struct AlertEngine {
     /// камеры — только на ходу. Стоя гейты не работают вовсе, и перевзведённая
     /// с соседней улицы камера на светофоре давала бы новое «первое» (ревью 20.10).
     private var rearmed: Set<Int> = []
+    /// Точка сближения с камерой и наш курс там — «своя дорога» камеры без
+    /// куска и оси (треноги, свои, снап на тротуар): новый подъезд — только
+    /// по той же дороге, по которой мы мимо неё проехали (ревью S4).
+    private var passLines: [Int: PassLine] = [:]
+
+    struct PassLine: Equatable {
+        let lat: Double
+        let lon: Double
+        let course: Double
+        let distance: Double
+        var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: lat, longitude: lon) }
+    }
     private var behindStreak: [Int: Int] = [:]
     private var aheadStreak: [Int: Int] = [:]
 
@@ -116,6 +128,7 @@ nonisolated struct AlertEngine {
         traversed.removeAll()
         passed.removeAll()
         rearmed.removeAll()
+        passLines.removeAll()
         behindStreak.removeAll()
         aheadStreak.removeAll()
     }
@@ -125,12 +138,25 @@ nonisolated struct AlertEngine {
         announcedLevel[cameraID] = 0
         traversed.remove(cameraID)
         passed.remove(cameraID)
+        passLines[cameraID] = nil
         behindStreak[cameraID] = nil
         aheadStreak[cameraID] = nil
     }
 
     /// О камере уже сказали (уровень > 0).
     func isAnnounced(_ cameraID: Int) -> Bool { (announcedLevel[cameraID] ?? 0) > 0 }
+
+    /// Сближение с камерой, о которой сказали: ближайшая точка с курсом
+    /// запоминается — по ней потом узнаётся «та же дорога».
+    mutating func noteApproach(_ cameraID: Int, distance: CLLocationDistance,
+                               at coordinate: CLLocationCoordinate2D, course: Double) {
+        guard isAnnounced(cameraID), course >= 0 else { return }
+        if let line = passLines[cameraID], line.distance <= distance { return }
+        passLines[cameraID] = PassLine(lat: coordinate.latitude, lon: coordinate.longitude,
+                                       course: course, distance: distance)
+    }
+
+    func passLine(_ cameraID: Int) -> PassLine? { passLines[cameraID] }
 
     /// Камеру проехали — ждём только нового подъезда (тогда и нужен дорогой
     /// LocationGates.isReapproach, а не на каждой камере каждый фикс).

@@ -21,14 +21,53 @@ final class ScenarioDriveTests: XCTestCase {
 
     // MARK: - Стенд
 
+    /// Маршрут для стенда: ломаная в метрах; у камеры — одна позиция вдоль
+    /// него (ближайший отрезок, первый при равенстве — как
+    /// RouteService.camerasAlong), прогресс — проекция в окне у прошлого
+    /// прогресса и с отставанием на фикс (сервис обновляет его после выбора
+    /// ближайшей камеры).
+    private struct RouteModel {
+        let points: [(x: Double, y: Double)]
+
+        func project(_ p: (x: Double, y: Double), near: Double? = nil) -> (along: Double, offset: Double) {
+            var best = (along: 0.0, offset: Double.infinity)
+            var cumulative = 0.0
+            for (a, b) in zip(points, points.dropFirst()) {
+                let dx = b.x - a.x, dy = b.y - a.y
+                let len = (dx * dx + dy * dy).squareRoot()
+                let t = len > 0 ? max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (len * len))) : 0
+                let qx = a.x + dx * t, qy = a.y + dy * t
+                let offset = ((p.x - qx) * (p.x - qx) + (p.y - qy) * (p.y - qy)).squareRoot()
+                let along = cumulative + t * len
+                cumulative += len
+                if let near, along < near - 50 || along > near + 500 { continue }
+                if offset < best.offset - 0.01 { best = (along, offset) }
+            }
+            return best
+        }
+    }
+
+    /// Тот же порядок решений, что в LocationService на каждом фиксе:
+    /// фильтр → (о ком сказали: траверз, «явно позади») → кандидаты
+    /// (LocationGates.candidateDistance: маршрут или прямая) → первая «наша»
+    /// (LocationGates.isOnOurRoad) → AlertEngine.
     private struct Drive {
         var filter = LocationFilter()
         var engine = AlertEngine()
+        var route: RouteModel?
         /// Камера → сколько раз о ней предупредили с начала (новый подъезд).
         private(set) var firstAlerts: [Int: Int] = [:]
         private(set) var rejected = 0
+        private var progress: Double?
 
-        mutating func run(_ fixes: [LocationFilter.Fix], cameras: [Camera]) {
+        mutating func run(_ fixes: [LocationFilter.Fix], cameras: [Camera],
+                          xy: (Double, Double) -> (x: Double, y: Double)) {
+            let cameraAlong: [Int: Double] = route.map { route in
+                Dictionary(uniqueKeysWithValues: cameras.compactMap { camera in
+                    let hit = route.project(xy(camera.lat, camera.lon))
+                    return hit.offset <= 30 ? (camera.id, hit.along) : nil
+                })
+            } ?? [:]
             for fix in fixes {
                 guard case .accepted(let good) = filter.accept(fix, now: fix.timestamp) else {
                     rejected += 1
@@ -39,20 +78,33 @@ final class ScenarioDriveTests: XCTestCase {
                 let situation = LocationGates.Situation(coordinate: here, course: good.course,
                                                         speedKmh: speedKmh,
                                                         horizontalAccuracy: good.accuracy, context: .city)
-                // Как в LocationService.recomputeNearest: проеханные — до выбора ближайшей.
-                engine.notePassed(cameras.filter { engine.isAnnounced($0.id) }, in: situation)
-                var nearest: (camera: Camera, distance: Double)?
+                var candidates: [(camera: Camera, distance: Double, onRoute: Bool)] = []
                 for camera in cameras {
-                    let distance = GeoMath.fastDistance(here.latitude, here.longitude, camera.lat, camera.lon)
-                    guard LocationGates.isOnOurRoad(camera, in: situation, isOnRoute: false),
-                          LocationGates.isAhead(camera, in: situation) else { continue }
-                    if distance < (nearest?.distance ?? .greatestFiniteMagnitude) { nearest = (camera, distance) }
+                    let straight = GeoMath.fastDistance(here.latitude, here.longitude, camera.lat, camera.lon)
+                    if engine.isAnnounced(camera.id) {
+                        engine.noteGeometry(camera.id,
+                                            atTraverse: straight <= PassGeometry.traverseLimit(for: camera),
+                                            behind: LocationGates.isClearlyBehind(camera, in: situation),
+                                            ahead: LocationGates.isClearlyAhead(camera, in: situation))
+                    }
+                    let remaining = progress.flatMap { p in cameraAlong[camera.id].map { $0 - p } }
+                    guard let candidate = LocationGates.candidateDistance(straight: straight, routeRemaining: remaining,
+                                                                          in: situation) else { continue }
+                    candidates.append((camera, candidate.distance, candidate.onRoute))
                 }
-                guard let nearest else { continue }
+                // Прогресс по маршруту — после выбора, как в сервисе (отставание на фикс).
+                defer {
+                    if let route {
+                        progress = route.project(xy(good.lat, good.lon), near: progress).along
+                    }
+                }
+                candidates.sort { $0.distance < $1.distance }
+                guard let nearest = candidates.first(where: {
+                    LocationGates.isOnOurRoad($0.camera, in: situation, isOnRoute: $0.onRoute)
+                }) else { continue }
                 let radius = AlertEngine.effectiveRadius(speedKmh: speedKmh, baseRadius: AppConfig.alertRadius)
                 if let decision = engine.evaluate(cameraID: nearest.camera.id, distance: nearest.distance,
-                                                  radius: radius,
-                                                  approaching: LocationGates.isFilteringActive(situation)),
+                                                  radius: radius),
                    decision.isFirst {
                     firstAlerts[nearest.camera.id, default: 0] += 1
                 }
@@ -68,6 +120,10 @@ final class ScenarioDriveTests: XCTestCase {
 
     private func point(_ x: Double, _ y: Double) -> (lat: Double, lon: Double) {
         (lat0 + y / 111_320, lon0 + x / kx)
+    }
+
+    private func xy(_ lat: Double, _ lon: Double) -> (x: Double, y: Double) {
+        ((lon - lon0) * kx, (lat - lat0) * 111_320)
     }
 
     /// Отрезок пути: куда ехать (x, y в метрах), с какой скоростью (м/с) и
@@ -123,7 +179,7 @@ final class ScenarioDriveTests: XCTestCase {
         let route = fixes(from: (0, 0), legs: [Leg(x: 1300, y: 0, speed: 14),
                                                Leg(x: 0, y: 0, speed: 14)])
         var drive = Drive()
-        drive.run(route, cameras: [camera(1, x: 1000, y: 0)])
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
         XCTAssertEqual(drive.rejected, 0)
         XCTAssertEqual(drive.firstAlerts[1], 2, "туда и после разворота обратно")
     }
@@ -136,7 +192,7 @@ final class ScenarioDriveTests: XCTestCase {
                                                Leg(x: 600, y: 0, speed: 10),
                                                Leg(x: 1300, y: 0, speed: 12)])
         var drive = Drive()
-        drive.run(route, cameras: [camera(1, x: 1000, y: 0)])
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
         XCTAssertEqual(drive.firstAlerts[1], 2)
     }
 
@@ -146,7 +202,7 @@ final class ScenarioDriveTests: XCTestCase {
         let route = fixes(from: (0, 0), legs: [Leg(x: 1040, y: 0, speed: 14, stopSeconds: 120),
                                                Leg(x: 1600, y: 0, speed: 14)])
         var drive = Drive()
-        drive.run(route, cameras: [camera(1, x: 1000, y: 0)])
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
         XCTAssertEqual(drive.firstAlerts[1], 1)
     }
 
@@ -157,35 +213,94 @@ final class ScenarioDriveTests: XCTestCase {
                                                Leg(x: 900, y: 0, speed: 2, stopSeconds: 300),
                                                Leg(x: 1500, y: 0, speed: 12)])
         var drive = Drive()
-        drive.run(route, cameras: [camera(1, x: 1000, y: 0)])
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
         XCTAssertEqual(drive.firstAlerts[1], 1)
     }
 
-    /// Движок сам по себе: проеханная камера без подъезда (стоим) не
-    /// сбрасывается; с подъездом — серия начинается заново.
+    /// Движок сам по себе: «проехали» — о камере сказали, были на траверзе и
+    /// она явно позади два фикса подряд; «новый подъезд» — явно впереди два
+    /// фикса подряд. Одиночный кривой фикс — ни то, ни другое.
     func testPassedCameraRestartsOnlyOnARealApproach() {
         var engine = AlertEngine()
         let cam = camera(7, x: 0, y: 0)
         XCTAssertEqual(engine.evaluate(cameraID: 7, distance: 50, radius: 400)?.level, 3)
-        // Едем на восток, камера в 200 м позади.
-        let behind = LocationGates.Situation(coordinate: CLLocationCoordinate2D(latitude: point(200, 0).lat,
-                                                                                longitude: point(200, 0).lon),
-                                             course: 90, speedKmh: 50, horizontalAccuracy: 6, context: .city)
-        XCTAssertTrue(LocationGates.isClearlyBehind(cam, in: behind))
-        engine.notePassed([cam], in: behind)
-        XCTAssertNil(engine.evaluate(cameraID: 7, distance: 150, radius: 400, approaching: false),
-                     "стоим — курса нет: та же камера, повтора нет")
-        XCTAssertEqual(engine.evaluate(cameraID: 7, distance: 150, radius: 400, approaching: true)?.isFirst, true,
-                       "едем к ней снова — новый подъезд")
-        // Без курса «позади» не решается.
-        let standing = LocationGates.Situation(coordinate: behind.coordinate, course: -1, speedKmh: 0,
+        // Без траверза «позади» — не «проехали» (свернули до неё, шпилька).
+        for _ in 0..<3 { engine.noteGeometry(7, atTraverse: false, behind: true, ahead: false) }
+        for _ in 0..<3 { engine.noteGeometry(7, atTraverse: false, behind: false, ahead: true) }
+        XCTAssertNil(engine.evaluate(cameraID: 7, distance: 150, radius: 400), "серия не забыта")
+        // Траверз; позади, кривой фикс, позади — ещё не проехали.
+        engine.noteGeometry(7, atTraverse: true, behind: true, ahead: false)
+        engine.noteGeometry(7, atTraverse: false, behind: false, ahead: false)
+        engine.noteGeometry(7, atTraverse: false, behind: true, ahead: false)
+        for _ in 0..<3 { engine.noteGeometry(7, atTraverse: false, behind: false, ahead: true) }
+        XCTAssertNil(engine.evaluate(cameraID: 7, distance: 150, radius: 400), "не проехали — не забыта")
+        // Позади два подряд — проехали; стоим (ни позади, ни впереди) — та же камера.
+        engine.noteGeometry(7, atTraverse: true, behind: true, ahead: false)
+        engine.noteGeometry(7, atTraverse: false, behind: true, ahead: false)
+        engine.noteGeometry(7, atTraverse: false, behind: true, ahead: false)
+        for _ in 0..<5 { engine.noteGeometry(7, atTraverse: false, behind: false, ahead: false) }
+        XCTAssertNil(engine.evaluate(cameraID: 7, distance: 150, radius: 400))
+        // Впереди один раз, потом снова позади — не подъезд (отражение).
+        engine.noteGeometry(7, atTraverse: false, behind: false, ahead: true)
+        engine.noteGeometry(7, atTraverse: false, behind: true, ahead: false)
+        engine.noteGeometry(7, atTraverse: false, behind: false, ahead: true)
+        XCTAssertNil(engine.evaluate(cameraID: 7, distance: 150, radius: 400))
+        // Впереди два подряд — новый подъезд, серия с начала.
+        engine.noteGeometry(7, atTraverse: false, behind: false, ahead: true)
+        XCTAssertEqual(engine.evaluate(cameraID: 7, distance: 140, radius: 400)?.isFirst, true)
+        // Геометрия: без курса «позади»/«впереди» не решается; шум траверза — не «позади».
+        let east = { (x: Double) in LocationGates.Situation(
+            coordinate: CLLocationCoordinate2D(latitude: self.point(x, 0).lat, longitude: self.point(x, 0).lon),
+            course: 90, speedKmh: 50, horizontalAccuracy: 6, context: .city) }
+        XCTAssertTrue(LocationGates.isClearlyBehind(cam, in: east(200)))
+        XCTAssertFalse(LocationGates.isClearlyBehind(cam, in: east(30)))
+        XCTAssertTrue(LocationGates.isClearlyAhead(cam, in: east(-200)))
+        XCTAssertFalse(LocationGates.isClearlyAhead(cam, in: east(-40)))
+        let standing = LocationGates.Situation(coordinate: east(200).coordinate, course: -1, speedKmh: 0,
                                                horizontalAccuracy: 6, context: .city)
         XCTAssertFalse(LocationGates.isClearlyBehind(cam, in: standing))
-        // Шум траверза (30 м за спиной) — ещё не «проехали».
-        let atTraverse = LocationGates.Situation(coordinate: CLLocationCoordinate2D(latitude: point(30, 0).lat,
-                                                                                    longitude: point(30, 0).lon),
-                                                 course: 90, speedKmh: 50, horizontalAccuracy: 6, context: .city)
-        XCTAssertFalse(LocationGates.isClearlyBehind(cam, in: atTraverse))
+        XCTAssertFalse(LocationGates.isClearlyAhead(cam, in: standing))
+    }
+
+    // MARK: - S4 на маршруте (ревью 20.10)
+
+    /// Камера на маршруте: остаток по маршруту держит её «0 м» за спиной ещё
+    /// фикс-другой после траверза. Второго «0 метров» быть не должно — это
+    /// была бы каждая камера каждого маршрута.
+    func testRouteCameraWarnsOnce() {
+        let track = fixes(from: (0, 0), legs: [Leg(x: 1800, y: 0, speed: 14)])
+        var drive = Drive()
+        drive.route = RouteModel(points: [(0, 0), (1800, 0)])
+        drive.run(track, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 1)
+    }
+
+    /// Маршрут сам с разворотом: туда мимо камеры, разворот через 300 м и
+    /// обратно мимо неё же. Позиция камеры на маршруте одна (первый проезд),
+    /// на обратном пути она — камера «как все», и о ней снова предупреждают.
+    func testRouteWithAUTurnWarnsAgainOnTheWayBack() {
+        let track = fixes(from: (0, 0), legs: [Leg(x: 1300, y: 0, speed: 14), Leg(x: 0, y: 0, speed: 14)])
+        var drive = Drive()
+        drive.route = RouteModel(points: [(0, 0), (1300, 0), (0, 0)])
+        drive.run(track, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 2)
+    }
+
+    /// Один фикс с кривым, но «достоверным» курсом (отражение от стены): ни
+    /// камера впереди не становится «проеханной», ни проеханная позади — «новой».
+    func testOneBadCourseFixDoesNotWarnTwice() {
+        var route = fixes(from: (0, 0), legs: [Leg(x: 1600, y: 0, speed: 14)])
+        func flipCourse(at index: Int) {
+            let f = route[index]
+            route[index] = LocationFilter.Fix(lat: f.lat, lon: f.lon, horizontalAccuracy: f.horizontalAccuracy,
+                                              speed: f.speed, speedAccuracy: f.speedAccuracy, course: 270,
+                                              courseAccuracy: 5, timestamp: f.timestamp)
+        }
+        flipCourse(at: 50)    // ~700 м: камера в 300 м впереди «вдруг позади»
+        flipCourse(at: 82)    // ~1150 м: проеханная «вдруг впереди»
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 1)
     }
 
     // MARK: - A3: тоннель
@@ -203,7 +318,7 @@ final class ScenarioDriveTests: XCTestCase {
                                courseAccuracy: $0.courseAccuracy, timestamp: $0.timestamp.addingTimeInterval(gap))
         }
         var drive = Drive()
-        drive.run(route, cameras: [camera(1, x: 1400, y: 0), camera(2, x: 1950, y: 0)])
+        drive.run(route, cameras: [camera(1, x: 1400, y: 0), camera(2, x: 1950, y: 0)], xy: xy)
         XCTAssertEqual(drive.rejected, 0, "после тоннеля фиксы принимаются")
         XCTAssertEqual(drive.firstAlerts[2], 1, "камера за выездом звучит")
         XCTAssertLessThanOrEqual(drive.firstAlerts[1] ?? 0, 1, "проеханная в тоннеле не звучит после выезда")
@@ -221,7 +336,7 @@ final class ScenarioDriveTests: XCTestCase {
                                         speedAccuracy: 1, course: 90, courseAccuracy: 5,
                                         timestamp: spike.timestamp.addingTimeInterval(0.5)), at: 51)
         var drive = Drive()
-        drive.run(route, cameras: [camera(1, x: 800, y: 300), camera(2, x: 1200, y: 0)])
+        drive.run(route, cameras: [camera(1, x: 800, y: 300), camera(2, x: 1200, y: 0)], xy: xy)
         XCTAssertEqual(drive.rejected, 1)
         XCTAssertNil(drive.firstAlerts[1], "камера на соседней улице не звучит из-за выброса")
         XCTAssertEqual(drive.firstAlerts[2], 1)

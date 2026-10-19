@@ -1429,7 +1429,7 @@ final class LocationService: NSObject {
         if !clusteredCameras.isEmpty { clusteredCameras = [] }
     }
 
-    @ObservationIgnored private var nearestBuffer: [(camera: Camera, distance: CLLocationDistance)] = []
+    @ObservationIgnored private var nearestBuffer: [(camera: Camera, distance: CLLocationDistance, onRoute: Bool)] = []
 
     private func recomputeNearest(from coordinate: CLLocationCoordinate2D) {
         guard !trackedCameras.isEmpty else { clearNearest(); return }
@@ -1457,29 +1457,36 @@ final class LocationService: NSObject {
         // (см. его комментарий). Кэшированный фикс у камеры иначе записался бы
         // проездом без предупреждения, то есть выдуманным промахом.
         let countsPasses = isTripActive && !isPositionCoarse
+        let situation = gateSituation(at: coordinate)
         for camera in trackedCameras {
             let straight = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
                                                 camera.lat, camera.lon)
-            if countsPasses, straight <= PassGeometry.traverseLimit(for: camera) {
+            let atTraverse = straight <= PassGeometry.traverseLimit(for: camera)
+            if countsPasses, atTraverse {
                 alertRecall.notePassed(cameraID: camera.id)
             }
-            guard let remaining = routeRemaining(to: camera) else {
-                candidates.append((camera, straight))
-                continue
+            // Проеханные (сценарий S4): о ком сказали, у кого были и кто теперь
+            // явно позади — следующий подъезд к ним (разворот, круг) будет
+            // новым. Только по годному фиксу — грубая точка из seedContext
+            // «проезжать» камеры не вправе. Сказано о единицах камер.
+            if alertEngine.isAnnounced(camera.id), !isPositionCoarse {
+                alertEngine.noteGeometry(camera.id, atTraverse: atTraverse,
+                                         behind: LocationGates.isClearlyBehind(camera, in: situation),
+                                         ahead: LocationGates.isClearlyAhead(camera, in: situation))
             }
-            // Камера уехала назад по маршруту — уже проехали, не пугаем.
-            guard remaining > -AppConfig.routePassedToleranceMeters else { continue }
-            candidates.append((camera, max(0, remaining)))
+            // Камера уехала назад по маршруту — стоя не пугаем ею, в движении
+            // она снова камера «как все» (маршрут с разворотом).
+            guard let candidate = LocationGates.candidateDistance(straight: straight,
+                                                                  routeRemaining: routeRemaining(to: camera),
+                                                                  in: situation) else { continue }
+            candidates.append((camera, candidate.distance, candidate.onRoute))
         }
         candidates.sort { $0.distance < $1.distance }
-        // Проеханные: о ком сказали и кто теперь явно позади — следующий
-        // подъезд к ним (разворот, круг) будет новым. Сказано о единицах камер.
-        let announced = trackedCameras.filter { alertEngine.isAnnounced($0.id) }
-        if !announced.isEmpty { alertEngine.notePassed(announced, in: gateSituation(at: coordinate)) }
         // В движении HUD показывает ближайшую камеру НА НАШЕЙ ДОРОГЕ впереди;
         // камеры позади и с соседних улиц не пугают зря.
-        guard let index = candidates.firstIndex(where: { isOnOurRoad($0.camera, from: coordinate) })
-        else { clearNearest(); return }
+        guard let index = candidates.firstIndex(where: {
+            LocationGates.isOnOurRoad($0.camera, in: situation, isOnRoute: $0.onRoute)
+        }) else { clearNearest(); return }
         let found = candidates[index]
         // Камера чаще всего ТА ЖЕ, что тик назад: перезапись тем же значением
         // всё равно будит всех наблюдателей @Observable, и до этой проверки
@@ -1491,7 +1498,7 @@ final class LocationService: NSObject {
         // группу по расстоянию — это ноль-два лишних вычисления геометрии.
         clusteredCameras = candidates[(index + 1)...]
             .prefix { $0.distance <= found.distance + AppConfig.voiceGroupMeters }
-            .filter { isOnOurRoad($0.camera, from: coordinate) }
+            .filter { LocationGates.isOnOurRoad($0.camera, in: situation, isOnRoute: $0.onRoute) }
             .map(\.camera)
     }
 
@@ -1590,8 +1597,7 @@ final class LocationService: NSObject {
     private func runAlertEngine() {
         guard let camera = nearestCamera, let distance = distanceToNearest else { return }
         guard let decision = alertEngine.evaluate(cameraID: camera.id, distance: distance,
-                                                  radius: effectiveAlertRadius,
-                                                  approaching: isDirectionalFilteringActive) else { return }
+                                                  radius: effectiveAlertRadius) else { return }
 
         let policy = voicePlan(for: camera, crawling: isCrawling)
 

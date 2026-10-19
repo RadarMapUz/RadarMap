@@ -151,7 +151,7 @@ nonisolated enum AppConfig {
 
     /// Насколько камера может «уехать назад» по маршруту, прежде чем считаем её
     /// пройденной и убираем из кандидатов на предупреждение.
-    static let routePassedToleranceMeters = 60.0
+    nonisolated static let routePassedToleranceMeters = 60.0
 
     // MARK: - Дорога камеры (направление, полосы, кусок проезжей части)
     // nonisolated: читаются из чистых RoadShape/RoadCorridor и их тестов.
@@ -385,6 +385,9 @@ nonisolated enum AppConfig {
     /// разворота или круга по кварталу — предупреждается заново. С запасом над
     /// шумом траверза (`corridorBehindToleranceMeters`).
     nonisolated static let alertPassedBehindMeters: CLLocationDistance = 60
+    /// Сколько фиксов подряд нужно, чтобы считать камеру проеханной и чтобы
+    /// считать подъезд к ней новым: один фикс с кривым курсом — не решение.
+    nonisolated static let alertPassedConfirmFixes = 2
     /// Ступени тревоги — доли радиуса (AlertEngine.level): ближе 0,6 —
     /// вторая, ближе 0,3 — третья.
     nonisolated static let alertLevel2Share = 0.6

@@ -159,4 +159,26 @@ nonisolated enum LocationGates {
         return RoadCorridor.fix(from: situation.coordinate, course: situation.course,
                                 to: camera.coordinate).along < -AppConfig.alertPassedBehindMeters
     }
+
+    /// Камера ЯВНО впереди: тот же порог в другую сторону. Новый подъезд к
+    /// проеханной камере — только так; камера маршрута, которую остаток по
+    /// маршруту ещё держит «0 м» за спиной, впереди не оказывается (ревью 20.10:
+    /// иначе после каждой камеры на маршруте звучало второе «0 метров»).
+    static func isClearlyAhead(_ camera: Camera, in situation: Situation) -> Bool {
+        guard isFilteringActive(situation) else { return false }
+        return RoadCorridor.fix(from: situation.coordinate, course: situation.course,
+                                to: camera.coordinate).along > AppConfig.alertPassedBehindMeters
+    }
+
+    /// Кандидат в ближайшие: по маршруту — остаток вдоль него и признак «на
+    /// маршруте» для гейта; камера, уехавшая назад по маршруту дальше допуска,
+    /// — уже не маршрутная: в движении она снова «как все» (по прямой и через
+    /// гейты — маршрут с разворотом проходит её второй раз), стоя — не
+    /// кандидат вовсе, как и раньше. nil — не кандидат.
+    static func candidateDistance(straight: CLLocationDistance, routeRemaining: CLLocationDistance?,
+                                  in situation: Situation) -> (distance: CLLocationDistance, onRoute: Bool)? {
+        guard let routeRemaining else { return (straight, false) }
+        if routeRemaining > -AppConfig.routePassedToleranceMeters { return (max(0, routeRemaining), true) }
+        return isFilteringActive(situation) ? (straight, false) : nil
+    }
 }

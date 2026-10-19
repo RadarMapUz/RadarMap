@@ -1512,12 +1512,17 @@ final class LocationService: NSObject {
             // новым. Только по годному фиксу — грубая точка из seedContext
             // «проезжать» камеры не вправе. Сказано о единицах камер.
             if announced, newFix, !isPositionCoarse {
-                alertEngine.noteGeometry(camera.id,
-                                         atTraverse: straight <= max(PassGeometry.traverseLimit(for: camera),
-                                                                     AppConfig.alertTraverseMeters),
+                let atTraverse = straight <= max(PassGeometry.traverseLimit(for: camera),
+                                                 AppConfig.alertTraverseMeters)
+                if atTraverse {
+                    alertEngine.noteApproach(camera.id, distance: straight, at: coordinate,
+                                             course: situation.course)
+                }
+                alertEngine.noteGeometry(camera.id, atTraverse: atTraverse,
                                          behind: LocationGates.isClearlyBehind(camera, in: situation),
                                          ahead: alertEngine.isPassed(camera.id)
-                                            && LocationGates.isReapproach(camera, in: situation))
+                                            && LocationGates.isReapproach(camera, in: situation,
+                                                                          passLine: alertEngine.passLine(camera.id)))
             }
             // Камера уехала назад по маршруту — стоя не пугаем ею, в движении
             // она снова камера «как все» (маршрут с разворотом).

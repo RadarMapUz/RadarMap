@@ -89,12 +89,16 @@ final class ScenarioDriveTests: XCTestCase {
                 for camera in cameras {
                     let straight = GeoMath.fastDistance(here.latitude, here.longitude, camera.lat, camera.lon)
                     if engine.isAnnounced(camera.id) {
-                        engine.noteGeometry(camera.id,
-                                            atTraverse: straight <= max(PassGeometry.traverseLimit(for: camera),
-                                                                        AppConfig.alertTraverseMeters),
+                        let atTraverse = straight <= max(PassGeometry.traverseLimit(for: camera),
+                                                         AppConfig.alertTraverseMeters)
+                        if atTraverse {
+                            engine.noteApproach(camera.id, distance: straight, at: here, course: situation.course)
+                        }
+                        engine.noteGeometry(camera.id, atTraverse: atTraverse,
                                             behind: LocationGates.isClearlyBehind(camera, in: situation),
                                             ahead: engine.isPassed(camera.id)
-                                                && LocationGates.isReapproach(camera, in: situation))
+                                                && LocationGates.isReapproach(camera, in: situation,
+                                                                              passLine: engine.passLine(camera.id)))
                     }
                     let remaining = progress.flatMap { p in cameraAlong[camera.id].map { $0 - p } }
                     guard let candidate = LocationGates.candidateDistance(straight: straight, routeRemaining: remaining,
@@ -175,10 +179,10 @@ final class ScenarioDriveTests: XCTestCase {
     }
 
     /// Камера без доказанных сторон (половина базы): может снимать обе стороны.
-    private func camera(_ id: Int, x: Double, y: Double) -> Camera {
+    private func camera(_ id: Int, x: Double, y: Double, type: String = "Стационар радар") -> Camera {
         let p = point(x, y)
         return Camera(id: id, region: "Т", city: "", location: "к", lat: p.lat, lon: p.lon,
-                      type: "Стационар радар", violations: [], needsReview: false, axis: nil, dir: nil,
+                      type: type, violations: [], needsReview: false, axis: nil, dir: nil,
                       lanes: 2, cls: nil, bridge: nil, road: nil, split: nil, twin: nil)
     }
 
@@ -395,6 +399,48 @@ final class ScenarioDriveTests: XCTestCase {
                                "петля с \(Int(loopStart)) м, радиус \(Int(radius)): \(drive.firstAlertPoints[1] ?? [])")
             }
         }
+    }
+
+    /// Тренога (и своя камера) без куска и оси: на клевере коридор
+    /// перевзводил её с петли — сирена второй раз. Своя дорога такой камеры —
+    /// та, по которой мы мимо неё проехали (ревью S4, четвёртый круг).
+    func testCloverleafLoopDoesNotRepeatATripod() {
+        for type in ["Тренога", "Стационар радар"] {
+            for loopStart in [120.0, 200, 340] {
+                for radius in [35.0, 55, 80] {
+                    let ramp = loop(from: (0, loopStart), radius: radius, degrees: 270, speed: 8.3)
+                    let route = fixes(from: (0, -900), legs: [Leg(x: 0, y: loopStart, speed: 13.9)] + ramp.legs
+                                        + [Leg(x: -600, y: ramp.end.y, speed: 13.9)])
+                    var drive = Drive()
+                    drive.run(route, cameras: [camera(1, x: 0, y: 0, type: type)], xy: xy)
+                    XCTAssertEqual(drive.firstAlerts[1], 1,
+                                   "\(type), петля с \(Int(loopStart)) м, радиус \(Int(radius))")
+                }
+            }
+        }
+    }
+
+    /// Тренога, поставленная в 18 м от дороги: разворот по той же дороге —
+    /// новый подъезд (своя дорога — наш след, а не отметка).
+    func testTripodOffTheRoadStillWarnsAfterAUTurn() {
+        let route = fixes(from: (0, -900), legs: [Leg(x: 0, y: 300, speed: 13.9),
+                                                  Leg(x: -10, y: 300, speed: 5),
+                                                  Leg(x: -10, y: -900, speed: 13.9)])
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 18, y: 0, type: "Тренога")], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 2)
+    }
+
+    /// Широкий проспект: разворот на дальнюю проезжую часть в 42 м от оси
+    /// камеры с недоказанными сторонами — новый подъезд (она может снимать
+    /// и ту сторону; до четвёртого круга предел был 35 м — молчание).
+    func testFarCarriagewayOfAWideAvenueWarnsAgain() {
+        let route = fixes(from: (0, -900), legs: [Leg(x: 0, y: 300, speed: 13.9),
+                                                  Leg(x: -42, y: 300, speed: 5),
+                                                  Leg(x: -42, y: -900, speed: 13.9)])
+        var drive = Drive()
+        drive.run(route, cameras: [snappedCamera(1, x: 0, y: 0, axis: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 2)
     }
 
     /// Настоящий разворот на встречную проезжую часть (12 м от оси) у камеры

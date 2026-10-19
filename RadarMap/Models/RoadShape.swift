@@ -393,12 +393,26 @@ nonisolated enum PassGeometry {
             if let extended = shape.extendedEndOffset(from: coordinate) { return extended }
         }
         guard let axis = camera.axis.map(Double.init) else { return nil }
-        let metersPerLon = 111_320.0 * cos(camera.lat * .pi / 180)
-        let x = (coordinate.longitude - camera.lon) * metersPerLon
-        let y = (coordinate.latitude - camera.lat) * 111_320.0
-        let angle = axis * .pi / 180
-        // |P × d|, d = (sin, cos) — единичный вектор оси (0° — север).
+        return lineOffset(coordinate, through: camera.coordinate, bearing: axis)
+    }
+
+    /// Боковое смещение от прямой через `origin` по направлению `bearing`
+    /// (0° — север), метры.
+    static func lineOffset(_ coordinate: CLLocationCoordinate2D, through origin: CLLocationCoordinate2D,
+                           bearing: Double) -> Double {
+        let metersPerLon = 111_320.0 * cos(origin.latitude * .pi / 180)
+        let x = (coordinate.longitude - origin.longitude) * metersPerLon
+        let y = (coordinate.latitude - origin.latitude) * 111_320.0
+        let angle = bearing * .pi / 180
+        // |P × d|, d = (sin, cos) — единичный вектор направления.
         return abs(x * cos(angle) - y * sin(angle))
+    }
+
+    /// Предел «своей дороги» для нового подъезда: ширина дороги камеры с
+    /// запасом; камере с недоказанными сторонами — и дальняя проезжая часть.
+    static func reapproachLimit(for camera: Camera) -> Double {
+        camera.sidesAreProven ? offRoadLimit(for: camera)
+                              : max(offRoadLimit(for: camera), AppConfig.reapproachUnprovenMeters)
     }
 }
 

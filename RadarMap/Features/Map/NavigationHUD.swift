@@ -54,9 +54,9 @@ struct TripSpeedCluster: View {
 
             if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
                 SpeedLimitSign(limit: limit, diameter: 46,
-                               isAssumed: env.speedLimits.isCurrentLimitAssumed)
-                    .shadow(color: over ? Theme.danger.opacity(0.9) : .black.opacity(0.3),
-                            radius: over ? 10 : 3)
+                               isAssumed: env.speedLimits.isCurrentLimitAssumed,
+                               glow: over ? Theme.danger.opacity(0.9) : .black.opacity(0.3),
+                               glowRadius: over ? 10 : 3)
                     .transition(.scale.combined(with: .opacity))
             }
         }

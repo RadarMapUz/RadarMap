@@ -3,18 +3,27 @@
 //  RadarMapWidgets
 //
 //  Live Activity: ближайшая камера на локскрине и в Dynamic Island,
-//  пока приложение свёрнуто. Тёмный «радар-детектор» стиль.
+//  пока приложение свёрнуто. Палитра А в её ночном варианте — как окно
+//  тревоги в самом приложении (до 19.10 здесь жил неоновый циан).
 //
 
 import WidgetKit
 import SwiftUI
 import ActivityKit
 
+/// Плашка всегда тёмная (и Dynamic Island чёрный), поэтому цвета — ночные
+/// значения палитры А; числа сверяет WidgetPaletteTests.
 private enum WTheme {
-    static let accent = Color(red: 0.235, green: 0.863, blue: 1.0)
-    static let camera = Color(red: 1.0, green: 0.27, blue: 0.38)
-    static let background = Color(red: 0.02, green: 0.04, blue: 0.07)
-    static let secondary = Color.white.opacity(0.62)
+    static let accent = SW.fixed(WidgetPalette.accent.dark)
+    /// Текст «камера» и полоса приближения.
+    static let camera = SW.fixed(WidgetPalette.danger.dark)
+    /// Диск под белым значком: камера / «камер рядом нет».
+    static let cameraFill = SW.fixed(WidgetPalette.dangerFill.dark)
+    static let clearFill = SW.fixed(WidgetPalette.successFill.dark)
+    static let clear = SW.fixed(WidgetPalette.success.dark)
+    static let background = SW.fixed(WidgetPalette.alertSurface)
+    static let primary = SW.fixed(WidgetPalette.primary.dark)
+    static let secondary = SW.fixed(WidgetPalette.secondary.dark)
 }
 
 /// Единицы — через каталог: плашка живёт на экране блокировки в том же
@@ -33,7 +42,7 @@ struct CameraActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CameraActivityAttributes.self) { context in
             LockScreenView(state: context.state, isStale: context.isStale)
-                .activityBackgroundTint(WTheme.background.opacity(0.85))
+                .activityBackgroundTint(WTheme.background.opacity(0.92))
                 .activitySystemActionForegroundColor(WTheme.accent)
         } dynamicIsland: { context in
             DynamicIsland {
@@ -78,7 +87,7 @@ struct CameraActivityWidget: Widget {
     private func typeIcon(_ state: CameraActivityAttributes.ContentState) -> some View {
         Image(systemName: state.nearestTitle == nil ? "checkmark.shield.fill" : state.nearestSymbol)
             .font(.system(size: 14, weight: .bold))
-            .foregroundStyle(state.nearestTitle == nil ? .green : WTheme.camera)
+            .foregroundStyle(state.nearestTitle == nil ? WTheme.clear : WTheme.camera)
     }
 }
 
@@ -105,17 +114,22 @@ private struct LockScreenView: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: state.nearestTitle == nil ? "checkmark.shield.fill" : state.nearestSymbol)
+            // Без сигнала — не красная камера: цифры под ней уже неправда,
+            // и значок говорит о GPS, а не о камере впереди.
+            Image(systemName: isStale ? "location.slash.fill"
+                  : state.nearestTitle == nil ? "checkmark.shield.fill" : state.nearestSymbol)
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 42, height: 42)
-                .background((state.nearestTitle == nil ? Color.green : WTheme.camera).gradient, in: Circle())
+                .background(isStale ? WTheme.primary.opacity(0.16)
+                            : state.nearestTitle == nil ? WTheme.clearFill : WTheme.cameraFill,
+                            in: Circle())
 
             VStack(alignment: .leading, spacing: 3) {
                 if isStale {
                     Text("Нет сигнала GPS")
                         .font(.system(.headline, design: .rounded))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(WTheme.primary)
                     Text("Откройте RadarMap, если поездка идёт")
                         .font(.system(.caption, design: .rounded))
                         .foregroundStyle(WTheme.secondary)
@@ -131,7 +145,7 @@ private struct LockScreenView: View {
                 } else {
                     Text("Камер рядом нет")
                         .font(.system(.headline, design: .rounded))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(WTheme.primary)
                 }
             }
             Spacer(minLength: 0)

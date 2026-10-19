@@ -28,6 +28,13 @@ nonisolated enum WidgetPalette {
     static let success = Pair(light: 0x177A41, dark: 0x4CC27A)
     static let warning = Pair(light: 0x9A5800, dark: 0xFFB020)
 
+    /// Заливки под белым значком (Theme.dangerFill / successFill).
+    static let dangerFill = Pair(light: 0xC62828, dark: 0xD0362C)
+    static let successFill = Pair(light: 0x177A41, dark: 0x1A7F45)
+    /// Подложка плашки поездки — графит экрана тревоги (Theme.alertSurface):
+    /// Live Activity и Dynamic Island всегда тёмные.
+    static let alertSurface: UInt32 = 0x14181D
+
     /// Подложка: верх и низ карточки (Theme.surfaceTop → surface ночью;
     /// днём — белая с едва заметным холодным низом, как панели приложения).
     static let top = Pair(light: 0xFFFFFF, dark: 0x252B33)

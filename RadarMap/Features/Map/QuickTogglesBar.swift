@@ -119,6 +119,8 @@ struct QuickTogglesBar: View {
                                  : AnyShapeStyle(Theme.background), in: Capsule())
         }
         .buttonStyle(PressableStyle())
+        // Выбранный режим виден только цветом — VoiceOver должен его слышать.
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
 }

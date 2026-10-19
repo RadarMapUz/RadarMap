@@ -10871,6 +10871,22 @@
         }
       }
     },
+    "Страница %lld из %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Страница %lld из %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld-sahifa, jami %lld"
+          }
+        }
+      }
+    },
     "Страница проекта": {
       "extractionState": "manual",
       "localizations": {

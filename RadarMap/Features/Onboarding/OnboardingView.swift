@@ -213,6 +213,11 @@ struct OnboardingView: View {
             }
         }
         .motionAnimation(Motion.standard, value: page)
+        // Точки — для глаза; VoiceOver слышит одну фразу «страница 2 из 4»,
+        // а не семь безымянных капсул (4.6).
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(String(format: String(localized: "Страница %lld из %lld"),
+                                        page + 1, lastPage + 1)))
     }
 
     // MARK: - Состояния разрешений

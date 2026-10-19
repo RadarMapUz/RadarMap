@@ -15,6 +15,11 @@ struct SpeedLimitSign: View {
     /// и со знаком «≈»: цифра без пометки читается как факт, а это догадка,
     /// и водитель имеет право видеть разницу.
     var isAssumed = false
+    /// Тень знака (в HUD — красное свечение при превышении). Ложится на
+    /// КРУГ, а не на весь знак: `.shadow` снаружи давал свою тень каждой
+    /// цифре и пересчитывался над живой картой каждый кадр (4.3).
+    var glow: Color? = nil
+    var glowRadius: CGFloat = 3
 
     /// Толщина обводки и кегль подписи масштабируются от диаметра —
     /// знак одинаково читается и в HUD (42), и в карточке проезда (44).
@@ -24,6 +29,7 @@ struct SpeedLimitSign: View {
     var body: some View {
         ZStack {
             Circle().fill(.white)
+                .shadow(color: glow ?? .clear, radius: glow == nil ? 0 : glowRadius)
             Circle()
                 .strokeBorder(Color(red: 0.85, green: 0.05, blue: 0.1),
                               style: StrokeStyle(lineWidth: borderWidth,

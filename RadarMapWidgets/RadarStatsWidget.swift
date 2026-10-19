@@ -26,6 +26,9 @@ import UIKit
 /// «Календарём», поэтому следует теме системы: белая карточка днём,
 /// графитовая ночью — как панели самого приложения.
 enum SW {
+    /// Один цвет без темы — для всегда тёмных Live Activity и Dynamic Island.
+    static func fixed(_ hex: UInt32) -> Color { Color(uiColor: rgb(hex)) }
+
     private static func color(_ pair: WidgetPalette.Pair) -> Color {
         Color(uiColor: UIColor { traits in
             rgb(traits.userInterfaceStyle == .dark ? pair.dark : pair.light)

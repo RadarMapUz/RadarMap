@@ -117,6 +117,10 @@ struct MapLayersControl: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Галочка — картинка: без признака VoiceOver читал «Места, кнопка»
+        // и включённый слой не отличался от выключенного (4.6).
+        .accessibilityAddTraits(isOn.wrappedValue ? .isSelected : [])
+        .accessibilityValue(isOn.wrappedValue ? Text("включено") : Text("выключено"))
     }
 
     /// Панель закрывается сама: открытой она занимает четверть экрана, а

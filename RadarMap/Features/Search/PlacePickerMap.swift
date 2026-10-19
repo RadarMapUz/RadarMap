@@ -178,6 +178,10 @@ struct PlacePickerMap: View {
                     .fill(Theme.accentFill)
                     .frame(width: 3, height: Self.pinStem)
             }
+            // Одна тень на всю булавку: без группы `.shadow` ложился на
+            // каждую часть (глиф, круг, ножку) и пересчитывался при каждом
+            // сдвиге карты (4.3).
+            .compositingGroup()
             .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
             // Остриё — ровно в центре карты: фигура поднята на полувысоту.
             .offset(y: -(Self.pinHead + Self.pinStem) / 2 - (isMoving ? Self.pinLift : 0))

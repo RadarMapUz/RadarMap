@@ -75,6 +75,22 @@ final class WidgetPaletteTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(contrast(0xFFFFFF, WidgetPalette.accent.light), 4.5)
     }
 
+    /// Плашка поездки (Live Activity) — ночные значения палитры: заливки
+    /// под белым значком совпадают с Theme и держат контраст, подложка — с
+    /// окном тревоги.
+    func testLiveActivityColoursAreTheNightPalette() {
+        XCTAssertEqual(WidgetPalette.dangerFill.dark, hex(Theme.dangerFill, .dark))
+        XCTAssertEqual(WidgetPalette.successFill.dark, hex(Theme.successFill, .dark))
+        XCTAssertEqual(WidgetPalette.alertSurface, hex(Theme.alertSurface, .dark))
+        for fill in [WidgetPalette.dangerFill.dark, WidgetPalette.successFill.dark] {
+            XCTAssertGreaterThanOrEqual(contrast(0xFFFFFF, fill), 4.5, "белый значок на заливке")
+        }
+        for text in [WidgetPalette.accent.dark, WidgetPalette.danger.dark,
+                     WidgetPalette.primary.dark, WidgetPalette.secondary.dark] {
+            XCTAssertGreaterThanOrEqual(contrast(text, WidgetPalette.alertSurface), 4.5)
+        }
+    }
+
     func testScoreTiersMatchTheApp() {
         for rating in 0...100 {
             XCTAssertEqual(WidgetPalette.scoreTier(rating), DrivingScore.tier(for: rating), "балл \(rating)")

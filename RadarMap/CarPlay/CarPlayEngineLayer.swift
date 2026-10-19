@@ -80,7 +80,7 @@ struct CarPlayEngineLayer: View {
             viewHeight: height, latitude: me.latitude, clear: clear,
             carY: { compact ? AppConfig.carPlayDashboardMeY : Self.meY(size: size, safe: safe, share: $0) })
         let frame = model.cameraSmoother.step(toward: target, at: Date())
-        let offlineFiles: OfflineFiles? = env.network.isOnline
+        let offlineFiles: OfflineFiles? = env.network.isMapOnline
             ? nil : env.offlineMaps.offlineFiles(at: me)
         return EngineMapView(
             coordinate: me,

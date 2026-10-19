@@ -69,6 +69,11 @@ struct CarPlayStatusChips: View {
             result.append(CarPlayChip(id: "offline", symbol: "wifi.slash",
                                       tint: Theme.warning,
                                       text: String(localized: "Нет сети — камеры работают")))
+        } else if env.network.isTileServerDown {
+            // Связь есть, сервер карты лёг (S22): «нет сети» было бы неправдой.
+            result.append(CarPlayChip(id: "offline", symbol: "server.rack",
+                                      tint: Theme.warning,
+                                      text: String(localized: "Карта не отвечает — камеры работают")))
         }
         // Жара: бюджеты уже урезаны (маркеры карты, сеть схемы) — но молча.
         if env.thermal.mode != .full {

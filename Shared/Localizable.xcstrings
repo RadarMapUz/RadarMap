@@ -5799,6 +5799,22 @@
         }
       }
     },
+    "Карта не отвечает — камеры работают": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта не отвечает — камеры работают"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita javob bermayapti — kameralar ishlaydi"
+          }
+        }
+      }
+    },
     "Карта по ходу движения": {
       "localizations": {
         "ru": {
@@ -11319,6 +11335,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Baza serveri javob bermadi"
+          }
+        }
+      }
+    },
+    "Сервер карты не отвечает — камеры предупреждают": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер карты не отвечает — камеры предупреждают"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita serveri javob bermayapti — kameralar ogohlantiradi"
+          }
+        }
+      }
+    },
+    "Сервер карты не отвечает — карта из скачанной области": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер карты не отвечает — карта из скачанной области"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita serveri javob bermayapti — xarita yuklab olingan hududdan"
           }
         }
       }

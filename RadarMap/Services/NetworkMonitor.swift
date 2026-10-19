@@ -23,6 +23,18 @@ import os
 @Observable
 final class NetworkMonitor {
     private(set) var isOnline = true   // до первого ответа считаем, что связь есть
+    /// Связь есть, а сервер карты не отвечает (S22): карта — со скачанной
+    /// области, плашка — «сервер карты недоступен». Ставит AppEnvironment по
+    /// сторожу тайлов.
+    private(set) var isTileServerDown = false
+    /// Карта может грузиться из сети: и связь, и сервер карты на месте.
+    var isMapOnline: Bool { isOnline && !isTileServerDown }
+
+    func setTileServerDown(_ down: Bool) {
+        guard isTileServerDown != down else { return }
+        isTileServerDown = down
+        Log.network.notice("сервер карты: \(down ? "недоступен" : "отвечает", privacy: .public)")
+    }
     /// Связь платная или урезанная (сотовая, режим экономии трафика). До
     /// первого ответа — да: предложить скачать сотни мегабайт по мобильной
     /// сети хуже, чем не предложить вовсе.

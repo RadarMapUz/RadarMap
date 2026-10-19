@@ -42,6 +42,8 @@ struct MapStatusBanner: View {
                 case .general:          return "offline"
                 case .downloadedRegion: return "offline:region"
                 case .noMap:            return "offline:none"
+                case .serverDown:       return "offline:server"
+                case .serverDownRegion: return "offline:server-region"
                 }
             case .overheated:          return "overheated"
             case .noSpeedLimits:       return "limits"
@@ -82,11 +84,12 @@ struct MapStatusBanner: View {
     /// Какую плашку «нет связи» показать. Координата читается только без
     /// связи: со связью плашка не должна перерисовываться на каждом GPS-тике.
     private func offlineNotice(online: Bool) -> OfflineNotice? {
-        guard !online else { return nil }
+        let serverDown = env.network.isTileServerDown
+        guard !online || serverDown else { return nil }
         let here = modernMap ? env.location.currentCoordinate : nil
         let files = here.flatMap { env.offlineMaps.offlineFiles(at: $0) }
         return OfflineNotice.resolve(online: online, modernMap: modernMap,
-                                     hasRegionFiles: files != nil)
+                                     hasRegionFiles: files != nil, serverDown: serverDown)
     }
 
     var body: some View {
@@ -136,6 +139,14 @@ struct MapStatusBanner: View {
                   title: String(localized: "Нет связи — карта не грузится, камеры предупреждают"),
                   body: nil, id: status.id,
                   action: (String(localized: "Скачать область"), { showOfflineMaps = true }))
+        case .offline(.serverDown):
+            shell(symbol: "server.rack", tint: Theme.textSecondary,
+                  title: String(localized: "Сервер карты не отвечает — камеры предупреждают"),
+                  body: nil, id: status.id)
+        case .offline(.serverDownRegion):
+            shell(symbol: "server.rack", tint: Theme.textSecondary,
+                  title: String(localized: "Сервер карты не отвечает — карта из скачанной области"),
+                  body: nil, id: status.id)
         case .overheated:
             shell(symbol: "thermometer.high", tint: Theme.warning,
                   title: String(localized: "Телефон перегрелся"),

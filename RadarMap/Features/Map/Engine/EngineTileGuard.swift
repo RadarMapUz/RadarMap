@@ -37,6 +37,39 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
 
     private static let log = Log.network
 
+    // MARK: - Здоровье сервера карты (S22)
+
+    private struct HealthState: Sendable {
+        var health = TileServerHealth()
+        var notify: (@Sendable (Bool) -> Void)?
+    }
+    private static let healthLock = OSAllocatedUnfairLock(initialState: HealthState())
+
+    /// Кому сообщать о смене «сервер карты доступен / нет» (AppEnvironment).
+    static func observeHealth(_ notify: @escaping @Sendable (Bool) -> Void) {
+        healthLock.withLock { $0.notify = notify }
+    }
+
+    /// Пробный возврат к онлайну.
+    static func resetHealthForProbe() {
+        healthLock.withLock { $0.health.resetForProbe() }
+    }
+
+    private static func noteOutcome(success: Bool) {
+        let change: (down: Bool, notify: (@Sendable (Bool) -> Void)?)? = healthLock.withLock { state in
+            let changed = success ? state.health.noteSuccess() : state.health.noteFailure(at: Date())
+            return changed ? (state.health.isDown, state.notify) : nil
+        }
+        if let change { change.notify?(change.down) }
+    }
+
+    /// Отказ, который говорит о сервере: отмена движком (ушли с экрана,
+    /// сменили масштаб) — не о нём.
+    private static func noteFailure(_ error: Error) {
+        if (error as? URLError)?.code == .cancelled { return }
+        noteOutcome(success: false)
+    }
+
     /// Своя сессия сторожа — БЕЗ URLCache, и это не микрооптимизация.
     ///
     /// Тайлы кэшировались ДВАЖДЫ: у движка своя база на 200 МБ
@@ -236,15 +269,26 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
         let own = Self.guardRequest(from: request)
         loader = Self.session.dataTask(with: own) { [weak self] data, response, error in
             guard let self else { return }
-            if let error { return self.finish(with: error) }
+            if let error {
+                Self.noteFailure(error)
+                return self.finish(with: error)
+            }
             guard let data, let response else {
+                Self.noteOutcome(success: false)
                 return self.finish(with: URLError(.badServerResponse))
             }
             // 404 и 204 — «тайла нет», и это НЕ ошибка: пирамида дырявая по
             // построению, движок такой ответ понимает и рисует пустоту.
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
             if code == 204 || code == 404 {
+                Self.noteOutcome(success: true)
                 return self.deliver(data: Data(), response: response)
+            }
+            // 5xx и прочее — сервер, а не тайл: тело ошибки не хэшировать
+            // (оно «не сходилось» и писало в журнал ложную подмену).
+            guard code == 200 else {
+                Self.noteOutcome(success: false)
+                return self.finish(with: URLError(.badServerResponse))
             }
             // Сравниваем БАЙТЫ. Прежде здесь на каждый тайл строилось
             // тридцать две строки через String(format:) и склеивалось в hex
@@ -259,6 +303,7 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
                 Self.log.error("sha256 тайла не сошёлся: \(url.path, privacy: .public)")
                 return self.finish(with: URLError(.userAuthenticationRequired))
             }
+            Self.noteOutcome(success: true)
             self.deliver(data: data, response: response)
         }
         loader?.resume()
@@ -300,6 +345,7 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
                 let (data, response) = try await Self.session.data(for: own)
                 guard !Task.isCancelled else { return }
                 guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                    Self.noteOutcome(success: false)
                     return self.finish(with: URLError(.badServerResponse))
                 }
                 let signed = SHA256.hash(data: data).withUnsafeBytes {
@@ -309,8 +355,10 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
                     Self.log.error("sha256 тайла выпуска не сошёлся: \(url.path, privacy: .public)")
                     return self.finish(with: URLError(.userAuthenticationRequired))
                 }
+                Self.noteOutcome(success: true)
                 self.deliver(data: data, response: response)
             } catch {
+                Self.noteFailure(error)
                 self.finish(with: error)
             }
         }

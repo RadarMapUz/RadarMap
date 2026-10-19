@@ -526,8 +526,10 @@ struct EngineMapView: UIViewRepresentable {
                     .draw(in: CGRect(x: 2, y: 2, width: 28, height: 28))
             }
             style.setImage(pin, forName: "radar-pin")
+            for place in EnginePlaceIcons.all { style.setImage(place.image, forName: place.name) }
             let names = ["radar-signal", EngineModernStyle.trafficLightImage, "radar-stop", "radar-flag",
                          "radar-pin", CameraMarkerLook.ghostBadge, CameraMarkerLook.ownBadge]
+                + EnginePlaceIcons.all.map(\.name)
                 + kinds.flatMap { kind in Self.markerLooks.map { kind.symbolName + $0.suffix } }
             for name in names { Self.iconCache[name] = style.image(forName: name) }
         }

@@ -251,7 +251,13 @@ final class TripStats {
                       silent: Bool = false, date: Date = Date()) {
         passed.append(PassedCamera(
             id: UUID(), cameraID: camera.id, typeRaw: camera.type,
-            location: camera.displayTitle, speedKmh: speedKmh, date: date,
+            // Отметка водителей: её подпись — «исчезнет ~14:05», и в истории,
+            // карточке «зона риска» и виджете она жила бы вечно (S6, 20.10).
+            // Пусто, а не «тип»: «зона риска» группирует по месту, и одна
+            // подпись на все отметки сложила бы город в одно «место» (ревью);
+            // экраны без места показывают тип сами.
+            location: camera.mobileConfirmed != nil ? "" : camera.displayTitle,
+            speedKmh: speedKmh, date: date,
             lat: camera.lat, lon: camera.lon, limitKmh: limitKmh,
             // Сырой лимит храним, только если он отличается от итогового:
             // повторять одно и то же число в каждой записи истории незачем.

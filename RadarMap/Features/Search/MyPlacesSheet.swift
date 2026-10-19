@@ -61,7 +61,15 @@ struct MyPlacesSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .onAppear { env.usage.noteScreen("places") }
+        .onAppear {
+            env.usage.noteScreen("places")
+            #if DEBUG
+            // Снимки экрана: сразу открыть выбор Дома на карте.
+            if ProcessInfo.processInfo.arguments.contains("-pickHome") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { pickSlot = .home }
+            }
+            #endif
+        }
         .sheet(item: $searchSlot) { slot in
             SearchView(initialAssign: slot)
         }

@@ -17,6 +17,11 @@
 //  источников в приложении нет и ради подписи не появится. Не нашлось ничего —
 //  честное «Точка на карте» с координатами.
 //
+//  Карта — наша (7.3), та же, что на главном экране: Apple-карта здесь была
+//  единственным местом с чужими подписями, домами и цветами, и дом,
+//  найденный на главной карте, выглядел тут иначе. Apple-карта осталась
+//  запасной — для сборки без движка.
+//
 
 import CoreLocation
 import MapKit
@@ -84,6 +89,10 @@ struct PlacePickerMap: View {
     /// Один геокодер на экран: CLGeocoder не любит параллельные запросы, и
     /// прежний запрос снимается, как только карту сдвинули снова.
     @State private var geocoder = CLGeocoder()
+    /// Куда смотрит наша карта, пока её не тронули, — стартовая точка.
+    /// «К себе» снимает его: камера встаёт на «я», булавка — туда, где стоим.
+    @State private var lookAt: CLLocationCoordinate2D?
+    @State private var recenterToken = 0
 
     /// Диаметр головки булавки и длина её ножки, пт.
     private static let pinHead: CGFloat = 44
@@ -99,6 +108,7 @@ struct PlacePickerMap: View {
             latitudinalMeters: AppConfig.placePickerSpanMeters,
             longitudinalMeters: AppConfig.placePickerSpanMeters)))
         _center = State(initialValue: start.coordinate)
+        _lookAt = State(initialValue: start.coordinate)
         _caption = State(initialValue: start.title.map {
             Caption.found(PinTitle(coordinate: start.coordinate, text: $0, source: .saved))
         } ?? .searching)
@@ -136,7 +146,66 @@ struct PlacePickerMap: View {
 
     // MARK: - Карта и булавка
 
-    private var map: some View {
+    @ViewBuilder private var map: some View {
+        #if canImport(MapLibre)
+        engineMap
+        #else
+        appleMap
+        #endif
+    }
+
+    #if canImport(MapLibre)
+    /// Наша карта: север вверху, без наклона, «я» — настоящее положение, а
+    /// не стартовая точка (её держит `lookAt`). Камер нет — здесь выбирают
+    /// дом, а не смотрят радары.
+    private var engineMap: some View {
+        let me = env.location.currentCoordinate
+        return EngineMapView(
+            coordinate: me ?? center,
+            courseDegrees: env.location.displayCourse,
+            spanMeters: AppConfig.placePickerSpanMeters,
+            anchorY: 0.5,
+            pitchDegrees: 0,
+            daylight: env.interfaceIsDaylight,
+            houses: env.settings.mapHouses,
+            cameras: [],
+            route: [],
+            recenterToken: recenterToken,
+            modernStyle: env.settings.mapModernStyle,
+            performance: env.thermal.mode,
+            lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled,
+            northUp: true,
+            offline: env.network.isMapOnline ? nil : env.offlineMaps.offlineFiles(at: center),
+            places: env.settings.mapPlaces,
+            labelLanguage: env.settings.appLanguage.mapCode,
+            cursorStyle: env.settings.cursorStyle,
+            onRegion: { settle(at: $0.center) },
+            onGesture: { if !isMoving { isMoving = true } },
+            lookAt: lookAt,
+            showsPosition: me != nil)
+            .overlay(alignment: .bottomTrailing) { locateButton }
+    }
+
+    /// «К себе» — камера встаёт на «я», булавка — на место, где стоим. Нет
+    /// положения — нет и кнопки: вести её некуда.
+    @ViewBuilder private var locateButton: some View {
+        if env.location.currentCoordinate != nil {
+            Button {
+                lookAt = nil
+                recenterToken += 1
+            } label: {
+                Image(systemName: "location.fill")
+                    .font(.rounded(17, .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .controlCircle()
+            }
+            .buttonStyle(PressableStyle())
+            .padding(16)
+            .accessibilityLabel(Text("Моё местоположение"))
+        }
+    }
+    #else
+    private var appleMap: some View {
         Map(position: $position) {
             UserAnnotation()
         }
@@ -149,15 +218,20 @@ struct PlacePickerMap: View {
             if !isMoving { isMoving = true }
         }
         .onMapCameraChange(frequency: .onEnd) { context in
-            isMoving = false
-            let point = context.region.center
-            // Карта отдаёт остановку и на первой раскладке — с той же точкой.
-            // Подпись для неё уже есть (или ищется), второй запрос не нужен.
-            if GeoMath.fastDistance(point.latitude, point.longitude,
-                                    center.latitude, center.longitude) < 1 { return }
-            center = point
-            scheduleLookup(delay: AppConfig.placePickerLookupDelay)
+            settle(at: context.region.center)
         }
+    }
+    #endif
+
+    /// Карта остановилась: булавка опускается, подпись ищется для новой точки.
+    private func settle(at point: CLLocationCoordinate2D) {
+        isMoving = false
+        // Карта отдаёт остановку и на первой раскладке — с той же точкой.
+        // Подпись для неё уже есть (или ищется), второй запрос не нужен.
+        if GeoMath.fastDistance(point.latitude, point.longitude,
+                                center.latitude, center.longitude) < 1 { return }
+        center = point
+        scheduleLookup(delay: AppConfig.placePickerLookupDelay)
     }
 
     private var pin: some View {

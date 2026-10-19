@@ -508,6 +508,14 @@ final class AppSettings {
     var adaptiveGPS: Bool { didSet { store.set(adaptiveGPS, forKey: Keys.adaptive) } }
     var showNextCamera: Bool { didSet { store.set(showNextCamera, forKey: Keys.nextCamera) } }
     var weeklyDigest: Bool { didSet { store.set(weeklyDigest, forKey: Keys.digest) } }
+    /// «Выезжайте раньше» (8.8.7): напоминание по будням, когда выезд в другое
+    /// время выгоднее или нужен к сроку. Выключено, пока человек не попросит:
+    /// уведомление о распорядке дня без спроса — навязчиво.
+    var departureReminders: Bool { didSet { store.set(departureReminders, forKey: Keys.departureReminders) } }
+    /// Предложение «Напоминать по будням» в «Итогах» уже было — второй раз не показываем.
+    var departureRemindersAsked: Bool {
+        didSet { store.set(departureRemindersAsked, forKey: Keys.departureRemindersAsked) }
+    }
     var recentPlaces: [SavedPlace] { didSet { saveRecents() } }
     /// «Избранное» в «Моих местах» (7.2): свои места с именем — дача, школа,
     /// мама. Звезда на кнопке «Мои места» это обещала, а внутри были только
@@ -674,6 +682,8 @@ final class AppSettings {
         static let work = "workPlace"
         static let workTarget = "workArrivalTarget"
         static let workTargetAsked = "workTargetAsked"
+        static let departureReminders = "departureReminders"
+        static let departureRemindersAsked = "departureRemindersAsked"
         static let alternatives = "routeAlternatives"
         static let personalRoutes = "personalRoutes"
         static let timedTrack = "recordTimedTrack"
@@ -777,6 +787,8 @@ final class AppSettings {
         homePlace = Self.load(store, Keys.home)
         workArrivalTarget = Self.loadArrivalTarget(store)
         workTargetAsked = store.bool(forKey: Keys.workTargetAsked)
+        departureReminders = store.bool(forKey: Keys.departureReminders)
+        departureRemindersAsked = store.bool(forKey: Keys.departureRemindersAsked)
         workPlace = Self.load(store, Keys.work)
         routeAlternatives = store.bool(forKey: Keys.alternatives)
         personalRoutes = store.bool(forKey: Keys.personalRoutes)

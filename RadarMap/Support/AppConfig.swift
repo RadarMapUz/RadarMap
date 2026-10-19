@@ -714,6 +714,18 @@ nonisolated enum AppConfig {
     nonisolated static let commuteEstimateMaxAgeSeconds: TimeInterval = 20 * 60
     /// Строка «Домой/На работу» на экране — проверка, не пора ли пересчитать, с.
     nonisolated static let commuteEstimateTickSeconds: TimeInterval = 120
+
+    // MARK: «Выезжайте раньше» (план 19.10, 8.8.7)
+
+    /// Напоминание — за столько минут до выгодного выезда.
+    nonisolated static let departureReminderLeadMinutes = 10
+    /// Запас к сроку «быть к 9:00» сверх обычного времени в пути, мин.
+    nonisolated static let departureReminderMarginMinutes = 5
+    /// На сколько дней вперёд стоят напоминания (перепланируются при каждом
+    /// пересчёте «дороги»; лимит iOS — 64 ожидающих уведомления на приложение).
+    nonisolated static let departureReminderDays = 7
+    /// Столько дней без поездки на работу — отпуск: напоминаний нет.
+    nonisolated static let departureReminderVacationDays = 10
     /// Поездка — «дорога на работу», если началась не дальше 1 км от дома
     /// (и наоборот): автостарт CoreMotion срабатывает уже на ходу.
     nonisolated static let commuteGhostStartRadiusMeters: Double = 1000

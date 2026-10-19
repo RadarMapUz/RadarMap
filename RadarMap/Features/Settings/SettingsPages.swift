@@ -442,6 +442,11 @@ struct LearningSettingsPage: View {
                     .onChange(of: settings.commuteLearning) { _, _ in
                         env.commuteLearningChanged()
                     }
+                // «Выезжайте раньше»: только когда выгоднее выехать в другое
+                // время или нужен срок — обычное «пора ехать» не шлём.
+                Toggle("Когда выезжать на работу", isOn: Binding(
+                    get: { settings.departureReminders },
+                    set: { env.setDepartureReminders($0) }))
                 // Выключенная настройка не должна оставлять данные лежать:
                 // человек выключил подсказки — значит и списку мест на
                 // диске взяться неоткуда.

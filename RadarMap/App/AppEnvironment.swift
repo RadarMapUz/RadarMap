@@ -270,6 +270,11 @@ final class AppEnvironment {
             if active { self.traffic.tripStarted() } else { self.traffic.tripEnded() }
             self.commuteGhostPending = active
             if active { self.tryStartCommuteGhost() } else { self.commuteLive.stop() }
+            // Уже едем — сегодняшнее «пора выезжать» не нужно.
+            if active, let today = self.scheduledReminders?.first,
+               Calendar.current.isDateInToday(today.fire) {
+                self.notifications.cancelDepartureReminder(id: today.id)
+            }
             self.refreshTrafficWanted()
             if !active, !self.isPhoneSceneActive, !self.isCarPlayConnected {
                 self.mobile.stopPolling()
@@ -776,6 +781,15 @@ final class AppEnvironment {
                           workday: target?.applies(on: startedAt) ?? false)
     }
 
+    /// Включили или выключили «Выезжайте раньше» — в настройках или из
+    /// предложения в «Итогах». Включение спрашивает разрешение на уведомления.
+    func setDepartureReminders(_ on: Bool) {
+        settings.departureRemindersAsked = true
+        if settings.departureReminders != on { settings.departureReminders = on }
+        if on { notifications.requestAuthorization() }
+        refreshDepartureReminders()
+    }
+
     /// Выключили «Время дороги на работу» посреди поездки — призрак гаснет
     /// сразу, а не на финише.
     func commuteLearningChanged() {
@@ -822,6 +836,27 @@ final class AppEnvironment {
         // сменились — «сейчас ~44 мин» пересчитывается тут же (ключ решит,
         // есть ли что).
         refreshDepartureEstimates()
+        refreshDepartureReminders()
+    }
+
+    /// Напоминать есть о чём (выгодный выезд или срок) — для предложения в «Итогах».
+    private(set) var departureReminderAvailable = false
+
+    /// Последний поставленный план «Выезжайте раньше»: переставляем только
+    /// при изменении — не трогаем центр уведомлений на каждом пересчёте.
+    @ObservationIgnored private var scheduledReminders: [DepartureReminder.Reminder]?
+
+    /// «Выезжайте раньше» (8.8.7): по будням за 10 мин до выгодного выезда —
+    /// из своей истории, без сервера. Выключено — снимаем всё поставленное.
+    func refreshDepartureReminders(now: Date = Date()) {
+        let candidate = DepartureReminder.plan(summary: commute.first { $0.direction == .toWork },
+                                               target: settings.workArrivalTarget, now: now)
+        // Есть что напомнить — предложение в «Итогах» имеет смысл.
+        if departureReminderAvailable != !candidate.isEmpty { departureReminderAvailable = !candidate.isEmpty }
+        let plan = settings.departureReminders ? candidate : []
+        guard plan != scheduledReminders else { return }
+        scheduledReminders = plan
+        notifications.scheduleDepartureReminders(plan)
     }
 
     #if DEBUG

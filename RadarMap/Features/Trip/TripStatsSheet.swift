@@ -1179,6 +1179,10 @@ struct TripStatsSheet: View {
                         env.settings.workTargetAsked = true
                         if yes { env.settings.workArrivalTarget = ArrivalTarget(minute: minute) }
                     }
+                } else if commute.direction == .toWork, env.departureReminderAvailable,
+                          !env.settings.departureReminders, !env.settings.departureRemindersAsked {
+                    // «Выезжайте раньше» — предложением и один раз (8.8.7).
+                    DepartureReminderOffer { env.setDepartureReminders($0) }
                 }
             }
         }

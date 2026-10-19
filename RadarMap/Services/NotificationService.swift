@@ -8,6 +8,7 @@
 
 import Foundation
 import UserNotifications
+import os
 import Observation
 import UIKit
 
@@ -202,6 +203,39 @@ final class NotificationService: NSObject {
     func cancelWeeklyDigest() {
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: [Self.digestID])
+    }
+
+    // MARK: - «Выезжайте раньше» (8.8.7)
+
+    /// Заменить запланированные напоминания о выезде новыми: старые с
+    /// префиксом `departure-` снимаются целиком (дни и тексты могли
+    /// измениться), новые ставятся одним разом. Пустой список — снять все.
+    func scheduleDepartureReminders(_ reminders: [DepartureReminder.Reminder]) {
+        let center = UNUserNotificationCenter.current()
+        Task {
+            let pending = await center.pendingNotificationRequests()
+            center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier)
+                .filter { $0.hasPrefix(DepartureReminder.idPrefix) })
+            for reminder in reminders {
+                let content = UNMutableNotificationContent()
+                content.title = String(localized: "Пора выезжать на работу")
+                content.body = reminder.body
+                content.sound = .default
+                let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reminder.fire)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
+                do {
+                    try await center.add(UNNotificationRequest(identifier: reminder.id, content: content,
+                                                               trigger: trigger))
+                } catch {
+                    Log.app.error("напоминание о выезде не поставлено: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+        }
+    }
+
+    /// Уже едем — сегодняшнее напоминание не нужно.
+    func cancelDepartureReminder(id: String) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
     }
 
     // MARK: - Приближение к камере (фон)

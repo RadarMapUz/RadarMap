@@ -34,4 +34,14 @@ final class MapFrameStateTests: XCTestCase {
         let insets = MapFrameState.insets(viewHeight: 800, panelTop: 160, panelBottom: 0)
         XCTAssertEqual(insets.bottom, 0)
     }
+
+    /// Карточка предупреждения о камере в навигации поднимает нижнюю кромку
+    /// карты: «я» и камера над ней, а не под ней (ревью 19.10).
+    func testAlertCardRaisesTheBottomEdge() {
+        XCTAssertEqual(MapFrameState.bottomEdge(panel: 700, overlay: nil), 700)
+        XCTAssertEqual(MapFrameState.bottomEdge(panel: 700, overlay: 480), 480)
+        XCTAssertEqual(MapFrameState.bottomEdge(panel: 700, overlay: 760), 700, "ниже панели — панель")
+        XCTAssertEqual(MapFrameState.bottomEdge(panel: 0, overlay: 480), 480, "панель ещё не мерили")
+        XCTAssertEqual(MapFrameState.bottomEdge(panel: 700, overlay: 0), 700)
+    }
 }

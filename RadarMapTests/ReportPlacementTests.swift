@@ -48,6 +48,21 @@ final class ReportPlacementTests: XCTestCase {
         let placed = ReportPlacement.snapped(raw, course: 0,
                                              roads: network.roads(near: raw, radius: 60), maxMeters: 60)
         XCTAssertEqual(placed?.coordinate.longitude ?? 0, 69.250, accuracy: 1e-6)
+
+        // Тайлы есть, но двора водителя в них нет (дворы не качаем): объединение
+        // с индексом лимитов сажает на свою улицу, а не на соседний проспект.
+        let avenue = RoadLine(points: [CLLocationCoordinate2D(latitude: 41.30, longitude: 69.2509),
+                                       CLLocationCoordinate2D(latitude: 41.32, longitude: 69.2509)],
+                              kind: .primary)
+        // «Первичный, иначе запасной» видел бы только проспект и сажал туда.
+        let primaryOnly = FallbackRoadNetwork(primary: Lines(lines: [avenue]), fallback: Lines(lines: [limitLine]))
+        let wrong = ReportPlacement.snapped(raw, course: 0,
+                                            roads: primaryOnly.roads(near: raw, radius: 60), maxMeters: 60)
+        XCTAssertEqual(wrong?.coordinate.longitude ?? 0, 69.2509, accuracy: 1e-6)
+        let union = UnionRoadNetwork(sources: [Lines(lines: [avenue]), Lines(lines: [limitLine])])
+        let own = ReportPlacement.snapped(raw, course: 0,
+                                          roads: union.roads(near: raw, radius: 60), maxMeters: 60)
+        XCTAssertEqual(own?.coordinate.longitude ?? 0, 69.250, accuracy: 1e-6)
     }
 
     func testRoadAlongCourseBeatsACloserCrossStreet() {

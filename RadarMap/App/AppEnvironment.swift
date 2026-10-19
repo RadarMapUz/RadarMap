@@ -245,9 +245,11 @@ final class AppEnvironment {
             // Улицы вокруг машины — для посадки «Радар!» на дорогу и схемы
             // развязки в CarPlay. После удаления схемы приборки (11.10)
             // ensureCoverage не звал никто, сеть была пустой, и отметки уходили
-            // сырой координатой водителя (аудит 19.10). Только в поездке или с
-            // машиной; гейт внутри — дёшево, пока окрестность та же.
-            if let self, location?.isTripActive == true || self.isCarPlayConnected {
+            // сырой координатой водителя (аудит 19.10). В поездке, с машиной
+            // или когда похоже, что едем без поездки («Радар!» доступен и так);
+            // гейт внутри — дёшево, пока окрестность та же.
+            if let self, let location,
+               location.isTripActive || location.isProbablyDriving || self.isCarPlayConnected {
                 self.roads.ensureCoverage(around: coordinate)
             }
             traffic?.note(coordinate, speedKmh: location?.speedKmh ?? -1)

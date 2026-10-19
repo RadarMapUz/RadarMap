@@ -48,6 +48,9 @@ struct ApproachAlertView: View {
     let relativeBearing: Double?
     let alertRadius: Double
     var layout: Layout = .fullScreen
+    /// Верхняя кромка нижней карточки в пунктах окна (nil — карточки нет):
+    /// карта поднимает «я» и камеру над ней (MapFrameState).
+    var onCardEdge: (CGFloat?) -> Void = { _ in }
     let onDismiss: () -> Void
 
     @State private var pulse = false
@@ -86,17 +89,15 @@ struct ApproachAlertView: View {
                 detailsRow
                     .padding(.top, 36)
                 Spacer(minLength: 12)
-                // Место под кнопки внизу (они лежат отдельным слоем).
-                Color.clear.frame(height: 110)
+                // Место под кнопки внизу (они лежат отдельным слоем):
+                // 56 кнопки + 10 + 44 «Скрыть» + 4 — с запасом.
+                Color.clear.frame(height: 122)
             }
             .padding(.horizontal, 24)
-            // VoiceOver: сведения — одна фраза + действие «скрыть»; кнопки ниже
-            // остаются отдельными элементами.
+            // VoiceOver: сведения — одна фраза; скрыть — только кнопкой
+            // «Скрыть», как и касанием (случайная активация не убирает окно).
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilitySummary)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityHint(Text("Нажмите, чтобы скрыть"))
-            .accessibilityAction { onDismiss() }
 
             VStack(spacing: 10) {
                 Spacer()
@@ -178,6 +179,8 @@ struct ApproachAlertView: View {
             }
             .contentShape(Rectangle())
             .onTapGesture {}
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { onCardEdge($0) }
+            .onDisappear { onCardEdge(nil) }
         }
         .environment(\.colorScheme, .dark)
         .transition(.move(edge: .bottom).combined(with: .opacity))

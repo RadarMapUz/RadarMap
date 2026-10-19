@@ -106,6 +106,20 @@ nonisolated struct FallbackRoadNetwork: RoadNetworkSource {
     }
 }
 
+/// Все источники сразу. Для посадки отметки: тайлы улиц не везут дворовые
+/// проезды, и непустой ответ тайлов ещё не значит, что дорога водителя в нём
+/// есть, — тогда «первичный, иначе запасной» посадил бы отметку на соседний
+/// проспект. Посадке дубли осей не мешают (берётся ближайшая по курсу), а
+/// рисовать объединение нельзя — линии легли бы двойными.
+nonisolated struct UnionRoadNetwork: RoadNetworkSource {
+    let sources: [any RoadNetworkSource]
+
+    func roads(near coordinate: CLLocationCoordinate2D,
+               radius: CLLocationDistance) -> [RoadLine] {
+        sources.flatMap { $0.roads(near: coordinate, radius: radius) }
+    }
+}
+
 /// Кэш окрестности поверх любого источника.
 ///
 /// Сеть вокруг машины меняется на сотнях метров пути, а спрашивают её на

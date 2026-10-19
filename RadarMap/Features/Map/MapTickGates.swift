@@ -38,6 +38,7 @@ struct OverspeedVignetteGate: View {
 struct ApproachOverlayGate: View {
     @Environment(AppEnvironment.self) private var env
     @Binding var dismissedID: Int?
+    var onCardEdge: (CGFloat?) -> Void = { _ in }
 
     var body: some View {
         ZStack {
@@ -56,7 +57,11 @@ struct ApproachOverlayGate: View {
                     // 794 (130 км/ч). Одиннадцать секунд экран говорил «ещё
                     // далеко» про камеру, о которой уже сказал голос.
                     alertRadius: env.location.effectiveAlertRadius,
-                    layout: .choose(navigating: env.route.isActive && env.location.isTripActive),
+                    // То же правило, что у баннера манёвра (ManeuverBannerGate):
+                    // карточка — ровно когда манёвр на экране.
+                    layout: .choose(navigating: MapMode.current(isTripActive: env.location.isTripActive,
+                                                                hasRoute: env.route.isActive).showsManeuver),
+                    onCardEdge: onCardEdge,
                     onDismiss: { dismissedID = camera.id }
                 )
                 // Экран тревоги тёмный при любой теме: на полностью затемнённой

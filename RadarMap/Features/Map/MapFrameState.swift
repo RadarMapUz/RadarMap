@@ -54,6 +54,13 @@ final class MapFrameState {
     /// Поля по замерам. Ноль снизу — «ещё не мерили», а не «панель во весь
     /// экран»: до первого замера поле обязано быть пустым, иначе первый же
     /// кадр сожмётся в треть экрана. Без высоты вида полей нет вовсе.
+    /// Нижняя кромка, над которой карта держит «я»: выше из нижней стопки
+    /// панелей и карточки предупреждения о камере. 0 у панели — «не мерили».
+    nonisolated static func bottomEdge(panel: CGFloat, overlay: CGFloat?) -> CGFloat {
+        guard let overlay, overlay > 0 else { return panel }
+        return panel > 0 ? min(panel, overlay) : overlay
+    }
+
     nonisolated static func insets(viewHeight: CGFloat, panelTop: CGFloat,
                                    panelBottom: CGFloat) -> RoadSketch.Insets {
         guard viewHeight > 0 else { return .none }

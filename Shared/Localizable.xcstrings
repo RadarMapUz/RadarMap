@@ -6020,22 +6020,6 @@
         }
       }
     },
-    "Нажмите, чтобы скрыть": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Нажмите, чтобы скрыть"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yashirish uchun bosing"
-          }
-        }
-      }
-    },
     "Название (необязательно)": {
       "localizations": {
         "ru": {

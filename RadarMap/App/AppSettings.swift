@@ -336,20 +336,20 @@ enum AlertProfile: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Значения, которые профиль проставляет. `nil` — не трогать (свой профиль).
-    var applied: (voice: VoiceMode, mode: AlertMode)? {
+    /// Значения, которые профиль проставляет. `nil` — не трогать (свой профиль);
+    /// `mode == nil` — режим контекста не трогать: «Тихий» — это только голос,
+    /// и выбор «Город» обязан пережить «Тихий» туда-обратно (до 19.10 он
+    /// сбрасывался в «Авто», а глушилка — нет: одно намерение, два исхода).
+    var applied: (voice: VoiceMode, mode: AlertMode?)? {
         switch self {
         case .auto:    return (.smart, .auto)
         case .city:    return (.smart, .city)
         case .highway: return (.smart, .highway)
-        case .quiet:   return (.off, .auto)
+        case .quiet:   return (.off, nil)
         case .custom:  return nil
         }
     }
 
-    /// Какой профиль соответствует уже сохранённым настройкам — для переезда
-    /// со старой версии. Всё, что не ложится в готовый профиль, становится
-    /// «Своим»: привычка пользователя важнее стройности списка.
     /// Профиль после того, как голос или режим поменяли НЕ через профиль:
     /// глушилка, чипы голоса на карте, кнопка звука в машине. До 19.10
     /// профиль оставался прежним, и корень настроек писал «Авто», пока
@@ -358,12 +358,14 @@ enum AlertProfile: String, CaseIterable, Identifiable {
     /// посреди правки спрятал бы сами переключатели.
     static func following(_ current: AlertProfile, voice: VoiceMode, mode: AlertMode) -> AlertProfile {
         if current == .custom { return .custom }
-        if let applied = current.applied, applied.voice == voice, applied.mode == mode { return current }
         // «Тихий» — это голос выключен; режим контекста ему безразличен.
-        if current == .quiet, voice == .off { return .quiet }
+        if let applied = current.applied, applied.voice == voice, applied.mode ?? mode == mode { return current }
         return matching(voice: voice, mode: mode)
     }
 
+    /// Какой профиль соответствует уже сохранённым настройкам — для переезда
+    /// со старой версии. Всё, что не ложится в готовый профиль, становится
+    /// «Своим»: привычка пользователя важнее стройности списка.
     static func matching(voice: VoiceMode, mode: AlertMode) -> AlertProfile {
         if voice == .off { return .quiet }
         guard voice == .smart else { return .custom }
@@ -555,7 +557,7 @@ final class AppSettings {
             applyingProfile = true
             defer { applyingProfile = false }
             if voiceMode != applied.voice { voiceMode = applied.voice }
-            if alertMode != applied.mode { alertMode = applied.mode }
+            if let mode = applied.mode, alertMode != mode { alertMode = mode }
         }
     }
     /// Профиль сейчас сам проставляет голос и режим: промежуточное сочетание

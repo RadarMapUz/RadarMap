@@ -27,6 +27,8 @@ struct MapScreen: View {
     /// Меряют сами панели; схема переводит их в доли своей высоты.
     @State private var topPanelEdge: CGFloat = 0
     @State private var bottomPanelEdge: CGFloat = 0
+    /// Верх нижней карточки предупреждения о камере (в навигации), nil — нет.
+    @State private var alertCardEdge: CGFloat?
     /// Сколько кнопок помещается в колонку справа (TripScreenLayout.columnSlots).
     /// Отдельно от кромок и только при смене: кромки body не читает, а это
     /// число — читает, и писать его на каждый пиксель высоты панели значило
@@ -318,11 +320,19 @@ struct MapScreen: View {
                                 ? .bottomCard : .fullScreen,
                               onDismiss: {})
         } else {
-            ApproachOverlayGate(dismissedID: $dismissedApproachID)
+            ApproachOverlayGate(dismissedID: $dismissedApproachID, onCardEdge: setAlertCardEdge)
         }
         #else
-        ApproachOverlayGate(dismissedID: $dismissedApproachID)
+        ApproachOverlayGate(dismissedID: $dismissedApproachID, onCardEdge: setAlertCardEdge)
         #endif
+    }
+
+    /// Карточка предупреждения закрывает низ карты — «я» и камера встают
+    /// над ней, а не под ней (ревью 19.10).
+    private func setAlertCardEdge(_ edge: CGFloat?) {
+        guard edge != alertCardEdge else { return }
+        alertCardEdge = edge
+        applySketchInsets()
     }
 
     // MARK: - Карта
@@ -349,7 +359,8 @@ struct MapScreen: View {
     /// Одной точкой, а не двумя вызовами из двух замеров: поля приходят
     /// парой, и половина пары — это неверная проекция на один кадр.
     private func applySketchInsets() {
-        frame.setPanelEdges(top: topPanelEdge, bottom: bottomPanelEdge)
+        frame.setPanelEdges(top: topPanelEdge,
+                            bottom: MapFrameState.bottomEdge(panel: bottomPanelEdge, overlay: alertCardEdge))
     }
 
     /// Подложка экрана: своя схема или карта Apple.

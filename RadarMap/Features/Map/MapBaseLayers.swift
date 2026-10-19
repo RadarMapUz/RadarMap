@@ -99,8 +99,12 @@ struct EngineBaseLayer: View {
                         places: env.settings.mapPlaces,
                         driving: env.location.isTripActive,
                         // Хранимый флаг: меняется на въезде и выезде из зоны
-                        // камеры, а не на каждом фиксе.
-                        covered: env.location.isApproachingCamera,
+                        // камеры, а не на каждом фиксе. Накрыта карта только
+                        // полноэкранным окном: в навигации предупреждение —
+                        // карточка снизу, и карта с манёвром видна (19.10).
+                        covered: env.location.isApproachingCamera
+                            && !MapMode.current(isTripActive: env.location.isTripActive,
+                                                hasRoute: env.route.isActive).showsManeuver,
                         // В поездке на ходу — только дорога (как в машине).
                         declutter: env.location.isTripActive
                             && map.declutter.update(speedKmh: env.location.speedKmh, at: Date()),

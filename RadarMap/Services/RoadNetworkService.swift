@@ -55,9 +55,14 @@ final class RoadNetworkService {
     /// новая окрестность): индекс лимитов. Ставит AppEnvironment.
     @ObservationIgnored var fallbackSource: (() -> (any RoadNetworkSource)?)?
     /// Проезжие оси вокруг точки: тайлы, где они есть, иначе индекс лимитов.
-    /// Для посадки отметки «Радар!» и схемы развязки в машине.
+    /// Для схемы развязки в машине (рисуется — дублей быть не должно).
     var vehicleNetwork: any RoadNetworkSource {
         FallbackRoadNetwork(primary: network, fallback: fallbackSource?() ?? EmptyRoadNetwork())
+    }
+    /// Для посадки отметки «Радар!»: тайлы И индекс лимитов вместе (см.
+    /// UnionRoadNetwork — дворов в тайлах улиц нет).
+    var reportNetwork: any RoadNetworkSource {
+        UnionRoadNetwork(sources: [network, fallbackSource?() ?? EmptyRoadNetwork()])
     }
     /// Костяк района: раздельные проезжие сведены в одну ось, мелочи нет.
     /// Пустой на старом формате — вызывающий тогда берёт обычную сеть.

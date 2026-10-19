@@ -148,6 +148,60 @@ nonisolated enum LocationGates {
                          to: camera.coordinate)
             .along >= -AppConfig.corridorBehindToleranceMeters
     }
+
+    /// Камера ЯВНО позади: едем с достоверным курсом, и она за спиной дальше
+    /// `alertPassedBehindMeters`. Не глушит ничего (позади и так не звучит) —
+    /// только говорит движку, что подъезд к ней закончен, и следующий
+    /// (после разворота или круга) — новый. Без курса — false: по случайному
+    /// курсу стоящей машины «проехали» не решается.
+    static func isClearlyBehind(_ camera: Camera, in situation: Situation) -> Bool {
+        guard isFilteringActive(situation) else { return false }
+        return RoadCorridor.fix(from: situation.coordinate, course: situation.course,
+                                to: camera.coordinate).along < -AppConfig.alertPassedBehindMeters
+    }
+
+    /// Камера ЯВНО впереди: тот же порог в другую сторону. Новый подъезд к
+    /// проеханной камере — только так; камера маршрута, которую остаток по
+    /// маршруту ещё держит «0 м» за спиной, впереди не оказывается (ревью 20.10:
+    /// иначе после каждой камеры на маршруте звучало второе «0 метров»).
+    static func isClearlyAhead(_ camera: Camera, in situation: Situation) -> Bool {
+        guard isFilteringActive(situation) else { return false }
+        return RoadCorridor.fix(from: situation.coordinate, course: situation.course,
+                                to: camera.coordinate).along > AppConfig.alertPassedAheadMeters
+    }
+
+    /// Новый подъезд к проеханной камере: она явно впереди, И проходит гейт
+    /// «наша дорога», И едем не ползком, И мы на СВОЕЙ дороге камеры — сбоку
+    /// от её куска или от прямой по её оси не дальше её ширины с запасом.
+    /// Одного «впереди по курсу» мало — на параллельной улице в 250 м, на
+    /// развязке-клевере и на парковке у дороги курс тоже смотрит на камеру
+    /// (ревью 20.10). Без куска и оси (свои, краудсорс) решает коридор.
+    static func isReapproach(_ camera: Camera, in situation: Situation) -> Bool {
+        guard situation.speedKmh >= AppConfig.voiceMinSpeedKmh,
+              isClearlyAhead(camera, in: situation),
+              isOnOurRoad(camera, in: situation, isOnRoute: false) else { return false }
+        guard let offset = PassGeometry.ownRoadOffset(camera: camera, at: situation.coordinate) else {
+            return true
+        }
+        return offset <= PassGeometry.offRoadLimit(for: camera)
+    }
+
+    /// Кандидат в ближайшие: по маршруту — остаток вдоль него и признак «на
+    /// маршруте» для гейта; камера, уехавшая назад по маршруту дальше допуска,
+    /// — уже не маршрутная: в движении она снова «как все» (по прямой и через
+    /// гейты — маршрут с разворотом проходит её второй раз), стоя — не
+    /// кандидат вовсе, как и раньше. nil — не кандидат.
+    /// `announced` — о камере уже сказали: такая, уехавшая назад по
+    /// маршруту, кандидатом не становится, пока движок не забудет серию
+    /// (проехали → новый подъезд): иначе проеханная камера после разворота
+    /// у самой камеры заслоняла бы следующую камеру маршрута (ревью 20.10).
+    static func candidateDistance(straight: CLLocationDistance, routeRemaining: CLLocationDistance?,
+                                  announced: Bool,
+                                  in situation: Situation) -> (distance: CLLocationDistance, onRoute: Bool)? {
+        guard let routeRemaining else { return (straight, false) }
+        if routeRemaining > -AppConfig.routePassedToleranceMeters { return (max(0, routeRemaining), true) }
+        return isFilteringActive(situation) && !announced ? (straight, false) : nil
+    }
 }
 
 /// Входы в геозоны до загрузки базы камер (сценарий S3, 20.10): по одному на

@@ -1,0 +1,462 @@
+//
+//  ScenarioDriveTests.swift
+//  RadarMapTests
+//
+//  Сценарии поездки до релиза (план 19.10, этап 12в): маршрут целиком
+//  проходит через НАСТОЯЩИЙ конвейер, как в LocationService на каждом фиксе —
+//  LocationFilter → LocationGates (наша ли дорога, впереди ли) → ближайшая
+//  уцелевшая → AlertEngine; проеханные камеры помечаются тем же
+//  `notePassed`, что и в сервисе. Утверждения — про то, что слышит водитель:
+//  сколько раз о камере предупредили С НАЧАЛА (`isFirst`).
+//
+//  Каждый найденный по сценарию баг остаётся здесь тестом, который его
+//  воспроизводит: разворот за камерой (A6) — первый из них.
+//
+
+import CoreLocation
+import XCTest
+@testable import RadarMap
+
+final class ScenarioDriveTests: XCTestCase {
+
+    // MARK: - Стенд
+
+    /// Маршрут для стенда: ломаная в метрах; у камеры — одна позиция вдоль
+    /// него (ближайший отрезок, первый при равенстве — как
+    /// RouteService.camerasAlong), прогресс — проекция в окне у прошлого
+    /// прогресса и с отставанием на фикс (сервис обновляет его после выбора
+    /// ближайшей камеры).
+    private struct RouteModel {
+        let points: [(x: Double, y: Double)]
+
+        func project(_ p: (x: Double, y: Double), near: Double? = nil) -> (along: Double, offset: Double) {
+            var best = (along: 0.0, offset: Double.infinity)
+            var cumulative = 0.0
+            for (a, b) in zip(points, points.dropFirst()) {
+                let dx = b.x - a.x, dy = b.y - a.y
+                let len = (dx * dx + dy * dy).squareRoot()
+                let t = len > 0 ? max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (len * len))) : 0
+                let qx = a.x + dx * t, qy = a.y + dy * t
+                let offset = ((p.x - qx) * (p.x - qx) + (p.y - qy) * (p.y - qy)).squareRoot()
+                let along = cumulative + t * len
+                cumulative += len
+                if let near, along < near - 50 || along > near + 500 { continue }
+                // При равенстве — дальше по маршруту (как штраф «против хода» у
+                // сервиса): обратная нога не проецируется на прямую.
+                if offset < best.offset - 0.01
+                    || (abs(offset - best.offset) <= 0.01 && near != nil && along > best.along) {
+                    best = (along, offset)
+                }
+            }
+            return best
+        }
+    }
+
+    /// Тот же порядок решений, что в LocationService на каждом фиксе:
+    /// фильтр → (о ком сказали: траверз, «явно позади») → кандидаты
+    /// (LocationGates.candidateDistance: маршрут или прямая) → первая «наша»
+    /// (LocationGates.isOnOurRoad) → AlertEngine.
+    private struct Drive {
+        var filter = LocationFilter()
+        var engine = AlertEngine()
+        var route: RouteModel?
+        /// Камера → сколько раз о ней предупредили с начала (новый подъезд).
+        private(set) var firstAlerts: [Int: Int] = [:]
+        /// Где прозвучало каждое «первое» (x, y в метрах).
+        private(set) var firstAlertPoints: [Int: [(x: Double, y: Double)]] = [:]
+        private(set) var rejected = 0
+        private var progress: Double?
+
+        mutating func run(_ fixes: [LocationFilter.Fix], cameras: [Camera],
+                          xy: (Double, Double) -> (x: Double, y: Double)) {
+            let cameraAlong: [Int: Double] = route.map { route in
+                Dictionary(uniqueKeysWithValues: cameras.compactMap { camera in
+                    let hit = route.project(xy(camera.lat, camera.lon))
+                    return hit.offset <= 30 ? (camera.id, hit.along) : nil
+                })
+            } ?? [:]
+            for fix in fixes {
+                guard case .accepted(let good) = filter.accept(fix, now: fix.timestamp) else {
+                    rejected += 1
+                    continue
+                }
+                let here = CLLocationCoordinate2D(latitude: good.lat, longitude: good.lon)
+                let speedKmh = max(0, good.speed ?? 0) * 3.6
+                let situation = LocationGates.Situation(coordinate: here, course: good.course,
+                                                        speedKmh: speedKmh,
+                                                        horizontalAccuracy: good.accuracy, context: .city)
+                var candidates: [(camera: Camera, distance: Double, onRoute: Bool)] = []
+                for camera in cameras {
+                    let straight = GeoMath.fastDistance(here.latitude, here.longitude, camera.lat, camera.lon)
+                    if engine.isAnnounced(camera.id) {
+                        engine.noteGeometry(camera.id,
+                                            atTraverse: straight <= max(PassGeometry.traverseLimit(for: camera),
+                                                                        AppConfig.alertTraverseMeters),
+                                            behind: LocationGates.isClearlyBehind(camera, in: situation),
+                                            ahead: engine.isPassed(camera.id)
+                                                && LocationGates.isReapproach(camera, in: situation))
+                    }
+                    let remaining = progress.flatMap { p in cameraAlong[camera.id].map { $0 - p } }
+                    guard let candidate = LocationGates.candidateDistance(straight: straight, routeRemaining: remaining,
+                                                                          announced: engine.isAnnounced(camera.id),
+                                                                          in: situation) else { continue }
+                    candidates.append((camera, candidate.distance, candidate.onRoute))
+                }
+                // Прогресс по маршруту — после выбора, как в сервисе (отставание на фикс).
+                defer {
+                    if let route {
+                        progress = route.project(xy(good.lat, good.lon), near: progress).along
+                    }
+                }
+                candidates.sort { $0.distance < $1.distance }
+                guard let nearest = candidates.first(where: {
+                    LocationGates.isOnOurRoad($0.camera, in: situation, isOnRoute: $0.onRoute)
+                }) else { continue }
+                let radius = AlertEngine.effectiveRadius(speedKmh: speedKmh, baseRadius: AppConfig.alertRadius)
+                if let decision = engine.evaluate(cameraID: nearest.camera.id, distance: nearest.distance,
+                                                  radius: radius,
+                                                  moving: LocationGates.isFilteringActive(situation)),
+                   decision.isFirst {
+                    firstAlerts[nearest.camera.id, default: 0] += 1
+                    firstAlertPoints[nearest.camera.id, default: []].append(xy(good.lat, good.lon))
+                }
+            }
+        }
+    }
+
+    // MARK: - Маршруты
+
+    private let lat0 = 41.30, lon0 = 69.20
+    private var kx: Double { 111_320 * cos(lat0 * .pi / 180) }
+    private let start = Date(timeIntervalSince1970: 1_770_000_000)
+
+    private func point(_ x: Double, _ y: Double) -> (lat: Double, lon: Double) {
+        (lat0 + y / 111_320, lon0 + x / kx)
+    }
+
+    private func xy(_ lat: Double, _ lon: Double) -> (x: Double, y: Double) {
+        ((lon - lon0) * kx, (lat - lat0) * 111_320)
+    }
+
+    /// Отрезок пути: куда ехать (x, y в метрах), с какой скоростью (м/с) и
+    /// сколько стоять в конце, с.
+    private struct Leg {
+        let x: Double, y: Double, speed: Double
+        var stopSeconds = 0
+    }
+
+    /// Фикс раз в секунду вдоль ломаной; курс — по отрезку, достоверный. На
+    /// стоянке курса нет (−1), скорость 0 — как отдаёт iOS стоящей машине.
+    private func fixes(from origin: (Double, Double), legs: [Leg]) -> [LocationFilter.Fix] {
+        var out: [LocationFilter.Fix] = []
+        var (x, y) = origin
+        var t = start
+        func emit(_ x: Double, _ y: Double, speed: Double, course: Double) {
+            let p = point(x, y)
+            out.append(LocationFilter.Fix(lat: p.lat, lon: p.lon, horizontalAccuracy: 6,
+                                          speed: speed, speedAccuracy: speed > 0 ? 1 : -1,
+                                          course: course, courseAccuracy: course >= 0 ? 5 : -1,
+                                          timestamp: t))
+            t = t.addingTimeInterval(1)
+        }
+        for leg in legs {
+            let dx = leg.x - x, dy = leg.y - y
+            let length = (dx * dx + dy * dy).squareRoot()
+            let course = (atan2(dx, dy) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+            let steps = max(1, Int((length / leg.speed).rounded()))
+            for k in 1...steps {
+                let f = Double(k) / Double(steps)
+                emit(x + dx * f, y + dy * f, speed: leg.speed, course: course)
+            }
+            (x, y) = (leg.x, leg.y)
+            for _ in 0..<leg.stopSeconds { emit(x, y, speed: 0, course: -1) }
+        }
+        return out
+    }
+
+    /// Камера без доказанных сторон (половина базы): может снимать обе стороны.
+    private func camera(_ id: Int, x: Double, y: Double) -> Camera {
+        let p = point(x, y)
+        return Camera(id: id, region: "Т", city: "", location: "к", lat: p.lat, lon: p.lon,
+                      type: "Стационар радар", violations: [], needsReview: false, axis: nil, dir: nil,
+                      lanes: 2, cls: nil, bridge: nil, road: nil, split: nil, twin: nil)
+    }
+
+    /// Камера со снапом, как в базе: кусок своей проезжей части ±100 м по
+    /// оси, разделённая дорога, стороны не доказаны.
+    private func snappedCamera(_ id: Int, x: Double, y: Double, axis: Double, lanes: Int = 3) -> Camera {
+        let p = point(x, y)
+        let rad = axis * .pi / 180
+        let dLat = Int((100 * cos(rad) / 111_320 * 1e6).rounded())
+        let dLon = Int((100 * sin(rad) / kx * 1e6).rounded())
+        return Camera(id: id, region: "Т", city: "", location: "к", lat: p.lat, lon: p.lon,
+                      type: "Стационар радар", violations: [], needsReview: false, axis: Int(axis), dir: nil,
+                      lanes: lanes, cls: "primary", bridge: nil, road: [-dLat, -dLon, 0, 0, dLat, dLon],
+                      split: true, twin: nil)
+    }
+
+    /// Петля по часовой стрелке: из точки `from` с курсом на север, центр —
+    /// справа на `radius`, `degrees` дуги; точки дуги — легами по 10°.
+    private func loop(from start: (x: Double, y: Double), radius: Double, degrees: Double,
+                      speed: Double) -> (legs: [Leg], end: (x: Double, y: Double)) {
+        let centre = (x: start.x + radius, y: start.y)
+        var legs: [Leg] = []
+        var end = start
+        for step in stride(from: 10.0, through: degrees, by: 10) {
+            let angle = (180 - step) * .pi / 180   // от западной точки по часовой
+            end = (centre.x + radius * cos(angle), centre.y + radius * sin(angle))
+            legs.append(Leg(x: end.x, y: end.y, speed: speed))
+        }
+        return (legs, end)
+    }
+
+    // MARK: - A6: разворот и круг
+
+    /// Проехали камеру, через 300 м развернулись и едем обратно мимо неё:
+    /// стороны не доказаны — камера снимает и нашу, и предупредить надо снова.
+    /// До 20.10 движок помнил «уже сказал» всю поездку и молчал.
+    func testUTurnAfterACameraWarnsAgain() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 1300, y: 0, speed: 14),
+                                               Leg(x: 0, y: 0, speed: 14)])
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.rejected, 0)
+        XCTAssertEqual(drive.firstAlerts[1], 2, "туда и после разворота обратно")
+    }
+
+    /// Круг по кварталу и снова по той же улице в ту же сторону.
+    func testLoopAroundTheBlockWarnsAgain() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 1250, y: 0, speed: 12),
+                                               Leg(x: 1250, y: 250, speed: 10),
+                                               Leg(x: 600, y: 250, speed: 12),
+                                               Leg(x: 600, y: 0, speed: 10),
+                                               Leg(x: 1300, y: 0, speed: 12)])
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 2)
+    }
+
+    /// Стоим у светофора в 40 м за камерой две минуты: курса нет, она ближайшая
+    /// «вокруг» — но это та же камера, о ней уже сказали. Повтора нет.
+    func testStandingRightAfterACameraStaysQuiet() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 1040, y: 0, speed: 14, stopSeconds: 120),
+                                               Leg(x: 1600, y: 0, speed: 14)])
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 1)
+    }
+
+    /// Пробка перед камерой: десять минут стоим в 150 м до неё — одно
+    /// предупреждение на весь подъезд, не по разу на каждую остановку.
+    func testJamBeforeACameraWarnsOnce() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 850, y: 0, speed: 14, stopSeconds: 300),
+                                               Leg(x: 900, y: 0, speed: 2, stopSeconds: 300),
+                                               Leg(x: 1500, y: 0, speed: 12)])
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 1)
+    }
+
+    /// Движок сам по себе: «проехали» — о камере сказали, были на траверзе и
+    /// она явно позади два фикса подряд; «новый подъезд» — явно впереди два
+    /// фикса подряд. Одиночный кривой фикс — ни то, ни другое.
+    func testPassedCameraRestartsOnlyOnARealApproach() {
+        var engine = AlertEngine()
+        let cam = camera(7, x: 0, y: 0)
+        XCTAssertEqual(engine.evaluate(cameraID: 7, distance: 50, radius: 400, moving: true)?.level, 3)
+        // Без траверза «позади» — не «проехали» (свернули до неё, шпилька).
+        for _ in 0..<3 { engine.noteGeometry(7, atTraverse: false, behind: true, ahead: false) }
+        for _ in 0..<3 { engine.noteGeometry(7, atTraverse: false, behind: false, ahead: true) }
+        XCTAssertNil(engine.evaluate(cameraID: 7, distance: 150, radius: 400, moving: true), "серия не забыта")
+        // Траверз; позади, кривой фикс, позади — ещё не проехали.
+        engine.noteGeometry(7, atTraverse: true, behind: true, ahead: false)
+        engine.noteGeometry(7, atTraverse: false, behind: false, ahead: false)
+        engine.noteGeometry(7, atTraverse: false, behind: true, ahead: false)
+        for _ in 0..<3 { engine.noteGeometry(7, atTraverse: false, behind: false, ahead: true) }
+        XCTAssertNil(engine.evaluate(cameraID: 7, distance: 150, radius: 400, moving: true), "не проехали — не забыта")
+        // Позади два подряд — проехали; стоим (ни позади, ни впереди) — та же камера.
+        engine.noteGeometry(7, atTraverse: true, behind: true, ahead: false)
+        engine.noteGeometry(7, atTraverse: false, behind: true, ahead: false)
+        engine.noteGeometry(7, atTraverse: false, behind: true, ahead: false)
+        for _ in 0..<5 { engine.noteGeometry(7, atTraverse: false, behind: false, ahead: false) }
+        XCTAssertNil(engine.evaluate(cameraID: 7, distance: 150, radius: 400, moving: true))
+        // Впереди один раз, потом снова позади — не подъезд (отражение).
+        engine.noteGeometry(7, atTraverse: false, behind: false, ahead: true)
+        engine.noteGeometry(7, atTraverse: false, behind: true, ahead: false)
+        engine.noteGeometry(7, atTraverse: false, behind: false, ahead: true)
+        XCTAssertNil(engine.evaluate(cameraID: 7, distance: 150, radius: 400, moving: true))
+        // Впереди два подряд — новый подъезд, серия с начала; но первое
+        // оповещение перевзведённой — только на ходу (стоя гейтов нет).
+        engine.noteGeometry(7, atTraverse: false, behind: false, ahead: true)
+        // В полосе гистерезиса (за радиусом) решения нет — перевзвод не снят:
+        // иначе дальше, стоя без гейтов, она звучала бы «первой» (N3).
+        XCTAssertNil(engine.evaluate(cameraID: 7, distance: 440, radius: 400, moving: true))
+        XCTAssertNil(engine.evaluate(cameraID: 7, distance: 140, radius: 400, moving: false))
+        XCTAssertEqual(engine.evaluate(cameraID: 7, distance: 140, radius: 400, moving: true)?.isFirst, true)
+        // Геометрия: без курса «позади»/«впереди» не решается; шум траверза — не «позади».
+        let east = { (x: Double) in LocationGates.Situation(
+            coordinate: CLLocationCoordinate2D(latitude: self.point(x, 0).lat, longitude: self.point(x, 0).lon),
+            course: 90, speedKmh: 50, horizontalAccuracy: 6, context: .city) }
+        XCTAssertTrue(LocationGates.isClearlyBehind(cam, in: east(200)))
+        XCTAssertFalse(LocationGates.isClearlyBehind(cam, in: east(30)))
+        XCTAssertTrue(LocationGates.isClearlyAhead(cam, in: east(-200)))
+        XCTAssertFalse(LocationGates.isClearlyAhead(cam, in: east(-30)))
+        let standing = LocationGates.Situation(coordinate: east(200).coordinate, course: -1, speedKmh: 0,
+                                               horizontalAccuracy: 6, context: .city)
+        XCTAssertFalse(LocationGates.isClearlyBehind(cam, in: standing))
+        XCTAssertFalse(LocationGates.isClearlyAhead(cam, in: standing))
+    }
+
+    // MARK: - S4 на маршруте (ревью 20.10)
+
+    /// Камера на маршруте: остаток по маршруту держит её «0 м» за спиной ещё
+    /// фикс-другой после траверза. Второго «0 метров» быть не должно — это
+    /// была бы каждая камера каждого маршрута.
+    func testRouteCameraWarnsOnce() {
+        let track = fixes(from: (0, 0), legs: [Leg(x: 1800, y: 0, speed: 14)])
+        var drive = Drive()
+        drive.route = RouteModel(points: [(0, 0), (1800, 0)])
+        drive.run(track, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 1)
+    }
+
+    /// Маршрут сам с разворотом: туда мимо камеры, разворот через 300 м и
+    /// обратно мимо неё же. Позиция камеры на маршруте одна (первый проезд),
+    /// на обратном пути она — камера «как все», и о ней снова предупреждают.
+    func testRouteWithAUTurnWarnsAgainOnTheWayBack() {
+        let track = fixes(from: (0, 0), legs: [Leg(x: 1300, y: 0, speed: 14), Leg(x: 0, y: 0, speed: 14)])
+        var drive = Drive()
+        drive.route = RouteModel(points: [(0, 0), (1300, 0), (0, 0)])
+        drive.run(track, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 2)
+    }
+
+    /// Один фикс с кривым, но «достоверным» курсом (отражение от стены): ни
+    /// камера впереди не становится «проеханной», ни проеханная позади — «новой».
+    func testOneBadCourseFixDoesNotWarnTwice() {
+        var route = fixes(from: (0, 0), legs: [Leg(x: 1600, y: 0, speed: 14)])
+        func flipCourse(at index: Int) {
+            let f = route[index]
+            route[index] = LocationFilter.Fix(lat: f.lat, lon: f.lon, horizontalAccuracy: f.horizontalAccuracy,
+                                              speed: f.speed, speedAccuracy: f.speedAccuracy, course: 270,
+                                              courseAccuracy: 5, timestamp: f.timestamp)
+        }
+        flipCourse(at: 50)    // ~700 м: камера в 300 м впереди «вдруг позади»
+        flipCourse(at: 82)    // ~1150 м: проеханная «вдруг впереди»
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 1)
+    }
+
+    // MARK: - S4: ревью 20.10, третий круг
+
+    /// Круг по кварталу со светофором на обратной улице: камера, проеханная
+    /// по y=0, с параллельной улицы y=250 «впереди по курсу», но на чужой
+    /// дороге — не перевзводится; стоя у светофора — не звучит. Второе
+    /// «первое» — на настоящем подъезде по y=0.
+    func testLoopWithALightOnTheParallelStreet() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 1250, y: 0, speed: 12),
+                                               Leg(x: 1250, y: 250, speed: 10),
+                                               Leg(x: 1100, y: 250, speed: 10, stopSeconds: 40),
+                                               Leg(x: 600, y: 250, speed: 12),
+                                               Leg(x: 600, y: 0, speed: 10),
+                                               Leg(x: 1300, y: 0, speed: 12)])
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 2)
+        let second = drive.firstAlertPoints[1]?.last
+        XCTAssertEqual(second?.y ?? 999, 0, accuracy: 1, "второе «первое» — на подъезде по y=0, а не у светофора")
+    }
+
+    /// Разворот всего в 60 м за камерой: «впереди» после него — дважды, и
+    /// подъезд новый (порог «впереди» мягче порога «позади»).
+    func testUTurnSoonAfterTheCameraWarnsAgain() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 1065, y: 0, speed: 12), Leg(x: 0, y: 0, speed: 12)])
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 2)
+    }
+
+    /// Развязка-клевер (ревью S4, третий круг): проехали камеру со снапом на
+    /// север и ушли петлёй на 270° на пересекающую дорогу. На петле курс на
+    /// одну-три точки смотрит прямо на камеру, и коридор (сбоку от НАШЕГО
+    /// курса) перевзводил её — второе «первое» в 190 м от камеры, с петли.
+    /// Своя дорога камеры (кусок и прямая по оси) такого не допускает — на
+    /// любой петле: начало 120–340 м за камерой, радиус 35–80 м.
+    func testCloverleafLoopDoesNotWarnTwice() {
+        for loopStart in [120.0, 200, 340] {
+            for radius in [35.0, 55, 80] {
+                let ramp = loop(from: (0, loopStart), radius: radius, degrees: 270, speed: 8.3)
+                let route = fixes(from: (0, -900), legs: [Leg(x: 0, y: loopStart, speed: 13.9)] + ramp.legs
+                                    + [Leg(x: -600, y: ramp.end.y, speed: 13.9)])
+                var drive = Drive()
+                drive.run(route, cameras: [snappedCamera(1, x: 0, y: 0, axis: 0)], xy: xy)
+                XCTAssertEqual(drive.firstAlerts[1], 1,
+                               "петля с \(Int(loopStart)) м, радиус \(Int(radius)): \(drive.firstAlertPoints[1] ?? [])")
+            }
+        }
+    }
+
+    /// Настоящий разворот на встречную проезжую часть (12 м от оси) у камеры
+    /// со снапом — по-прежнему новый подъезд.
+    func testSnappedCameraUTurnStillWarnsAgain() {
+        let route = fixes(from: (0, -900), legs: [Leg(x: 0, y: 300, speed: 13.9),
+                                                  Leg(x: 12, y: 300, speed: 5),
+                                                  Leg(x: 12, y: -900, speed: 13.9)])
+        var drive = Drive()
+        drive.run(route, cameras: [snappedCamera(1, x: 0, y: 0, axis: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 2)
+    }
+
+    /// Перевзвод на параллельной улице, проверка в полосе гистерезиса без
+    /// решения, потом красный свет (гейты выключены): камера с той улицы не
+    /// звучит «первой» (ревью S4, третий круг, N3).
+    func testRearmedCameraStaysQuietAtALightOnAParallelStreet() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 1475, y: 0, speed: 13.9),
+                                               Leg(x: 1475, y: 72, speed: 8),
+                                               Leg(x: 1300, y: 72, speed: 13.9, stopSeconds: 40),
+                                               Leg(x: 500, y: 72, speed: 13.9)])
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 1, "\(drive.firstAlertPoints[1] ?? [])")
+    }
+
+    // MARK: - A3: тоннель
+
+    /// 45 с без фиксов на 50 км/ч, потом сигнал на 600 м дальше: перелёт
+    /// правдоподобен (скорость та же) — фикс принят; камера сразу за выездом
+    /// предупреждается; камера, проеханная в тоннеле, позади — молчит.
+    func testTunnelGapThenTheCameraAfterTheExit() {
+        var route = fixes(from: (0, 0), legs: [Leg(x: 1000, y: 0, speed: 14)])
+        let resumed = fixes(from: (1625, 0), legs: [Leg(x: 2600, y: 0, speed: 14)])
+        let gap = route.last!.timestamp.addingTimeInterval(45).timeIntervalSince(resumed.first!.timestamp)
+        route += resumed.map {
+            LocationFilter.Fix(lat: $0.lat, lon: $0.lon, horizontalAccuracy: $0.horizontalAccuracy,
+                               speed: $0.speed, speedAccuracy: $0.speedAccuracy, course: $0.course,
+                               courseAccuracy: $0.courseAccuracy, timestamp: $0.timestamp.addingTimeInterval(gap))
+        }
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 1400, y: 0), camera(2, x: 1950, y: 0)], xy: xy)
+        XCTAssertEqual(drive.rejected, 0, "после тоннеля фиксы принимаются")
+        XCTAssertEqual(drive.firstAlerts[2], 1, "камера за выездом звучит")
+        XCTAssertLessThanOrEqual(drive.firstAlerts[1] ?? 0, 1, "проеханная в тоннеле не звучит после выезда")
+    }
+
+    // MARK: - A4: выброс
+
+    /// Один фикс в 300 м вбок посреди поездки (отражение от стены): отброшен,
+    /// камера на «той» улице не звучит.
+    func testOneSpikeSidewaysIsRejected() {
+        var route = fixes(from: (0, 0), legs: [Leg(x: 1500, y: 0, speed: 14)])
+        let p = point(700, 300)
+        let spike = route[50]
+        route.insert(LocationFilter.Fix(lat: p.lat, lon: p.lon, horizontalAccuracy: 10, speed: 14,
+                                        speedAccuracy: 1, course: 90, courseAccuracy: 5,
+                                        timestamp: spike.timestamp.addingTimeInterval(0.5)), at: 51)
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 800, y: 300), camera(2, x: 1200, y: 0)], xy: xy)
+        XCTAssertEqual(drive.rejected, 1)
+        XCTAssertNil(drive.firstAlerts[1], "камера на соседней улице не звучит из-за выброса")
+        XCTAssertEqual(drive.firstAlerts[2], 1)
+    }
+}

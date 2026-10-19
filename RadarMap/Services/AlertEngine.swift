@@ -24,6 +24,26 @@ nonisolated struct AlertEngine {
 
     /// Достигнутый уровень по каждой камере — повторно на том же уровне не сигналим.
     private var announcedLevel: [Int: Int] = [:]
+    /// Проеханные камеры (сценарий S4, 20.10). Новый подъезд к такой камере —
+    /// разворот через 300 м, круг по кварталу — это новое приближение, и о нём
+    /// предупреждаем с начала. До этого уровень жил всю поездку: сброс был
+    /// только у ближайшей камеры за радиусом, а проеханная ближайшей уже не
+    /// бывала — и после разворота на разделённом проспекте камера, снимающая
+    /// обе стороны, молчала.
+    ///
+    /// «Проехали» — строго: о камере сказали, мы были у неё на траверзе, и
+    /// она явно позади два фикса подряд. «Новый подъезд» — явно впереди два
+    /// фикса подряд. Оба решения — в `noteGeometry` на КАЖДОМ годном фиксе:
+    /// одиночный фикс с кривым курсом (отражение от стены на ползущей машине)
+    /// иначе давал второе «первое» оповещение о той же камере (ревью 20.10).
+    private var traversed: Set<Int> = []
+    private var passed: Set<Int> = []
+    /// Серия забыта по «проехали → снова подъезд»: первое оповещение такой
+    /// камеры — только на ходу. Стоя гейты не работают вовсе, и перевзведённая
+    /// с соседней улицы камера на светофоре давала бы новое «первое» (ревью 20.10).
+    private var rearmed: Set<Int> = []
+    private var behindStreak: [Int: Int] = [:]
+    private var aheadStreak: [Int: Int] = [:]
 
     /// Сколько секунд запаса даём: городские 22 внизу, трассовые 29 наверху,
     /// линейный переход между ними (см. AppConfig).
@@ -69,21 +89,81 @@ nonisolated struct AlertEngine {
 
     /// Оценить приближение: вернёт решение, если уровень вырос; nil — молчим.
     /// Выход за радиус с гистерезисом сбрасывает серию — при возврате сигналим заново.
+    /// `moving` — едем с достоверным курсом (гейты работают). Важно только
+    /// для камер, перевзведённых после проезда: им первое оповещение — на ходу.
+    /// Перевзведённая камера остаётся такой до первого РЕШЕНИЯ: проверка в
+    /// полосе гистерезиса (за радиусом, решения нет) флаг не снимает — иначе
+    /// дальше, у светофора без гейтов, она звучала «первой» с соседней улицы
+    /// (ревью S4, третий круг).
     mutating func evaluate(cameraID: Int, distance: CLLocationDistance,
-                           radius: CLLocationDistance) -> Decision? {
+                           radius: CLLocationDistance, moving: Bool) -> Decision? {
         if distance > radius + AppConfig.alertExitHysteresisMeters {
-            announcedLevel[cameraID] = 0
+            forget(cameraID)
+            rearmed.remove(cameraID)
             return nil
         }
+        if rearmed.contains(cameraID), !moving { return nil }
         let level = Self.level(distance: distance, radius: radius)
         let previous = announcedLevel[cameraID] ?? 0
         guard level > previous else { return nil }
+        rearmed.remove(cameraID)
         announcedLevel[cameraID] = level
         return Decision(level: level, isFirst: previous == 0)
     }
 
     mutating func reset() {
         announcedLevel.removeAll()
+        traversed.removeAll()
+        passed.removeAll()
+        rearmed.removeAll()
+        behindStreak.removeAll()
+        aheadStreak.removeAll()
+    }
+
+    /// Серия по камере закончена — следующий подъезд начнётся с нуля.
+    private mutating func forget(_ cameraID: Int) {
+        announcedLevel[cameraID] = 0
+        traversed.remove(cameraID)
+        passed.remove(cameraID)
+        behindStreak[cameraID] = nil
+        aheadStreak[cameraID] = nil
+    }
+
+    /// О камере уже сказали (уровень > 0).
+    func isAnnounced(_ cameraID: Int) -> Bool { (announcedLevel[cameraID] ?? 0) > 0 }
+
+    /// Камеру проехали — ждём только нового подъезда (тогда и нужен дорогой
+    /// LocationGates.isReapproach, а не на каждой камере каждый фикс).
+    func isPassed(_ cameraID: Int) -> Bool { passed.contains(cameraID) }
+
+    /// Геометрия камеры, о которой сказали, на годном фиксе — звать на КАЖДОМ
+    /// (сказано о единицах камер):
+    /// - `atTraverse` — у камеры (PassGeometry.traverseLimit). Без траверза
+    ///   «позади» не значит «проехали»: свернули до неё, шпилька, кривой курс;
+    /// - `behind` / `ahead` — LocationGates.isClearlyBehind / isClearlyAhead.
+    /// Проехали (траверз и позади два фикса подряд) → потом впереди два фикса
+    /// подряд — серия забыта, и следующее приближение предупреждается заново.
+    /// Камера маршрута, ещё «0 м» за спиной по остатку, впереди не бывает —
+    /// второго «0 метров» нет.
+    mutating func noteGeometry(_ cameraID: Int, atTraverse: Bool, behind: Bool, ahead: Bool) {
+        guard isAnnounced(cameraID) else { return }
+        if atTraverse { traversed.insert(cameraID) }
+        let confirm = AppConfig.alertPassedConfirmFixes
+        if passed.contains(cameraID) {
+            let streak = ahead ? (aheadStreak[cameraID] ?? 0) + 1 : 0
+            aheadStreak[cameraID] = streak
+            if streak >= confirm {
+                forget(cameraID)
+                rearmed.insert(cameraID)
+            }
+        } else if traversed.contains(cameraID) {
+            let streak = behind ? (behindStreak[cameraID] ?? 0) + 1 : 0
+            behindStreak[cameraID] = streak
+            if streak >= confirm {
+                passed.insert(cameraID)
+                behindStreak[cameraID] = nil
+            }
+        }
     }
 
     /// Ступень тревоги по дистанции: 1 — в радиусе, 2 — ближе

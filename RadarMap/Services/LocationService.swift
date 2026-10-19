@@ -1177,7 +1177,7 @@ final class LocationService: NSObject {
         locationTick &+= 1
         onAcceptedFix?(coordinate)
         retileIfNeeded(around: coordinate)
-        recomputeNearest(from: coordinate)
+        recomputeNearest(from: coordinate, fromFix: true)
         recomputeDirection()
 
         // Активные оповещения (звук/голос/экран) — в поездке ИЛИ пока приложение открыто.
@@ -1416,7 +1416,7 @@ final class LocationService: NSObject {
             bearingSmoother.reset()
             return
         }
-        if isCameraOnRoute(camera) {
+        if nearestViaRoute {
             if relativeBearingToNearest != 0 { relativeBearingToNearest = 0 }   // на маршруте — прямо по ходу
             bearingSmoother.reset()
             return
@@ -1436,18 +1436,6 @@ final class LocationService: NSObject {
         relativeBearingToNearest.map { CameraDirection.classify(relativeBearing: $0) }
     }
 
-    /// Тот же гейт «камера на нашей дороге», которым отбирается ближайшая для
-    /// HUD и голоса, — наружу для экранов, перечисляющих камеры впереди.
-    ///
-    /// Открыт ровно ради того, чтобы такие экраны НЕ заводили свой коридор.
-    /// Лента машины сначала фильтровала сама и на первом же перекрёстке
-    /// показала камеру в тридцати метрах, пока док писал «741 м»: обе цифры
-    /// правдивы по-своему, а вместе они означают приложение, спорящее само с
-    /// собой. Правило прежнее — порядок и состав гейтов живут в одном месте.
-    func isRelevantAhead(_ camera: Camera, from coordinate: CLLocationCoordinate2D) -> Bool {
-        isOnOurRoad(camera, from: coordinate)
-    }
-
     /// «впереди» / «впереди справа» / «впереди слева» — для голосового предупреждения.
     private var directionPhrase: String {
         switch nearestDirection {
@@ -1464,13 +1452,29 @@ final class LocationService: NSObject {
     private func clearNearest() {
         if nearestCamera != nil { nearestCamera = nil }
         if distanceToNearest != nil { distanceToNearest = nil }
+        nearestViaRoute = false
         if !clusteredCameras.isEmpty { clusteredCameras = [] }
     }
 
-    @ObservationIgnored private var nearestBuffer: [(camera: Camera, distance: CLLocationDistance)] = []
+    @ObservationIgnored private var nearestBuffer: [(camera: Camera, distance: CLLocationDistance, onRoute: Bool)] = []
+    /// Ближайшая выбрана по остатку маршрута (а не по прямой): фраза «по
+    /// маршруту» и «прямо по ходу» — только тогда. Проеханная камера маршрута,
+    /// снова впереди по прямой после разворота, — уже не «по маршруту».
+    @ObservationIgnored private var nearestViaRoute = false
+    /// Время фикса, по которому последний раз считалась серия «проехали».
+    @ObservationIgnored private var geometryFixTime: Date?
 
-    private func recomputeNearest(from coordinate: CLLocationCoordinate2D) {
+    /// `fromFix` — вызов с настоящего фикса GPS (handleLocation). Учёт
+    /// «проехали / снова подъезд» — только по ним: пересборка окна (база,
+    /// чужие отметки, возврат на экран) повторяет последний фикс, и один кривой
+    /// курс засчитывался бы дважды (ревью 20.10).
+    private func recomputeNearest(from coordinate: CLLocationCoordinate2D, fromFix: Bool = false) {
         guard !trackedCameras.isEmpty else { clearNearest(); return }
+        // Тот же фикс второй раз (iOS повторяет кэшированный после каждого
+        // startUpdatingLocation — экран, машина, питание) — не новый шаг серии
+        // «проехали / снова впереди» (ревью S4, третий круг).
+        let newFix = fromFix && (geometryFixTime.map { lastFixTime > $0 } ?? true)
+        if newFix { geometryFixTime = lastFixTime }
         // Сначала дешёвая дистанция по всему окну, и только потом дорогая проверка
         // «наша ли это дорога» — по возрастанию, до первой подходящей. Результат
         // тот же, что у минимума по отфильтрованному списку, но геометрию камеры
@@ -1495,26 +1499,42 @@ final class LocationService: NSObject {
         // (см. его комментарий). Кэшированный фикс у камеры иначе записался бы
         // проездом без предупреждения, то есть выдуманным промахом.
         let countsPasses = isTripActive && !isPositionCoarse
+        let situation = gateSituation(at: coordinate)
         for camera in trackedCameras {
             let straight = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
                                                 camera.lat, camera.lon)
             if countsPasses, straight <= PassGeometry.traverseLimit(for: camera) {
                 alertRecall.notePassed(cameraID: camera.id)
             }
-            guard let remaining = routeRemaining(to: camera) else {
-                candidates.append((camera, straight))
-                continue
+            let announced = alertEngine.isAnnounced(camera.id)
+            // Проеханные (сценарий S4): о ком сказали, у кого были и кто теперь
+            // явно позади — следующий подъезд к ним (разворот, круг) будет
+            // новым. Только по годному фиксу — грубая точка из seedContext
+            // «проезжать» камеры не вправе. Сказано о единицах камер.
+            if announced, newFix, !isPositionCoarse {
+                alertEngine.noteGeometry(camera.id,
+                                         atTraverse: straight <= max(PassGeometry.traverseLimit(for: camera),
+                                                                     AppConfig.alertTraverseMeters),
+                                         behind: LocationGates.isClearlyBehind(camera, in: situation),
+                                         ahead: alertEngine.isPassed(camera.id)
+                                            && LocationGates.isReapproach(camera, in: situation))
             }
-            // Камера уехала назад по маршруту — уже проехали, не пугаем.
-            guard remaining > -AppConfig.routePassedToleranceMeters else { continue }
-            candidates.append((camera, max(0, remaining)))
+            // Камера уехала назад по маршруту — стоя не пугаем ею, в движении
+            // она снова камера «как все» (маршрут с разворотом).
+            guard let candidate = LocationGates.candidateDistance(straight: straight,
+                                                                  routeRemaining: routeRemaining(to: camera),
+                                                                  announced: alertEngine.isAnnounced(camera.id),
+                                                                  in: situation) else { continue }
+            candidates.append((camera, candidate.distance, candidate.onRoute))
         }
         candidates.sort { $0.distance < $1.distance }
         // В движении HUD показывает ближайшую камеру НА НАШЕЙ ДОРОГЕ впереди;
         // камеры позади и с соседних улиц не пугают зря.
-        guard let index = candidates.firstIndex(where: { isOnOurRoad($0.camera, from: coordinate) })
-        else { clearNearest(); return }
+        guard let index = candidates.firstIndex(where: {
+            LocationGates.isOnOurRoad($0.camera, in: situation, isOnRoute: $0.onRoute)
+        }) else { clearNearest(); return }
         let found = candidates[index]
+        nearestViaRoute = found.onRoute
         // Камера чаще всего ТА ЖЕ, что тик назад: перезапись тем же значением
         // всё равно будит всех наблюдателей @Observable, и до этой проверки
         // карта с двумя сотнями маркеров перерисовывалась каждую секунду.
@@ -1525,7 +1545,7 @@ final class LocationService: NSObject {
         // группу по расстоянию — это ноль-два лишних вычисления геометрии.
         clusteredCameras = candidates[(index + 1)...]
             .prefix { $0.distance <= found.distance + AppConfig.voiceGroupMeters }
-            .filter { isOnOurRoad($0.camera, from: coordinate) }
+            .filter { LocationGates.isOnOurRoad($0.camera, in: situation, isOnRoute: $0.onRoute) }
             .map(\.camera)
     }
 
@@ -1624,7 +1644,8 @@ final class LocationService: NSObject {
     private func runAlertEngine() {
         guard let camera = nearestCamera, let distance = distanceToNearest else { return }
         guard let decision = alertEngine.evaluate(cameraID: camera.id, distance: distance,
-                                                  radius: effectiveAlertRadius) else { return }
+                                                  radius: effectiveAlertRadius,
+                                                  moving: isDirectionalFilteringActive) else { return }
 
         let policy = voicePlan(for: camera, crawling: isCrawling)
 
@@ -1748,7 +1769,7 @@ final class LocationService: NSObject {
         } else if brief {
             phrase = String(format: String(localized: "%@, %lld метров"),
                             camera.kind.shortName, rounded)
-        } else if isCameraOnRoute(camera) {
+        } else if camera == nearestCamera ? nearestViaRoute : isCameraOnRoute(camera) {
             phrase = String(format: String(localized: "По маршруту %@ через %lld метров"),
                             camera.kind.displayName.lowercased(), rounded)
         } else {

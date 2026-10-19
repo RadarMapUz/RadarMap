@@ -66,7 +66,7 @@ final class DriveReplayTests: XCTestCase {
                 }
                 guard let nearest else { continue }
                 if engine.evaluate(cameraID: nearest.camera.id, distance: nearest.distance,
-                                   radius: AppConfig.alertRadius) != nil {
+                                   radius: AppConfig.alertRadius, moving: true) != nil {
                     alerted[nearest.camera.id, default: 0] += 1
                 }
             }

@@ -151,7 +151,7 @@ nonisolated enum AppConfig {
 
     /// Насколько камера может «уехать назад» по маршруту, прежде чем считаем её
     /// пройденной и убираем из кандидатов на предупреждение.
-    static let routePassedToleranceMeters = 60.0
+    nonisolated static let routePassedToleranceMeters = 60.0
     /// Процесс подняли в фоне (смена места, геозона): столько держим окно
     /// работы, чтобы CoreMotion успел подтвердить поездку (его уверенный
     /// старт ждёт 8 с, а фоновое окно iOS — около 10).
@@ -384,6 +384,21 @@ nonisolated enum AppConfig {
     /// Гистерезис выхода из зоны оповещения: серия порогов сбрасывается только
     /// когда камера ушла заметно дальше радиуса — анти-дребезг на границе.
     static let alertExitHysteresisMeters: CLLocationDistance = 80
+    /// Камера, о которой сказали, считается проеханной, когда она за спиной
+    /// дальше этого (при достоверном курсе): следующий подъезд к ней — после
+    /// разворота или круга по кварталу — предупреждается заново. С запасом над
+    /// шумом траверза (`corridorBehindToleranceMeters`).
+    nonisolated static let alertPassedBehindMeters: CLLocationDistance = 40
+    /// Сколько фиксов подряд нужно, чтобы считать камеру проеханной и чтобы
+    /// считать подъезд к ней новым: один фикс с кривым курсом — не решение.
+    nonisolated static let alertPassedConfirmFixes = 2
+    /// «Явно впереди» для нового подъезда (ревью 20.10): разворот уже в 60 м
+    /// за камерой даёт два фикса «впереди». Дубль «0 метров» у камеры маршрута
+    /// этим порогом не держится — его закрывает isReapproach (гейт дороги).
+    nonisolated static let alertPassedAheadMeters: CLLocationDistance = 40
+    /// «Были у камеры» для нового подъезда — шире записи проезда (40 м):
+    /// проезд по дальней проезжей части широкого проспекта тоже «был».
+    nonisolated static let alertTraverseMeters: CLLocationDistance = 90
     /// Ступени тревоги — доли радиуса (AlertEngine.level): ближе 0,6 —
     /// вторая, ближе 0,3 — третья.
     nonisolated static let alertLevel2Share = 0.6

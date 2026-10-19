@@ -3179,22 +3179,6 @@
         }
       }
     },
-    "Данные о местоположении остаются на устройстве.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Данные о местоположении остаются на устройстве."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Joylashuv ma'lumotlari qurilmada qoladi."
-          }
-        }
-      }
-    },
     "Два разрешения — и в путь": {
       "localizations": {
         "ru": {
@@ -4501,6 +4485,22 @@
         }
       }
     },
+    "История поездок, дом и работа хранятся только на этом iPhone. На сервер уходят запрос маршрута, ваши отметки и обезличенные отрезки для пробок — их можно выключить в Настройках.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "История поездок, дом и работа хранятся только на этом iPhone. На сервер уходят запрос маршрута, ваши отметки и обезличенные отрезки для пробок — их можно выключить в Настройках."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlar tarixi, uy va ish joyi faqat shu iPhone'da saqlanadi. Serverga faqat marshrut so‘rovi, sizning belgilaringiz va tirbandlik uchun shaxssiz yo‘l bo‘laklari yuboriladi — ularni Sozlamalarda o‘chirish mumkin."
+          }
+        }
+      }
+    },
     "Источники данных": {
       "localizations": {
         "ru": {
@@ -5598,22 +5598,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrutlar vaqtincha ishlamayapti — tuzatyapmiz"
-          }
-        }
-      }
-    },
-    "Маршруты и местоположение обрабатываются только на этом iPhone — на сервер не уходят.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Маршруты и местоположение обрабатываются только на этом iPhone — на сервер не уходят."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Marshrutlar va joylashuv faqat shu iPhone'da qayta ishlanadi — serverga yuborilmaydi."
           }
         }
       }

@@ -65,10 +65,7 @@ struct OnboardingView: View {
                         .padding(.bottom, 8)
                 }
 
-                Text("Данные о местоположении остаются на устройстве.")
-                    .font(.rounded(11))
-                    .foregroundStyle(Theme.textTertiary)
-                    .padding(.bottom, 12)
+                Color.clear.frame(height: 12)
             }
         }
     }
@@ -138,7 +135,7 @@ struct OnboardingView: View {
 
                 // Прайминг приватности: объясняем ДО системного диалога — больше доверия
                 // и согласий, App Review видит обоснование фоновой геолокации.
-                Label("Маршруты и местоположение обрабатываются только на этом iPhone — на сервер не уходят.",
+                Label("История поездок, дом и работа хранятся только на этом iPhone. На сервер уходят запрос маршрута, ваши отметки и обезличенные отрезки для пробок — их можно выключить в Настройках.",
                       systemImage: "lock.shield.fill")
                     .font(.rounded(12, .medium))
                     .foregroundStyle(Theme.textSecondary)

@@ -90,6 +90,9 @@ struct EngineMapView: UIViewRepresentable {
     /// Карту накрыло полноэкранное предупреждение о камере (градиент до 96 %):
     /// рисовать её на полной частоте незачем (аудит 11.10).
     var covered: Bool = false
+    /// Крейсер вдали от камер и манёвра (EngineMapView.isCruise): кадров
+    /// меньше — картинка на трассе почти неподвижна (аудит энергии 19.10).
+    var cruise: Bool = false
     /// На ходу — только дорога (DrivingDeclutter): пешеходные тоннели и
     /// тротуары, деревья, тени, парковки, значки заведений прячутся видимостью
     /// слоёв; встали — возвращаются.
@@ -816,7 +819,8 @@ struct EngineMapView: UIViewRepresentable {
             } ?? true
             // Частота кадров: полная — только когда водитель сам двигает карту.
             let fps = Self.framesPerSecond(browsing: browsing, performance: model.performance,
-                                           lowPower: model.lowPower, covered: model.covered)
+                                           lowPower: model.lowPower, covered: model.covered,
+                                           cruise: model.cruise)
             if fps != lastFPS {
                 lastFPS = fps
                 view.preferredFramesPerSecond = fps > 0
@@ -1218,13 +1222,29 @@ struct EngineMapView: UIViewRepresentable {
         /// направление карты: как у прежнего символа с `icon-rotation-alignment:
         /// map`. Вид стоит лицом к экрану при наклоне — как `icon-pitch-alignment:
         /// viewport`.
+        /// Стрелка «я» на экране. Зовётся дважды за кадр (кадр камеры и шаг
+        /// глайда) — второй раз с тем же результатом, поэтому сдвиг меньше
+        /// четверти пункта и поворот меньше 0,2° пропускаются. Ставится слоем,
+        /// а не `center`/`transform` вида: UIKit на них пересобирает раскладку
+        /// карты (`layoutSubviews` движка — половина кода приложения на main
+        /// в замере 19.10, perf_audit_2026-10-19.md).
         private func layoutPositionView(in view: MLNMapView) {
             guard let coordinate = displayedPosition else { return }
             let marker = positionView ?? makePositionView(in: view)
-            marker.center = view.convert(coordinate, toPointTo: view)
-            marker.transform = CGAffineTransform(
-                rotationAngle: (positionHeading - view.direction) * .pi / 180)
+            let point = view.convert(coordinate, toPointTo: view)
+            let angle = (positionHeading - view.direction) * .pi / 180
+            if let shown = shownPosition,
+               abs(shown.point.x - point.x) < 0.25, abs(shown.point.y - point.y) < 0.25,
+               abs(shown.angle - angle) < 0.0035 { return }
+            shownPosition = (point, angle)
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            marker.layer.position = point
+            marker.layer.setAffineTransform(CGAffineTransform(rotationAngle: angle))
+            CATransaction.commit()
         }
+        /// Что стрелка показывает сейчас (точка и угол) — для пропуска повторов.
+        private var shownPosition: (point: CGPoint, angle: Double)?
 
         private func makePositionView(in view: MLNMapView) -> UIImageView {
             let marker = UIImageView()
@@ -1232,6 +1252,7 @@ struct EngineMapView: UIViewRepresentable {
             marker.isAccessibilityElement = false
             view.addSubview(marker)
             positionView = marker
+            shownPosition = nil   // новый вид — поставить заново, а не «уже стоит»
             installCursor(current?.cursorStyle ?? lastCursor ?? .arrow)
             return marker
         }
@@ -1277,7 +1298,7 @@ struct EngineMapView: UIViewRepresentable {
 
         /// 0 — частота по умолчанию (движок сам выбирает, плавно для жестов).
         static func framesPerSecond(browsing: Bool, performance: PerformanceMode, lowPower: Bool,
-                                    covered: Bool = false) -> Int {
+                                    covered: Bool = false, cruise: Bool = false) -> Int {
             if browsing { return performance == .full && !lowPower ? 0 : AppConfig.engineWarmFPS }
             // Под предупреждением о камере — как у горячего телефона: видна
             // лишь верхняя полоска карты сквозь градиент.
@@ -1285,8 +1306,21 @@ struct EngineMapView: UIViewRepresentable {
             switch performance {
             case .minimal: return AppConfig.engineHotFPS
             case .reduced: return AppConfig.engineWarmFPS
-            case .full:    return lowPower ? AppConfig.engineWarmFPS : AppConfig.engineFollowFPS
+            case .full:    return lowPower || cruise ? AppConfig.engineWarmFPS : AppConfig.engineFollowFPS
             }
+        }
+
+        /// Крейсер: поездка на скорости трассы, камера не близко, манёвр
+        /// далеко. В городе и у камеры/поворота — полные 30 к/с: там картинка
+        /// меняется и «рывками» замечают (поле 12.10). С гистерезисом по
+        /// скорости (вход 70, выход ниже 60): на пороге частота не должна
+        /// мигать от шума спидометра. Хранится флагом LocationService.isCruising
+        /// — пишется только на смене, как isApproachingCamera.
+        static func isCruise(was: Bool, tripActive: Bool, speedKmh: Double, approachingCamera: Bool,
+                             maneuverMeters: Double?) -> Bool {
+            guard tripActive, !approachingCamera,
+                  (maneuverMeters ?? .infinity) > AppConfig.engineCruiseManeuverMeters else { return false }
+            return speedKmh >= (was ? AppConfig.engineCruiseExitKmh : AppConfig.engineCruiseMinKmh)
         }
 
         static func zoom(spanMeters: Double, height: Double, latitude: Double) -> Double {

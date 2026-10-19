@@ -64,6 +64,9 @@ nonisolated enum AppConfig {
     /// расслабляемся вовсе, а вдали выход мгновенный — первый же фикс с
     /// движением возвращает точный тир.
     nonisolated static let gpsIdleAfterSeconds: TimeInterval = 20
+    /// Открытый экран «лежал» — сдвиг на столько от места лёжки возвращает
+    /// максимальную точность, даже если скорость первого фикса ещё ноль.
+    nonisolated static let gpsIdleLeaveMeters: Double = 20
     /// «Стою» — скорость ниже этого (км/ч). Ползание в пробке (1–2 км/ч) —
     /// тоже стоянка: фиксы всё равно приходят по 30-метровому фильтру.
     nonisolated static let gpsStandstillSpeedKmh = 3.0
@@ -544,14 +547,19 @@ nonisolated enum AppConfig {
     /// кусок рвётся.
     nonisolated static let trafficMaxStepMeters: CLLocationDistance = 500
     nonisolated static let trafficMaxGapSeconds: TimeInterval = 120
-    /// Отправка — пачкой раз в столько, пока идёт поездка.
-    static let trafficUploadInterval: TimeInterval = 120
     /// Не отправленные (нет сети) куски копятся не больше этого — старые
     /// выбрасываются: пробка часовой давности серверу уже не нужна.
     static let trafficQueueCap = 30
     /// Пробки с сервера: как часто перечитывать, пока карта на экране или идёт
     /// поездка, и с какого возраста файла считать данных нет вовсе.
     static let trafficRefreshInterval: TimeInterval = 120
+    /// Экран погашен и маршрута нет — пробки нужны только «впереди пробка».
+    static let trafficQuietInterval: TimeInterval = 300
+    /// Радио уже проснулось ради другого запроса — пробки, чей срок подойдёт
+    /// в ближайшие столько секунд, идут вместе с ним (NetworkRhythm).
+    static let radioJoinSlackSeconds: TimeInterval = 30
+    /// Шаг проверки такта пробок (сон без радио — дёшево).
+    static let trafficLoopStepSeconds: TimeInterval = 15
     static let trafficStaleSeconds: TimeInterval = 10 * 60
     /// Участок маршрута совпал с ребром пробки: ближе этого и почти тем же
     /// направлением (иначе встречная полоса проспекта красила бы нашу).
@@ -1412,20 +1420,38 @@ nonisolated enum AppConfig {
     static let engineFollowFPS = 30
     /// Телефон греется или включено энергосбережение.
     static let engineWarmFPS = 20
+    /// Крейсер (EngineMapView.isCruise): с какой скорости и как далеко от
+    /// манёвра карта может жить на engineWarmFPS.
+    static let engineCruiseMinKmh: Double = 70
+    /// Выход из крейсера — ниже этой скорости (гистерезис).
+    static let engineCruiseExitKmh: Double = 60
+    static let engineCruiseManeuverMeters: Double = 1000
     /// Телефон горячий: карта почти статична, HUD и голос важнее картинки.
     static let engineHotFPS = 15
     /// Порог сдвига камеры на горячем телефоне, метры (на холодном — 2 м).
     static let engineCameraMoveThresholdWarm = 6.0
 
     /// Live Activity: ближе этой дистанции до камеры — частые обновления
-    /// (25 м / 3 с); дальше — 100 м и не чаще `liveActivityFarInterval`.
+    /// (`liveActivityNearStepMeters` / `liveActivityNearInterval`); дальше —
+    /// `liveActivityFarStepMeters` и не чаще `liveActivityFarInterval`.
     /// С запасом к самому большому эффективному радиусу оповещения (~800 м).
     static let liveActivityNearMeters = 1_200.0
     /// Нижняя граница частой ступени (город, малая скорость) и запас к
     /// эффективному радиусу оповещения (LiveActivityService.nearZone).
     static let liveActivityMinNearMeters = 400.0
     static let liveActivityNearMargin = 1.3
-    static let liveActivityFarInterval: TimeInterval = 15
+    static let liveActivityFarInterval: TimeInterval = 30
+    /// Вблизи камеры: шаг дистанции и не чаще раза в столько секунд. Между
+    /// обновлениями полосу приближения двигает система по `arrivesAt`.
+    static let liveActivityNearStepMeters = 50.0
+    static let liveActivityFarStepMeters = 200.0
+    static let liveActivityNearInterval: TimeInterval = 5
+    /// Прибытие к камере сдвинулось больше этой доли оставшегося времени
+    /// (скорость поменялась) — обновить полосу, хоть дистанция та же.
+    static let liveActivityArrivalDrift = 0.15
+    /// Неизменное состояние всё равно освежается раньше staleDate (300 с):
+    /// «Нет сигнала GPS» — только когда приложение и правда молчит.
+    static let liveActivityKeepAliveSeconds: TimeInterval = 240
     /// Часы без тревоги: не чаще раза в столько секунд.
     static let watchCalmInterval: TimeInterval = 10
 

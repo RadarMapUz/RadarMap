@@ -126,6 +126,7 @@ struct CarPlayEngineLayer: View {
             // Режим «в поездке» всегда: без кафе, номеров домов и подписей
             // дорожек — экран машины читают боковым зрением.
             driving: true,
+            cruise: env.location.isCruising,
             // На ходу — только дорога; встали — окрестность возвращается.
             declutter: model.declutter.update(speedKmh: env.location.speedKmh, at: Date()),
             // Плитка — только смотреть: случайный жест снимал слежение, а

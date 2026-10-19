@@ -64,7 +64,7 @@ struct SpeedHUDView: View {
         // которого она и сделана: телефон в держателе на солнце.
         .opacity(SpeedHUDView.dimming(
             secondary: secondary,
-            night: !env.settings.mapAppearance.isDaylight(at: env.location.currentCoordinate),
+            night: !env.interfaceIsDaylight,
             alertLevel: env.location.alertLevel))
         .fixedSize(horizontal: false, vertical: true)
         // Синего значка «город/трасса» в углу больше нет: его смысла с дороги

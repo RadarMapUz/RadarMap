@@ -638,6 +638,7 @@ final class LocationService: NSObject {
             // Просто открытое приложение: точный GPS для HUD, фон не держим.
             // Точность — как у Apple Карт (почему — GPSTiers.foreground).
             let request = GPSTiers.foreground(lowPower: isLowPowerMode)
+            foregroundIdle = false
             manager.desiredAccuracy = request.accuracy
             manager.distanceFilter = request.distanceFilter
             manager.allowsBackgroundLocationUpdates = false
@@ -689,7 +690,8 @@ final class LocationService: NSObject {
         // CarPlay без поездки — тоже вождение с живыми оповещениями, и лестница
         // ему положена: раньше он держал «Best» и фильтр 5 м всю сессию, в том
         // числе на стоянке и на трассе вдали от камер (аудит 11.10).
-        guard isTripActive || isCarPlayConnected, settings.adaptiveGPS else { return }
+        if !(isTripActive || isCarPlayConnected) { return tuneForegroundAccuracy() }
+        guard settings.adaptiveGPS else { return }
         let cameraDistance = distanceToNearest ?? .greatestFiniteMagnitude
         let stepDistance = (route?.isActive == true && route?.nextStep != nil)
             ? (route?.nextStepDistance ?? .greatestFiniteMagnitude)
@@ -714,6 +716,35 @@ final class LocationService: NSObject {
         manager.distanceFilter = request.distanceFilter
     }
     @ObservationIgnored private var accuracyWatched = false
+
+    /// Открытый экран без поездки: телефон лежит — чип на «до 10 м», тронулись
+    /// — снова «Best» (GPSTiers.foreground). Только на принятых фиксах.
+    private func tuneForegroundAccuracy() {
+        guard isForeground else { return }
+        var idle = settings.adaptiveGPS
+            && GPSTiers.foregroundIdle(idleSeconds: Date().timeIntervalSince(lastMovementAt),
+                                       hasPosition: currentCoordinate != nil,
+                                       nearestCameraMeters: distanceToNearest ?? .infinity)
+        // Сдвинулись от места, где легли, — уже не лежим, даже если первый
+        // фикс после фильтра 30 м ещё показал «0 км/ч».
+        if foregroundIdle, let anchor = idleAnchor, let here = currentCoordinate,
+           GeoMath.fastDistance(anchor.latitude, anchor.longitude, here.latitude, here.longitude)
+            >= AppConfig.gpsIdleLeaveMeters {
+            idle = false
+            lastMovementAt = Date()
+        }
+        guard idle != foregroundIdle else { return }
+        foregroundIdle = idle
+        idleAnchor = idle ? currentCoordinate : nil
+        let request = GPSTiers.foreground(lowPower: isLowPowerMode, idle: idle)
+        manager.desiredAccuracy = request.accuracy
+        manager.distanceFilter = request.distanceFilter
+        Log.location.info("открытый экран: \(idle ? "лежит — точность до 10 м" : "движение — точность максимум", privacy: .public)")
+    }
+    /// Открытый экран сейчас на «лежачей» точности.
+    @ObservationIgnored private var foregroundIdle = false
+    /// Где легли (выход из «лежачей» точности — по сдвигу от этой точки).
+    @ObservationIgnored private var idleAnchor: CLLocationCoordinate2D?
 
     /// Попросить точную геопозицию на эту сессию (если дана «приблизительная»).
     func requestPreciseLocation() {
@@ -864,6 +895,22 @@ final class LocationService: NSObject {
 
     /// Единственная точка входа фиксов: сначала гейт качества, потом обработка.
     /// Отброшенный фикс не двигает ни трек, ни алерты, ни спидометр.
+    /// Крейсер вдали от камер и манёвра — карта может рисовать реже
+    /// (EngineMapView.Coordinator.isCruise). Хранимый флаг: пишется только на
+    /// смене, вью читают его, а не скорость с дистанцией на каждом фиксе.
+    private(set) var isCruising = false
+
+    private func refreshCruise() {
+        #if canImport(MapLibre)
+        let maneuver = route?.isActive == true && route?.nextStep != nil ? route?.nextStepDistance : nil
+        let next = EngineMapView.Coordinator.isCruise(was: isCruising, tripActive: isTripActive,
+                                                      speedKmh: speedKmh,
+                                                      approachingCamera: isApproachingCamera,
+                                                      maneuverMeters: maneuver)
+        if next != isCruising { isCruising = next }
+        #endif
+    }
+
     /// Время последнего принятого фикса (для трека поездки).
     @ObservationIgnored private var lastFixTime = Date()
 
@@ -910,7 +957,9 @@ final class LocationService: NSObject {
             }
             // То же для открытого экрана без поездки: забракован по точности —
             // просим максимум, иначе метка так и стоит по грубой точке.
-            if reason == .accuracy, !isTripActive, isForeground,
+            // Телефон лежит, точка уже есть — грубый фикс в помещении не повод
+            // будить чип: иначе лежачая точность и подъём сменяли бы друг друга.
+            if reason == .accuracy, !isTripActive, isForeground, !foregroundIdle,
                let raised = GPSTiers.escalatedAccuracy(from: manager.desiredAccuracy) {
                 Log.location.notice("открытый экран: фикс \(fix.horizontalAccuracy, privacy: .public) м отброшен — поднимаем точность")
                 manager.desiredAccuracy = raised
@@ -1202,6 +1251,7 @@ final class LocationService: NSObject {
             // приёмника на месте, а не движение (владелец, 12.10).
             freezeDisplayIfStopped(shownBefore: shownBefore, courseBefore: courseBefore)
             tuneAdaptiveAccuracy()
+            refreshCruise()
             // Умный режим: детектор города/трассы (дёшево — пара сравнений).
             contextDetector.update(roadLimitKmh: speedLimits?.certainLimit,
                                    camerasWithin3km: cameraDensity3km,
@@ -1276,10 +1326,13 @@ final class LocationService: NSObject {
 
     /// Текущее состояние для Live Activity.
     var activityState: CameraActivityAttributes.ContentState {
-        CameraActivityAttributes.ContentState(
+        let now = Date()
+        return CameraActivityAttributes.ContentState(
             nearestTitle: nearestCamera?.displayTitle,
             nearestSymbol: nearestCamera?.kind.symbolName ?? "checkmark.shield.fill",
-            distanceMeters: distanceToNearest
+            distanceMeters: distanceToNearest,
+            arrivesAt: LiveActivityService.arrival(distance: distanceToNearest, speedKmh: speedKmh, now: now),
+            since: now
         )
     }
 
@@ -1377,6 +1430,8 @@ final class LocationService: NSObject {
         if !clusteredCameras.isEmpty { clusteredCameras = [] }
     }
 
+    @ObservationIgnored private var nearestBuffer: [(camera: Camera, distance: CLLocationDistance)] = []
+
     private func recomputeNearest(from coordinate: CLLocationCoordinate2D) {
         guard !trackedCameras.isEmpty else { clearNearest(); return }
         // Сначала дешёвая дистанция по всему окну, и только потом дорогая проверка
@@ -1385,8 +1440,14 @@ final class LocationService: NSObject {
         // (кусок дороги, ось, коридор) считаем раз-два на тик, а не 150 раз.
         // fastDistance вместо CLLocation: без аллокаций, и PassTracking меряет
         // траверз тем же способом — цифры на HUD и в проездах сходятся.
-        var candidates: [(camera: Camera, distance: CLLocationDistance)] = []
-        candidates.reserveCapacity(trackedCameras.count)
+        // Буфер переиспользуется между тиками (без новой аллокации на фикс).
+        // Полная сортировка оставлена сознательно: окно ≤ trackedCamerasLimit,
+        // это микросекунды, а частичный выбор на пути тревоги — лишний риск
+        // (аудит энергии 19.10, 2.12).
+        var candidates = nearestBuffer
+        nearestBuffer = []   // единственная ссылка — иначе removeAll скопирует буфер
+        candidates.removeAll(keepingCapacity: true)
+        defer { nearestBuffer = candidates }
         // Охват предупреждений меряется по ГЕОГРАФИИ: проехали ближе порога
         // траверса — камера была наша, и молчание о ней обязано попасть в счёт.
         // Ни маршрут, ни гейты, ни правила записи проезда здесь не участвуют:

@@ -72,11 +72,57 @@ final class PerfAuditTests: XCTestCase {
         var state = CameraActivityAttributes.ContentState(
             nearestTitle: "Камера", nearestSymbol: "camera", distanceMeters: 812)
         let far = LiveActivityService.quantize(state, nearMeters: 400)
-        XCTAssertEqual(far.distanceMeters, 800, "вне зоны — шаг 100 м")
+        XCTAssertEqual(far.distanceMeters, 800, "вне зоны — шаг 200 м")
         XCTAssertEqual(LiveActivityService.interval(for: far, nearMeters: 400),
                        AppConfig.liveActivityFarInterval)
         state.distanceMeters = 312
         let near = LiveActivityService.quantize(state, nearMeters: 400)
-        XCTAssertEqual(near.distanceMeters, 300, "в зоне — шаг 25 м")
+        XCTAssertEqual(near.distanceMeters, 300, "в зоне — шаг 50 м")
+    }
+
+    /// Течение времени — не повод будить плашку: полосу приближения ведёт
+    /// система по `arrivesAt`. Повод — камера, ступень дистанции или
+    /// заметная смена скорости (аудит энергии 19.10).
+    func testLiveActivityIsNotWokenByTimeAlone() {
+        let t0 = Date(timeIntervalSince1970: 1_760_900_000)
+        let sent = CameraActivityAttributes.ContentState(
+            nearestTitle: "Камера", nearestSymbol: "camera", distanceMeters: 300,
+            arrivesAt: t0.addingTimeInterval(20), since: t0)
+        var same = sent
+        same.since = t0.addingTimeInterval(4)
+        same.arrivesAt = t0.addingTimeInterval(20.5)
+        XCTAssertFalse(LiveActivityService.differs(same, from: sent, now: t0.addingTimeInterval(4)))
+        var slower = same
+        slower.arrivesAt = t0.addingTimeInterval(40)   // встали в пробку перед камерой
+        XCTAssertTrue(LiveActivityService.differs(slower, from: sent, now: t0.addingTimeInterval(4)))
+        var stopped = same
+        stopped.arrivesAt = nil
+        XCTAssertTrue(LiveActivityService.differs(stopped, from: sent, now: t0.addingTimeInterval(4)))
+        var nextStep = same
+        nextStep.distanceMeters = 250
+        XCTAssertTrue(LiveActivityService.differs(nextStep, from: sent, now: t0.addingTimeInterval(4)))
+        XCTAssertNil(LiveActivityService.arrival(distance: 300, speedKmh: 2, now: t0), "стоим — полоса не едет")
+        XCTAssertEqual(LiveActivityService.arrival(distance: 300, speedKmh: 54, now: t0), t0.addingTimeInterval(20))
+    }
+
+    /// Полоса приближения не обнуляется на каждом обновлении: начало — от
+    /// подъезда к этой камере (ревью 19.10).
+    func testApproachBarKeepsItsStartForTheSameCamera() {
+        let t0 = Date(timeIntervalSince1970: 1_760_900_000)
+        let sent = CameraActivityAttributes.ContentState(
+            nearestTitle: "Камера", nearestSymbol: "camera", distanceMeters: 300,
+            arrivesAt: t0.addingTimeInterval(20), since: t0)
+        var next = sent
+        next.distanceMeters = 250
+        next.arrivesAt = t0.addingTimeInterval(21)
+        XCTAssertEqual(LiveActivityService.approachStart(new: next, sent: sent, now: t0.addingTimeInterval(5)), t0)
+        var other = next
+        other.nearestTitle = "Другая"
+        XCTAssertEqual(LiveActivityService.approachStart(new: other, sent: sent, now: t0.addingTimeInterval(5)),
+                       t0.addingTimeInterval(5), "новая камера — новая полоса")
+        var stopped = next
+        stopped.arrivesAt = nil
+        XCTAssertNil(LiveActivityService.approachStart(new: stopped, sent: sent, now: t0.addingTimeInterval(5)))
+        XCTAssertLessThan(AppConfig.liveActivityKeepAliveSeconds, 300, "освежать раньше staleDate")
     }
 }

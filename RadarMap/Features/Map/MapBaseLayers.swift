@@ -66,7 +66,10 @@ struct EngineBaseLayer: View {
                         spanMeters: camera.spanMeters,
                         anchorY: insets.meY,
                         pitchDegrees: camera.pitchDegrees,
-                        daylight: env.settings.mapAppearance.isDaylight(at: me, now: Date()),
+                        // Тот же день/ночь, что у интерфейса (пересчёт раз в
+                        // 5 мин и на смене настройки), а не расчёт солнца по
+                        // живой координате на каждом фиксе (аудит энергии 19.10).
+                        daylight: env.interfaceIsDaylight,
                         houses: env.settings.mapHouses,
                         cameras: [],
                         cameraRevision: env.cameras.revision,
@@ -105,6 +108,7 @@ struct EngineBaseLayer: View {
                         covered: env.location.isApproachingCamera
                             && !MapMode.current(isTripActive: env.location.isTripActive,
                                                 hasRoute: env.route.isActive).showsManeuver,
+                        cruise: env.location.isCruising,
                         // В поездке на ходу — только дорога (как в машине).
                         declutter: env.location.isTripActive
                             && map.declutter.update(speedKmh: env.location.speedKmh, at: Date()),

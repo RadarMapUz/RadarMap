@@ -6,7 +6,8 @@
 //
 //  Отправка. Во время поездки принятые фиксы режет TrafficProbes (концы
 //  поездки и места у дома/работы не уходят никогда), готовые куски уходят
-//  пачкой раз в `trafficUploadInterval` на POST /api/traffic. Без сети куски
+//  пачкой на POST /api/traffic — тем же тактом, что и приём (NetworkRhythm):
+//  одно пробуждение радио вместо двух. Без сети куски
 //  копятся (не больше `trafficQueueCap`, старые выбрасываются — пробка
 //  часовой давности серверу не нужна). Выключатель — «Помогать с пробками»
 //  в настройках; рубильник — пульт (`features.traffic`).
@@ -39,8 +40,19 @@ final class TrafficService {
 
     @ObservationIgnored private var probes = TrafficProbes()
     @ObservationIgnored private var queue: [TrafficProbes.Piece] = []
-    @ObservationIgnored private var uploadTask: Task<Void, Never>?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    /// Последний такт сети (отправка + приём).
+    @ObservationIgnored private var lastTickAt = Date.distantPast
+    /// Интервал такта — ставит AppEnvironment (экран, маршрут).
+    @ObservationIgnored var intervalProvider: (() -> TimeInterval)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: intervalProvider,
+                                               "TrafficService.intervalProvider") }
+    }
+    private var interval: TimeInterval { intervalProvider?() ?? AppConfig.trafficRefreshInterval }
+    /// Отправки идут по одной: такт, «радио проснулось» и финиш поездки могли
+    /// взять одну и ту же голову очереди — кусок ушёл бы дважды и сервер
+    /// принял бы его за второго независимого водителя (ревью 19.10).
+    @ObservationIgnored private var uploadChain: Task<Void, Never>?
     @ObservationIgnored private var etag: String?
     @ObservationIgnored private var wanted = false
 
@@ -67,22 +79,12 @@ final class TrafficService {
     func tripStarted() {
         guard contributes else { return }
         probes.begin(zones: privacyZones())
-        uploadTask?.cancel()
-        uploadTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(AppConfig.trafficUploadInterval))
-                guard !Task.isCancelled else { return }
-                await self?.upload()
-            }
-        }
     }
 
     func tripEnded() {
         // Хвост (последние ≥ 400 м) выбрасывается внутри finish(): финиш не
         // уходит никогда. Готовое — последней пачкой.
         probes.finish()
-        uploadTask?.cancel()
-        uploadTask = nil
         Task { await upload() }
     }
 
@@ -100,6 +102,16 @@ final class TrafficService {
     }
 
     private func upload() async {
+        let previous = uploadChain
+        let task = Task { [weak self] in
+            await previous?.value
+            await self?.uploadNow()
+        }
+        uploadChain = task
+        await task.value
+    }
+
+    private func uploadNow() async {
         queue += probes.takeReady()
         if queue.count > AppConfig.trafficQueueCap { queue.removeFirst(queue.count - AppConfig.trafficQueueCap) }
         guard contributes, isOnline(), !queue.isEmpty else { return }
@@ -128,9 +140,33 @@ final class TrafficService {
         guard wanted else { return }
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refresh()
-                try? await Task.sleep(for: .seconds(AppConfig.trafficRefreshInterval))
+                guard let self else { return }
+                if Date().timeIntervalSince(self.lastTickAt) >= self.interval { await self.tick() }
+                // Короткими шагами: интервал зависит от экрана и маршрута, а
+                // такт мог уже пройти вместе с опросом отметок (radioIsAwake).
+                await Task.pause(seconds: AppConfig.trafficLoopStepSeconds)
             }
+        }
+    }
+
+    /// Такт сети: досылка кусков и свежие пробки — одним пробуждением радио.
+    private func tick() async {
+        lastTickAt = Date()
+        await upload()
+        await refresh()
+    }
+
+    /// Радио только что проснулось ради другого запроса (опрос отметок):
+    /// если срок пробок почти подошёл — сходить сейчас, вместе с ним.
+    func radioIsAwake() {
+        guard wanted, NetworkRhythm.joinsAwakeRadio(sinceLast: Date().timeIntervalSince(lastTickAt),
+                                                     interval: interval) else { return }
+        // Срок — сразу, до запуска задачи: иначе цикл в этот промежуток сам
+        // прошёл бы проверку и такт случился бы дважды.
+        lastTickAt = Date()
+        Task {
+            await upload()
+            await refresh()
         }
     }
 

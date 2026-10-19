@@ -120,8 +120,11 @@ struct MapStatusBanner: View {
             // спидометр рисовался без сети целиком, — но он убран, а другого
             // экрана, который честно заменил бы серую карту, у этой подложки
             // нет. Главное плашка и так говорит: камеры предупреждают.
+            // В поездке пояснение убирается — заголовок сам говорит главное
+            // (ревью 19.10).
             shell(symbol: "wifi.slash", tint: Theme.textSecondary,
-                  title: String(localized: "Карта не загружается — нет сети"),
+                  title: compact ? String(localized: "Нет сети — камеры предупреждают")
+                                 : String(localized: "Карта не загружается — нет сети"),
                   body: String(localized: "Камеры предупреждают как обычно: база хранится на телефоне"),
                   id: status.id)
         case .offline(.downloadedRegion):

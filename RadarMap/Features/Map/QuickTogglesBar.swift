@@ -11,6 +11,9 @@ import SwiftUI
 struct QuickTogglesBar: View {
     @Environment(AppEnvironment.self) private var env
     let onClose: () -> Void
+    /// Пояснение режима голоса — по скорости в момент ОТКРЫТИЯ: на каждом
+    /// фиксе в пробке 18–22 км/ч панель прыгала бы по высоте (ревью 19.10).
+    @State private var showsDetail = true
 
     var body: some View {
         @Bindable var settings = env.settings
@@ -46,7 +49,7 @@ struct QuickTogglesBar: View {
             }
             // Пояснение — абзац для чтения: на ходу его не читают, а панель
             // от него на треть выше (5.5). Стоя — показываем.
-            if env.location.speedKmh < AppConfig.speakSpeedThresholdKmh {
+            if showsDetail {
                 Text(settings.voiceMode.detail)
                     .font(.rounded(10))
                     .foregroundStyle(Theme.textTertiary)
@@ -72,6 +75,7 @@ struct QuickTogglesBar: View {
             }
         }
         .padding(14)
+        .onAppear { showsDetail = env.location.speedKmh < AppConfig.speakSpeedThresholdKmh }
         // Сплошная панель, не стекло: над картой, которая едет, стекло
         // пересчитывает размытие каждый её кадр (правило 13.10, 4.2).
         .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))

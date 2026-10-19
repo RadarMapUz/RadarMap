@@ -6383,6 +6383,22 @@
         }
       }
     },
+    "Не видим вашего положения — заезд остался": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не видим вашего положения — заезд остался"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joylashuvingiz ko‘rinmayapti — bekat qoldi"
+          }
+        }
+      }
+    },
     "Не вижу геопозицию — попробуйте ещё раз.": {
       "localizations": {
         "ru": {
@@ -6798,6 +6814,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aloqa yo‘q, keyinroq yuboraman"
+          }
+        }
+      }
+    },
+    "Нет сети — камеры предупреждают": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет сети — камеры предупреждают"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarmoq yo‘q — kameralar ogohlantiradi"
           }
         }
       }

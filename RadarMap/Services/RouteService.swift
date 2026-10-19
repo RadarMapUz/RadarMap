@@ -375,6 +375,11 @@ final class RouteService {
         errorMessage = String(localized: "Не видим вашего положения — маршрут не построен")
     }
 
+    /// Убрать заезд не вышло без положения — маршрут при этом остаётся.
+    func reportNoFixForStop() {
+        errorMessage = String(localized: "Не видим вашего положения — заезд остался")
+    }
+
     func build(from source: CLLocationCoordinate2D,
                to destination: CLLocationCoordinate2D,
                name: String, cameras: [Camera],

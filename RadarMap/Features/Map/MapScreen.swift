@@ -1026,7 +1026,11 @@ struct MapScreen: View {
 
     /// Долгий тап: маркер + бар действий (кроме режима прицела добавления камеры).
     private func selectPoint(at coordinate: CLLocationCoordinate2D) {
-        guard !map.isAddingCamera else { return }
+        guard !map.isAddingCamera,
+              TripScreenLayout.allowsMapLongPress(isTripActive: env.location.isTripActive,
+                                                  speedKmh: env.location.speedKmh,
+                                                  isProbablyDriving: env.location.isProbablyDriving)
+        else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         withMotion(Motion.standard) {
             map.pressedPoint = MapPoint(coordinate: coordinate)
@@ -1065,7 +1069,7 @@ struct MapScreen: View {
     private func removeStop() {
         Task {
             guard let from = await env.location.awaitPreciseCoordinate() else {
-                env.route.reportNoFix()
+                env.route.reportNoFixForStop()
                 return
             }
             await env.route.removeStop(from: from, cameras: env.cameras.cameras)
@@ -1189,10 +1193,10 @@ struct MapScreen: View {
             .strokeBorder(Theme.edgePanel, lineWidth: 1))
     }
 
-    /// Пункты меню поездки — только то, что нужно В ДОРОГЕ (5.3): куда
-    /// ехать, что впереди, кому сказать время прибытия. «Итоги», «Настройки»
-    /// и «Добавить камеру» за рулём — экраны на минуту чтения или прицел на
-    /// карте; они ждут остановки в нижнем баре.
+    /// Пункты меню поездки — то, что нужно В ДОРОГЕ (5.3): куда ехать, что
+    /// впереди, кому сказать время прибытия. «Итоги», «Настройки» и «Добавить
+    /// камеру» — экраны на минуту чтения или прицел на карте: в меню они
+    /// появляются, только когда стоим (нижнего бара в поездке нет).
     @ViewBuilder private var tripActionItems: some View {
         Button { map.showSearch = true } label: {
             Label("Поиск", systemImage: "magnifyingglass")
@@ -1218,6 +1222,21 @@ struct MapScreen: View {
         }
         Button { map.showNearbySheet = true } label: {
             Label("Рядом", systemImage: "list.bullet")
+        }
+        if TripScreenLayout.tripMenuShowsParkedItems(speedKmh: env.location.speedKmh) {
+            Section {
+                Button { map.showStats = true } label: {
+                    Label("Итоги", systemImage: "chart.bar.fill")
+                }
+                Button {
+                    withMotion { map.isAddingCamera = true }
+                } label: {
+                    Label("Добавить камеру", systemImage: Icon.ownCamera)
+                }
+                Button { map.showSettings = true } label: {
+                    Label("Настройки", systemImage: "gearshape.fill")
+                }
+            }
         }
     }
 

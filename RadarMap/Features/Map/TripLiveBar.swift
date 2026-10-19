@@ -134,7 +134,8 @@ struct TripLiveBar: View {
         if route.isActive, env.settings.showNextCamera, let next = route.nextCamera,
            TripScreenLayout.showsCameraCapsule(capsuleCameraID: next.camera.id,
                                                chipCameraID: location.nearestCamera?.id,
-                                               chipShown: chipShown) {
+                                               chipShown: chipShown,
+                                               isSignalStale: location.isSignalStale) {
             Button(action: onShowCameras) {
                 HStack(spacing: 5) {
                     Image(systemName: next.camera.kind.symbolName)

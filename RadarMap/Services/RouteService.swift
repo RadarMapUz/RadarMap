@@ -79,8 +79,11 @@ final class RouteService {
         case serverUnreachable
     }
 
-    private(set) var variants: [Variant] = []
-    private(set) var selectedID = 0
+    /// Кумулятивная длина считается по ВЫБРАННОЙ линии: смена набора или
+    /// выбора её сбрасывает (до 19.10 сверялось только число точек, и вариант
+    /// с тем же числом точек брал чужие длины — ревью энергии).
+    private(set) var variants: [Variant] = [] { didSet { selectedCumulative = [] } }
+    private(set) var selectedID = 0 { didSet { selectedCumulative = [] } }
     private(set) var destinationName: String = ""
     private(set) var destinationCoordinate: CLLocationCoordinate2D?
 

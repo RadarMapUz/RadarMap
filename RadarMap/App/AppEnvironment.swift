@@ -439,17 +439,25 @@ final class AppEnvironment {
     /// окна и сетки на одну отметку при открытом телефоне и машине (аудит
     /// энергии). Здесь, а не во вью: среда жива всегда, тело вью со сложенным
     /// телефоном не исполняется — а именно там водитель и едет.
+    ///
+    /// Оценка тревоги СРАЗУ — только когда сменились чужие отметки (новый
+    /// радар впереди не ждёт фикса); загрузка базы, своя камера и скрытие
+    /// оцениваются на следующем фиксе, как и раньше, — не по позиции
+    /// минутной давности стоящей машины.
     private func observeCameraRevision() {
         withObservationTracking {
             _ = cameras.revision
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.location.refreshMonitoring(evaluateNow: true)
+                let mobileChanged = self.cameras.mobileRevision != self.seenMobileRevision
+                self.seenMobileRevision = self.cameras.mobileRevision
+                self.location.refreshMonitoring(evaluateNow: mobileChanged)
                 self.observeCameraRevision()
             }
         }
     }
+    @ObservationIgnored private var seenMobileRevision = 0
 
     var loadError: String? { cameras.loadError }
 

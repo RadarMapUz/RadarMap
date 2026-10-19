@@ -1158,9 +1158,11 @@ nonisolated enum AppConfig {
     /// Обновление ссылки раз в минуту; «на месте» — если прибытие было не
     /// раньше двух минут назад, иначе маршрут сняли — «больше не отслеживается».
     static let etaShareIntervalSeconds: TimeInterval = 60
-    /// Обновление ссылки — только при сдвиге прибытия на минуту, остатка на
-    /// 500 м или раз в 10 мин (ссылка живёт 2 ч без обновлений).
-    static let etaShareArrivalStepSeconds: TimeInterval = 60
+    /// Обновление ссылки — только при сдвиге прибытия на 2 мин, остатка на
+    /// 500 м или раз в 10 мин (ссылка живёт 2 ч без обновлений). Стоя в
+    /// пробке прибытие честно съезжает на минуту в минуту — знакомому
+    /// хватит шага в две.
+    static let etaShareArrivalStepSeconds: TimeInterval = 120
     static let etaShareRemainingStepMeters: Double = 500
     static let etaShareKeepAliveSeconds: TimeInterval = 10 * 60
     static let etaShareArrivalFreshSeconds: TimeInterval = 120

@@ -216,7 +216,12 @@ nonisolated enum HitchWatch {
 
     static func setCounting(_ on: Bool) {
         counting.withLock { $0 = on }
+        // Экран машины стал нашим — разбудить сторож из редкого шага сразу:
+        // фриз пересборки карты на входе — ровно то, что считаем.
+        if on { wake.signal() }
     }
+    /// Будильник сна между пингами (вместо Thread.sleep).
+    private static let wake = DispatchSemaphore(value: 0)
 
     /// Забрать накопленное и обнулить.
     static func drain() -> Tally {
@@ -259,7 +264,7 @@ nonisolated enum HitchWatch {
                     let stage = MainWork.last.description
                     Log.app.fault("фриз main \(Int(lag * 1000), privacy: .public) мс на «\(stage, privacy: .public)»")
                 }
-                Thread.sleep(forTimeInterval: counting.withLock({ $0 }) ? pingEvery : idlePingEvery)
+                _ = wake.wait(timeout: .now() + (counting.withLock({ $0 }) ? pingEvery : idlePingEvery))
             }
         }
     }

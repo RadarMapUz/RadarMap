@@ -46,7 +46,7 @@ final class EtaShareTests: XCTestCase {
                                            arrival: eta.addingTimeInterval(20), remaining: 8800,
                                            now: t0.addingTimeInterval(60)))
         XCTAssertTrue(EtaShare.shouldSend(lastArrival: eta, lastRemaining: 9000, lastSentAt: t0,
-                                          arrival: eta.addingTimeInterval(90), remaining: 8800,
+                                          arrival: eta.addingTimeInterval(150), remaining: 8800,
                                           now: t0.addingTimeInterval(60)), "прибытие сдвинулось")
         XCTAssertTrue(EtaShare.shouldSend(lastArrival: eta, lastRemaining: 9000, lastSentAt: t0,
                                           arrival: eta, remaining: 8400,

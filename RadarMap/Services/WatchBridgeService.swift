@@ -111,7 +111,9 @@ extension WatchBridgeService: WCSessionDelegate {
             if !ready { self.lastSent = [:] }
         }
     }
-    nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
+    nonisolated func sessionDidBecomeInactive(_ session: WCSession) {
+        noteWatchState(session)   // смена часов: пока неактивна — не шлём
+    }
     nonisolated func sessionDidDeactivate(_ session: WCSession) {
         noteWatchState(session)
         session.activate()   // смена часов — переактивируемся

@@ -217,7 +217,7 @@ final class TripStats {
         lastCoordinate = coordinate
         maxSpeedKmh = max(maxSpeedKmh, speedKmh)
         lastPointAt = Date()
-        if recordsTimedTrack, startedAt != nil {
+        if recordsTimedTrack {
             timedBuffer.append(TimedPoint(time: Date(), lat: coordinate.latitude,
                                           lon: coordinate.longitude, speedKmh: speedKmh))
         }

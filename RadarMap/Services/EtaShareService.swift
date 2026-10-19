@@ -49,6 +49,9 @@ final class EtaShareService {
     func confirmShared() {
         guard token != nil, !isSharing else { return }
         isSharing = true
+        sentArrival = nil
+        sentRemaining = nil
+        sentAt = nil
         Log.network.notice("прибытие: делимся")
         loop?.cancel()
         loop = Task { [weak self] in
@@ -59,10 +62,15 @@ final class EtaShareService {
                     if EtaShare.shouldSend(lastArrival: self.sentArrival, lastRemaining: self.sentRemaining,
                                            lastSentAt: self.sentAt, arrival: arrival,
                                            remaining: remaining, now: Date()) {
-                        await self.send(.driving, arrival: arrival, remaining: remaining)
-                        self.sentArrival = arrival
-                        self.sentRemaining = remaining
-                        self.sentAt = Date()
+                        // Запоминаем только доставленное — иначе после сбоя
+                        // ссылка молчала бы до 10 минут; и не после «Перестать»
+                        // (finish уже обнулил, отмена не прерывает отправку).
+                        let delivered = await self.send(.driving, arrival: arrival, remaining: remaining)
+                        if delivered, !Task.isCancelled {
+                            self.sentArrival = arrival
+                            self.sentRemaining = remaining
+                            self.sentAt = Date()
+                        }
                     }
                 } else {
                     let arrived = route.lastArrival.map {
@@ -105,9 +113,10 @@ final class EtaShareService {
         Log.network.notice("прибытие: ссылка закрыта (\(status.rawValue, privacy: .public))")
     }
 
-    private func send(_ status: EtaShare.Status, arrival: Date, remaining: CLLocationDistance) async {
-        guard let token, allowedByConfig() else { return }
-        _ = await api.postAccepted("api/eta", json: EtaShare.payload(token: token, arrival: arrival,
-                                                                    remainingMeters: remaining, status: status))
+    @discardableResult
+    private func send(_ status: EtaShare.Status, arrival: Date, remaining: CLLocationDistance) async -> Bool {
+        guard let token, allowedByConfig() else { return false }
+        return await api.postAccepted("api/eta", json: EtaShare.payload(token: token, arrival: arrival,
+                                                                       remainingMeters: remaining, status: status))
     }
 }

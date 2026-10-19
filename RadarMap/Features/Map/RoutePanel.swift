@@ -119,32 +119,34 @@ struct RoutePanel: View {
                 if labeled {
                     Text(variant.assessment.labels.first.map { Self.title($0, variant) } ?? " ")
                         .font(.rounded(11, .bold))
-                        .foregroundStyle(isSelected ? Theme.background : Theme.accent)
+                        .foregroundStyle(isSelected ? Theme.onAccentFill : Theme.accent)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
                 Text(variant.etaText)
                     .font(.rounded(15, .bold))
-                    .foregroundStyle(isSelected ? Theme.background
+                    .foregroundStyle(isSelected ? Theme.onAccentFill
                                      : (variant.trafficDelay ?? 0) >= AppConfig.routeTrafficNoticeSeconds
                                         ? Self.trafficTint(variant.trafficDelay ?? 0) : Theme.textPrimary)
                 HStack(spacing: 4) {
                     Text(variant.distanceText)
-                    Image(systemName: "camera.fill").font(.rounded(9))
+                    Image(systemName: Icon.cameras).font(.rounded(9))
                     Text("\(variant.cameras.count)")
                 }
                 .font(.rounded(11, .medium))
-                .foregroundStyle(isSelected ? Theme.background.opacity(0.75) : Theme.textSecondary)
+                .foregroundStyle(isSelected ? Theme.onAccentFillSecondary : Theme.textSecondary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
-            .background(isSelected ? AnyShapeStyle(Theme.accent.gradient)
+            .background(isSelected ? AnyShapeStyle(Theme.accentFill)
                                    : AnyShapeStyle(.ultraThinMaterial),
                         in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
                 .stroke(isSelected ? .clear : Theme.stroke, lineWidth: 1))
         }
         .buttonStyle(.plain)
+        // Выбор закодирован только цветом — VoiceOver должен его слышать (4.6).
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     /// Цвет пробки на маршруте: заметная задержка — янтарь, большая — красный,

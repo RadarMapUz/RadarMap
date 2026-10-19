@@ -71,7 +71,7 @@ struct ApproachAlertView: View {
 
     private var fullScreen: some View {
         ZStack {
-            Color(uiColor: Theme.rgb(0x14181D)).ignoresSafeArea()
+            Theme.alertSurface.ignoresSafeArea()
             // Полоса цвета типа сверху — тип виден боковым зрением.
             VStack {
                 LinearGradient(colors: [tint.opacity(0.55), tint.opacity(0)],
@@ -170,7 +170,7 @@ struct ApproachAlertView: View {
             .background {
                 // Полоса цвета типа сверху — тот же сигнал, что у полного экрана.
                 ZStack(alignment: .top) {
-                    Color(uiColor: Theme.rgb(0x14181D))
+                    Theme.alertSurface
                     tint.frame(height: 5)
                 }
                 .clipShape(UnevenRoundedRectangle(topLeadingRadius: Theme.cornerLarge,

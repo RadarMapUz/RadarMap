@@ -82,9 +82,8 @@ struct ArrivalCardView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
-        .liftPanel()
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .onAppear {
             UINotificationFeedbackGenerator().notificationOccurred(.success)

@@ -178,7 +178,7 @@ struct ReportRadarButton: View {
             // Тень у формы строки, а не у текста поверх неё (см. View.statCard).
             RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
                 .fill(isActive ? AnyShapeStyle(Theme.action)
-                               : AnyShapeStyle(.ultraThinMaterial))
+                               : AnyShapeStyle(Theme.surface))
                 .shadow(color: .black.opacity(isActive ? 0.3 : 0.15), radius: isActive ? 10 : 4, y: 3)
         }
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
@@ -294,8 +294,8 @@ struct ReportRefineBar: View {
                 if env.mobile.cancellableReportID() != nil { cancelOption }
             }
             .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(.ultraThinMaterial,
-                        in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+            .liftedBackground(Theme.surface,
+                              in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
                 .stroke(Theme.stroke, lineWidth: 1))
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -406,8 +406,8 @@ struct MobileConfirmBar: View {
                 answer(title: String(localized: "Нет"), tint: Theme.dangerFill, value: false)
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
-            .background(.ultraThinMaterial,
-                        in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+            .liftedBackground(Theme.surface,
+                              in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
                 .stroke(Theme.stroke, lineWidth: 1))
             .transition(.move(edge: .bottom).combined(with: .opacity))

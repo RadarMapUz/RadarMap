@@ -231,6 +231,9 @@ enum Theme {
     static let background    = adaptive(0xF1F4F9, 0x111418)
     static let surface       = adaptive(0xFFFFFF, 0x1E232A)
     static let stroke        = adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.08, darkAlpha: 0.10)
+    /// Подложка экрана тревоги — всегда графит, днём тоже: на белом фоне
+    /// цифра расстояния читалась бы, но полоса цвета типа — нет (13.10).
+    static let alertSurface  = Color(uiColor: rgb(0x14181D))
 
     // MARK: - Глубина
     //
@@ -258,6 +261,9 @@ enum Theme {
     /// пятнами вокруг каждой карточки. Ночью тень почти не видна и нужна
     /// только как отрыв от фона — там объём даёт градиент заливки.
     static let cardShadow = adaptive(0x0B1B33, 0x000000, lightAlpha: 0.07, darkAlpha: 0.35)
+    /// Тень панели над картой: днём заметнее карточки (карта пёстрая), но не
+    /// 0,3 тёмной темы.
+    static let panelShadow = adaptive(0x0B1B33, 0x000000, lightAlpha: 0.16, darkAlpha: 0.30)
 
     /// Фон экрана: свет сверху, темнота к низу. Плоский `background` остаётся
     /// для мест, где нужна именно КРАСКА (точка на карте, подложка значка), —

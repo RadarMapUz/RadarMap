@@ -63,7 +63,8 @@ struct MapPointBar: View {
             }
         }
         .padding(12)
-        .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerLarge))
+        .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous).strokeBorder(Theme.edgePanel, lineWidth: 1))
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
@@ -145,7 +146,8 @@ struct ReportPickerBar: View {
             }
         }
         .padding(12)
-        .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerLarge))
+        .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous).strokeBorder(Theme.edgePanel, lineWidth: 1))
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }

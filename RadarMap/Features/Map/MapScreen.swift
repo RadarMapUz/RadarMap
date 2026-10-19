@@ -934,7 +934,7 @@ struct MapScreen: View {
                                 .font(.rounded(12, .medium)).foregroundStyle(Theme.danger)
                                 .padding(.horizontal, 14)
                                 .frame(minHeight: Theme.controlSize)
-                                .background(.ultraThinMaterial, in: Capsule())
+                                .liftedBackground(Theme.surface, in: Capsule())
                         }
                         .buttonStyle(PressableStyle())
                         .accessibilityHint(Text("Убрать сообщение"))
@@ -945,7 +945,7 @@ struct MapScreen: View {
                                 .font(.rounded(12, .medium)).foregroundStyle(Theme.textSecondary)
                         }
                         .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        .liftedBackground(Theme.surface, in: Capsule())
                     case .driving:
                         // Только старт: подсказка живёт до следующего фикса,
                         // и второе касание через toggle завершало бы поездку.
@@ -1264,7 +1264,7 @@ struct MapScreen: View {
                 .buttonStyle(PressableStyle())
             }
             .padding(12)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
+            .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
         }
     }
@@ -1575,7 +1575,7 @@ private struct HintChip: View {
             .font(.rounded(12, .semibold))
             .foregroundStyle(tint)
             .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
+            .liftedBackground(Theme.surface, in: Capsule())
             .overlay(Capsule().stroke(Theme.stroke, lineWidth: 1))
             .transition(.move(edge: .top).combined(with: .opacity))
     }

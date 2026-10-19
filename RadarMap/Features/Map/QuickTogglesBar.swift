@@ -66,7 +66,10 @@ struct QuickTogglesBar: View {
             }
         }
         .padding(14)
-        .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerLarge))
+        // Сплошная панель, не стекло: над картой, которая едет, стекло
+        // пересчитывает размытие каждый её кадр (правило 13.10, 4.2).
+        .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous).strokeBorder(Theme.edgePanel, lineWidth: 1))
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
@@ -79,9 +82,11 @@ struct QuickTogglesBar: View {
             VStack(spacing: 5) {
                 Image(systemName: icon)
                     .font(.rounded(17, .semibold))
-                    .foregroundStyle(isOn.wrappedValue ? Theme.background : Theme.textTertiary)
+                    // Белое на accentFill (палитра А, PaletteTests): тёмный
+                    // фон поверх светлого ночного accent читался хуже (4.4).
+                    .foregroundStyle(isOn.wrappedValue ? Theme.onAccentFill : Theme.textTertiary)
                     .frame(width: 44, height: 44)
-                    .background(isOn.wrappedValue ? AnyShapeStyle(Theme.accent.gradient)
+                    .background(isOn.wrappedValue ? AnyShapeStyle(Theme.accentFill)
                                                   : AnyShapeStyle(Theme.surface), in: Circle())
                 Text(title)
                     .font(.rounded(11, .medium))

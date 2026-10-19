@@ -68,12 +68,12 @@ struct MapLayersControl: View {
         .scrollBounceBehavior(.basedOnSize)
         .frame(width: 208,
                height: contentHeight > 0 ? min(contentHeight, max(maxPanelHeight, Theme.controlSize)) : nil)
-        .background(Theme.background.opacity(0.42),
-                    in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
-        .backport.glassEffect(.regular, in: .rect(cornerRadius: Theme.cornerPanel))
+        // Сплошная, как все панели над живой картой (4.2): стекло с вуалью
+        // пересчитывало размытие каждый кадр и пропускало подписи улиц.
+        .liftedBackground(Theme.surface,
+                          in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
             .strokeBorder(Theme.edgePanel, lineWidth: 1))
-        .liftPanel()
         .transition(.scale(scale: 0.86, anchor: .topTrailing).combined(with: .opacity))
     }
 

@@ -138,7 +138,7 @@ struct EngineBaseLayer: View {
                                 Label("К машине", systemImage: "location.fill")
                                     .font(.rounded(14, .semibold))
                                     .padding(.horizontal, 14).padding(.vertical, 10)
-                                    .background(.regularMaterial, in: Capsule())
+                                    .liftedBackground(Theme.surface, in: Capsule())
                             }
                             .tapTarget()
                             .padding(.bottom, geo.size.height * (1 - insets.meY) + 32)

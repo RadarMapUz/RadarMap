@@ -101,7 +101,7 @@ final class CarPlayEngineTests: XCTestCase {
     }
 
     func testDegenerateWindowFallsBackToDefault() {
-        XCTAssertEqual(CarPlayEngineLayer.meY(size: .zero, safe: EdgeInsets()), RoadSketch.meY)
+        XCTAssertEqual(CarPlayEngineLayer.meY(size: .zero, safe: EdgeInsets()), MapViewport.meY)
         let tiny = CarPlayEngineLayer.meY(size: CGSize(width: 300, height: 100), safe: EdgeInsets())
         XCTAssertTrue((0...1).contains(tiny))
     }

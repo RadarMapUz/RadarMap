@@ -1230,7 +1230,7 @@ final class LocationService: NSObject {
             // Объезд пробки — на каждом фиксе, и стоя: в пробке машина не
             // сдвигается, и прогресс ниже молчит ровно тогда, когда он нужен.
             if isTripActive { route?.considerDetour(coordinate: coordinate, speedKmh: speedKmh) }
-            if progressMoved >= RoadSketch.standstillMeters
+            if progressMoved >= MapViewport.standstillMeters
                 || (route?.remainingDistance ?? .greatestFiniteMagnitude) < 300 {
                 lastRouteProgressCoordinate = coordinate
                 // Курс — чтобы положение не прыгнуло на встречную ветку

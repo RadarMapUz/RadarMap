@@ -47,23 +47,6 @@ final class SketchHouseTests: XCTestCase {
                           SketchArea.Kind.block.maxSpanMeters)
     }
 
-    func testHouseLiesOnTheBlockAndUnderEverythingElse() {
-        // Квартал закрывает пустоту между улицами, дом — застройка внутри
-        // него. Ляг дом ниже квартала — квартал закрасил бы застройку целиком.
-        let house = RoadSketch.drawOrder(.house)
-        XCTAssertGreaterThan(house, RoadSketch.drawOrder(.block))
-        for other in [SketchArea.Kind.green, .water, .rail, .sidewalk] {
-            XCTAssertLessThan(house, RoadSketch.drawOrder(other),
-                              "дом обязан лежать под \(other)")
-        }
-    }
-
-    func testEveryAreaKindHasItsOwnDrawOrder() {
-        let orders = SketchArea.Kind.allCases.map { RoadSketch.drawOrder($0) }
-        XCTAssertEqual(orders.count, Swift.Set(orders).count,
-                       "два слоя с одним порядком рисуются как повезёт")
-    }
-
     func testStoreysRideInTheFlags() {
         // Пятый элемент записи невозможен: decodeEntries принимает длину 3 или
         // 4, и пятый отправил бы в nil ВЕСЬ тайл у сборок, которые о нём не

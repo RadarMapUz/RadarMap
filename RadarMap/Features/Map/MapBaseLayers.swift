@@ -173,7 +173,7 @@ struct EngineBaseLayer: View {
     /// Вне поездки — обзор города, как раньше. «+ / −» сдвигают масштаб на
     /// ступень за нажатие. 3D — кнопкой «3D» (по умолчанию включено); на
     /// горячем телефоне — плоско: наклон тянет к горизонту втрое больше тайлов.
-    private func camera(me: CLLocationCoordinate2D, size: CGSize, insets: RoadSketch.Insets,
+    private func camera(me: CLLocationCoordinate2D, size: CGSize, insets: MapViewport.Insets,
                         maneuverDistance: Double?) -> (spanMeters: Double, pitchDegrees: Double,
                                                        visibleAhead: Double) {
         let pitchAllowed = map.prefers3D && env.thermal.mode == .full

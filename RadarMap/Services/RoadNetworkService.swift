@@ -81,18 +81,9 @@ final class RoadNetworkService {
     /// points — другая геометрия, как и сама дальняя сеть.
     private(set) var farPoints: [SketchPoint] = []
 
-    /// Какие наборы тайлов сейчас нужны. Ставит схема: она одна знает охват и
-    /// то, едем ли мы по двору. Слой, невидимый на текущем охвате, не
-    /// качается и не разбирается вовсе — дворовые проезды это половина всех
-    /// дорог, и в общем файле они ехали бы на телефон всю поездку впустую.
-    func setWantedSets(_ wanted: Swift.Set<RoadTiles.Set>) {
-        guard wanted != wantedSets else { return }
-        wantedSets = wanted
-        lastEnsureAt = nil   // состав окрестности изменился — проверить сразу
-    }
     /// Только улицы: костяк района и местность рисовала схема приборки
     /// (удалена 11.10), а посадке отметки и схеме развязки нужны оси улиц.
-    @ObservationIgnored private var wantedSets: Swift.Set<RoadTiles.Set> = [.streets]
+    private static let wantedSets: Swift.Set<RoadTiles.Set> = [.streets]
     /// Распакованная местность по ключам наборов.
     @ObservationIgnored private var loadedAreas: [String: [SketchArea]] = [:]
     @ObservationIgnored private var loadedPoints: [String: [SketchPoint]] = [:]
@@ -408,7 +399,7 @@ final class RoadNetworkService {
         // окрестности), внутри тайла — набор по loadRank. Так первым на экране
         // появляется костяк того места, где мы стоим, а не дома соседнего
         // района.
-        let sets = wantedSets.sorted { $0.loadRank < $1.loadRank }
+        let sets = Self.wantedSets.sorted { $0.loadRank < $1.loadRank }
         return tiles.flatMap { tile in
             sets.map { RoadTiles.setKey(tile, $0) }
         }.filter { index.tiles[$0] != nil }

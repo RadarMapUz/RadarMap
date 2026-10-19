@@ -21,7 +21,7 @@ final class MapFrameState {
     nonisolated deinit {}
 
     /// Поля вида в долях высоты. Наблюдаемы: от них зависит, где стоит «я».
-    private(set) var insets = RoadSketch.Insets.none
+    private(set) var insets = MapViewport.Insets.none
 
     /// Высота карты в пунктах и кромки панелей в пунктах окна приходят в
     /// разном порядке — хранятся оба, поля считаются, когда есть всё.
@@ -62,10 +62,10 @@ final class MapFrameState {
     }
 
     nonisolated static func insets(viewHeight: CGFloat, panelTop: CGFloat,
-                                   panelBottom: CGFloat) -> RoadSketch.Insets {
+                                   panelBottom: CGFloat) -> MapViewport.Insets {
         guard viewHeight > 0 else { return .none }
         let height = Double(viewHeight)
         let bottom = panelBottom > 0 ? max(0, height - Double(panelBottom)) / height : 0
-        return RoadSketch.Insets(top: max(0, Double(panelTop)) / height, bottom: bottom)
+        return MapViewport.Insets(top: max(0, Double(panelTop)) / height, bottom: bottom)
     }
 }

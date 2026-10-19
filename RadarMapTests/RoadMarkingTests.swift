@@ -91,7 +91,7 @@ final class RoadMarkingTests: XCTestCase {
         XCTAssertLessThan(SketchPoint.Kind.crossing.maxSpanMeters,
                           SketchPoint.Kind.trafficLight.maxSpanMeters)
         XCTAssertLessThan(SketchPoint.Kind.stopLine.maxSpanMeters,
-                          RoadSketch.farNetworkSpan)
+                          MapViewport.farNetworkSpan)
     }
 
     // MARK: - Стрелки полос
@@ -148,46 +148,4 @@ final class RoadMarkingTests: XCTestCase {
         XCTAssertTrue(LaneTurn.none.angles.isEmpty)
     }
 
-    // MARK: - Геометрия черты
-
-    private func marking(azimuth: Double, width: Double) -> RoadSketch.Marking {
-        RoadSketch.Marking(point: .zero, kind: .crossing,
-                           azimuthDegrees: azimuth, widthMeters: width)
-    }
-
-    func testMarkingLiesAcrossTheRoadNotAlongIt() {
-        // Дорога на север — черта строго на восток-запад.
-        let (left, right) = marking(azimuth: 0, width: 20).ends
-        XCTAssertEqual(Double(left.x), -10, accuracy: 0.001)
-        XCTAssertEqual(Double(right.x), 10, accuracy: 0.001)
-        XCTAssertEqual(Double(left.y), 0, accuracy: 0.001)
-        XCTAssertEqual(Double(right.y), 0, accuracy: 0.001)
-    }
-
-    func testMarkingTurnsWithTheRoad() {
-        // Дорога на восток — черта на север-юг.
-        let (left, right) = marking(azimuth: 90, width: 20).ends
-        XCTAssertEqual(Double(left.x), 0, accuracy: 0.001)
-        XCTAssertEqual(Double(left.y), 10, accuracy: 0.001)
-        XCTAssertEqual(Double(right.y), -10, accuracy: 0.001)
-    }
-
-    func testMarkingIsExactlyAsLongAsTheRoadIsWide() {
-        for azimuth in stride(from: 0.0, to: 360.0, by: 15.0) {
-            let (left, right) = marking(azimuth: azimuth, width: 22.5).ends
-            let length = hypot(right.x - left.x, right.y - left.y)
-            XCTAssertEqual(Double(length), 22.5, accuracy: 0.001,
-                           "азимут \(azimuth): черта не во всю ширину")
-        }
-    }
-
-    func testMarkingIsCentredOnItsPoint() {
-        // Точка стоит на ОСИ дороги, и черта обязана выходить на обе стороны
-        // поровну. Смещение оставило бы половину проезжей части неразмеченной.
-        let mark = RoadSketch.Marking(point: CGPoint(x: 100, y: -40), kind: .stopLine,
-                                      azimuthDegrees: 37, widthMeters: 12)
-        let (left, right) = mark.ends
-        XCTAssertEqual(Double((left.x + right.x) / 2), 100, accuracy: 0.001)
-        XCTAssertEqual(Double((left.y + right.y) / 2), -40, accuracy: 0.001)
-    }
 }

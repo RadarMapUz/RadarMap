@@ -288,26 +288,30 @@ final class MobileCameraService {
             }
             lastETag = answer.etag
             let decoded = answer.value
+            // Сроки в ответе — по часам сервера. Часы телефона спешат на
+            // десять минут — тренога «исчезала» на десять минут раньше, пока
+            // ещё стоит (молчание), отстают — висела дольше (S31, 20.10).
+            let skew = Self.clockSkew(serverDate: answer.serverDate, localNow: Date())
             var fresh: [Int: Confirmation] = [:]
             reports = decoded.reports.map { report in
                 let kind = ReportKind(rawValue: report.type ?? "") ?? .radar
                 let id = Self.idOffset + report.id
                 fresh[id] = Confirmation(upvotes: report.up ?? 0,
-                                         created: Date(timeIntervalSince1970: report.created ?? 0),
+                                         created: Date(timeIntervalSince1970: (report.created ?? 0) + skew),
                                          confirmed: report.confirmed ?? true)
                 return Camera(
                     id: id,
                     region: kind.cameraType.displayName,
                     city: "",
                     location: String(format: String(localized: "Отмечен водителями, исчезнет ~%@"),
-                                     Self.expiryText(report.expires)),
+                                     Self.expiryText(report.expires + skew)),
                     lat: report.lat,
                     lon: report.lon,
                     type: kind.cameraType.sourceString,
                     violations: Camera.defaultViolations(forType: kind.cameraType.sourceString),
                     needsReview: nil,
                     mobileConfirmed: report.confirmed ?? true,
-                    mobileExpires: Date(timeIntervalSince1970: report.expires)
+                    mobileExpires: Date(timeIntervalSince1970: report.expires + skew)
                 )
             }
             confirmations = fresh
@@ -823,6 +827,16 @@ final class MobileCameraService {
     #endif
 
     // MARK: - Внутреннее
+
+    /// На сколько часы телефона впереди сервера (секунды). Меньше 5 с —
+    /// шум (заголовок с точностью до секунды, время в пути); больше суток —
+    /// не верим ни тем, ни другим часам и не правим.
+    nonisolated static func clockSkew(serverDate: Date?, localNow: Date) -> TimeInterval {
+        guard let serverDate else { return 0 }
+        let skew = localNow.timeIntervalSince(serverDate)
+        guard abs(skew) >= 5, abs(skew) <= 86_400 else { return 0 }
+        return skew
+    }
 
     private static func expiryText(_ expires: TimeInterval) -> String {
         let date = Date(timeIntervalSince1970: expires)

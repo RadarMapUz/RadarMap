@@ -3730,6 +3730,22 @@
         }
       }
     },
+    "Добавить место": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить место"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joy qo‘shish"
+          }
+        }
+      }
+    },
     "Добавлено вручную": {
       "localizations": {
         "ru": {
@@ -4783,6 +4799,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reytingingiz nimadan tuzildi"
+          }
+        }
+      }
+    },
+    "Избранное": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Избранное"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sevimlilar"
           }
         }
       }
@@ -6483,6 +6515,22 @@
         }
       }
     },
+    "Название места": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Название места"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joy nomi"
+          }
+        }
+      }
+    },
     "Найдите и выберите адрес для «%@»": {
       "localizations": {
         "ru": {
@@ -6538,6 +6586,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yo‘nalish hozircha noma’lum"
+          }
+        }
+      }
+    },
+    "Например, Дача": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Например, Дача"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masalan, Dacha"
           }
         }
       }
@@ -11107,6 +11171,22 @@
         }
       }
     },
+    "Сохранить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saqlash"
+          }
+        }
+      }
+    },
     "Сохранить копию": {
       "extractionState": "manual",
       "localizations": {
@@ -11540,6 +11620,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tezlikka bosish — tezkor tugmalar"
+          }
+        }
+      }
+    },
+    "Текущее место": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текущее место"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joriy joy"
           }
         }
       }

@@ -70,10 +70,10 @@ struct KPIStrip: View {
             StatStripCell(value: activeDaysText, label: "дней за рулём", icon: "calendar",
                           tint: Theme.Icon.time)
             StatStripDivider()
-            StatStripCell(value: "\(Int(summary.averageSpeedKmh))", label: "средняя км/ч",
+            StatStripCell(value: "\(Int(summary.averageSpeedKmh))", label: "средняя, км/ч",
                           icon: "gauge.with.dots.needle.33percent", tint: Theme.Icon.speed)
             StatStripDivider()
-            StatStripCell(value: "\(Int(summary.maxSpeedKmh))", label: "макс. км/ч",
+            StatStripCell(value: "\(Int(summary.maxSpeedKmh))", label: "максимум, км/ч",
                           icon: "gauge.with.dots.needle.100percent", tint: Theme.Icon.speed)
         }
         .statCard(padding: 14)

@@ -113,7 +113,9 @@ struct PassRow: View {
                     .foregroundStyle(Theme.textTertiary)
             }
         }
-        .statCard(padding: 12, radius: Theme.cornerMedium)
+        // Без своей карточки: строки лежат в общей (passCard) — тень на
+        // каждой строке пересчитывалась при прокрутке (6.5).
+        .padding(.horizontal, 12).padding(.vertical, 10)
     }
 }
 
@@ -244,6 +246,13 @@ struct TripDetailSheet: View {
         .sheet(item: $selectedPass) { pass in
             PassMapSheet(pass: pass, track: record.trackPoints, record: record)
         }
+        #if DEBUG
+        // Скриншот-хук: `-openFirstPass` открывает первый проезд поездки.
+        .onAppear {
+            guard ProcessInfo.processInfo.arguments.contains("-openFirstPass") else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { selectedPass = record.passed.first }
+        }
+        #endif
     }
 }
 
@@ -264,6 +273,7 @@ struct TripDetailContent: View {
     @State private var shareSubject: ShareSubjectBox?
     @State private var gpxFile: ShareFilePayload?
     @State private var appeared = false
+    @State private var calmExpanded = false
 
     var body: some View {
         ScrollView {
@@ -277,23 +287,18 @@ struct TripDetailContent: View {
                     .entrance(1, appeared)
                 metricsCard
                     .entrance(2, appeared)
-                TripStopsSection(record: record) { dismiss() }
-                    .entrance(3, appeared)
+                // Порядок (6.5): метрики → скорость → камеры → остановки.
+                // «Повторить маршрут» — в шапке: жёлтая кнопка в самом низу
+                // длинного экрана была и главной, и самой далёкой.
                 SpeedProfileChart(record: record)
                     .entrance(3, appeared)
                     .id("chart")
                 if !record.passed.isEmpty {
                     passesSection
-                        .entrance(4, appeared)
+                        .entrance(3, appeared)
                 }
-                if let onRoute, let end = record.endCoordinate {
-                    PrimaryButton(title: "Повторить маршрут",
-                                  systemImage: "arrow.triangle.turn.up.right.circle.fill") {
-                        dismiss()
-                        onRoute(end, String(localized: "Как в прошлый раз"))
-                    }
+                TripStopsSection(record: record) { dismiss() }
                     .entrance(4, appeared)
-                }
             }
             .padding(20)
             #if DEBUG
@@ -319,6 +324,17 @@ struct TripDetailContent: View {
         .backport.scrollEdgeEffectStyle(.hard, for: .top)
         .background(Theme.screenBackground)
         .toolbar {
+            if let onRoute, let end = record.endCoordinate {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        dismiss()
+                        onRoute(end, String(localized: "Как в прошлый раз"))
+                    } label: {
+                        Image(systemName: "arrow.triangle.turn.up.right.circle")
+                    }
+                    .accessibilityLabel(Text("Повторить маршрут"))
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 // Карточка — для людей, GPX — для разбора видео регистратора
                 // и редакторов OSM. Трек уходит с телефона только так, руками.
@@ -601,11 +617,11 @@ struct TripDetailContent: View {
                   icon: "clock"),
             .init(value: Formatting.distance(record.distanceMeters), label: String(localized: "пройдено пути"),
                   icon: "point.topleft.down.to.point.bottomright.curvepath"),
-            .init(value: "\(record.camerasPassed)", label: String(localized: "камер пройдено"),
+            .init(value: "\(record.camerasPassed)", label: String(localized: "пройдено камер"),
                   icon: Icon.cameras),
-            .init(value: "\(Int(record.maxSpeedKmh))", label: String(localized: "макс. км/ч"),
+            .init(value: "\(Int(record.maxSpeedKmh))", label: String(localized: "максимум, км/ч"),
                   icon: "gauge.with.dots.needle.100percent"),
-            .init(value: "\(Int(record.averageSpeedKmh))", label: String(localized: "средняя км/ч"),
+            .init(value: "\(Int(record.averageSpeedKmh))", label: String(localized: "средняя, км/ч"),
                   icon: "gauge.with.dots.needle.33percent"),
         ]
         // Цена поездки в заряде — цифрой, а не верой (есть не у всех записей).
@@ -616,13 +632,60 @@ struct TripDetailContent: View {
         return MetricsCard(items: items)
     }
 
+    /// Превышения — раскрыты, проезды без штрафа — свёрнуты одной строкой
+    /// (6.5): из двадцати камер поездки смотрят те две, что стоили баллов.
+    /// Строки — в одной карточке, без своей тени у каждой.
     private var passesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let passes = Array(record.passed.reversed())
+        let fined = passes.filter(Self.isFined)
+        let calm = passes.filter { !Self.isFined($0) }
+        return VStack(alignment: .leading, spacing: 10) {
             SectionHeader(String(localized: "Пройденные камеры"))
-            ForEach(record.passed.reversed()) { pass in
+            if !fined.isEmpty { passCard(fined) }
+            if !calm.isEmpty {
+                // Без превышений в поездке свёрнутому списку нечего уступать.
+                if fined.isEmpty || calmExpanded {
+                    passCard(calm)
+                }
+                if !fined.isEmpty {
+                    Button {
+                        withMotion(Motion.standard) { calmExpanded.toggle() }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark.shield.fill")
+                                .foregroundStyle(Theme.success)
+                            Text(String(format: String(localized: "Без штрафа: %lld"), calm.count))
+                                .font(.rounded(14, .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.down")
+                                .font(.rounded(12, .bold))
+                                .foregroundStyle(Theme.textTertiary)
+                                .rotationEffect(.degrees(calmExpanded ? 180 : 0))
+                        }
+                        .statCard(padding: 12, radius: Theme.cornerMedium)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func passCard(_ passes: [PassedCamera]) -> some View {
+        LazyVStack(spacing: 0) {
+            ForEach(Array(passes.enumerated()), id: \.element.id) { index, pass in
+                if index > 0 { Divider().overlay(Theme.stroke).padding(.leading, 58) }
                 PassRowButton(pass: pass, onTap: onOpenPass)
             }
         }
+        .statCard(padding: 0, radius: Theme.cornerMedium)
+    }
+
+    /// Штрафуемый проезд: лимит известен и превышение дошло до ступени штрафа.
+    nonisolated static func isFined(_ pass: PassedCamera) -> Bool {
+        guard pass.limitIsCertain, let limit = pass.limitKmh else { return false }
+        return FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0
     }
 
     // MARK: Шеринг-карточка

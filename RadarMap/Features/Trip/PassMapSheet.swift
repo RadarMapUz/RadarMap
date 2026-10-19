@@ -29,15 +29,14 @@ struct PassDetailView: View {
     var period: StatsPeriod? = nil
 
     @Environment(AppEnvironment.self) private var env
-    @State private var position: MapCameraPosition
     @State private var appeared = false
     @State private var isSendingMissed = false
     @State private var missedSent = false
     /// Судьба штрафа — локальная копия: `pass` здесь слепок, а после тапа
     /// «Пришёл»/«Не пришёл» экран обязан показать новое состояние сразу.
     @State private var fineOutcome: PassedCamera.FineOutcome = .pending
-    /// «А если бы» — из .task, не из body: пересчёт рейтинга периода попадал в
-    /// кадры анимации подлёта (Map пишет position обратно на каждом кадре).
+    /// «А если бы» — из .task, не из body: пересчёт рейтинга периода не должен
+    /// попадать в кадры анимации появления.
     @State private var whatIf: (tripScore: Int, periodRating: Int?, currentRating: Int?)?
     /// Развёрнутая карта проезда.
     @State private var showsFullMap = false
@@ -52,11 +51,6 @@ struct PassDetailView: View {
         self.days = days
         self.interval = interval
         self.period = period
-        let center = pass.coordinate ?? CLLocationCoordinate2D(latitude: 41.3111,
-                                                               longitude: 69.2797)
-        // Старт издалека и сверху — при появлении камера красиво подлетает.
-        _position = State(initialValue: .camera(
-            MapCamera(centerCoordinate: center, distance: 14_000)))
     }
 
     private var honestyColor: Color {
@@ -83,6 +77,9 @@ struct PassDetailView: View {
             VStack(spacing: 16) {
                 map
                 answerCard
+                // Промолчали об этой камере — жалоба сразу под ответом (6.7):
+                // это худшая наша ошибка, и прятать её в «Подробнее» нельзя.
+                if pass.silent == true { missedAlertCard }
                 details
             }
             .padding(20)
@@ -111,12 +108,6 @@ struct PassDetailView: View {
         }
         .onAppear {
             fineOutcome = pass.fineOutcome
-            guard let coordinate = pass.coordinate else { return }
-            // Подлёт: с высоты — к камере, с лёгким наклоном для объёма.
-            withMotion(.spring(duration: 1.6, bounce: 0.12).delay(0.25)) {
-                position = .camera(MapCamera(centerCoordinate: coordinate,
-                                             distance: 1300, pitch: 48))
-            }
             withMotion(.spring(duration: 0.6, bounce: 0.2).delay(0.5)) {
                 appeared = true
             }
@@ -156,31 +147,41 @@ struct PassDetailView: View {
             }
     }
 
+    /// Снимок, а не живая 3D-карта (6.7): в листе она жила ради одного
+    /// подлёта, держала GPU и подгружала тайлы, а жесты у неё всё равно были
+    /// выключены. Кадр — участок трека у камеры, а не вся поездка: на 20 км
+    /// камера была бы точкой. Тап по-прежнему открывает настоящую карту.
     private var mapCanvas: some View {
-        Map(position: $position) {
-            if track.count >= 2 {
-                MapPolyline(coordinates: track.map {
-                    CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
-                })
-                .stroke(LinearGradient(colors: [Theme.accent, Theme.Types.intelligent],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing),
-                        style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
+        MapPictureView(key: "pass:\(pass.id.uuidString)", picture: passPicture, height: 240)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
+                .stroke(Theme.stroke, lineWidth: 1))
+            .allowsHitTesting(false)
+    }
+
+    private var passPicture: MapPicture {
+        var picture = MapPicture()
+        let near: [TrackPoint]
+        if let camera = pass.coordinate {
+            near = track.filter {
+                GeoMath.fastDistance($0.lat, $0.lon, camera.latitude, camera.longitude)
+                    <= AppConfig.passPictureTrackMeters
             }
-            if let coordinate = pass.coordinate {
-                Annotation("", coordinate: coordinate, anchor: .center) {
-                    PassPulseMarker(color: honestyColor, icon: pass.kind.symbolName)
-                }
-                .annotationTitles(.hidden)
-            }
+        } else {
+            near = track
         }
-        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll,
-                            showsTraffic: false))
-        .frame(height: 240)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
-            .stroke(Theme.stroke, lineWidth: 1))
-        // Статичная витрина: жесты карты не крадём у прокрутки.
-        .allowsHitTesting(false)
+        let line = near.count >= 2 ? near : track
+        if line.count >= 2 {
+            picture.lines = [.init(coordinates: line.map {
+                CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+            }, color: Theme.route, width: 4.5, casing: Theme.routeCasing, casingWidth: 8)]
+        }
+        if let camera = pass.coordinate {
+            picture.dots.append(.init(coordinate: camera, diameter: 30, fill: honestyColor,
+                                      ringWidth: 2.5, label: "\(Int(pass.speedKmh.rounded()))",
+                                      labelColor: .white))
+        }
+        return picture
     }
 
     /// Маркер этого проезда для развёрнутой карты. Один проезд — значит
@@ -260,9 +261,13 @@ struct PassDetailView: View {
                         .contentTransition(.numericText())
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
+                    // Вердикт — под числом, а не справа: в ряд со знаком и
+                    // крупной скоростью он не помещался, и обрезалось то одно,
+                    // то другое («превы / шение», «88 к…»).
+                    statusChip
+                        .padding(.top, 4)
                 }
-                Spacer(minLength: 8)
-                statusChip
+                Spacer(minLength: 0)
             }
             .statePanel(honestyColor)
 
@@ -284,16 +289,23 @@ struct PassDetailView: View {
     @ViewBuilder private var statusChip: some View {
         let fine = overKmh.map { FineSchedule.fine(overKmh: $0) } ?? 0
         if fine > 0 {
-            VStack(alignment: .trailing, spacing: 2) {
-                Label("превышение", systemImage: "exclamationmark.triangle.fill")
-                    .font(.rounded(15, .bold))
-                    .foregroundStyle(Theme.danger)
+            // «+28 км/ч» со знаком опасности: что это превышение, говорит
+            // красная панель; слово «превышение» рядом с крупной скоростью
+            // ломалось посередине — «превы / шение».
+            Group {
                 if let over = shownOverKmh, over > 0 {
-                    Text(String(format: String(localized: "на %lld км/ч"), over))
-                        .font(.rounded(11, .semibold))
-                        .foregroundStyle(Theme.danger)
+                    Label(String(format: String(localized: "+%lld км/ч"), over),
+                          systemImage: "exclamationmark.triangle.fill")
+                } else {
+                    Label("превышение", systemImage: "exclamationmark.triangle.fill")
                 }
             }
+            .font(.rounded(15, .bold))
+            .foregroundStyle(Theme.danger)
+            .lineLimit(1)
+            .fixedSize()
+            .accessibilityLabel(Text(String(format: String(localized: "превышение на %lld км/ч"),
+                                            shownOverKmh ?? 0)))
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(Theme.danger.opacity(0.12),
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -357,7 +369,7 @@ struct PassDetailView: View {
             VStack(spacing: 16) {
                 whatIfCard
                 methodCard
-                missedAlertCard
+                if pass.silent != true { missedAlertCard }
             }
             .padding(.top, 12)
         } label: {
@@ -582,37 +594,5 @@ struct PassMapSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-    }
-}
-
-// MARK: - Пульсирующий маркер проезда
-
-/// Маленький слой с одним повторяющимся кольцом — GPU-нагрузка ничтожна,
-/// живёт только пока открыт этот экран.
-private struct PassPulseMarker: View {
-    let color: Color
-    let icon: String
-    @State private var pulse = false
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(color.opacity(pulse ? 0 : 0.55), lineWidth: 2.5)
-                .frame(width: 36, height: 36)
-                .scaleEffect(pulse ? 2.7 : 1)
-            Circle()
-                .fill(color.gradient)
-                .frame(width: 38, height: 38)
-                .shadow(color: color.opacity(0.65), radius: 9)
-            Image(systemName: icon)
-                .font(.rounded(15, .bold))
-                .foregroundStyle(.white)
-        }
-        .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 2).frame(width: 38, height: 38))
-        .onAppear {
-            withMotion(.easeOut(duration: 1.7).repeatForever(autoreverses: false)) {
-                pulse = true
-            }
-        }
     }
 }

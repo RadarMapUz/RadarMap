@@ -49,6 +49,10 @@ nonisolated struct PassedCamera: Codable, Identifiable {
     /// в «пришло» (finesPaid) приходит. Взаимоисключимо с fineDismissed —
     /// следит TripHistory.settingFineOutcome.
     var finePaid: Bool?
+    /// Приложение промолчало об этой камере до проезда (true). nil — сказало,
+    /// или запись старше 19.10, когда этого не записывали: тогда жалоба
+    /// «не предупредила» остаётся в «Подробнее», а не наверху.
+    var silent: Bool?
 
     var kind: CameraType { CameraType(raw: typeRaw) }
     var coordinate: CLLocationCoordinate2D? {

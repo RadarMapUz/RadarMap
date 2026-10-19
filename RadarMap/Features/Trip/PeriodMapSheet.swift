@@ -23,8 +23,13 @@ struct PeriodMapSheet: View {
     let data: PeriodMapData
     /// Открыть сразу с выбранной камерой (тап по зоне риска).
     var focus: PassMarker? = nil
+    /// Окно, за которое карта: «19–25 октября» под заголовком (6.8) — на
+    /// полноэкранной карте период из шапки «Итогов» уже не виден.
+    var periodTitle: String? = nil
 
     @State private var selected: PassMarker?
+    /// «Только превышения»: из полусотни зелёных точек найти три красные.
+    @State private var onlyViolations = false
     @State private var position: MapCameraPosition = .automatic
 
     var body: some View {
@@ -40,6 +45,32 @@ struct PeriodMapSheet: View {
             .navigationTitle("Карта проездов")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                if let periodTitle {
+                    ToolbarItem(placement: .principal) {
+                        VStack(spacing: 0) {
+                            Text("Карта проездов").font(.rounded(15, .semibold))
+                            Text(periodTitle)
+                                .font(.rounded(11))
+                                .foregroundStyle(Theme.textTertiary)
+                        }
+                    }
+                }
+                if data.markers.contains(where: \.hasViolation),
+                   data.markers.contains(where: { !$0.hasViolation }) {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            withMotion(Motion.standard) {
+                                onlyViolations.toggle()
+                                if onlyViolations, selected?.hasViolation == false { selected = nil }
+                            }
+                        } label: {
+                            Image(systemName: onlyViolations ? "exclamationmark.triangle.fill"
+                                                             : "exclamationmark.triangle")
+                        }
+                        .accessibilityLabel(Text("Только превышения"))
+                        .accessibilityAddTraits(onlyViolations ? .isSelected : [])
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
             }
         }
@@ -73,7 +104,7 @@ struct PeriodMapSheet: View {
                     MapPolyline(coordinates: track.map {
                         CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
                     })
-                    .stroke(Theme.accent, style: Self.stroke(width: 4.5))
+                    .stroke(Theme.route, style: Self.stroke(width: 4.5))
                 }
             } else {
                 ForEach(data.heat) { line in
@@ -85,13 +116,13 @@ struct PeriodMapSheet: View {
                 }
                 ForEach(data.heat) { line in
                     MapPolyline(coordinates: line.coordinates)
-                        .stroke(Theme.accent.opacity(line.tier == 2 ? 1
-                                                     : line.tier == 1 ? 0.7 : 0.35),
+                        .stroke(Theme.route.opacity(line.tier == 2 ? 1
+                                                     : line.tier == 1 ? 0.75 : 0.55),
                                 style: Self.stroke(width: line.tier == 2 ? 5.5
                                                           : line.tier == 1 ? 4 : 2.5))
                 }
             }
-            ForEach(data.markers) { marker in
+            ForEach(onlyViolations ? data.markers.filter(\.hasViolation) : data.markers) { marker in
                 Annotation("", coordinate: marker.coordinate, anchor: .center) {
                     markerDot(marker, isSelected: selected?.id == marker.id)
                         // Кружок от 20 pt, а палец — 44: мишень растёт, рисунок

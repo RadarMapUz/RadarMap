@@ -46,6 +46,8 @@ final class FormattingTests: XCTestCase {
         XCTAssertTrue(Formatting.duration(59).contains("59"), "меньше минуты — секунды")
         XCTAssertTrue(Formatting.duration(60).contains("1"))
         XCTAssertFalse(Formatting.duration(60).contains("60"), "ровно минута — уже минуты")
+        XCTAssertFalse(Formatting.duration(3600).contains("0"), "ровно час — без «0 мин»")
+        XCTAssertTrue(Formatting.duration(3660).contains("1"))
         let hour = Formatting.duration(3_661)
         XCTAssertNotEqual(hour, Formatting.duration(61), "час не сливается с минутой")
         XCTAssertTrue(hour.contains("1"))

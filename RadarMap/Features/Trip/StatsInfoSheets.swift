@@ -19,79 +19,26 @@ import SwiftUI
 
 // MARK: - Как считаем экономию
 
-struct SavingsInfoSheet: View {
-    let summary: PeriodSummary
-    let period: StatsPeriod
-    /// Окно, за которое показана сумма: по нему считаются камеры-источники.
+/// «Откуда сумма», ступени штрафа и «как считаем» — раскрывашкой внутри
+/// «Возможных штрафов» (6.9). Был отдельный экран с тем же заголовком и
+/// своей шапкой-суммой: два «Возможных штрафа» с двумя способами посчитать
+/// одно и то же, и на расхождении демо-данных они показывали разные суммы.
+struct FinesExplainer: View {
     var interval: DateInterval = DateInterval(start: .distantPast, end: Date())
     @Environment(AppEnvironment.self) private var env
-    @Environment(\.dismiss) private var dismiss
-    /// Камеры-источники: считаются один раз на открытие, не в body.
     @State private var sources: [FineSource] = []
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    header
-                    sourcesSection
-                    fineTable
-                    method
-                }
-                .padding(20)
-            }
-            .background(Theme.screenBackground)
-            .navigationTitle("Возможные штрафы")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
-            }
+        VStack(alignment: .leading, spacing: 16) {
+            sourcesSection
+            fineTable
+            method
         }
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-        .task {
+        // И на смену данных: отметка «не пришёл» на этом же экране должна
+        // сразу убрать камеру из «Откуда сумма».
+        .task(id: "\(interval.start.timeIntervalSince1970)|\(env.trip.dataRevision)") {
             sources = RatingBreakdown.fineSources(records: env.trip.history, in: interval)
         }
-    }
-
-    private var header: some View {
-        // Ровно те цифры, что на карточке: то же окно, тот же расчёт.
-        let ok = summary.overPasses == 0
-        return VStack(spacing: 12) {
-            Text(period.caption)
-                .font(.rounded(11, .medium))
-                .foregroundStyle(Theme.textTertiary)
-            Text(ok ? String(localized: "0 штрафов")
-                    : String(format: String(localized: "риск ≈ %@"),
-                             Formatting.money(summary.fineRisk)))
-                .font(.rounded(34, .heavy))
-                .foregroundStyle(ok ? Theme.success : Theme.danger)
-            HStack(spacing: 0) {
-                headerMetric("\(summary.cleanPasses)", String(localized: "в лимите"))
-                divider
-                headerMetric("\(summary.overPasses)", String(localized: "превышений"))
-                divider
-                headerMetric("\(summary.trips)", String(localized: "поездок"))
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 18)
-        .background((ok ? Theme.success : Theme.danger).opacity(0.08),
-                    in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
-            .stroke((ok ? Theme.success : Theme.danger).opacity(0.25), lineWidth: 1))
-    }
-
-    private func headerMetric(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 3) {
-            Text(value).font(.rounded(15, .bold)).foregroundStyle(Theme.textPrimary)
-            Text(label).font(.rounded(11)).foregroundStyle(Theme.textTertiary)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var divider: some View {
-        Rectangle().fill(Theme.success.opacity(0.2)).frame(width: 1, height: 30)
     }
 
     /// Откуда взялась сумма: камеры от дорогих к дешёвым. Сумма строк равна

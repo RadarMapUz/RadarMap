@@ -243,7 +243,7 @@ final class TripStats {
     func registerPass(camera: Camera, speedKmh: Double, limitKmh: Int?,
                       roadLimitKmh: Int? = nil, limitAssumed: Bool = false,
                       courseDegrees: Double? = nil, speedAfterKmh: Double? = nil,
-                      date: Date = Date()) {
+                      silent: Bool = false, date: Date = Date()) {
         passed.append(PassedCamera(
             id: UUID(), cameraID: camera.id, typeRaw: camera.type,
             location: camera.displayTitle, speedKmh: speedKmh, date: date,
@@ -252,7 +252,8 @@ final class TripStats {
             // повторять одно и то же число в каждой записи истории незачем.
             roadLimitKmh: roadLimitKmh == limitKmh ? nil : roadLimitKmh,
             limitAssumed: limitAssumed ? true : nil,
-            courseDegrees: courseDegrees, speedAfterKmh: speedAfterKmh
+            courseDegrees: courseDegrees, speedAfterKmh: speedAfterKmh,
+            silent: silent ? true : nil
         ))
     }
 
@@ -594,6 +595,12 @@ final class TripStats {
                                      seed: item.seed, over: item.over, hour: item.hour))
         }
         history = seeded
+        #if DEBUG
+        // Демо сеется раньше, чем дочитан диск: без флага загрузка складывала
+        // его с прошлыми демо и копила дубли от запуска к запуску («Поездок:
+        // 12», а в списке 13 — проверять цифры на таком демо нельзя).
+        demoReplacesDisk = true
+        #endif
         // Агрегаты пересобираем вместе с историей: иначе экран считает рейтинг
         // по дням от прошлого запуска, а разложение — по свежим записям.
         days = TripDayBook.rebuilt(from: history)
@@ -862,8 +869,24 @@ final class TripStats {
          JSONFile.load([TripDay].self, from: days, log: Log.trips) ?? [])
     }
 
+    #if DEBUG
+    /// Демо замещает историю целиком — загрузка с диска её не трогает.
+    @ObservationIgnored private var demoReplacesDisk = false
+    #endif
+
     private func loadFromDisk() async {
         let decoded = await Self.decodeStore(trips: storeURL, days: daysURL)
+        #if DEBUG
+        // После чтения, а не до: демо сеется, пока файл читается.
+        if demoReplacesDisk {
+            isLoaded = true
+            persist()
+            persistDays()
+            finishLoading()
+            onHistoryLoaded?()
+            return
+        }
+        #endif
         // Пока читали, поездка могла закончиться — окно крошечное, но цена
         // ошибки здесь это потерянная история, поэтому приехавшее за время
         // чтения не выбрасываем, а ставим впереди (история — от новых к

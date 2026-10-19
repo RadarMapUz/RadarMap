@@ -57,16 +57,27 @@ struct RatingDetailSheet: View {
         let latest: Double?
     }
 
+    @State private var chartMode: ChartMode = .days
+
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
                 ScrollViewReader { proxy in
                     LazyVStack(spacing: 16) {
-                        hero
-                        formulaCard(proxy: proxy)
-                        baselineCard
-                        trendCard
+                        // Порядок (6.6): итог и его формула — одной карточкой;
+                        // «Где теряете баллы» сразу за ними — это вопрос,
+                        // ради которого открывают экран; норма и динамика —
+                        // одним графиком с переключателем.
+                        VStack(alignment: .leading, spacing: 14) {
+                            hero
+                            if summary.rating != nil {
+                                Divider().overlay(Theme.stroke)
+                                formulaCard(proxy: proxy)
+                            }
+                        }
+                        .statCard()
                         sourcesCard
+                        normAndTrendCard
                         contributionsCard
                         understandCard
                     }
@@ -130,18 +141,55 @@ struct RatingDetailSheet: View {
     /// которого нет внутри одного окна. Считается из дневных агрегатов, поэтому
     /// видит и месяцы, чьи полные записи давно вычищены. Меньше двух непустых
     /// недель — не показываем: тренд из одной точки не тренд.
-    @ViewBuilder private var trendCard: some View {
-        let filled = data.trend.filter { $0.rating != nil }
-        if filled.count >= 2 {
+    private enum ChartMode: Hashable { case days, weeks }
+
+    /// Норма и динамика — одна карточка (6.6): были два графика подряд,
+    /// дневной с линией нормы и недельный, и читались как один, нарисованный
+    /// дважды. Переключатель — только когда есть оба.
+    @ViewBuilder private var normAndTrendCard: some View {
+        let weeks = data.trend.filter { $0.rating != nil }
+        let hasDays = data.daily.count >= 2, hasWeeks = weeks.count >= 2
+        if hasDays || hasWeeks || data.baseline != nil {
             VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(title: String(localized: "Динамика по неделям")) {
-                    if let last = filled.last?.rating,
-                       let previous = filled.dropLast().last?.rating,
-                       last != previous {
-                        Text(last > previous ? "+\(last - previous)" : "\(last - previous)")
-                            .font(.rounded(15, .bold).monospacedDigit())
-                            .foregroundStyle(last > previous ? Theme.success : Theme.danger)
+                SectionHeader(title: String(localized: "Норма и динамика")) {
+                    if let baseline = data.baseline {
+                        Text(period.baselineTitle(periods: baseline.periods))
+                            .font(.rounded(11, .medium))
+                            .foregroundStyle(Theme.textTertiary)
                     }
+                }
+                if let verdict = baselineVerdict {
+                    Text(verdict)
+                        .font(.rounded(15, .medium))
+                        .foregroundStyle(Theme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if hasDays && hasWeeks {
+                    Picker("", selection: $chartMode) {
+                        Text("По дням").tag(ChartMode.days)
+                        Text("По неделям").tag(ChartMode.weeks)
+                    }
+                    .pickerStyle(.segmented)
+                }
+                if hasDays && (chartMode == .days || !hasWeeks) {
+                    ratingChart
+                } else if hasWeeks {
+                    weeksChart(weeks)
+                }
+            }
+            .statCard()
+        }
+    }
+
+    @ViewBuilder private func weeksChart(_ filled: [RatingTrend.Week]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+                if let last = filled.last?.rating,
+                   let previous = filled.dropLast().last?.rating,
+                   last != previous {
+                    Text(String(format: String(localized: "%@ к прошлой неделе"),
+                                last > previous ? "+\(last - previous)" : "\(last - previous)"))
+                        .font(.rounded(13, .bold).monospacedDigit())
+                        .foregroundStyle(last > previous ? Theme.success : Theme.danger)
                 }
                 Chart(filled) { week in
                     BarMark(x: .value("Неделя", week.start, unit: .weekOfYear),
@@ -181,8 +229,6 @@ struct RatingDetailSheet: View {
                 Text("Недели без поездок пропущены")
                     .font(.rounded(10))
                     .foregroundStyle(Theme.textTertiary)
-            }
-            .statCard()
         }
     }
 
@@ -221,7 +267,6 @@ struct RatingDetailSheet: View {
             }
             Spacer(minLength: 0)
         }
-        .statCard()
     }
 
     private func deltaBadge(_ delta: Int) -> some View {
@@ -287,7 +332,6 @@ struct RatingDetailSheet: View {
                         .foregroundStyle(Theme.accent)
                 }
             }
-            .statCard()
         }
     }
 
@@ -303,28 +347,6 @@ struct RatingDetailSheet: View {
     /// Абсолютная цифра ничего не говорит: 73 для одного водителя рекорд, для
     /// другого — провал. Норма считается по прошлым таким же окнам (текущее в
     /// неё не входит — иначе оно объясняло бы само себя).
-    @ViewBuilder private var baselineCard: some View {
-        if data.daily.count >= 2 || data.baseline != nil {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(title: String(localized: "Ваша норма")) {
-                    if let baseline = data.baseline {
-                        Text(period.baselineTitle(periods: baseline.periods))
-                            .font(.rounded(11, .medium))
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                }
-                if let verdict = baselineVerdict {
-                    Text(verdict)
-                        .font(.rounded(15, .medium))
-                        .foregroundStyle(Theme.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if data.daily.count >= 2 { ratingChart }
-            }
-            .statCard()
-        }
-    }
-
     private var baselineVerdict: String? {
         guard let baseline = data.baseline, let rating = summary.rating else { return nil }
         if baseline.contains(rating) {

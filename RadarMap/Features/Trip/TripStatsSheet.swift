@@ -60,9 +60,6 @@ struct TripStatsSheet: View {
     /// Вся сохранённая история отдельным экраном — вместо сегмента «Всё время»,
     /// который обещал показать всё, а показывал последние записи.
     @State private var showAllTrips = false
-    /// Поездка, выбранная в «Всех поездках»: деталка откроется после того, как
-    /// список ЗАКОНЧИТ закрываться (см. onDismiss у шита).
-    @State private var pendingDetailRecord: TripRecord?
     /// Список поездок показан целиком (иначе — первые statsTripsPreview).
     @State private var tripsExpanded = false
     /// Раскрыты ли «Детали периода» (KPI, график по дням, часы риска).
@@ -349,6 +346,7 @@ struct TripStatsSheet: View {
                     if args.contains("-showSavingsInfo") { showFinesInfo = true }
                     if args.contains("-showFines") { showFines = true }
                     if args.contains("-showPeriodMap") { openMap(focus: nil) }
+                    if args.contains("-showAllTrips") { showAllTrips = true }
                     if args.contains("-shareStats") {
                         share(summary: TripHistory.summary(days: env.trip.days,
                                                           history: env.trip.history,
@@ -369,7 +367,8 @@ struct TripStatsSheet: View {
             })
         }
         .sheet(item: $mapPayload) { payload in
-            PeriodMapSheet(data: payload.data, focus: payload.focus)
+            PeriodMapSheet(data: payload.data, focus: payload.focus,
+                           periodTitle: period.rangeTitle(containing: anchor))
         }
         // Шиты получают ТУ ЖЕ сводку, что показала карточка: расшифровка
         // обязана объяснять именно то число, по которому тапнули.
@@ -380,12 +379,12 @@ struct TripStatsSheet: View {
                               anchor: anchor)
         }
         .sheet(isPresented: $showFinesInfo) {
-            SavingsInfoSheet(summary: current.summary,
-                             period: period,
-                             interval: period.interval(containing: anchor))
+            // Один экран штрафов (6.9): вход через (i) раскрывает «Откуда сумма».
+            FinesSheet(period: period, anchor: anchor, explainsFirst: true,
+                       periodRisk: current.summary.fineRisk)
         }
         .sheet(isPresented: $showFines) {
-            FinesSheet(period: period, anchor: anchor)
+            FinesSheet(period: period, anchor: anchor, periodRisk: current.summary.fineRisk)
         }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
         .sheet(item: $commuteDetail) { commute in
@@ -403,20 +402,9 @@ struct TripStatsSheet: View {
         .sheet(isPresented: $showRecallInfo) {
             AlertRecallInfoSheet(tally: env.trip.alertRecall)
         }
-        // Деталка открывается из onDismiss, а не в один тик с закрытием списка:
-        // sheet поверх ещё анимирующегося sheet молча не показывается (см.
-        // комментарий к скриншот-хукам) — тап по поездке закрывал список, а
-        // деталка не появлялась, и повторный тап по той же записи был мёртв.
-        .sheet(isPresented: $showAllTrips, onDismiss: {
-            if let pending = pendingDetailRecord {
-                pendingDetailRecord = nil
-                selectedRecord = pending
-            }
-        }) {
-            AllTripsSheet(onOpenDetail: { record in
-                pendingDetailRecord = record
-                showAllTrips = false
-            }, onRepeat: onRoute.map { route in
+        // Поездки открываются внутри своего стека «Всех поездок» (6.10).
+        .sheet(isPresented: $showAllTrips) {
+            AllTripsSheet(onRepeat: onRoute.map { route in
                 { coord, name in dismiss(); route(coord, name) }
             })
         }
@@ -1688,7 +1676,7 @@ private struct LiveTripCard: View {
             HStack(spacing: 0) {
                 metric(Formatting.distance(trip.distanceMeters), "пройдено", Theme.success)
                 metric("\(trip.camerasPassed)", "камер", Theme.accent)
-                metric("\(Int(trip.maxSpeedKmh))", "макс. км/ч", Theme.danger)
+                metric("\(Int(trip.maxSpeedKmh))", "максимум, км/ч", Theme.danger)
                 metric("\(Int(trip.averageSpeedKmh))", "средняя", Theme.warning)
             }
         }

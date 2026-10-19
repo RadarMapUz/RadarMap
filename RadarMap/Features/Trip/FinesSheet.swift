@@ -27,9 +27,16 @@ struct FinesSheet: View {
     @Environment(\.dismiss) private var dismiss
     let period: StatsPeriod
     let anchor: Date
+    /// «Откуда сумма» раскрыта сразу — вход через (i) у карточки денег.
+    var explainsFirst = false
+    /// Риск периода с карточки «Итогов» — по дневным сводкам, которые живут
+    /// дольше записей (хранятся последние 50). Если строк меньше, чем денег на
+    /// карточке, шапка говорит об этом, а не показывает другое число молча.
+    var periodRisk: Double? = nil
 
     /// Проезд, открытый на карте.
     @State private var selectedItem: PassMapPayload?
+    @State private var explainerOpen = false
 
     /// Слепок для шита карты: пара (проезд, запись) в момент тапа.
     struct PassMapPayload: Identifiable {
@@ -48,19 +55,41 @@ struct FinesSheet: View {
 
         NavigationStack {
             ScrollView {
+                ScrollViewReader { proxy in
                 LazyVStack(spacing: 12) {
+                    // Один экран (6.9): шапка → строки → «Откуда сумма и как
+                    // считаем» раскрывашкой. Нет штрафов — объяснение раскрыто.
                     if items.isEmpty {
                         emptyHint
                     } else {
                         header(sum: pendingSum, paid: paidSum, total: items.count,
                                dismissed: dismissedCount)
+                        if let periodRisk, periodRisk > pendingSum + 1000 {
+                            Label(String(format: String(localized: "В «Итогах» за период — %@: часть поездок старше сохранённых, их строк здесь нет"),
+                                         Formatting.money(periodRisk)),
+                                  systemImage: "internaldrive")
+                                .font(.rounded(11))
+                                .foregroundStyle(Theme.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         ForEach(items) { item in
                             row(item)
                         }
                         footnote
                     }
+                    explainer(open: items.isEmpty || explainerOpen, togglable: !items.isEmpty)
+                        .id("explainer")
                 }
                 .padding(20)
+                // Вход через (i) — объяснение и есть то, за чем пришли.
+                .onAppear {
+                    guard explainsFirst, !items.isEmpty else { return }
+                    explainerOpen = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        withMotion(Motion.standard) { proxy.scrollTo("explainer", anchor: .top) }
+                    }
+                }
+                }
             }
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
             .background(Theme.screenBackground)
@@ -76,6 +105,36 @@ struct FinesSheet: View {
         .sheet(item: $selectedItem) { payload in
             PassMapSheet(pass: payload.pass, track: payload.record.trackPoints,
                          record: payload.record)
+        }
+    }
+
+    /// «Откуда сумма и как считаем» — заголовок-раскрывашка и FinesExplainer.
+    @ViewBuilder private func explainer(open: Bool, togglable: Bool = true) -> some View {
+        Button {
+            withMotion(Motion.standard) { explainerOpen.toggle() }
+        } label: {
+            HStack(spacing: 10) {
+                IconBadge(symbol: "info.circle.fill", tint: Theme.accent, size: 30)
+                Text("Откуда сумма и как считаем")
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                Spacer(minLength: 0)
+                if togglable {
+                    Image(systemName: "chevron.down")
+                        .font(.rounded(13, .bold))
+                        .foregroundStyle(Theme.textTertiary)
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                }
+            }
+            .statCard(padding: 14, radius: Theme.cornerMedium)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // Без строк объяснение раскрыто всегда — сворачивать его нечем.
+        .disabled(!togglable)
+        .padding(.top, 4)
+        if open {
+            FinesExplainer(interval: period.interval(containing: anchor))
         }
     }
 
@@ -153,7 +212,11 @@ struct FinesSheet: View {
                             .font(.rounded(14, .semibold))
                             .foregroundStyle(Theme.textPrimary)
                             .lineLimit(1)
-                        Text(item.pass.date.formatted(date: .abbreviated, time: .shortened))
+                        // «19 окт., 19:06» — без года и одной строкой: полная
+                        // дата переносилась и раздувала каждую строку.
+                        Text(item.pass.date.formatted(.dateTime.day().month(.abbreviated)
+                                                        .hour().minute()
+                                                        .locale(NumberFormat.locale)))
                             .font(.rounded(11))
                             .foregroundStyle(Theme.textTertiary)
                     }
@@ -185,7 +248,9 @@ struct FinesSheet: View {
 
             // Низ — деньги и судьба штрафа. Кнопки РЯДОМ с кнопкой проезда,
             // не внутри: вложенные кнопки в SwiftUI ненадёжны (см. riskCard).
-            HStack(spacing: 8) {
+            // Сумма — своей строкой, кнопки — под ней на всю ширину: в один
+            // ряд «Не пришёл» обрезалось до «Не при…».
+            VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(outcome == .paid
                          ? String(format: String(localized: "штраф ≈ %@"),
@@ -204,7 +269,7 @@ struct FinesSheet: View {
                             .foregroundStyle(Theme.textTertiary)
                     }
                 }
-                Spacer(minLength: 8)
+                HStack(spacing: 8) {
                 if outcome == .pending {
                     outcomeButton(item, set: .paid,
                                   title: String(localized: "Пришёл"),
@@ -220,6 +285,7 @@ struct FinesSheet: View {
                                   symbol: "arrow.uturn.backward.circle",
                                   tint: Theme.textSecondary,
                                   hint: String(localized: "Вернуть штраф в сумму"))
+                }
                 }
             }
         }
@@ -241,6 +307,7 @@ struct FinesSheet: View {
             Label(title, systemImage: symbol)
                 .font(.rounded(15, .semibold))
                 .foregroundStyle(tint)
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 11).padding(.vertical, 7)
                 .background(tint.opacity(0.12), in: Capsule())
                 // Капсула ~34 pt остаётся прежней на глаз, а мишень — 44:

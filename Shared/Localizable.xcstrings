@@ -238,6 +238,22 @@
         }
       }
     },
+    "%@ к прошлой неделе": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ к прошлой неделе"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘tgan haftaga %@"
+          }
+        }
+      }
+    },
     "%@ км": {
       "localizations": {
         "ru": {
@@ -378,6 +394,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ so‘m"
+          }
+        }
+      }
+    },
+    "%@ ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ soat"
           }
         }
       }
@@ -1763,6 +1795,22 @@
         }
       }
     },
+    "Без штрафа: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без штрафа: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimasiz: %lld"
+          }
+        }
+      }
+    },
     "Без штрафов": {
       "localizations": {
         "ru": {
@@ -1903,6 +1951,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "O‘tgan davrdagidan ko‘proq"
+          }
+        }
+      }
+    },
+    "В «Итогах» за период — %@: часть поездок старше сохранённых, их строк здесь нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В «Итогах» за период — %@: часть поездок старше сохранённых, их строк здесь нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Natijalar»da davr uchun — %@: ba’zi safarlar saqlanganlardan eski, ularning qatorlari bu yerda yo‘q"
           }
         }
       }
@@ -2080,22 +2144,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Odatdagi yo'nalishingiz"
-          }
-        }
-      }
-    },
-    "Ваша норма": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ваша норма"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sizning odatiy darajangiz"
           }
         }
       }
@@ -3502,22 +3550,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Davr tafsilotlari"
-          }
-        }
-      }
-    },
-    "Динамика по неделям": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Динамика по неделям"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Haftalar dinamikasi"
           }
         }
       }
@@ -7180,6 +7212,22 @@
         }
       }
     },
+    "Норма и динамика": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Норма и динамика"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Me’yor va dinamika"
+          }
+        }
+      }
+    },
     "О приложении": {
       "extractionState": "manual",
       "localizations": {
@@ -7658,6 +7706,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Summa qayerdan"
+          }
+        }
+      }
+    },
+    "Откуда сумма и как считаем": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Откуда сумма и как считаем"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summa qayerdan va qanday hisoblaymiz"
           }
         }
       }
@@ -8195,6 +8259,22 @@
         }
       }
     },
+    "По дням": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По дням"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunlar bo‘yicha"
+          }
+        }
+      }
+    },
     "По маршруту %@ через %lld метров": {
       "localizations": {
         "ru": {
@@ -8223,6 +8303,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrutda radar 800 metrdan so‘ng"
+          }
+        }
+      }
+    },
+    "По неделям": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По неделям"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haftalar bo‘yicha"
           }
         }
       }
@@ -8656,6 +8752,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hozircha safarlar yo‘q"
+          }
+        }
+      }
+    },
+    "Поездок с превышениями среди сохранённых нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездок с превышениями среди сохранённых нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saqlanganlar orasida oshirishli safarlar yo‘q"
           }
         }
       }
@@ -9571,6 +9683,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "O'tilgan kameralar"
+          }
+        }
+      }
+    },
+    "Пройдено камер: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пройдено камер: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘tilgan kameralar: %lld"
           }
         }
       }
@@ -11464,6 +11592,22 @@
         }
       }
     },
+    "Только превышения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только превышения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat oshirishlar"
+          }
+        }
+      }
+    },
     "Только радары": {
       "localizations": {
         "ru": {
@@ -11491,7 +11635,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Faqat tezlik oshirilganlari"
+            "value": "Faqat oshirishlar bilan"
           }
         }
       }
@@ -13358,22 +13502,6 @@
         }
       }
     },
-    "камер пройдено": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "камер пройдено"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "kamera o'tildi"
-          }
-        }
-      }
-    },
     "км": {
       "localizations": {
         "ru": {
@@ -13502,18 +13630,18 @@
         }
       }
     },
-    "макс. км/ч": {
+    "максимум, км/ч": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "макс. км/ч"
+            "value": "максимум, км/ч"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "maks. km/soat"
+            "value": "maksimal, km/soat"
           }
         }
       }
@@ -14023,6 +14151,22 @@
         }
       }
     },
+    "превышение на %lld км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "превышение на %lld км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld km/soat oshirish"
+          }
+        }
+      }
+    },
     "превышений": {
       "localizations": {
         "ru": {
@@ -14132,6 +14276,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "bosib o‘tildi"
+          }
+        }
+      }
+    },
+    "пройдено камер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пройдено камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘tilgan kameralar"
           }
         }
       }
@@ -14506,18 +14666,18 @@
         }
       }
     },
-    "средняя км/ч": {
+    "средняя, км/ч": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "средняя км/ч"
+            "value": "средняя, км/ч"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o'rtacha km/soat"
+            "value": "o‘rtacha, km/soat"
           }
         }
       }
@@ -14678,6 +14838,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "jarimali o'tishlar: %lld"
+          }
+        }
+      }
+    },
+    "→ Дом": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ Дом"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ Uy"
+          }
+        }
+      }
+    },
+    "→ Работа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ Работа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ Ish"
           }
         }
       }

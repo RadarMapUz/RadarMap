@@ -38,6 +38,9 @@ final class WatchBridgeService: NSObject {
     /// запястье не нуждаются в секундной точности — а смена уровня тревоги
     /// проходит без очереди.
     private var lastSentAt = Date.distantPast
+    /// Часы спарены и приложение на них стоит — по событиям сессии, а не
+    /// опросом WCSession на каждом GPS-тике (аудит энергии 19.10).
+    private var watchReady = false
     private static let minInterval: TimeInterval = 3
 
     override init() {
@@ -50,9 +53,8 @@ final class WatchBridgeService: NSObject {
     /// Обновить часы. Дёшево вызывать на каждом GPS-тике: без изменений — no-op.
     func update(isTripActive: Bool, speedKmh: Double, cameraTitle: String?,
                 distanceMeters: Double?, alertLevel: Int) {
+        guard watchReady else { return }
         let session = WCSession.default
-        guard WCSession.isSupported(), session.activationState == .activated,
-              session.isPaired, session.isWatchAppInstalled else { return }
 
         // Квантуем — меньше пробуждений радио. Без тревоги грубее: скорость до
         // 5 км/ч, дальняя дистанция до 100 м, — ступень в 2 км/ч менялась почти
@@ -95,9 +97,23 @@ final class WatchBridgeService: NSObject {
 extension WatchBridgeService: WCSessionDelegate {
     nonisolated func session(_ session: WCSession,
                              activationDidCompleteWith activationState: WCSessionActivationState,
-                             error: Error?) {}
+                             error: Error?) {
+        noteWatchState(session)
+    }
+    /// Часы спарили, сняли, поставили или удалили приложение.
+    nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
+        noteWatchState(session)
+    }
+    nonisolated private func noteWatchState(_ session: WCSession) {
+        let ready = session.activationState == .activated && session.isPaired && session.isWatchAppInstalled
+        Task { @MainActor in
+            self.watchReady = ready
+            if !ready { self.lastSent = [:] }
+        }
+    }
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
     nonisolated func sessionDidDeactivate(_ session: WCSession) {
+        noteWatchState(session)
         session.activate()   // смена часов — переактивируемся
     }
 }

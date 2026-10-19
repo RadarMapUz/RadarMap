@@ -224,4 +224,22 @@ final class RouteGeometryTests: XCTestCase {
         let beyond = try XCTUnwrap(RouteService.pointAndCourse(along: cum[2] + 500, pts: pts, cum: cum))
         XCTAssertEqual(beyond.coordinate.latitude, 41.31, accuracy: 0.0001, "за финишем — на финише")
     }
+
+    /// Путь впереди: с сегмента машины и не дальше просимого — не весь
+    /// хвост маршрута с начала (аудит энергии 19.10).
+    func testPathAheadStartsAtTheCarAndStopsAtTheDistance() {
+        // Прямая на восток: точка каждые ~100 м, 5 км.
+        let points = (0...50).map { MKMapPoint(CLLocationCoordinate2D(latitude: 41.3,
+                                                                     longitude: 69.2 + Double($0) * 0.0012)) }
+        let cumulative = RouteService.cumulative(of: points)
+        let car = CLLocationCoordinate2D(latitude: 41.3, longitude: 69.2 + 10.5 * 0.0012)
+        let path = RouteService.ahead(points, cumulative: cumulative, after: cumulative[10] + 50,
+                                      from: car, meters: 600)!
+        XCTAssertEqual(path.first!.longitude, car.longitude, accuracy: 1e-9, "начало — машина")
+        XCTAssertEqual(path[1].longitude, points[11].coordinate.longitude, accuracy: 1e-9,
+                       "следующая точка — конец сегмента машины, не начало маршрута")
+        XCTAssertLessThanOrEqual(path.count, 9, "≈600 м по ~100 м — не весь хвост")
+        XCTAssertNil(RouteService.ahead(points, cumulative: cumulative, after: cumulative.last! + 10,
+                                        from: car, meters: 600), "маршрут кончился")
+    }
 }

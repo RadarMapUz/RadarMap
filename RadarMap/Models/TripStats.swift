@@ -91,14 +91,6 @@ final class TripStats {
     @ObservationIgnored var recordsTimedTrack = false
     @ObservationIgnored private var timedBuffer: [TimedPoint] = []
 
-    /// Хвост живого трека для схемы на приборке: откуда я приехал.
-    /// Отдаём последние N точек, а не весь буфер: чертим двести метров вокруг
-    /// себя, а поездка бывает на сотню километров.
-    func recentTrack(limit: Int = 60) -> [CLLocationCoordinate2D] {
-        trackBuffer.suffix(limit).map {
-            CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
-        }
-    }
     // nonisolated: их читает и nonisolated-восстановление слепка (record(from:)).
     nonisolated private static let trackStepMeters = 30.0
     nonisolated private static let trackTolerance = 0.00022   // ~22 м — упрощение Дугласа-Пекера
@@ -209,6 +201,11 @@ final class TripStats {
     }
 
     func update(coordinate: CLLocationCoordinate2D, speedKmh: Double, at time: Date = Date()) {
+        // Вне поездки здесь делать нечего: хвост трека для схемы приборки
+        // ушёл вместе со схемой (11.10), а дистанция, максимум и время точки
+        // — наблюдаемые свойства, и их запись будила читателей каждый фикс
+        // открытого приложения (аудит энергии 19.10).
+        guard startedAt != nil else { return }
         if let last = lastCoordinate {
             // Тем же способом, что и весь пайплайн: HUD, гейты и запись проезда
             // обязаны сходиться в цифрах, а на масштабе одного тика (десятки
@@ -235,17 +232,6 @@ final class TripStats {
                                           lon: coordinate.longitude, speedKmh: speedKmh))
             trackTimes.append(time.timeIntervalSince1970)
         }
-        // Вне поездки буфер нужен только схеме приборки (хвост «откуда
-        // приехал», recentTrack ≤ 60 точек) — а рос он неограниченно: долгая
-        // пассажирская сессия с открытым приложением надувала массив, который
-        // никто не читал дальше хвоста.
-        if startedAt == nil, trackBuffer.count > 120 {
-            trackBuffer.removeFirst(trackBuffer.count - 120)
-        }
-        if trackTimes.count > trackBuffer.count {
-            trackTimes.removeFirst(trackTimes.count - trackBuffer.count)
-        }
-
         checkpointIfDue()
     }
 

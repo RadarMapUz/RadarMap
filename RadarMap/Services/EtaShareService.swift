@@ -55,7 +55,15 @@ final class EtaShareService {
             while !Task.isCancelled {
                 guard let self, let route = self.route else { return }
                 if route.isActive {
-                    await self.send(.driving, arrival: route.arrivalDate, remaining: route.remainingDistance)
+                    let arrival = route.arrivalDate, remaining = route.remainingDistance
+                    if EtaShare.shouldSend(lastArrival: self.sentArrival, lastRemaining: self.sentRemaining,
+                                           lastSentAt: self.sentAt, arrival: arrival,
+                                           remaining: remaining, now: Date()) {
+                        await self.send(.driving, arrival: arrival, remaining: remaining)
+                        self.sentArrival = arrival
+                        self.sentRemaining = remaining
+                        self.sentAt = Date()
+                    }
                 } else {
                     let arrived = route.lastArrival.map {
                         Date().timeIntervalSince($0.at) < AppConfig.etaShareArrivalFreshSeconds
@@ -80,9 +88,17 @@ final class EtaShareService {
         Task { await finish(.ended) }
     }
 
+    /// Что ушло в последний раз — повтор тех же цифр не шлём (shouldSend).
+    @ObservationIgnored private var sentArrival: Date?
+    @ObservationIgnored private var sentRemaining: Double?
+    @ObservationIgnored private var sentAt: Date?
+
     private func finish(_ status: EtaShare.Status) async {
         loop?.cancel()
         loop = nil
+        sentArrival = nil
+        sentRemaining = nil
+        sentAt = nil
         await send(status, arrival: Date(), remaining: 0)
         isSharing = false
         token = nil

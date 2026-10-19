@@ -550,6 +550,7 @@ struct EngineMapView: UIViewRepresentable {
             routeInitialized = false
             lineKeys = [:]
             hiddenLayers = nil
+            modernDrivingLayerIDs = nil
             lastTrafficRevision = -1
             lastPosition = nil
             cameraRegion = nil
@@ -953,6 +954,18 @@ struct EngineMapView: UIViewRepresentable {
             "waterway-name",
         ]
         private var hiddenLayers: Set<String>?
+        /// Слои нового стиля, гасимые в поездке, — один раз на загрузку
+        /// стиля. До 19.10 `style.layers.map(\.identifier)` по сотням
+        /// ObjC-слоёв шёл дважды на КАЖДЫЙ фикс поездки (в машине — всегда),
+        /// главный кандидат CPU в CarPlay по аудиту энергии.
+        private var modernDrivingLayerIDs: [String]?
+
+        private func drivingLayerIDs(_ style: MLNStyle) -> [String] {
+            if let ids = modernDrivingLayerIDs { return ids }
+            let ids = style.layers.map(\.identifier).filter(EngineModernStyle.hiddenWhileDriving)
+            modernDrivingLayerIDs = ids
+            return ids
+        }
 
         /// Видимость, а не новый стиль: перезагрузка стиля — сама по себе пик и
         /// сброс тайлов, а на ходу слои меняются на каждой остановке.
@@ -964,12 +977,12 @@ struct EngineMapView: UIViewRepresentable {
             // Режим «в поездке» новой карты: заведения, номера домов, подписи
             // дорожек — те же слои, что раньше вырезал drivingLayers при сборке.
             if model.driving, modernLoaded {
-                wanted.formUnion(style.layers.map(\.identifier).filter(EngineModernStyle.hiddenWhileDriving))
+                wanted.formUnion(drivingLayerIDs(style))
             }
             if wanted != hiddenLayers {
                 hiddenLayers = wanted
                 let managed = Set(Self.hotHiddenLayers).union(Self.drivingHiddenLayers)
-                    .union(style.layers.map(\.identifier).filter(EngineModernStyle.hiddenWhileDriving))
+                    .union(drivingLayerIDs(style))
                 for id in managed {
                     style.layer(withIdentifier: id)?.isVisible = !wanted.contains(id)
                 }

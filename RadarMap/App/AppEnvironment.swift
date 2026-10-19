@@ -243,7 +243,10 @@ final class AppEnvironment {
         // «Радар ещё стоял?» — наблюдение за проездом мимо передвижных точек
         // на каждом фиксе, и с погашенным экраном тоже (MobileCameraService).
         location.onAcceptedFix = { [weak self, weak mobile, weak traffic, weak location, weak route, weak alerts] coordinate in
-            withMotion { mobile?.trackPasses(from: coordinate) }
+            // Без withAnimation: транзакция анимации на КАЖДОМ фиксе, в том
+            // числе в фоне, ради смены вопроса раз в поездку. Появление
+            // вопроса анимирует сам гейт (MobileConfirmGate).
+            mobile?.trackPasses(from: coordinate)
             // Улицы вокруг машины — для посадки «Радар!» на дорогу и схемы
             // развязки в CarPlay. После удаления схемы приборки (11.10)
             // ensureCoverage не звал никто, сеть была пустой, и отметки уходили
@@ -323,13 +326,6 @@ final class AppEnvironment {
         // где чужая отметка устаревает за минуту, реже на стоянке и на жаре.
         mobile.drivingContext = { [weak location, weak thermal] in
             (speedKmh: location?.speedKmh ?? 0, thermal: thermal?.mode ?? .full)
-        }
-        // Чужая отметка приехала — пересобрать окно ближайших камер и оповестить
-        // немедленно, не дожидаясь ни экрана, ни следующего ретайла. Вешаем
-        // здесь, а не во вью: среда жива всегда, тело вью со сложенным
-        // телефоном не исполняется вовсе — а именно там водитель и едет.
-        mobile.onReportsChanged = { [weak location] in
-            location?.refreshMonitoring(evaluateNow: true)
         }
         mobile.onMyReportConfirmed = { [weak notifications] report in
             let kind = ReportKind(rawValue: report.kind)?.title
@@ -434,6 +430,25 @@ final class AppEnvironment {
         // Тема интерфейса — до первого кадра: днём приложение не должно
         // мигнуть тёмным при запуске.
         refreshInterfaceAppearance()
+        observeCameraRevision()
+    }
+
+    /// База камер изменилась (загрузка, своя камера, скрытие, чужая отметка) —
+    /// пересобрать окно ближайших камер и оценить сразу. ОДНА точка: до 19.10
+    /// то же делали хук отметок, MapScreen и экран машины — три пересборки
+    /// окна и сетки на одну отметку при открытом телефоне и машине (аудит
+    /// энергии). Здесь, а не во вью: среда жива всегда, тело вью со сложенным
+    /// телефоном не исполняется — а именно там водитель и едет.
+    private func observeCameraRevision() {
+        withObservationTracking {
+            _ = cameras.revision
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.location.refreshMonitoring(evaluateNow: true)
+                self.observeCameraRevision()
+            }
+        }
     }
 
     var loadError: String? { cameras.loadError }

@@ -182,6 +182,10 @@ nonisolated enum MainWork {
 /// Смотреть: log show --predicate 'subsystem == "uz.radarmap.ios"' | grep фриз
 nonisolated enum HitchWatch {
     private static let pingEvery: TimeInterval = 0.5
+    /// Пока экран машины не наш (музыка, чужой навигатор) фризы не считаются
+    /// — и будить main дважды в секунду незачем: шаг реже, лог остаётся
+    /// (аудит энергии 19.10: 7 200 пробуждений в час на всю сессию машины).
+    private static let idlePingEvery: TimeInterval = 3
     private static let threshold: TimeInterval = 0.25
     /// Ждём отклика долго: обрывать ожидание на пяти секундах значило бы
     /// записывать любой длинный фриз пятисекундным и потерять его настоящий
@@ -255,7 +259,7 @@ nonisolated enum HitchWatch {
                     let stage = MainWork.last.description
                     Log.app.fault("фриз main \(Int(lag * 1000), privacy: .public) мс на «\(stage, privacy: .public)»")
                 }
-                Thread.sleep(forTimeInterval: pingEvery)
+                Thread.sleep(forTimeInterval: counting.withLock({ $0 }) ? pingEvery : idlePingEvery)
             }
         }
     }

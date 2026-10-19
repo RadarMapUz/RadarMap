@@ -167,6 +167,25 @@ nonisolated enum WidgetState: Equatable {
 }
 
 nonisolated enum WidgetWeek {
+
+    /// Когда виджету самому перечитать снимок: в начале следующих суток (с
+    /// минутой запаса). Новые цифры приносит приложение (reloadTimelines),
+    /// а сам виджет должен заметить только смену дня и недели — до 19.10 он
+    /// просыпался каждый час, ~24 пробуждения расширения в сутки на виджет
+    /// впустую.
+    /// `updatedAt` — время снимка: в момент, когда он станет «старым»
+    /// (`isStale`), виджет тоже просыпается, чтобы приглушить подпись.
+    static func nextRefresh(after now: Date, updatedAt: Date? = nil,
+                            calendar: Calendar = .current) -> Date {
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
+            ?? now.addingTimeInterval(86_400)
+        var next = tomorrow.addingTimeInterval(60)
+        if let updatedAt {
+            let staleAt = updatedAt.addingTimeInterval(staleAfter + 60)
+            if staleAt > now { next = min(next, staleAt) }
+        }
+        return next
+    }
     /// Как часто переписывать неизменный снимок. Меньше суток с запасом:
     /// виджет приглушает подпись снимку старше `isStale` (24 ч), и при
     /// ежедневно открываемом приложении он не должен тускнеть.
@@ -244,8 +263,10 @@ nonisolated enum WidgetWeek {
 
     /// Снимку больше суток — цифры ещё те же, но подпись стоит приглушить:
     /// приложение давно не открывали, и сегодняшняя поездка в них не вошла.
+    static let staleAfter: TimeInterval = 24 * 60 * 60
+
     static func isStale(_ updatedAt: Date?, now: Date,
-                        maxAge: TimeInterval = 24 * 60 * 60) -> Bool {
+                        maxAge: TimeInterval = staleAfter) -> Bool {
         guard let updatedAt else { return true }
         return now.timeIntervalSince(updatedAt) > maxAge
     }

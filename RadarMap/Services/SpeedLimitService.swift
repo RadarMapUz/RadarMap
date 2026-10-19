@@ -394,7 +394,7 @@ final class SpeedLimitService {
     /// - Parameter path: точки пути впереди от машины (маршрут); nil — по оси
     ///   текущей дороги прямо.
     func checkLimitAhead(coordinate: CLLocationCoordinate2D, course: CLLocationDirection,
-                         speedKmh: Double, path: [CLLocationCoordinate2D]?, announce: Bool,
+                         speedKmh: Double, path: () -> [CLLocationCoordinate2D]?, announce: Bool,
                          now: Date = Date()) {
         // Предполагаемый лимит (по классу дороги) — не повод для фразы «через
         // 200 м»: это догадка, а не знак.
@@ -403,7 +403,7 @@ final class SpeedLimitService {
               let current = currentLimit, !isCurrentLimitAssumed else { return }
         if let at = limitAheadCheckedAt, now.timeIntervalSince(at) < AppConfig.limitAheadCheckSeconds { return }
         limitAheadCheckedAt = now
-        let probes = Self.probes(index: index, from: coordinate, course: course, path: path)
+        let probes = Self.probes(index: index, from: coordinate, course: course, path: path())
         guard let notice = LimitAhead.notice(current: current, speedKmh: speedKmh,
                                              tolerance: settings.overspeedTolerance, probes: probes),
               limitAheadAnnouncer.shouldAnnounce(notice, at: now) else { return }

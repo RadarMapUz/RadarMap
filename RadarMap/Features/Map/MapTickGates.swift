@@ -163,6 +163,7 @@ struct MobileConfirmGate: View {
     var body: some View {
         MobileConfirmBar(isCovered: env.location.isApproachingCamera)
             .onAppear { env.mobile.expireStaleConfirm() }
+            .motionAnimation(Motion.standard, value: env.mobile.pendingConfirm?.id)
     }
 }
 

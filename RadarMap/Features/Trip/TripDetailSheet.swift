@@ -602,7 +602,7 @@ struct TripDetailContent: View {
             .init(value: Formatting.distance(record.distanceMeters), label: String(localized: "пройдено пути"),
                   icon: "point.topleft.down.to.point.bottomright.curvepath"),
             .init(value: "\(record.camerasPassed)", label: String(localized: "камер пройдено"),
-                  icon: "camera.metering.center.weighted"),
+                  icon: Icon.cameras),
             .init(value: "\(Int(record.maxSpeedKmh))", label: String(localized: "макс. км/ч"),
                   icon: "gauge.with.dots.needle.100percent"),
             .init(value: "\(Int(record.averageSpeedKmh))", label: String(localized: "средняя км/ч"),

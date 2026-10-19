@@ -792,7 +792,7 @@ struct MapScreen: View {
                 Label("Пробки", systemImage: "car.2.fill")
             }
             Toggle(isOn: setting(\.mapPlaces)) {
-                Label("Места", systemImage: "fuelpump.fill")
+                Label("Места", systemImage: Icon.placesLayer)
             }
             Toggle(isOn: setting(\.mapHouses)) {
                 Label("Дома", systemImage: "building.2.fill")
@@ -1149,7 +1149,7 @@ struct MapScreen: View {
             // «Рядом» сюда не вернулся по прежней причине: список камер
             // поблизости открывался с экрана, который эти же камеры уже
             // показывает на карте, — он живёт в «Ещё».
-            actionButton("Мои места", "star.fill") { showMyPlaces = true }
+            actionButton("Мои места", Icon.myPlaces) { showMyPlaces = true }
             actionButton("Итоги", "chart.bar.fill") { map.showStats = true }
             Menu {
                 moreActionItems
@@ -1180,7 +1180,7 @@ struct MapScreen: View {
             Label("Поиск", systemImage: "magnifyingglass")
         }
         Button { showMyPlaces = true } label: {
-            Label("Мои места", systemImage: "star.fill")
+            Label("Мои места", systemImage: Icon.myPlaces)
         }
         Button { map.showStats = true } label: {
             Label("Итоги", systemImage: "chart.bar.fill")
@@ -1212,7 +1212,7 @@ struct MapScreen: View {
         Button {
             withMotion { map.isAddingCamera = true }
         } label: {
-            Label("Добавить камеру", systemImage: "plus.circle.fill")
+            Label("Добавить камеру", systemImage: Icon.ownCamera)
         }
         Button { map.showSettings = true } label: {
             Label("Настройки", systemImage: "gearshape.fill")

@@ -744,7 +744,7 @@ struct TripStatsSheet: View {
                 showFines = true
             } label: {
                 HStack(spacing: 12) {
-                    IconBadge(symbol: "envelope.badge.clock", tint: Theme.warning, size: 30)
+                    IconBadge(symbol: "envelope.open.badge.clock", tint: Theme.warning, size: 30)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(String(format: String(localized: "Ждут ответа: %lld"),
                                     nudge.count))

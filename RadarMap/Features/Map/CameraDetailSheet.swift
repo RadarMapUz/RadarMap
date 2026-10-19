@@ -275,7 +275,7 @@ struct CameraDetailSheet: View {
                     Task { await env.mobile.vote(cameraID: camera.id, stillThere: true) }
                     dismiss()
                 } label: {
-                    Label("Радар на месте", systemImage: "hand.thumbsup.fill")
+                    Label("Радар на месте", systemImage: Icon.pointHere)
                         .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.success)
                         .frame(maxWidth: .infinity)
@@ -286,7 +286,7 @@ struct CameraDetailSheet: View {
                     Task { await env.mobile.vote(cameraID: camera.id, stillThere: false) }
                     dismiss()
                 } label: {
-                    Label("Уже нет", systemImage: "hand.thumbsdown.fill")
+                    Label("Уже нет", systemImage: Icon.pointGone)
                         .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.danger)
                         .frame(maxWidth: .infinity)
@@ -307,7 +307,7 @@ struct CameraDetailSheet: View {
                 }
                 dismiss()
             } label: {
-                Label("Стоит не там", systemImage: "mappin.slash")
+                Label("Стоит не там", systemImage: Icon.pointMisplaced)
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textSecondary)
                     .frame(maxWidth: .infinity)
@@ -370,15 +370,15 @@ struct CameraDetailSheet: View {
                 HStack(spacing: 8) {
                     // Краудсорс в обе стороны: подтверждение «на месте» гасит ложные
                     // gone-репорты — база чистится голосами водителей, а не только жалобами.
-                    reportButton(title: "Камера на месте", icon: "checkmark.seal.fill",
+                    reportButton(title: "Камера на месте", icon: Icon.pointHere,
                                  tint: Theme.success) {
                         sendReport(.stillHere)
                     }
-                    reportButton(title: "Камеры больше нет", icon: "camera.slash.fill",
+                    reportButton(title: "Камеры больше нет", icon: Icon.pointGone,
                                  tint: Theme.warning) {
                         confirmation = .gone
                     }
-                    reportButton(title: "Неверное место", icon: "mappin.slash.circle.fill",
+                    reportButton(title: "Стоит не там", icon: Icon.pointMisplaced,
                                  tint: Theme.warning) {
                         sendReport(.wrongLocation)
                     }

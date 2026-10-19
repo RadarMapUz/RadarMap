@@ -109,7 +109,7 @@ struct OnboardingCommunityScene: View {
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
             step {
-                Image(systemName: "exclamationmark.triangle.fill")
+                Image(systemName: Icon.reportRadar)
                     .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(Theme.onAction)
                     .frame(width: 74, height: 74)

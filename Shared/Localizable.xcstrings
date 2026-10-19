@@ -6480,22 +6480,6 @@
         }
       }
     },
-    "Неверное место": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Неверное место"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Joyi noto‘g‘ri"
-          }
-        }
-      }
-    },
     "Недавние": {
       "localizations": {
         "ru": {

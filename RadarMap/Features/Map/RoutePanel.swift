@@ -212,7 +212,7 @@ struct RoutePanel: View {
         let route = env.route
         return Button(action: onShowCameras) {
             HStack(spacing: 10) {
-                Image(systemName: "camera.metering.center.weighted")
+                Image(systemName: Icon.cameras)
                     .font(.rounded(15, .bold))
                     .foregroundStyle(route.camerasOnRoute.isEmpty ? Theme.success : Theme.Types.camera)
                 Text("\(route.camerasOnRoute.count) камер на маршруте")

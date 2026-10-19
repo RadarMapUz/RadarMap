@@ -202,7 +202,7 @@ enum SettingsItem {
         case .route:    return "arrow.triangle.turn.up.right.diamond.fill"
         case .map:      return "map.fill"
         case .offline:  return "arrow.down.circle.fill"
-        case .places:   return "house.fill"
+        case .places:   return Icon.myPlaces
         case .learning: return "sparkles"
         case .battery:  return "battery.75percent"
         case .privacy:  return "hand.raised.fill"

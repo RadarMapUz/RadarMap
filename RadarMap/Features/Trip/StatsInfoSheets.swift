@@ -103,7 +103,7 @@ struct SavingsInfoSheet: View {
             infoCard(title: String(localized: "Откуда сумма")) {
                 ForEach(sources.prefix(AppConfig.fineSourcesVisibleRows)) { source in
                     HStack(spacing: 10) {
-                        Image(systemName: "camera.metering.center.weighted")
+                        Image(systemName: Icon.cameras)
                             .font(.rounded(15, .bold))
                             .foregroundStyle(Theme.danger)
                             .frame(width: 28, height: 28)

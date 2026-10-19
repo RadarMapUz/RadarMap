@@ -21,7 +21,7 @@ struct NearbyCamerasSheet: View {
                 if cameras.isEmpty {
                     ContentUnavailableView(
                         "Камеры не найдены",
-                        systemImage: "location.slash",
+                        systemImage: Icon.noCameras,
                         description: Text("Двигайтесь — приложение подберёт ближайшие камеры вокруг вас.")
                     )
                 } else {

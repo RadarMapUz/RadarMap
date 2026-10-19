@@ -1254,7 +1254,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Фолбэк — заголовком, а не пустой картинкой: `?? UIImage()` давал бы
     /// нажимаемую кнопку-невидимку в баре.
     private var reportButton: CPBarButton {
-        guard let image = buttonImage("exclamationmark.triangle.fill") else {
+        guard let image = buttonImage(Icon.reportRadar) else {
             return CPBarButton(title: String(localized: "Радар")) { [weak self] _ in
                 self?.presentReport()
             }

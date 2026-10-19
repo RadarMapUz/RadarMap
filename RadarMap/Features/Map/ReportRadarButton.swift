@@ -209,7 +209,7 @@ struct ReportRadarButton: View {
         switch flash {
         case .ok: return "checkmark"
         case .no: return "xmark"
-        case nil: return "exclamationmark.triangle.fill"
+        case nil: return Icon.reportRadar
         }
     }
 

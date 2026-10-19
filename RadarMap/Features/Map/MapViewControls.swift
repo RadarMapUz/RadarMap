@@ -26,12 +26,17 @@ struct MapCompassButton: View {
                 map.showNorth(coordinate: env.location.currentCoordinate,
                               inTrip: env.location.isTripActive)
             } label: {
-                ZStack {
-                    Image(systemName: "location.north.fill")
-                        .font(.rounded(17, .bold))
-                        .foregroundStyle(Theme.danger)
-                        .rotationEffect(.degrees(-map.displayedDirection))
+                // Нейтральная «N» с остриём на север, а не красная стрелка:
+                // красное на этой карте значит камеру, а стрелка путалась с
+                // соседней кнопкой «по ходу» (аудит 19.10, 4.1).
+                VStack(spacing: -1) {
+                    Image(systemName: "arrowtriangle.up.fill")
+                        .font(.rounded(8, .bold))
+                    Text(verbatim: "N")
+                        .font(.rounded(14, .heavy))
                 }
+                .foregroundStyle(Theme.textPrimary)
+                .rotationEffect(.degrees(-map.displayedDirection))
                 .controlCircle()
             }
             .buttonStyle(PressableStyle())

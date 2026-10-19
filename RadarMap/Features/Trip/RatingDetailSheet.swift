@@ -462,7 +462,7 @@ struct RatingDetailSheet: View {
             path.append(.pass(trip: found.record.id, pass: found.pass.id))
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: "camera.metering.center.weighted")
+                Image(systemName: Icon.cameras)
                     .font(.rounded(15, .bold))
                     .foregroundStyle(Theme.danger)
                     .frame(width: 32, height: 32)
@@ -639,7 +639,7 @@ struct RatingDetailSheet: View {
                 }
                 VStack(alignment: .leading, spacing: 12) {
                     SectionHeader(String(localized: "Из чего складывается"))
-                    componentRow(icon: "camera.metering.center.weighted", tint: Theme.accent,
+                    componentRow(icon: Icon.cameras, tint: Theme.accent,
                                  title: String(localized: "Скорость у камер"),
                                  text: String(localized: "Каждый проезд камеры с известным лимитом: берём минимальную скорость в 80 м перед камерой — разгон после проезда не считается. Штрафные ступени снижают балл сильнее всего."))
                     componentRow(icon: "waveform.path.ecg", tint: Theme.Types.intelligent,

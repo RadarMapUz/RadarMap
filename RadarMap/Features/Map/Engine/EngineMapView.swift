@@ -1311,12 +1311,16 @@ struct EngineMapView: UIViewRepresentable {
         }
 
         /// Крейсер: поездка на скорости трассы, камера не близко, манёвр
-        /// далеко. В городе (ниже порога) и у камеры/поворота — полные 30 к/с:
-        /// там картинка меняется и «рывками» замечают (поле 12.10).
-        static func isCruise(tripActive: Bool, speedKmh: Double, approachingCamera: Bool,
+        /// далеко. В городе и у камеры/поворота — полные 30 к/с: там картинка
+        /// меняется и «рывками» замечают (поле 12.10). С гистерезисом по
+        /// скорости (вход 70, выход ниже 60): на пороге частота не должна
+        /// мигать от шума спидометра. Хранится флагом LocationService.isCruising
+        /// — пишется только на смене, как isApproachingCamera.
+        static func isCruise(was: Bool, tripActive: Bool, speedKmh: Double, approachingCamera: Bool,
                              maneuverMeters: Double?) -> Bool {
-            tripActive && speedKmh >= AppConfig.engineCruiseMinKmh && !approachingCamera
-                && (maneuverMeters ?? .infinity) > AppConfig.engineCruiseManeuverMeters
+            guard tripActive, !approachingCamera,
+                  (maneuverMeters ?? .infinity) > AppConfig.engineCruiseManeuverMeters else { return false }
+            return speedKmh >= (was ? AppConfig.engineCruiseExitKmh : AppConfig.engineCruiseMinKmh)
         }
 
         static func zoom(spanMeters: Double, height: Double, latitude: Double) -> Double {

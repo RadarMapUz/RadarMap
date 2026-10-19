@@ -44,7 +44,15 @@ final class TrafficService {
     /// Последний такт сети (отправка + приём).
     @ObservationIgnored private var lastTickAt = Date.distantPast
     /// Интервал такта — ставит AppEnvironment (экран, маршрут).
-    @ObservationIgnored var interval: () -> TimeInterval = { AppConfig.trafficRefreshInterval }
+    @ObservationIgnored var intervalProvider: (() -> TimeInterval)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: intervalProvider,
+                                               "TrafficService.intervalProvider") }
+    }
+    private var interval: TimeInterval { intervalProvider?() ?? AppConfig.trafficRefreshInterval }
+    /// Отправки идут по одной: такт, «радио проснулось» и финиш поездки могли
+    /// взять одну и ту же голову очереди — кусок ушёл бы дважды и сервер
+    /// принял бы его за второго независимого водителя (ревью 19.10).
+    @ObservationIgnored private var uploadChain: Task<Void, Never>?
     @ObservationIgnored private var etag: String?
     @ObservationIgnored private var wanted = false
 
@@ -94,6 +102,16 @@ final class TrafficService {
     }
 
     private func upload() async {
+        let previous = uploadChain
+        let task = Task { [weak self] in
+            await previous?.value
+            await self?.uploadNow()
+        }
+        uploadChain = task
+        await task.value
+    }
+
+    private func uploadNow() async {
         queue += probes.takeReady()
         if queue.count > AppConfig.trafficQueueCap { queue.removeFirst(queue.count - AppConfig.trafficQueueCap) }
         guard contributes, isOnline(), !queue.isEmpty else { return }
@@ -123,7 +141,7 @@ final class TrafficService {
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                if Date().timeIntervalSince(self.lastTickAt) >= self.interval() { await self.tick() }
+                if Date().timeIntervalSince(self.lastTickAt) >= self.interval { await self.tick() }
                 // Короткими шагами: интервал зависит от экрана и маршрута, а
                 // такт мог уже пройти вместе с опросом отметок (radioIsAwake).
                 await Task.pause(seconds: AppConfig.trafficLoopStepSeconds)
@@ -142,8 +160,14 @@ final class TrafficService {
     /// если срок пробок почти подошёл — сходить сейчас, вместе с ним.
     func radioIsAwake() {
         guard wanted, NetworkRhythm.joinsAwakeRadio(sinceLast: Date().timeIntervalSince(lastTickAt),
-                                                     interval: interval()) else { return }
-        Task { await tick() }
+                                                     interval: interval) else { return }
+        // Срок — сразу, до запуска задачи: иначе цикл в этот промежуток сам
+        // прошёл бы проверку и такт случился бы дважды.
+        lastTickAt = Date()
+        Task {
+            await upload()
+            await refresh()
+        }
     }
 
     func refresh() async {

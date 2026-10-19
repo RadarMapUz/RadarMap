@@ -140,9 +140,14 @@ nonisolated enum GPSTiers {
                         : Request(accuracy: kCLLocationAccuracyBest, distanceFilter: 10)
     }
 
-    /// Лежит ли телефон открытого экрана: стоим дольше порога и точка есть.
-    static func foregroundIdle(idleSeconds: TimeInterval, hasPosition: Bool) -> Bool {
+    /// Лежит ли телефон открытого экрана: стоим дольше порога, точка есть и
+    /// камера не ближе охраны замера проезда (та же, что у лестницы поездки:
+    /// красный свет в 80 м от камеры — не стол, оповещение не должно
+    /// запоздать на грубых фиксах).
+    static func foregroundIdle(idleSeconds: TimeInterval, hasPosition: Bool,
+                               nearestCameraMeters: Double = .infinity) -> Bool {
         hasPosition && idleSeconds >= AppConfig.gpsIdleAfterSeconds
+            && nearestCameraMeters > AppConfig.gpsStandstillNearCameraMeters
     }
 
     /// Фикс открытого экрана забракован по точности: какую точность просить

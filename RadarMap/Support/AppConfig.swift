@@ -64,6 +64,9 @@ nonisolated enum AppConfig {
     /// расслабляемся вовсе, а вдали выход мгновенный — первый же фикс с
     /// движением возвращает точный тир.
     nonisolated static let gpsIdleAfterSeconds: TimeInterval = 20
+    /// Открытый экран «лежал» — сдвиг на столько от места лёжки возвращает
+    /// максимальную точность, даже если скорость первого фикса ещё ноль.
+    nonisolated static let gpsIdleLeaveMeters: Double = 20
     /// «Стою» — скорость ниже этого (км/ч). Ползание в пробке (1–2 км/ч) —
     /// тоже стоянка: фиксы всё равно приходят по 30-метровому фильтру.
     nonisolated static let gpsStandstillSpeedKmh = 3.0
@@ -554,7 +557,7 @@ nonisolated enum AppConfig {
     static let trafficQuietInterval: TimeInterval = 300
     /// Радио уже проснулось ради другого запроса — пробки, чей срок подойдёт
     /// в ближайшие столько секунд, идут вместе с ним (NetworkRhythm).
-    static let radioJoinSlackSeconds: TimeInterval = 60
+    static let radioJoinSlackSeconds: TimeInterval = 30
     /// Шаг проверки такта пробок (сон без радио — дёшево).
     static let trafficLoopStepSeconds: TimeInterval = 15
     static let trafficStaleSeconds: TimeInterval = 10 * 60
@@ -1419,7 +1422,9 @@ nonisolated enum AppConfig {
     static let engineWarmFPS = 20
     /// Крейсер (EngineMapView.isCruise): с какой скорости и как далеко от
     /// манёвра карта может жить на engineWarmFPS.
-    static let engineCruiseMinKmh: Double = 50
+    static let engineCruiseMinKmh: Double = 70
+    /// Выход из крейсера — ниже этой скорости (гистерезис).
+    static let engineCruiseExitKmh: Double = 60
     static let engineCruiseManeuverMeters: Double = 1000
     /// Телефон горячий: карта почти статична, HUD и голос важнее картинки.
     static let engineHotFPS = 15
@@ -1444,6 +1449,9 @@ nonisolated enum AppConfig {
     /// Прибытие к камере сдвинулось больше этой доли оставшегося времени
     /// (скорость поменялась) — обновить полосу, хоть дистанция та же.
     static let liveActivityArrivalDrift = 0.15
+    /// Неизменное состояние всё равно освежается раньше staleDate (300 с):
+    /// «Нет сигнала GPS» — только когда приложение и правда молчит.
+    static let liveActivityKeepAliveSeconds: TimeInterval = 240
     /// Часы без тревоги: не чаще раза в столько секунд.
     static let watchCalmInterval: TimeInterval = 10
 

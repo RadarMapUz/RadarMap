@@ -129,7 +129,7 @@ final class AppEnvironment {
     /// Ритм сети в поездке (NetworkRhythm): пробки — одним тактом и вместе с
     /// опросом отметок, реже при погашенном экране без маршрута.
     private func wireNetworkRhythm() {
-        traffic.interval = { [weak self] in
+        traffic.intervalProvider = { [weak self] in
             guard let self else { return AppConfig.trafficRefreshInterval }
             return NetworkRhythm.trafficInterval(screenOn: self.isPhoneSceneActive || self.isCarPlayConnected,
                                                  hasRoute: self.route.isActive)

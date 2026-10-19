@@ -71,12 +71,18 @@ final class LiveActivityService {
         guard let activity else { return }
         // Квантуем расстояние и не шлём одинаковые состояния — у Live Activity
         // ограниченный бюджет обновлений.
-        let quantized = Self.quantize(state, nearMeters: nearMeters)
+        var quantized = Self.quantize(state, nearMeters: nearMeters)
         let now = Date()
-        guard Self.differs(quantized, from: lastSentState, now: now) else { return }
+        // Полоса — от начала подъезда к ЭТОЙ камере, а не от прошлой отправки:
+        // иначе каждое обновление обнуляло бы её (ревью 19.10).
+        quantized.since = Self.approachStart(new: quantized, sent: lastSentState, now: now)
+        // Состояние давно не менялось (пробка, камер нет) — всё равно освежить
+        // до staleDate: иначе плашка сказала бы «Нет сигнала GPS» при живом GPS.
+        let keepAlive = now.timeIntervalSince(lastSentAt) >= AppConfig.liveActivityKeepAliveSeconds
+        guard keepAlive || Self.differs(quantized, from: lastSentState, now: now) else { return }
         // Смена камеры (заголовка) — сразу; бегущая дистанция и полоса — не
         // чаще интервала ступени.
-        if quantized.nearestTitle == lastSentState?.nearestTitle,
+        if !keepAlive, quantized.nearestTitle == lastSentState?.nearestTitle,
            now.timeIntervalSince(lastSentAt) < Self.interval(for: quantized,
                                                              nearMeters: nearMeters) { return }
         lastSentState = quantized
@@ -120,6 +126,17 @@ final class LiveActivityService {
     static func arrival(distance: CLLocationDistance?, speedKmh: Double, now: Date) -> Date? {
         guard let distance, speedKmh >= 5 else { return nil }
         return now.addingTimeInterval(distance / (speedKmh / 3.6))
+    }
+
+    /// Начало полосы приближения: та же камера и машина едет — прежнее начало;
+    /// новая камера или тронулись — сейчас.
+    static func approachStart(new: CameraActivityAttributes.ContentState,
+                              sent: CameraActivityAttributes.ContentState?, now: Date) -> Date? {
+        guard new.arrivesAt != nil else { return nil }
+        if let sent, sent.nearestTitle == new.nearestTitle, let since = sent.since, sent.arrivesAt != nil {
+            return since
+        }
+        return now
     }
 
     /// Есть ли что отправлять: сменилась камера или дистанция по ступени, или

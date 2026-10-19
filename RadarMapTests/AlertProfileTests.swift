@@ -53,4 +53,21 @@ final class AlertProfileTests: XCTestCase {
             XCTAssertFalse(profile.detail.isEmpty, "профиль без объяснения выбирают наугад")
         }
     }
+
+    /// Голос поменяли мимо профиля (глушилка, чипы на карте, кнопка в машине):
+    /// профиль следует за настройками, а не врёт «Авто» над молчащим
+    /// приложением (аудит 19.10).
+    func testProfileFollowsVoiceChangedElsewhere() {
+        typealias P = AlertProfile
+        XCTAssertEqual(P.following(.auto, voice: .off, mode: .auto), .quiet, "глушилка")
+        XCTAssertEqual(P.following(.quiet, voice: .smart, mode: .auto), .auto, "звук вернули")
+        XCTAssertEqual(P.following(.city, voice: .off, mode: .city), .quiet)
+        XCTAssertEqual(P.following(.quiet, voice: .smart, mode: .city), .city, "глушилка туда-обратно")
+        XCTAssertEqual(P.following(.auto, voice: .always, mode: .auto), .custom)
+        // Совпадает с профилем — остаётся им.
+        XCTAssertEqual(P.following(.highway, voice: .smart, mode: .highway), .highway)
+        XCTAssertEqual(P.following(.quiet, voice: .off, mode: .highway), .quiet)
+        // «Свой» не прыгает на готовый профиль посреди правки.
+        XCTAssertEqual(P.following(.custom, voice: .smart, mode: .auto), .custom)
+    }
 }

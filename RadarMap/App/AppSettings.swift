@@ -350,6 +350,20 @@ enum AlertProfile: String, CaseIterable, Identifiable {
     /// Какой профиль соответствует уже сохранённым настройкам — для переезда
     /// со старой версии. Всё, что не ложится в готовый профиль, становится
     /// «Своим»: привычка пользователя важнее стройности списка.
+    /// Профиль после того, как голос или режим поменяли НЕ через профиль:
+    /// глушилка, чипы голоса на карте, кнопка звука в машине. До 19.10
+    /// профиль оставался прежним, и корень настроек писал «Авто», пока
+    /// приложение молчало (аудит, plan_app_ui §0.5). «Свой» не трогаем: в
+    /// нём человек сам крутит обе настройки, и прыжок на готовый профиль
+    /// посреди правки спрятал бы сами переключатели.
+    static func following(_ current: AlertProfile, voice: VoiceMode, mode: AlertMode) -> AlertProfile {
+        if current == .custom { return .custom }
+        if let applied = current.applied, applied.voice == voice, applied.mode == mode { return current }
+        // «Тихий» — это голос выключен; режим контекста ему безразличен.
+        if current == .quiet, voice == .off { return .quiet }
+        return matching(voice: voice, mode: mode)
+    }
+
     static func matching(voice: VoiceMode, mode: AlertMode) -> AlertProfile {
         if voice == .off { return .quiet }
         guard voice == .smart else { return .custom }
@@ -420,7 +434,12 @@ final class AppSettings {
     nonisolated deinit {}
     var soundEnabled: Bool { didSet { store.set(soundEnabled, forKey: Keys.sound) } }
     /// Голос о камерах — единственная настройка на этот счёт.
-    var voiceMode: VoiceMode { didSet { store.set(voiceMode.rawValue, forKey: Keys.voiceMode) } }
+    var voiceMode: VoiceMode {
+        didSet {
+            store.set(voiceMode.rawValue, forKey: Keys.voiceMode)
+            followProfile()
+        }
+    }
     /// Голос о превышении: всегда / только у камер / никогда (см. OverspeedVoice).
     var overspeedVoice: OverspeedVoice {
         didSet { store.set(overspeedVoice.rawValue, forKey: Keys.overspeedVoice) }
@@ -531,10 +550,27 @@ final class AppSettings {
     var alertProfile: AlertProfile {
         didSet {
             store.set(alertProfile.rawValue, forKey: Keys.alertProfile)
-            guard let applied = alertProfile.applied else { return }
+            // Профиль выведен из настроек (followProfile) — применять нечего.
+            guard !profileFollowing, let applied = alertProfile.applied else { return }
+            applyingProfile = true
+            defer { applyingProfile = false }
             if voiceMode != applied.voice { voiceMode = applied.voice }
             if alertMode != applied.mode { alertMode = applied.mode }
         }
+    }
+    /// Профиль сейчас сам проставляет голос и режим: промежуточное сочетание
+    /// (голос уже новый, режим ещё старый) не должно перевыбрать профиль.
+    @ObservationIgnored private var applyingProfile = false
+    /// Профиль выводится из настроек — его didSet не применяет их обратно.
+    @ObservationIgnored private var profileFollowing = false
+
+    private func followProfile() {
+        guard !applyingProfile, !profileFollowing else { return }
+        let next = AlertProfile.following(alertProfile, voice: voiceMode, mode: alertMode)
+        guard next != alertProfile else { return }
+        profileFollowing = true
+        defer { profileFollowing = false }
+        alertProfile = next
     }
     /// Слои подложки — тумблеры в легенде карты. Пробки уважают выбор всегда:
     /// затор впереди нужен именно в дороге. Места (заправки, парковки,
@@ -571,7 +607,10 @@ final class AppSettings {
     var knownCarAudio: [String] { didSet { store.set(knownCarAudio, forKey: Keys.knownCarAudio) } }
     /// Режим оповещений: «Авто» сам различает город/трассу, вручную можно зафиксировать.
     var alertMode: AlertMode {
-        didSet { store.set(alertMode.rawValue, forKey: Keys.alertMode) }
+        didSet {
+            store.set(alertMode.rawValue, forKey: Keys.alertMode)
+            followProfile()
+        }
     }
     /// Подложка карты: тёмная / светлая / авто по времени суток.
     var mapAppearance: MapAppearance {
@@ -693,14 +732,16 @@ final class AppSettings {
         // стоял тумблер «только при превышении» — это ровно «Умно»; иначе
         // «Умно» же: город на каждой камере говорить перестаёт, и это новый
         // разумный дефолт (голос поверх музыки надоедает за две недели).
+        let loadedVoice: VoiceMode
         if let raw = store.string(forKey: Keys.voiceMode),
            let mode = VoiceMode(rawValue: raw) {
-            voiceMode = mode
+            loadedVoice = mode
         } else if !store.bool(forKey: Keys.voice) {
-            voiceMode = .off
+            loadedVoice = .off
         } else {
-            voiceMode = .smart
+            loadedVoice = .smart
         }
+        voiceMode = loadedVoice
         overspeedVoice = OverspeedVoice(
             rawValue: store.string(forKey: Keys.overspeedVoice) ?? "") ?? .always
         alertRadius = store.double(forKey: Keys.radius)
@@ -740,7 +781,8 @@ final class AppSettings {
         mapZoomButtons = store.bool(forKey: Keys.mapZoomButtons)
         // Подложка одна — движок (карта Apple и схема убраны 11.10): старые
         // ключи mapBase/engineMapEnabled/sketchWhileDriving больше не читаются.
-        alertMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto
+        let loadedMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto
+        alertMode = loadedMode
         cursorStyle = CursorStyle(stored: store.string(forKey: Keys.cursorStyle))
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []
         weeklyDigest = store.bool(forKey: Keys.digest)
@@ -749,10 +791,13 @@ final class AppSettings {
         trafficContribution = !store.bool(forKey: Keys.trafficContributionOff)
         // Переезд со старой версии: профиля ещё нет — выводим его из того, что
         // человек уже выбрал, чтобы ни одна привычка не сменилась молча.
-        alertProfile = AlertProfile(rawValue: store.string(forKey: Keys.alertProfile) ?? "")
+        let storedProfile = AlertProfile(rawValue: store.string(forKey: Keys.alertProfile) ?? "")
             ?? AlertProfile.matching(
                 voice: VoiceMode(rawValue: store.string(forKey: Keys.voiceMode) ?? "") ?? .smart,
                 mode: AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto)
+        // Профиль, сохранённый до 19.10, мог разойтись с голосом (глушилка его
+        // не трогала) — сверяем при запуске тем же правилом, что и на ходу.
+        alertProfile = AlertProfile.following(storedProfile, voice: loadedVoice, mode: loadedMode)
         appLanguage = AppLanguage(rawValue: store.string(forKey: Keys.language) ?? "") ?? .system
         backgroundAlerts = BackgroundAlertMode(rawValue: store.string(forKey: Keys.backgroundAlerts) ?? "") ?? .all
         hapticsEnabled = store.bool(forKey: Keys.haptics)

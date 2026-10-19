@@ -69,6 +69,12 @@ final class NavigationFlowTests: XCTestCase {
         // Стоя на светофоре, водитель выбирает в машине новый путь: поездка
         // идёт, фаза — ведение, но выбор закрывать не за что.
         XCTAssertEqual(Flow.carChoice(from: .guiding, to: .guiding, showing: true, building: false), .none)
+        // Сценарий D1 (20.10): поездка без маршрута, водитель на светофоре
+        // выбирает путь в машине — достроилось, фаза «свободно → ведение», а
+        // выбор на экране его собственный. Не закрываем: до 20.10 он мигал и
+        // пропадал, а ведение шло по первому варианту.
+        XCTAssertEqual(Flow.carChoice(from: .free, to: .guiding, showing: true, building: false), .none)
+        XCTAssertEqual(Flow.carChoice(from: nil, to: .guiding, showing: true, building: false), .none)
         // Закрытый выбор в той же фазе не открывается заново сам по себе.
         XCTAssertEqual(Flow.carChoice(from: .choosing, to: .choosing, showing: false, building: false), .none)
         XCTAssertEqual(Flow.carChoice(from: .guiding, to: .guiding, showing: false, building: false), .none)

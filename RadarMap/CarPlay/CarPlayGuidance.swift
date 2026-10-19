@@ -225,15 +225,12 @@ final class CarPlayGuidance {
     /// экране рисует то, что сессия прислала ПОСЛЕДНИМ (carplay12: на главном
     /// экране «Дом / Работа» при живом маршруте).
     ///
-    /// `driverReturned` — водитель сам открыл RadarMap на экране машины. Если
-    /// перед этим навигацию забрала система (другой навигатор начал свою),
-    /// ведение к той же цели снова наше: до 2.2.16 сессия после такой отмены
-    /// не возвращалась до конца маршрута — ни манёвра, ни прибытия нигде.
-    func refresh(reason: String, driverReturned: Bool = false) {
-        if driverReturned, cancelledDestination != nil {
-            cancelledDestination = nil
-            Log.carplay.notice("водитель вернулся к RadarMap — ведение снова наше")
-        }
+    /// Навигацию забрала система (другой навигатор) — ведение не возвращается
+    /// само ни здесь, ни при открытии RadarMap: маршрут при такой отмене
+    /// снимается (CarPlaySceneDelegate.mapTemplateDidCancelNavigation), а
+    /// новое ведение — только новым маршрутом по действию водителя. До 20.10
+    /// открытие RadarMap ради «Радар!» забирало ведение у Яндекса.
+    func refresh(reason: String) {
         Log.carplay.notice("ведение заново (\(reason, privacy: .public)): маршрут \(self.env.route.isActive, privacy: .public), сессия \(self.session != nil, privacy: .public), манёвр \(self.maneuver != nil, privacy: .public)")
         guard template != nil else { return }
         sentStepDistance = nil
@@ -261,6 +258,27 @@ final class CarPlayGuidance {
     }
     private var cancelledDestination: CLLocationCoordinate2D?
 
+    /// Сессию, начатую, пока корень не был на экране машины (подключение в
+    /// фоне), начать заново на показанном корне: в фоне хост мог её и не
+    /// принять (2.2.3 — «No active map template found»). Один раз за
+    /// подключение; без маршрута — просто обновить.
+    func restartSession(reason: String) {
+        guard let session else { return refresh(reason: reason) }
+        Log.carplay.notice("сессия заново: \(reason, privacy: .public)")
+        session.upcomingManeuvers = []
+        session.currentLaneGuidance = nil
+        session.cancelTrip()
+        self.session = nil
+        trip = nil
+        maneuver = nil
+        upcoming = []
+        maneuverStep = nil
+        laneGuidances = []
+        pausedForReroute = false
+        model.hasSystemGuidance = false
+        sync()
+    }
+
     /// Машина отключилась: сессия уходит вместе с шаблоном, держать нечего.
     func detach() {
         generation &+= 1
@@ -274,7 +292,7 @@ final class CarPlayGuidance {
         template = nil
         banners = nil
         cameraBanner.reset()
-        themedDaylight = nil
+        themed = nil
         model.hasSystemGuidance = false
     }
 
@@ -303,12 +321,19 @@ final class CarPlayGuidance {
         }
     }
 
-    private var themedDaylight: Bool?
+    /// Тема, под которую нарисованы стрелки: своя карточка (день/ночь
+    /// приложения) и баннеры с плиткой приборки (тема машины).
+    private var themed: ArrowTheme?
+    private struct ArrowTheme: Equatable {
+        let daylight: Bool
+        let carDark: Bool?
+    }
 
     private func sync() {
         guard let template else { return }
-        if themedDaylight != model.isDaylight {
-            themedDaylight = model.isDaylight
+        let theme = ArrowTheme(daylight: model.isDaylight, carDark: model.carIsDark)
+        if themed != theme {
+            themed = theme
             applyTheme(daylight: model.isDaylight)
             // Стрелка красится под фон карточки — сменился фон, пересобираем.
             maneuverStep = nil
@@ -333,6 +358,9 @@ final class CarPlayGuidance {
             updateCameraBanner()
             return
         }
+        // Маршрут снят — отмена системы к нему больше не относится: новый
+        // маршрут к той же цели (Siri, «Куда») — это решение водителя.
+        if !route.isActive { cancelledDestination = nil }
         // Ведём только в поездке (NavigationFlow): маршрут без поездки — это
         // выбор с «Поехали», и на телефоне, и здесь. До 12.10 машина вела по
         // любому маршруту — после «Стоп» и под «Поехали» на телефоне.

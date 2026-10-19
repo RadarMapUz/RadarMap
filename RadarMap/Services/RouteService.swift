@@ -1121,8 +1121,21 @@ final class RouteService {
         let saving: TimeInterval
         /// Улица, которой объезд уходит; nil — не назвать.
         let via: String?
-        /// Без ответа до этого момента — «остаёмся».
-        let expires: Date
+        /// Когда предложение появилось.
+        let created: Date
+        /// Когда водитель его УВИДЕЛ (карточка на телефоне или баннер в
+        /// машине); nil — ещё нет. В машине баннер ждёт за камерой весь её
+        /// подъезд (30–50 с), и 20 с от создания истекали раньше, чем он
+        /// вставал: голос предлагал, а нажать было некуда, и истёкшее
+        /// засчитывалось отказом с 10 минутами тишины (сценарий D1, 20.10).
+        var shownAt: Date?
+
+        /// Без ответа до этого момента — «остаёмся» (показано) или тихо
+        /// снимаем (так и не показали).
+        var expires: Date {
+            shownAt.map { $0.addingTimeInterval(AppConfig.detourOfferSeconds) }
+                ?? created.addingTimeInterval(AppConfig.detourOfferUnseenSeconds)
+        }
 
         /// «Быстрее на 8 мин».
         var title: String {
@@ -1154,7 +1167,13 @@ final class RouteService {
     /// На каждом фиксе поездки — и стоя: в пробке машина не сдвигается, и
     /// updateProgress (он ждёт смещения) молчит ровно тогда, когда объезд нужен.
     func considerDetour(coordinate: CLLocationCoordinate2D, speedKmh: Double, now: Date = Date()) {
-        if let offer = detourOffer, now >= offer.expires { declineDetour(now: now, reason: "нет ответа") }
+        if let offer = detourOffer, now >= offer.expires {
+            if offer.shownAt == nil {
+                dropUnseenDetour()
+            } else {
+                declineDetour(now: now, reason: "нет ответа")
+            }
+        }
         let crawl = detourCrawl.update(speedKmh: speedKmh, at: now)
         guard let variant = selected, let destination = destinationCoordinate,
               !isBuilding, !isRebuilding, detourOffer == nil, !detourSearching,
@@ -1200,8 +1219,7 @@ final class RouteService {
             detourVariant = built[offer.index]
             detourCounter += 1
             detourOffers += 1
-            let shown = DetourOffer(id: detourCounter, saving: offer.saving, via: offer.via,
-                                    expires: Date().addingTimeInterval(AppConfig.detourOfferSeconds))
+            let shown = DetourOffer(id: detourCounter, saving: offer.saving, via: offer.via, created: Date())
             detourOffer = shown
             Log.route.notice("объезд: предлагаю, выигрыш \(Int(offer.saving), privacy: .public) с")
             onDetourOffer?(shown)
@@ -1224,6 +1242,24 @@ final class RouteService {
         }
     }
 
+    /// Предложение на экране — карточка на телефоне или баннер в машине:
+    /// отсюда отсчитывается время на ответ.
+    func noteDetourShown(id: Int, now: Date = Date()) {
+        guard var offer = detourOffer, offer.id == id, offer.shownAt == nil else { return }
+        offer.shownAt = now
+        detourOffer = offer
+    }
+
+    /// Предложение так и не встало ни на один экран — снимаем без «отказа»:
+    /// ни 10 минут тишины, ни счёта в лимит предложений на маршрут.
+    private func dropUnseenDetour() {
+        guard detourOffer != nil else { return }
+        detourOffer = nil
+        detourVariant = nil
+        detourOffers = max(0, detourOffers - 1)
+        Log.route.notice("объезд: так и не показан — снят без отказа")
+    }
+
     /// «Остаться» (или нет ответа): 10 минут тишины.
     func declineDetour(now: Date = Date(), reason: String = "остаться") {
         guard detourOffer != nil else { return }
@@ -1238,8 +1274,7 @@ final class RouteService {
     /// Варианта за ней нет — «Объехать» ничего не меняет.
     func seedDemoDetourOffer() {
         detourCounter += 1
-        detourOffer = DetourOffer(id: detourCounter, saving: 8 * 60, via: "Шота Руставели",
-                                  expires: Date().addingTimeInterval(120))
+        detourOffer = DetourOffer(id: detourCounter, saving: 8 * 60, via: "Шота Руставели", created: Date())
     }
     #endif
 

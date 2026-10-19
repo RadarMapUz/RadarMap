@@ -78,7 +78,10 @@ final class CarPlayMapModel {
     var isDaylight = false
     /// Тема машины (датчик света, фары): в «Авто» она старше солнца — она
     /// знает про тоннель и пасмурный вечер, а таблица восходов не знает.
-    @ObservationIgnored var carIsDark: Bool?
+    /// Наблюдаемая: баннеры поверх чужого приложения и плитка приборки
+    /// рисуются в теме МАШИНЫ, и при ручной теме приложения (isDaylight не
+    /// меняется) стрелки иначе оставались в цвете прежней темы машины.
+    var carIsDark: Bool?
     /// Манёвр показывает сама машина (навигационная сессия): свой баннер
     /// манёвра тогда не рисуем — два одинаковых поворота на одном экране.
     var hasSystemGuidance = false
@@ -250,8 +253,14 @@ struct CarPlayMapScreen: View {
             // цифры не держатся в дереве, которое никто не видит.
             if model.isOnScreen {
                 // Во время выбора маршрута манёвр и прибытие — в карточке
-                // вариантов системы, свой баннер их бы дублировал.
-                CarPlayOverlay(showsManeuver: !model.hasSystemGuidance && !model.isPreviewing,
+                // вариантов системы, свой баннер их бы дублировал. И только в
+                // ведении (NavigationFlow): маршрут без поездки — это выбор с
+                // «Поехали» на телефоне, а не «через 300 м направо» без голоса.
+                let guiding = NavigationFlow.carGuides(
+                    phase: NavigationFlow.phase(hasRoute: env.route.isActive,
+                                                isTripActive: env.location.isTripActive),
+                    choosing: model.isPreviewing)
+                CarPlayOverlay(showsManeuver: !model.hasSystemGuidance && guiding,
                                buttonInsets: model.mapButtonInsets)
             }
 

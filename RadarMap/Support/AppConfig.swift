@@ -1235,6 +1235,13 @@ nonisolated enum AppConfig {
     static let detourSampleMeters: Double = 100
     /// Сколько держать предложение без ответа (дальше — «остаёмся»).
     static let detourOfferSeconds: TimeInterval = 20
+    /// Предложение, которое ещё ни на одном экране не встало (баннер в машине
+    /// ждёт за камерой), живёт столько — подъезд к камере 30–50 с, — и
+    /// снимается без «отказа».
+    static let detourOfferUnseenSeconds: TimeInterval = 90
+    /// Второй тап по кнопке экрана в машине раньше этого после первого, пока
+    /// экран ещё едет, — не второй экран.
+    static let carPlayPushGuardSeconds: TimeInterval = 1.5
 
     // MARK: - «Впереди пробка» без маршрута (JamAhead)
 

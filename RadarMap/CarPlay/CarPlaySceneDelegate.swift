@@ -143,6 +143,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         rootSet = nil
         rootRetried = false
         offeredDestination = false
+        guidanceAttached = false
+        guidanceAttachedInBackground = false
+        // Камеры поверх чужого приложения — системными алертами, пока сцена
+        // не на экране машины.
+        guidance.isOnScreen = shown
 
         let template = CPMapTemplate()
         template.mapDelegate = self
@@ -209,6 +214,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         stopPanHold()
         isPanning = false
         guidance.detach()
+        guidanceAttached = false
+        guidanceAttachedInBackground = false
         session += 1   // гасим подписки syncTemplate этой сессии
         banners?.reset()
         banners = nil
@@ -633,12 +640,45 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // хост ещё держал сцену в фоне.
         // Выбор на телефоне уже идёт — тот же выбор и здесь, до сессии.
         observeFlow()
-        if let banners { guidance.attach(to: mapTemplate, banners: banners) }
+        if !guidanceAttached {
+            attachGuidance(background: false)
+        } else if guidanceAttachedInBackground {
+            guidanceAttachedInBackground = false
+            guidance.restartSession(reason: "корень на экране после подключения в фоне")
+        }
         // Алерт о разрешении — сразу, а не по первому тапу: без разрешения
         // экран машины не покажет ни скорости, ни камер, и молчание
         // неотличимо от поломки. Поверх летящего корня CarPlay его отклонял.
         if !env.location.isAuthorized { return showNoPermissionAlert() }
         offerDestinationSoon()
+    }
+
+    /// Ведение (сессия, баннеры камер, плитка приборки) подключено в этом
+    /// подключении; в фоне — до первого показа корня.
+    private var guidanceAttached = false
+    private var guidanceAttachedInBackground = false
+
+    private func attachGuidance(background: Bool) {
+        guard !guidanceAttached, let mapTemplate, let banners else { return }
+        guidanceAttached = true
+        guidanceAttachedInBackground = background
+        Log.carplay.notice("ведение подключено \(background ? "в фоне" : "на экране", privacy: .public)")
+        guidance.attach(to: mapTemplate, banners: banners)
+    }
+
+    /// Машина подключилась, а на её экране не мы (главный экран, Яндекс):
+    /// корень установлен — ведение подключаем, не дожидаясь, пока водитель
+    /// откроет RadarMap (сценарий D1, 20.10). Иначе до этого не было ни
+    /// манёвра на плитке приборки, ни камер баннером поверх чужого
+    /// приложения — только голос. Алерт о разрешении и «куда едем?» — по-
+    /// прежнему только на экране; сессию первый показ корня перезапустит.
+    private func attachGuidanceInBackground() {
+        let session = session
+        Task { @MainActor [weak self] in
+            await Task.pause(seconds: AppConfig.carPlayRootSettleDelay)
+            guard let self, self.session == session, !self.rootShown else { return }
+            self.attachGuidance(background: true)
+        }
     }
 
     // MARK: - Фаза маршрута
@@ -753,6 +793,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         guard banners.show(alert, kind: .detour) else { return }
         detourAlertID = offer.id
         detourAlert = alert
+        env.route.noteDetourShown(id: offer.id)
         Log.carplay.notice("объезд: баннер в машине")
     }
 
@@ -877,8 +918,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let place = SavedPlace(title: guess.placeTitle ?? guess.kind.title,
                                lat: guess.coordinate.latitude, lon: guess.coordinate.longitude)
         let alert = CPNavigationAlert(
-            titleVariants: [guess.usualText.map { "\(title) · \($0)" } ?? title, title],
-            subtitleVariants: [guess.subtitle],
+            // Время — один раз, в подзаголовке (как на телефоне): до 20.10
+            // «сейчас ~52 мин, пробки +8» стояло и в заголовке, и под ним.
+            titleVariants: [title],
+            subtitleVariants: [guess.subtitle, guess.usualText ?? guess.kind.title],
             image: CarPlayGuidance.symbol(guess.kind.symbol, pointSize: 30,
                                           onDark: model.carIsDark ?? !model.isDaylight),
             primaryAction: CPAlertAction(title: String(localized: "Поехали"), style: .default) { [weak self] _ in
@@ -915,11 +958,16 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private var rootRetried = false
 
     /// Навигацию забрала система (другое приложение, встроенный навигатор
-    /// машины): сессии больше нет, и свой баннер манёвра обязан вернуться —
-    /// иначе до конца маршрута ни манёвра, ни прибытия нигде.
+    /// машины). Ведущий может быть один: уступаем совсем — маршрут снимаем,
+    /// поездка и камеры остаются (RadarMap рядом с Яндексом). До 20.10
+    /// маршрут жил: телефон говорил свои повороты поверх чужих, перестраивал
+    /// путь под чужую линию, а открытие RadarMap ради «Радар!» забирало
+    /// ведение у Яндекса (сценарий D1). Вернуть ведение — новый маршрут
+    /// (цель — в «Недавних»).
     func mapTemplateDidCancelNavigation(_ mapTemplate: CPMapTemplate) {
-        Log.carplay.notice("CarPlay: навигацию отменила система")
+        Log.carplay.notice("CarPlay: навигацию отменила система — уступаем, маршрут снят")
         guidance.systemCancelled()
+        if env.route.isActive { env.route.clear() }
     }
 
     /// Метаданные манёвра для приборки и проекции на стекло — ВЫКЛЮЧЕНЫ.
@@ -965,11 +1013,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// сцена жива и подключена: камеры поверх чужого приложения — системными
     /// алертами навигационной сессии (guidance.isOnScreen).
     func sceneWillResignActive(_ scene: UIScene) {
+        // Siri или звонок поверх карты — сцена неактивна, но ещё на экране:
+        // баннер камеры не должен прыгать в «уведомление» и обратно
+        // (сценарий D1, 20.10). С экрана мы уходим в sceneDidEnterBackground.
         Log.carplay.notice("сцена машины: resign active")
-        // Только владелец: события устаревшей сцены не должны гасить буст живой.
-        guard Self.activeDelegate === self else { return }
-        guidance.isOnScreen = false
-        guidance.refresh(reason: "ушли с экрана машины")
     }
 
     /// На экране машины другое приложение или приборная панель — карту
@@ -982,6 +1029,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Хост, переживший фон, не пере-используем: при возвращении — новый.
         needsFreshHost = true
         guard Self.activeDelegate === self else { return }
+        // Ушли с экрана машины: камеры поверх чужого приложения — системными
+        // алертами сессии, манёвр и оценки для приборки — заново.
+        guidance.isOnScreen = false
+        guidance.refresh(reason: "ушли с экрана машины")
         // В фоне приложение могут приостановить, и сторож записал бы паузу
         // процесса как фриз — счёт только пока экран машины наш.
         HitchWatch.setCounting(false)
@@ -1015,7 +1066,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Стали видимым экраном машины — значит, мы и владелец.
         Self.activeDelegate = self
         guidance.isOnScreen = true
-        guidance.refresh(reason: "вернулись на экран машины", driverReturned: true)
+        guidance.refresh(reason: "вернулись на экран машины")
         model.isOnScreen = true
         // Бар — заново: что показывает головное устройство после чужого
         // приложения, решаем не мы.
@@ -1089,7 +1140,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             Task { @MainActor [weak self] in
                 guard let self, self.session == session else { return }
                 self.rootSet = confirmed
-                if confirmed, self.model.isOnScreen, !self.rootShown { self.watchRootTemplate() }
+                guard confirmed, !self.rootShown else { return }
+                if self.model.isOnScreen {
+                    self.watchRootTemplate()
+                } else {
+                    self.attachGuidanceInBackground()
+                }
             }
         }
     }
@@ -1453,13 +1509,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Дом, Работа и недавние — маршрут в один тап. Сетка ограничена восемью
     /// плитками, поэтому недавние добираем тем, что осталось.
     private func presentDestinations() {
+        guard beginPush("куда") else { return }
         // Заголовок совпадает с кнопкой, которой сюда пришли: тап «Маршрут»,
         // открывший экран «Куда», читался как промах.
         let grid = CPGridTemplate(title: env.route.isActive ? String(localized: "Маршрут")
                                                             : String(localized: "Куда"),
                                   gridButtons: destinationButtons())
         destinationsGrid = grid
-        interfaceController?.pushTemplate(grid, animated: true) { _, error in
+        interfaceController?.pushTemplate(grid, animated: true) { [weak self] _, error in
+            Task { @MainActor [weak self] in self?.endPush() }
             if let error {
                 Log.carplay.error("pushTemplate(куда): \(error.localizedDescription, privacy: .public)")
             }
@@ -1592,8 +1650,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             route(to: place)
         }
         search.present = { [weak self] template in self?.pushSearchResults(template) }
+        guard beginPush("поиск для слота") else { return }
         assignSearch = search
-        interfaceController?.pushTemplate(search.makeTemplate(), animated: true) { _, error in
+        interfaceController?.pushTemplate(search.makeTemplate(), animated: true) { [weak self] _, error in
+            Task { @MainActor [weak self] in self?.endPush() }
             if let error {
                 Log.carplay.error("pushTemplate(поиск для слота): \(error.localizedDescription, privacy: .public)")
             }
@@ -1617,12 +1677,35 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func presentSearch() {
-        interfaceController?.pushTemplate(search.makeTemplate(), animated: true) { _, error in
+        guard beginPush("поиск") else { return }
+        interfaceController?.pushTemplate(search.makeTemplate(), animated: true) { [weak self] _, error in
+            Task { @MainActor [weak self] in self?.endPush() }
             if let error {
                 Log.carplay.error("pushTemplate(поиск): \(error.localizedDescription, privacy: .public)")
             }
         }
     }
+
+    // MARK: - Один экран за раз
+
+    /// Второй тап «Куда», «Радар!» или плитки до того, как первый экран
+    /// встал, клал второй такой же экран сверху — «Назад» будто не работал
+    /// (сценарий D1, 20.10). Пока экран едет — новый не кладём. Ответа
+    /// системы может и не быть — тогда замок отпускает время.
+    private var pushStartedAt: Date?
+
+    private func beginPush(_ label: String) -> Bool {
+        guard interfaceController != nil else { return false }
+        if let started = pushStartedAt,
+           Date().timeIntervalSince(started) < AppConfig.carPlayPushGuardSeconds {
+            Log.carplay.notice("второй тап, пока экран едет (\(label, privacy: .public)) — пропускаю")
+            return false
+        }
+        pushStartedAt = Date()
+        return true
+    }
+
+    private func endPush() { pushStartedAt = nil }
 
     /// Плитка Дом/Работа. Место не задано — плитку всё равно показываем: она
     /// всегда на одном месте (мышечная память), а тап задаёт место поиском.
@@ -1832,8 +1915,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 self?.submitReport(kind)
             }
         }
+        guard beginPush("отметка") else { return }
         let grid = CPGridTemplate(title: String(localized: "Что впереди?"), gridButtons: buttons)
-        interfaceController?.pushTemplate(grid, animated: true) { _, error in
+        interfaceController?.pushTemplate(grid, animated: true) { [weak self] _, error in
+            Task { @MainActor [weak self] in self?.endPush() }
             if let error {
                 Log.carplay.error("pushTemplate(отметка): \(error.localizedDescription, privacy: .public)")
             }

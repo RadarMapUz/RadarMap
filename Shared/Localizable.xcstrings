@@ -931,6 +931,46 @@
         }
       }
     },
+    "+%lld мин к обычному": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "+%lld мин к обычному"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "+%lld мин к обычному"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "+%lld мин к обычному"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "+%lld мин к обычному"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatdagidan +%lld daq"
+          }
+        }
+      }
+    },
     "+10 км/ч": {
       "localizations": {
         "ru": {
@@ -3827,6 +3867,22 @@
         }
       }
     },
+    "Домой к %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Домой к %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga %@ da"
+          }
+        }
+      }
+    },
     "Допуск превышения": {
       "localizations": {
         "ru": {
@@ -6398,6 +6454,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ishga"
+          }
+        }
+      }
+    },
+    "На работу к %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На работу к %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga %@ da"
           }
         }
       }
@@ -13930,6 +14002,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld km/soatga"
+          }
+        }
+      }
+    },
+    "на %lld минут дольше обычного": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "на %lld минуту дольше обычного"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "на %lld минуты дольше обычного"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "на %lld минут дольше обычного"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "на %lld минуты дольше обычного"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatdagidan %lld daqiqa uzoqroq"
           }
         }
       }

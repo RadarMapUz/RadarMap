@@ -914,7 +914,7 @@ final class LocationService: NSObject {
     }
 
     /// Время последнего принятого фикса (для трека поездки).
-    @ObservationIgnored private var lastFixTime = Date()
+    @ObservationIgnored private(set) var lastFixTime = Date()
 
     private func handleFix(_ fix: LocationFilter.Fix) {
         switch locationFilter.accept(fix) {

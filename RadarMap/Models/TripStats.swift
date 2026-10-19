@@ -34,6 +34,11 @@ final class TripStats {
     private(set) var maxSpeedKmh: Double = 0
     private(set) var distanceMeters: CLLocationDistance = 0
     private(set) var startedAt: Date?
+    /// Где началась поездка (первая точка трека; после склейки — исходной
+    /// поездки): по нему призрак решает «на работу или домой».
+    var startCoordinate: CLLocationCoordinate2D? {
+        trackBuffer.first.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+    }
     private(set) var lastPointAt: Date?
     /// Пройденные камеры текущей/последней поездки (со скоростью прохождения).
     private(set) var passed: [PassedCamera] = []

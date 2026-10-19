@@ -70,6 +70,8 @@ final class AppEnvironment {
     let roads = RoadNetworkService()
     /// Профиль дороги дом↔работа по участкам и журнал поездок для «дороги».
     let commuteProfiles = CommuteProfileStore()
+    /// Призрак дороги на работу на ходу (этап 8).
+    let commuteLive = CommuteLiveService()
     /// «Поделиться прибытием» — ссылка с временем прибытия для знакомого.
     let etaShare = EtaShareService()
     /// Горячие точки треног: подписанный список мест, где водители отмечали
@@ -266,11 +268,14 @@ final class AppEnvironment {
             guard let self else { return }
             self.mobile.setTripActive(active)
             if active { self.traffic.tripStarted() } else { self.traffic.tripEnded() }
+            self.commuteGhostPending = active
+            if active { self.tryStartCommuteGhost() } else { self.commuteLive.stop() }
             self.refreshTrafficWanted()
             if !active, !self.isPhoneSceneActive, !self.isCarPlayConnected {
                 self.mobile.stopPolling()
             }
         }
+        wireCommuteVoice()
         // Ответ на «Вы за рулём?»: пассажир — гасим поездку без следа,
         // водитель — запоминаем магнитолу машины, чтобы не переспрашивать.
         notifications.onPassengerConfirmed = { [weak location] in location?.markPassenger() }
@@ -325,6 +330,13 @@ final class AppEnvironment {
                 self.roads.ensureCoverage(around: coordinate)
             }
             traffic?.note(coordinate, speedKmh: location?.speedKmh ?? -1)
+            if let self, let location, location.isTripActive {
+                if self.commuteGhostPending { self.tryStartCommuteGhost() }
+                if self.commuteLive.isRunning {
+                    self.commuteLive.note(coordinate, accuracy: location.horizontalAccuracy,
+                                          at: location.lastFixTime)
+                }
+            }
             if let traffic, let route, route.isActive { route.refreshTrafficDelay(revision: traffic.revision) }
             // «Впереди пробка» — только без маршрута: с маршрутом пробки уже в
             // ETA и в предложении объезда. Одна фраза на пробку (JamAhead).
@@ -642,6 +654,60 @@ final class AppEnvironment {
             manual: { [settings] kind in settings.place(for: kind == .home ? .home : .work) },
             usual: { [commute] direction in commute.first { $0.direction == direction }?.usual },
             from: location.currentCoordinate, now: now)
+    }
+
+    /// Голос призрака — ниже камеры и манёвра: при оповещении о камере
+    /// фраза пропускается (следующая — по правилу повтора); с маршрутом
+    /// время прибытия говорит навигация, а не призрак.
+    /// Фраза засчитывается только сказанной (`true`): под оповещением о
+    /// камере она ждёт следующего пересчёта, а не теряется.
+    private func wireCommuteVoice() {
+        commuteLive.onAnnounce = { [weak self] phrase in
+            guard let self, self.settings.voiceEnabled else { return true }
+            guard self.location.alertLevel == 0, !self.route.isActive else { return false }
+            self.alerts.speak(phrase)
+            return true
+        }
+    }
+
+    /// Поездка началась, а призрак ещё не решён: на старте часто не из чего
+    /// решать (запуск Siri до первого фикса, профиль ещё читается с диска,
+    /// выученные места ещё не пересчитаны), поэтому решение повторяется на
+    /// фиксах — до `commuteGhostStartWaitSeconds`.
+    @ObservationIgnored private var commuteGhostPending = false
+
+    /// Призрак: только при включённом «Время дороги на работу», с известными
+    /// домом и работой и стартом поездки у одного из них.
+    private func tryStartCommuteGhost() {
+        guard commuteGhostPending else { return }
+        guard settings.commuteLearning else {
+            commuteGhostPending = false
+            return
+        }
+        let startedAt = trip.startedAt ?? Date()
+        guard let start = trip.startCoordinate ?? location.currentCoordinate,
+              commuteProfiles.isLoaded, let ends = commuteEnds else {
+            if Date().timeIntervalSince(startedAt) > AppConfig.commuteGhostStartWaitSeconds {
+                commuteGhostPending = false
+            }
+            return
+        }
+        commuteGhostPending = false
+        guard let direction = CommuteLiveService.direction(start: start, home: ends.home, work: ends.work)
+        else { return }
+        commuteLive.start(direction: direction, variants: commuteProfiles.book[direction],
+                          departure: startedAt)
+    }
+
+    /// Выключили «Время дороги на работу» посреди поездки — призрак гаснет
+    /// сразу, а не на финише.
+    func commuteLearningChanged() {
+        if !settings.commuteLearning {
+            commuteGhostPending = false
+            commuteLive.stop()
+            commuteProfiles.clear()
+        }
+        refreshCommute()
     }
 
     /// Дом и работа для дороги: заданный вручную адрес старше выученного —

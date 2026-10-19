@@ -137,6 +137,14 @@ struct MapScreen: View {
             }
             #if DEBUG
             openScreenFromLaunchArguments()
+            // Скриншот-хук: `-demoGhost` — строка «Работа · 9:12 · +4 мин».
+            if ProcessInfo.processInfo.arguments.contains("-demoGhost") {
+                Task {
+                    await Task.pause(seconds: 4)
+                    env.commuteLive.showDemo(direction: .toWork,
+                                             arrival: Date().addingTimeInterval(22 * 60), deltaMinutes: 4)
+                }
+            }
             // Скриншот-хук: `-whatsNew` — показать «Что нового» снова.
             if ProcessInfo.processInfo.arguments.contains("-whatsNew") {
                 Storage.set(0, for: .whatsNewEdition)

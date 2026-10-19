@@ -163,7 +163,7 @@ struct EngineBaseLayer: View {
                 }
             }
         } else {
-            SketchPalette.ground
+            MapPalette.ground
         }
     }
 

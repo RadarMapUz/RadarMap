@@ -5,7 +5,7 @@
 //  Стиль карты для движка — тот же язык, что у панели модератора.
 //
 //  Почему стиль собирается КОДОМ, а не лежит файлом на сервере. Во-первых,
-//  палитра одна на всё приложение (SketchPalette), и держать её копию в JSON
+//  палитра одна на всё приложение (MapPalette), и держать её копию в JSON
 //  значило бы завести второй источник правды о цвете. Во-вторых, стиль,
 //  который качается по сети, — это чужая геометрия и чужие цвета в обход
 //  подписи: правило проекта fail-closed запрещает применять неподписанное
@@ -58,32 +58,32 @@ nonisolated enum EngineMapStyle {
         // Палитра общая с самописной схемой, и берётся она по ЯВНО заданному
         // времени суток: стиль собирается один раз на тему, а глобальный флаг
         // живёт для отрисовки кадра.
-        let was = SketchPalette.daylight
-        SketchPalette.daylight = daylight
-        defer { SketchPalette.daylight = was }
+        let was = MapPalette.daylight
+        MapPalette.daylight = daylight
+        defer { MapPalette.daylight = was }
 
-        let ground = SketchPalette.groundTone.hex
-        let casing = SketchPalette.casingTone.hex
-        let label = SketchPalette.labelTone.hex
-        let halo = SketchPalette.groundTone.hex
+        let ground = MapPalette.groundTone.hex
+        let casing = MapPalette.casingTone.hex
+        let label = MapPalette.labelTone.hex
+        let halo = MapPalette.groundTone.hex
 
         let landColour: [Any] = ["match", ["get", "kind"],
-                                 1, SketchPalette.waterTone.hex,
-                                 2, SketchPalette.greenTone.hex,
-                                 3, SketchPalette.railTone.hex,
-                                 4, SketchPalette.blockTone.hex,
-                                 5, SketchPalette.sidewalkTone.hex,
-                                 6, SketchPalette.houseTone.hex,
-                                 SketchPalette.blockTone.hex]
+                                 1, MapPalette.waterTone.hex,
+                                 2, MapPalette.greenTone.hex,
+                                 3, MapPalette.railTone.hex,
+                                 4, MapPalette.blockTone.hex,
+                                 5, MapPalette.sidewalkTone.hex,
+                                 6, MapPalette.houseTone.hex,
+                                 MapPalette.blockTone.hex]
         let asphaltColour: [Any] = ["match", ["get", "cls"],
-                                    1, SketchPalette.asphaltTone(.motorway).hex,
-                                    2, SketchPalette.asphaltTone(.trunk).hex,
-                                    3, SketchPalette.asphaltTone(.primary).hex,
-                                    4, SketchPalette.asphaltTone(.secondary).hex,
-                                    5, SketchPalette.asphaltTone(.tertiary).hex,
-                                    6, SketchPalette.asphaltTone(.residential).hex,
-                                    7, SketchPalette.asphaltTone(.service).hex,
-                                    SketchPalette.asphaltUnknownTone.hex]
+                                    1, MapPalette.asphaltTone(.motorway).hex,
+                                    2, MapPalette.asphaltTone(.trunk).hex,
+                                    3, MapPalette.asphaltTone(.primary).hex,
+                                    4, MapPalette.asphaltTone(.secondary).hex,
+                                    5, MapPalette.asphaltTone(.tertiary).hex,
+                                    6, MapPalette.asphaltTone(.residential).hex,
+                                    7, MapPalette.asphaltTone(.service).hex,
+                                    MapPalette.asphaltUnknownTone.hex]
 
         var style: [String: Any] = [
             "version": 8,
@@ -182,8 +182,8 @@ nonisolated enum EngineMapStyle {
             out.append([
                 "id": "houses", "type": "fill", "source": "near", "source-layer": "houses",
                 "minzoom": detailFromZoom,
-                "paint": ["fill-color": SketchPalette.houseTone.hex,
-                          "fill-outline-color": SketchPalette.houseEdgeTone.hex],
+                "paint": ["fill-color": MapPalette.houseTone.hex,
+                          "fill-outline-color": MapPalette.houseEdgeTone.hex],
             ])
         }
         // ДВА ПРОХОДА, и это главное отличие от самописного рендера: сначала
@@ -227,13 +227,13 @@ nonisolated enum EngineMapStyle {
         out.append([
             "id": "junction-surface", "type": "fill", "source": "near", "source-layer": "surface",
             "minzoom": 16, "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 8]],
-            "paint": ["fill-color": SketchPalette.asphaltTone(.primary).hex,
+            "paint": ["fill-color": MapPalette.asphaltTone(.primary).hex,
                       "fill-antialias": false],
         ])
         out.append([
             "id": "median-surface", "type": "fill", "source": "near", "source-layer": "surface",
             "minzoom": 16, "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9]],
-            "paint": ["fill-color": SketchPalette.sidewalkTone.hex,
+            "paint": ["fill-color": MapPalette.sidewalkTone.hex,
                       "fill-outline-color": casing],
         ])
         // Мост не должен исчезать под заливкой нижнего перекрёстка.
@@ -242,7 +242,7 @@ nonisolated enum EngineMapStyle {
                 "id": edge ? "bridge-case" : "bridge-deck", "type": "line", "source": "near", "source-layer": "roads",
                 "minzoom": 16, "filter": ["==", ["get", "bridge"], true],
                 "layout": ["line-cap": "round", "line-join": "round"],
-                "paint": ["line-color": edge ? casing : SketchPalette.asphaltTone(.primary).hex,
+                "paint": ["line-color": edge ? casing : MapPalette.asphaltTone(.primary).hex,
                           "line-width": roadWidth(extra: edge ? 1.4 : 0)],
             ])
         }

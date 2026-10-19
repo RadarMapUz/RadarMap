@@ -66,10 +66,4 @@ nonisolated enum MapViewport {
     /// Сдвиг меньше шума GPS на стоянке: прогресс маршрута не пересчитывается
     /// (чуть выше типичного дрожания хорошего фикса, ±1 м).
     static let standstillMeters = 2.0
-
-    /// Охваты, на которых видны объекты тайлов дорог (SketchArea/Point/Place
-    /// — разбор файлов тайлов): улицы до 340 м, дальше костяк района;
-    /// точечные объекты — до 700 м.
-    static let farNetworkSpan: Double = 340
-    static let maxSpanMeters: Double = 700
 }

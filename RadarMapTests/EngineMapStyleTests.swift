@@ -161,10 +161,10 @@ struct EngineMapStyleTests {
         let nightText = EngineMapStyle.json(daylight: false, base: base)
         #expect(dayText != nightText)
 
-        let was = SketchPalette.daylight
-        SketchPalette.daylight = true
-        let ground = SketchPalette.groundTone.hex
-        SketchPalette.daylight = was
+        let was = MapPalette.daylight
+        MapPalette.daylight = true
+        let ground = MapPalette.groundTone.hex
+        MapPalette.daylight = was
         let background = layers(style(daylight: true))
             .first { $0["id"] as? String == "ground" }?["paint"] as? [String: Any]
         #expect(background?["background-color"] as? String == ground,

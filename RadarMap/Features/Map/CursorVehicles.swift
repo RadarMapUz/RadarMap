@@ -37,24 +37,24 @@ struct CarCursor: View {
         ZStack {
             // Зеркала — под кузовом: кайма кузова перекрывает их корень, и
             // они читаются выступами, а не наклейками.
-            CarShape(part: .mirrors).fill(SketchPalette.meBase)
+            CarShape(part: .mirrors).fill(MapPalette.meBase)
             CarShape(part: .mirrors).stroke(.white.opacity(0.85), lineWidth: 0.9 * scale)
-            CarShape(part: .body).fill(LinearGradient(colors: [SketchPalette.meTop,
-                                                               SketchPalette.meBody],
+            CarShape(part: .body).fill(LinearGradient(colors: [MapPalette.meTop,
+                                                               MapPalette.meBody],
                                                       startPoint: .top, endPoint: .bottom))
             CarShape(part: .body).fill(CursorLight.side)
             CarShape(part: .glass).fill(CursorLight.glass)
             // Крыша светлее капота: так кабина поднимается над кузовом.
-            CarShape(part: .roof).fill(LinearGradient(colors: [SketchPalette.meTop,
-                                                               SketchPalette.meBody],
+            CarShape(part: .roof).fill(LinearGradient(colors: [MapPalette.meTop,
+                                                               MapPalette.meBody],
                                                       startPoint: .leading, endPoint: .trailing))
             CarShape(part: .roof).fill(CursorLight.side)
-            CarShape(part: .headlights).fill(SketchPalette.headlight)
-            CarShape(part: .taillights).fill(SketchPalette.taillight)
+            CarShape(part: .headlights).fill(MapPalette.headlight)
+            CarShape(part: .taillights).fill(MapPalette.taillight)
             CarShape(part: .body).stroke(.white.opacity(0.9), lineWidth: 1.2 * scale)
         }
         .compositingGroup()
-        .modifier(CursorShadow(glow: SketchPalette.meBody, scale: scale))
+        .modifier(CursorShadow(glow: MapPalette.meBody, scale: scale))
     }
 }
 
@@ -119,10 +119,10 @@ struct SportCursor: View {
 
     var body: some View {
         ZStack {
-            SportShape(part: .mirrors).fill(SketchPalette.sportBase)
+            SportShape(part: .mirrors).fill(MapPalette.sportBase)
             SportShape(part: .mirrors).stroke(.white.opacity(0.85), lineWidth: 0.9 * scale)
-            SportShape(part: .body).fill(LinearGradient(colors: [SketchPalette.sportTop,
-                                                                 SketchPalette.sportBody],
+            SportShape(part: .body).fill(LinearGradient(colors: [MapPalette.sportTop,
+                                                                 MapPalette.sportBody],
                                                         startPoint: .top, endPoint: .bottom))
             SportShape(part: .body).fill(CursorLight.side)
             // Полосы идут через капот, крышу и крышку мотора — поверх кузова,
@@ -130,19 +130,19 @@ struct SportCursor: View {
             SportShape(part: .stripes).fill(.white.opacity(0.92))
                 .clipShape(SportShape(part: .body))
             SportShape(part: .glass).fill(CursorLight.glass)
-            SportShape(part: .roof).fill(LinearGradient(colors: [SketchPalette.sportTop,
-                                                                 SketchPalette.sportBody],
+            SportShape(part: .roof).fill(LinearGradient(colors: [MapPalette.sportTop,
+                                                                 MapPalette.sportBody],
                                                         startPoint: .leading, endPoint: .trailing))
             SportShape(part: .stripes).fill(.white.opacity(0.92))
                 .clipShape(SportShape(part: .roof))
             SportShape(part: .roof).fill(CursorLight.side)
-            SportShape(part: .headlights).fill(SketchPalette.headlight)
-            SportShape(part: .taillights).fill(SketchPalette.taillight)
-            SportShape(part: .wing).fill(SketchPalette.carbon)
+            SportShape(part: .headlights).fill(MapPalette.headlight)
+            SportShape(part: .taillights).fill(MapPalette.taillight)
+            SportShape(part: .wing).fill(MapPalette.carbon)
             SportShape(part: .body).stroke(.white.opacity(0.9), lineWidth: 1.2 * scale)
         }
         .compositingGroup()
-        .modifier(CursorShadow(glow: SketchPalette.sportBody, scale: scale))
+        .modifier(CursorShadow(glow: MapPalette.sportBody, scale: scale))
     }
 }
 
@@ -222,33 +222,33 @@ struct SpaceshipCursor: View {
     var body: some View {
         ZStack {
             // Ореол пламени: размытая копия под ним — свет, а не мазок.
-            ShipShape(part: .flame).fill(SketchPalette.flameTail.opacity(0.75))
+            ShipShape(part: .flame).fill(MapPalette.flameTail.opacity(0.75))
                 .blur(radius: 2 * scale)
             ShipShape(part: .flame).fill(LinearGradient(stops: [
-                .init(color: SketchPalette.flameCore, location: 0),
-                .init(color: SketchPalette.flameMid, location: 0.45),
-                .init(color: SketchPalette.flameTail.opacity(0.85), location: 1),
+                .init(color: MapPalette.flameCore, location: 0),
+                .init(color: MapPalette.flameMid, location: 0.45),
+                .init(color: MapPalette.flameTail.opacity(0.85), location: 1),
             ], startPoint: .top, endPoint: .bottom))
-            ShipShape(part: .wings).fill(LinearGradient(colors: [SketchPalette.meTop,
-                                                                 SketchPalette.meBody,
-                                                                 SketchPalette.meBase],
+            ShipShape(part: .wings).fill(LinearGradient(colors: [MapPalette.meTop,
+                                                                 MapPalette.meBody,
+                                                                 MapPalette.meBase],
                                                         startPoint: .top, endPoint: .bottom))
             ShipShape(part: .wings).fill(CursorLight.side)
             ShipShape(part: .wings).stroke(.white.opacity(0.9), lineWidth: 1.1 * scale)
-            ShipShape(part: .nozzle).fill(SketchPalette.nozzle)
-            ShipShape(part: .hull).fill(LinearGradient(colors: [SketchPalette.hullTop,
-                                                                SketchPalette.hullBody,
-                                                                SketchPalette.hullBase],
+            ShipShape(part: .nozzle).fill(MapPalette.nozzle)
+            ShipShape(part: .hull).fill(LinearGradient(colors: [MapPalette.hullTop,
+                                                                MapPalette.hullBody,
+                                                                MapPalette.hullBase],
                                                        startPoint: .leading, endPoint: .trailing))
             // Светлый фюзеляж на белой кайме не отделился бы от крыльев и от
             // дневной карты — его обводит тонкая тёмная линия поверх каймы.
             ShipShape(part: .hull).stroke(.white.opacity(0.9), lineWidth: 1.1 * scale)
-            ShipShape(part: .hull).stroke(SketchPalette.hullBase, lineWidth: 0.5 * scale)
+            ShipShape(part: .hull).stroke(MapPalette.hullBase, lineWidth: 0.5 * scale)
             ShipShape(part: .canopy).fill(CursorLight.glass)
             ShipShape(part: .glint).fill(.white.opacity(0.75))
         }
         .compositingGroup()
-        .modifier(CursorShadow(glow: SketchPalette.meBody, scale: scale))
+        .modifier(CursorShadow(glow: MapPalette.meBody, scale: scale))
     }
 }
 
@@ -310,7 +310,7 @@ enum CursorLight {
         .init(color: .black.opacity(0.26), location: 1),
     ], startPoint: .leading, endPoint: .trailing)
 
-    static let glass = LinearGradient(colors: [SketchPalette.glassTop, SketchPalette.glass],
+    static let glass = LinearGradient(colors: [MapPalette.glassTop, MapPalette.glass],
                                       startPoint: .topLeading, endPoint: .bottomTrailing)
 }
 

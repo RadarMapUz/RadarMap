@@ -14,7 +14,7 @@
 //  пикселя.
 //
 //  Цвет каждого — свой, и ни один не красный: красный на этой карте —
-//  камера и тревога (см. SketchPalette).
+//  камера и тревога (см. MapPalette).
 //
 //  Силуэт — по-прежнему правая половина и её зеркало (HalfOutline), парные
 //  детали — зеркальной парой: CursorStyleTests проверяет симметрию по
@@ -32,34 +32,34 @@ struct FormulaCursor: View {
 
     var body: some View {
         ZStack {
-            FormulaShape(part: .suspension).stroke(SketchPalette.carbon, lineWidth: 1.1 * scale)
+            FormulaShape(part: .suspension).stroke(MapPalette.carbon, lineWidth: 1.1 * scale)
             RacerTyres(shape: FormulaShape(part: .tyres), tread: FormulaShape(part: .tread), scale: scale)
-            FormulaShape(part: .frontWing).fill(SketchPalette.carbon)
-            FormulaShape(part: .endplates).fill(SketchPalette.formulaBody)
+            FormulaShape(part: .frontWing).fill(MapPalette.carbon)
+            FormulaShape(part: .endplates).fill(MapPalette.formulaBody)
             FormulaShape(part: .frontWing).stroke(.white.opacity(0.85), lineWidth: 0.8 * scale)
-            FormulaShape(part: .body).fill(LinearGradient(colors: [SketchPalette.formulaTop,
-                                                                   SketchPalette.formulaBody],
+            FormulaShape(part: .body).fill(LinearGradient(colors: [MapPalette.formulaTop,
+                                                                   MapPalette.formulaBody],
                                                           startPoint: .top, endPoint: .bottom))
             FormulaShape(part: .body).fill(CursorLight.side)
             // Ливрея: белая полоса по носу, карбоновый хребет мотора и
             // чёрные входы понтонов — поверх кузова, внутри его контура.
             FormulaShape(part: .noseStripe).fill(.white.opacity(0.92))
                 .clipShape(FormulaShape(part: .body))
-            FormulaShape(part: .spine).fill(SketchPalette.carbon)
+            FormulaShape(part: .spine).fill(MapPalette.carbon)
                 .clipShape(FormulaShape(part: .body))
-            FormulaShape(part: .inlets).fill(SketchPalette.carbon)
-            FormulaShape(part: .cockpit).fill(SketchPalette.carbon)
-            FormulaShape(part: .helmet).fill(SketchPalette.helmet)
-            FormulaShape(part: .visor).fill(SketchPalette.glass)
-            FormulaShape(part: .halo).stroke(SketchPalette.carbon,
+            FormulaShape(part: .inlets).fill(MapPalette.carbon)
+            FormulaShape(part: .cockpit).fill(MapPalette.carbon)
+            FormulaShape(part: .helmet).fill(MapPalette.helmet)
+            FormulaShape(part: .visor).fill(MapPalette.glass)
+            FormulaShape(part: .halo).stroke(MapPalette.carbon,
                                              style: StrokeStyle(lineWidth: 1.2 * scale, lineCap: .round))
             FormulaShape(part: .body).stroke(.white.opacity(0.9), lineWidth: 1.1 * scale)
-            FormulaShape(part: .rearWing).fill(SketchPalette.carbon)
-            FormulaShape(part: .rearFlap).fill(SketchPalette.formulaBody)
+            FormulaShape(part: .rearWing).fill(MapPalette.carbon)
+            FormulaShape(part: .rearFlap).fill(MapPalette.formulaBody)
             FormulaShape(part: .rearWing).stroke(.white.opacity(0.85), lineWidth: 0.8 * scale)
         }
         .compositingGroup()
-        .modifier(CursorShadow(glow: SketchPalette.formulaBody, scale: scale))
+        .modifier(CursorShadow(glow: MapPalette.formulaBody, scale: scale))
     }
 }
 
@@ -146,26 +146,26 @@ struct SupercarCursor: View {
     var body: some View {
         ZStack {
             RacerTyres(shape: SupercarShape(part: .tyres), tread: SupercarShape(part: .tread), scale: scale)
-            SupercarShape(part: .body).fill(LinearGradient(colors: [SketchPalette.limeTop,
-                                                                    SketchPalette.limeBody],
+            SupercarShape(part: .body).fill(LinearGradient(colors: [MapPalette.limeTop,
+                                                                    MapPalette.limeBody],
                                                            startPoint: .top, endPoint: .bottom))
             SupercarShape(part: .body).fill(CursorLight.side)
-            SupercarShape(part: .creases).stroke(SketchPalette.limeBase.opacity(0.7), lineWidth: 0.7 * scale)
-            SupercarShape(part: .intakes).fill(SketchPalette.carbon)
+            SupercarShape(part: .creases).stroke(MapPalette.limeBase.opacity(0.7), lineWidth: 0.7 * scale)
+            SupercarShape(part: .intakes).fill(MapPalette.carbon)
             SupercarShape(part: .glass).fill(CursorLight.glass)
-            SupercarShape(part: .roof).fill(LinearGradient(colors: [SketchPalette.limeTop,
-                                                                    SketchPalette.limeBody],
+            SupercarShape(part: .roof).fill(LinearGradient(colors: [MapPalette.limeTop,
+                                                                    MapPalette.limeBody],
                                                            startPoint: .leading, endPoint: .trailing))
             SupercarShape(part: .roof).fill(CursorLight.side)
-            SupercarShape(part: .louvres).stroke(SketchPalette.carbon,
+            SupercarShape(part: .louvres).stroke(MapPalette.carbon,
                                                  style: StrokeStyle(lineWidth: 1.0 * scale, lineCap: .round))
-            SupercarShape(part: .headlights).fill(SketchPalette.headlight)
-            SupercarShape(part: .diffuser).fill(SketchPalette.carbon)
-            SupercarShape(part: .taillights).fill(SketchPalette.taillight)
+            SupercarShape(part: .headlights).fill(MapPalette.headlight)
+            SupercarShape(part: .diffuser).fill(MapPalette.carbon)
+            SupercarShape(part: .taillights).fill(MapPalette.taillight)
             SupercarShape(part: .body).stroke(.white.opacity(0.9), lineWidth: 1.1 * scale)
         }
         .compositingGroup()
-        .modifier(CursorShadow(glow: SketchPalette.limeBody, scale: scale))
+        .modifier(CursorShadow(glow: MapPalette.limeBody, scale: scale))
     }
 }
 
@@ -253,30 +253,30 @@ struct RallyCursor: View {
     var body: some View {
         ZStack {
             RacerTyres(shape: RallyShape(part: .tyres), tread: RallyShape(part: .tread), scale: scale)
-            RallyShape(part: .mudflaps).fill(SketchPalette.carbon)
-            RallyShape(part: .body).fill(LinearGradient(colors: [SketchPalette.rallyTop,
-                                                                 SketchPalette.rallyBody],
+            RallyShape(part: .mudflaps).fill(MapPalette.carbon)
+            RallyShape(part: .body).fill(LinearGradient(colors: [MapPalette.rallyTop,
+                                                                 MapPalette.rallyBody],
                                                         startPoint: .top, endPoint: .bottom))
             RallyShape(part: .body).fill(CursorLight.side)
-            RallyShape(part: .stripes).fill(SketchPalette.rallyGold)
+            RallyShape(part: .stripes).fill(MapPalette.rallyGold)
                 .clipShape(RallyShape(part: .body))
             RallyShape(part: .glass).fill(CursorLight.glass)
-            RallyShape(part: .roof).fill(SketchPalette.rallyRoof)
+            RallyShape(part: .roof).fill(MapPalette.rallyRoof)
             RallyShape(part: .roof).fill(CursorLight.side)
-            RallyShape(part: .roofScoop).fill(SketchPalette.carbon)
-            RallyShape(part: .roundel).fill(SketchPalette.rallyBody)
-            RallyShape(part: .roundel).stroke(SketchPalette.rallyGold, lineWidth: 0.8 * scale)
-            RallyShape(part: .hoodScoop).fill(SketchPalette.carbon)
-            RallyShape(part: .lightBar).fill(SketchPalette.carbon)
-            RallyShape(part: .lights).fill(SketchPalette.spotlight)
+            RallyShape(part: .roofScoop).fill(MapPalette.carbon)
+            RallyShape(part: .roundel).fill(MapPalette.rallyBody)
+            RallyShape(part: .roundel).stroke(MapPalette.rallyGold, lineWidth: 0.8 * scale)
+            RallyShape(part: .hoodScoop).fill(MapPalette.carbon)
+            RallyShape(part: .lightBar).fill(MapPalette.carbon)
+            RallyShape(part: .lights).fill(MapPalette.spotlight)
             RallyShape(part: .lightCores).fill(.white)
             RallyShape(part: .body).stroke(.white.opacity(0.9), lineWidth: 1.1 * scale)
-            RallyShape(part: .wing).fill(SketchPalette.carbon)
+            RallyShape(part: .wing).fill(MapPalette.carbon)
             RallyShape(part: .wing).stroke(.white.opacity(0.85), lineWidth: 0.8 * scale)
-            RallyShape(part: .taillights).fill(SketchPalette.taillight)
+            RallyShape(part: .taillights).fill(MapPalette.taillight)
         }
         .compositingGroup()
-        .modifier(CursorShadow(glow: SketchPalette.rallyBody, scale: scale))
+        .modifier(CursorShadow(glow: MapPalette.rallyBody, scale: scale))
     }
 }
 
@@ -371,8 +371,8 @@ private struct RacerTyres<S: Shape, T: Shape>: View {
 
     var body: some View {
         ZStack {
-            shape.fill(SketchPalette.tyre)
-            tread.fill(SketchPalette.tyreTread.opacity(0.6))
+            shape.fill(MapPalette.tyre)
+            tread.fill(MapPalette.tyreTread.opacity(0.6))
             shape.stroke(.white.opacity(0.55), lineWidth: 0.6 * scale)
         }
     }

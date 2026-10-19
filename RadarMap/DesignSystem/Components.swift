@@ -153,33 +153,6 @@ extension SectionHeader where Accessory == EmptyView {
     }
 }
 
-/// Разделитель «дальше — пожизненные цифры»: подпись в разрыве линии. Нужен,
-/// чтобы было видно, где кончается власть фильтра периода.
-struct LabeledDivider: View {
-    let title: String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            line
-            // Одна строка обязательна: узбекское «BUTUN VAQT UCHUN» переносилось
-            // на вторую, а линии оставались на высоте первой и висели обрубками.
-            Text(title)
-                .font(.rounded(11, .semibold))
-                .foregroundStyle(Theme.textTertiary)
-                .textCase(.uppercase)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .layoutPriority(1)
-            line
-        }
-        .padding(.top, 8)
-    }
-
-    private var line: some View {
-        Rectangle().fill(Theme.stroke).frame(height: 1)
-    }
-}
-
 /// Круглая кнопка-контрол поверх карты (мой геопоиск, слои и т.п.).
 struct CircleControl: View {
     let systemName: String
@@ -388,27 +361,6 @@ struct OverspeedVignette: View {
             }
             .transition(.opacity)
             .accessibilityHidden(true)   // VoiceOver уже читает алерт приближения
-    }
-}
-
-/// Чип-легенда типа камеры.
-struct LegendChip: View {
-    let color: Color
-    let symbol: String
-    let text: LocalizedStringKey
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.rounded(10, .bold))
-                // Светлый радар — тёмный значок (как на маркере), остальные — белый.
-                .foregroundStyle(color == Theme.Types.radar ? Theme.Types.darkGlyph : .white)
-                .frame(width: 20, height: 20)
-                .background(color, in: Circle())
-            Text(text)
-                .font(.rounded(12, .medium))
-                .foregroundStyle(Theme.textSecondary)
-        }
     }
 }
 

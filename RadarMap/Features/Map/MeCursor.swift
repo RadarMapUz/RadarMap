@@ -59,11 +59,11 @@ private struct ArrowCursor: View {
                 .offset(y: 15 * scale)
             // Основание: тот же силуэт чуть ниже и темнее — даёт толщину.
             MeCursorShape()
-                .fill(SketchPalette.meBase)
+                .fill(MapPalette.meBase)
                 .offset(y: 2.5 * scale)
             MeCursorShape()
-                .fill(LinearGradient(colors: [SketchPalette.meTop,
-                                              SketchPalette.meBody],
+                .fill(LinearGradient(colors: [MapPalette.meTop,
+                                              MapPalette.meBody],
                                      startPoint: .top, endPoint: .bottom))
             // Боковое освещение: левая грань светлее, правая уходит в тень.
             // Градиентом, а не половиной фигуры под маской: жёсткая граница по
@@ -79,7 +79,7 @@ private struct ArrowCursor: View {
                 .stroke(.white.opacity(0.85), lineWidth: 1.2 * scale)
         }
         .compositingGroup()
-        .shadow(color: SketchPalette.meBody.opacity(0.55), radius: 6 * scale)
+        .shadow(color: MapPalette.meBody.opacity(0.55), radius: 6 * scale)
     }
 }
 

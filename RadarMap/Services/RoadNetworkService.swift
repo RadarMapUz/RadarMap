@@ -64,36 +64,11 @@ final class RoadNetworkService {
     var reportNetwork: any RoadNetworkSource {
         UnionRoadNetwork(sources: [network, fallbackSource?() ?? EmptyRoadNetwork()])
     }
-    /// Костяк района: раздельные проезжие сведены в одну ось, мелочи нет.
-    /// Пустой на старом формате — вызывающий тогда берёт обычную сеть.
-    private(set) var farNetwork: any RoadNetworkSource = EmptyRoadNetwork()
-
-    /// Местность вокруг: вода, зелень, рельсы, кварталы. Пустая, пока слои не
-    /// приехали, — рисовать нечего, и это нормальное состояние.
-    private(set) var areas: [SketchArea] = []
-    /// Названия населённых пунктов окрестности. Пусто на ближнем охвате —
-    /// там их не просят вовсе.
-    private(set) var places: [SketchPlace] = []
-    /// Точечные объекты, нарисованные руками в панели: светофоры, развороты.
-    private(set) var points: [SketchPoint] = []
-    /// Те же объекты, пересчитанные сервером по костяку района: свои
-    /// пересечения, своё сведение, своя посадка на ось. Не выборка из
-    /// points — другая геометрия, как и сама дальняя сеть.
-    private(set) var farPoints: [SketchPoint] = []
-
-    /// Только улицы: костяк района и местность рисовала схема приборки
-    /// (удалена 11.10), а посадке отметки и схеме развязки нужны оси улиц.
+    /// Только улицы: костяк района, местность, точки и названия рисовала схема
+    /// приборки (удалена 11.10, её разбор вычищен 19.10), а посадке отметки и
+    /// схеме развязки нужны оси улиц.
     private static let wantedSets: Swift.Set<RoadTiles.Set> = [.streets]
-    /// Распакованная местность по ключам наборов.
-    @ObservationIgnored private var loadedAreas: [String: [SketchArea]] = [:]
-    @ObservationIgnored private var loadedPoints: [String: [SketchPoint]] = [:]
-    @ObservationIgnored private var loadedPointsFar: [String: [SketchPoint]] = [:]
-    @ObservationIgnored private var loadedPlaces: [String: [SketchPlace]] = [:]
 
-    /// Сеть приходит уже генерализованной: склейка, схлопывание раздельных
-    /// проезжих, отсев обрубков и упрощение посчитаны на сервере один раз на
-    /// всю страну. Схема тогда только фильтрует по классу и сглаживает.
-    var isPrecomputed: Bool { indexVersion >= RoadTiles.formatVersionV2 }
 
     @ObservationIgnored private var index: RoadTiles.Index?
     /// Распакованные тайлы в памяти (только окрестность — см. eviction).
@@ -419,11 +394,10 @@ final class RoadNetworkService {
         let fileURL = directory.appendingPathComponent(
             RoadTiles.fileName(key: key, version: indexVersion))
 
-        let set = Self.setOf(key)
-        let fromDisk = await Task.detached(priority: .utility) { () -> Decoded? in
+        let fromDisk = await Task.detached(priority: .utility) { () -> [RoadLine]? in
             guard let data = try? Data(contentsOf: fileURL),
                   RoadTiles.sha256Hex(of: data) == expected.sha256 else { return nil }
-            return Self.decode(data, as: set)
+            return RoadTiles.decodeTile(data)
         }.value
         if let fromDisk {
             // Снять с полёта ДО finish, а не в defer на выходе: finish
@@ -431,7 +405,7 @@ final class RoadNetworkService {
             // позже него — то есть на последнем тайле пачки снимок не
             // собирался никогда.
             downloading.remove(key)
-            finish(key: key, decoded: fromDisk)
+            finish(key: key, lines: fromDisk)
             return
         }
 
@@ -452,9 +426,9 @@ final class RoadNetworkService {
         let directory = self.directory
         // Причина отказа нужна: sha — признак устаревшего индекса (лечится
         // его перепроверкой), формат — битый файл (не лечится ничем).
-        let (decoded, shaMatches) = await Task.detached(priority: .utility) { () -> (Decoded?, Bool) in
+        let (decoded, shaMatches) = await Task.detached(priority: .utility) { () -> ([RoadLine]?, Bool) in
             guard RoadTiles.sha256Hex(of: data) == expected.sha256 else { return (nil, false) }
-            guard let value = Self.decode(data, as: set) else { return (nil, true) }
+            guard let value = RoadTiles.decodeTile(data) else { return (nil, true) }
             do {
                 try FileManager.default.createDirectory(at: directory,
                                                         withIntermediateDirectories: true)
@@ -471,7 +445,7 @@ final class RoadNetworkService {
             return
         }
         downloading.remove(key)
-        finish(key: key, decoded: decoded)
+        finish(key: key, lines: decoded)
     }
 
     // MARK: - Адреса
@@ -541,61 +515,11 @@ final class RoadNetworkService {
         return decoded
     }
 
-    /// Что лежит в наборе: дороги или местность.
-    private nonisolated enum Decoded {
-        case roads([RoadLine])
-        case areas([SketchArea])
-        case points([SketchPoint])
-        case places([SketchPlace])
-    }
-
     /// Тайл уже разобран и лежит в памяти.
-    ///
-    /// Проверять один `loaded` нельзя: туда попадают только ДОРОЖНЫЕ наборы, а
-    /// местность и точки живут в своих словарях. Пока здесь стояло
-    /// `loaded[key] == nil`, любой недорожный тайл считался недостающим ВСЕГДА
-    /// — он скачивался, разбирался, ложился в свой словарь и на следующем
-    /// тике запрашивался снова. А так как список недостающих никогда не
-    /// пустел, снимок окрестности не пересобирался вовсе: схема всю дорогу
-    /// рисовалась запасной сетью из индекса лимитов, и ни вода, ни зелень, ни
-    /// кварталы, ни светофоры на неё не попадали ни разу.
-    private func isLoaded(_ key: String) -> Bool {
-        guard let set = Self.setOf(key) else { return loaded[key] != nil }
-        if set.isPlaces { return loadedPlaces[key] != nil }
-        if set.isPoints { return loadedPoints[key] != nil || loadedPointsFar[key] != nil }
-        if set.isArea { return loadedAreas[key] != nil }
-        return loaded[key] != nil
-    }
+    private func isLoaded(_ key: String) -> Bool { loaded[key] != nil }
 
-    /// Набор по составному ключу «тайл_набор». nil — старый формат.
-    private nonisolated static func setOf(_ key: String) -> RoadTiles.Set? {
-        guard let suffix = key.split(separator: "_").last else { return nil }
-        return RoadTiles.Set(rawValue: String(suffix))
-    }
-
-    private nonisolated static func decode(_ data: Data,
-                                           as set: RoadTiles.Set?) -> Decoded? {
-        if set?.isPlaces == true {
-            return RoadTiles.decodePlaces(data).map(Decoded.places)
-        }
-        if set?.isPoints == true {
-            return RoadTiles.decodePoints(data).map(Decoded.points)
-        }
-        if set?.isArea == true {
-            return RoadTiles.decodeAreas(data).map(Decoded.areas)
-        }
-        return RoadTiles.decodeTile(data).map(Decoded.roads)
-    }
-
-    private func finish(key: String, decoded: Decoded) {
-        switch decoded {
-        case .roads(let lines): loaded[key] = lines
-        case .areas(let shapes): loadedAreas[key] = shapes
-        case .points(let marks):
-            if Self.setOf(key) == .pointsFar { loadedPointsFar[key] = marks }
-            else { loadedPoints[key] = marks }
-        case .places(let names): loadedPlaces[key] = names
-        }
+    private func finish(key: String, lines: [RoadLine]) {
+        loaded[key] = lines
         // Состав окрестности изменился — следующий тик обязан пройти гейт,
         // иначе новый тайл ждал бы километра пути.
         lastEnsureAt = nil
@@ -618,80 +542,35 @@ final class RoadNetworkService {
         // Выселение — только на ПОСЛЕДНЕМ проходе. На промежуточных «ключи
         // снимка» это половина окрестности, и выселение по ним выбросило бы
         // из памяти тайлы, которые уже приехали и вот-вот понадобятся.
-        rebuildSnapshot(keys: Set(loaded.keys).union(loadedAreas.keys)
-            .union(loadedPoints.keys).union(loadedPointsFar.keys)
-            .union(loadedPlaces.keys), evict: last)
+        rebuildSnapshot(keys: Set(loaded.keys), evict: last)
     }
 
     /// Не чаще этого собираем снимок во время закачки пачки.
     private static let snapshotThrottle: TimeInterval = 0.5
 
     private func rebuildSnapshot(keys: Set<String>, evict: Bool = true) {
-        // Дальние тайлы — вон из памяти (файлы остаются на диске).
-        //
-        // Порог считается ОТ РАЗМЕРА ОКРЕСТНОСТИ, а не константой в двенадцать.
-        // Константа была верна, пока на тайл приходился один файл: девять
-        // тайлов покрытия плюс запас. В новом формате файлов три на тайл, то
-        // есть окрестность сама по себе от восемнадцати до двадцати семи, —
-        // порог срабатывал бы всегда, и запас, ради которого он и написан,
-        // исчез бы: разворот через границу тайла заставлял бы перечитывать
-        // файлы с диска заново.
-        if evict, loaded.count + loadedAreas.count + loadedPoints.count
-            + loadedPointsFar.count + loadedPlaces.count > keys.count + 9 {
+        // Дальние тайлы — вон из памяти (файлы остаются на диске). Порог — от
+        // размера окрестности плюс запас: разворот через границу тайла не
+        // должен перечитывать файлы с диска заново.
+        if evict, loaded.count > keys.count + 9 {
             for key in loaded.keys where !keys.contains(key) {
                 loaded.removeValue(forKey: key)
             }
-            for key in loadedAreas.keys where !keys.contains(key) {
-                loadedAreas.removeValue(forKey: key)
-            }
-            for key in loadedPoints.keys where !keys.contains(key) {
-                loadedPoints.removeValue(forKey: key)
-            }
-            for key in loadedPointsFar.keys where !keys.contains(key) {
-                loadedPointsFar.removeValue(forKey: key)
-            }
-            for key in loadedPlaces.keys where !keys.contains(key) {
-                loadedPlaces.removeValue(forKey: key)
-            }
         }
         snapshotKeys = keys
-        // Костяк района собирается отдельным снимком: на дальнем охвате схема
-        // берёт его вместо обычной сети — там раздельные проезжие уже сведены
-        // в одну ось, и мелочи нет вовсе.
-        let isV2 = indexVersion >= RoadTiles.formatVersionV2
-        let farSuffix = "_" + RoadTiles.Set.far.rawValue
-        let nearTiles = keys.filter { !isV2 || !$0.hasSuffix(farSuffix) }
-            .compactMap { loaded[$0] }
-        let farTiles = isV2 ? keys.filter { $0.hasSuffix(farSuffix) }.compactMap { loaded[$0] }
-                            : []
-        let newAreas = keys.compactMap { loadedAreas[$0] }.flatMap { $0 }
-        let newPoints = keys.compactMap { loadedPoints[$0] }.flatMap { $0 }
-        let newFarPoints = keys.compactMap { loadedPointsFar[$0] }.flatMap { $0 }
-        let newPlaces = keys.compactMap { loadedPlaces[$0] }.flatMap { $0 }
+        let tiles = keys.compactMap { loaded[$0] }
         // Поколение: сборка идёт в фоне, и две подряд (машина пересекла край
         // клетки дважды) могли закончиться в обратном порядке — поздний ответ
-        // по старым клеткам затирал свежую сеть. И кварталы с точками
-        // применяются ВМЕСТЕ с сетью, а не до неё: иначе на время сборки
-        // схема рисовала новые дома поверх старых дорог.
+        // по старым клеткам затирал свежую сеть.
         networkGeneration &+= 1
         let generation = networkGeneration
-        Task.detached(priority: .utility) { [nearTiles, farTiles] in
-            let near = TileRoadNetwork.build(nearTiles)
-            let far = farTiles.isEmpty ? nil : TileRoadNetwork.build(farTiles)
+        Task.detached(priority: .utility) { [tiles] in
+            let near = TileRoadNetwork.build(tiles)
             await MainActor.run {
                 guard self.networkGeneration == generation else { return }
-                self.areas = newAreas
-                self.points = newPoints
-                self.farPoints = newFarPoints
-                self.places = newPlaces
                 self.network = CachedRoadNetwork(near)
-                if let far {
-                    self.farNetwork = CachedRoadNetwork(far)
-                } else {
-                    self.farNetwork = EmptyRoadNetwork()
-                }
                 self.revision += 1
-                Log.route.info("сеть дорог: \(near.lines.count) линий, костяк \(far?.lines.count ?? 0)")
+                Log.route.info("сеть дорог: \(near.lines.count) линий")
             }
         }
     }

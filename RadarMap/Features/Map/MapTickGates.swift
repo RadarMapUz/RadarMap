@@ -56,6 +56,7 @@ struct ApproachOverlayGate: View {
                     // 794 (130 км/ч). Одиннадцать секунд экран говорил «ещё
                     // далеко» про камеру, о которой уже сказал голос.
                     alertRadius: env.location.effectiveAlertRadius,
+                    layout: .choose(navigating: env.route.isActive && env.location.isTripActive),
                     onDismiss: { dismissedID = camera.id }
                 )
                 // Экран тревоги тёмный при любой теме: на полностью затемнённой

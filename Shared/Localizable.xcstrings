@@ -3307,6 +3307,22 @@
         }
       }
     },
+    "До следующей камеры": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "До следующей камеры"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyingi kameragacha"
+          }
+        }
+      }
+    },
     "До уровня «%1$@» — %2$lld балла": {
       "localizations": {
         "ru": {

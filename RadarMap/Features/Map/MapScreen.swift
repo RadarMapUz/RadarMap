@@ -313,7 +313,10 @@ struct MapScreen: View {
                     ?? env.cameras.cameras.first {
             // Полноэкранное предупреждение на снимок — без поездки и движения.
             ApproachAlertView(camera: camera, distance: 240, speedKmh: 67, relativeBearing: 12,
-                              alertRadius: 500, onDismiss: {})
+                              alertRadius: 500,
+                              layout: ProcessInfo.processInfo.arguments.contains("-demoAlertCard")
+                                ? .bottomCard : .fullScreen,
+                              onDismiss: {})
         } else {
             ApproachOverlayGate(dismissedID: $dismissedApproachID)
         }

@@ -337,7 +337,7 @@ struct ReportRefineBar: View {
             }
             .foregroundStyle(Theme.textTertiary)
             .frame(width: 56, height: 44)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+            .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text("Отменить мою отметку"))

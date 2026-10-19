@@ -795,7 +795,7 @@ struct MapScreen: View {
                 Label("Места", systemImage: Icon.placesLayer)
             }
             Toggle(isOn: setting(\.mapHouses)) {
-                Label("Дома", systemImage: "building.2.fill")
+                Label("Дома", systemImage: Icon.buildingsLayer)
             }
             Toggle(isOn: setting(\.mapSidewalks)) {
                 Label("Тротуары", systemImage: "figure.walk")

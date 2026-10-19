@@ -48,7 +48,7 @@ struct TripEndCard: View {
                         .font(.rounded(15, .bold))
                         .foregroundStyle(Theme.textTertiary)
                         .frame(width: 32, height: 32)
-                        .background(Theme.surface, in: Circle())
+                        .background(Theme.background, in: Circle())
                         .tapTarget()
                 }
                 .buttonStyle(.plain)
@@ -65,7 +65,7 @@ struct TripEndCard: View {
                 metric("\(record.camerasPassed)", String(localized: "камер"))
             }
             .padding(.vertical, 10)
-            .background(Theme.surface,
+            .background(Theme.background,
                         in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
 
             if let previous = mergeCandidate {
@@ -99,7 +99,7 @@ struct TripEndCard: View {
                         .font(.rounded(16, .semibold))
                         .foregroundStyle(Theme.accent)
                         .frame(width: 46, height: 44)
-                        .background(Theme.surface, in: Capsule())
+                        .background(Theme.background, in: Capsule())
                         .contentShape(Capsule())
                 }
                 .buttonStyle(PressableStyle())

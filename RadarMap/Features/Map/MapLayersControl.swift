@@ -86,7 +86,7 @@ struct MapLayersControl: View {
             toggle("Пробки", "car.2.fill", isOn: $traffic)
             // «Места» прячут кафе и банки, заправки и парковки остаются всегда.
             toggle("Места", Icon.placesLayer, isOn: $places)
-            toggle("Дома", "building.2.fill", isOn: $houses)
+            toggle("Дома", Icon.buildingsLayer, isOn: $houses)
             toggle("Тротуары", "figure.walk", isOn: $sidewalks)
         }
         .padding(12)

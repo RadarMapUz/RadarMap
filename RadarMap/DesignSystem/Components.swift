@@ -231,9 +231,10 @@ extension View {
     func liftedBackground<S: Shape, F: ShapeStyle>(_ style: F, in shape: S) -> some View {
         background {
             shape.fill(style)
-                // Днём — мягкая тень карточки (Theme.cardShadow, 0,07): 0,3
+                // Тень панели над картой (Theme.panelShadow: днём 0,16): 0,3
                 // была подобрана под тёмную тему и днём лежала грязным
-                // пятном под каждой панелью (4.3).
+                // пятном под каждой панелью (4.3). Все пользователи — панели
+                // над картой; карточкам контента — statCard и cardShadow.
                 .shadow(color: Theme.panelShadow, radius: 14, y: 6)
         }
     }

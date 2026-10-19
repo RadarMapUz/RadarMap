@@ -91,7 +91,7 @@ struct MapPointBar: View {
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
-            .background(Theme.surface.opacity(0.6),
+            .background(Theme.background,
                         in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
     }
@@ -138,7 +138,7 @@ struct ReportPickerBar: View {
                         .foregroundStyle(Theme.textPrimary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
-                        .background(Theme.surface.opacity(0.6),
+                        .background(Theme.background,
                                     in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
                     }
                     .buttonStyle(PressableStyle())

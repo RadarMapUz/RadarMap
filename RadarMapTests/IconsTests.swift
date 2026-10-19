@@ -12,7 +12,8 @@ import XCTest
 
 final class IconsTests: XCTestCase {
     private let all = [Icon.reportRadar, Icon.hazard, Icon.ownCamera, Icon.cameras, Icon.myPlaces,
-                       Icon.pointHere, Icon.pointGone, Icon.pointMisplaced, Icon.placesLayer, Icon.noCameras]
+                       Icon.pointHere, Icon.pointGone, Icon.pointMisplaced, Icon.placesLayer, Icon.buildingsLayer,
+                       Icon.noCameras]
 
     func testEveryMeaningHasItsOwnSymbol() {
         XCTAssertEqual(Set(all).count, all.count, "два смысла на одном значке — путаница на дороге")
@@ -29,6 +30,13 @@ final class IconsTests: XCTestCase {
     func testReportRadarMatchesTheMobileRadarMarker() {
         XCTAssertEqual(Icon.reportRadar, CameraType.mobileRadar.symbolName)
         XCTAssertNotEqual(Icon.reportRadar, Icon.hazard)
+    }
+
+    /// «На месте / нет» — не печать с галочкой: она уже значит «в лимите» и
+    /// достижения в «Итогах» (ревью 4.1).
+    func testPointAnswersDoNotReuseTheInLimitSeal() {
+        XCTAssertNotEqual(Icon.pointHere, "checkmark.seal.fill")
+        XCTAssertNotEqual(Icon.pointGone, "xmark.seal.fill")
     }
 
     /// Символы, которые жили в коде строкой и молча не существовали: кнопка

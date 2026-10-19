@@ -60,7 +60,9 @@ struct QuickTogglesBar: View {
                         .foregroundStyle(Theme.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
-                        .background(Theme.surface, in: Capsule())
+                        // Внутри сплошной панели — заливка фона: surface на
+                        // surface растворял кнопку (ревью 4.2).
+                        .background(Theme.background, in: Capsule())
                 }
                 .buttonStyle(PressableStyle())
             }
@@ -87,7 +89,7 @@ struct QuickTogglesBar: View {
                     .foregroundStyle(isOn.wrappedValue ? Theme.onAccentFill : Theme.textTertiary)
                     .frame(width: 44, height: 44)
                     .background(isOn.wrappedValue ? AnyShapeStyle(Theme.accentFill)
-                                                  : AnyShapeStyle(Theme.surface), in: Circle())
+                                                  : AnyShapeStyle(Theme.background), in: Circle())
                 Text(title)
                     .font(.rounded(11, .medium))
                     .foregroundStyle(isOn.wrappedValue ? Theme.textPrimary : Theme.textTertiary)
@@ -114,7 +116,7 @@ struct QuickTogglesBar: View {
             .padding(.horizontal, 12)
             .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
             .background(selected ? AnyShapeStyle(Theme.accentFill)
-                                 : AnyShapeStyle(Theme.surface), in: Capsule())
+                                 : AnyShapeStyle(Theme.background), in: Capsule())
         }
         .buttonStyle(PressableStyle())
     }

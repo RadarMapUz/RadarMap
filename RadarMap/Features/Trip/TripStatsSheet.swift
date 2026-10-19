@@ -1171,6 +1171,15 @@ struct TripStatsSheet: View {
                     CommuteCard(summary: commute)
                 }
                 .buttonStyle(PressableStyle())
+                // Срок прибытия выученный — только вопросом и один раз (8.6),
+                // под той карточкой, о которой он.
+                if commute.direction == .toWork, let minute = env.workTargetSuggestion,
+                   env.settings.workArrivalTarget == nil, !env.settings.workTargetAsked {
+                    ArrivalTargetQuestion(minute: minute) { yes in
+                        env.settings.workTargetAsked = true
+                        if yes { env.settings.workArrivalTarget = ArrivalTarget(minute: minute) }
+                    }
+                }
             }
         }
     }

@@ -297,15 +297,58 @@ nonisolated enum CommuteGhost {
     }
 
     /// «На работу к 9:12, как обычно» / «Домой к 18:40, на 4 минуты дольше
-    /// обычного». Быстрее обычного — тоже «как обычно»: не гонка.
+    /// обычного». Быстрее обычного — тоже «как обычно»: не гонка. Со сроком
+    /// хвост — запас: «с запасом 9 минут», «впритык», «на 12 минут позже
+    /// срока». Без «поторопитесь» в любом виде.
     static func phrase(direction: Commute.Direction, arrival: Date, deltaMinutes: Int,
+                       slack: TargetSlack? = nil,
                        locale: Locale = NumberFormat.locale) -> String {
-        let clock = arrival.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(locale))
+        let clock = Self.clock(arrival, locale: locale)
         let head = direction == .toWork ? String(localized: "На работу к \(clock)")
                                         : String(localized: "Домой к \(clock)")
-        let tail = deltaMinutes >= 1 ? String(localized: "на \(deltaMinutes) минут дольше обычного")
+        let tail: String
+        if let slack {
+            switch slack.state {
+            case .comfortable: tail = String(localized: "с запасом \(slack.minutes) минут")
+            case .tight: tail = String(localized: "впритык")
+            case .late: tail = String(localized: "на \(slack.lateMinutes) минут позже срока")
+            }
+        } else {
+            tail = deltaMinutes >= 1 ? String(localized: "на \(deltaMinutes) минут дольше обычного")
                                      : String(localized: "как обычно")
+        }
         return head + ", " + tail
+    }
+
+    static func clock(_ date: Date, locale: Locale = NumberFormat.locale) -> String {
+        date.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(locale))
+    }
+
+    /// Запас до срока для строки и голоса: состояние (с гистерезисом) и минуты.
+    struct TargetSlack: Equatable, Sendable {
+        let state: Slack
+        /// Срок минус прибытие, мин, округлено (меньше нуля — позже срока).
+        let minutes: Int
+        let deadline: Date
+
+        /// «Позже на N» — не меньше одной: на границе гистерезиса состояние
+        /// ещё «позже», а сырой запас уже около нуля.
+        var lateMinutes: Int { max(1, -minutes) }
+    }
+
+    /// Опоздание голосом — один раз; повтор — только если стало хуже ещё на
+    /// `arrivalTargetLateRepeatMinutes` (8.7). Не «поторопитесь» — просто время.
+    struct LateNotice: Equatable, Sendable {
+        private var lastLate: Int?
+
+        init() {}
+
+        func wants(lateMinutes: Int) -> Bool {
+            guard let lastLate else { return true }
+            return lateMinutes >= lastLate + AppConfig.arrivalTargetLateRepeatMinutes
+        }
+
+        mutating func commit(lateMinutes: Int) { lastLate = lateMinutes }
     }
 
     // MARK: - Запас до целевого времени

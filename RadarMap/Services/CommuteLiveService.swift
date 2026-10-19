@@ -27,6 +27,8 @@ final class CommuteLiveService {
         let arrival: Date
         /// Отклонение от обычного всего пути, мин (0 — «как обычно»).
         let deltaMinutes: Int
+        /// Запас до срока «быть к 9:00»; nil — срока нет (или не сегодня).
+        var slack: CommuteGhost.TargetSlack?
     }
 
     private(set) var display: Display?
@@ -34,6 +36,9 @@ final class CommuteLiveService {
     @ObservationIgnored private var session: CommuteLiveSession?
     @ObservationIgnored private var direction: Commute.Direction?
     @ObservationIgnored private var announcer = CommuteGhost.Announcer()
+    @ObservationIgnored private var deadline: Date?
+    @ObservationIgnored private var slackTracker = CommuteGhost.SlackTracker()
+    @ObservationIgnored private var lateNotice = CommuteGhost.LateNotice()
     /// Фраза призрака (8.7) — голос решает, можно ли сейчас говорить
     /// (оповещение о камере и манёвр важнее); true — сказана. Несказанная
     /// не засчитывается и прозвучит на следующем пересчёте.
@@ -45,9 +50,10 @@ final class CommuteLiveService {
     var isRunning: Bool { session != nil }
 
     /// Начать сессию: направление решено по месту старта, варианты — из
-    /// профиля. Нет базы — тихо ничего (призрак не обязателен).
+    /// профиля. Нет базы — тихо ничего (призрак не обязателен). `deadline` —
+    /// срок «быть к» на сегодня (ArrivalTarget.deadline), иначе nil.
     func start(direction: Commute.Direction, variants: [CommuteProfile.Variant], departure: Date,
-               calendar: Calendar = .current) {
+               deadline: Date? = nil, calendar: Calendar = .current) {
         stop()
         guard let session = CommuteLiveSession(variants: variants,
                                                weekend: calendar.isDateInWeekend(departure),
@@ -55,7 +61,10 @@ final class CommuteLiveService {
         else { return }
         self.session = session
         self.direction = direction
+        self.deadline = deadline
         announcer = CommuteGhost.Announcer()
+        slackTracker = CommuteGhost.SlackTracker()
+        lateNotice = CommuteGhost.LateNotice()
         Log.trips.info("призрак: \(direction.rawValue, privacy: .public), вариантов \(variants.count, privacy: .public)")
     }
 
@@ -72,28 +81,43 @@ final class CommuteLiveService {
         }
         guard let forecast = output.forecast else { return }
         let minute = (forecast.arrival.timeIntervalSince1970 / 60).rounded() * 60
+        let raw = deadline.map { ArrivalTarget.slackMinutes(deadline: $0, arrival: forecast.arrival) }
+        let slack: CommuteGhost.TargetSlack? = Self.all(slackTracker.update(slackMinutes: raw, now: now), raw, deadline)
+            .map { CommuteGhost.TargetSlack(state: $0, minutes: Int($1.rounded()), deadline: $2) }
         let next = Display(direction: direction, arrival: Date(timeIntervalSince1970: minute),
-                           deltaMinutes: forecast.deltaMinutes)
+                           deltaMinutes: forecast.deltaMinutes, slack: slack)
         if next != display { display = next }
         // Голос — на каждом пересчёте (≤ раз в 30 с), а не только при смене
         // строки: фраза, отложенная из-за камеры, не ждёт сдвига на 3 мин.
-        if announcer.wants(deltaMinutes: next.deltaMinutes, remainingMeters: output.remainingMeters, now: now),
-           onAnnounce?(CommuteGhost.phrase(direction: direction, arrival: next.arrival,
-                                           deltaMinutes: next.deltaMinutes)) == true {
+        // Позже срока — своё правило: один раз и снова, только если хуже на 5 мин.
+        let late = slack?.state == .late ? slack?.lateMinutes : nil
+        let wants = late.map { lateNotice.wants(lateMinutes: $0) }
+            ?? announcer.wants(deltaMinutes: next.deltaMinutes, remainingMeters: output.remainingMeters, now: now)
+        if wants, onAnnounce?(CommuteGhost.phrase(direction: direction, arrival: next.arrival,
+                                                  deltaMinutes: next.deltaMinutes, slack: slack)) == true {
             announcer.commit(deltaMinutes: next.deltaMinutes, now: now)
+            if let late { lateNotice.commit(lateMinutes: late) }
         }
+    }
+
+    /// Три необязательных — вместе или ничего.
+    private static func all<A, B, C>(_ a: A?, _ b: B?, _ c: C?) -> (A, B, C)? {
+        guard let a, let b, let c else { return nil }
+        return (a, b, c)
     }
 
     #if DEBUG
     /// Скриншот-хук `-demoGhost`: строка призрака без настоящей истории.
-    func showDemo(direction: Commute.Direction, arrival: Date, deltaMinutes: Int) {
-        display = Display(direction: direction, arrival: arrival, deltaMinutes: deltaMinutes)
+    func showDemo(direction: Commute.Direction, arrival: Date, deltaMinutes: Int,
+                  slack: CommuteGhost.TargetSlack? = nil) {
+        display = Display(direction: direction, arrival: arrival, deltaMinutes: deltaMinutes, slack: slack)
     }
     #endif
 
     func stop() {
         session = nil
         direction = nil
+        deadline = nil
         announcer = CommuteGhost.Announcer()
         if display != nil { display = nil }
     }

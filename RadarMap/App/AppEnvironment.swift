@@ -585,6 +585,9 @@ final class AppEnvironment {
     /// где места: на старте сцены, в конце поездки, после загрузки истории и
     /// смены мест в настройках. Порядок — по времени суток.
     private(set) var commute: [Commute.Summary] = []
+    /// Срок, о котором можно спросить («вам нужно быть к 9:00?», 8.6), —
+    /// минута суток или nil. Пересчитывается вместе с «дорогой», не в body.
+    private(set) var workTargetSuggestion: Int?
 
     /// Разовая чистка проездов, засчитанных с моста над камерой. Нужны и оси
     /// камер, и прочитанная история; порядок их прихода не определён.
@@ -695,8 +698,10 @@ final class AppEnvironment {
         commuteGhostPending = false
         guard let direction = CommuteLiveService.direction(start: start, home: ends.home, work: ends.work)
         else { return }
+        let deadline = direction == .toWork
+            ? settings.workArrivalTarget?.deadline(forDeparture: startedAt) : nil
         commuteLive.start(direction: direction, variants: commuteProfiles.book[direction],
-                          departure: startedAt)
+                          departure: startedAt, deadline: deadline)
     }
 
     /// Выключили «Время дороги на работу» посреди поездки — призрак гаснет
@@ -726,6 +731,7 @@ final class AppEnvironment {
         // записей, и «медиана за 30 дней» на ней была медианой за 12–17.
         guard let ends = commuteEnds else {
             commute = []
+            workTargetSuggestion = nil
             return
         }
         let trips = settings.commuteLearning
@@ -733,6 +739,8 @@ final class AppEnvironment {
                             home: ends.home, work: ends.work)
             : Commute.trips(history: trip.history, home: ends.home, work: ends.work)
         commute = Commute.summaries(trips: trips, now: Date())
+        workTargetSuggestion = ArrivalTarget.suggestion(
+            arrivals: trips.filter { $0.direction == .toWork }.map(\.arrival), now: Date())
     }
 
     #if DEBUG

@@ -326,6 +326,9 @@ struct PlacesSettingsPage: View {
                 Text("Маршрут в один тап — кнопкой «Мои места» на карте или из «Поиска». Адрес можно найти словами или показать на карте.")
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if hasWork {
+                arrivalTargetSection
+            }
         }
         .settingsPage("Мои места")
         .sheet(item: $assignSlot) { slot in
@@ -333,6 +336,46 @@ struct PlacesSettingsPage: View {
         }
         .fullScreenCover(item: $pickSlot) { slot in
             PlacePickerMap(slot: slot, start: .init(for: slot, env: env))
+        }
+    }
+
+    /// Работа известна — заданная или выученная: срок без работы не к чему.
+    private var hasWork: Bool {
+        env.settings.place(for: .work) != nil || env.learnedPlaces.contains { $0.kind == .work }
+    }
+
+    /// «Быть на работе к 9:00» (8.6): запас в дороге вместо «как обычно».
+    private var arrivalTargetSection: some View {
+        let settings = env.settings
+        let enabled = Binding<Bool>(
+            get: { settings.workArrivalTarget != nil },
+            set: { on in
+                settings.workTargetAsked = true
+                settings.workArrivalTarget = on
+                    ? ArrivalTarget(minute: env.workTargetSuggestion ?? AppConfig.arrivalTargetDefaultMinute)
+                    : nil
+            })
+        let time = Binding<Date>(
+            get: {
+                let minute = settings.workArrivalTarget?.minute ?? AppConfig.arrivalTargetDefaultMinute
+                return Calendar.current.date(bySettingHour: minute / 60, minute: minute % 60, second: 0,
+                                             of: Date()) ?? Date()
+            },
+            set: { settings.workArrivalTarget?.minute = Commute.minuteOfDay($0) })
+        let saturday = Binding<Bool>(
+            get: { settings.workArrivalTarget?.saturday ?? false },
+            set: { settings.workArrivalTarget?.saturday = $0 })
+        return Section {
+            Toggle("Быть на работе к сроку", isOn: enabled)
+            if settings.workArrivalTarget != nil {
+                DatePicker("Срок", selection: time, displayedComponents: .hourAndMinute)
+                Toggle("И по субботам", isOn: saturday)
+            }
+        } header: {
+            Text("Работа")
+        } footer: {
+            Text("В дороге на работу будет видно, успеваете ли: «с запасом 9 мин» или «впритык». Без срока — только «как обычно», и никогда «опоздаете». Срок не уходит с телефона.")
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

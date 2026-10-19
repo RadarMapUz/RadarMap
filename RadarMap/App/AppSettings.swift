@@ -481,6 +481,11 @@ final class AppSettings {
     }
     var homePlace: SavedPlace? { didSet { save(homePlace, forKey: Keys.home) } }
     var workPlace: SavedPlace? { didSet { save(workPlace, forKey: Keys.work) } }
+    /// «Быть на работе к 9:00» (план 19.10, 8.6). nil — срока нет, и призрак
+    /// говорит только «как обычно / дольше обычного», никогда «позже срока».
+    var workArrivalTarget: ArrivalTarget? { didSet { saveArrivalTarget() } }
+    /// Вопрос «вам нужно быть к 9:00?» уже был (ответ любой) — второй раз не задаём.
+    var workTargetAsked: Bool { didSet { store.set(workTargetAsked, forKey: Keys.workTargetAsked) } }
 
     /// Координаты сохранённых мест одним списком — для склейки поездок
     /// (TripMerge) и её карточки-предложения в Итогах.
@@ -667,6 +672,8 @@ final class AppSettings {
         static let volume = "alertVolume"
         static let home = "homePlace"
         static let work = "workPlace"
+        static let workTarget = "workArrivalTarget"
+        static let workTargetAsked = "workTargetAsked"
         static let alternatives = "routeAlternatives"
         static let personalRoutes = "personalRoutes"
         static let timedTrack = "recordTimedTrack"
@@ -768,6 +775,8 @@ final class AppSettings {
         alertVolume = store.double(forKey: Keys.volume)
         vehicleEnergy = VehicleEnergy(rawValue: store.string(forKey: Keys.vehicleEnergy) ?? "") ?? .fuel
         homePlace = Self.load(store, Keys.home)
+        workArrivalTarget = Self.loadArrivalTarget(store)
+        workTargetAsked = store.bool(forKey: Keys.workTargetAsked)
         workPlace = Self.load(store, Keys.work)
         routeAlternatives = store.bool(forKey: Keys.alternatives)
         personalRoutes = store.bool(forKey: Keys.personalRoutes)
@@ -892,6 +901,25 @@ final class AppSettings {
             store.set(data, forKey: key)
         } else {
             store.removeObject(forKey: key)
+        }
+    }
+
+    private func saveArrivalTarget() {
+        guard let workArrivalTarget else { return store.removeObject(forKey: Keys.workTarget) }
+        do {
+            store.set(try JSONEncoder().encode(workArrivalTarget), forKey: Keys.workTarget)
+        } catch {
+            Log.app.error("workArrivalTarget не сохранился: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private static func loadArrivalTarget(_ store: UserDefaults) -> ArrivalTarget? {
+        guard let data = store.data(forKey: Keys.workTarget) else { return nil }
+        do {
+            return try JSONDecoder().decode(ArrivalTarget.self, from: data)
+        } catch {
+            Log.app.error("workArrivalTarget не декодировался: \(error.localizedDescription, privacy: .public)")
+            return nil
         }
     }
 

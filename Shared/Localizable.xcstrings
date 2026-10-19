@@ -2011,6 +2011,22 @@
         }
       }
     },
+    "Быть на работе к сроку": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Быть на работе к сроку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga muddatgacha yetib borish"
+          }
+        }
+      }
+    },
     "В «Итогах» за период — %@: часть поездок старше сохранённых, их строк здесь нет": {
       "localizations": {
         "ru": {
@@ -2071,6 +2087,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shaharda qisqa: «kamera, 300 metr». Chorrahadagi kameralarni bitta ibora bilan aytaman"
+          }
+        }
+      }
+    },
+    "В дороге на работу будет видно, успеваете ли: «с запасом 9 мин» или «впритык». Без срока — только «как обычно», и никогда «опоздаете». Срок не уходит с телефона.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В дороге на работу будет видно, успеваете ли: «с запасом 9 мин» или «впритык». Без срока — только «как обычно», и никогда «опоздаете». Срок не уходит с телефона."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga yo‘lda ulgurayotganingiz ko‘rinadi: «9 daq. zaxira bilan» yoki «zo‘rg‘a». Muddatsiz — faqat «odatdagidek», hech qachon «kechikasiz» emas. Muddat telefondan chiqmaydi."
           }
         }
       }
@@ -2168,6 +2200,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bu davrda safarlar bo'lmagan"
+          }
+        }
+      }
+    },
+    "Вам нужно быть на работе к %@?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вам нужно быть на работе к %@?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishda soat %@ gacha bo‘lishingiz kerakmi?"
           }
         }
       }
@@ -4791,6 +4839,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Xavf zonasi: %@"
+          }
+        }
+      }
+    },
+    "И по субботам": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "И по субботам"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shanba kunlari ham"
           }
         }
       }
@@ -11485,6 +11549,22 @@
         }
       }
     },
+    "Срок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Срок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muddat"
+          }
+        }
+      }
+    },
     "Стали ездить чище: %1$@ превышения на 100 км против %2$@ в прошлый период": {
       "localizations": {
         "ru": {
@@ -11900,6 +11980,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jim"
+          }
+        }
+      }
+    },
+    "Тогда в дороге будет видно, успеваете ли: «с запасом» или «впритык». Срок останется на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тогда в дороге будет видно, успеваете ли: «с запасом» или «впритык». Срок останется на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shunda yo‘lda ulgurayotganingiz ko‘rinadi: «zaxira bilan» yoki «zo‘rg‘a». Muddat telefonda qoladi."
           }
         }
       }
@@ -13348,6 +13444,22 @@
         }
       }
     },
+    "впритык": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "впритык"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vaqt zo‘rg‘a yetadi"
+          }
+        }
+      }
+    },
     "все проезды в лимите": {
       "localizations": {
         "ru": {
@@ -14006,6 +14118,22 @@
         }
       }
     },
+    "на %lld мин позже %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на %lld мин позже %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$@ dan %1$lld daq. kech"
+          }
+        }
+      }
+    },
     "на %lld минут дольше обычного": {
       "localizations": {
         "ru": {
@@ -14042,6 +14170,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "odatdagidan %lld daqiqa uzoqroq"
+          }
+        }
+      }
+    },
+    "на %lld минут позже срока": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "на %lld минуту позже срока"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "на %lld минуты позже срока"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "на %lld минут позже срока"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "на %lld минуты позже срока"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "muddatdan %lld daqiqa kech"
           }
         }
       }
@@ -14836,6 +15004,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "xavf ≈ %@"
+          }
+        }
+      }
+    },
+    "с запасом %lld мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "с запасом %lld мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld daq. zaxira bilan"
+          }
+        }
+      }
+    },
+    "с запасом %lld минут": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "с запасом %lld минуту"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "с запасом %lld минуты"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "с запасом %lld минут"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "с запасом %lld минуты"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld daqiqa zaxira bilan"
           }
         }
       }

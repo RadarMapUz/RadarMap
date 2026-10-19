@@ -87,6 +87,30 @@ struct TripStatsSheet: View {
     /// Открытая «Дорога на работу/домой».
     @State private var commuteDetail: Commute.Summary?
 
+    /// Сводка, выводы, напоминание о штрафах и поездки периода — посчитанные
+    /// вне main на смену периода или данных (ItogiScreen, 6.4).
+    @State private var screen: ItogiScreen?
+    @State private var screenKey: ScreenKey?
+
+    private struct ScreenKey: Equatable {
+        let period: StatsPeriod
+        let anchor: Date
+        let revision: Int
+    }
+
+    private var currentKey: ScreenKey {
+        ScreenKey(period: period, anchor: anchor, revision: env.trip.dataRevision)
+    }
+
+    /// Готовый экран; синхронно — только в кадр, когда ключ уже сменился, а
+    /// фоновый пересчёт ещё не вернулся (первое открытие, смена периода):
+    /// иначе шапка показала бы новый период над цифрами старого.
+    private var current: ItogiScreen {
+        if let screen, screenKey == currentKey { return screen }
+        return ItogiScreen.build(days: env.trip.days, history: env.trip.history,
+                                 period: period, anchor: anchor, now: Date())
+    }
+
     /// Ключ пересчёта данных карты: период и состав истории.
     private struct MapDataKey: Equatable {
         let period: StatsPeriod
@@ -98,8 +122,8 @@ struct TripStatsSheet: View {
     var body: some View {
         let trip = env.trip
         let active = env.location.isTripActive
-        let summary = TripHistory.summary(days: trip.days, history: trip.history,
-                                          period: period, anchor: anchor)
+        let itogi = current
+        let summary = itogi.summary
 
         NavigationStack {
             ScrollView {
@@ -140,12 +164,12 @@ struct TripStatsSheet: View {
                             emptyPeriodHint.entrance(1, appeared)
                         }
                     } else {
-                        heroCard(trip: trip, summary: summary)
+                        heroCard(trip: trip, summary: summary, insights: itogi.insights)
                             .entrance(1, appeared)
                         riskCard(summary: summary)
                             .entrance(2, appeared)
                             .id("risk")
-                        pendingNudgeRow
+                        pendingNudgeRow(itogi)
                             .entrance(2, appeared)
                         mapCard
                             .entrance(3, appeared)
@@ -274,6 +298,15 @@ struct TripStatsSheet: View {
                     }
                 }
             }
+            // Цифры экрана — один пересчёт вне main на смену периода/данных.
+            .task(id: currentKey) {
+                let key = currentKey
+                let built = await ItogiScreen.screen(days: env.trip.days, history: env.trip.history,
+                                                     period: key.period, anchor: key.anchor, now: Date())
+                guard key == currentKey else { return }
+                screen = built
+                screenKey = key
+            }
             // Треки и слой частоты — один пересчёт на смену периода/истории.
             // В body это делать нельзя: пересчёт шёл бы на каждый кадр прокрутки.
             .task(id: MapDataKey(period: period, anchor: anchor, count: trip.history.count,
@@ -348,17 +381,13 @@ struct TripStatsSheet: View {
         // Шиты получают ТУ ЖЕ сводку, что показала карточка: расшифровка
         // обязана объяснять именно то число, по которому тапнули.
         .sheet(isPresented: $showRatingInfo) {
-            RatingDetailSheet(summary: TripHistory.summary(days: env.trip.days,
-                                                           history: env.trip.history,
-                                                           period: period, anchor: anchor),
+            RatingDetailSheet(summary: current.summary,
                               period: period,
                               interval: period.interval(containing: anchor),
                               anchor: anchor)
         }
         .sheet(isPresented: $showFinesInfo) {
-            SavingsInfoSheet(summary: TripHistory.summary(days: env.trip.days,
-                                                          history: env.trip.history,
-                                                          period: period, anchor: anchor),
+            SavingsInfoSheet(summary: current.summary,
                              period: period,
                              interval: period.interval(containing: anchor))
         }
@@ -491,13 +520,12 @@ struct TripStatsSheet: View {
     /// своей коробкой с заголовком «Разбор недели»: три отдельных карточки
     /// подряд читались тяжело, а выводы и есть объяснение рейтинга, поэтому
     /// им место в его карточке, и тап по любому месту ведёт в расшифровку.
-    private func heroCard(trip: TripStats, summary: PeriodSummary) -> some View {
+    private func heroCard(trip: TripStats, summary: PeriodSummary, insights: [Insight]) -> some View {
         Button {
             showRatingInfo = true
         } label: {
             VStack(spacing: 14) {
                 heroTopRow(trip: trip, summary: summary)
-                let insights = PeriodInsights.build(summary)
                 if !insights.isEmpty {
                     Divider().overlay(Theme.stroke)
                     VStack(alignment: .leading, spacing: 10) {
@@ -580,10 +608,10 @@ struct TripStatsSheet: View {
         }
     }
 
+    /// Одна строка каталога с аргументами, а не склейка трёх: переводчик
+    /// видит фразу целиком и порядок слов в узбекском свой (6.11).
     private func heroSubtitle(_ summary: PeriodSummary) -> String {
-        let trips = String(format: String(localized: "Поездок: %lld"), summary.trips)
-        return "\(trips) · \(Formatting.duration(summary.movingDuration)) "
-            + String(localized: "за рулём")
+        String(localized: "Поездок: \(summary.trips) · \(Formatting.duration(summary.movingDuration)) за рулём")
     }
 
     /// «+6» под кольцом: рост рейтинга — зелёный, просадка — красная.
@@ -733,8 +761,9 @@ struct TripStatsSheet: View {
     /// истории, а не окну периода: зависший штраф остаётся зависшим, в каком
     /// периоде на него ни смотри. Тап открывает штрафы того периода, где лежит
     /// самый старый, — иначе кнопка вела бы в окно, где их не видно.
-    @ViewBuilder private var pendingNudgeRow: some View {
-        if let nudge = TripHistory.pendingFineNudge(env.trip.history) {
+    @ViewBuilder private func pendingNudgeRow(_ screen: ItogiScreen) -> some View {
+        if screen.pendingCount > 0, let oldest = screen.pendingOldest {
+            let nudge = (count: screen.pendingCount, oldest: oldest)
             Button {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 withMotion(Motion.standard) {
@@ -1178,7 +1207,7 @@ struct TripStatsSheet: View {
     /// активной езды — это 20+ записей, и без обрезки блок «За всё время»
     /// приходилось искать археологией.
     private func tripsSection(trip: TripStats, proxy: ScrollViewProxy) -> some View {
-        let all = TripHistory.historyList(trip.history, period: period, anchor: anchor)
+        let all = current.trips
         let shown = tripsExpanded ? all : Array(all.prefix(AppConfig.statsTripsPreview))
         return VStack(spacing: 10) {
             if let pair = mergeSuggestion {
@@ -1611,8 +1640,9 @@ private struct LiveTripCard: View {
                     Text("\(Int(env.location.speedKmh))")
                         .font(.rounded(26, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
-                        .contentTransition(.numericText())
-                        .motionAnimation(Motion.standard, value: Int(env.location.speedKmh))
+                        // Скорость меняется на каждом фиксе: liveNumber, не
+                        // numericText (CPU-размытие, правило 11.10).
+                        .liveNumber()
                     Text("км/ч")
                         .font(.rounded(10, .medium))
                         .foregroundStyle(Theme.textTertiary)
@@ -1635,8 +1665,7 @@ private struct LiveTripCard: View {
             Text(value)
                 .font(.rounded(18, .heavy).monospacedDigit())
                 .foregroundStyle(color)
-                .contentTransition(.numericText())
-                .motionAnimation(.snappy(duration: 0.4), value: value)
+                .liveNumber()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(label)

@@ -118,9 +118,8 @@ struct CameraDetailSheet: View {
                       systemImage: "arrow.up.forward.circle.fill")
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.accent)
-                Text(String(format: String(localized:
-                    "Вывод по вашим %lld проездам: в эту сторону вы каждый раз сбрасываете скорость, во встречную — нет. Это наблюдение, а не данные реестра: предупреждать о камере мы продолжаем в обе стороны."),
-                    aimPasses))
+                Text(String(localized:
+                    "Вывод по вашим \(aimPasses) проездам: в эту сторону вы каждый раз сбрасываете скорость, во встречную — нет. Это наблюдение, а не данные реестра: предупреждать о камере мы продолжаем в обе стороны."))
                     .font(.rounded(12))
                     .foregroundStyle(Theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)

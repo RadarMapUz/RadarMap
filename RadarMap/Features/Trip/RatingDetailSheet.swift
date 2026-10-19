@@ -280,8 +280,9 @@ struct RatingDetailSheet: View {
                 }
 
                 if let next = DrivingScore.nextLevel(for: rating) {
-                    Text(String(format: String(localized: "До уровня «%1$@» — %2$lld балла"),
-                                next.name, next.threshold - rating))
+                    // Форма числа — отдельной строкой каталога: «1 балл»,
+                    // «3 балла», «7 баллов» (6.11).
+                    Text(String(localized: "До уровня «\(next.name)» — \(String(localized: "\(next.threshold - rating) баллов"))"))
                         .font(.rounded(11, .medium))
                         .foregroundStyle(Theme.accent)
                 }
@@ -605,8 +606,7 @@ struct RatingDetailSheet: View {
                 .buttonStyle(PressableStyle())
 
                 if data.unrated > 0 {
-                    Text(String(format: String(localized: "Ещё %lld поездок без известных лимитов и трека — в рейтинг они не вошли"),
-                                data.unrated))
+                    Text(String(localized: "Ещё \(data.unrated) поездок без известных лимитов и трека — в рейтинг они не вошли"))
                         .font(.rounded(11))
                         .foregroundStyle(Theme.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -769,8 +769,7 @@ private struct ContributionBar: View {
         }
         .frame(height: 14)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(String(format: String(localized: "Удержано %lld баллов из 100"),
-                                        rating)))
+        .accessibilityLabel(Text(String(localized: "Удержано \(rating) баллов из 100")))
     }
 }
 

@@ -59,7 +59,8 @@ nonisolated struct TripodHotspots: Decodable, Sendable {
 
         /// Подпись на карточке: чем эта точка заслужила подсказку.
         var caption: String {
-            let base = String(format: String(localized: "Отмечали %lld раз, в разные дни: %lld"),
+            // «Отметок: 2» — без формы числа («Отмечали 2 раз» резало слух).
+            let base = String(format: String(localized: "Отметок: %lld, в разные дни: %lld"),
                               n, days)
             guard let peakTitle else { return base }
             return base + ", " + peakTitle

@@ -1460,6 +1460,24 @@ nonisolated enum AppConfig {
     static let liveActivityKeepAliveSeconds: TimeInterval = 240
     /// Часы без тревоги: не чаще раза в столько секунд.
     static let watchCalmInterval: TimeInterval = 10
+    /// Часы в тревоге: не чаще раза в столько секунд; шаг скорости на часах
+    /// без тревоги и в тревоге.
+    static let watchAlertInterval: TimeInterval = 3
+    static let watchSpeedStepCalm = 5.0
+    static let watchSpeedStepAlert = 2.0
+    /// Плашка Live Activity «устаревает» (нет обновлений) — «Нет сигнала GPS».
+    static let liveActivityStaleSeconds: TimeInterval = 300
+    /// Пачка кусков пробок за одну отправку.
+    static let trafficBatchPieces = 12
+    /// Аудиосессия отпускается через столько после фразы — музыка возвращается.
+    static let audioReleaseDelaySeconds: TimeInterval = 0.4
+    /// «Я пассажир» — кусок короче этого не пишется вовсе.
+    static let passengerTripMinMeters: Double = 500
+    /// Шаг между фиксами длиннее этого — перелёт, в дистанцию поездки не идёт.
+    nonisolated static let tripMaxStepMeters: Double = 500
+    /// Вспышка ответа на «Радар!» и вопрос «Радар ещё стоял?» на телефоне.
+    static let reportFlashSeconds: TimeInterval = 2
+    static let mobileQuestionSeconds: TimeInterval = 20
 
     // MARK: - Офлайн-карты (docs/plan_map_offline.md §2.7)
 

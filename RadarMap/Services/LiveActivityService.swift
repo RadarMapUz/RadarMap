@@ -47,7 +47,7 @@ final class LiveActivityService {
     /// на которую водитель смотрит и верит. Пять минут — заведомо больше
     /// обычного интервала обновления и заведомо меньше поездки.
     private static func staleDate() -> Date {
-        Date().addingTimeInterval(300)
+        Date().addingTimeInterval(AppConfig.liveActivityStaleSeconds)
     }
 
     func startIfNeeded(state: CameraActivityAttributes.ContentState) {

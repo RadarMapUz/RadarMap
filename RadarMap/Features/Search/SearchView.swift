@@ -160,9 +160,9 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
             // междугороднем маршруте это десятки миллионов операций, не для main.
             var along: [(venue: Venue, ahead: Double)] = []
             if let route, let venues {
-                along = await Task.detached(priority: .userInitiated) {
+                along = await offMain {
                     venues.alongRoute(kind, points: route.points, progress: route.progress)
-                }.value
+                }
             }
             guard let self, !Task.isCancelled, self.category == kind else { return }
             defer { self.categoryLoading = false }

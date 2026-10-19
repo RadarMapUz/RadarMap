@@ -76,9 +76,9 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         let limit = Self.listLimit
         if let route = env.route.selected, let venues {
             let points = route.points, progress = env.route.progressAlong
-            let along = await Task.detached(priority: .userInitiated) {
+            let along = await offMain {
                 venues.alongRoute(kind, points: points, progress: progress, limit: limit)
-            }.value
+            }
             if !along.isEmpty {
                 return along.map { venue, ahead in
                     (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),

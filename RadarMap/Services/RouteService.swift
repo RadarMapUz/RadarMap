@@ -1022,7 +1022,7 @@ final class RouteService {
 
         // Там же — выбор варианта по своим поездкам: сравнение с сотней
         // треков стоит десятки миллисекунд, главному потоку они не нужны.
-        let (variantCameras, verdict, trafficDelays) = await Task.detached(priority: .userInitiated) {
+        let (variantCameras, verdict, trafficDelays) = await offMain {
             let found = inputs.map { variant -> [RouteCamera] in
                 var bbox = MKMapRect.null
                 for p in variant.points { bbox = bbox.union(MKMapRect(origin: p, size: MKMapSize())) }
@@ -1041,7 +1041,7 @@ final class RouteService {
                                   hardManeuvers: RouteChoice.hardManeuvers(inputs[index].steps))
             }, history: history)
             return (found, choice, delays)
-        }.value
+        }
 
         // Второй раз, и это не дублирование проверки у вызывающего: тот
         // сверял поколение ДО входа сюда, а внутри мы сами ушли в await на
@@ -1145,14 +1145,14 @@ final class RouteService {
             let candidates = built.map { variant in
                 (points: variant.points.map(\.coordinate), travelTime: variant.travelTime, steps: variant.steps)
             }
-            let offer = await Task.detached(priority: .utility) { () -> DetourAdvisor.Offer? in
+            let offer = await offMain { () -> DetourAdvisor.Offer? in
                 let scored = candidates.map { candidate in
                     DetourAdvisor.Candidate(points: candidate.points,
                                             expectedTime: candidate.travelTime + snapshot.delay(along: candidate.points),
                                             steps: candidate.steps)
                 }
                 return DetourAdvisor.decide(currentRemaining: currentRemaining, current: current, candidates: scored)
-            }.value
+            }
             guard gen == generation, detourOffer == nil else { return }
             guard let offer, built.indices.contains(offer.index) else {
                 Log.route.notice("объезд: выгодного нет")

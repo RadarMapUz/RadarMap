@@ -252,7 +252,7 @@ struct ReportRadarButton: View {
             env.alerts.speak(outcome.spoken)
             UINotificationFeedbackGenerator()
                 .notificationOccurred(outcome.isSuccess ? .success : .warning)
-            try? await Task.sleep(for: .seconds(2))
+            await Task.pause(seconds: AppConfig.reportFlashSeconds)
             flash = nil
         }
     }
@@ -414,7 +414,7 @@ struct MobileConfirmBar: View {
             .onAppear {
                 task?.cancel()
                 task = Task {
-                    try? await Task.sleep(for: .seconds(20))
+                    try? await Task.sleep(for: .seconds(AppConfig.mobileQuestionSeconds))
                     guard !Task.isCancelled else { return }
                     // Время вышло — снимаем вопрос, ничего не отправляя.
                     withMotion { env.mobile.answerConfirm(stillThere: nil) }

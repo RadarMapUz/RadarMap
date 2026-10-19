@@ -538,7 +538,7 @@ final class LocationService: NSObject {
         let batteryPercent = BatteryProbe.percent()
         if asPassenger {
             _ = passTracking.flush()   // пассажирские «проезды» не считаем
-            if trip.distanceMeters < 500 { trip.cancel() } else {
+            if trip.distanceMeters < AppConfig.passengerTripMinMeters { trip.cancel() } else {
                 trip.finish(batteryPercent: batteryPercent)
             }
         } else {
@@ -1130,7 +1130,7 @@ final class LocationService: NSObject {
             speedKmh = speedSmoother.update(rawKmh: speed * 3.6, at: Date())
             refreshDrivingFlag()
         }
-        if speedKmh >= 3 { lastMovementAt = Date() }
+        if speedKmh >= AppConfig.gpsStandstillSpeedKmh { lastMovementAt = Date() }
         if currentCourse != course { currentCourse = course }
         locationTick &+= 1
         onAcceptedFix?(coordinate)

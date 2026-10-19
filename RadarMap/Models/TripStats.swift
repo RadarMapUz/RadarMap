@@ -212,7 +212,7 @@ final class TripStats {
             // метров) разница с точной формулой — доли процента.
             let step = GeoMath.fastDistance(last.latitude, last.longitude,
                                             coordinate.latitude, coordinate.longitude)
-            if step < 500 { distanceMeters += step }
+            if step < AppConfig.tripMaxStepMeters { distanceMeters += step }
         }
         lastCoordinate = coordinate
         maxSpeedKmh = max(maxSpeedKmh, speedKmh)

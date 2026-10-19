@@ -115,7 +115,7 @@ final class TrafficService {
         queue += probes.takeReady()
         if queue.count > AppConfig.trafficQueueCap { queue.removeFirst(queue.count - AppConfig.trafficQueueCap) }
         guard contributes, isOnline(), !queue.isEmpty else { return }
-        let batch = Array(queue.prefix(12))
+        let batch = Array(queue.prefix(AppConfig.trafficBatchPieces))
         guard let body = try? JSONEncoder().encode(Envelope(pieces: batch)) else { return }
         if await api.postAccepted("api/traffic", body: body) {
             queue.removeFirst(min(batch.count, queue.count))

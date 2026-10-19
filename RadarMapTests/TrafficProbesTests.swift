@@ -141,4 +141,62 @@ final class TrafficProbesTests: XCTestCase {
         _ = drive(&probes, meters: 3000)
         XCTAssertTrue(probes.takeReady().isEmpty)
     }
+
+    /// Куски знают, когда кончились и когда отпущены (только локально):
+    /// офлайн-поездка не уходит часы спустя как «сейчас» (S21, 20.10).
+    func testPiecesKeepTheirLocalEndAndReleaseTime() {
+        var probes = TrafficProbes(random: { 0.5 })
+        probes.begin(zones: [])
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        for i in 0..<400 {
+            probes.add(lat: 41.30, lon: 69.20 + Double(i) * 0.0001, kmh: 40,
+                       at: start.addingTimeInterval(Double(i)))
+        }
+        let stamped = probes.takeReadyStamped()
+        XCTAssertFalse(stamped.isEmpty)
+        for item in stamped {
+            XCTAssertGreaterThan(item.endedAt, start)
+            XCTAssertLessThan(item.endedAt, start.addingTimeInterval(400))
+            // ~8,4 м на шаг: отпуск — через 400 м, то есть ~48 с после конца.
+            XCTAssertGreaterThanOrEqual(item.releasedAt.timeIntervalSince(item.endedAt), 40)
+        }
+    }
+
+    /// Плотная пробка: кусок кончился 12 мин назад, отпущен минуту назад —
+    /// уходит (счёт от конца выбрасывал бы ровно тяжёлые пробки). Пролежал в
+    /// очереди 11 мин или кончился полчаса назад — нет. Обычный кусок,
+    /// отпущенный после 25 минут у магазина, — старая езда, не «сейчас».
+    func testJamPieceIsFreshFromItsRelease() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func fresh(released: Double, ended: Double, slow: Bool) -> Bool {
+            TrafficService.isFresh(releasedAt: now.addingTimeInterval(-released * 60),
+                                   endedAt: now.addingTimeInterval(-ended * 60), slow: slow, now: now)
+        }
+        XCTAssertTrue(fresh(released: 1, ended: 12, slow: true))
+        XCTAssertFalse(fresh(released: 11, ended: 12, slow: true), "офлайн-очередь")
+        XCTAssertFalse(fresh(released: 1, ended: 31, slow: true))
+        XCTAssertFalse(fresh(released: 1, ended: 26, slow: false), "стоянка у магазина без автостопа")
+        XCTAssertTrue(fresh(released: 1, ended: 9, slow: false))
+    }
+
+    /// Кусок пробки узнаётся по средней по пути, не по доплеру.
+    func testSlowPieceIsMarkedAsJam() {
+        var probes = TrafficProbes(random: { 0.5 })
+        probes.begin(zones: [])
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        // ~0,84 м/с (3 км/ч), скорость в фиксе — нет.
+        for i in 0..<2400 {
+            probes.add(lat: 41.30, lon: 69.20 + Double(i) * 0.00001, kmh: -1,
+                       at: start.addingTimeInterval(Double(i)))
+        }
+        let slow = probes.takeReadyStamped()
+        XCTAssertFalse(slow.isEmpty)
+        XCTAssertTrue(slow.allSatisfy(\.slow))
+        var fast = TrafficProbes(random: { 0.5 })
+        fast.begin(zones: [])
+        for i in 0..<400 {
+            fast.add(lat: 41.30, lon: 69.20 + Double(i) * 0.0001, kmh: 30, at: start.addingTimeInterval(Double(i)))
+        }
+        XCTAssertFalse(fast.takeReadyStamped().contains(where: \.slow))
+    }
 }

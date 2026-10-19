@@ -697,12 +697,17 @@ struct DatabaseSettingsPage: View {
                     }
                 }
                 Button {
-                    Task { await env.sync.check() }
+                    Task { await env.sync.check(force: true) }
                 } label: {
                     HStack {
-                        Text("Проверить обновления")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Проверить обновления")
+                            // Длинная причина на узком SE не помещалась в одну
+                            // строку с заголовком — она под ним.
+                            if env.sync.state == .failed { syncFailureView }
+                        }
                         Spacer()
-                        syncStatusView
+                        if env.sync.state != .failed { syncStatusView }
                     }
                 }
                 .disabled(env.sync.state == .checking || env.sync.state == .downloading)
@@ -726,11 +731,18 @@ struct DatabaseSettingsPage: View {
             Label("Обновлено", systemImage: "arrow.down.circle.fill")
                 .font(.rounded(13)).foregroundStyle(Theme.accent).labelStyle(.titleAndIcon)
         case .failed:
-            Label("Ошибка сети", systemImage: "wifi.slash")
-                .font(.rounded(13)).foregroundStyle(Theme.danger).labelStyle(.titleAndIcon)
+            syncFailureView
         case .idle:
             EmptyView()
         }
+    }
+
+    /// Подпись, разбор, место — не «сеть»: своя причина и значок (S23).
+    private var syncFailureView: some View {
+        let failure = env.sync.failure ?? .network
+        return Label { Text(verbatim: failure.message) } icon: { Image(systemName: failure.symbol) }
+            .font(.rounded(13)).foregroundStyle(Theme.danger).labelStyle(.titleAndIcon)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

@@ -112,6 +112,16 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual({e[4] for e in edges} - {1, 2, 3}, set())
         self.assertIn(3, {e[4] for e in edges}, "ползком на проспекте — пробка")
 
+    def test_prune_clears_old_repeat_marks(self):
+        # Таблицу создаёт api.py; старого api.py без неё cron не роняет.
+        tb.prune(self.conn, self.now)
+        self.conn.execute("CREATE TABLE traffic_seen(hash TEXT PRIMARY KEY, received REAL NOT NULL)")
+        self.conn.execute("INSERT INTO traffic_seen VALUES('old', ?), ('new', ?)",
+                          (self.now - tb.SEEN_TTL - 1, self.now))
+        tb.prune(self.conn, self.now)
+        left = [r[0] for r in self.conn.execute("SELECT hash FROM traffic_seen")]
+        self.assertEqual(left, ["new"])
+
     def test_old_samples_leave_the_window(self):
         for _ in range(2):
             self.add_piece()

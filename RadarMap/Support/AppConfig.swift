@@ -593,6 +593,23 @@ nonisolated enum AppConfig {
     /// Не отправленные (нет сети) куски копятся не больше этого — старые
     /// выбрасываются: пробка часовой давности серверу уже не нужна.
     static let trafficQueueCap = 30
+    /// Кусок пробок, пролежавший в очереди дольше этого (с отпуска), не
+    /// отправляется: сервер ставит ему «сейчас», а старая пробка — это ложная
+    /// пробка (S21, 20.10).
+    static let trafficPieceMaxAgeSeconds: TimeInterval = 10 * 60
+    /// И с конца куска пробки — шире: отпуск в плотной пробке занимает до
+    /// ~12 мин (400 м на 2 км/ч), плюс 15-минутное окно сервера.
+    static let trafficPieceMaxEndAgeSeconds: TimeInterval = 30 * 60
+    /// Кусок пробки — средняя по пути ниже этого.
+    static let trafficJamPieceKmh = 15.0
+    /// Отчёты MetricKit, не ушедшие сразу: сколько хранить и как долго (S26).
+    static let metricsQueueMaxFiles = 20
+    static let metricsQueueMaxAgeDays = 7.0
+    /// Потолки сервера (api.py METRIC_MAX_BYTES / DIAGNOSTIC_MAX_BYTES): больше
+    /// он не примет никогда — такой отчёт не откладывается.
+    /// Запас 10 %: сервер мерит json.dumps с пробелами, телефон — плотный JSON.
+    static let metricsMaxBytes = 180_000
+    static let diagnosticMaxBytes = 1_800_000
     /// Пробки с сервера: как часто перечитывать, пока карта на экране или идёт
     /// поездка, и с какого возраста файла считать данных нет вовсе.
     static let trafficRefreshInterval: TimeInterval = 120

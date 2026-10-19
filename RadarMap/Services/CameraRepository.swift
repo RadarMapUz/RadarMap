@@ -239,19 +239,27 @@ final class CameraStore: CameraRepository {
     }
 
     /// Применить скачанное обновление базы: валидация → атомарная запись → подмена в памяти.
-    func applyRemote(data: Data, version: Int) async throws -> Int {
-        let decoded = try await offMain {
-            try JSONDecoder().decode([Camera].self, from: data)
+    func applyRemote(data: Data, version: Int) async throws(RemoteDBError) -> Int {
+        let decoded: [Camera]
+        do throws(any Error) {
+            decoded = try await offMain {
+                try JSONDecoder().decode([Camera].self, from: data)
+            }
+        } catch {
+            // Путь ключа (codingPath) — ровно то, что нужно, когда сборка не
+            // разбирает подписанную базу.
+            throw .undecodable(String(describing: error))
         }
-        guard decoded.count >= 100 else {
-            throw NSError(domain: "RadarMap.Sync", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "Файл базы неполный (\(decoded.count) камер)."])
-        }
+        guard decoded.count >= 100 else { throw .incomplete(count: decoded.count) }
         // Запись ~1 МБ атомарно (temp + rename) — вне main, как декод выше:
         // на применении OTA она подвешивала кадр.
         let url = Self.remoteFileURL
-        try await offMain {
-            try data.write(to: url, options: .atomic)
+        do throws(any Error) {
+            try await offMain {
+                try data.write(to: url, options: .atomic)
+            }
+        } catch {
+            throw .writeFailed(error.localizedDescription)
         }
         bundled = decoded
         dbVersion = version
@@ -455,5 +463,19 @@ final class CameraStore: CameraRepository {
     private func persist() {
         JSONFile.saveOrdered(UserData(custom: custom, hidden: Array(hiddenIDs)),
                              to: storeURL, log: Log.cameras, wait: false)
+    }
+}
+
+/// Почему OTA-база не применена. Дефект самого файла (не разбирается, камер
+/// мало) — этот файл не качать снова; сбой записи на телефоне (место) — не
+/// дефект базы, её можно взять позже (ревью S23, 20.10).
+nonisolated enum RemoteDBError: Error, Equatable {
+    case undecodable(String)
+    case incomplete(count: Int)
+    case writeFailed(String)
+
+    var isPayloadDefect: Bool {
+        if case .writeFailed = self { return false }
+        return true
     }
 }

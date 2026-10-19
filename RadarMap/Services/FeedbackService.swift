@@ -74,13 +74,22 @@ final class FeedbackService {
     }
 
     /// Дослать накопленное (вызывается на старте и после удачной отправки).
-    /// Останавливаемся на первом фейле — сервер недоступен, не долбим зря.
+    /// Останавливаемся на первом сбое сети или сервера — не долбим зря; тело,
+    /// которое сервер не примет никогда (400, 413…), выбрасываем — иначе оно
+    /// навсегда держало бы всю очередь за собой (ревью S26).
     func flushPending() async {
         guard !isFlushing, !pending.isEmpty else { return }
         isFlushing = true
         defer { isFlushing = false }
         while let item = pending.first {
-            guard await api.postAccepted(item.endpoint, body: item.body) else { return }
+            switch await api.post(item.endpoint, body: item.body) {
+            case .accepted:
+                break
+            case .retry:
+                return
+            case .rejected(let status):
+                Log.network.error("отзыв отвергнут сервером (HTTP \(status, privacy: .public)) — снят с очереди")
+            }
             pending.removeFirst()
             saveQueue()
         }

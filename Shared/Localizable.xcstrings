@@ -1723,6 +1723,22 @@
         }
       }
     },
+    "Базу не удалось сохранить на телефоне": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Базу не удалось сохранить на телефоне"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bazani telefonga saqlab bo‘lmadi"
+          }
+        }
+      }
+    },
     "Балл записывается за каждую поездку — смотрите его в истории.": {
       "localizations": {
         "ru": {
@@ -7669,6 +7685,22 @@
         }
       }
     },
+    "Обновление базы отклонено проверкой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновление базы отклонено проверкой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baza yangilanishi tekshiruvdan o‘tmadi"
+          }
+        }
+      }
+    },
     "Обновлено": {
       "localizations": {
         "ru": {
@@ -11271,6 +11303,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rulga o‘tirdingiz — safar o‘zi boshlandi"
+          }
+        }
+      }
+    },
+    "Сервер базы не ответил": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер базы не ответил"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baza serveri javob bermadi"
           }
         }
       }

@@ -51,6 +51,10 @@ nonisolated struct TrafficProbes: Sendable {
     private var current: [Fix] = []
     private var held: [[Fix]] = []
     private var ready: [Piece] = []
+    /// Когда каждый готовый кусок отпущен и когда кончился — только на
+    /// телефоне, на сервер не уходит: по ним старые куски не отправляются
+    /// (S21, 20.10).
+    private var readyStamps: [(released: Date, ended: Date, slow: Bool)] = []
     /// Длина текущего куска до закрытия (плавает вокруг pieceMeters).
     private var targetLength: Double = AppConfig.trafficPieceMeters
     private var random: @Sendable () -> Double
@@ -99,7 +103,7 @@ nonisolated struct TrafficProbes: Sendable {
         }
         let fix = Fix(lat: lat, lon: lon, kmh: kmh, time: time, along: traveled)
         last = fix
-        releaseHeld()
+        releaseHeld(at: time)
 
         // Начало поездки не уходит.
         guard traveled >= AppConfig.trafficTrimMeters else { return }
@@ -127,8 +131,16 @@ nonisolated struct TrafficProbes: Sendable {
 
     /// Готовые куски (и очистка очереди).
     mutating func takeReady() -> [Piece] {
-        defer { ready = [] }
-        return ready
+        takeReadyStamped().map(\.piece)
+    }
+
+    /// Готовые куски с локальным временем отпуска и конца; `slow` — кусок
+    /// пробки (средняя по нему ниже `trafficJamPieceKmh`).
+    mutating func takeReadyStamped() -> [(piece: Piece, releasedAt: Date, endedAt: Date, slow: Bool)] {
+        defer { ready = []; readyStamps = [] }
+        return zip(ready, readyStamps).map {
+            (piece: $0.0, releasedAt: $0.1.released, endedAt: $0.1.ended, slow: $0.1.slow)
+        }
     }
 
     // MARK: - Внутреннее
@@ -144,12 +156,21 @@ nonisolated struct TrafficProbes: Sendable {
 
     /// Кусок отпускается, когда машина отъехала от его конца на 400 м: если
     /// поездка кончится раньше, его конец мог оказаться финишем.
-    private mutating func releaseHeld() {
+    private mutating func releaseHeld(at time: Date) {
         while let piece = held.first, let end = piece.last,
               traveled - end.along >= AppConfig.trafficTrimMeters {
             held.removeFirst()
             ready.append(Self.encode(piece))
+            readyStamps.append((released: time, ended: end.time, slow: Self.isJam(piece)))
         }
+    }
+
+    /// Средняя скорость по пути куска (не по доплеру — его в пробке и нет).
+    private static func isJam(_ fixes: [Fix]) -> Bool {
+        guard let first = fixes.first, let last = fixes.last else { return false }
+        let seconds = last.time.timeIntervalSince(first.time)
+        guard seconds > 0 else { return false }
+        return (last.along - first.along) / seconds * 3.6 < AppConfig.trafficJamPieceKmh
     }
 
     private mutating func nextTarget() {

@@ -127,11 +127,11 @@ nonisolated enum EngineModernStyle {
         } ?? layers.count
         layers.insert(contentsOf: EngineMapStyle.routeLayers(daylight: daylight), at: labels)
 
-        let was = SketchPalette.daylight
-        SketchPalette.daylight = daylight
-        let label = SketchPalette.labelTone.hex
-        let halo = SketchPalette.groundTone.hex
-        SketchPalette.daylight = was
+        let was = MapPalette.daylight
+        MapPalette.daylight = daylight
+        let label = MapPalette.labelTone.hex
+        let halo = MapPalette.groundTone.hex
+        MapPalette.daylight = was
         layers += EngineMapStyle.markerLayers(label: label, halo: halo)
         style["layers"] = layers
 

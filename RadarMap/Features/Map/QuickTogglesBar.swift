@@ -97,30 +97,6 @@ struct QuickTogglesBar: View {
         .accessibilityValue(isOn.wrappedValue ? Text("включено") : Text("выключено"))
     }
 
-    /// Строка-галочка на всю ширину: для тумблеров, чьё название не влезает в круг.
-    private func checkRow(_ title: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
-        Button {
-            isOn.wrappedValue.toggle()
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
-                    .font(.rounded(15, .semibold))
-                    .foregroundStyle(isOn.wrappedValue ? Theme.accent : Theme.textTertiary)
-                Text(title)
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(isOn.wrappedValue ? Theme.textPrimary : Theme.textSecondary)
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
-            .background(Theme.surface, in: Capsule())
-        }
-        .buttonStyle(PressableStyle())
-        .accessibilityAddTraits(isOn.wrappedValue ? .isSelected : [])
-        .accessibilityValue(isOn.wrappedValue ? Text("включено") : Text("выключено"))
-    }
-
     /// Чип режима голоса — та же форма, что была у города/трассы.
     private func voiceChip(_ mode: VoiceMode, selected: Bool,
                            action: @escaping () -> Void) -> some View {
@@ -138,19 +114,4 @@ struct QuickTogglesBar: View {
         .buttonStyle(PressableStyle())
     }
 
-    private func modeChip(_ mode: AlertMode, selected: Bool,
-                          action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: mode.symbol).font(.rounded(11, .semibold))
-                Text(mode.title).font(.rounded(12, .semibold))
-            }
-            .foregroundStyle(selected ? Theme.onAccentFill : Theme.textSecondary)
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
-            .background(selected ? AnyShapeStyle(Theme.accentFill)
-                                 : AnyShapeStyle(Theme.surface), in: Capsule())
-        }
-        .buttonStyle(PressableStyle())
-    }
 }

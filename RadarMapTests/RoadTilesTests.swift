@@ -274,4 +274,24 @@ final class RoadTilesTests: XCTestCase {
             lastCheck: now.addingTimeInterval(-interval), now: now))
         XCTAssertGreaterThan(interval, 0, "нулевая пауза — запрос индекса на каждый тайл")
     }
+
+    // MARK: - Имя улицы и кольца (из SketchAreaTests, 19.10)
+
+    func testNameArrivesFromTheFourthElement() {
+        // Четвёртый элемент необязателен: имя есть у одной дороги из семи.
+        let tile = #"{"version":2,"roads":[[3,0,[4130000,6925000,100,0],"Амира Темура"],[3,0,[4130500,6925000,100,0]]]}"#
+        let lines = RoadTiles.decodeTile(Data(tile.utf8))
+        XCTAssertEqual(lines?.count, 2)
+        XCTAssertEqual(lines?.first?.name, "Амира Темура")
+        XCTAssertEqual(lines?.last?.name, "", "нет имени — не «безымянная», а «не знаем»")
+    }
+
+    func testRingIsNeverDrawnAsOneWay() {
+        // Бит кольца снимает одностороннесть: стрелки по кругу читаются как
+        // ошибка рендера, а не как направление.
+        let tile = #"{"version":2,"roads":[[3,9,[4130000,6925000,100,0,0,100,-100,0]]]}"#
+        let line = RoadTiles.decodeTile(Data(tile.utf8))?.first
+        XCTAssertEqual(line?.isRing, true)
+        XCTAssertEqual(line?.isOneWay, false)
+    }
 }

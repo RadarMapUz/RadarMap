@@ -68,22 +68,6 @@ nonisolated enum RoadTiles {
         case points = "p"
         case pointsFar = "q"
 
-        /// Наборы местности разбираются в SketchArea, дорожные — в RoadLine.
-        var isArea: Bool {
-            switch self {
-            case .far, .streets, .yards, .points, .pointsFar, .places: return false
-            case .water, .green, .rail, .blocks, .sidewalks, .houses,
-                 .surface: return true
-            }
-        }
-
-        /// Набор точечных объектов: у него своя распаковка — одна координата
-        /// вместо ломаной.
-        var isPoints: Bool { self == .points || self == .pointsFar }
-
-        /// Набор названий: своя распаковка — одна координата и строка.
-        var isPlaces: Bool { self == .places }
-
         /// Очередь закачки: кого тянем первым, когда тайлов больше, чем
         /// соединений.
         ///
@@ -111,28 +95,6 @@ nonisolated enum RoadTiles {
             case .surface:   return 10
             case .sidewalks: return 11
             case .houses:    return 12
-            }
-        }
-
-        /// Вид местности набора. nil — вид из набора НЕ следует.
-        ///
-        /// Так у дорожных наборов, и так же у поверхности: в наборе «d» лежат
-        /// сразу три вида — полотно, площадь перекрёстка и разделительная, —
-        /// и вид каждой записи берётся из неё самой, а не из буквы файла.
-        /// Вернуть отсюда один вид значило бы соврать про две трети набора.
-        ///
-        /// Без этой ветки switch переставал быть исчерпывающим, и МОДУЛЬ НЕ
-        /// СОБИРАЛСЯ вовсе: набор «d» завели, а сюда его не дописали.
-        var areaKind: SketchArea.Kind? {
-            switch self {
-            case .water:  return .water
-            case .green:  return .green
-            case .rail:   return .rail
-            case .blocks: return .block
-            case .sidewalks: return .sidewalk
-            case .houses: return .house
-            case .surface: return nil
-            case .far, .streets, .yards, .points, .pointsFar, .places: return nil
             }
         }
     }
@@ -236,38 +198,6 @@ nonisolated enum RoadTiles {
         }
     }
 
-    /// Распаковать тайл местности.
-    ///
-    /// Формат тот же, что у дорог, и это не совпадение, а решение: одна
-    /// распаковка дельт на оба слоя. Первое число — вид, второе — биты, из
-    /// которых нам нужен один: замкнут контур или нет.
-    static func decodeAreas(_ data: Data) -> [SketchArea]? {
-        guard let raw = decodeEntries(data) else { return nil }
-        var areas: [SketchArea] = []
-        areas.reserveCapacity(raw.count)
-        for entry in raw {
-            guard let kind = SketchArea.Kind(rawValue: entry.code) else { continue }
-            // Этажность дома лежит в БИТАХ записи, старше бита «замкнут».
-            // Пятый элемент записи невозможен: decodeEntries принимает длину
-            // 3 или 4, и пятый отправил бы в nil весь тайл у сборок, которые
-            // о нём не знают. Биты старая сборка просто не видит.
-            // И этажность дома, и класс полотна лежат в ОДНОМ И ТОМ ЖЕ поле
-            // старших битов — у разных видов оно значит разное. Второго поля
-            // не завести: пятый элемент записи возвращает nil на весь тайл у
-            // сборок, которые о нём не знают.
-            areas.append(SketchArea(points: entry.points, kind: kind,
-                                    isClosed: entry.flags & 1 != 0,
-                                    levels: kind == .house
-                                            ? (entry.flags >> 1) & 0x3F : 0,
-                                    roadClass: kind == .road
-                                            ? (entry.flags >> 1) & 0x0F : 0))
-        }
-        return areas
-    }
-
-    /// Распаковать тайл. `nil` — формат не тот: sha уже сошёлся, значит это
-    /// не порча по дороге, а дрейф формата, и правильный ответ — не рисовать
-    /// ничего, а не рисовать наполовину разобранное.
     /// Одна запись тайла: код, биты и распакованные дельты.
     private struct Entry {
         let code: Int
@@ -279,61 +209,8 @@ nonisolated enum RoadTiles {
         let name: String
     }
 
-    /// Распаковка, общая для дорог и местности. Держать её в одном месте
-    /// важнее краткости: формат дельт — контракт с сервером, и разойтись двум
-    /// его читателям нельзя.
-    /// Распаковать тайл точечных объектов.
-    ///
-    /// Вид, которого приложение не знает, пропускается, а не валит тайл:
-    /// панель вправе завести новый раньше, чем выйдет сборка, и светофоры в
-    /// том же файле водитель увидеть обязан.
-    static func decodePoints(_ data: Data) -> [SketchPoint]? {
-        guard let raw = decodeEntries(data, minimumCoordinates: 1) else { return nil }
-        return raw.compactMap { entry in
-            guard let kind = SketchPoint.Kind(rawValue: entry.code),
-                  let point = entry.points.first else { return nil }
-            // Биты записи точки: 0–6 — азимут дороги шагом 3°, 7–12 — ширина
-            // проезжей части целыми метрами. Контракт с point_flags в
-            // build_roads.py. Оба числа известны серверу в момент посадки
-            // точки на ось и больше нигде: дальше по конвейеру дороги нет.
-            // Направления полос лежат ВЫШЕ азимута и ширины, по четыре бита
-            // на полосу, до восьми полос. Девять стрелок в ряд на схеме уже не
-            // читаются, а место в записи не бесплатно.
-            //
-            // Сколько полос — считаем ПО САМИМ направлениям, а не по ширине:
-            // ширина знает про метры, а не про разметку, и деление её на
-            // среднюю полосу давало бы то восемь стрелок там, где их шесть, то
-            // наоборот. Читаем все восемь слотов и отбрасываем пустой хвост.
-            var turns: [LaneTurn] = []
-            if kind == .laneArrows {
-                turns = (0..<8).map {
-                    LaneTurn(rawValue: (entry.flags >> (13 + $0 * 4)) & 0xF) ?? .none
-                }
-                while turns.last == LaneTurn.none { turns.removeLast() }
-            }
-            return SketchPoint(coordinate: point, kind: kind,
-                               azimuthDegrees: Double(entry.flags & 0x7F) * 3,
-                               widthMeters: Double((entry.flags >> 7) & 0x3F),
-                               turns: turns)
-        }
-    }
-
-    /// Распаковать тайл названий.
-    ///
-    /// Формат — тот же, что у точек, плюс имя четвёртым элементом записи:
-    /// [ранг, биты, [lat, lon], "Имя"]. Ранг, которого приложение не знает,
-    /// пропускается, а не валит тайл: сервер вправе завести новый раньше, чем
-    /// выйдет сборка. Без имени запись бесполезна — подписывать нечем.
-    static func decodePlaces(_ data: Data) -> [SketchPlace]? {
-        guard let raw = decodeEntries(data, minimumCoordinates: 1) else { return nil }
-        return raw.compactMap { entry in
-            guard let rank = SketchPlace.Rank(rawValue: entry.code),
-                  let point = entry.points.first,
-                  !entry.name.isEmpty else { return nil }
-            return SketchPlace(coordinate: point, rank: rank, name: entry.name)
-        }
-    }
-
+    /// Распаковка записей тайла. Формат дельт — контракт с сервером
+    /// (server/test_build_roads.py), и разойтись с ним нельзя.
     private static func decodeEntries(_ data: Data,
                                       minimumCoordinates: Int = 2) -> [Entry]? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

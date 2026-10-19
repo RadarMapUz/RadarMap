@@ -24,10 +24,10 @@ import Testing
 struct DaylightPaletteTests {
 
     private func with(daylight: Bool, _ body: () -> Void) {
-        let was = SketchPalette.daylight
-        SketchPalette.daylight = daylight
+        let was = MapPalette.daylight
+        MapPalette.daylight = daylight
         body()
-        SketchPalette.daylight = was
+        MapPalette.daylight = was
     }
 
     // MARK: - Отношение тонов
@@ -35,8 +35,8 @@ struct DaylightPaletteTests {
     @Test("Ночью полотно светлее земли")
     func nightRoadIsLighter() {
         with(daylight: false) {
-            #expect(SketchPalette.asphaltTone(.primary).luminance
-                    > SketchPalette.groundTone.luminance)
+            #expect(MapPalette.asphaltTone(.primary).luminance
+                    > MapPalette.groundTone.luminance)
         }
     }
 
@@ -47,8 +47,8 @@ struct DaylightPaletteTests {
         // то есть невидимая, — отсюда и пустое поле на снимках. Белая дорога
         // на сером городе оставляет место и кварталам, и домам, и зелени.
         with(daylight: true) {
-            #expect(SketchPalette.asphaltTone(.primary).luminance
-                    > SketchPalette.groundTone.luminance)
+            #expect(MapPalette.asphaltTone(.primary).luminance
+                    > MapPalette.groundTone.luminance)
         }
     }
 
@@ -56,8 +56,8 @@ struct DaylightPaletteTests {
     func hierarchyHolds() {
         for daylight in [false, true] {
             with(daylight: daylight) {
-                let trunk = SketchPalette.asphaltTone(.trunk).luminance
-                let street = SketchPalette.asphaltTone(.residential).luminance
+                let trunk = MapPalette.asphaltTone(.trunk).luminance
+                let street = MapPalette.asphaltTone(.residential).luminance
                 #expect(trunk > street, "магистраль обязана быть заметнее жилой улицы")
             }
         }
@@ -68,23 +68,23 @@ struct DaylightPaletteTests {
     @Test("Днём местность отличается от земли на видимое число")
     func dayTerrainIsVisible() {
         with(daylight: true) {
-            let ground = SketchPalette.groundTone
-            #expect(SketchPalette.blockTone.contrast(to: ground) >= 1.30)
-            #expect(SketchPalette.houseTone.contrast(to: ground) >= 1.50)
-            #expect(SketchPalette.greenTone.contrast(to: ground) >= 1.22)
-            #expect(SketchPalette.waterTone.contrast(to: ground) >= 1.65)
-            #expect(SketchPalette.railTone.contrast(to: ground) >= 2.0)
+            let ground = MapPalette.groundTone
+            #expect(MapPalette.blockTone.contrast(to: ground) >= 1.30)
+            #expect(MapPalette.houseTone.contrast(to: ground) >= 1.50)
+            #expect(MapPalette.greenTone.contrast(to: ground) >= 1.22)
+            #expect(MapPalette.waterTone.contrast(to: ground) >= 1.65)
+            #expect(MapPalette.railTone.contrast(to: ground) >= 2.0)
         }
     }
 
     @Test("Ночью — то же самое от своей земли")
     func nightTerrainIsVisible() {
         with(daylight: false) {
-            let ground = SketchPalette.groundTone
-            #expect(SketchPalette.blockTone.contrast(to: ground) >= 1.15)
-            #expect(SketchPalette.houseTone.contrast(to: ground) >= 1.25)
-            #expect(SketchPalette.greenTone.contrast(to: ground) >= 1.30)
-            #expect(SketchPalette.waterTone.contrast(to: ground) >= 1.65)
+            let ground = MapPalette.groundTone
+            #expect(MapPalette.blockTone.contrast(to: ground) >= 1.15)
+            #expect(MapPalette.houseTone.contrast(to: ground) >= 1.25)
+            #expect(MapPalette.greenTone.contrast(to: ground) >= 1.30)
+            #expect(MapPalette.waterTone.contrast(to: ground) >= 1.65)
         }
     }
 
@@ -92,10 +92,10 @@ struct DaylightPaletteTests {
     func houseReadsInsideTheBlock() {
         for daylight in [false, true] {
             with(daylight: daylight) {
-                #expect(SketchPalette.houseTone.contrast(to: SketchPalette.blockTone) >= 1.13)
+                #expect(MapPalette.houseTone.contrast(to: MapPalette.blockTone) >= 1.13)
                 // Контур делает для застройки больше, чем заливка: без него
                 // девяносто домов в кадре — одно серое пятно.
-                #expect(SketchPalette.houseEdgeTone.contrast(to: SketchPalette.houseTone) >= 1.30)
+                #expect(MapPalette.houseEdgeTone.contrast(to: MapPalette.houseTone) >= 1.30)
             }
         }
     }
@@ -105,8 +105,8 @@ struct DaylightPaletteTests {
         // Иначе застройка читается сетью улиц — на тёмной схеме это прямая
         // ложь про то, где можно ехать.
         with(daylight: false) {
-            #expect(SketchPalette.houseTone.luminance
-                    < SketchPalette.asphaltTone(.service).luminance)
+            #expect(MapPalette.houseTone.luminance
+                    < MapPalette.asphaltTone(.service).luminance)
         }
     }
 
@@ -117,15 +117,15 @@ struct DaylightPaletteTests {
         // от серого города.
         for daylight in [false, true] {
             with(daylight: daylight) {
-                #expect(SketchPalette.casingTone
-                    .contrast(to: SketchPalette.asphaltTone(.residential)) >= 1.7)
+                #expect(MapPalette.casingTone
+                    .contrast(to: MapPalette.asphaltTone(.residential)) >= 1.7)
             }
         }
         // Днём требование строже: ночью кайму подпирает тёмная земля, а днём
         // она одна отделяет белую дорогу от светлого города.
         with(daylight: true) {
-            #expect(SketchPalette.casingTone
-                .contrast(to: SketchPalette.asphaltTone(.residential)) >= 1.95)
+            #expect(MapPalette.casingTone
+                .contrast(to: MapPalette.asphaltTone(.residential)) >= 1.95)
         }
     }
 
@@ -134,14 +134,14 @@ struct DaylightPaletteTests {
         // Днём краска ТЕМНЕЕ полотна: белая краска на белом асфальте исчезает,
         // и меняется не яркость, а сторона контраста.
         with(daylight: true) {
-            let road = SketchPalette.asphaltTone(.motorway)
-            #expect(SketchPalette.markingTone.contrast(to: road) >= 2.5)
-            #expect(SketchPalette.centerlineTone.contrast(to: road) >= 1.7)
-            #expect(SketchPalette.laneDividerTone.contrast(to: road) >= 1.35)
+            let road = MapPalette.asphaltTone(.motorway)
+            #expect(MapPalette.markingTone.contrast(to: road) >= 2.5)
+            #expect(MapPalette.centerlineTone.contrast(to: road) >= 1.7)
+            #expect(MapPalette.laneDividerTone.contrast(to: road) >= 1.35)
             // Осевая делит ВСТРЕЧНЫЕ потоки, разделительная — попутные: два
             // разных запрета не имеют права выглядеть одним узором.
-            #expect(SketchPalette.centerlineTone.contrast(to: road)
-                    > SketchPalette.laneDividerTone.contrast(to: road))
+            #expect(MapPalette.centerlineTone.contrast(to: road)
+                    > MapPalette.laneDividerTone.contrast(to: road))
         }
     }
 
@@ -149,7 +149,7 @@ struct DaylightPaletteTests {
     func labelIsReadable() {
         for daylight in [false, true] {
             with(daylight: daylight) {
-                #expect(SketchPalette.labelTone.contrast(to: SketchPalette.groundTone) >= 5)
+                #expect(MapPalette.labelTone.contrast(to: MapPalette.groundTone) >= 5)
             }
         }
     }
@@ -161,22 +161,22 @@ struct DaylightPaletteTests {
         // Единственный объект, ради которого приложение существует. Его
         // заметность не должна зависеть ни от чего.
         var night = Color.clear
-        with(daylight: false) { night = SketchPalette.cameraDotFill }
-        with(daylight: true) { #expect(SketchPalette.cameraDotFill == night) }
+        with(daylight: false) { night = MapPalette.cameraDotFill }
+        with(daylight: true) { #expect(MapPalette.cameraDotFill == night) }
     }
 
     @Test("Днём земля светлее, чем ночью")
     func dayGroundIsLight() {
         var night = 0.0
-        with(daylight: false) { night = SketchPalette.groundTone.luminance }
-        with(daylight: true) { #expect(SketchPalette.groundTone.luminance > night + 0.3) }
+        with(daylight: false) { night = MapPalette.groundTone.luminance }
+        with(daylight: true) { #expect(MapPalette.groundTone.luminance > night + 0.3) }
     }
 
     @Test("Край растра гаснет в то, чем кончается карта")
     func edgeFadeFollowsTheTheme() {
         // Чёрная виньетка на светлой карте — не мягкий край, а грязная рама:
         // на дневных снимках она съедала десятую часть кадра с каждой стороны.
-        with(daylight: true) { #expect(SketchPalette.edgeFade == SketchPalette.ground) }
-        with(daylight: false) { #expect(SketchPalette.edgeFade == Color.black) }
+        with(daylight: true) { #expect(MapPalette.edgeFade == MapPalette.ground) }
+        with(daylight: false) { #expect(MapPalette.edgeFade == Color.black) }
     }
 }

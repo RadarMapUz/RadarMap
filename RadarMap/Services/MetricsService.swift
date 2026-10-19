@@ -46,6 +46,8 @@ final class MetricsService: NSObject, MXMetricManagerSubscriber {
         guard !started else { return }
         started = true
         MXMetricManager.shared.add(self)
+        // Не ушедшие в прошлый раз — сейчас (S26, 20.10).
+        Self.flushPending(allowed: isUploadAllowed)
     }
 
     // MetricKit зовёт эти методы на своей очереди.
@@ -73,9 +75,81 @@ final class MetricsService: NSObject, MXMetricManagerSubscriber {
                 ]
                 // Словарь из уже валидного JSON — сериализация не падает.
                 guard let encoded = try? JSONSerialization.data(withJSONObject: body) else { continue }
-                // Потерянный пакет не страшен — придёт со следующим суточным отчётом.
-                _ = await api.postAccepted("api/metrics", body: encoded)
+                // Не ушёл (трасса без сети, сервер лёг) — на диск: диагностика
+                // (крэш, зависание) приходит от системы ОДИН раз, и крэши на
+                // трассе без покрытия терялись первыми (S26, 20.10).
+                if await !api.postAccepted("api/metrics", body: encoded) {
+                    MetricsQueue.save(encoded)
+                }
             }
         }
+    }
+
+    /// Дослать отложенные отчёты: по одному, до первой неудачи.
+    nonisolated static func flushPending(allowed: Bool) {
+        Task.detached(priority: .utility) {
+            MetricsQueue.prune(now: Date())
+            guard allowed else { return }
+            let api = APIClient(timeout: 20)
+            for url in MetricsQueue.pending() {
+                guard let data = try? Data(contentsOf: url) else {
+                    MetricsQueue.remove(url)
+                    continue
+                }
+                guard await api.postAccepted("api/metrics", body: data) else { return }
+                MetricsQueue.remove(url)
+            }
+        }
+    }
+}
+
+/// Отчёты MetricKit, ждущие отправки (S26, 20.10): не больше 20 и не
+/// старше недели — очередь не растёт без конца на телефоне, который месяцами
+/// не видит сервер.
+nonisolated enum MetricsQueue {
+    static let maxFiles = 20
+    static let maxAgeDays = 7.0
+
+    static var directory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("metrics_pending", isDirectory: true)
+    }
+
+    static func save(_ body: Data, now: Date = Date()) {
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let url = directory.appendingPathComponent(String(format: "%.0f-%@.json", now.timeIntervalSince1970,
+                                                              UUID().uuidString))
+            try body.write(to: url, options: .atomic)
+        } catch {
+            Log.network.error("отчёт MetricKit не отложен: \(error.localizedDescription, privacy: .public)")
+        }
+        prune(now: now)
+    }
+
+    /// Отложенные, от старых к новым (имя начинается со времени).
+    static func pending() -> [URL] {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return [] }
+        return names.filter { $0.hasSuffix(".json") }.sorted().map { directory.appendingPathComponent($0) }
+    }
+
+    static func remove(_ url: URL) {
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            Log.network.error("отложенный отчёт не удалён: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Старше недели и сверх 20 — долой, старые первыми.
+    static func prune(now: Date) {
+        let files = pending()
+        let limit = now.timeIntervalSince1970 - maxAgeDays * 86_400
+        var kept: [URL] = []
+        for url in files {
+            let stamp = Double(url.lastPathComponent.split(separator: "-").first ?? "") ?? 0
+            if stamp < limit { remove(url) } else { kept.append(url) }
+        }
+        for url in kept.dropLast(maxFiles) { remove(url) }
     }
 }

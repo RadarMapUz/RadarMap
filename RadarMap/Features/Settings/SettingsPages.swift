@@ -726,7 +726,8 @@ struct DatabaseSettingsPage: View {
             Label("Обновлено", systemImage: "arrow.down.circle.fill")
                 .font(.rounded(13)).foregroundStyle(Theme.accent).labelStyle(.titleAndIcon)
         case .failed:
-            Label("Ошибка сети", systemImage: "wifi.slash")
+            // Подпись или разбор — не «сеть»: причина из lastError (S23).
+            Label(env.sync.lastError.map { LocalizedStringKey($0) } ?? "Ошибка сети", systemImage: "wifi.slash")
                 .font(.rounded(13)).foregroundStyle(Theme.danger).labelStyle(.titleAndIcon)
         case .idle:
             EmptyView()

@@ -613,6 +613,9 @@ final class RouteService {
             * pow(2, Double(min(rerouteFailures, 4)))
         guard offRouteTicks >= AppConfig.rerouteConfirmTicks,
               Date().timeIntervalSince(lastRebuildAt) > cooldown else { return }
+        // Пульт выключил маршруты (OSRM лёг) — не перестраиваем: каждая
+        // попытка шла в Apple и OSRM, пока владелец гасил именно это (S24).
+        guard isRoutingEnabled else { return }
 
         offRouteTicks = 0
         lastRebuildAt = Date()
@@ -1172,6 +1175,8 @@ final class RouteService {
     /// На каждом фиксе поездки — и стоя: в пробке машина не сдвигается, и
     /// updateProgress (он ждёт смещения) молчит ровно тогда, когда объезд нужен.
     func considerDetour(coordinate: CLLocationCoordinate2D, speedKmh: Double, now: Date = Date()) {
+        // Пульт выключил маршруты (OSRM лёг) — поиск объезда не ходит (S24).
+        guard isRoutingEnabled else { return }
         // Истекло — показанное или так и не показанное — это «остаёмся»: то же
         // молчание 10 минут и тот же счёт в лимит. Иначе невиданное
         // предложение, снятое без отказа, звучало голосом снова через 3 мин

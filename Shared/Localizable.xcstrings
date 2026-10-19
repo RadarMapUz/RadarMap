@@ -7669,6 +7669,22 @@
         }
       }
     },
+    "Обновление базы отклонено проверкой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновление базы отклонено проверкой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baza yangilanishi tekshiruvdan o‘tmadi"
+          }
+        }
+      }
+    },
     "Обновлено": {
       "localizations": {
         "ru": {

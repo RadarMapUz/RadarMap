@@ -141,4 +141,22 @@ final class TrafficProbesTests: XCTestCase {
         _ = drive(&probes, meters: 3000)
         XCTAssertTrue(probes.takeReady().isEmpty)
     }
+
+    /// Куски знают, когда кончились (только локально): офлайн-поездка не
+    /// уходит часы спустя как «сейчас» (S21, 20.10).
+    func testPiecesKeepTheirLocalEndTime() {
+        var probes = TrafficProbes(random: { 0.5 })
+        probes.begin(zones: [])
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        for i in 0..<400 {
+            probes.add(lat: 41.30, lon: 69.20 + Double(i) * 0.0001, kmh: 40,
+                       at: start.addingTimeInterval(Double(i)))
+        }
+        let stamped = probes.takeReadyStamped()
+        XCTAssertFalse(stamped.isEmpty)
+        for item in stamped {
+            XCTAssertGreaterThan(item.endedAt, start)
+            XCTAssertLessThan(item.endedAt, start.addingTimeInterval(400))
+        }
+    }
 }

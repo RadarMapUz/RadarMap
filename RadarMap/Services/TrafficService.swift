@@ -39,7 +39,11 @@ final class TrafficService {
     private(set) var revision = 0
 
     @ObservationIgnored private var probes = TrafficProbes()
-    @ObservationIgnored private var queue: [TrafficProbes.Piece] = []
+    /// Куски, ждущие отправки, с временем их конца (на сервер оно не идёт:
+    /// только чтобы не отправить старое). Офлайн-поездка оставляла до 30
+    /// кусков, и они уходили часы спустя как «сейчас» — ложные пробки в
+    /// now.json и в чужих ETA (S21, 20.10).
+    @ObservationIgnored private var queue: [(piece: TrafficProbes.Piece, at: Date)] = []
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     /// Последний такт сети (отправка + приём).
     @ObservationIgnored private var lastTickAt = Date.distantPast
@@ -112,11 +116,19 @@ final class TrafficService {
     }
 
     private func uploadNow() async {
-        queue += probes.takeReady()
+        let now = Date()
+        queue += probes.takeReadyStamped().map { (piece: $0.piece, at: $0.endedAt) }
+        queue.removeAll { now.timeIntervalSince($0.at) > AppConfig.trafficPieceMaxAgeSeconds }
         if queue.count > AppConfig.trafficQueueCap { queue.removeFirst(queue.count - AppConfig.trafficQueueCap) }
         guard contributes, isOnline(), !queue.isEmpty else { return }
         let batch = Array(queue.prefix(AppConfig.trafficBatchPieces))
-        guard let body = try? JSONEncoder().encode(Envelope(pieces: batch)) else { return }
+        let body: Data
+        do {
+            body = try JSONEncoder().encode(Envelope(pieces: batch.map(\.piece)))
+        } catch {
+            Log.network.error("пробки: куски не закодированы — \(error.localizedDescription, privacy: .public)")
+            return
+        }
         if await api.postAccepted("api/traffic", body: body) {
             queue.removeFirst(min(batch.count, queue.count))
             Log.network.info("пробки: отправлено кусков \(batch.count, privacy: .public)")

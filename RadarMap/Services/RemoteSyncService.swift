@@ -109,6 +109,15 @@ final class RemoteSyncService {
                 state = .upToDate
                 return
             }
+            // Эту версию уже скачивали и отвергли (подпись, разбор): мегабайт
+            // заново на каждой активации ничего не изменит (S23, 20.10).
+            // Новая версия — новая попытка.
+            if Storage.intIfPresent(.rejectedDBVersion) == manifest.version {
+                Storage.set(Date(), for: .lastSyncCheck)
+                lastError = String(localized: "Обновление базы отклонено проверкой")
+                state = .failed
+                return
+            }
 
             state = .downloading
             let payload = try await api.getData("cameras.json")
@@ -116,11 +125,20 @@ final class RemoteSyncService {
             // (защита от MITM на HTTP и от компрометации сервера).
             guard OTASignature.isValid(data: payload, signatureB64: manifest.sig) else {
                 Log.network.error("синк базы: подпись не сошлась — обновление отклонено")
+                reject(manifest.version)
                 lastError = String(localized: "Подпись базы не прошла проверку")
                 state = .failed
                 return
             }
-            let count = try await store.applyRemote(data: payload, version: manifest.version)
+            let count: Int
+            do {
+                count = try await store.applyRemote(data: payload, version: manifest.version)
+            } catch {
+                // Подписанная, но не годная этой сборке (разбор, мало камер) —
+                // тоже не качать заново до новой версии.
+                reject(manifest.version)
+                throw error
+            }
 
             Storage.set(Date(), for: .lastSyncCheck)
             state = .updated(count: count)
@@ -129,5 +147,10 @@ final class RemoteSyncService {
             lastError = error.localizedDescription
             state = .failed
         }
+    }
+
+    private func reject(_ version: Int) {
+        Storage.set(version, for: .rejectedDBVersion)
+        Storage.set(Date(), for: .lastSyncCheck)
     }
 }

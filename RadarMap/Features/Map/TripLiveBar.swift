@@ -179,7 +179,8 @@ struct TripLiveBar: View {
         let place = ghost.direction == .toWork ? String(localized: "Работа") : String(localized: "Дом")
         let tail: String
         if let slack = ghost.slack {
-            switch slack.state {
+            switch slack.shown {
+            case .comfortable where slack.minutes >= 60: tail = String(localized: "с запасом больше часа")
             case .comfortable: tail = String(localized: "с запасом \(slack.minutes) мин")
             case .tight: tail = String(localized: "впритык")
             case .late:
@@ -196,7 +197,7 @@ struct TripLiveBar: View {
     /// Цвет — второй признак, смысл в словах: со сроком — по запасу, без него —
     /// жёлтый только на заметной задержке.
     static func ghostTint(_ ghost: CommuteLiveService.Display) -> Color {
-        switch ghost.slack?.state {
+        switch ghost.slack?.shown {
         case .late: return Theme.danger
         case .tight: return Theme.warning
         case .comfortable: return Theme.textSecondary

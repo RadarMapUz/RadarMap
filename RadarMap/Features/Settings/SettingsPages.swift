@@ -326,7 +326,9 @@ struct PlacesSettingsPage: View {
                 Text("Маршрут в один тап — кнопкой «Мои места» на карте или из «Поиска». Адрес можно найти словами или показать на карте.")
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if hasWork {
+            // Срок работает через призрак: без «Время дороги на работу» он
+            // ничего бы не дал.
+            if hasWork, env.settings.commuteLearning {
                 arrivalTargetSection
             }
         }

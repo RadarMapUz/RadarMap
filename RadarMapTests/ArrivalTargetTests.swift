@@ -117,8 +117,32 @@ final class ArrivalTargetTests: XCTestCase {
             XCTAssertFalse(text.contains("опоздаете"), text)
         }
         XCTAssertNotEqual(phrase(.late, -12), phrase(.tight, 2))
-        XCTAssertEqual(CommuteGhost.TargetSlack(state: .late, minutes: 1, deadline: date(9)).lateMinutes, 1,
-                       "на границе гистерезиса — не «на 0 минут»")
+        XCTAssertTrue(phrase(.comfortable, 150).contains("больше часа"), "не «с запасом 150 минут»")
+    }
+
+    /// Гистерезис держит «позже» до +1,5 мин, но прогноз раньше срока словом
+    /// «позже» не называется — это «впритык».
+    func testHysteresisNeverSaysLateBeforeTheDeadline() {
+        let held = CommuteGhost.TargetSlack(state: .late, minutes: 1, deadline: date(9))
+        XCTAssertEqual(held.shown, .tight)
+        XCTAssertEqual(CommuteGhost.TargetSlack(state: .late, minutes: 0, deadline: date(9)).shown, .tight)
+        let late = CommuteGhost.TargetSlack(state: .late, minutes: -1, deadline: date(9))
+        XCTAssertEqual(late.shown, .late)
+        XCTAssertEqual(late.lateMinutes, 1)
+    }
+
+    /// Опоздание живёт в общем лимите фраз: после трёх — тишина.
+    func testLateRespectsThePhraseCap() {
+        var a = CommuteGhost.Announcer()
+        let t = date(8)
+        XCTAssertTrue(a.allowsLate(remainingMeters: 100, now: t), "первая фраза — где угодно")
+        for i in 0..<3 { a.commit(deltaMinutes: i * 5, now: t.addingTimeInterval(Double(i) * 300)) }
+        XCTAssertFalse(a.allowsLate(remainingMeters: 9000, now: t.addingTimeInterval(3600)))
+        var b = CommuteGhost.Announcer()
+        b.commit(deltaMinutes: 0, now: t)
+        XCTAssertFalse(b.allowsLate(remainingMeters: 9000, now: t.addingTimeInterval(60)), "чаще раза в 4 мин")
+        XCTAssertFalse(b.allowsLate(remainingMeters: 1500, now: t.addingTimeInterval(600)), "у финиша")
+        XCTAssertTrue(b.allowsLate(remainingMeters: 5000, now: t.addingTimeInterval(600)))
     }
 
     func testLateIsRepeatedOnlyWhenFiveMinutesWorse() {
@@ -133,9 +157,10 @@ final class ArrivalTargetTests: XCTestCase {
     // MARK: - На ходу
 
     /// Прямая 4 км, обычно 400 с; срок — через 300 с после выезда: позже
-    /// срока. Голосом — один раз, хотя пересчётов десятки.
+    /// срока. Голосом — один раз, хотя пересчётов десятки; постояли 6 мин —
+    /// стало хуже ещё на 5+, и это говорится второй раз.
     @MainActor
-    func testLiveLateIsSpokenOnce() {
+    func testLiveLateIsSpokenOnceThenOnlyWhenWorse() {
         let lat = 41.30, lon0 = 69.20
         let k = 111_320 * cos(lat * .pi / 180)
         let start = date(8)
@@ -156,11 +181,23 @@ final class ArrivalTargetTests: XCTestCase {
         service.start(direction: .toWork, variants: [variant], departure: start,
                       deadline: start.addingTimeInterval(300), calendar: utc)
         var t = start
-        for s in stride(from: 0.0, through: 3500, by: 50) {
-            service.note(CLLocationCoordinate2D(latitude: lat, longitude: lon0 + s / k), accuracy: 10, at: t)
+        func drive(through meters: Double, from: Double) {
+            for s in stride(from: from, through: meters, by: 50) {
+                service.note(CLLocationCoordinate2D(latitude: lat, longitude: lon0 + s / k), accuracy: 10, at: t)
+                t = t.addingTimeInterval(5)
+            }
+        }
+        drive(through: 1800, from: 0)
+        XCTAssertEqual(service.display?.slack?.shown, .late)
+        XCTAssertEqual(spoken.count, 1, "\(spoken)")
+        XCTAssertTrue(spoken.first?.contains("позже срока") == true, "\(spoken)")
+        // Стоим 6 минут на 1800-м метре.
+        for _ in 0..<72 {
+            service.note(CLLocationCoordinate2D(latitude: lat, longitude: lon0 + 1800 / k), accuracy: 10, at: t)
             t = t.addingTimeInterval(5)
         }
-        XCTAssertEqual(service.display?.slack?.state, .late)
-        XCTAssertEqual(spoken.count, 1, "\(spoken)")
+        XCTAssertEqual(spoken.count, 2, "хуже ещё на 6 мин — второй раз: \(spoken)")
+        drive(through: 3500, from: 1850)
+        XCTAssertEqual(spoken.count, 2, "без нового ухудшения — тишина: \(spoken)")
     }
 }

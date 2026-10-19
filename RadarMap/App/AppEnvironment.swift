@@ -659,11 +659,10 @@ final class AppEnvironment {
             from: location.currentCoordinate, now: now)
     }
 
-    /// Голос призрака — ниже камеры и манёвра: при оповещении о камере
-    /// фраза пропускается (следующая — по правилу повтора); с маршрутом
-    /// время прибытия говорит навигация, а не призрак.
-    /// Фраза засчитывается только сказанной (`true`): под оповещением о
-    /// камере она ждёт следующего пересчёта, а не теряется.
+    /// Голос призрака — ниже камеры и манёвра; с маршрутом время прибытия
+    /// говорит навигация, а не призрак. Фраза засчитывается только сказанной
+    /// (`true`): под оповещением о камере она ждёт следующего пересчёта, а
+    /// не теряется.
     private func wireCommuteVoice() {
         commuteLive.onAnnounce = { [weak self] phrase in
             guard let self, self.settings.voiceEnabled else { return true }
@@ -698,10 +697,14 @@ final class AppEnvironment {
         commuteGhostPending = false
         guard let direction = CommuteLiveService.direction(start: start, home: ends.home, work: ends.work)
         else { return }
-        let deadline = direction == .toWork
-            ? settings.workArrivalTarget?.deadline(forDeparture: startedAt) : nil
+        // Срок — от того, когда едем сейчас: склеенная поездка хранит начало
+        // утренней (спортзал в 5:40), и окно «не раньше чем за 3 ч» по нему
+        // теряло срок. Выборка «обычно» — по исходному выезду.
+        let target = direction == .toWork ? settings.workArrivalTarget : nil
         commuteLive.start(direction: direction, variants: commuteProfiles.book[direction],
-                          departure: startedAt, deadline: deadline)
+                          departure: startedAt,
+                          deadline: target?.deadline(forDeparture: Date()),
+                          workday: target?.applies(on: startedAt) ?? false)
     }
 
     /// Выключили «Время дороги на работу» посреди поездки — призрак гаснет
@@ -739,8 +742,12 @@ final class AppEnvironment {
                             home: ends.home, work: ends.work)
             : Commute.trips(history: trip.history, home: ends.home, work: ends.work)
         commute = Commute.summaries(trips: trips, now: Date())
-        workTargetSuggestion = ArrivalTarget.suggestion(
-            arrivals: trips.filter { $0.direction == .toWork }.map(\.arrival), now: Date())
+        // Вопрос о сроке — про выученный распорядок: обучение выключено —
+        // не спрашиваем (и срок без призрака ничего бы не дал).
+        workTargetSuggestion = settings.commuteLearning
+            ? ArrivalTarget.suggestion(arrivals: trips.filter { $0.direction == .toWork }.map(\.arrival),
+                                       now: Date())
+            : nil
     }
 
     #if DEBUG

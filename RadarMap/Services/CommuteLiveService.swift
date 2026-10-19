@@ -39,6 +39,7 @@ final class CommuteLiveService {
     @ObservationIgnored private var deadline: Date?
     @ObservationIgnored private var slackTracker = CommuteGhost.SlackTracker()
     @ObservationIgnored private var lateNotice = CommuteGhost.LateNotice()
+    @ObservationIgnored private var sessionDeparture: Date?
     /// Фраза призрака (8.7) — голос решает, можно ли сейчас говорить
     /// (оповещение о камере и манёвр важнее); true — сказана. Несказанная
     /// не засчитывается и прозвучит на следующем пересчёте.
@@ -52,19 +53,28 @@ final class CommuteLiveService {
     /// Начать сессию: направление решено по месту старта, варианты — из
     /// профиля. Нет базы — тихо ничего (призрак не обязателен). `deadline` —
     /// срок «быть к» на сегодня (ArrivalTarget.deadline), иначе nil.
+    /// `workday` — суббота шестидневки (срок «и по субботам»): её поездки
+    /// сравниваются с будними, а не с воскресными.
     func start(direction: Commute.Direction, variants: [CommuteProfile.Variant], departure: Date,
-               deadline: Date? = nil, calendar: Calendar = .current) {
+               deadline: Date? = nil, workday: Bool = false, calendar: Calendar = .current) {
+        // Та же поездка, продолженная после остановки (TripMerge), — голос
+        // помнит, что уже сказал: иначе «позже срока» звучало бы после
+        // каждого заезда.
+        let resumed = departure == sessionDeparture
         stop()
         guard let session = CommuteLiveSession(variants: variants,
-                                               weekend: calendar.isDateInWeekend(departure),
+                                               weekend: !workday && calendar.isDateInWeekend(departure),
                                                departure: departure, calendar: calendar)
         else { return }
         self.session = session
         self.direction = direction
         self.deadline = deadline
-        announcer = CommuteGhost.Announcer()
+        sessionDeparture = departure
         slackTracker = CommuteGhost.SlackTracker()
-        lateNotice = CommuteGhost.LateNotice()
+        if !resumed {
+            announcer = CommuteGhost.Announcer()
+            lateNotice = CommuteGhost.LateNotice()
+        }
         Log.trips.info("призрак: \(direction.rawValue, privacy: .public), вариантов \(variants.count, privacy: .public)")
     }
 
@@ -90,9 +100,11 @@ final class CommuteLiveService {
         // Голос — на каждом пересчёте (≤ раз в 30 с), а не только при смене
         // строки: фраза, отложенная из-за камеры, не ждёт сдвига на 3 мин.
         // Позже срока — своё правило: один раз и снова, только если хуже на 5 мин.
-        let late = slack?.state == .late ? slack?.lateMinutes : nil
-        let wants = late.map { lateNotice.wants(lateMinutes: $0) }
-            ?? announcer.wants(deltaMinutes: next.deltaMinutes, remainingMeters: output.remainingMeters, now: now)
+        let late = slack?.shown == .late ? slack?.lateMinutes : nil
+        let wants = late.map {
+            lateNotice.wants(lateMinutes: $0)
+                && announcer.allowsLate(remainingMeters: output.remainingMeters, now: now)
+        } ?? announcer.wants(deltaMinutes: next.deltaMinutes, remainingMeters: output.remainingMeters, now: now)
         if wants, onAnnounce?(CommuteGhost.phrase(direction: direction, arrival: next.arrival,
                                                   deltaMinutes: next.deltaMinutes, slack: slack)) == true {
             announcer.commit(deltaMinutes: next.deltaMinutes, now: now)
@@ -118,7 +130,6 @@ final class CommuteLiveService {
         session = nil
         direction = nil
         deadline = nil
-        announcer = CommuteGhost.Announcer()
         if display != nil { display = nil }
     }
 

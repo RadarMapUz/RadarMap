@@ -281,6 +281,16 @@ nonisolated enum CommuteGhost {
                 && remainingMeters >= AppConfig.commuteGhostRepeatMinRemainingMeters
         }
 
+        /// Фраза об опоздании (у неё своё правило — LateNotice) всё равно
+        /// живёт в общем лимите: не больше трёх фраз за поездку, повтор не
+        /// чаще раза в 4 мин и не у самого финиша.
+        func allowsLate(remainingMeters: Double, now: Date) -> Bool {
+            guard spoken < AppConfig.commuteGhostMaxPhrases else { return false }
+            guard let lastAt else { return true }
+            return now.timeIntervalSince(lastAt) >= AppConfig.commuteGhostRepeatSeconds
+                && remainingMeters >= AppConfig.commuteGhostRepeatMinRemainingMeters
+        }
+
         mutating func commit(deltaMinutes: Int, now: Date) {
             spoken += 1
             lastDelta = deltaMinutes
@@ -308,7 +318,8 @@ nonisolated enum CommuteGhost {
                                         : String(localized: "Домой к \(clock)")
         let tail: String
         if let slack {
-            switch slack.state {
+            switch slack.shown {
+            case .comfortable where slack.minutes >= 60: tail = String(localized: "с запасом больше часа")
             case .comfortable: tail = String(localized: "с запасом \(slack.minutes) минут")
             case .tight: tail = String(localized: "впритык")
             case .late: tail = String(localized: "на \(slack.lateMinutes) минут позже срока")
@@ -331,8 +342,13 @@ nonisolated enum CommuteGhost {
         let minutes: Int
         let deadline: Date
 
-        /// «Позже на N» — не меньше одной: на границе гистерезиса состояние
-        /// ещё «позже», а сырой запас уже около нуля.
+        /// Что показать и сказать. Гистерезис держит «позже» до запаса +1,5
+        /// мин, но прогноз раньше срока словом «позже» не называется — на
+        /// границе это «впритык» (ревью 19.10: зелёные 8:59 и красное «на
+        /// 1 мин позже 9:00» рядом).
+        var shown: Slack { state == .late && minutes >= 0 ? .tight : state }
+
+        /// «Позже на N» — только когда показано «позже», и не меньше одной.
         var lateMinutes: Int { max(1, -minutes) }
     }
 

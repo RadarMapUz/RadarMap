@@ -2102,7 +2102,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ishga yo‘lda ulgurayotganingiz ko‘rinadi: «9 daq. zaxira bilan» yoki «zo‘rg‘a». Muddatsiz — faqat «odatdagidek», hech qachon «kechikasiz» emas. Muddat telefondan chiqmaydi."
+            "value": "Ishga yo‘lda ulgurayotganingiz ko‘rinadi: «9 daq. zaxira bilan» yoki «vaqt zo‘rg‘a yetadi». Muddatsiz — faqat «odatdagidek», hech qachon «kechikasiz» emas. Muddat telefondan chiqmaydi."
           }
         }
       }
@@ -11995,7 +11995,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shunda yo‘lda ulgurayotganingiz ko‘rinadi: «zaxira bilan» yoki «zo‘rg‘a». Muddat telefonda qoladi."
+            "value": "Shunda yo‘lda ulgurayotganingiz ko‘rinadi: «zaxira bilan» yoki «vaqt zo‘rg‘a yetadi». Muddat telefonda qoladi."
           }
         }
       }
@@ -14768,6 +14768,22 @@
         }
       }
     },
+    "пробки +%lld мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пробки +%lld мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tirbandlik +%lld daq."
+          }
+        }
+      }
+    },
     "проездов камер": {
       "localizations": {
         "ru": {
@@ -15064,6 +15080,22 @@
         }
       }
     },
+    "с запасом больше часа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "с запасом больше часа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bir soatdan ko‘p zaxira bilan"
+          }
+        }
+      }
+    },
     "с превышением": {
       "localizations": {
         "ru": {
@@ -15140,6 +15172,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "bugun %@ · o‘rtacha %@"
+          }
+        }
+      }
+    },
+    "сейчас ~%@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сейчас ~%@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hozir ~%@"
           }
         }
       }

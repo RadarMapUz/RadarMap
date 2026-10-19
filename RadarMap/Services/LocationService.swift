@@ -372,6 +372,10 @@ final class LocationService: NSObject {
         // == nil), поэтому одна попытка на поездку, не чаще.
         if foreground, isTripActive {
             liveActivity?.startIfNeeded(state: activityState)
+        } else if foreground, liveActivity?.isActive == true {
+            // Открыли приложение, а поездки нет: плашка — сирота прошлого
+            // процесса (его убили посреди поездки) — снять (S14).
+            liveActivity?.end()
         }
     }
 

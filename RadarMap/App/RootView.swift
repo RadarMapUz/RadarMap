@@ -153,6 +153,9 @@ struct RootView: View {
             // Общий набор сервисов вождения — см. startDrivingServices:
             // CarPlay может подключиться раньше телефонной сцены.
             env.startDrivingServices()
+            // Хранилища, не прочитанные до разблокировки (S9): onChange ниже
+            // для начальной фазы не приходит.
+            env.reloadProtectedStores()
             guard hasCompletedOnboarding else { return }
             env.location.setForeground(true)
             // И здесь тоже, а не только в onChange(of: scenePhase): SwiftUI не
@@ -178,8 +181,9 @@ struct RootView: View {
                 // такого пользователя лишь после ручного убийства процесса.
                 // Свои интервалы (6 ч / 3 ч / сутки) сервисы держат сами.
                 env.refreshRemoteIfNeeded()
-                // Свои камеры, не прочитанные на старте до разблокировки (S9).
-                env.cameras.reloadUserDataIfNeeded()
+                // История, профиль дороги и свои камеры, не прочитанные на
+                // старте до разблокировки (S9).
+                env.reloadProtectedStores()
                 // «Сейчас ~44 мин» — свежий после возвращения: строка на карте
                 // могла простоять в фоне час.
                 env.refreshDepartureEstimates()

@@ -119,4 +119,87 @@ final class TimedTrackPrivacyTests: XCTestCase {
         let values = try TimedTrackStore.directory.resourceValues(forKeys: [.isExcludedFromBackupKey])
         XCTAssertEqual(values.isExcludedFromBackup, true)
     }
+
+    // MARK: - Третий круг: старт до разблокировки
+
+    private func record(_ id: Double, km: Double = 10) -> TripRecord {
+        TripRecord(id: id, startedAt: Date(timeIntervalSince1970: id), endedAt: Date(timeIntervalSince1970: id + 1800),
+                   distanceMeters: km * 1000, maxSpeedKmh: 60, passed: [])
+    }
+
+    /// Откуда «за всё время»: файл — правда; нет файла — перенос из
+    /// UserDefaults; нет и там — пересборка, но не в процессе, поднятом до
+    /// разблокировки при непустой истории: там пустота может быть пустым
+    /// кэшем — не писать вовсе.
+    func testLifetimeSource() {
+        let trips = [record(1), record(2)]
+        var saved = LifetimeStats()
+        saved.trips = 120
+        saved.distanceMeters = 3_000_000
+        let file = TripStats.LifetimeFile(lifetime: saved, alertRecall: AlertRecall.Tally())
+        let loaded = TripStats.lifetimeSource(.loaded(file), legacy: nil, legacyRecall: nil,
+                                              startedBlocked: true, decodedTrips: trips)
+        XCTAssertEqual(loaded.file.lifetime.trips, 120)
+        XCTAssertFalse(loaded.needsWrite)
+        XCTAssertTrue(loaded.trusted)
+
+        let migrated = TripStats.lifetimeSource(.missing, legacy: saved, legacyRecall: nil,
+                                                startedBlocked: true, decodedTrips: trips)
+        XCTAssertEqual(migrated.file.lifetime.trips, 120, "запись UserDefaults настоящая — переносим")
+        XCTAssertTrue(migrated.needsWrite)
+
+        let blind = TripStats.lifetimeSource(.missing, legacy: nil, legacyRecall: nil,
+                                             startedBlocked: true, decodedTrips: trips)
+        XCTAssertFalse(blind.trusted, "до разблокировки пустые UserDefaults — не правда")
+        XCTAssertFalse(blind.needsWrite)
+
+        let fresh = TripStats.lifetimeSource(.missing, legacy: nil, legacyRecall: nil,
+                                             startedBlocked: false, decodedTrips: trips)
+        XCTAssertEqual(fresh.file.lifetime.trips, 2, "версия без счётчиков — из истории")
+        XCTAssertTrue(fresh.trusted)
+
+        let empty = TripStats.lifetimeSource(.missing, legacy: nil, legacyRecall: nil,
+                                             startedBlocked: true, decodedTrips: [])
+        XCTAssertTrue(empty.trusted, "истории нет — новый человек, нулям можно верить")
+
+        let corrupt = TripStats.lifetimeSource(.corrupt(CocoaError(.fileReadCorruptFile)), legacy: saved, legacyRecall: nil,
+                                               startedBlocked: false, decodedTrips: trips)
+        XCTAssertEqual(corrupt.file.lifetime.trips, 120, "битый файл: лучшее из оставшегося")
+        XCTAssertTrue(corrupt.needsWrite)
+    }
+
+    /// Поездка A кончилась до разблокировки, потом продолжена склейкой и ещё
+    /// едет при чтении: её в истории нет, но вклад A — обязателен.
+    func testWindowContributionsIncludeTheResumedFirstLeg() {
+        let a = record(100), b = record(200)
+        XCTAssertEqual(TripStats.windowContributions(window: [b], windowIDs: [100, 200], resumed: a).map(\.id),
+                       [100, 200])
+        XCTAssertEqual(TripStats.windowContributions(window: [b], windowIDs: [200], resumed: a).map(\.id), [200],
+                       "склейка старой, прочитанной поездки — её вклад уже в файле")
+    }
+
+    /// Слепок живой поездки — не крэш; поездка уже в истории — дубль после
+    /// штатного финиша (S14); иначе — восстановить.
+    func testInflightActions() {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertEqual(TripStats.inflightAction(snapshotStartedAt: t, liveStartedAt: t, historyIDs: []), .live)
+        XCTAssertEqual(TripStats.inflightAction(snapshotStartedAt: t, liveStartedAt: nil,
+                                                historyIDs: [t.timeIntervalSince1970]), .duplicate)
+        XCTAssertEqual(TripStats.inflightAction(snapshotStartedAt: t, liveStartedAt: t.addingTimeInterval(60),
+                                                historyIDs: []), .restore)
+    }
+
+    /// Своя камера, добавленная, пока файл не читался, с тем же id, что у
+    /// другой на диске, — не выбрасывается, а получает свободный id.
+    func testCollidingCustomCameraGetsAFreeID() {
+        func camera(_ id: Int, lat: Double) -> Camera {
+            Camera(id: id, region: "Т", city: "", location: "к", lat: lat, lon: 69.2, type: "Стационар радар",
+                   violations: [], needsReview: false, axis: nil, dir: nil, lanes: nil, cls: nil, bridge: nil,
+                   road: nil, split: nil, twin: nil)
+        }
+        let disk = [camera(900_001, lat: 41.30)]
+        let merged = CameraStore.merged(disk, [camera(900_001, lat: 41.35), camera(900_001, lat: 41.30)])
+        XCTAssertEqual(merged.count, 2, "та же камера — один раз, новая — не потеряна")
+        XCTAssertEqual(Set(merged.map(\.id)).count, 2)
+    }
 }

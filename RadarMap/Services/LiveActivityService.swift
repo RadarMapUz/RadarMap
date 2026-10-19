@@ -40,6 +40,24 @@ final class LiveActivityService {
 
     var isActive: Bool { activity != nil }
 
+    /// Плашка прошлого процесса (его убила система посреди поездки) живёт
+    /// на локскрине и после смерти: `activity` нового процесса о ней не
+    /// знал, и поездка заводила вторую, а старая висела «нет сигнала» до
+    /// восьмичасового предела (S14, 20.10). Подхватываем её — обновлять из
+    /// фона можно, а запросить новую из фона нельзя; лишние — снимаем.
+    init() {
+        let alive = Activity<CameraActivityAttributes>.activities.filter {
+            $0.activityState == .active || $0.activityState == .stale
+        }
+        activity = alive.first
+        for extra in alive.dropFirst() {
+            Task { await extra.end(nil, dismissalPolicy: .immediate) }
+        }
+        if !alive.isEmpty {
+            Log.alerts.notice("Live Activity прошлого процесса подхвачена (\(alive.count, privacy: .public))")
+        }
+    }
+
     /// Момент, после которого показанная дистанция перестаёт быть правдой.
     /// Без staleDate система считает плашку вечно свежей: приложение убили или
     /// GPS замолчал, а на экране блокировки всё ещё «камера 300 м» — цифра,
@@ -91,10 +109,13 @@ final class LiveActivityService {
     }
 
     func end() {
-        guard let activity else { return }
         self.activity = nil
         lastSentState = nil
-        Task { await activity.end(nil, dismissalPolicy: .immediate) }
+        // Все плашки этого типа, а не только своя: осиротевшая от прошлого
+        // процесса не должна пережить конец поездки (S14).
+        for activity in Activity<CameraActivityAttributes>.activities {
+            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+        }
     }
 
     /// Вблизи камеры — шаг 50 м и раз в 5 с, вдали — 200 м и раз в 30 с. До

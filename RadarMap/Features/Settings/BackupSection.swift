@@ -30,18 +30,23 @@ struct BackupSection: View {
 
     var body: some View {
         Section {
-            Button {
-                document = BackupDocument(backup: env.makeBackup())
-                exporting = true
-            } label: {
-                row(title: String(localized: "Сохранить копию"), symbol: "square.and.arrow.up")
-            }
+            Group {
+                Button {
+                    document = BackupDocument(backup: env.makeBackup())
+                    exporting = true
+                } label: {
+                    row(title: String(localized: "Сохранить копию"), symbol: "square.and.arrow.up")
+                }
 
-            Button {
-                importing = true
-            } label: {
-                row(title: String(localized: "Восстановить из файла"), symbol: "square.and.arrow.down")
+                Button {
+                    importing = true
+                } label: {
+                    row(title: String(localized: "Восстановить из файла"), symbol: "square.and.arrow.down")
+                }
             }
+            // Пока история не прочитана (сразу после разблокировки), копия
+            // вышла бы пустой, а слияние — поверх пустоты (ревью S9).
+            .disabled(!env.trip.isLoaded)
         } header: {
             Text("Мои данные")
         } footer: {

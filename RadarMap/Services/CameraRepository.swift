@@ -125,7 +125,7 @@ final class CameraStore: CameraRepository {
     /// Растёт только при смене чужих отметок (см. setMobileCameras).
     @ObservationIgnored private(set) var mobileRevision = 0
 
-    private static let firstCustomID = 1_000_001
+    nonisolated private static let firstCustomID = 1_000_001
 
     /// Версия активной базы (встроенная = bundledDBVersion; после OTA — версия с сервера).
     private(set) var dbVersion: Int =
@@ -473,8 +473,18 @@ final class CameraStore: CameraRepository {
     /// существующей на диске, и одна из них потерялась бы (ревью S9).
     private func ensureUserDataLoaded() {
         guard userDataUnreadable else { return }
+        // Добавленное, пока файл не читался, — поверх прочитанного, а не
+        // вместо: иначе правка окна пропадала при первом чтении (ревью S9).
+        let added = custom, hidden = hiddenIDs
         loadUserData()
-        if !userDataUnreadable { dataChanged() }
+        guard !userDataUnreadable else { return }
+        if !added.isEmpty || !hidden.isEmpty {
+            custom = Self.merged(custom, added)
+            hiddenIDs.formUnion(hidden)
+            JSONFile.saveOrdered(UserData(custom: custom, hidden: Array(hiddenIDs)),
+                                 to: storeURL, log: Log.cameras, wait: false)
+        }
+        dataChanged()
     }
 
     /// Вернулись на экран — свои камеры, не прочитанные на старте, сейчас:
@@ -485,16 +495,13 @@ final class CameraStore: CameraRepository {
 
     private func persist() {
         if userDataUnreadable {
-            // Ещё раз: к моменту правки файл мог стать доступен.
-            let added = custom, hidden = hiddenIDs
-            loadUserData()
-            guard !userDataUnreadable else {
+            // Ещё раз: к моменту правки файл мог стать доступен (и тогда
+            // ensureUserDataLoaded сам допишет правку поверх прочитанного).
+            ensureUserDataLoaded()
+            if userDataUnreadable {
                 Log.cameras.error("свои камеры не записаны: файл ещё не читается")
-                return
             }
-            custom = Self.merged(custom, added)
-            hiddenIDs.formUnion(hidden)
-            dataChanged()
+            return
         }
         JSONFile.saveOrdered(UserData(custom: custom, hidden: Array(hiddenIDs)),
                              to: storeURL, log: Log.cameras, wait: false)
@@ -502,12 +509,16 @@ final class CameraStore: CameraRepository {
 
     /// Свои с диска плюс добавленные, пока файл не читался. Совпавший id —
     /// новая камера, а не та же: ей — свободный id, а не молча выбросить.
-    private static func merged(_ disk: [Camera], _ memory: [Camera]) -> [Camera] {
+    nonisolated static func merged(_ disk: [Camera], _ memory: [Camera]) -> [Camera] {
         var used = Set(disk.map(\.id))
         var next = max(firstCustomID, (disk.map(\.id).max() ?? 0) + 1)
         var result = disk
         for camera in memory {
-            if disk.contains(camera) { continue }
+            // Та же камера — по содержанию: `==` у Camera сравнивает только id,
+            // и столкнувшийся id просто выбрасывал новую (ревью S9).
+            if disk.contains(where: { $0.id == camera.id && $0.lat == camera.lat && $0.lon == camera.lon }) {
+                continue
+            }
             var copy = camera
             if used.contains(copy.id) {
                 while used.contains(next) { next += 1 }

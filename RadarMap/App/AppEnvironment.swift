@@ -423,14 +423,14 @@ final class AppEnvironment {
                 ?? String(localized: "отметка")
             notifications?.notifyReportConfirmed(kind: kind)
         }
+        // История не читается (старт до разблокировки) — автостарт, ждавший
+        // её, не ждёт дальше: CoreMotion зовёт onDrivingStart один раз на
+        // начало езды, и первая поездка после перезагрузки пропала бы (ревью S9).
+        trip.onLoadBlocked = { [weak self] in self?.startPendingAutoStart() }
+        observeProtectedData()
         trip.onHistoryLoaded = { [weak self] in
             // Автостарт, ждавший историю, — сейчас, если всё ещё едем.
-            if let self, self.pendingAutoStart {
-                self.pendingAutoStart = false
-                if self.motion.isDriving, self.settings.tripStartMode.usesMotion, !self.location.isTripActive {
-                    self.location.startTrip(auto: true)
-                }
-            }
+            self?.startPendingAutoStart()
             self?.refreshLearnedPlaces()
             self?.refreshWidgetSnapshot()
             // «Свои камеры» считаются ПО ИСТОРИИ, а bootstrap() успевает
@@ -590,6 +590,32 @@ final class AppEnvironment {
     /// ходу): склейка с только что прерванной поездкой и восстановление
     /// снимка ещё не видят её — ждём историю (ревью S3, 20.10).
     @ObservationIgnored private var pendingAutoStart = false
+
+    /// Автостарт, отложенный до истории, — сейчас, если всё ещё едем.
+    private func startPendingAutoStart() {
+        guard pendingAutoStart else { return }
+        pendingAutoStart = false
+        if motion.isDriving, settings.tripStartMode.usesMotion, !location.isTripActive {
+            location.startTrip(auto: true)
+        }
+    }
+
+    /// Данные телефона стали доступны (разблокировка после перезагрузки,
+    /// возврат на экран): хранилища, не прочитанные на старте, — сейчас, а не
+    /// через паузу повтора (ревью S9, третий круг).
+    func reloadProtectedStores() {
+        trip.retryLoadNow()
+        commuteProfiles.retryLoadNow()
+        cameras.reloadUserDataIfNeeded()
+    }
+
+    private func observeProtectedData() {
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.protectedDataDidBecomeAvailableNotification,
+            object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reloadProtectedStores() }
+            }
+    }
 
     /// База камер изменилась (загрузка, своя камера, скрытие, чужая отметка) —
     /// пересобрать окно ближайших камер и оценить сразу. ОДНА точка: до 19.10

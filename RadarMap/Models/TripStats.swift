@@ -108,12 +108,9 @@ final class TripStats {
     nonisolated private static let trackTolerance = 0.00022   // ~22 м — упрощение Дугласа-Пекера
     nonisolated private static let trackMaxPoints = 400
 
-    /// Пожизненные счётчики читаются синхронно: это одна запись UserDefaults,
-    /// зато она обязана быть на месте раньше, чем поездка успеет её изменить.
-    /// Историю и дневные сводки — с диска и вне main: это мегабайты JSON, и
-    /// раньше их разбор стоял между запуском и первым кадром.
+    /// История, дневные сводки и «за всё время» — с диска и вне main: это
+    /// мегабайты JSON, и раньше их разбор стоял между запуском и первым кадром.
     init() {
-        loadLifetime()
         Task { await loadFromDisk() }
         // Старые посекундные треки — и без новых записей (S10, 20.10).
         Task.detached(priority: .utility) { TimedTrackStore.prune(now: Date()) }
@@ -163,8 +160,10 @@ final class TripStats {
         resumedFrom = nil       // и не продолжение прошлой записи
         finishedDuration = 0
         startBatteryPercent = batteryPercent
-        startedAt = Date()
-        lastPointAt = startedAt
+        let now = Date()
+        startedAt = now
+        lastPointAt = now
+        checkpointURL = Self.newCheckpointURL(for: now)
     }
 
     /// Продолжить прошлую поездку вместо новой: запись вынимается из истории
@@ -196,6 +195,7 @@ final class TripStats {
         startBatteryPercent = Self.resumedStartPercent(
             previousDrop: record.batteryDropPercent, currentPercent: batteryPercent)
         startedAt = record.startedAt
+        checkpointURL = Self.newCheckpointURL(for: record.startedAt)
         lastPointAt = resumedAt
         finishedDuration = 0
         distanceMeters = record.distanceMeters
@@ -361,6 +361,9 @@ final class TripStats {
         )
         history.insert(record, at: 0)
         history = TripHistory.pruned(history)
+        // До чтения истории (старт до разблокировки): её вклад в «за всё
+        // время» ляжет поверх прочитанного при загрузке.
+        if !isLoaded { windowRecordIDs.insert(record.id) }
         lastSavedAt = Date()
         if trackTimes.count == trackBuffer.count {
             // Массивы уходят как есть (копия при записи — даром): склейку в
@@ -418,7 +421,8 @@ final class TripStats {
     /// Разделить склеенную поездку по остановке («Разделить здесь» в деталке) —
     /// страховка, если автоматика склеила лишнее.
     func splitRecord(id: Double, at stop: TripStop) {
-        guard let index = history.firstIndex(where: { $0.id == id }) else { return }
+        guard editAllowed("разделение поездки"),
+              let index = history.firstIndex(where: { $0.id == id }) else { return }
         let original = history[index]
         let legs = TripHistory.split(original, at: stop)
         guard legs.count == 2 else { return }
@@ -448,7 +452,8 @@ final class TripStats {
     /// имела права: ручное «Завершить» она не переигрывает никогда, а водитель
     /// жмёт стоп у магазина по привычке. Симметрия к splitRecord.
     func mergeWithPrevious(id: Double) {
-        guard let index = history.firstIndex(where: { $0.id == id }),
+        guard editAllowed("склейка поездок"),
+              let index = history.firstIndex(where: { $0.id == id }),
               index + 1 < history.count else { return }
         let next = history[index], previous = history[index + 1]
         guard TripMerge.manualMergeAllowed(previous: previous, next: next) else { return }
@@ -481,7 +486,8 @@ final class TripStats {
     /// и дневном агрегате (хирургически, снять старую / положить новую).
     /// Рейтинг не трогается: он про езду, а не про почту.
     func setFineOutcome(_ outcome: PassedCamera.FineOutcome, passID: UUID, tripID: Double) {
-        guard let index = history.firstIndex(where: { $0.id == tripID }),
+        guard editAllowed("отметка штрафа"),
+              let index = history.firstIndex(where: { $0.id == tripID }),
               let updated = TripHistory.settingFineOutcome(history[index], passID: passID,
                                                            outcome: outcome)
         else { return }
@@ -532,7 +538,18 @@ final class TripStats {
 
     /// Удаление записи убирает её и из дневных агрегатов: иначе поездка
     /// исчезает из списка, но продолжает жить в километрах и рейтинге отчёта.
+    /// Правка истории до её чтения отклоняется: в памяти только поездки
+    /// окна, и при загрузке диск лёг бы поверх правки (ревью S9, третий круг).
+    private func editAllowed(_ what: String) -> Bool {
+        guard isLoaded else {
+            Log.trips.error("\(what, privacy: .public): история ещё не прочитана — отклонено")
+            return false
+        }
+        return true
+    }
+
     func deleteRecord(id: Double) {
+        guard editAllowed("удаление поездки") else { return }
         if let record = history.first(where: { $0.id == id }) {
             days = TripDayBook.unfolded(record, from: days)
             persistDays()
@@ -557,6 +574,9 @@ final class TripStats {
     /// «за всё время», охват предупреждений и посекундные треки: диалог
     /// обещает «итоги за все периоды сотрутся», а они оставались (S10, 20.10).
     func clearHistory() {
+        // До чтения в памяти только поездки окна: «очистка» их и вернула бы
+        // весь диск поверх при загрузке (ревью S9, третий круг).
+        guard editAllowed("очистка истории") else { return }
         history = []
         days = []
         lastFinishedRaw = nil
@@ -565,7 +585,6 @@ final class TripStats {
         persist()
         persistDays()
         persistLifetime()
-        Storage.encode(alertRecall, for: .alertRecallTotal)
         Task.detached(priority: .utility) { TimedTrackStore.removeAll() }
         onRecordsErased?(nil)
     }
@@ -918,49 +937,84 @@ final class TripStats {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("trips.json")
     }
-    private func loadLifetime() {
-        alertRecall = Storage.decoded(AlertRecall.Tally.self, for: .alertRecallTotal)
-            ?? AlertRecall.Tally()
-        guard let data = Storage.data(.lifetimeStats) else { return }
+    /// «За всё время» и охват — файлом рядом с историей (ревью S9, третий
+    /// круг). До 20.10 они жили в UserDefaults, а процесс, поднятый до первой
+    /// разблокировки, видит там пустоту, и кэш настроек, по сообщениям, может
+    /// остаться пустым до конца процесса: запись поверх стёрла бы годы. У
+    /// файла честное «не читается», и после разблокировки он читается в том
+    /// же процессе. UserDefaults — только источник переноса.
+    nonisolated struct LifetimeFile: Codable, Sendable {
+        var lifetime: LifetimeStats
+        var alertRecall: AlertRecall.Tally
+    }
+
+    private var lifetimeURL: URL { Self.documents.appendingPathComponent("lifetime.json") }
+
+    nonisolated private static var documents: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
+    /// Счётчики из UserDefaults (до 20.10) — только для переноса в файл.
+    private static func legacyLifetime() -> (lifetime: LifetimeStats?, recall: AlertRecall.Tally?) {
+        let recall = Storage.decoded(AlertRecall.Tally.self, for: .alertRecallTotal)
+        guard let data = Storage.data(.lifetimeStats) else { return (nil, recall) }
         do {
-            lifetime = try JSONDecoder().decode(LifetimeStats.self, from: data)
+            return (try JSONDecoder().decode(LifetimeStats.self, from: data), recall)
         } catch {
-            // Не читается — ниже восстановим из истории (backfill).
             Log.trips.error("lifetimeStats не декодировались: \(error.localizedDescription, privacy: .public)")
+            return (nil, recall)
         }
     }
 
     /// Итог охвата за поездку. Копится, а не заменяется: одна поездка мимо
     /// трёх камер ничего не доказывает, вопрос «умно ли» решается на сотнях.
     func addAlertRecall(_ tally: AlertRecall.Tally) {
-        alertRecall = alertRecall + tally
-        // До загрузки (процесс подняли до первой разблокировки) UserDefaults
-        // тоже не прочитан: копим окно отдельно и доливаем к настоящему.
+        // До чтения (старт до разблокировки) — отдельно: настоящий итог ещё
+        // не прочитан, и при загрузке окно дольётся к нему один раз.
         guard isLoaded else {
             pendingRecall = pendingRecall + tally
             return
         }
-        Storage.encode(alertRecall, for: .alertRecallTotal)
+        alertRecall = alertRecall + tally
+        persistLifetime()
     }
 
     /// Охват, накопленный, пока хранилище не читалось (до первой разблокировки).
     @ObservationIgnored private var pendingRecall = AlertRecall.Tally()
-    /// Прошлое чтение истории упёрлось в «не читается»: «за всё время» и
-    /// охват из UserDefaults тогда тоже были пустыми — перечитать (ревью S9).
-    @ObservationIgnored private var loadWasBlocked = false
+    /// Первое чтение упёрлось в «не читается» — процесс подняли до первой
+    /// разблокировки. Не сбрасывается: UserDefaults этого процесса не верим.
+    @ObservationIgnored private var startedBlocked = false
+    /// Поездки, закончившиеся до чтения истории: их вклад в «за всё время»
+    /// ложится поверх прочитанного при загрузке.
+    @ObservationIgnored private var windowRecordIDs: Set<Double> = []
+    /// Счётчикам этого процесса можно верить: нет — не пишем их вовсе
+    /// (старт до разблокировки, файла ещё нет, а UserDefaults пусты).
+    @ObservationIgnored private var lifetimeTrusted = true
     /// Повтор чтения — с нарастающей паузой (30 с … 10 мин).
     @ObservationIgnored private var loadRetryDelay = AppConfig.storeRetrySeconds
+    @ObservationIgnored private var retryTask: Task<Void, Never>?
+    @ObservationIgnored private var isLoading = false
+    /// Уже отложенные в этом процессе файлы: повтор чтения не копирует их снова.
+    @ObservationIgnored private var asideDone: Set<URL> = []
 
     /// Хранилище пока не читается (до первой разблокировки после перезагрузки).
-    var isLoadBlocked: Bool { loadWasBlocked && !isLoaded }
+    var isLoadBlocked: Bool { startedBlocked && !isLoaded }
 
-    /// Разбор двух файлов вне main — поэлементно, с честным ответом на «не
+    /// Первое чтение не удалось — AppEnvironment не ждёт истории с автостартом.
+    @ObservationIgnored var onLoadBlocked: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onLoadBlocked,
+                                               "TripStats.onLoadBlocked") }
+    }
+
+    /// Разбор трёх файлов вне main — поэлементно, с честным ответом на «не
     /// читается» (сценарий S9, 20.10): см. JSONFile.LoadResult.
     @concurrent private nonisolated static func decodeStore(
-        trips: URL, days: URL
-    ) async -> (trips: JSONFile.LoadResult<LossyArray<TripRecord>>, days: JSONFile.LoadResult<LossyArray<TripDay>>) {
+        trips: URL, days: URL, lifetime: URL
+    ) async -> (trips: JSONFile.LoadResult<LossyArray<TripRecord>>, days: JSONFile.LoadResult<LossyArray<TripDay>>,
+                lifetime: JSONFile.LoadResult<LifetimeFile>) {
         (JSONFile.loadChecked(LossyArray<TripRecord>.self, from: trips, log: Log.trips),
-         JSONFile.loadChecked(LossyArray<TripDay>.self, from: days, log: Log.trips))
+         JSONFile.loadChecked(LossyArray<TripDay>.self, from: days, log: Log.trips),
+         JSONFile.loadChecked(LifetimeFile.self, from: lifetime, log: Log.trips))
     }
 
     /// Разобрать ответ чтения: прочитанное, что сделать с файлом, и можно ли
@@ -986,13 +1040,13 @@ final class TripStats {
     }
 
     /// Отложить файл; не вышло — считать нечитаемым: перезаписать битый
-    /// оригинал, не сохранив копии, нельзя.
-    private static func setAside(_ aside: Aside, _ url: URL) -> Bool {
-        switch aside {
-        case .none: return true
-        case .copy: return JSONFile.setAside(url, copy: true, log: Log.trips)
-        case .move: return JSONFile.setAside(url, log: Log.trips)
-        }
+    /// оригинал, не сохранив копии, нельзя. Отложенный раз — не снова.
+    private func setAside(_ aside: Aside, _ url: URL) -> Bool {
+        guard aside != .none, !asideDone.contains(url) else { return true }
+        let done = aside == .copy ? JSONFile.setAside(url, copy: true, log: Log.trips)
+                                  : JSONFile.setAside(url, log: Log.trips)
+        if done { asideDone.insert(url) }
+        return done
     }
 
     #if DEBUG
@@ -1001,27 +1055,33 @@ final class TripStats {
     #endif
 
     private func loadFromDisk() async {
-        let result = await Self.decodeStore(trips: storeURL, days: daysURL)
+        guard !isLoaded, !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+        let result = await Self.decodeStore(trips: storeURL, days: daysURL, lifetime: lifetimeURL)
         let tripsRead = Self.accept(result.trips)
         let daysRead = Self.accept(result.days)
+        var lifetimeAside = Aside.none
+        var lifetimeReadable = true
+        switch result.lifetime {
+        case .unreadable: lifetimeReadable = false
+        case .corrupt: lifetimeAside = .move
+        case .missing, .loaded: break
+        }
         // Файл есть, но не читается (процесс подняли до первой разблокировки
         // после перезагрузки): загруженным не считаем — запись затёрла бы
-        // историю пустым списком. Пробуем снова (пауза растёт до 10 мин);
-        // поездки, закончившиеся за это время, встанут впереди прочитанного
-        // (ниже, «arrived»). Битое откладываем только ПОСЛЕ этой проверки — и
-        // не вышло отложить — тоже «не читается».
-        guard tripsRead.readable, daysRead.readable,
-              Self.setAside(tripsRead.aside, storeURL), Self.setAside(daysRead.aside, daysURL) else {
-            loadWasBlocked = true
-            let delay = loadRetryDelay
-            loadRetryDelay = min(loadRetryDelay * 2, AppConfig.storeRetryMaxSeconds)
-            Log.trips.notice("история не читается — повтор через \(Int(delay), privacy: .public) с")
-            Task { [weak self] in
-                await Task.pause(seconds: delay)
-                await self?.loadFromDisk()
-            }
+        // историю пустым списком. Пробуем снова (пауза растёт до 10 мин, а
+        // разблокировка зовёт retryLoadNow сразу); поездки, закончившиеся за
+        // это время, встанут впереди прочитанного. Битое откладываем только
+        // ПОСЛЕ этой проверки — и не вышло отложить — тоже «не читается».
+        guard tripsRead.readable, daysRead.readable, lifetimeReadable,
+              setAside(tripsRead.aside, storeURL), setAside(daysRead.aside, daysURL),
+              setAside(lifetimeAside, lifetimeURL) else {
+            scheduleRetry()
             return
         }
+        retryTask?.cancel()
+        retryTask = nil
         let decoded = (trips: tripsRead.values, days: daysRead.values)
         let rewrite = tripsRead.aside != .none || daysRead.aside != .none
         #if DEBUG
@@ -1030,55 +1090,128 @@ final class TripStats {
             isLoaded = true
             persist()
             persistDays()
+            persistLifetime()
             finishLoading()
             onHistoryLoaded?()
             return
         }
         #endif
-        // Пока читали, поездка могла закончиться — окно крошечное, но цена
-        // ошибки здесь это потерянная история, поэтому приехавшее за время
-        // чтения не выбрасываем, а ставим впереди (история — от новых к
-        // старым) и заново складываем в дневные сводки.
-        let arrived = history
-        history = arrived + decoded.trips
-        if arrived.isEmpty {
+        // Всё, что в памяти до чтения, — поездки окна (правки истории до
+        // чтения отклоняются): впереди прочитанного (история — от новых к
+        // старым), и заново — в дневные сводки.
+        let window = history
+        history = window + decoded.trips
+        if window.isEmpty {
             days = decoded.days
         } else {
-            days = arrived.reduce(decoded.days) { TripDayBook.folded($1, into: $0) }
+            days = window.reduce(decoded.days) { TripDayBook.folded($1, into: $0) }
         }
-        // Старт был до разблокировки: «за всё время» и охват из UserDefaults
-        // тогда не читались — перечитать настоящие и долить окно поверх.
-        if loadWasBlocked {
-            reloadLifetime(applying: arrived)
-            loadWasBlocked = false
+        // «За всё время»: прочитанное (или перенесённое) плюс вклад поездок
+        // окна — они легли на нули. Продолжение склейкой, идущее сейчас,
+        // увезло свою первую ногу из истории: её вклад — тоже (ревью S9).
+        let legacy = Self.legacyLifetime()
+        var base = Self.lifetimeSource(result.lifetime, legacy: legacy.lifetime, legacyRecall: legacy.recall,
+                                       startedBlocked: startedBlocked, decodedTrips: decoded.trips)
+        if !base.trusted {
+            lifetimeTrusted = false
+            Log.trips.fault("«за всё время»: старт до разблокировки, файла нет, UserDefaults пусты — не пишем до следующего запуска")
         }
+        let contributions = Self.windowContributions(window: window, windowIDs: windowRecordIDs,
+                                                     resumed: resumedFrom)
+        for record in contributions {
+            base.file.lifetime = LifetimeStats.updated(
+                base.file.lifetime,
+                passes: record.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+                distanceMeters: record.distanceMeters)
+        }
+        lifetime = base.file.lifetime
+        alertRecall = base.file.alertRecall + pendingRecall
+        let lifetimeChanged = base.needsWrite || !contributions.isEmpty || pendingRecall != AlertRecall.Tally()
+        pendingRecall = AlertRecall.Tally()
+        windowRecordIDs = []
         isLoaded = true
-        if !arrived.isEmpty || rewrite {
+        if !window.isEmpty || rewrite {
             // Битые записи отложены копией — переписать файл без них, иначе
             // копия откладывалась бы на каждом запуске.
             persist()
             persistDays()
         }
-        if !arrived.isEmpty || pendingRecall != AlertRecall.Tally() {
-            persistLifetime()
-            alertRecall = alertRecall + pendingRecall
-            pendingRecall = AlertRecall.Tally()
-            Storage.encode(alertRecall, for: .alertRecallTotal)
-        }
+        if lifetimeChanged { persistLifetime() }
         finishLoading()
         onHistoryLoaded?()
     }
 
-    /// Перечитать «за всё время» и охват после старта до разблокировки и
-    /// внести поездки, закончившиеся в это окно (они легли на нули).
-    private func reloadLifetime(applying arrived: [TripRecord]) {
-        loadLifetime()
-        for record in arrived.reversed() {
-            lifetime = LifetimeStats.updated(
-                lifetime,
-                passes: record.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
-                distanceMeters: record.distanceMeters)
+    private func scheduleRetry() {
+        if !startedBlocked {
+            startedBlocked = true
+            onLoadBlocked?()
         }
+        let delay = loadRetryDelay
+        loadRetryDelay = min(loadRetryDelay * 2, AppConfig.storeRetryMaxSeconds)
+        Log.trips.notice("история не читается — повтор через \(Int(delay), privacy: .public) с")
+        retryTask?.cancel()
+        retryTask = Task { [weak self] in
+            await Task.pause(seconds: delay)
+            guard !Task.isCancelled else { return }
+            await self?.loadFromDisk()
+        }
+    }
+
+    /// Данные стали доступны (разблокировка, возврат на экран) — читать
+    /// сейчас, а не через паузу повтора: окно до 10 минут, в котором правки
+    /// отклоняются, а итоги пусты (ревью S9, третий круг).
+    func retryLoadNow() {
+        guard startedBlocked, !isLoaded, !isLoading else { return }
+        retryTask?.cancel()
+        retryTask = Task { [weak self] in await self?.loadFromDisk() }
+    }
+
+    /// Откуда «за всё время» при чтении (ревью S9, третий круг). Чистая —
+    /// покрыта тестами. `needsWrite` — файла не было или он битый: записать
+    /// взятое; `trusted == false` — не писать вовсе (перенос — следующему
+    /// запуску): старт до разблокировки, файла нет, а пустые UserDefaults
+    /// могут быть пустым кэшем, а не правдой.
+    nonisolated static func lifetimeSource(_ result: JSONFile.LoadResult<LifetimeFile>,
+                                           legacy: LifetimeStats?, legacyRecall: AlertRecall.Tally?,
+                                           startedBlocked: Bool, decodedTrips: [TripRecord])
+        -> (file: LifetimeFile, needsWrite: Bool, trusted: Bool) {
+        let recall = legacyRecall ?? AlertRecall.Tally()
+        switch result {
+        case .loaded(let file):
+            return (file, false, true)
+        case .corrupt:
+            // Отложен; лучшее, что осталось, — максимум по каждому полю из
+            // старой записи UserDefaults и пересборки по истории.
+            let rebuilt = LifetimeStats.rebuilt(from: decodedTrips)
+            return (LifetimeFile(lifetime: legacy.map { TripBackupMerge.maxed($0, rebuilt) } ?? rebuilt,
+                                 alertRecall: recall), true, true)
+        case .missing, .unreadable:
+            // Перенос из UserDefaults (до 20.10 счётчики жили там). Запись
+            // есть — она настоящая: пустой кэш врёт пустотой, а не цифрами.
+            if let legacy {
+                return (LifetimeFile(lifetime: legacy, alertRecall: recall), true, true)
+            }
+            if startedBlocked && !decodedTrips.isEmpty {
+                return (LifetimeFile(lifetime: LifetimeStats(), alertRecall: recall), false, false)
+            }
+            // Свежая установка или версия без счётчиков — из истории, чтобы
+            // экономия и достижения не начинались с нуля.
+            let rebuilt = decodedTrips.isEmpty ? LifetimeStats() : LifetimeStats.rebuilt(from: decodedTrips)
+            return (LifetimeFile(lifetime: rebuilt, alertRecall: recall), true, true)
+        }
+    }
+
+    /// Поездки окна (закончились до чтения истории), чей вклад ложится
+    /// поверх прочитанного, — по времени. Продолжение склейкой, идущее
+    /// сейчас, увезло свою первую ногу из истории: её вклад — тоже, иначе
+    /// финиш продолжения добавит только прибавку (ревью S9, третий круг).
+    nonisolated static func windowContributions(window: [TripRecord], windowIDs: Set<Double>,
+                                                resumed: TripRecord?) -> [TripRecord] {
+        var result = window.filter { windowIDs.contains($0.id) }
+        if let resumed, windowIDs.contains(resumed.id), !result.contains(where: { $0.id == resumed.id }) {
+            result.append(resumed)
+        }
+        return result.sorted { $0.startedAt < $1.startedAt }
     }
 
     private func finishLoading() {
@@ -1172,19 +1305,13 @@ final class TripStats {
             }
             Storage.set(true, for: .passLimitFloor1)
         }
-        // Обновились с версии без счётчиков, а поездки уже есть — восстанавливаем
-        // из истории, чтобы экономия и достижения не начинались с нуля.
-        // Только когда записи нет ВОВСЕ — не «нули в памяти»: после
-        // нечитаемого старта нули были пустотой, а не правдой (ревью S9).
-        if Storage.data(.lifetimeStats) == nil && !history.isEmpty {
-            lifetime = LifetimeStats.rebuilt(from: history)
-            persistLifetime()
-        }
     }
 
     /// Влить восстановленное из копии. Слияние уже сделано чистым движком
     /// (TripBackupMerge) — здесь только присвоение и запись на диск.
     func applyRestored(history: [TripRecord], days: [TripDay], lifetime: LifetimeStats) {
+        // Слияние шло с пустой памятью — при чтении диск лёг бы поверх ещё раз.
+        guard editAllowed("восстановление из копии") else { return }
         self.history = history
         self.days = days
         self.lifetime = lifetime
@@ -1221,10 +1348,21 @@ final class TripStats {
     private static let checkpointInterval: TimeInterval = 20
     @ObservationIgnored private var lastCheckpointAt: Date = .distantPast
 
-    private var inflightURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("trip_inflight.json")
+    /// Слепок этой поездки — свой файл на каждую (ревью S9, третий круг):
+    /// поездка, начатая до разблокировки, не затирает и не удаляет слепок
+    /// прошлого процесса, который ещё не прочитан. Хвост имени случайный:
+    /// продолжение склейкой стартует с тем же временем начала.
+    @ObservationIgnored private var checkpointURL: URL?
+
+    private static func newCheckpointURL(for startedAt: Date) -> URL {
+        documents.appendingPathComponent(
+            "trip_inflight-\(Int(startedAt.timeIntervalSince1970))-\(UUID().uuidString.prefix(8)).json")
     }
+
+    /// Имена слепков, которые этот процесс уже удалил: запоздавшая запись
+    /// (упрощение трека идёт вне main) не воскрешает файл после финиша —
+    /// иначе следующий запуск восстановил бы поездку второй раз (S14).
+    nonisolated private static let finishedCheckpoints = OSAllocatedUnfairLock(initialState: Set<String>())
 
     private func checkpointIfDue() {
         guard let startedAt,
@@ -1248,19 +1386,44 @@ final class TripStats {
             passed: passed, stops: stops, track: [],
             endLat: lastCoordinate?.latitude, endLon: lastCoordinate?.longitude,
             baseDistance: resumedFrom?.distanceMeters, basePassCount: resumedFrom?.passed.count)
-        let url = inflightURL
+        guard let url = checkpointURL else { return }
         Task.detached(priority: .utility) {
             var snapshot = head
             snapshot.track = Self.packTrack(Self.simplify(raw, tolerance: Self.trackTolerance,
                                                           maxPoints: Self.trackMaxPoints)) ?? []
-            JSONFile.save(snapshot, to: url, log: Log.trips)
+            let ready = snapshot
+            let name = url.lastPathComponent
+            Self.finishedCheckpoints.withLock { finished in
+                guard !finished.contains(name) else { return }
+                _ = JSONFile.save(ready, to: url, log: Log.trips)
+            }
         }
     }
 
+    /// Удалить слепок ЭТОЙ поездки — чужие (прошлого процесса) не трогаем.
     private func removeCheckpoint() {
         lastCheckpointAt = .distantPast
-        // Отсутствие файла — норма (поездка без чекпоинта короче интервала).
-        try? FileManager.default.removeItem(at: inflightURL)
+        guard let url = checkpointURL else { return }
+        checkpointURL = nil
+        let name = url.lastPathComponent
+        Task.detached(priority: .utility) {
+            Self.finishedCheckpoints.withLock { finished in
+                finished.insert(name)
+                JSONFile.remove(at: url, log: Log.trips)
+            }
+        }
+    }
+
+    /// Слепки на диске: по поездке и старый общий (до 20.10).
+    private static func inflightFiles() -> [URL] {
+        do {
+            return try FileManager.default.contentsOfDirectory(at: documents, includingPropertiesForKeys: nil)
+                .filter { $0.lastPathComponent.hasPrefix("trip_inflight") && $0.pathExtension == "json" }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        } catch {
+            Log.trips.error("слепки поездок не перечислены: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
     }
 
     /// Восстановление после смерти процесса: слепок превращается в обычную
@@ -1268,12 +1431,42 @@ final class TripStats {
     /// автозапуск пройдёт через TripMerge — короткая пауза склеится, и
     /// дистанция продолжится, как будто вылета не было.
     private func restoreInflightIfAny() {
-        guard let snapshot = JSONFile.load(InflightTrip.self, from: inflightURL, log: Log.trips)
-        else { return }
-        // Слепок ЖИВОЙ поездки (начатой, пока история ещё не читалась) — не
-        // крэш: восстановить его значило бы получить ту же поездку дважды.
-        if let startedAt, snapshot.startedAt == startedAt { return }
-        defer { removeCheckpoint() }
+        for url in Self.inflightFiles() where url != checkpointURL {
+            restoreInflight(at: url)
+        }
+    }
+
+    private func restoreInflight(at url: URL) {
+        let snapshot: InflightTrip
+        switch JSONFile.loadChecked(InflightTrip.self, from: url, log: Log.trips) {
+        case .loaded(let value):
+            snapshot = value
+        case .missing:
+            return
+        case .unreadable:
+            Log.trips.notice("слепок поездки не читается — оставлен до следующего чтения")
+            return
+        case .corrupt:
+            JSONFile.setAside(url, log: Log.trips)
+            return
+        }
+        switch Self.inflightAction(snapshotStartedAt: snapshot.startedAt, liveStartedAt: startedAt,
+                                   historyIDs: Set(history.map(\.id))) {
+        case .live:
+            // Слепок ЖИВОЙ поездки (начатой, пока история ещё не читалась) —
+            // не крэш: восстановить его значило бы получить её дважды.
+            return
+        case .duplicate:
+            // Поездка уже в истории — слепок пережил штатный финиш (запись
+            // после удаления, смерть процесса между ними): второй раз её не
+            // вносить (S14).
+            Log.trips.notice("слепок поездки уже в истории (слепок \(Int(snapshot.distanceMeters), privacy: .public) м) — не восстанавливаю")
+            JSONFile.remove(at: url, log: Log.trips)
+            return
+        case .restore:
+            break
+        }
+        defer { JSONFile.remove(at: url, log: Log.trips) }
         guard let record = Self.record(from: snapshot) else {
             Log.trips.notice("слепок незавершённой поездки короче 100 м — не восстановлен")
             noteDropped("crashShort")
@@ -1298,6 +1491,16 @@ final class TripStats {
         persistDays()
         persistLifetime()
         Log.trips.info("восстановлена незавершённая поездка: \(Int(record.distanceMeters), privacy: .public) м")
+    }
+
+    nonisolated enum InflightAction: Equatable { case live, duplicate, restore }
+
+    /// Что делать со слепком при чтении. Чистая — покрыта тестами.
+    nonisolated static func inflightAction(snapshotStartedAt: Date, liveStartedAt: Date?,
+                                           historyIDs: Set<Double>) -> InflightAction {
+        if snapshotStartedAt == liveStartedAt { return .live }
+        if historyIDs.contains(snapshotStartedAt.timeIntervalSince1970) { return .duplicate }
+        return .restore
     }
 
     /// Слепок → запись истории. Та же логика, что в finish(): порог 100 м,
@@ -1333,24 +1536,34 @@ final class TripStats {
     }
 
     private func persistDays() {
-        guard isLoaded else { return }
+        guard isLoaded else {
+            Log.trips.notice("дневные сводки не записаны: история ещё не прочитана")
+            return
+        }
         JSONFile.saveOrdered(days, to: daysURL, log: Log.trips, wait: mustWriteSynchronously())
     }
 
     private func persistLifetime() {
         // До загрузки «за всё время» в памяти — нули поверх нечитаемого: запись
         // затёрла бы годы километров (ревью S9).
-        guard isLoaded else { return }
-        do {
-            Storage.set(try JSONEncoder().encode(lifetime), for: .lifetimeStats)
-        } catch {
-            Log.trips.error("lifetimeStats не сохранились: \(error.localizedDescription, privacy: .public)")
+        guard isLoaded else {
+            Log.trips.notice("«за всё время» не записано: история ещё не прочитана")
+            return
         }
+        guard lifetimeTrusted else {
+            Log.trips.notice("«за всё время» не записано: перенос — на следующем запуске")
+            return
+        }
+        JSONFile.saveOrdered(LifetimeFile(lifetime: lifetime, alertRecall: alertRecall), to: lifetimeURL,
+                             log: Log.trips, wait: mustWriteSynchronously())
     }
     private func persist() {
         // См. isLoaded: пока история не приехала с диска, в файле лежит
         // правда, а в памяти — пусто; запись в этом окне была бы потерей.
-        guard isLoaded else { return }
+        guard isLoaded else {
+            Log.trips.notice("история не записана: ещё не прочитана")
+            return
+        }
         JSONFile.saveOrdered(history, to: storeURL, log: Log.trips, wait: mustWriteSynchronously())
     }
 

@@ -56,6 +56,7 @@ final class CommuteProfileStore {
     }
 
     private func loadFromDisk() async {
+        guard !isLoaded else { return }
         let started = generation
         let (book, ledger) = await Self.read()
         // Файл есть, но не читается (процесс подняли до первой разблокировки):
@@ -65,18 +66,31 @@ final class CommuteProfileStore {
         if case .unreadable = ledger { return retryLoad() }
         // Стёрли, пока читали, — прочитанное уже не наше.
         if started == generation {
+            // Битый откладываем; не вышло отложить — как «не читается»:
+            // запись поверх затёрла бы его без копии.
+            if case .corrupt = book, !JSONFile.setAside(Self.profileURL, log: Log.trips) { return retryLoad() }
+            if case .corrupt = ledger, !JSONFile.setAside(Self.ledgerURL, log: Log.trips) { return retryLoad() }
             if case .loaded(let value) = book { self.book = value }
             if case .loaded(let value) = ledger { self.ledger = value }
-            if case .corrupt = book { JSONFile.setAside(Self.profileURL, log: Log.trips) }
-            if case .corrupt = ledger { JSONFile.setAside(Self.ledgerURL, log: Log.trips) }
         }
+        blocked = false
         isLoaded = true
+        // Стёртое человеком, пока файлы не читались, — и из прочитанного.
+        if !pendingForget.isEmpty {
+            let ids = pendingForget
+            pendingForget = []
+            forget(ids)
+        }
         onLoaded?()
     }
 
     @ObservationIgnored private var retryDelay = AppConfig.storeRetrySeconds
+    @ObservationIgnored private var blocked = false
+    /// Поездки, стёртые до чтения файлов (S9): применить к прочитанному.
+    @ObservationIgnored private var pendingForget: Set<Double> = []
 
     private func retryLoad() {
+        blocked = true
         let delay = retryDelay
         retryDelay = min(retryDelay * 2, AppConfig.storeRetryMaxSeconds)
         Log.trips.notice("профиль дороги не читается — повтор через \(Int(delay), privacy: .public) с")
@@ -84,6 +98,14 @@ final class CommuteProfileStore {
             await Task.pause(seconds: delay)
             self?.enqueue { store in await store.loadFromDisk() }
         }
+    }
+
+    /// Данные стали доступны (разблокировка) — читать сейчас, не дожидаясь
+    /// паузы повтора. Лишний вызов безвреден: чтение идёт через ту же
+    /// очередь и выходит, если уже прочитано.
+    func retryLoadNow() {
+        guard blocked, !isLoaded else { return }
+        enqueue { store in await store.loadFromDisk() }
     }
 
     // MARK: - Поездка
@@ -100,7 +122,11 @@ final class CommuteProfileStore {
         enqueue { store in
             // Профиль не прочитан (до первой разблокировки) — свёртка поверх
             // пустого затёрла бы его на диске: эту поездку пропускаем.
-            guard store.generation == started, store.isLoaded else { return }
+            guard store.generation == started else { return }
+            guard store.isLoaded else {
+                Log.trips.notice("профиль дороги ещё не прочитан — поездка в него не свёрнута")
+                return
+            }
             let book = await Self.folded(store.book, track: track, times: times, direction: direction,
                                          tripID: record.id, departure: record.startedAt,
                                          arrival: record.endedAt, stops: stops, limits: limits)
@@ -194,7 +220,10 @@ final class CommuteProfileStore {
                 return variant
             }
         }
-        guard isLoaded else { return }
+        guard isLoaded else {
+            pendingForget.formUnion(ids)
+            return
+        }
         saveLedger()
         let book = book
         let started = generation

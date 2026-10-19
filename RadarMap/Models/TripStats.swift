@@ -436,8 +436,7 @@ final class TripStats {
         history = TripHistory.pruned(history)
         // В цифрах дня та же поездка, но двумя записями: снимаем исходную,
         // кладём обе ноги — иначе «поездок» в отчёте разойдётся со списком.
-        days = TripDayBook.unfolded(original, from: days)
-        for leg in legs { days = TripDayBook.folded(leg, into: days) }
+        days = TripDayBook.replaced([original], with: legs, in: days)
         // Одна поездка стала двумя — и в «за всё время» (склейка вычитала).
         applyLifetime(.trips(max(0, legs.count - 1)))
         persist()
@@ -465,19 +464,10 @@ final class TripStats {
         guard TripMerge.manualMergeAllowed(previous: previous, next: next,
                                            maxMeters: AppConfig.tripManualMergeMaxMeters) else { return }
         let merged = TripMerge.merged(previous: previous, next: next)
-        // Дни: снять обе ноги, положить склейку — но только если строки обеих
-        // на месте (смена пояса могла увести ключ; unfolded тогда промахнётся,
-        // а folded добавит склейку целиком — день задвоится).
-        let calendar = Calendar.current
-        let keysPresent = [previous, next].allSatisfy { record in
-            days.contains { $0.day == calendar.startOfDay(for: record.startedAt) }
-        }
-        if keysPresent {
-            days = TripDayBook.unfolded(previous, from: days)
-            days = TripDayBook.unfolded(next, from: days)
-            days = TripDayBook.folded(merged, into: days)
-            persistDays()
-        }
+        // Дни: снять обе ноги и положить склейку в строку первой — по своей
+        // строке и после смены пояса (S16); строки нет — день не трогаем.
+        days = TripDayBook.replaced([previous, next], with: [merged], in: days)
+        persistDays()
         history.replaceSubrange(index...(index + 1), with: [merged])
         // Пожизненный счётчик: две записи стали одной поездкой. Серии чистых
         // поездок не пересчитываем — задним числом их уже не восстановить,
@@ -499,15 +489,9 @@ final class TripStats {
                                                            outcome: outcome)
         else { return }
         let original = history[index]
-        // Как в гео-чистке: день правим, только если его строка на месте —
-        // смена часового пояса могла увести ключ, и folded без парного
-        // unfolded задвоил бы поездку в агрегате.
-        let key = Calendar.current.startOfDay(for: original.startedAt)
-        if days.contains(where: { $0.day == key }) {
-            days = TripDayBook.unfolded(original, from: days)
-            days = TripDayBook.folded(updated, into: days)
-            persistDays()
-        }
+        // День — в своей строке, и после смены пояса (S16).
+        days = TripDayBook.replaced([original], with: [updated], in: days)
+        persistDays()
         history[index] = updated
         persist()
     }
@@ -1435,15 +1419,8 @@ final class TripStats {
                     removed += gone.map {
                         DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh)
                     }
-                    // Смена часового пояса могла увести день записи на другой
-                    // ключ: unfolded тогда промахнётся и молча выйдет, а folded
-                    // добавит день заново — поездка задвоится. Правим только
-                    // если строка дня на месте.
-                    let key = Calendar.current.startOfDay(for: old.startedAt)
-                    if days.contains(where: { $0.day == key }) {
-                        days = TripDayBook.unfolded(old, from: days)
-                        days = TripDayBook.folded(new, into: days)
-                    }
+                    // В своей строке — и после смены пояса (S16).
+                    days = TripDayBook.replaced([old], with: [new], in: days)
                 }
                 history = cleaned
                 lifetime = LifetimeStats.subtractingPasses(removed, from: lifetime)
@@ -1463,11 +1440,7 @@ final class TripStats {
                 // Хирургически, как гео-чистка: агрегаты переживают обрезку
                 // истории, пересборка из неё обнулила бы старые месяцы.
                 for (old, new) in zip(before, cleaned) where old.passed.count != new.passed.count {
-                    let key = Calendar.current.startOfDay(for: old.startedAt)
-                    if days.contains(where: { $0.day == key }) {
-                        days = TripDayBook.unfolded(old, from: days)
-                        days = TripDayBook.folded(new, into: days)
-                    }
+                    days = TripDayBook.replaced([old], with: [new], in: days)
                 }
                 history = cleaned
                 lifetime = LifetimeStats.subtractingPasses(
@@ -1502,14 +1475,8 @@ final class TripStats {
                         lifetimeChanged = true
                     }
                     guard lifetimeChanged else { continue }
-                    // Строка дня могла уехать на другой ключ при смене
-                    // часового пояса: unfolded тогда промахнётся, а folded
-                    // добавит день заново и задвоит поездку.
-                    let key = Calendar.current.startOfDay(for: old.startedAt)
-                    if days.contains(where: { $0.day == key }) {
-                        days = TripDayBook.unfolded(old, from: days)
-                        days = TripDayBook.folded(new, into: days)
-                    }
+                    // В своей строке — и после смены пояса (S16).
+                    days = TripDayBook.replaced([old], with: [new], in: days)
                 }
                 history = raised
                 persist()
@@ -1696,9 +1663,7 @@ final class TripStats {
                 JSONFile.remove(at: url, log: Log.trips)
                 return
             }
-            if days.contains(where: { $0.day == Calendar.current.startOfDay(for: saved.startedAt) }) {
-                days = TripDayBook.unfolded(saved, from: days)
-            }
+            days = TripDayBook.unfolded(saved, from: days)
             history.removeAll { $0.id == id }
             Log.trips.notice("слепок продолжения длиннее записи — запись заменена")
         case .restore:

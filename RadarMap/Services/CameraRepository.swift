@@ -468,7 +468,9 @@ final class CameraStore: CameraRepository {
         case .missing:
             userDataUnreadable = false
         case .loaded(let decoded):
-            custom = decoded.custom
+            // Подписи по умолчанию — на языке интерфейса, а не того дня, когда
+            // камеру добавили (S16): «Моя камера» оставалась по-русски в uz.
+            custom = decoded.custom.map(Self.relabeled)
             hiddenIDs = Set(decoded.hidden)
             userDataUnreadable = false
         case .corrupt:
@@ -519,6 +521,21 @@ final class CameraStore: CameraRepository {
 
     /// Свои с диска плюс добавленные, пока файл не читался. Совпавший id —
     /// новая камера, а не та же: ей — свободный id, а не молча выбросить.
+    /// Своя камера с подписями по умолчанию — на текущем языке. Подпись,
+    /// данная человеком, не трогается.
+    nonisolated static func relabeled(_ camera: Camera) -> Camera {
+        let region = Self.defaultLabels(ru: "Моя камера", uz: "Mening kameram").contains(camera.region)
+            ? String(localized: "Моя камера") : camera.region
+        let location = Self.defaultLabels(ru: "Добавлено вручную", uz: "Qo'lda qo'shilgan").contains(camera.location)
+            ? String(localized: "Добавлено вручную") : camera.location
+        guard region != camera.region || location != camera.location else { return camera }
+        return camera.withLabels(region: region, location: location)
+    }
+
+    nonisolated private static func defaultLabels(ru: String, uz: String) -> Set<String> {
+        [ru, uz, uz.replacingOccurrences(of: "'", with: "‘"), uz.replacingOccurrences(of: "'", with: "ʻ")]
+    }
+
     nonisolated static func merged(_ disk: [Camera], _ memory: [Camera]) -> [Camera] {
         var used = Set(disk.map(\.id))
         var next = max(firstCustomID, (disk.map(\.id).max() ?? 0) + 1)

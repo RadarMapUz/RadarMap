@@ -234,6 +234,14 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
                cls: cls, bridge: bridge, road: road, split: split, twin: twin, mobileConfirmed: mobileConfirmed)
     }
 
+    /// Та же камера с другими подписями (своя камера на языке интерфейса, S16).
+    func withLabels(region: String, location: String) -> Camera {
+        Camera(id: id, region: region, city: city, location: location, lat: lat, lon: lon, type: type,
+               violations: violations, needsReview: needsReview, axis: axis, dir: dir, lanes: lanes,
+               cls: cls, bridge: bridge, road: road, split: split, twin: twin, mobileConfirmed: mobileConfirmed,
+               mobileExpires: mobileExpires)
+    }
+
     /// Класс дороги в разобранном виде.
     var roadClass: RoadClass { RoadClass(raw: cls) }
 

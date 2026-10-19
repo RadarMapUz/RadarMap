@@ -56,9 +56,11 @@ nonisolated enum TripDayBook {
     /// Добавить завершённую поездку в дневные агрегаты. Идемпотентности здесь
     /// нет и быть не может: вызывается ровно один раз — из finish() и из
     /// восстановления слепка, то есть в тот же момент, что и запись в историю.
+    /// `key` — в какую строку: правка записи (разделение, склейка, чистка)
+    /// кладёт новую туда, откуда сняла старую (см. `replaced`).
     static func folded(_ record: TripRecord, into days: [TripDay],
-                       calendar: Calendar = .current) -> [TripDay] {
-        let key = calendar.startOfDay(for: record.startedAt)
+                       calendar: Calendar = .current, key fixedKey: Date? = nil) -> [TripDay] {
+        let key = fixedKey ?? calendar.startOfDay(for: record.startedAt)
         var result = days
         var day = result.first { $0.day == key } ?? TripDay(day: key)
 
@@ -114,8 +116,8 @@ nonisolated enum TripDayBook {
     /// заниженного (он БЫЛ в этот день).
     static func unfolded(_ record: TripRecord, from days: [TripDay],
                          calendar: Calendar = .current) -> [TripDay] {
-        let key = calendar.startOfDay(for: record.startedAt)
-        guard var day = days.first(where: { $0.day == key }) else { return days }
+        guard let key = rowKey(for: record, in: days, calendar: calendar),
+              var day = days.first(where: { $0.day == key }) else { return days }
 
         day.trips = max(0, day.trips - 1)
         day.distanceMeters = max(0, day.distanceMeters - record.distanceMeters)
@@ -155,6 +157,33 @@ nonisolated enum TripDayBook {
 
     /// Пересборка из истории: обновление приложения (агрегатов ещё нет, поездки
     /// уже есть) и починка, если файл дней потерялся. Как LifetimeStats.rebuilt.
+    /// Строка, в которой лежит поездка. Обычно — начало её дня в текущем
+    /// поясе; после смены пояса (поездка в другую страну, ручная смена) строка
+    /// лежит под ключом СТАРОГО пояса — это та, чей день содержит начало
+    /// поездки. Раньше правка промахивалась мимо неё: удалённая поездка
+    /// оставалась в итогах дня, а разделённая — задваивалась (S16, 20.10).
+    static func rowKey(for record: TripRecord, in days: [TripDay],
+                       calendar: Calendar = .current) -> Date? {
+        let key = calendar.startOfDay(for: record.startedAt)
+        if days.contains(where: { $0.day == key }) { return key }
+        return days.filter { $0.day <= record.startedAt && record.startedAt.timeIntervalSince($0.day) < 26 * 3600 }
+            .max { $0.day < $1.day }?.day
+    }
+
+    /// Заменить записи в агрегатах: снять старые из их строки и положить новые
+    /// туда же. Строки нет вовсе — не делать ничего: новая без снятой старой
+    /// задвоила бы поездку.
+    static func replaced(_ olds: [TripRecord], with news: [TripRecord], in days: [TripDay],
+                         calendar: Calendar = .current) -> [TripDay] {
+        guard let first = olds.first, let key = rowKey(for: first, in: days, calendar: calendar) else {
+            return days
+        }
+        var result = days
+        for old in olds { result = unfolded(old, from: result, calendar: calendar) }
+        for new in news { result = folded(new, into: result, calendar: calendar, key: key) }
+        return result
+    }
+
     static func rebuilt(from history: [TripRecord],
                         calendar: Calendar = .current) -> [TripDay] {
         var days: [TripDay] = []

@@ -516,6 +516,11 @@ nonisolated enum AppConfig {
     /// Новый старт дальше этого от финиша прошлой — точно другая поездка
     /// (телефон приехал сюда не за рулём).
     nonisolated static let tripMergeMaxMeters: CLLocationDistance = 400
+    /// Сервер карты «недоступен» (S22): столько отказов тайлов подряд за окно
+    /// без единого успеха. Пробный возврат к онлайну — через столько секунд.
+    nonisolated static let tileServerFailureThreshold = 4
+    nonisolated static let tileServerFailureWindowSeconds: TimeInterval = 30
+    static let tileServerProbeSeconds: TimeInterval = 180
     /// «Я пассажир» живёт до конца езды, но после перезапуска системой
     /// конец езды мог пройти незамеченным — не дольше этого (S29).
     nonisolated static let passengerSessionMaxSeconds: TimeInterval = 3 * 3600

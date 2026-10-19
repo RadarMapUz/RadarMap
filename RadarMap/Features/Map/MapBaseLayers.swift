@@ -53,7 +53,8 @@ struct EngineBaseLayer: View {
             // связью — всегда онлайн (свежий выпуск). Отдельной константой:
             // внутри огромного вызова ниже тернарник с опционалом заставлял
             // компилятор выводить типы минутами.
-            let offlineFiles: OfflineFiles? = env.network.isOnline
+            // Сервер карты лёг при живой связи — тоже на область (S22).
+            let offlineFiles: OfflineFiles? = env.network.isMapOnline
                 ? nil : env.offlineMaps.offlineFiles(at: me)
             GeometryReader { geo in
                 let camera = camera(me: me, size: geo.size, insets: insets,

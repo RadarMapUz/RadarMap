@@ -23,10 +23,18 @@ nonisolated enum OfflineNotice: Equatable {
     case downloadedRegion
     /// Новая карта, области на телефоне нет: карта не грузится.
     case noMap
+    /// Связь есть, сервер карты не отвечает (S22): «нет связи» было бы
+    /// неправдой. С областью на телефоне — карта с неё.
+    case serverDown
+    case serverDownRegion
 
-    /// nil — связь есть, плашка не нужна.
-    static func resolve(online: Bool, modernMap: Bool, hasRegionFiles: Bool) -> OfflineNotice? {
-        guard !online else { return nil }
+    /// nil — связь есть и сервер карты на месте, плашка не нужна.
+    static func resolve(online: Bool, modernMap: Bool, hasRegionFiles: Bool,
+                        serverDown: Bool = false) -> OfflineNotice? {
+        if online {
+            guard serverDown else { return nil }
+            return modernMap && hasRegionFiles ? .serverDownRegion : .serverDown
+        }
         guard modernMap else { return .general }
         return hasRegionFiles ? .downloadedRegion : .noMap
     }

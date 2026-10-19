@@ -369,6 +369,14 @@ final class AppEnvironment {
         etaShare.route = route
         etaShare.allowedByConfig = { [weak config] in config?.current.isEtaShareEnabled ?? true }
         traffic.isOnline = { [weak network] in network?.isOnline ?? false }
+        #if canImport(MapLibre)
+        // Сервер карты лёг при живой связи (S22): сторож тайлов сообщает, карта
+        // уходит на скачанную область, плашка говорит правду. С областью
+        // онлайн-запросов нет — через 3 минуты пробуем онлайн снова.
+        EngineTileGuard.observeHealth { [weak self] down in
+            Task { @MainActor in self?.tileServerHealthChanged(down: down) }
+        }
+        #endif
         traffic.privacyZones = { [weak self] in
             guard let self else { return [] }
             // Выученные места считаются и при выключенных подсказках: зона
@@ -594,6 +602,22 @@ final class AppEnvironment {
     /// ходу): склейка с только что прерванной поездкой и восстановление
     /// снимка ещё не видят её — ждём историю (ревью S3, 20.10).
     @ObservationIgnored private var pendingAutoStart = false
+
+    @ObservationIgnored private var tileProbeTask: Task<Void, Never>?
+
+    #if canImport(MapLibre)
+    private func tileServerHealthChanged(down: Bool) {
+        network.setTileServerDown(down)
+        tileProbeTask?.cancel()
+        guard down else { return }
+        tileProbeTask = Task { [weak self] in
+            await Task.pause(seconds: AppConfig.tileServerProbeSeconds)
+            guard !Task.isCancelled else { return }
+            EngineTileGuard.resetHealthForProbe()
+            self?.network.setTileServerDown(false)
+        }
+    }
+    #endif
 
     /// Автостарт, отложенный до истории, — сейчас, если всё ещё едем.
     private func startPendingAutoStart() {

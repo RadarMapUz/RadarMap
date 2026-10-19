@@ -1483,6 +1483,22 @@
         }
       }
     },
+    "«Когда выезжать на работу» напоминает по будням, только если выехать в другое время выгоднее или нужно успеть к сроку «быть к».": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Когда выезжать на работу» напоминает по будням, только если выехать в другое время выгоднее или нужно успеть к сроку «быть к»."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Ishga qachon chiqish» ish kunlari eslatadi — faqat boshqa vaqtda chiqish foydaliroq bo‘lsa yoki «gacha yetib borish» muddatiga ulgurish kerak bo‘lsa."
+          }
+        }
+      }
+    },
     "«Начать поездку» одним нажатием": {
       "localizations": {
         "ru": {
@@ -2023,6 +2039,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ishga muddatgacha yetib borish"
+          }
+        }
+      }
+    },
+    "В %1$@ до работы обычно %2$@ — на %3$@ быстрее, чем в %4$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В %1$@ до работы обычно %2$@ — на %3$@ быстрее, чем в %4$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ da ishgacha odatda %2$@ — %4$@ dagidan %3$@ tezroq"
           }
         }
       }
@@ -3116,6 +3148,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qarama-qarshi yo'nalishga chiqish"
+          }
+        }
+      }
+    },
+    "Выезжайте к %1$@ — к %2$@ с запасом (обычно %3$@ в пути)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выезжайте к %1$@ — к %2$@ с запасом (обычно %3$@ в пути)"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ gacha chiqing — %2$@ ga zaxira bilan (yo‘lda odatda %3$@)"
           }
         }
       }
@@ -5880,6 +5928,22 @@
         }
       }
     },
+    "Когда выезжать на работу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Когда выезжать на работу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga qachon chiqish"
+          }
+        }
+      }
+    },
     "Когда поездка начинается сама.": {
       "localizations": {
         "ru": {
@@ -6715,6 +6779,38 @@
         }
       }
     },
+    "Напоминать": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Напоминать"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eslatish"
+          }
+        }
+      }
+    },
+    "Напоминать, когда выезжать?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Напоминать, когда выезжать?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qachon chiqishni eslatib turaymi?"
+          }
+        }
+      }
+    },
     "Направление пока неизвестно": {
       "extractionState": "manual",
       "localizations": {
@@ -6978,6 +7074,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Belgilanmagan — sozlash uchun bosing"
+          }
+        }
+      }
+    },
+    "Не нужно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не нужно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kerak emas"
           }
         }
       }
@@ -8539,6 +8651,22 @@
         }
       }
     },
+    "По будням, за %lld мин до выезда — только когда выехать в другое время выгоднее или нужно успеть к сроку. По вашим поездкам, на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По будням, за %lld мин до выезда — только когда выехать в другое время выгоднее или нужно успеть к сроку. По вашим поездкам, на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ish kunlari, chiqishdan %lld daq. oldin — faqat boshqa vaqtda chiqish foydaliroq bo‘lsa yoki muddatga ulgurish kerak bo‘lsa. Safarlaringiz bo‘yicha, telefonda."
+          }
+        }
+      }
+    },
     "По вкладу": {
       "localizations": {
         "ru": {
@@ -9433,6 +9561,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ma'lumotlarni tushunish"
+          }
+        }
+      }
+    },
+    "Пора выезжать на работу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пора выезжать на работу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga chiqish vaqti"
           }
         }
       }

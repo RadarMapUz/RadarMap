@@ -8,6 +8,7 @@
 
 import Foundation
 import UserNotifications
+import os
 import Observation
 import UIKit
 
@@ -202,6 +203,56 @@ final class NotificationService: NSObject {
     func cancelWeeklyDigest() {
         UNUserNotificationCenter.current()
             .removePendingNotificationRequests(withIdentifiers: [Self.digestID])
+    }
+
+    // MARK: - «Выезжайте раньше» (8.8.7)
+
+    /// Заменить запланированные напоминания о выезде новыми. Снимаем по id
+    /// (они по датам — известны заранее), без опроса центра: опрос с `await`
+    /// давал гонку двух пересчётов, и поставленные первым переживали «пусто»
+    /// второго (ревью 20.10). Добавление — по порядку, через обработчик.
+    /// `deliveredToday` — снять и уже показанное сегодня (поехали).
+    func scheduleDepartureReminders(_ reminders: [DepartureReminder.Reminder], now: Date = Date(),
+                                    deliveredToday: Bool = false) {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: DepartureReminder.allIDs(around: now))
+        if deliveredToday {
+            center.removeDeliveredNotifications(withIdentifiers: [DepartureReminder.id(for: now)])
+        }
+        for reminder in reminders {
+            let content = UNMutableNotificationContent()
+            content.title = String(localized: "Пора выезжать на работу")
+            content.body = reminder.body
+            content.sound = .default
+            let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reminder.fire)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
+            center.add(UNNotificationRequest(identifier: reminder.id, content: content, trigger: trigger)) { error in
+                if let error {
+                    Log.app.error("напоминание о выезде не поставлено: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+        }
+    }
+
+    /// Разрешение на уведомления — с ответом: напоминание, которое некуда
+    /// показать, не должно стоять включённым.
+    func requestAuthorizationResult() async -> Bool {
+        let granted: Bool
+        do {
+            granted = try await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound, .badge])
+        } catch {
+            Log.app.error("разрешение на уведомления: \(error.localizedDescription, privacy: .public)")
+            granted = false
+        }
+        await refreshStatus()
+        return granted
+    }
+
+    /// Уведомлениям можно показываться (разрешены или «тихо»).
+    var canNotify: Bool {
+        authorizationStatus == .authorized || authorizationStatus == .provisional
+            || authorizationStatus == .ephemeral
     }
 
     // MARK: - Приближение к камере (фон)

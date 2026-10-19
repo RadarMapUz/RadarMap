@@ -88,7 +88,10 @@ enum Formatting {
     /// (Commute), дата — для выезда и приезда.
     static func clock(minuteOfDay: Int, calendar: Calendar = .current) -> String {
         let day = calendar.startOfDay(for: Date())
-        return clock(day.addingTimeInterval(Double(minuteOfDay) * 60))
+        // В поясе того же календаря: полночь по UTC, отформатированная по
+        // Ташкенту, дала бы «12:45» вместо «7:45».
+        return day.addingTimeInterval(Double(minuteOfDay) * 60)
+            .formatted(Date.FormatStyle(date: .omitted, time: .shortened, timeZone: calendar.timeZone))
     }
 
     static func clock(_ date: Date) -> String {

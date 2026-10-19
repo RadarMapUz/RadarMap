@@ -181,6 +181,10 @@ struct RootView: View {
                 // «Сейчас ~44 мин» — свежий после возвращения: строка на карте
                 // могла простоять в фоне час.
                 env.refreshDepartureEstimates()
+                Task {
+                    await env.notifications.refreshStatus()
+                    env.refreshDepartureReminders()
+                }
             case .background:
                 env.location.setForeground(false)   // в поездке непрерывный GPS продолжит работать
                 env.setPhoneSceneActive(false)       // опрос гаснет, если и CarPlay нет

@@ -449,6 +449,35 @@ final class RouteService {
         }
     }
 
+    /// Убрать заезд, оставив цель (5.13): раньше передумавший заезжать на
+    /// АЗС сбрасывал весь маршрут и искал адрес заново. Не вышло — заезд и
+    /// линия остаются, как были, с сообщением.
+    func removeStop(from source: CLLocationCoordinate2D, cameras: [Camera]) async {
+        errorMessage = nil
+        guard isActive, stop != nil, let destination = destinationCoordinate else { return }
+        guard isRoutingEnabled else {
+            errorMessage = String(localized: "Маршруты временно недоступны — мы уже чиним")
+            return
+        }
+        isBuilding = true
+        defer { isBuilding = false }
+        generation += 1
+        let gen = generation
+        let destinationName = self.destinationName
+        do {
+            let built = try await calculate(from: source, via: nil, to: destination,
+                                            alternatives: false)
+            guard gen == generation else { return }
+            stop = nil
+            await apply(built, name: destinationName, destination: destination,
+                        cameras: cameras, gen: gen, history: nil)
+        } catch RouteError.serverUnreachable {
+            errorMessage = String(localized: "Нет связи с сервером маршрутов — проверьте интернет")
+        } catch {
+            errorMessage = String(localized: "Не удалось убрать заезд — маршрут прежний")
+        }
+    }
+
     func selectVariant(_ id: Int) {
         guard id != selectedID, variants.contains(where: { $0.id == id }) else { return }
         selectedID = id

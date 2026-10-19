@@ -13,6 +13,11 @@ struct RoutePanel: View {
     @Environment(AppEnvironment.self) private var env
     let onShowCameras: () -> Void
     let onTripToggle: () -> Void
+    /// Убрать заезд, оставив цель.
+    var onRemoveStop: () -> Void = {}
+    /// «Поделиться прибытием» до старта — пока человек ещё стоит и может
+    /// выбрать, кому написать (5.13).
+    var onShareArrival: (() -> Void)?
 
     var body: some View {
         let route = env.route
@@ -49,11 +54,24 @@ struct RoutePanel: View {
                             // Заезд по пути — видно, что цель та же, а линия
                             // идёт через остановку.
                             if let stop = route.stop {
-                                Label(String(format: String(localized: "через %@"), stop.name),
-                                      systemImage: "mappin.circle.fill")
-                                    .font(.rounded(12, .semibold))
-                                    .foregroundStyle(Theme.accent)
-                                    .lineLimit(1)
+                                HStack(spacing: 6) {
+                                    Label(String(format: String(localized: "через %@"), stop.name),
+                                          systemImage: "mappin.circle.fill")
+                                        .font(.rounded(12, .semibold))
+                                        .foregroundStyle(Theme.accent)
+                                        .lineLimit(1)
+                                    Button(action: onRemoveStop) {
+                                        Image(systemName: "xmark")
+                                            .font(.rounded(10, .bold))
+                                            .foregroundStyle(Theme.textSecondary)
+                                            .frame(width: 20, height: 20)
+                                            .background(Theme.background, in: Circle())
+                                            .tapTarget()
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(route.isBuilding)
+                                    .accessibilityLabel(Text("Убрать заезд"))
+                                }
                             }
                             Text("\(route.etaText) · \(route.distanceText)")
                                 .font(.rounded(13, .medium))
@@ -82,7 +100,22 @@ struct RoutePanel: View {
                     }
 
                     // В поездке панель заменяется компактной TripLiveBar — здесь всегда «до старта».
-                    camerasButton
+                    HStack(spacing: 10) {
+                        camerasButton
+                        if let onShareArrival, env.etaShare.isAvailable, !env.etaShare.isSharing {
+                            // Значком: подписью кнопка сжимала «2 камеры на
+                            // маршруте» в две строки.
+                            Button(action: onShareArrival) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.rounded(16, .semibold))
+                                    .foregroundStyle(Theme.accent)
+                                    .frame(width: Theme.controlSize, height: Theme.controlSize)
+                                    .background(Theme.accent.opacity(0.12), in: Circle())
+                            }
+                            .buttonStyle(PressableStyle())
+                            .accessibilityLabel(Text("Поделиться прибытием"))
+                        }
+                    }
 
                     // Главное действие — жёлтое, как «Начать поездку» и «Радар!»:
                     // было зелёное (success), то есть цвет «в лимите» на кнопке

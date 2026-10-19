@@ -5393,6 +5393,22 @@
         }
       }
     },
+    "Кнопки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кнопки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tugmalar"
+          }
+        }
+      }
+    },
     "Когда поездка начинается сама.": {
       "localizations": {
         "ru": {
@@ -5758,6 +5774,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrutlar, limitlar va safar Yakunlari — ham shu yerda"
+          }
+        }
+      }
+    },
+    "Масштаб": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Масштаб"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masshtab"
           }
         }
       }
@@ -6540,6 +6572,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manzilni ochib bo‘lmadi"
+          }
+        }
+      }
+    },
+    "Не удалось убрать заезд — маршрут прежний": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось убрать заезд — маршрут прежний"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekatni olib tashlab bo‘lmadi — yo‘nalish o‘zgarmadi"
           }
         }
       }
@@ -7489,22 +7537,6 @@
         }
       }
     },
-    "Отметка видна всем водителям ~3 часа": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Отметка видна всем водителям ~3 часа"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Belgi barcha haydovchilarga ~3 soat ko'rinadi"
-          }
-        }
-      }
-    },
     "Отметка водителей: %@": {
       "localizations": {
         "ru": {
@@ -7840,22 +7872,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limitdan ortiq birinchi ~%lld km/soat uchun odatda jarima yozilmaydi. Summalar — birinchi qayd; takroriy buzishlar ancha qimmat."
-          }
-        }
-      }
-    },
-    "Передвижной": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Передвижной"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ko'chma"
           }
         }
       }
@@ -9545,22 +9561,6 @@
         }
       }
     },
-    "Радар здесь!": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Радар здесь!"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Radar shu yerda!"
-          }
-        }
-      }
-    },
     "Радар на месте": {
       "localizations": {
         "ru": {
@@ -10432,6 +10432,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tizim tili"
+          }
+        }
+      }
+    },
+    "Скопировать координаты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скопировать координаты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Koordinatalarni nusxalash"
           }
         }
       }
@@ -11399,6 +11415,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "O'tilgan kameralarda yo'l limiti noma'lum — ular bo'yicha oshirishlar hisoblanmadi"
+          }
+        }
+      }
+    },
+    "Убрать заезд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Убрать заезд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekatni olib tashlash"
           }
         }
       }

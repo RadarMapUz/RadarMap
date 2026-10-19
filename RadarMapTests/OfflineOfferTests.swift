@@ -27,6 +27,13 @@ final class OfflineOfferTests: XCTestCase {
         XCTAssertFalse(OfflineOffer.shouldOffer(s), "«Не сейчас» — значит больше не спрашивать")
     }
 
+    /// «Домой» внизу — мегабайты ждут: больше двух карточек внизу нет (5.9).
+    func testWaitsWhileADestinationIsSuggested() {
+        var situation = calm
+        situation.suggestionShown = true
+        XCTAssertFalse(OfflineOffer.shouldOffer(situation))
+    }
+
     func testNeverWhileDriving() {
         var s = calm
         s.driving = true

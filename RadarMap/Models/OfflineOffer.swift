@@ -33,11 +33,14 @@ nonisolated enum OfflineOffer {
         var expensiveNetwork: Bool
         /// Область найдена в каталоге и ещё не скачана и не качается.
         var regionAvailable: Bool
+        /// Внизу уже стоит «Домой / На работу» — действие этой минуты.
+        /// Мегабайты подождут: больше двух карточек внизу не бывает (5.9).
+        var suggestionShown = false
     }
 
     static func shouldOffer(_ s: Situation) -> Bool {
         s.onboarded && !s.answered && s.ownMap && !s.driving
-            && s.online && !s.expensiveNetwork && s.regionAvailable
+            && s.online && !s.expensiveNetwork && s.regionAvailable && !s.suggestionShown
     }
 
     /// Точка, по которой выбирается «ваша» область: адрес «Дом», иначе

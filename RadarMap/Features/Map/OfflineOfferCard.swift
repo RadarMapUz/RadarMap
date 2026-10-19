@@ -97,7 +97,8 @@ struct OfflineOfferCard: View {
             driving: env.location.isTripActive || env.location.isProbablyDriving,
             online: env.network.isOnline,
             expensiveNetwork: env.network.isExpensive,
-            regionAvailable: available))
+            regionAvailable: available,
+            suggestionShown: DestinationSuggestionBar.isShown(env)))
         return offer ? region : nil
     }
 

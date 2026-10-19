@@ -166,54 +166,9 @@ struct MapStatusBanner: View {
 
     private func shellContent(symbol: String, tint: Color, title: String, body: String?,
                               id: String, action: (String, () -> Void)?) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: symbol)
-                .foregroundStyle(tint)
-                .font(.rounded(19, .semibold))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.rounded(15, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                if let body, !body.isEmpty {
-                    Text(body)
-                        .font(.rounded(12))
-                        .foregroundStyle(Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if let (label, perform) = action {
-                    // Кнопка, а не подпись: была `.caption` без рамки, ~16 pt
-                    // в высоту — промах за рулём значит второй взгляд.
-                    Button(action: perform) {
-                        Text(isRetrying ? String(localized: "Загружаю…") : label)
-                            .font(.rounded(15, .semibold))
-                            .foregroundStyle(Theme.accent)
-                            .padding(.horizontal, 14)
-                            .frame(minHeight: Theme.controlSize)
-                            .background(Theme.accent.opacity(0.12), in: Capsule())
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(PressableStyle())
-                    .disabled(isRetrying)
-                    .padding(.top, 4)
-                }
-            }
-            Spacer(minLength: 0)
-            Button {
-                withMotion(Motion.quick) { _ = dismissed.insert(id) }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.rounded(12, .bold))
-                    .foregroundStyle(Theme.textTertiary)
-                    .tapTarget()         // палец за рулём крупнее крестика
-            }
-            .accessibilityLabel(Text("Закрыть объявление"))
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
-                .stroke(tint.opacity(0.35), lineWidth: 1)
-        )
+        StatusBanner(symbol: symbol, tint: tint, title: title, detail: body,
+                     action: action.map { StatusBanner.Action(title: $0.0, isBusy: isRetrying,
+                                                              perform: $0.1) },
+                     onDismiss: { withMotion(Motion.quick) { _ = dismissed.insert(id) } })
     }
 }

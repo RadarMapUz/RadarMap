@@ -30,6 +30,9 @@ struct MapLayersControl: View {
     /// тротуары — один), и нужны они разным людям.
     @Binding var houses: Bool
     @Binding var sidewalks: Bool
+    /// Кнопки «+ / −» в колонке. Здесь, а не только в настройках: их
+    /// включают и выключают, глядя на колонку, а не на список настроек (5.8).
+    @Binding var zoomButtons: Bool
     /// Сколько панели можно занять по высоте — до нижних панелей экрана.
     /// Не влезает — листается, а не уезжает под них.
     var maxPanelHeight: CGFloat = .infinity
@@ -94,6 +97,12 @@ struct MapLayersControl: View {
             toggle("Места", Icon.placesLayer, isOn: $places)
             toggle("Дома", Icon.buildingsLayer, isOn: $houses)
             toggle("Тротуары", "figure.walk", isOn: $sidewalks)
+            Text("Кнопки")
+                .font(.rounded(11, .semibold))
+                .foregroundStyle(Theme.textTertiary)
+                .padding(.top, 8)
+                .padding(.bottom, 2)
+            toggle("Масштаб", "plus.magnifyingglass", isOn: $zoomButtons)
         }
         .padding(12)
         .frame(minWidth: Self.minWidth, alignment: .leading)

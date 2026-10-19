@@ -709,6 +709,7 @@ struct MapScreen: View {
                          places: setting(\.mapPlaces),
                          houses: setting(\.mapHouses),
                          sidewalks: setting(\.mapSidewalks),
+                         zoomButtons: setting(\.mapZoomButtons),
                          maxPanelHeight: columnSlots.map {
                              CGFloat($0) * AppConfig.mapColumnSlotHeight - AppConfig.mapColumnSpacing
                          } ?? .infinity)
@@ -910,7 +911,9 @@ struct MapScreen: View {
                 } else if mode.showsRoutePanel, env.route.isActive {
                     RoutePanel(
                         onShowCameras: { showRouteCameras = true },
-                        onTripToggle: { toggleTrip() }
+                        onTripToggle: { toggleTrip() },
+                        onRemoveStop: { removeStop() },
+                        onShareArrival: { shareArrival() }
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else {
@@ -1059,6 +1062,22 @@ struct MapScreen: View {
         }
     }
 
+    private func removeStop() {
+        Task {
+            guard let from = await env.location.awaitPreciseCoordinate() else {
+                env.route.reportNoFix()
+                return
+            }
+            await env.route.removeStop(from: from, cameras: env.cameras.cameras)
+        }
+    }
+
+    /// Ссылка «Поделиться прибытием» — один путь для меню поездки и панели
+    /// маршрута: отправка начнётся, только когда лист скажет, что отправили.
+    private func shareArrival() {
+        if let share = env.etaShare.prepare() { etaSharePayload = ActivityTextPayload(text: share.message) }
+    }
+
     /// Построить авто-маршрут от текущей позиции и показать все варианты целиком.
     /// Заезд по пути (АЗС, кафе из плитки категории): цель остаётся прежней.
     private func addStop(_ coordinate: CLLocationCoordinate2D, name: String) {
@@ -1193,9 +1212,7 @@ struct MapScreen: View {
                 Label("Перестать делиться прибытием", systemImage: "person.crop.circle.badge.xmark")
             }
         } else if env.etaShare.isAvailable {
-            Button {
-                if let share = env.etaShare.prepare() { etaSharePayload = ActivityTextPayload(text: share.message) }
-            } label: {
+            Button { shareArrival() } label: {
                 Label("Поделиться прибытием", systemImage: "square.and.arrow.up")
             }
         }
@@ -1249,27 +1266,11 @@ struct MapScreen: View {
 
     @ViewBuilder private var permissionBanner: some View {
         if let banner = bannerInfo {
-            HStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
-                Text(banner.message).font(.rounded(12)).foregroundStyle(Theme.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 8)
-                // Мишень 44 pt: была голая подпись 12 pt (~16 pt в высоту).
-                // Оформление — ВНУТРИ кнопки: нажимается её метка, и капсула
-                // снаружи была бы 44 pt только на вид.
-                Button(action: banner.action) {
-                    Text(banner.button)
-                        .font(.rounded(15, .semibold)).foregroundStyle(Theme.accent)
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: Theme.controlSize)
-                        .background(Theme.accent.opacity(0.12), in: Capsule())
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(PressableStyle())
-            }
-            .padding(12)
-            .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
+            // Та же форма, что у баннеров состояния (5.10); без крестика —
+            // без доступа приложение не делает главного.
+            StatusBanner(symbol: "exclamationmark.triangle.fill", tint: Theme.warning,
+                         title: banner.message,
+                         action: StatusBanner.Action(title: banner.button, perform: banner.action))
         }
     }
 
@@ -1288,22 +1289,9 @@ struct MapScreen: View {
             withMotion { map.isAddingCamera = false }
             return
         }
-        switch kind {
-        case .camera, .radar:
-            let type: CameraType = kind == .radar ? .stationaryRadar : .stationaryCamera
-            env.cameras.addCamera(at: center, type: type, label: name)   // revision → onChange обновит карту
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-        case .mobile:
-            Task {
-                let outcome = await env.mobile.quickReport(
-                    coordinate: center,
-                    speedKmh: env.location.speedKmh,
-                    isTripActive: env.location.isTripActive,
-                    placement: .deliberate)
-                UINotificationFeedbackGenerator()
-                    .notificationOccurred(outcome.isSuccess ? .success : .error)
-            }
-        }
+        let type: CameraType = kind == .radar ? .stationaryRadar : .stationaryCamera
+        env.cameras.addCamera(at: center, type: type, label: name)   // revision → onChange обновит карту
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         withMotion { map.isAddingCamera = false }
     }
 

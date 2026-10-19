@@ -66,7 +66,6 @@ struct CameraDetailSheet: View {
                     // жалобы под край, и шит открывался без единой кнопки.
                     // Возможности типа — справка, её можно и долистать.
                     routeButton
-                    openInMapsButton
                     actionsBlock
                     violationsBlock
                 }
@@ -74,13 +73,16 @@ struct CameraDetailSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .background(Theme.screenBackground)
-            // String(id), не интерполяция Int: та форматирует с группировкой («№2,331»).
-            .navigationTitle(String(format: String(localized: "Камера №%@"), String(camera.id)))
+            // Заголовок — где стоит, а не «Камера №2331» (5.12): номер нужен
+            // модератору, а не водителю, и живёт в «…» вместе с картами и
+            // координатами.
+            .navigationTitle(camera.location.isEmpty ? camera.kind.displayName : camera.location)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Готово") { dismiss() }
                 }
+                ToolbarItem(placement: .topBarLeading) { moreMenu }
             }
         }
         .presentationDetents([.medium, .large])
@@ -119,7 +121,7 @@ struct CameraDetailSheet: View {
                 Text(String(format: String(localized:
                     "Вывод по вашим %lld проездам: в эту сторону вы каждый раз сбрасываете скорость, во встречную — нет. Это наблюдение, а не данные реестра: предупреждать о камере мы продолжаем в обе стороны."),
                     aimPasses))
-                    .font(.rounded(11))
+                    .font(.rounded(12))
                     .foregroundStyle(Theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -138,8 +140,11 @@ struct CameraDetailSheet: View {
                 .font(.rounded(20, .bold))
                 .foregroundStyle(camera.kind.glyphTint)
                 .frame(width: 46, height: 46)
-                .background(camera.kind.tint.gradient, in: Circle())
-                .shadow(color: camera.kind.tint.opacity(0.6), radius: 8)
+                // Тень у круга, а не у значка поверх него (правило 11.10).
+                .background {
+                    Circle().fill(camera.kind.tint.gradient)
+                        .shadow(color: camera.kind.tint.opacity(0.6), radius: 8)
+                }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(camera.kind.displayName)
@@ -197,10 +202,6 @@ struct CameraDetailSheet: View {
             Label(camera.subtitle, systemImage: "mappin.and.ellipse")
                 .font(.rounded(14))
                 .foregroundStyle(Theme.textSecondary)
-            Text(String(format: "%.6f, %.6f", camera.lat, camera.lon))
-                .font(.system(.footnote, design: .monospaced))
-                .foregroundStyle(Theme.textTertiary)
-                .textSelection(.enabled)
         }
     }
 
@@ -229,7 +230,7 @@ struct CameraDetailSheet: View {
                 }
             }
             Text("Список по каждой камере МВД не публикует — показываем возможности типа")
-                .font(.rounded(11))
+                .font(.rounded(12))
                 .foregroundStyle(Theme.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 2)
@@ -258,13 +259,34 @@ struct CameraDetailSheet: View {
         }
     }
 
-    private var openInMapsButton: some View {
-        // Второе действие — не жёлтое: две жёлтые подряд не говорят, какая главная.
-        SecondaryButton(title: "Открыть в Картах", systemImage: "map.fill") {
-            let item = MKMapItem(placemark: MKPlacemark(coordinate: camera.coordinate))
-            item.name = camera.displayTitle
-            item.openInMaps()
+    /// Редкое — в «…»: Карты, координаты и номер камеры для обращения к
+    /// модератору. На экране оно стояло второй кнопкой и строкой цифр.
+    private var moreMenu: some View {
+        Menu {
+            Button {
+                let item = MKMapItem(placemark: MKPlacemark(coordinate: camera.coordinate))
+                item.name = camera.displayTitle
+                item.openInMaps()
+            } label: {
+                Label("Открыть в Картах", systemImage: "map")
+            }
+            Button {
+                UIPasteboard.general.string = coordinatesText
+            } label: {
+                Label("Скопировать координаты", systemImage: "doc.on.doc")
+            }
+            // String(id), не интерполяция Int: та форматирует с группировкой («№2,331»).
+            Section(coordinatesText) {
+                Text(String(format: String(localized: "Камера №%@"), String(camera.id)))
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
         }
+        .accessibilityLabel(Text("Ещё"))
+    }
+
+    private var coordinatesText: String {
+        String(format: "%.6f, %.6f", camera.lat, camera.lon)
     }
 
     @ViewBuilder private var actionsBlock: some View {

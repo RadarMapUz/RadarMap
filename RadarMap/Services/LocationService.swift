@@ -543,9 +543,7 @@ final class LocationService: NSObject {
         notifier.clearDriverCheck()   // вопрос «вы за рулём?» больше не актуален
         let batteryPercent = BatteryProbe.percent()
         if asPassenger {
-            if trip.distanceMeters < AppConfig.passengerTripMinMeters { trip.cancel() } else {
-                trip.finish(batteryPercent: batteryPercent)
-            }
+            trip.discardAsPassenger()
         } else {
             trip.finish(endedManually: !auto, batteryPercent: batteryPercent)
             // Автостоп с телефоном в кармане: короткие итоги на локскрин —

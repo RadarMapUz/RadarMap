@@ -1,0 +1,83 @@
+//
+//  StoreSafetyTests.swift
+//  RadarMapTests
+//
+//  Данные человека (сценарии S9, S11, S12, 20.10): битая запись не уносит
+//  файл; битый файл откладывается, а не затирается; склеенная поездка не
+//  считается дважды «за всё время».
+//
+
+import XCTest
+@testable import RadarMap
+
+final class StoreSafetyTests: XCTestCase {
+    private struct Item: Codable, Equatable { let id: Int; let name: String }
+
+    private func tempURL(_ name: String) -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent(name)
+    }
+
+    func testOneBadRecordDoesNotLoseTheFile() throws {
+        let json = #"[{"id":1,"name":"a"},{"id":"bad"},42,{"id":3,"name":"c"}]"#
+        let lossy = try JSONDecoder().decode(LossyArray<Item>.self, from: Data(json.utf8))
+        XCTAssertEqual(lossy.elements, [Item(id: 1, name: "a"), Item(id: 3, name: "c")])
+        XCTAssertEqual(lossy.dropped, 2)
+    }
+
+    func testMissingCorruptAndLoadedAreDifferent() throws {
+        let url = tempURL("trips.json")
+        guard case .missing = JSONFile.loadChecked([Item].self, from: url, log: Log.trips) else {
+            return XCTFail("нет файла — это «нет файла»")
+        }
+        try Data("{не json".utf8).write(to: url)
+        guard case .corrupt = JSONFile.loadChecked([Item].self, from: url, log: Log.trips) else {
+            return XCTFail("битый — это «битый», а не «пусто»")
+        }
+        JSONFile.setAside(url, log: Log.trips)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "битый отложен, на его месте — ничего")
+        let siblings = try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path)
+        XCTAssertTrue(siblings.contains { $0.hasPrefix("trips.corrupt-") && $0.hasSuffix(".json") }, "\(siblings)")
+        try JSONEncoder().encode([Item(id: 1, name: "a")]).write(to: url)
+        guard case .loaded(let items) = JSONFile.loadChecked([Item].self, from: url, log: Log.trips) else {
+            return XCTFail("целый — прочитан")
+        }
+        XCTAssertEqual(items, [Item(id: 1, name: "a")])
+    }
+
+    // MARK: - S11: склейка «за всё время»
+
+    /// 10 км до магазина (один чистый проезд), потом ещё 3 км и проезд с
+    /// превышением: за всё время — 13 км, ОДНА поездка, два проезда, серия
+    /// оборвана штрафом второй ноги.
+    func testMergedTripCountsOnce() {
+        let clean = DrivingScore.Pass(speedKmh: 55, limitKmh: 60)
+        let fined = DrivingScore.Pass(speedKmh: 95, limitKmh: 60)
+        var stats = LifetimeStats(trips: 4, distanceMeters: 50_000, camerasPassed: 10, cleanStreak: 2, bestStreak: 3)
+        stats = LifetimeStats.updated(stats, passes: [clean], distanceMeters: 10_000)
+        XCTAssertEqual(stats.trips, 5)
+        XCTAssertEqual(stats.cleanStreak, 3)
+        let merged = LifetimeStats.updatedResumed(stats, basePasses: [clean], allPasses: [clean, fined],
+                                                  distanceDelta: 3_000)
+        XCTAssertEqual(merged.trips, 5, "та же поездка")
+        XCTAssertEqual(merged.distanceMeters, 63_000, accuracy: 0.1)
+        XCTAssertEqual(merged.camerasPassed, 12)
+        XCTAssertEqual(merged.cleanStreak, 0, "штраф второй ноги обрывает серию")
+        XCTAssertEqual(merged.bestStreak, 3)
+    }
+
+    /// Первая нога без лимитных камер, вторая — чистая лимитная: шаг серии —
+    /// один, за поездку; первая нога лимитная — шага повторно нет.
+    func testMergedCleanTripStepsTheStreakOnce() {
+        let clean = DrivingScore.Pass(speedKmh: 55, limitKmh: 60)
+        let unlimited = DrivingScore.Pass(speedKmh: 55, limitKmh: nil)
+        let base = LifetimeStats(trips: 1, distanceMeters: 1_000, camerasPassed: 1, cleanStreak: 1, bestStreak: 1)
+        let first = LifetimeStats.updatedResumed(base, basePasses: [unlimited], allPasses: [unlimited, clean],
+                                                 distanceDelta: 500)
+        XCTAssertEqual(first.cleanStreak, 2)
+        let again = LifetimeStats.updatedResumed(base, basePasses: [clean], allPasses: [clean, clean],
+                                                 distanceDelta: 500)
+        XCTAssertEqual(again.cleanStreak, 1, "шаг серии за эту поездку уже сделан")
+    }
+}

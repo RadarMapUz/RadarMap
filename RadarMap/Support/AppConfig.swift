@@ -156,6 +156,9 @@ nonisolated enum AppConfig {
     /// работы, чтобы CoreMotion успел подтвердить поездку (его уверенный
     /// старт ждёт 8 с, а фоновое окно iOS — около 10).
     static let backgroundLaunchWindowSeconds: TimeInterval = 25
+    /// История не прочиталась (файл защищён до первой разблокировки) —
+    /// повтор через столько секунд, пока не прочтётся.
+    static let storeRetrySeconds: TimeInterval = 30
 
     // MARK: - Дорога камеры (направление, полосы, кусок проезжей части)
     // nonisolated: читаются из чистых RoadShape/RoadCorridor и их тестов.
@@ -478,8 +481,6 @@ nonisolated enum AppConfig {
     nonisolated static let cameraOverspeedWarnMarginKmh: Double = 2
 
     // MARK: - Склейка поездок (заезд по пути ≠ новая поездка)
-    /// «Я пассажир» — кусок короче этого не пишется вовсе.
-    static let passengerTripMinMeters: Double = 500
     /// Шаг между фиксами длиннее этого — перелёт, в дистанцию поездки не идёт.
     nonisolated static let tripMaxStepMeters: Double = 500
     // nonisolated: читаются из чистого TripMerge (и его тестов) без прыжка на main.

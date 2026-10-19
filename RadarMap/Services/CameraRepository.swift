@@ -444,14 +444,43 @@ final class CameraStore: CameraRepository {
         return dir.appendingPathComponent("user_cameras.json")
     }
 
+    /// Свои камеры и скрытые не прочитались (файл защищён до разблокировки):
+    /// пока не прочтём, не пишем — иначе затрём их (сценарий S9, 20.10).
+    @ObservationIgnored private var userDataUnreadable = false
+
     private func loadUserData() {
-        guard let decoded = JSONFile.load(UserData.self, from: storeURL, log: Log.cameras) else { return }
-        custom = decoded.custom
-        hiddenIDs = Set(decoded.hidden)
+        switch JSONFile.loadChecked(UserData.self, from: storeURL, log: Log.cameras) {
+        case .missing:
+            break
+        case .loaded(let decoded):
+            custom = decoded.custom
+            hiddenIDs = Set(decoded.hidden)
+            userDataUnreadable = false
+        case .corrupt:
+            JSONFile.setAside(storeURL, log: Log.cameras)
+        case .unreadable:
+            userDataUnreadable = true
+        }
     }
 
     private func persist() {
+        if userDataUnreadable {
+            // Ещё раз: к моменту правки файл мог стать доступен.
+            let added = custom, hidden = hiddenIDs
+            loadUserData()
+            guard !userDataUnreadable else {
+                Log.cameras.error("свои камеры не записаны: файл ещё не читается")
+                return
+            }
+            custom = Self.merged(custom, added)
+            hiddenIDs.formUnion(hidden)
+        }
         JSONFile.saveOrdered(UserData(custom: custom, hidden: Array(hiddenIDs)),
                              to: storeURL, log: Log.cameras, wait: false)
+    }
+
+    private static func merged(_ disk: [Camera], _ memory: [Camera]) -> [Camera] {
+        var seen = Set(disk.map(\.id))
+        return disk + memory.filter { seen.insert($0.id).inserted }
     }
 }

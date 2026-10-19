@@ -268,6 +268,43 @@ nonisolated struct LifetimeStats: Codable, Equatable {
         return s
     }
 
+    /// Финиш ПРОДОЛЖЕННОЙ поездки (склейка, TripMerge): первая нога уже
+    /// внесена своим финишем — добавляем только то, что прибавилось, иначе
+    /// «за всё время» считало её дважды: 10 км до магазина + 3 после давали
+    /// 23 км и две поездки (сценарий S11, 20.10). Поездка та же — `trips` не
+    /// растёт; серия: новый штраф её обрывает, а чистые лимитные проезды
+    /// продлевают, только если у первой ноги лимитных не было (иначе шаг
+    /// серии уже сделан).
+    nonisolated static func updatedResumed(_ stats: LifetimeStats,
+                                           basePasses: [DrivingScore.Pass],
+                                           allPasses: [DrivingScore.Pass],
+                                           distanceDelta: Double) -> LifetimeStats {
+        var s = stats
+        s.distanceMeters += max(0, distanceDelta)
+        let added = Array(allPasses.dropFirst(min(basePasses.count, allPasses.count)))
+        s.camerasPassed += added.count
+        var limited = 0, fined = 0
+        for pass in added {
+            guard let limit = pass.limitKmh else { continue }
+            limited += 1
+            let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
+            if fine > 0 {
+                fined += 1
+                s.riskFinesSum += fine
+            } else {
+                s.camerasInLimit += 1
+                s.savedFinesSum += FineSchedule.minimumFine
+            }
+        }
+        if fined > 0 {
+            s.cleanStreak = 0
+        } else if limited > 0, !basePasses.contains(where: { $0.limitKmh != nil }) {
+            s.cleanStreak += 1
+            s.bestStreak = max(s.bestStreak, s.cleanStreak)
+        }
+        return s
+    }
+
     /// Хирургический откат вычищенных проездов из пожизненных счётчиков.
     ///
     /// Ретро-чистка ложных проездов НЕ имеет права пересобирать lifetime из

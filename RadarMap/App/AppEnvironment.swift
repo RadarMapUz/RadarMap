@@ -464,9 +464,13 @@ final class AppEnvironment {
         trip.onTripFinished = { [weak self, weak trip, weak notifications, weak usage] in
             guard let trip else { return }
             // История приходит от новых к старым — только что закрытая поездка первая.
-            if let last = trip.history.first {
-                usage?.noteTrip(distanceMeters: last.distanceMeters)
-                usage?.note { $0.passes += last.camerasPassed }
+            // Склейка — та же поездка: в статистику только прибавка километров.
+            // Проезды уже посчитаны по одному (notePass): здесь их не добавляем,
+            // иначе каждый считался дважды (сценарий S11, 20.10).
+            if trip.lastFinishWasContinuation {
+                usage?.note { $0.kilometres = (($0.kilometres + trip.lastFinishDistanceDelta / 1000) * 10).rounded() / 10 }
+            } else if trip.history.first != nil {
+                usage?.noteTrip(distanceMeters: trip.lastFinishDistanceDelta)
             }
             // Виджет — сразу: автозавершение в фоне иначе оставляло бы его
             // с цифрами «до поездки» до следующего открытия приложения.

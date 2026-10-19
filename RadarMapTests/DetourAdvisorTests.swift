@@ -115,4 +115,22 @@ final class DetourAdvisorTests: XCTestCase {
         _ = watch.update(speedKmh: 40, at: t0 + 100)
         XCTAssertEqual(watch.update(speedKmh: 45, at: t0 + 125), 0, "поехали по-настоящему")
     }
+
+    // MARK: - Время на ответ (сценарий D1, 20.10)
+
+    /// Предложение, которого никто не видел (баннер в машине ждёт за камерой
+    /// весь её подъезд), не истекает за 20 с от создания; показанное — через
+    /// 20 с от показа; вытесненное камерой — снова ждёт экрана с начала.
+    @MainActor
+    func testOfferTimesFromWhenItIsSeen() {
+        let created = Date(timeIntervalSince1970: 1_800_000_000)
+        var offer = RouteService.DetourOffer(id: 1, saving: 480, via: nil, waitingSince: created)
+        XCTAssertEqual(offer.expires, created.addingTimeInterval(AppConfig.detourOfferUnseenSeconds))
+        offer.shownAt = created.addingTimeInterval(45)
+        XCTAssertEqual(offer.expires, created.addingTimeInterval(45 + AppConfig.detourOfferSeconds))
+        // Вытеснен баннером камеры через 5 с показа — ждёт экрана заново.
+        offer.shownAt = nil
+        offer.waitingSince = created.addingTimeInterval(50)
+        XCTAssertEqual(offer.expires, created.addingTimeInterval(50 + AppConfig.detourOfferUnseenSeconds))
+    }
 }

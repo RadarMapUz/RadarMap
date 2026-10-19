@@ -30,12 +30,19 @@ struct CarPlayOverlay: View {
     /// версии дока на КАЖДЫЙ фикс (perf-аудит 07.10, п. 12).
     @State private var width: CGFloat = 0
 
+    /// Свой манёвр и прибытие — только в ведении (NavigationFlow): маршрут
+    /// без поездки — это выбор с «Поехали» на телефоне, а не «через 300 м
+    /// направо» без голоса (сценарий D1, 20.10).
+    private var isGuiding: Bool {
+        NavigationFlow.phase(hasRoute: env.route.isActive, isTripActive: env.location.isTripActive) == .guiding
+    }
+
     // MARK: - Раскладка
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 10) {
-                if showsManeuver, let step = env.route.nextStep {
+                if showsManeuver, isGuiding, let step = env.route.nextStep {
                     maneuverBanner(step: step, distance: env.route.nextStepDistance)
                 }
                 // Камеры наверху нет: до 11.10 тут стоял второй баннер той же
@@ -96,7 +103,7 @@ struct CarPlayOverlay: View {
             Spacer(minLength: 0)
             // Прибытие — только пока манёвр не рисует сама машина: в
             // навигационной сессии время в пути стоит в её карточке.
-            if showsManeuver, env.route.isActive, Self.fitsRoute(hudWidth: width) {
+            if showsManeuver, isGuiding, env.route.isActive, Self.fitsRoute(hudWidth: width) {
                 pill { etaCell }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }

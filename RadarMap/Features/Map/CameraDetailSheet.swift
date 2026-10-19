@@ -198,7 +198,7 @@ struct CameraDetailSheet: View {
                 .font(.rounded(14))
                 .foregroundStyle(Theme.textSecondary)
             Text(String(format: "%.6f, %.6f", camera.lat, camera.lon))
-                .font(.system(size: 12, design: .monospaced))
+                .font(.system(.footnote, design: .monospaced))
                 .foregroundStyle(Theme.textTertiary)
                 .textSelection(.enabled)
         }

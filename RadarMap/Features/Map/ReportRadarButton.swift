@@ -286,8 +286,9 @@ struct ReportRefineBar: View {
                 Text("Что это было?")
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .minimumScaleFactor(0.8)
+                    .layoutPriority(-1)
                 Spacer(minLength: 4)
                 option(.tripod, offer: offer)
                 option(.accident, offer: offer)
@@ -333,10 +334,12 @@ struct ReportRefineBar: View {
                 Text("Отменить")
                     .font(.rounded(9, .semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .fixedSize()
             }
             .foregroundStyle(Theme.textTertiary)
-            .frame(width: 56, height: 44)
+            // Ширина по подписи, не 56: «Bekor qilish» сжималось до 6 pt (4.5).
+            .padding(.horizontal, 6)
+            .frame(minWidth: 56, minHeight: 44)
             .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -362,10 +365,12 @@ struct ReportRefineBar: View {
                 Text(kind.title)
                     .font(.rounded(9, .semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .fixedSize()
             }
             .foregroundStyle(kind.cameraType.glyphTint)
-            .frame(width: 62, height: 44)
+            // По подписи: «Uch oyoq kamera» в 62 pt выходила кеглем 6 (4.5).
+            .padding(.horizontal, 6)
+            .frame(minWidth: 62, minHeight: 44)
             .background(kind.cameraType.tint.gradient,
                         in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
@@ -436,7 +441,8 @@ struct MobileConfirmBar: View {
                 .font(.rounded(15, .bold))
                 .foregroundStyle(.white)
                 // 44 pt — минимум Apple для пальца; за рулём это не педантизм.
-                .frame(width: 62, height: 44)
+                .padding(.horizontal, 10)
+                .frame(minWidth: 62, minHeight: 44)
                 .background(tint,
                             in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }

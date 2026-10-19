@@ -38,6 +38,9 @@ struct MapLayersControl: View {
     @State private var collapseTask: Task<Void, Never>?
     /// Настоящая высота содержимого панели — мерится внутри ScrollView.
     @State private var contentHeight: CGFloat = 0
+    /// Ширина по самой длинной подписи («Piyodalar yo‘lagi» и крупный
+    /// кегль не помещались в прежние 208 pt), но не уже 208 (4.5).
+    @State private var contentWidth: CGFloat = 0
 
     var body: some View {
         // Панель открывается СБОКУ от кнопки, поверх карты, и в вёрстке
@@ -63,10 +66,13 @@ struct MapLayersControl: View {
     private var panel: some View {
         ScrollView {
             panelContent
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+                .onGeometryChange(for: CGSize.self) { $0.size } action: {
+                    contentHeight = $0.height
+                    contentWidth = $0.width
+                }
         }
         .scrollBounceBehavior(.basedOnSize)
-        .frame(width: 208,
+        .frame(width: max(Self.minWidth, min(contentWidth, Self.maxWidth)),
                height: contentHeight > 0 ? min(contentHeight, max(maxPanelHeight, Theme.controlSize)) : nil)
         // Сплошная, как все панели над живой картой (4.2): стекло с вуалью
         // пересчитывало размытие каждый кадр и пропускало подписи улиц.
@@ -90,8 +96,14 @@ struct MapLayersControl: View {
             toggle("Тротуары", "figure.walk", isOn: $sidewalks)
         }
         .padding(12)
-        .frame(width: 208, alignment: .leading)
+        .frame(minWidth: Self.minWidth, alignment: .leading)
+        // Идеальная ширина, а не предложенная ScrollView: иначе панель
+        // измеряла бы саму себя.
+        .fixedSize(horizontal: true, vertical: false)
     }
+
+    private static let minWidth: CGFloat = 208
+    private static let maxWidth: CGFloat = 280
 
     private func toggle(_ title: LocalizedStringKey, _ icon: String,
                         isOn: Binding<Bool>) -> some View {

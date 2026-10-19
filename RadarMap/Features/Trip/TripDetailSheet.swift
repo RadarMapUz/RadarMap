@@ -720,10 +720,12 @@ struct TripShareCard: View {
 
     private func chip(icon: String, text: String, tint: Color) -> some View {
         HStack(spacing: 10) {
+            // Шкала Theme, а не .system(size:): подпись растёт с системным
+            // кеглем, как весь остальной текст экрана (4.5).
             Image(systemName: icon)
-                .font(.system(size: 17, weight: .bold))
+                .font(.rounded(17, .bold))
             Text(text)
-                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                .font(.rounded(18, .heavy))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
         }

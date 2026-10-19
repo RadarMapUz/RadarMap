@@ -253,14 +253,10 @@ struct CarPlayMapScreen: View {
             // цифры не держатся в дереве, которое никто не видит.
             if model.isOnScreen {
                 // Во время выбора маршрута манёвр и прибытие — в карточке
-                // вариантов системы, свой баннер их бы дублировал. И только в
-                // ведении (NavigationFlow): маршрут без поездки — это выбор с
-                // «Поехали» на телефоне, а не «через 300 м направо» без голоса.
-                let guiding = NavigationFlow.carGuides(
-                    phase: NavigationFlow.phase(hasRoute: env.route.isActive,
-                                                isTripActive: env.location.isTripActive),
-                    choosing: model.isPreviewing)
-                CarPlayOverlay(showsManeuver: !model.hasSystemGuidance && guiding,
+                // вариантов системы, свой баннер их бы дублировал. Фазу
+                // (ведение или выбор) читает сам HUD: тело с картой маршрут не
+                // читает.
+                CarPlayOverlay(showsManeuver: !model.hasSystemGuidance && !model.isPreviewing,
                                buttonInsets: model.mapButtonInsets)
             }
 

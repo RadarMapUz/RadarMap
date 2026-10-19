@@ -151,6 +151,10 @@ final class RouteService {
                                                "RouteService.onRerouted") }
     }
     /// Найден объезд пробки — сказать водителю (голос). Решение принимает он.
+    /// Есть ли экран, на котором предложение можно показать (телефон на
+    /// переднем плане или машина); нет — оно только голосом.
+    @ObservationIgnored var detourScreenAvailable: (() -> Bool)?
+
     @ObservationIgnored var onDetourOffer: ((DetourOffer) -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onDetourOffer,
                                                "RouteService.onDetourOffer") }
@@ -1121,8 +1125,9 @@ final class RouteService {
         let saving: TimeInterval
         /// Улица, которой объезд уходит; nil — не назвать.
         let via: String?
-        /// Когда предложение появилось.
-        let created: Date
+        /// С какого момента предложение ждёт экрана (появилось или его
+        /// вытеснил баннер камеры).
+        var waitingSince: Date
         /// Когда водитель его УВИДЕЛ (карточка на телефоне или баннер в
         /// машине); nil — ещё нет. В машине баннер ждёт за камерой весь её
         /// подъезд (30–50 с), и 20 с от создания истекали раньше, чем он
@@ -1134,7 +1139,7 @@ final class RouteService {
         /// снимаем (так и не показали).
         var expires: Date {
             shownAt.map { $0.addingTimeInterval(AppConfig.detourOfferSeconds) }
-                ?? created.addingTimeInterval(AppConfig.detourOfferUnseenSeconds)
+                ?? waitingSince.addingTimeInterval(AppConfig.detourOfferUnseenSeconds)
         }
 
         /// «Быстрее на 8 мин».
@@ -1167,12 +1172,12 @@ final class RouteService {
     /// На каждом фиксе поездки — и стоя: в пробке машина не сдвигается, и
     /// updateProgress (он ждёт смещения) молчит ровно тогда, когда объезд нужен.
     func considerDetour(coordinate: CLLocationCoordinate2D, speedKmh: Double, now: Date = Date()) {
+        // Истекло — показанное или так и не показанное — это «остаёмся»: то же
+        // молчание 10 минут и тот же счёт в лимит. Иначе невиданное
+        // предложение, снятое без отказа, звучало голосом снова через 3 мин
+        // всю пробку (ревью 20.10).
         if let offer = detourOffer, now >= offer.expires {
-            if offer.shownAt == nil {
-                dropUnseenDetour()
-            } else {
-                declineDetour(now: now, reason: "нет ответа")
-            }
+            declineDetour(now: now, reason: offer.shownAt == nil ? "так и не показано" : "нет ответа")
         }
         let crawl = detourCrawl.update(speedKmh: speedKmh, at: now)
         guard let variant = selected, let destination = destinationCoordinate,
@@ -1219,7 +1224,13 @@ final class RouteService {
             detourVariant = built[offer.index]
             detourCounter += 1
             detourOffers += 1
-            let shown = DetourOffer(id: detourCounter, saving: offer.saving, via: offer.via, created: Date())
+            // Ни телефон, ни машина показать не могут (телефон заблокирован в
+            // держателе, машины нет) — предложение только голосом, и время на
+            // ответ идёт сразу, как до 20.10.
+            let now = Date()
+            let screen = detourScreenAvailable?() ?? true
+            let shown = DetourOffer(id: detourCounter, saving: offer.saving, via: offer.via,
+                                    waitingSince: now, shownAt: screen ? nil : now)
             detourOffer = shown
             Log.route.notice("объезд: предлагаю, выигрыш \(Int(offer.saving), privacy: .public) с")
             onDetourOffer?(shown)
@@ -1250,14 +1261,13 @@ final class RouteService {
         detourOffer = offer
     }
 
-    /// Предложение так и не встало ни на один экран — снимаем без «отказа»:
-    /// ни 10 минут тишины, ни счёта в лимит предложений на маршрут.
-    private func dropUnseenDetour() {
-        guard detourOffer != nil else { return }
-        detourOffer = nil
-        detourVariant = nil
-        detourOffers = max(0, detourOffers - 1)
-        Log.route.notice("объезд: так и не показан — снят без отказа")
+    /// Баннер предложения вытеснен (камера впереди) — время на ответ начнётся
+    /// заново, когда он снова встанет на экран.
+    func noteDetourHidden(id: Int, now: Date = Date()) {
+        guard var offer = detourOffer, offer.id == id, offer.shownAt != nil else { return }
+        offer.shownAt = nil
+        offer.waitingSince = now
+        detourOffer = offer
     }
 
     /// «Остаться» (или нет ответа): 10 минут тишины.
@@ -1274,7 +1284,7 @@ final class RouteService {
     /// Варианта за ней нет — «Объехать» ничего не меняет.
     func seedDemoDetourOffer() {
         detourCounter += 1
-        detourOffer = DetourOffer(id: detourCounter, saving: 8 * 60, via: "Шота Руставели", created: Date())
+        detourOffer = DetourOffer(id: detourCounter, saving: 8 * 60, via: "Шота Руставели", waitingSince: Date())
     }
     #endif
 

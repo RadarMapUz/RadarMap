@@ -145,6 +145,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         offeredDestination = false
         guidanceAttached = false
         guidanceAttachedInBackground = false
+        guidingAtConnect = NavigationFlow.phase(hasRoute: env.route.isActive,
+                                                isTripActive: env.location.isTripActive) == .guiding
         // Камеры поверх чужого приложения — системными алертами, пока сцена
         // не на экране машины.
         guidance.isOnScreen = shown
@@ -644,6 +646,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             attachGuidance(background: false)
         } else if guidanceAttachedInBackground {
             guidanceAttachedInBackground = false
+            guidance.mayStartSession = true
             guidance.restartSession(reason: "корень на экране после подключения в фоне")
         }
         // Алерт о разрешении — сразу, а не по первому тапу: без разрешения
@@ -657,11 +660,18 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// подключении; в фоне — до первого показа корня.
     private var guidanceAttached = false
     private var guidanceAttachedInBackground = false
+    /// При подключении уже шло ведение по нашему маршруту.
+    private var guidingAtConnect = false
 
     private func attachGuidance(background: Bool) {
         guard !guidanceAttached, let mapTemplate, let banners else { return }
         guidanceAttached = true
         guidanceAttachedInBackground = background
+        // В фоне сессию начинаем, только если ведение уже шло, когда машина
+        // подключилась (водитель ехал по нашему маршруту): иначе автостарт
+        // поездки при старом маршруте молча забрал бы ведение у Яндекса на
+        // экране машины (ревью 20.10). Показ корня это ограничение снимает.
+        guidance.mayStartSession = !background || guidingAtConnect
         Log.carplay.notice("ведение подключено \(background ? "в фоне" : "на экране", privacy: .public)")
         guidance.attach(to: mapTemplate, banners: banners)
     }
@@ -676,7 +686,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let session = session
         Task { @MainActor [weak self] in
             await Task.pause(seconds: AppConfig.carPlayRootSettleDelay)
-            guard let self, self.session == session, !self.rootShown else { return }
+            // Сцена успела выйти на экран — подключит показ корня, не фон.
+            guard let self, self.session == session, !self.rootShown, !self.model.isOnScreen else { return }
             self.attachGuidance(background: true)
         }
     }
@@ -838,6 +849,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// освободится.
     private func forgetBanner(_ alert: CPNavigationAlert) {
         if alert === detourAlert {
+            // Вытеснен камерой — время на ответ начнётся снова, когда вернётся.
+            if let id = detourAlertID { env.route.noteDetourHidden(id: id) }
             detourAlertID = nil
             detourAlert = nil
         }
@@ -921,7 +934,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             // Время — один раз, в подзаголовке (как на телефоне): до 20.10
             // «сейчас ~52 мин, пробки +8» стояло и в заголовке, и под ним.
             titleVariants: [title],
-            subtitleVariants: [guess.subtitle, guess.usualText ?? guess.kind.title],
+            subtitleVariants: [guess.subtitle],
             image: CarPlayGuidance.symbol(guess.kind.symbol, pointSize: 30,
                                           onDark: model.carIsDark ?? !model.isDaylight),
             primaryAction: CPAlertAction(title: String(localized: "Поехали"), style: .default) { [weak self] _ in
@@ -965,8 +978,16 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// ведение у Яндекса (сценарий D1). Вернуть ведение — новый маршрут
     /// (цель — в «Недавних»).
     func mapTemplateDidCancelNavigation(_ mapTemplate: CPMapTemplate) {
-        Log.carplay.notice("CarPlay: навигацию отменила система — уступаем, маршрут снят")
+        // Только владелец экрана машины и только наша живая сессия: событие
+        // старой сцены после «моргания» кабеля или отмена сессии, которой у
+        // нас нет, не вправе снимать общий маршрут (ревью 20.10).
+        let hadSession = model.hasSystemGuidance
         guidance.systemCancelled()
+        guard Self.activeDelegate === self, hadSession else {
+            Log.carplay.notice("CarPlay: отмена навигации без нашей сессии — маршрут не трогаю")
+            return
+        }
+        Log.carplay.notice("CarPlay: навигацию отменила система — уступаем, маршрут снят")
         if env.route.isActive { env.route.clear() }
     }
 
@@ -1100,7 +1121,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let session = session
         templateWatch = Task { @MainActor [weak self] in
             await Task.pause(seconds: AppConfig.carPlayRootSettleDelay)
-            guard let self, !Task.isCancelled, self.session == session, self.model.isOnScreen else { return }
+            guard let self, !Task.isCancelled, self.session == session else { return }
+            guard self.model.isOnScreen else {
+                // Ушли с экрана машины, не дождавшись показа: ведение — в фон.
+                if self.rootSet == true, !self.rootShown { self.attachGuidanceInBackground() }
+                return
+            }
             if self.applyRootWatch(timedOut: false) == .markShown { return }
             await Task.pause(seconds: max(0, AppConfig.carPlayTemplateShowTimeout - AppConfig.carPlayRootSettleDelay))
             guard !Task.isCancelled, self.session == session, self.model.isOnScreen else { return }

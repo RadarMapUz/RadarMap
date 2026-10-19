@@ -206,6 +206,9 @@ final class CarPlayGuidance {
     /// может подключиться в фоне и так и не стать активной, а
     /// `sceneDidBecomeActive` ставит «да» сам.
     var isOnScreen = false
+    /// Можно ли начинать сессию навигации: ведение, подключённое в фоне,
+    /// начинает её только при ведении, шедшем уже при подключении.
+    var mayStartSession = true
 
     private var env: AppEnvironment { .shared }
 
@@ -368,7 +371,7 @@ final class CarPlayGuidance {
         if NavigationFlow.carGuides(phase: phase, choosing: model.isPreviewing),
            let destination = route.destinationCoordinate {
             let cancelledHere = cancelledDestination.map { Self.same($0, destination) } ?? false
-            if !cancelledHere,
+            if !cancelledHere, mayStartSession || session != nil,
                session == nil || tripDestination.map({ !Self.same($0, destination) }) ?? true {
                 cancelledDestination = nil
                 start(on: template, to: destination)

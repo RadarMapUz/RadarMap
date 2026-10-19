@@ -82,6 +82,38 @@ final class DepartureReminderTests: XCTestCase {
         XCTAssertEqual(late.count, 4, "7:35 уже прошло — задним числом не ставим")
     }
 
+    /// Уже едем — сегодняшнего нет, остальные дни на месте; поездка кончилась
+    /// раньше напоминания (переставили машину во дворе) — сегодняшнее вернётся.
+    func testDrivingNowSkipsTodayOnly() {
+        let summary = summary(lastDeparture: monday(8, 20, plusDays: -3))
+        let driving = DepartureReminder.plan(summary: summary, target: nil, now: monday(6),
+                                             tripActive: true, calendar: calendar)
+        XCTAssertEqual(driving.count, 4)
+        XCTAssertFalse(driving.contains { calendar.isDate($0.fire, inSameDayAs: monday(6)) })
+        let parked = DepartureReminder.plan(summary: summary, target: nil, now: monday(7, 5),
+                                            tripActive: false, calendar: calendar)
+        XCTAssertEqual(parked.count, 5, "в 7:05 поставили машину — в 7:35 напоминание будет")
+    }
+
+    /// Отпуск — по каждому дню: последняя поездка на работу — в воскресенье
+    /// 8:20 за 8 дней до этого понедельника; 10 суток от неё кончаются в среду
+    /// 8:20 — напоминания пн, вт и ср (7:35), четверга и пятницы нет.
+    func testVacationIsCheckedPerDay() {
+        let plan = DepartureReminder.plan(summary: summary(lastDeparture: monday(8, 20, plusDays: -8)),
+                                          target: nil, now: monday(6), calendar: calendar)
+        XCTAssertEqual(plan.count, 3)
+        XCTAssertEqual(plan.last?.fire, monday(7, 35, plusDays: 2))
+    }
+
+    /// id по датам — одни и те же при каждом пересчёте, и снимаются без опроса.
+    func testIDsAreByDate() {
+        let plan = DepartureReminder.plan(summary: summary(lastDeparture: monday(8, 20, plusDays: -3)),
+                                          target: nil, now: monday(6), calendar: calendar)
+        let all = Set(DepartureReminder.allIDs(around: monday(6), calendar: calendar))
+        XCTAssertTrue(plan.allSatisfy { all.contains($0.id) })
+        XCTAssertEqual(plan.first?.id, DepartureReminder.id(for: monday(0), calendar: calendar))
+    }
+
     func testNightShiftTargetHasNoLeaveBy() {
         XCTAssertNil(DepartureReminder.leaveBy(target: ArrivalTarget(minute: 30), usual: 48 * 60))
     }

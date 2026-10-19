@@ -207,35 +207,52 @@ final class NotificationService: NSObject {
 
     // MARK: - «Выезжайте раньше» (8.8.7)
 
-    /// Заменить запланированные напоминания о выезде новыми: старые с
-    /// префиксом `departure-` снимаются целиком (дни и тексты могли
-    /// измениться), новые ставятся одним разом. Пустой список — снять все.
-    func scheduleDepartureReminders(_ reminders: [DepartureReminder.Reminder]) {
+    /// Заменить запланированные напоминания о выезде новыми. Снимаем по id
+    /// (они по датам — известны заранее), без опроса центра: опрос с `await`
+    /// давал гонку двух пересчётов, и поставленные первым переживали «пусто»
+    /// второго (ревью 20.10). Добавление — по порядку, через обработчик.
+    /// `deliveredToday` — снять и уже показанное сегодня (поехали).
+    func scheduleDepartureReminders(_ reminders: [DepartureReminder.Reminder], now: Date = Date(),
+                                    deliveredToday: Bool = false) {
         let center = UNUserNotificationCenter.current()
-        Task {
-            let pending = await center.pendingNotificationRequests()
-            center.removePendingNotificationRequests(withIdentifiers: pending.map(\.identifier)
-                .filter { $0.hasPrefix(DepartureReminder.idPrefix) })
-            for reminder in reminders {
-                let content = UNMutableNotificationContent()
-                content.title = String(localized: "Пора выезжать на работу")
-                content.body = reminder.body
-                content.sound = .default
-                let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reminder.fire)
-                let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
-                do {
-                    try await center.add(UNNotificationRequest(identifier: reminder.id, content: content,
-                                                               trigger: trigger))
-                } catch {
+        center.removePendingNotificationRequests(withIdentifiers: DepartureReminder.allIDs(around: now))
+        if deliveredToday {
+            center.removeDeliveredNotifications(withIdentifiers: [DepartureReminder.id(for: now)])
+        }
+        for reminder in reminders {
+            let content = UNMutableNotificationContent()
+            content.title = String(localized: "Пора выезжать на работу")
+            content.body = reminder.body
+            content.sound = .default
+            let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reminder.fire)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
+            center.add(UNNotificationRequest(identifier: reminder.id, content: content, trigger: trigger)) { error in
+                if let error {
                     Log.app.error("напоминание о выезде не поставлено: \(error.localizedDescription, privacy: .public)")
                 }
             }
         }
     }
 
-    /// Уже едем — сегодняшнее напоминание не нужно.
-    func cancelDepartureReminder(id: String) {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+    /// Разрешение на уведомления — с ответом: напоминание, которое некуда
+    /// показать, не должно стоять включённым.
+    func requestAuthorizationResult() async -> Bool {
+        let granted: Bool
+        do {
+            granted = try await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound, .badge])
+        } catch {
+            Log.app.error("разрешение на уведомления: \(error.localizedDescription, privacy: .public)")
+            granted = false
+        }
+        await refreshStatus()
+        return granted
+    }
+
+    /// Уведомлениям можно показываться (разрешены или «тихо»).
+    var canNotify: Bool {
+        authorizationStatus == .authorized || authorizationStatus == .provisional
+            || authorizationStatus == .ephemeral
     }
 
     // MARK: - Приближение к камере (фон)

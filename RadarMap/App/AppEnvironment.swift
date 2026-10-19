@@ -10,6 +10,7 @@ import Foundation
 import Observation
 import UIKit
 import WidgetKit
+import os
 
 @MainActor
 @Observable
@@ -270,11 +271,10 @@ final class AppEnvironment {
             if active { self.traffic.tripStarted() } else { self.traffic.tripEnded() }
             self.commuteGhostPending = active
             if active { self.tryStartCommuteGhost() } else { self.commuteLive.stop() }
-            // Уже едем — сегодняшнее «пора выезжать» не нужно.
-            if active, let today = self.scheduledReminders?.first,
-               Calendar.current.isDateInToday(today.fire) {
-                self.notifications.cancelDepartureReminder(id: today.id)
-            }
+            // Едем — сегодняшнего «пора выезжать» нет (и показанное — снять);
+            // кончили поездку — план заново (машину переставили во дворе —
+            // напоминание вернётся).
+            self.refreshDepartureReminders(tripEdge: true)
             self.refreshTrafficWanted()
             if !active, !self.isPhoneSceneActive, !self.isCarPlayConnected {
                 self.mobile.stopPolling()
@@ -520,6 +520,7 @@ final class AppEnvironment {
         refreshInterfaceAppearance()
         observeCameraRevision()
         observeAppearanceSetting()
+        observeCommuteSettings()
         wireNetworkRhythm()
     }
 
@@ -790,8 +791,35 @@ final class AppEnvironment {
     func setDepartureReminders(_ on: Bool) {
         settings.departureRemindersAsked = true
         if settings.departureReminders != on { settings.departureReminders = on }
-        if on { notifications.requestAuthorization() }
-        refreshDepartureReminders()
+        guard on else { return refreshDepartureReminders() }
+        // Ответ на вопрос о разрешении — до расписания: «нет» выключает
+        // напоминания обратно, а не оставляет их включёнными впустую.
+        Task {
+            let granted = await notifications.requestAuthorizationResult()
+            if !granted, settings.departureReminders {
+                Log.app.notice("напоминания о выезде: уведомления запрещены — выключаю")
+                settings.departureReminders = false
+            }
+            refreshDepartureReminders()
+        }
+    }
+
+    /// Срок, места, обучение дороги и сами напоминания — пересчёт сразу при
+    /// смене, а не со следующей поездки: перенесли «быть к» с 9:00 на 8:00 в
+    /// воскресенье — в понедельник напоминание уже про 8:00 (ревью 20.10).
+    private func observeCommuteSettings() {
+        withObservationTracking {
+            _ = settings.workArrivalTarget
+            _ = settings.homePlace
+            _ = settings.workPlace
+            _ = settings.commuteLearning
+            _ = settings.departureReminders
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.refreshCommute()
+                self?.observeCommuteSettings()
+            }
+        }
     }
 
     /// Выключили «Время дороги на работу» посреди поездки — призрак гаснет
@@ -818,6 +846,12 @@ final class AppEnvironment {
     }
 
     func refreshCommute() {
+        // Что бы ни случилось ниже — «сейчас ~44 мин» и напоминания следом:
+        // места забыли — напоминания по ним сняты (ревью 20.10).
+        defer {
+            refreshDepartureEstimates()
+            refreshDepartureReminders()
+        }
         // Журнал копит концы поездок 45 дней — история держит только 50
         // записей, и «медиана за 30 дней» на ней была медианой за 12–17.
         guard let ends = commuteEnds else {
@@ -836,11 +870,6 @@ final class AppEnvironment {
             ? ArrivalTarget.suggestion(arrivals: trips.filter { $0.direction == .toWork }.map(\.arrival),
                                        now: Date())
             : nil
-        // Профиль загрузился, поездка свернулась, историю стёрли, места
-        // сменились — «сейчас ~44 мин» пересчитывается тут же (ключ решит,
-        // есть ли что).
-        refreshDepartureEstimates()
-        refreshDepartureReminders()
     }
 
     /// Напоминать есть о чём (выгодный выезд или срок) — для предложения в «Итогах».
@@ -852,15 +881,20 @@ final class AppEnvironment {
 
     /// «Выезжайте раньше» (8.8.7): по будням за 10 мин до выгодного выезда —
     /// из своей истории, без сервера. Выключено — снимаем всё поставленное.
-    func refreshDepartureReminders(now: Date = Date()) {
+    func refreshDepartureReminders(now: Date = Date(), tripEdge: Bool = false) {
+        // Срок — только пока учится дорога: без неё его и задать негде.
+        let target = settings.commuteLearning ? settings.workArrivalTarget : nil
         let candidate = DepartureReminder.plan(summary: commute.first { $0.direction == .toWork },
-                                               target: settings.workArrivalTarget, now: now)
-        // Есть что напомнить — предложение в «Итогах» имеет смысл.
-        if departureReminderAvailable != !candidate.isEmpty { departureReminderAvailable = !candidate.isEmpty }
+                                               target: target, now: now, tripActive: location.isTripActive)
+        // Есть что напомнить и куда показать — предложение в «Итогах» имеет смысл.
+        let available = !candidate.isEmpty && notifications.authorizationStatus != .denied
+        if departureReminderAvailable != available { departureReminderAvailable = available }
         let plan = settings.departureReminders ? candidate : []
-        guard plan != scheduledReminders else { return }
-        scheduledReminders = plan
-        notifications.scheduleDepartureReminders(plan)
+        guard plan != scheduledReminders || tripEdge else { return }
+        // Без разрешения не запоминаем «поставлено»: разрешат — поставим.
+        scheduledReminders = notifications.canNotify ? plan : nil
+        notifications.scheduleDepartureReminders(plan, now: now,
+                                                 deliveredToday: tripEdge && location.isTripActive)
     }
 
     #if DEBUG

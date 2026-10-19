@@ -145,7 +145,8 @@ struct DepartureReminderOffer: View {
                     Text("Напоминать, когда выезжать?")
                         .font(.rounded(15, .bold))
                         .foregroundStyle(Theme.textPrimary)
-                    Text("По будням, за 10 минут — только когда выехать в другое время выгоднее или нужно успеть к сроку. По вашим поездкам, на телефоне.")
+                    Text(String(format: String(localized: "По будням, за %lld мин до выезда — только когда выехать в другое время выгоднее или нужно успеть к сроку. По вашим поездкам, на телефоне."),
+                                AppConfig.departureReminderLeadMinutes))
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

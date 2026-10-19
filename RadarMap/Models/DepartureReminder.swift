@@ -36,13 +36,13 @@ enum DepartureReminder {
     static let idPrefix = "departure-"
 
     /// Напоминания на `days` дней вперёд, начиная с сегодняшнего.
+    /// `tripActive` — уже едем: сегодняшнего «пора выезжать» нет (вход плана,
+    /// а не разовая отмена — иначе следующий пересчёт возвращал его в дороге).
     static func plan(summary: Commute.Summary?, target: ArrivalTarget?, now: Date,
-                     calendar: Calendar = .current,
+                     tripActive: Bool = false, calendar: Calendar = .current,
                      days: Int = AppConfig.departureReminderDays) -> [Reminder] {
         guard let summary, summary.direction == .toWork, let usual = summary.usual else { return [] }
-        // Отпуск или работа из дома: давно не ездили — молчим, пока не поедем.
-        guard now.timeIntervalSince(summary.last.departure)
-                <= Double(AppConfig.departureReminderVacationDays) * 86_400 else { return [] }
+        let vacation = Double(AppConfig.departureReminderVacationDays) * 86_400
 
         let leave: (minute: Int, body: String)
         if let target, let minute = leaveBy(target: target, usual: usual) {
@@ -66,19 +66,34 @@ enum DepartureReminder {
         var result: [Reminder] = []
         for offset in 0..<days {
             guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
-            let weekday = calendar.component(.weekday, from: day)   // 1 — воскресенье
-            let workday = (2...6).contains(weekday) || (weekday == 7 && target?.saturday == true)
-            guard workday, !(offset == 0 && drovePastToday) else { continue }
+            let workday = target?.applies(on: day, calendar: calendar)
+                ?? (2...6).contains(calendar.component(.weekday, from: day))   // 1 — воскресенье
+            guard workday, !(offset == 0 && (drovePastToday || tripActive)) else { continue }
             let fireMinute = leave.minute - AppConfig.departureReminderLeadMinutes
             guard fireMinute >= 0,
                   let fire = calendar.date(bySettingHour: fireMinute / 60, minute: fireMinute % 60,
                                            second: 0, of: day),
-                  fire > now else { continue }
-            let parts = calendar.dateComponents([.year, .month, .day], from: day)
-            let id = String(format: "%@%04d-%02d-%02d", idPrefix, parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
-            result.append(Reminder(id: id, fire: fire, body: leave.body))
+                  fire > now,
+                  // Отпуск или работа из дома — по КАЖДОМУ дню: неделя, уже
+                  // поставленная, не должна звонить в первый день отпуска.
+                  fire.timeIntervalSince(summary.last.departure) <= vacation else { continue }
+            result.append(Reminder(id: id(for: day, calendar: calendar), fire: fire, body: leave.body))
         }
         return result
+    }
+
+    /// `departure-2026-10-21` — один id на день: замена, а не копия.
+    static func id(for day: Date, calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: day)
+        return String(format: "%@%04d-%02d-%02d", idPrefix, parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+    }
+
+    /// id всех дней, где напоминание могло стоять, — чтобы снять их без
+    /// опроса центра уведомлений (неделя назад и две вперёд).
+    static func allIDs(around now: Date, calendar: Calendar = .current) -> [String] {
+        let today = calendar.startOfDay(for: now)
+        return (-7...14).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
+            .map { id(for: $0, calendar: calendar) }
     }
 
     /// Во сколько выезжать к сроку: срок − обычное время − запас, вниз до 5 мин.

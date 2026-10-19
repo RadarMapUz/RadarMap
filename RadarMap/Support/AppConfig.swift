@@ -634,6 +634,31 @@ nonisolated enum AppConfig {
     nonisolated static let commuteProfileNearMeters: Double = 40
     /// Шаг выборки при сравнении путей.
     nonisolated static let commuteProfileSampleMeters: Double = 50
+
+    // MARK: Призрак дороги на работу (CommuteGhost, этап 8)
+    /// Поездок в выборке, без которых призрака нет: медиана из двух — не «обычно».
+    nonisolated static let commuteGhostMinRows = 3
+    /// На каком расстоянии затухает сегодняшний темп (пробка рядом ≠ пробка
+    /// на десятом километре).
+    nonisolated static let commuteGhostDecayMeters: Double = 2500
+    /// Окно темпа сегодня — последние ~2 км (не меньше трёх участков).
+    nonisolated static let commuteGhostPaceWindowMeters: Double = 2000
+    nonisolated static let commuteGhostPaceMin = 0.7
+    nonisolated static let commuteGhostPaceMax = 2.5
+    /// Сглаживание темпа к прежнему: половина нового за пересчёт.
+    nonisolated static let commuteGhostPaceSmoothing = 0.5
+    /// Прогноз — только после 1,5 км по линии варианта: заезд у дома — не дорога.
+    nonisolated static let commuteGhostMinAlongMeters: Double = 1500
+    /// Сход: дальше 60 м (или точность + 30) три фикса и 250 м пути.
+    nonisolated static let commuteGhostOffMeters: Double = 60
+    nonisolated static let commuteGhostOffRunMeters: Double = 250
+    /// Возврат: ближе 40 м на протяжении 300 м.
+    nonisolated static let commuteGhostBackMeters: Double = 40
+    nonisolated static let commuteGhostBackRunMeters: Double = 300
+    /// Запас до цели: гистерезис границ и сколько новое состояние должно
+    /// продержаться (второй пересчёт не раньше чем через минуту).
+    nonisolated static let commuteGhostSlackHysteresisMinutes = 1.5
+    nonisolated static let commuteGhostSlackHoldSeconds: TimeInterval = 60
     /// Тот же путь — столько точек в обе стороны лежат на другом.
     nonisolated static let commuteProfileSameRouteShare = 0.85
     /// Две точки дальше по времени — между ними могло быть что угодно.

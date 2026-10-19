@@ -406,4 +406,40 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertGreaterThan(total, 0)
         XCTAssertLessThan(elapsed, .milliseconds(500), "50 чекпоинтов часового трека: \(elapsed)")
     }
+
+    // MARK: - Призрак дороги на работу
+
+    /// Фикс призрака — проекция в окне линии и O(1) прогноз: 2000 фиксов
+    /// по линии из 600 вершин — меньше 50 мс суммарно (бюджет 8.8.2).
+    func testCommuteGhostPerFixBudget() throws {
+        let lat = 41.3, lon0 = 69.2
+        let kx = 111_320 * cos(lat * .pi / 180)
+        var line: [Int32] = []
+        for i in 0..<600 {
+            let x = 30_000.0 * Double(i) / 599
+            line.append(Int32((lat * 1e5).rounded()))
+            line.append(Int32(((lon0 + x / kx) * 1e5).rounded()))
+        }
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let rows = (0..<10).map { i in
+            CommuteProfile.Row(tripID: Double(i), departure: start.addingTimeInterval(-Double(i + 1) * 86_400),
+                               weekend: false, arrivalMinute: 0,
+                               seconds: [UInt16](repeating: 20, count: 150))
+        }
+        let variant = CommuteProfile.Variant(id: UUID(), line: line,
+                                             ends: (1...150).map { Float($0 * 200) },
+                                             limitKmh: [], rows: rows, lastUsed: start)
+        var session = try XCTUnwrap(CommuteLiveSession(variants: [variant], weekend: false,
+                                                        departure: start, calendar: utc))
+        let clock = ContinuousClock()
+        let began = clock.now
+        for k in 0..<2000 {
+            let x = Double(k) * 15
+            _ = session.note(lat: lat, lon: lon0 + x / kx, accuracy: 10,
+                             at: start.addingTimeInterval(Double(k)))
+        }
+        XCTAssertLessThan(clock.now - began, .milliseconds(50), "призрак дорожает на фикс")
+    }
 }

@@ -70,6 +70,8 @@ final class AppEnvironment {
     let roads = RoadNetworkService()
     /// Профиль дороги дом↔работа по участкам и журнал поездок для «дороги».
     let commuteProfiles = CommuteProfileStore()
+    /// Призрак дороги на работу на ходу (этап 8).
+    let commuteLive = CommuteLiveService()
     /// «Поделиться прибытием» — ссылка с временем прибытия для знакомого.
     let etaShare = EtaShareService()
     /// Горячие точки треног: подписанный список мест, где водители отмечали
@@ -266,6 +268,7 @@ final class AppEnvironment {
             guard let self else { return }
             self.mobile.setTripActive(active)
             if active { self.traffic.tripStarted() } else { self.traffic.tripEnded() }
+            if active { self.startCommuteGhost() } else { self.commuteLive.stop() }
             self.refreshTrafficWanted()
             if !active, !self.isPhoneSceneActive, !self.isCarPlayConnected {
                 self.mobile.stopPolling()
@@ -325,6 +328,9 @@ final class AppEnvironment {
                 self.roads.ensureCoverage(around: coordinate)
             }
             traffic?.note(coordinate, speedKmh: location?.speedKmh ?? -1)
+            if let self, let location, location.isTripActive, self.commuteLive.isRunning {
+                self.commuteLive.note(coordinate, accuracy: location.horizontalAccuracy, at: Date())
+            }
             if let traffic, let route, route.isActive { route.refreshTrafficDelay(revision: traffic.revision) }
             // «Впереди пробка» — только без маршрута: с маршрутом пробки уже в
             // ETA и в предложении объезда. Одна фраза на пробку (JamAhead).
@@ -642,6 +648,17 @@ final class AppEnvironment {
             manual: { [settings] kind in settings.place(for: kind == .home ? .home : .work) },
             usual: { [commute] direction in commute.first { $0.direction == direction }?.usual },
             from: location.currentCoordinate, now: now)
+    }
+
+    /// Призрак на старте поездки: только при включённом «Время дороги на
+    /// работу», с известными домом и работой и стартом у одного из них.
+    private func startCommuteGhost() {
+        guard settings.commuteLearning, let ends = commuteEnds,
+              let start = location.currentCoordinate,
+              let direction = CommuteLiveService.direction(start: start, home: ends.home, work: ends.work)
+        else { return }
+        commuteLive.start(direction: direction, variants: commuteProfiles.book[direction],
+                          departure: trip.startedAt ?? Date())
     }
 
     /// Дом и работа для дороги: заданный вручную адрес старше выученного —

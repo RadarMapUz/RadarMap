@@ -40,6 +40,8 @@ nonisolated enum CommuteGhost {
         let suffix: [Double]
         /// E_k = Σ_{j≥k} m_j·e^{−b_j/D}; последний элемент — 0.
         let decayed: [Double]
+        /// V_k = Σ_{j≥k} ((q75_j − q25_j)/1,35)²: разброс остатка за O(1).
+        let spreadSquared: [Double]
         /// Сколько поездок легло в базу.
         let rows: Int
 
@@ -129,13 +131,16 @@ nonisolated enum CommuteGhost {
         }
         var suffix = [Double](repeating: 0, count: n + 1)
         var decayed = [Double](repeating: 0, count: n + 1)
+        var spread = [Double](repeating: 0, count: n + 1)
         for j in stride(from: n - 1, through: 0, by: -1) {
             let b = j == 0 ? 0 : ends[j - 1]
+            let s = (q75[j] - q25[j]) / 1.35
             suffix[j] = suffix[j + 1] + median[j]
             decayed[j] = decayed[j + 1] + median[j] * exp(-b / decayMeters)
+            spread[j] = spread[j + 1] + s * s
         }
         return Baseline(ends: ends, median: median, q25: q25, q75: q75,
-                        suffix: suffix, decayed: decayed, rows: rows.count)
+                        suffix: suffix, decayed: decayed, spreadSquared: spread, rows: rows.count)
     }
 
     static func quantile(_ sorted: [Double], _ q: Double) -> Double {
@@ -192,11 +197,8 @@ nonisolated enum CommuteGhost {
         let here = base.median[k] * (1 - f) * rho
         let ahead = base.suffix[k + 1] + (rho - 1) * exp(a / decayMeters) * base.decayed[k + 1]
         let remaining = max(0, here + ahead)
-        var variance = 0.0
-        for j in k..<base.median.count {
-            let s = (base.q75[j] - base.q25[j]) / 1.35
-            variance += s * s * (j == k ? (1 - f) : 1)
-        }
+        let sk = (base.q75[k] - base.q25[k]) / 1.35
+        let variance = sk * sk * (1 - f) + base.spreadSquared[k + 1]
         return Forecast(remaining: remaining, delta: elapsed + remaining - base.total,
                         sigma: variance.squareRoot(), arrival: now.addingTimeInterval(remaining))
     }

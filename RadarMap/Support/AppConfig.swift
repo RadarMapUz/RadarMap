@@ -659,6 +659,15 @@ nonisolated enum AppConfig {
     /// продержаться (второй пересчёт не раньше чем через минуту).
     nonisolated static let commuteGhostSlackHysteresisMinutes = 1.5
     nonisolated static let commuteGhostSlackHoldSeconds: TimeInterval = 60
+    /// Пересчёт призрака стоя или посреди длинного участка — раз в 30 с.
+    nonisolated static let commuteGhostRecomputeSeconds: TimeInterval = 30
+    /// Проекция фикса — в окне 40 отрезков линии вокруг прошлой точки;
+    /// дальше 150 м от окна — полный проход (машина «потерялась»).
+    nonisolated static let commuteGhostWindowSegments = 40
+    nonisolated static let commuteGhostRescanMeters: Double = 150
+    /// Поездка — «дорога на работу», если началась не дальше 1 км от дома
+    /// (и наоборот): автостарт CoreMotion срабатывает уже на ходу.
+    nonisolated static let commuteGhostStartRadiusMeters: Double = 1000
     /// Тот же путь — столько точек в обе стороны лежат на другом.
     nonisolated static let commuteProfileSameRouteShare = 0.85
     /// Две точки дальше по времени — между ними могло быть что угодно.

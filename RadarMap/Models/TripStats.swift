@@ -155,6 +155,7 @@ final class TripStats {
         trackTimes = []
         timedBuffer = []
         lastFinishedRaw = nil   // новая поездка, не склейка — прошлый трек не нужен
+        resumedFrom = nil       // и не продолжение прошлой записи
         finishedDuration = 0
         startBatteryPercent = batteryPercent
         startedAt = Date()
@@ -273,6 +274,18 @@ final class TripStats {
 
     /// Сбросить поездку без записи в историю: пассажирский старт («я в такси»)
     /// не должен портить статистику и рейтинг.
+    /// Вернуть запись, вынутую склейкой, на место — как была: в историю (по
+    /// времени), в дневные итоги. «За всё время» её уже учитывает (финиш
+    /// продолжения вносит только прибавку), трогать не надо.
+    private func restoreResumedBase(_ base: TripRecord) {
+        resumedFrom = nil
+        let index = history.firstIndex { $0.startedAt < base.startedAt } ?? history.endIndex
+        history.insert(base, at: index)
+        days = TripDayBook.folded(base, into: days)
+        persist()
+        persistDays()
+    }
+
     func cancel() {
         resumedFrom = nil
         startedAt = nil
@@ -301,7 +314,7 @@ final class TripStats {
     func finish(endedManually: Bool = true, batteryPercent: Int? = nil) {
         finishedDuration = durationSeconds
         // Поездка завершена штатно — страховочный слепок больше не нужен.
-        defer { startedAt = nil; startBatteryPercent = nil; removeCheckpoint() }
+        defer { startedAt = nil; startBatteryPercent = nil; resumedFrom = nil; removeCheckpoint() }
         // Молчаливых потерь не бывает.
         //
         // Порог в сто метров остаётся — иначе выезд из гаража станет записью и
@@ -315,6 +328,9 @@ final class TripStats {
         guard distanceMeters >= 100 else {
             Log.trips.notice("поездка не сохранена: \(Int(self.distanceMeters), privacy: .public) м, короче порога 100 м")
             noteDropped("short")
+            // Продолжение, которое так и не стало поездкой, — прежняя запись
+            // возвращается как была, а не пропадает (ревью S11).
+            if let base = resumedFrom { restoreResumedBase(base) }
             return
         }
         // Рейтинг считаем по сырому треку (упрощённый теряет пики скорости).
@@ -388,14 +404,9 @@ final class TripStats {
     /// стирается вместе с чужой.
     func discardAsPassenger() {
         if let base = resumedFrom {
-            resumedFrom = nil
-            let index = history.firstIndex { $0.startedAt < base.startedAt } ?? history.endIndex
-            history.insert(base, at: index)
-            days = TripDayBook.folded(base, into: days)
             cancel()
+            restoreResumedBase(base)
             timedBuffer = []
-            persist()
-            persistDays()
             Log.trips.notice("пассажир: склейка отменена, прежняя поездка возвращена")
         } else {
             cancel()
@@ -417,8 +428,11 @@ final class TripStats {
         // кладём обе ноги — иначе «поездок» в отчёте разойдётся со списком.
         days = TripDayBook.unfolded(original, from: days)
         for leg in legs { days = TripDayBook.folded(leg, into: days) }
+        // Одна поездка стала двумя — и в «за всё время» (склейка вычитала).
+        lifetime.trips += max(0, legs.count - 1)
         persist()
         persistDays()
+        persistLifetime()
     }
 
     /// Можно ли объединить запись с предыдущей по времени (для меню и карточки-
@@ -911,8 +925,25 @@ final class TripStats {
     /// трёх камер ничего не доказывает, вопрос «умно ли» решается на сотнях.
     func addAlertRecall(_ tally: AlertRecall.Tally) {
         alertRecall = alertRecall + tally
+        // До загрузки (процесс подняли до первой разблокировки) UserDefaults
+        // тоже не прочитан: копим окно отдельно и доливаем к настоящему.
+        guard isLoaded else {
+            pendingRecall = pendingRecall + tally
+            return
+        }
         Storage.encode(alertRecall, for: .alertRecallTotal)
     }
+
+    /// Охват, накопленный, пока хранилище не читалось (до первой разблокировки).
+    @ObservationIgnored private var pendingRecall = AlertRecall.Tally()
+    /// Прошлое чтение истории упёрлось в «не читается»: «за всё время» и
+    /// охват из UserDefaults тогда тоже были пустыми — перечитать (ревью S9).
+    @ObservationIgnored private var loadWasBlocked = false
+    /// Повтор чтения — с нарастающей паузой (30 с … 10 мин).
+    @ObservationIgnored private var loadRetryDelay = AppConfig.storeRetrySeconds
+
+    /// Хранилище пока не читается (до первой разблокировки после перезагрузки).
+    var isLoadBlocked: Bool { loadWasBlocked && !isLoaded }
 
     /// Разбор двух файлов вне main — поэлементно, с честным ответом на «не
     /// читается» (сценарий S9, 20.10): см. JSONFile.LoadResult.
@@ -923,25 +954,35 @@ final class TripStats {
          JSONFile.loadChecked(LossyArray<TripDay>.self, from: days, log: Log.trips))
     }
 
-    /// Разобрать ответ чтения: прочитанное, отложить битое, и можно ли
+    /// Разобрать ответ чтения: прочитанное, что сделать с файлом, и можно ли
     /// вообще считать файл загруженным (нечитаемый — нельзя: ни одной записи
     /// в него, пока не прочтём, иначе затрём).
-    private static func accept<T>(_ result: JSONFile.LoadResult<LossyArray<T>>, url: URL)
-        -> (values: [T], readable: Bool) {
+    private enum Aside { case none, copy, move }
+
+    private static func accept<T>(_ result: JSONFile.LoadResult<LossyArray<T>>)
+        -> (values: [T], readable: Bool, aside: Aside) {
         switch result {
         case .missing:
-            return ([], true)
+            return ([], true, .none)
         case .loaded(let lossy):
             if lossy.dropped > 0 {
-                Log.trips.fault("\(url.lastPathComponent, privacy: .public): битых записей \(lossy.dropped, privacy: .public) — пропущены, копия отложена")
-                JSONFile.setAside(url, copy: true, log: Log.trips)
+                Log.trips.fault("битых записей \(lossy.dropped, privacy: .public): \(lossy.firstError ?? "", privacy: .public)")
             }
-            return (lossy.elements, true)
+            return (lossy.elements, true, lossy.dropped > 0 ? .copy : .none)
         case .corrupt:
-            JSONFile.setAside(url, log: Log.trips)
-            return ([], true)
+            return ([], true, .move)
         case .unreadable:
-            return ([], false)
+            return ([], false, .none)
+        }
+    }
+
+    /// Отложить файл; не вышло — считать нечитаемым: перезаписать битый
+    /// оригинал, не сохранив копии, нельзя.
+    private static func setAside(_ aside: Aside, _ url: URL) -> Bool {
+        switch aside {
+        case .none: return true
+        case .copy: return JSONFile.setAside(url, copy: true, log: Log.trips)
+        case .move: return JSONFile.setAside(url, log: Log.trips)
         }
     }
 
@@ -952,21 +993,28 @@ final class TripStats {
 
     private func loadFromDisk() async {
         let result = await Self.decodeStore(trips: storeURL, days: daysURL)
-        let tripsRead = Self.accept(result.trips, url: storeURL)
-        let daysRead = Self.accept(result.days, url: daysURL)
+        let tripsRead = Self.accept(result.trips)
+        let daysRead = Self.accept(result.days)
         // Файл есть, но не читается (процесс подняли до первой разблокировки
         // после перезагрузки): загруженным не считаем — запись затёрла бы
-        // историю пустым списком. Пробуем снова; поездки, закончившиеся за это
-        // время, встанут впереди прочитанного (ниже, «arrived»).
-        guard tripsRead.readable, daysRead.readable else {
-            Log.trips.notice("история не читается — повтор через \(Int(AppConfig.storeRetrySeconds), privacy: .public) с")
+        // историю пустым списком. Пробуем снова (пауза растёт до 10 мин);
+        // поездки, закончившиеся за это время, встанут впереди прочитанного
+        // (ниже, «arrived»). Битое откладываем только ПОСЛЕ этой проверки — и
+        // не вышло отложить — тоже «не читается».
+        guard tripsRead.readable, daysRead.readable,
+              Self.setAside(tripsRead.aside, storeURL), Self.setAside(daysRead.aside, daysURL) else {
+            loadWasBlocked = true
+            let delay = loadRetryDelay
+            loadRetryDelay = min(loadRetryDelay * 2, AppConfig.storeRetryMaxSeconds)
+            Log.trips.notice("история не читается — повтор через \(Int(delay), privacy: .public) с")
             Task { [weak self] in
-                await Task.pause(seconds: AppConfig.storeRetrySeconds)
+                await Task.pause(seconds: delay)
                 await self?.loadFromDisk()
             }
             return
         }
         let decoded = (trips: tripsRead.values, days: daysRead.values)
+        let rewrite = tripsRead.aside != .none || daysRead.aside != .none
         #if DEBUG
         // После чтения, а не до: демо сеется, пока файл читается.
         if demoReplacesDisk {
@@ -989,13 +1037,39 @@ final class TripStats {
         } else {
             days = arrived.reduce(decoded.days) { TripDayBook.folded($1, into: $0) }
         }
+        // Старт был до разблокировки: «за всё время» и охват из UserDefaults
+        // тогда не читались — перечитать настоящие и долить окно поверх.
+        if loadWasBlocked {
+            reloadLifetime(applying: arrived)
+            loadWasBlocked = false
+        }
         isLoaded = true
-        if !arrived.isEmpty {
+        if !arrived.isEmpty || rewrite {
+            // Битые записи отложены копией — переписать файл без них, иначе
+            // копия откладывалась бы на каждом запуске.
             persist()
             persistDays()
         }
+        if !arrived.isEmpty || pendingRecall != AlertRecall.Tally() {
+            persistLifetime()
+            alertRecall = alertRecall + pendingRecall
+            pendingRecall = AlertRecall.Tally()
+            Storage.encode(alertRecall, for: .alertRecallTotal)
+        }
         finishLoading()
         onHistoryLoaded?()
+    }
+
+    /// Перечитать «за всё время» и охват после старта до разблокировки и
+    /// внести поездки, закончившиеся в это окно (они легли на нули).
+    private func reloadLifetime(applying arrived: [TripRecord]) {
+        loadLifetime()
+        for record in arrived.reversed() {
+            lifetime = LifetimeStats.updated(
+                lifetime,
+                passes: record.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+                distanceMeters: record.distanceMeters)
+        }
     }
 
     private func finishLoading() {
@@ -1091,7 +1165,9 @@ final class TripStats {
         }
         // Обновились с версии без счётчиков, а поездки уже есть — восстанавливаем
         // из истории, чтобы экономия и достижения не начинались с нуля.
-        if lifetime.trips == 0 && !history.isEmpty {
+        // Только когда записи нет ВОВСЕ — не «нули в памяти»: после
+        // нечитаемого старта нули были пустотой, а не правдой (ревью S9).
+        if Storage.data(.lifetimeStats) == nil && !history.isEmpty {
             lifetime = LifetimeStats.rebuilt(from: history)
             persistLifetime()
         }
@@ -1125,6 +1201,10 @@ final class TripStats {
         var track: [Double]
         let endLat: Double?
         let endLon: Double?
+        /// Продолжение склейкой: сколько было в первой ноге (её финиш уже
+        /// внёс её в «за всё время»). Нет полей — старый слепок, не склейка.
+        var baseDistance: Double? = nil
+        var basePassCount: Int? = nil
     }
 
     /// Не чаще раза в checkpointInterval: слепок пишется на каждый интервал
@@ -1157,7 +1237,8 @@ final class TripStats {
             startedAt: startedAt, lastPointAt: lastPointAt ?? Date(),
             distanceMeters: distanceMeters, maxSpeedKmh: maxSpeedKmh,
             passed: passed, stops: stops, track: [],
-            endLat: lastCoordinate?.latitude, endLon: lastCoordinate?.longitude)
+            endLat: lastCoordinate?.latitude, endLon: lastCoordinate?.longitude,
+            baseDistance: resumedFrom?.distanceMeters, basePassCount: resumedFrom?.passed.count)
         let url = inflightURL
         Task.detached(priority: .utility) {
             var snapshot = head
@@ -1180,19 +1261,30 @@ final class TripStats {
     private func restoreInflightIfAny() {
         guard let snapshot = JSONFile.load(InflightTrip.self, from: inflightURL, log: Log.trips)
         else { return }
+        // Слепок ЖИВОЙ поездки (начатой, пока история ещё не читалась) — не
+        // крэш: восстановить его значило бы получить ту же поездку дважды.
+        if let startedAt, snapshot.startedAt == startedAt { return }
         defer { removeCheckpoint() }
         guard let record = Self.record(from: snapshot) else {
             Log.trips.notice("слепок незавершённой поездки короче 100 м — не восстановлен")
             noteDropped("crashShort")
             return
         }
-        history.insert(record, at: 0)
+        // По времени, а не первой: впереди могут быть поездки новее.
+        let index = history.firstIndex { $0.startedAt < record.startedAt } ?? history.endIndex
+        history.insert(record, at: index)
         history = TripHistory.pruned(history)
         days = TripDayBook.folded(record, into: days)
-        lifetime = LifetimeStats.updated(
-            lifetime,
-            passes: record.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
-            distanceMeters: record.distanceMeters)
+        let passes = record.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) }
+        if let baseDistance = snapshot.baseDistance, let basePassCount = snapshot.basePassCount {
+            // Продолжение склейкой: первая нога уже внесена своим финишем —
+            // только прибавка (S11 и на пути через крэш).
+            lifetime = LifetimeStats.updatedResumed(lifetime, basePasses: Array(passes.prefix(basePassCount)),
+                                                    allPasses: passes,
+                                                    distanceDelta: record.distanceMeters - baseDistance)
+        } else {
+            lifetime = LifetimeStats.updated(lifetime, passes: passes, distanceMeters: record.distanceMeters)
+        }
         persist()
         persistDays()
         persistLifetime()
@@ -1237,6 +1329,9 @@ final class TripStats {
     }
 
     private func persistLifetime() {
+        // До загрузки «за всё время» в памяти — нули поверх нечитаемого: запись
+        // затёрла бы годы километров (ревью S9).
+        guard isLoaded else { return }
         do {
             Storage.set(try JSONEncoder().encode(lifetime), for: .lifetimeStats)
         } catch {

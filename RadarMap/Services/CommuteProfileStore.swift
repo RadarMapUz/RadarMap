@@ -58,13 +58,32 @@ final class CommuteProfileStore {
     private func loadFromDisk() async {
         let started = generation
         let (book, ledger) = await Self.read()
+        // Файл есть, но не читается (процесс подняли до первой разблокировки):
+        // загруженным не считаем — свёртка поездки поверх пустого профиля
+        // затёрла бы месяц дороги на работу (ревью S9). Повтор с паузой.
+        if case .unreadable = book { return retryLoad() }
+        if case .unreadable = ledger { return retryLoad() }
         // Стёрли, пока читали, — прочитанное уже не наше.
         if started == generation {
-            if let book { self.book = book }
-            if let ledger { self.ledger = ledger }
+            if case .loaded(let value) = book { self.book = value }
+            if case .loaded(let value) = ledger { self.ledger = value }
+            if case .corrupt = book { JSONFile.setAside(Self.profileURL, log: Log.trips) }
+            if case .corrupt = ledger { JSONFile.setAside(Self.ledgerURL, log: Log.trips) }
         }
         isLoaded = true
         onLoaded?()
+    }
+
+    @ObservationIgnored private var retryDelay = AppConfig.storeRetrySeconds
+
+    private func retryLoad() {
+        let delay = retryDelay
+        retryDelay = min(retryDelay * 2, AppConfig.storeRetryMaxSeconds)
+        Log.trips.notice("профиль дороги не читается — повтор через \(Int(delay), privacy: .public) с")
+        Task { [weak self] in
+            await Task.pause(seconds: delay)
+            self?.enqueue { store in await store.loadFromDisk() }
+        }
     }
 
     // MARK: - Поездка
@@ -79,7 +98,9 @@ final class CommuteProfileStore {
         }
         let started = generation
         enqueue { store in
-            guard store.generation == started else { return }
+            // Профиль не прочитан (до первой разблокировки) — свёртка поверх
+            // пустого затёрла бы его на диске: эту поездку пропускаем.
+            guard store.generation == started, store.isLoaded else { return }
             let book = await Self.folded(store.book, track: track, times: times, direction: direction,
                                          tripID: record.id, departure: record.startedAt,
                                          arrival: record.endedAt, stops: stops, limits: limits)
@@ -208,9 +229,10 @@ final class CommuteProfileStore {
     // MARK: - Диск
 
     @concurrent
-    private static func read() async -> (CommuteProfile.Book?, [CommuteLedger.Entry]?) {
-        (JSONFile.load(CommuteProfile.Book.self, from: profileURL, log: Log.trips),
-         JSONFile.load([CommuteLedger.Entry].self, from: ledgerURL, log: Log.trips))
+    private static func read() async -> (JSONFile.LoadResult<CommuteProfile.Book>,
+                                         JSONFile.LoadResult<[CommuteLedger.Entry]>) {
+        (JSONFile.loadChecked(CommuteProfile.Book.self, from: profileURL, log: Log.trips),
+         JSONFile.loadChecked([CommuteLedger.Entry].self, from: ledgerURL, log: Log.trips))
     }
 
     @concurrent

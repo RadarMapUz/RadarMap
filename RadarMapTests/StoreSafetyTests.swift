@@ -64,7 +64,26 @@ final class StoreSafetyTests: XCTestCase {
         XCTAssertEqual(merged.distanceMeters, 63_000, accuracy: 0.1)
         XCTAssertEqual(merged.camerasPassed, 12)
         XCTAssertEqual(merged.cleanStreak, 0, "штраф второй ноги обрывает серию")
-        XCTAssertEqual(merged.bestStreak, 3)
+        XCTAssertEqual(merged.bestStreak, 3, "рекорд 3 был и до первой ноги")
+    }
+
+    /// Рекорд, поднятый первой ногой, отменяется штрафом второй: склеенная
+    /// поездка со штрафом не «чистая» и рекорда не ставит.
+    func testMergedFinedTripTakesBackTheRecordItSet() {
+        let clean = DrivingScore.Pass(speedKmh: 55, limitKmh: 60)
+        let fined = DrivingScore.Pass(speedKmh: 95, limitKmh: 60)
+        var stats = LifetimeStats(trips: 4, distanceMeters: 50_000, camerasPassed: 10, cleanStreak: 3, bestStreak: 3)
+        stats = LifetimeStats.updated(stats, passes: [clean], distanceMeters: 10_000)
+        XCTAssertEqual(stats.bestStreak, 4)
+        let merged = LifetimeStats.updatedResumed(stats, basePasses: [clean], allPasses: [clean, fined],
+                                                  distanceDelta: 3_000)
+        XCTAssertEqual(merged.cleanStreak, 0)
+        XCTAssertEqual(merged.bestStreak, 3, "рекорд 4 поставлен поездкой со штрафом — снят")
+        // Старая копия без поля — рекорд не трогаем (лучше лишний, чем отнятый).
+        var legacy = stats
+        legacy.lastTripRaisedBest = nil
+        XCTAssertEqual(LifetimeStats.updatedResumed(legacy, basePasses: [clean], allPasses: [clean, fined],
+                                                    distanceDelta: 3_000).bestStreak, 4)
     }
 
     /// Первая нога без лимитных камер, вторая — чистая лимитная: шаг серии —

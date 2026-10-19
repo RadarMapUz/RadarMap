@@ -359,6 +359,7 @@ final class CameraStore: CameraRepository {
 
     @discardableResult
     func addCamera(at coordinate: CLLocationCoordinate2D, type: CameraType, label: String) -> Camera {
+        ensureUserDataLoaded()
         let id = (custom.map(\.id).max() ?? (Self.firstCustomID - 1)) + 1
         let violations: [String] = type == .stationaryRadar
             ? ["тезликни ошириш"]
@@ -382,6 +383,7 @@ final class CameraStore: CameraRepository {
     }
 
     func deleteCustom(_ camera: Camera) {
+        ensureUserDataLoaded()
         custom.removeAll { $0.id == camera.id }
         dataChanged()
         persist()
@@ -401,12 +403,14 @@ final class CameraStore: CameraRepository {
     // MARK: - Скрытие / жалоба
 
     func hide(_ camera: Camera) {
+        ensureUserDataLoaded()
         hiddenIDs.insert(camera.id)
         dataChanged()
         persist()
     }
 
     func unhide(id: Int) {
+        ensureUserDataLoaded()
         hiddenIDs.remove(id)
         dataChanged()
         persist()
@@ -415,6 +419,7 @@ final class CameraStore: CameraRepository {
     /// Вернуть все скрытые разом — в том числе те, чьих точек уже нет в
     /// наборе (передвижная истекла, камеру убрал модератор).
     func unhideAll() {
+        ensureUserDataLoaded()
         guard !hiddenIDs.isEmpty else { return }
         hiddenIDs.removeAll()
         dataChanged()
@@ -451,16 +456,31 @@ final class CameraStore: CameraRepository {
     private func loadUserData() {
         switch JSONFile.loadChecked(UserData.self, from: storeURL, log: Log.cameras) {
         case .missing:
-            break
+            userDataUnreadable = false
         case .loaded(let decoded):
             custom = decoded.custom
             hiddenIDs = Set(decoded.hidden)
             userDataUnreadable = false
         case .corrupt:
-            JSONFile.setAside(storeURL, log: Log.cameras)
+            userDataUnreadable = !JSONFile.setAside(storeURL, log: Log.cameras)
         case .unreadable:
             userDataUnreadable = true
         }
+    }
+
+    /// Прочитать свои камеры, если на старте файл не читался (до первой
+    /// разблокировки): перед любой правкой — иначе id новой совпал бы с
+    /// существующей на диске, и одна из них потерялась бы (ревью S9).
+    private func ensureUserDataLoaded() {
+        guard userDataUnreadable else { return }
+        loadUserData()
+        if !userDataUnreadable { dataChanged() }
+    }
+
+    /// Вернулись на экран — свои камеры, не прочитанные на старте, сейчас:
+    /// иначе до первой правки они не предупреждали бы, а скрытые звучали.
+    func reloadUserDataIfNeeded() {
+        ensureUserDataLoaded()
     }
 
     private func persist() {
@@ -474,13 +494,28 @@ final class CameraStore: CameraRepository {
             }
             custom = Self.merged(custom, added)
             hiddenIDs.formUnion(hidden)
+            dataChanged()
         }
         JSONFile.saveOrdered(UserData(custom: custom, hidden: Array(hiddenIDs)),
                              to: storeURL, log: Log.cameras, wait: false)
     }
 
+    /// Свои с диска плюс добавленные, пока файл не читался. Совпавший id —
+    /// новая камера, а не та же: ей — свободный id, а не молча выбросить.
     private static func merged(_ disk: [Camera], _ memory: [Camera]) -> [Camera] {
-        var seen = Set(disk.map(\.id))
-        return disk + memory.filter { seen.insert($0.id).inserted }
+        var used = Set(disk.map(\.id))
+        var next = max(firstCustomID, (disk.map(\.id).max() ?? 0) + 1)
+        var result = disk
+        for camera in memory {
+            if disk.contains(camera) { continue }
+            var copy = camera
+            if used.contains(copy.id) {
+                while used.contains(next) { next += 1 }
+                copy = copy.withID(next)
+            }
+            used.insert(copy.id)
+            result.append(copy)
+        }
+        return result
     }
 }

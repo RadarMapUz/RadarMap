@@ -231,6 +231,11 @@ nonisolated struct LifetimeStats: Codable, Equatable {
     var riskFinesSum = 0.0        // сум: сумма «возможных штрафов» за превышения
     var cleanStreak = 0           // подряд чистых поездок (текущая серия)
     var bestStreak = 0
+    /// Последняя поездка подняла рекорд серии. Нужно склейке: штраф второй
+    /// ноги отменяет шаг первой, и рекорд — только если его поднял этот шаг
+    /// («равен серии» не доказывает: рекорд мог быть таким и раньше). Старые
+    /// файлы и копии без поля — nil: рекорд тогда не трогаем.
+    var lastTripRaisedBest: Bool?
 
     /// Ни одной поездки за всё время — пожизненный блок Итогов скрыт целиком.
     var isEmpty: Bool { trips == 0 }
@@ -265,6 +270,7 @@ nonisolated struct LifetimeStats: Codable, Equatable {
             s.cleanStreak = fined == 0 ? s.cleanStreak + 1 : 0
             s.bestStreak = max(s.bestStreak, s.cleanStreak)
         }
+        s.lastTripRaisedBest = s.bestStreak > stats.bestStreak
         return s
     }
 
@@ -296,11 +302,28 @@ nonisolated struct LifetimeStats: Codable, Equatable {
                 s.savedFinesSum += FineSchedule.minimumFine
             }
         }
-        if fined > 0 {
-            s.cleanStreak = 0
-        } else if limited > 0, !basePasses.contains(where: { $0.limitKmh != nil }) {
-            s.cleanStreak += 1
-            s.bestStreak = max(s.bestStreak, s.cleanStreak)
+        // Серия — для склеенной поездки как ОДНОЙ. Первая нога своим финишем
+        // уже сделала шаг, если была чистой лимитной; штраф второй ноги делает
+        // поездку нечистой — шаг отменяется, и рекорд, поднятый этим шагом,
+        // тоже (ревью S11: «20 чистых подряд» за поездку со штрафом).
+        let baseLimited = basePasses.contains { $0.limitKmh != nil }
+        let baseFined = basePasses.contains { pass in
+            pass.limitKmh.map { FineSchedule.fine(overKmh: pass.speedKmh - Double($0)) > 0 } ?? false
+        }
+        if baseLimited && !baseFined {
+            if fined > 0 {
+                if s.lastTripRaisedBest == true, s.bestStreak > 0 { s.bestStreak -= 1 }
+                s.lastTripRaisedBest = false
+                s.cleanStreak = 0
+            }
+        } else if !baseLimited, limited > 0 {
+            if fined > 0 {
+                s.cleanStreak = 0
+            } else {
+                s.cleanStreak += 1
+                s.lastTripRaisedBest = s.cleanStreak > s.bestStreak
+                s.bestStreak = max(s.bestStreak, s.cleanStreak)
+            }
         }
         return s
     }

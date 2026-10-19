@@ -58,7 +58,8 @@ nonisolated enum JSONFile {
     /// Отложить файл в сторону рядом: `trips.corrupt-1800000000.json`. Данные
     /// человека не перезаписываются — их можно вернуть или разобрать. `copy` —
     /// оставить и сам файл (часть записей прочиталась, файл ещё живой).
-    static func setAside(_ url: URL, copy: Bool = false, log: Logger) {
+    @discardableResult
+    static func setAside(_ url: URL, copy: Bool = false, log: Logger) -> Bool {
         let aside = url.deletingPathExtension()
             .appendingPathExtension("corrupt-\(Int(Date().timeIntervalSince1970))")
             .appendingPathExtension(url.pathExtension)
@@ -69,8 +70,10 @@ nonisolated enum JSONFile {
                 try FileManager.default.moveItem(at: url, to: aside)
             }
             log.notice("\(url.lastPathComponent, privacy: .public) отложен в \(aside.lastPathComponent, privacy: .public)")
+            return true
         } catch {
             log.error("\(url.lastPathComponent, privacy: .public) не отложен: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 
@@ -119,6 +122,8 @@ nonisolated enum JSONFile {
 nonisolated struct LossyArray<Element: Decodable>: Decodable {
     let elements: [Element]
     let dropped: Int
+    /// Первая причина отказа — в журнал (сколько и почему).
+    let firstError: String?
 
     /// Принимает любое значение, ничего не читая: так разбор переходит к
     /// следующему элементу после битого.
@@ -130,10 +135,12 @@ nonisolated struct LossyArray<Element: Decodable>: Decodable {
         var container = try decoder.unkeyedContainer()
         var elements: [Element] = []
         var dropped = 0
+        var firstError: String?
         while !container.isAtEnd {
-            if let element = try? container.decode(Element.self) {
-                elements.append(element)
-            } else {
+            do {
+                elements.append(try container.decode(Element.self))
+            } catch {
+                if firstError == nil { firstError = String(describing: error) }
                 // Битый элемент — пропустить, не останавливая разбор. Не
                 // пропускается — дальше не прочесть (и не зациклиться).
                 guard (try? container.decode(Skip.self)) != nil else { break }
@@ -142,5 +149,6 @@ nonisolated struct LossyArray<Element: Decodable>: Decodable {
         }
         self.elements = elements
         self.dropped = dropped
+        self.firstError = firstError
     }
 }

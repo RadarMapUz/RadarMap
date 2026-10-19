@@ -159,6 +159,9 @@ nonisolated enum AppConfig {
     /// История не прочиталась (файл защищён до первой разблокировки) —
     /// повтор через столько секунд, пока не прочтётся.
     static let storeRetrySeconds: TimeInterval = 30
+    /// Потолок паузы между повторами чтения (не защита данных, а сбой — не
+    /// долбим диск каждые 30 с всю сессию).
+    static let storeRetryMaxSeconds: TimeInterval = 600
 
     // MARK: - Дорога камеры (направление, полосы, кусок проезжей части)
     // nonisolated: читаются из чистых RoadShape/RoadCorridor и их тестов.

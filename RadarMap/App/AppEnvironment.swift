@@ -252,7 +252,10 @@ final class AppEnvironment {
         motion.onDrivingStart = { [weak self, weak location] in
             guard settings.tripStartMode.usesMotion, let location,
                   !location.isTripActive else { return }
-            guard self?.trip.isLoaded ?? true else {
+            // История ещё читается — подождать (склейка, восстановление);
+            // не читается вовсе (до первой разблокировки) — не ждать: поездка
+            // нужна сейчас, а пришедшее за окно встанет поверх прочитанного.
+            if let trip = self?.trip, !trip.isLoaded, !trip.isLoadBlocked {
                 self?.pendingAutoStart = true
                 return
             }

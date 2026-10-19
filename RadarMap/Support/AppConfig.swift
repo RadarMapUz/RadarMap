@@ -64,6 +64,8 @@ nonisolated enum AppConfig {
     /// расслабляемся вовсе, а вдали выход мгновенный — первый же фикс с
     /// движением возвращает точный тир.
     nonisolated static let gpsIdleAfterSeconds: TimeInterval = 20
+    /// Шаг ожидания одноразового фикса (интенты, маршрут из машины).
+    nonisolated static let positionWaitStepSeconds: TimeInterval = 0.2
     /// Открытый экран «лежал» — сдвиг на столько от места лёжки возвращает
     /// максимальную точность, даже если скорость первого фикса ещё ноль.
     nonisolated static let gpsIdleLeaveMeters: Double = 20
@@ -373,6 +375,10 @@ nonisolated enum AppConfig {
     /// Гистерезис выхода из зоны оповещения: серия порогов сбрасывается только
     /// когда камера ушла заметно дальше радиуса — анти-дребезг на границе.
     static let alertExitHysteresisMeters: CLLocationDistance = 80
+    /// Ступени тревоги — доли радиуса (AlertEngine.level): ближе 0,6 —
+    /// вторая, ближе 0,3 — третья.
+    nonisolated static let alertLevel2Share = 0.6
+    nonisolated static let alertLevel3Share = 0.3
 
     /// Проезд считается завершённым, когда камера ушла дальше радиуса на этот запас
     /// (гарантирует, что траверз точно пройден, а не GPS-скачок).
@@ -1239,9 +1245,9 @@ nonisolated enum AppConfig {
     static let carPlayAppleStartSpanMeters: CLLocationDistance = 2600
     static let carPlayAppleMinDelta = 0.002
     static let carPlayAppleMaxDelta = 4.0
-    /// День/ночь в машине пересчитывается с этим шагом (тема машины
-    /// приходит сразу, это только солнце).
-    static let carPlayDaylightRefresh: TimeInterval = 60
+    /// Тема по солнцу пересчитывается с этим шагом, пока на экран смотрят
+    /// (телефон или машина) — AppEnvironment, один расчёт на все сцены.
+    static let interfaceThemeRefreshSeconds: TimeInterval = 300
     /// Где стоит «я» по высоте вида: ниже середины, впереди видно больше.
     static let mapMeY: Double = 0.78
     /// Долгий тап по карте — точка с баром действий.

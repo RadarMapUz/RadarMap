@@ -126,14 +126,8 @@ struct RootView: View {
             }
         }
         #endif
-        // Тема по солнцу: закат не ждёт перезапуска. Раз в пять минут — дешёвый
-        // расчёт NOAA без подписки на тик GPS (её корню иметь нельзя).
-        .task {
-            while !Task.isCancelled {
-                env.refreshInterfaceAppearance()
-                await Task.pause(seconds: 300)
-            }
-        }
+        // Тема по солнцу — часы в AppEnvironment (themeClock): идут, пока
+        // смотрят телефон или машина, и одни на все сцены.
         .onChange(of: env.settings.mapAppearance) { _, _ in
             env.refreshInterfaceAppearance()
         }

@@ -44,16 +44,14 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         Log.carplay.notice("CarPlay: приборная панель подключена")
         controller = dashboardController
         model.carIsDark = window.traitCollection.userInterfaceStyle == .dark
-        model.refreshDaylight(appearance: env.settings.mapAppearance,
-                              coordinate: env.location.currentCoordinate)
+        model.refreshDaylight(appearance: env.settings.mapAppearance, sunDay: env.interfaceIsDaylight)
         // Тема машины меняется на ходу (фары, тоннель). У панели нет
         // contentStyleDidChange, как у основной сцены, — слушаем трейт окна:
         // иначе в «Авто» панель, подключённая днём, оставалась белой всю ночь.
         window.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (window: UIWindow, _: UITraitCollection) in
             guard let self else { return }
             self.model.carIsDark = window.traitCollection.userInterfaceStyle == .dark
-            self.model.refreshDaylight(appearance: self.env.settings.mapAppearance,
-                                       coordinate: self.env.location.currentCoordinate)
+            self.model.refreshDaylight(appearance: self.env.settings.mapAppearance, sunDay: self.env.interfaceIsDaylight)
         }
         // Панель подключается и в ФОНЕ (журнал 11.10: BG-Active сразу при
         // открытии приложения), а модель раньше считала себя на экране по
@@ -222,12 +220,8 @@ struct CarPlayDashboardView: View {
                 .safeAreaPadding()
         }
         .environment(\.colorScheme, model.isDaylight ? .light : .dark)
-        .task {
-            while !Task.isCancelled {
-                model.refreshDaylight(appearance: env.settings.mapAppearance,
-                                      coordinate: env.location.currentCoordinate)
-                await Task.pause(seconds: AppConfig.carPlayDaylightRefresh)
-            }
+        .onChange(of: env.interfaceIsDaylight, initial: true) { _, day in
+            model.refreshDaylight(appearance: env.settings.mapAppearance, sunDay: day)
         }
     }
 }

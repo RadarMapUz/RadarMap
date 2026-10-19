@@ -78,13 +78,17 @@ final class CarPlayEngineTests: XCTestCase {
         let model = model()
         // Полдень в Ташкенте: солнце сказало бы «день».
         model.carIsDark = true
-        model.refreshDaylight(appearance: .auto, coordinate: CLLocationCoordinate2D(latitude: 41.31, longitude: 69.28))
+        model.refreshDaylight(appearance: .auto, sunDay: true)
         XCTAssertFalse(model.isDaylight, "в «Авто» фары машины старше таблицы восходов")
-        model.refreshDaylight(appearance: .light, coordinate: nil)
+        model.refreshDaylight(appearance: .light, sunDay: false)
         XCTAssertTrue(model.isDaylight, "ручной выбор старше машины")
         model.carIsDark = false
-        model.refreshDaylight(appearance: .dark, coordinate: nil)
+        model.refreshDaylight(appearance: .dark, sunDay: true)
         XCTAssertFalse(model.isDaylight)
+        // Машина молчит — солнце из общего источника.
+        model.carIsDark = nil
+        model.refreshDaylight(appearance: .auto, sunDay: true)
+        XCTAssertTrue(model.isDaylight)
     }
 
     #if canImport(MapLibre)

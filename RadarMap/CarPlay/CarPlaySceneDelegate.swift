@@ -105,8 +105,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // День/ночь — ДО первого кадра: тема машины (датчик света) в «Авто»
         // старше солнца, и первый кадр раньше всегда был тёмным.
         model.carIsDark = scene.contentStyle == .dark
-        model.refreshDaylight(appearance: env.settings.mapAppearance,
-                              coordinate: env.location.currentCoordinate)
+        model.refreshDaylight(appearance: env.settings.mapAppearance, sunDay: env.interfaceIsDaylight)
 
         // Сцена часто подключается в ФОНЕ: телефон с идущей поездкой
         // подключили к машине, а на её экране последним был Яндекс (журнал
@@ -251,8 +250,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Машина сменила тему (включились фары, въехали в тоннель).
     func contentStyleDidChange(_ contentStyle: UIUserInterfaceStyle) {
         model.carIsDark = contentStyle == .dark
-        model.refreshDaylight(appearance: env.settings.mapAppearance,
-                              coordinate: env.location.currentCoordinate)
+        model.refreshDaylight(appearance: env.settings.mapAppearance, sunDay: env.interfaceIsDaylight)
     }
 
     /// Сторож застывшего окна. 11.10 кнопки шаблона жили, а картинка в окне

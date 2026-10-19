@@ -221,13 +221,13 @@ final class CarPlayMapModel {
     func returnOnAlert() { send(.cameraAhead) }
 
     /// Пересчитать день/ночь. Ручной выбор старше всего; в «Авто» — машина,
-    /// а без её ответа — солнце в точке водителя.
-    func refreshDaylight(appearance: MapAppearance, coordinate: CLLocationCoordinate2D?) {
+    /// а без её ответа — солнце (`sunDay` = AppEnvironment.interfaceIsDaylight:
+    /// один расчёт на телефон и машину, а не свой цикл в каждой сцене).
+    func refreshDaylight(appearance: MapAppearance, sunDay: Bool) {
         let day: Bool
-        if appearance == .auto, let carIsDark {
-            day = !carIsDark
-        } else {
-            day = appearance.isDaylight(at: coordinate)
+        switch appearance {
+        case .auto:  day = carIsDark.map { !$0 } ?? sunDay
+        default:     day = appearance.isDaylight(at: nil)
         }
         if day != isDaylight { isDaylight = day }
     }
@@ -282,22 +282,17 @@ struct CarPlayMapScreen: View {
         // AppEnvironment.observeCameraRevision сразу и без экрана (холодный
         // запуск из машины: первый фикс раньше базы, машина стоит — раньше
         // здесь была своя подписка, третья на одно изменение).
-        // День/ночь: раз в минуту, вне body. Чтение координаты внутри .task
-        // не отслеживается SwiftUI, а минутный шаг на границе восхода —
-        // незаметная цена против пересборки дерева карты каждым фиксом. Тема
-        // машины приходит сразу (contentStyleDidChange в делегате).
-        .task {
-            while !Task.isCancelled {
-                model.refreshDaylight(appearance: env.settings.mapAppearance,
-                                      coordinate: env.location.currentCoordinate)
-                await Task.pause(seconds: AppConfig.carPlayDaylightRefresh)
-            }
+        // День/ночь: тема машины приходит сразу (contentStyleDidChange в
+        // делегате), солнце — из AppEnvironment.interfaceIsDaylight.
+        // Солнце пересчитывает AppEnvironment (раз в 5 мин, пока на экран
+        // смотрят) — здесь только следуем за ним, без своего цикла.
+        .onChange(of: env.interfaceIsDaylight, initial: true) { _, day in
+            model.refreshDaylight(appearance: env.settings.mapAppearance, sunDay: day)
         }
         // Настройку водитель мог сменить на телефоне посреди поездки — минуты
         // не ждём.
         .onChange(of: env.settings.mapAppearance) { _, appearance in
-            model.refreshDaylight(appearance: appearance,
-                                  coordinate: env.location.currentCoordinate)
+            model.refreshDaylight(appearance: appearance, sunDay: env.interfaceIsDaylight)
         }
     }
 

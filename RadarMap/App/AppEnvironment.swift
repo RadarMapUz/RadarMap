@@ -100,6 +100,7 @@ final class AppEnvironment {
         isCarPlayConnected = connected
         location.setCarPlayConnected(connected)
         refreshTrafficWanted()
+        updateThemeClock()
         if connected {
             mobile.startPolling()
         } else if !isPhoneSceneActive, !mobile.isTripActive {
@@ -114,10 +115,33 @@ final class AppEnvironment {
     private(set) var interfaceIsDaylight = false
 
     /// Пересчёт темы: на старте, при открытии, при смене настройки и раз в
-    /// пять минут (RootView) — закат не ждёт перезапуска.
+    /// пять минут, пока на экран смотрят (themeClock) — закат не ждёт
+    /// перезапуска. Один источник дня/ночи для интерфейса, карты телефона,
+    /// HUD, CarPlay и плитки: до 19.10 их было пять, со своими точками и
+    /// циклами (аудит архитектуры).
     func refreshInterfaceAppearance() {
         let day = settings.mapAppearance.isDaylight(at: location.currentCoordinate, now: Date())
         if day != interfaceIsDaylight { interfaceIsDaylight = day }
+    }
+
+    /// Часы темы: идут, пока на экран смотрят — телефон или машина (CarPlay
+    /// может подключиться без телефонной сцены вовсе, и тогда раньше закат
+    /// не замечал никто).
+    @ObservationIgnored private var themeClock: Task<Void, Never>?
+
+    private func updateThemeClock() {
+        if isPhoneSceneActive || isCarPlayConnected {
+            guard themeClock == nil else { return }
+            themeClock = Task { [weak self] in
+                while !Task.isCancelled {
+                    self?.refreshInterfaceAppearance()
+                    await Task.pause(seconds: AppConfig.interfaceThemeRefreshSeconds)
+                }
+            }
+        } else {
+            themeClock?.cancel()
+            themeClock = nil
+        }
     }
 
     /// Пробки нужны, пока на них кто-то смотрит: экран телефона, машина или
@@ -141,6 +165,7 @@ final class AppEnvironment {
     func setPhoneSceneActive(_ active: Bool) {
         isPhoneSceneActive = active
         refreshTrafficWanted()
+        updateThemeClock()
         if active {
             mobile.startPolling()
         } else if !isCarPlayConnected, !mobile.isTripActive {

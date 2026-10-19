@@ -112,6 +112,8 @@ final class TripStats {
     init() {
         loadLifetime()
         Task { await loadFromDisk() }
+        // Старые посекундные треки — и без новых записей (S10, 20.10).
+        Task.detached(priority: .utility) { TimedTrackStore.prune(now: Date()) }
     }
 
     /// История доехала с диска. AppEnvironment пересчитывает по этому сигналу
@@ -540,6 +542,8 @@ final class TripStats {
         history.removeAll { $0.id == id }
         if lastFinishedRaw?.id == id { lastFinishedRaw = nil }
         persist()
+        // Удалили поездку — и её посекундный трек (S10, 20.10).
+        Task.detached(priority: .utility) { TimedTrackStore.remove(tripID: id) }
         onRecordsErased?([id])
     }
 
@@ -551,13 +555,20 @@ final class TripStats {
     }
 
     /// «Очистить историю» стирает и дневные агрегаты: пользователь просит
-    /// убрать статистику, а не спрятать список при живых цифрах в отчёте.
+    /// убрать статистику, а не спрятать список при живых цифрах в отчёте. И
+    /// «за всё время», охват предупреждений и посекундные треки: диалог
+    /// обещает «итоги за все периоды сотрутся», а они оставались (S10, 20.10).
     func clearHistory() {
         history = []
         days = []
         lastFinishedRaw = nil
+        lifetime = LifetimeStats()
+        alertRecall = AlertRecall.Tally()
         persist()
         persistDays()
+        persistLifetime()
+        Storage.encode(alertRecall, for: .alertRecallTotal)
+        Task.detached(priority: .utility) { TimedTrackStore.removeAll() }
         onRecordsErased?(nil)
     }
 

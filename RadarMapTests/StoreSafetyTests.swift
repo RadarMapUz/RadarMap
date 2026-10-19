@@ -100,3 +100,23 @@ final class StoreSafetyTests: XCTestCase {
         XCTAssertEqual(again.cleanStreak, 1, "шаг серии за эту поездку уже сделан")
     }
 }
+
+// MARK: - S10: удалили поездку — удалили и трек
+
+final class TimedTrackPrivacyTests: XCTestCase {
+    func testDeletingATripRemovesItsSecondByTrack() {
+        let id = 4_000_000_000.0 + Double(Int.random(in: 0..<100_000))
+        TimedTrackStore.save([TimedPoint(time: Date(), lat: 41.3, lon: 69.2, speedKmh: 40)], tripID: id)
+        XCTAssertNotNil(TimedTrackStore.load(tripID: id))
+        TimedTrackStore.remove(tripID: id)
+        XCTAssertNil(TimedTrackStore.load(tripID: id))
+    }
+
+    func testTracksAreNotBackedUp() throws {
+        let id = 4_000_000_000.0 + Double(Int.random(in: 0..<100_000))
+        TimedTrackStore.save([TimedPoint(time: Date(), lat: 41.3, lon: 69.2, speedKmh: 40)], tripID: id)
+        defer { TimedTrackStore.remove(tripID: id) }
+        let values = try TimedTrackStore.directory.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        XCTAssertEqual(values.isExcludedFromBackup, true)
+    }
+}

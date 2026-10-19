@@ -124,6 +124,12 @@ nonisolated enum TimedTrackStore {
         guard !points.isEmpty else { return }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            // Посекундный трек — самое точное, что есть о передвижениях
+            // человека: в резервную копию iCloud он не идёт (S10, 20.10).
+            var folder = directory
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try folder.setResourceValues(values)
             try TimedTrack.encode(points).write(to: url(for: tripID), atomically: true, encoding: .utf8)
         } catch {
             Log.trips.error("подробный трек не сохранён: \(error.localizedDescription, privacy: .public)")
@@ -138,13 +144,41 @@ nonisolated enum TimedTrackStore {
     }
 
     /// Файлы старше keepDays — долой (имя файла = время старта поездки).
+    /// Зовётся и на запуске: с выключенным «Подробным треком» записей нет, и
+    /// чистка при записи не наступала — треки жили вечно (S10, 20.10).
     static func prune(now: Date) {
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return }
+        guard FileManager.default.fileExists(atPath: directory.path) else { return }
+        let names: [String]
+        do {
+            names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        } catch {
+            Log.trips.error("подробные треки не перечислены: \(error.localizedDescription, privacy: .public)")
+            return
+        }
         let limit = now.timeIntervalSince1970 - Double(keepDays) * 86400
         for name in names {
             guard let started = Double(name.replacingOccurrences(of: ".csv", with: "")),
                   started < limit else { continue }
-            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+            removeFile(directory.appendingPathComponent(name))
+        }
+    }
+
+    /// Трек одной поездки — удалили поездку, удаляется и он.
+    static func remove(tripID: Double) {
+        removeFile(url(for: tripID))
+    }
+
+    /// Все треки — «Удалить все поездки».
+    static func removeAll() {
+        removeFile(directory)
+    }
+
+    private static func removeFile(_ url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            Log.trips.error("подробный трек не удалён: \(error.localizedDescription, privacy: .public)")
         }
     }
 

@@ -8228,6 +8228,22 @@
         }
       }
     },
+    "Поездка с предупреждениями о камерах — одним нажатием": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездка с предупреждениями о камерах — одним нажатием"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera ogohlantirishlari bilan safar — bir bosishda"
+          }
+        }
+      }
+    },
     "Поездка сохранена": {
       "localizations": {
         "ru": {

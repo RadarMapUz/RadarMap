@@ -12,5 +12,6 @@ struct RadarMapWidgetsBundle: WidgetBundle {
         RadarStatsWidget()
         RadarWeekWidget()
         CameraActivityWidget()
+        StartTripControl()
     }
 }

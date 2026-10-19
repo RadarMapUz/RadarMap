@@ -135,3 +135,31 @@ nonisolated struct UsageStatsFile: Codable, Sendable {
 
     static let pendingCap = 7
 }
+
+/// Чтение с пропусками: поля, добавленные в новых сборках (limitSource,
+/// alertRecall, voiced, memoryWarnings…), отсутствуют в файле старой сборки —
+/// и синтезированный разбор выбрасывал весь файл: сегодняшние счётчики и до
+/// семи неотправленных дней (сценарий S16, правило 18). Нет поля — значение
+/// по умолчанию.
+extension UsageStats {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(day: try c.decode(String.self, forKey: .day))
+        onboarded = try c.decodeIfPresent(Bool.self, forKey: .onboarded) ?? onboarded
+        locationAuth = try c.decodeIfPresent(String.self, forKey: .locationAuth) ?? locationAuth
+        notificationsAllowed = try c.decodeIfPresent(Bool.self, forKey: .notificationsAllowed) ?? notificationsAllowed
+        trips = try c.decodeIfPresent(Int.self, forKey: .trips) ?? trips
+        kilometres = try c.decodeIfPresent(Double.self, forKey: .kilometres) ?? kilometres
+        alerts = try c.decodeIfPresent(Int.self, forKey: .alerts) ?? alerts
+        passes = try c.decodeIfPresent(Int.self, forKey: .passes) ?? passes
+        reports = try c.decodeIfPresent(Int.self, forKey: .reports) ?? reports
+        screens = try c.decodeIfPresent([String: Int].self, forKey: .screens) ?? screens
+        limitSource = try c.decodeIfPresent([String: Int].self, forKey: .limitSource) ?? limitSource
+        maneuvers = try c.decodeIfPresent([String: Int].self, forKey: .maneuvers) ?? maneuvers
+        tripsDropped = try c.decodeIfPresent([String: Int].self, forKey: .tripsDropped) ?? tripsDropped
+        alertRecall = try c.decodeIfPresent([String: Int].self, forKey: .alertRecall) ?? alertRecall
+        voiced = try c.decodeIfPresent([String: Int].self, forKey: .voiced) ?? voiced
+        memoryWarnings = try c.decodeIfPresent(Int.self, forKey: .memoryWarnings) ?? memoryWarnings
+        carPlay = try c.decodeIfPresent([String: Int].self, forKey: .carPlay)
+    }
+}

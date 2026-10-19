@@ -10,6 +10,7 @@
 import MapKit
 import SwiftUI
 import UIKit
+import os
 
 enum TripMapSnapshot {
     /// Отрендерить карту с треком. nil — трека нет или карта не загрузилась
@@ -40,7 +41,13 @@ enum TripMapSnapshot {
         options.preferredConfiguration = config
         options.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
 
-        guard let snapshot = try? await MKMapSnapshotter(options: options).start() else {
+        let snapshot: MKMapSnapshotter.Snapshot
+        do {
+            snapshot = try await MKMapSnapshotter(options: options).start()
+        } catch {
+            // Без картинки карточка рисуется без карты — это не поломка, но
+            // в журнале причина должна быть (правило 3).
+            Log.app.notice("снимок карты поездки не снят: \(error.localizedDescription, privacy: .public)")
             return nil
         }
 

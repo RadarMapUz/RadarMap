@@ -220,7 +220,9 @@ final class CameraStore: CameraRepository {
         }
         guard fresh != overrides else { return true }
         overrides = fresh
-        JSONFile.save(fresh, to: Self.overridesFileURL, log: Log.cameras)
+        // Вне main и по порядку (как история поездок): запись правок не должна
+        // стоять в кадре применения (правило 11).
+        JSONFile.saveOrdered(fresh, to: Self.overridesFileURL, log: Log.cameras, wait: false)
         let result = CameraOverrideEngine.apply(fresh, to: bundled)
         Log.cameras.notice("правки v\(fresh.version, privacy: .public): скрыто \(result.hidden, privacy: .public), сдвинуто \(result.moved, privacy: .public), переопределено \(result.retyped, privacy: .public), отвергнуто \(result.rejected, privacy: .public)")
         dataChanged()
@@ -425,7 +427,7 @@ final class CameraStore: CameraRepository {
 
     // MARK: - Хранение
 
-    private struct UserData: Codable {
+    private nonisolated struct UserData: Codable, Sendable {
         var custom: [Camera]
         var hidden: [Int]
     }
@@ -442,7 +444,7 @@ final class CameraStore: CameraRepository {
     }
 
     private func persist() {
-        JSONFile.save(UserData(custom: custom, hidden: Array(hiddenIDs)),
-                      to: storeURL, log: Log.cameras)
+        JSONFile.saveOrdered(UserData(custom: custom, hidden: Array(hiddenIDs)),
+                             to: storeURL, log: Log.cameras, wait: false)
     }
 }

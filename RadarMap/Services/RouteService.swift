@@ -1139,9 +1139,14 @@ final class RouteService {
         Log.route.notice("объезд: ищу — впереди +\(Int(self.remainingTrafficDelay), privacy: .public) с, ползём \(Int(crawl), privacy: .public) с")
         Task {
             defer { detourSearching = false }
-            guard let built = try? await calculate(from: coordinate, via: via, to: destination,
-                                                   alternatives: true),
-                  gen == generation else { return }
+            let built: [BuiltVariant]
+            do {
+                built = try await calculate(from: coordinate, via: via, to: destination, alternatives: true)
+            } catch {
+                Log.route.notice("объезд: варианты не построены — \(error.localizedDescription, privacy: .public)")
+                return
+            }
+            guard gen == generation else { return }
             let candidates = built.map { variant in
                 (points: variant.points.map(\.coordinate), travelTime: variant.travelTime, steps: variant.steps)
             }

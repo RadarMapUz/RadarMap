@@ -281,6 +281,24 @@ nonisolated struct LifetimeStats: Codable, Equatable {
     /// растёт; серия: новый штраф её обрывает, а чистые лимитные проезды
     /// продлевают, только если у первой ноги лимитных не было (иначе шаг
     /// серии уже сделан).
+    /// Этот итог, а после него — более поздний период `later`, посчитанный с
+    /// нуля (вклад процесса, которому нельзя было верить UserDefaults,
+    /// ревью S9). Счётчики складываются; серия `later` продолжает эту, если
+    /// в `later` не было штрафа, иначе она — своя; рекорд — наибольший.
+    func followed(by later: LifetimeStats) -> LifetimeStats {
+        var s = self
+        s.trips += later.trips
+        s.distanceMeters += later.distanceMeters
+        s.camerasPassed += later.camerasPassed
+        s.camerasInLimit += later.camerasInLimit
+        s.savedFinesSum += later.savedFinesSum
+        s.riskFinesSum += later.riskFinesSum
+        s.cleanStreak = later.riskFinesSum > 0 ? later.cleanStreak : cleanStreak + later.cleanStreak
+        s.bestStreak = max(bestStreak, later.bestStreak, s.cleanStreak)
+        s.lastTripRaisedBest = later.trips > 0 ? later.lastTripRaisedBest : lastTripRaisedBest
+        return s
+    }
+
     nonisolated static func updatedResumed(_ stats: LifetimeStats,
                                            basePasses: [DrivingScore.Pass],
                                            allPasses: [DrivingScore.Pass],
@@ -456,5 +474,23 @@ nonisolated enum Achievements {
     /// одна цель с прогрессом отвечает.
     nonisolated static func next(for stats: LifetimeStats) -> Achievement? {
         all(for: stats).filter { !$0.earned }.max { $0.fraction < $1.fraction }
+    }
+}
+
+extension LifetimeStats {
+    /// Поле, добавленное позже, не делает старый файл «битым» (ревью S9):
+    /// синтезированный разбор требует все ключи, даже у полей по умолчанию.
+    nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init()
+        trips = try c.decodeIfPresent(Int.self, forKey: .trips) ?? 0
+        distanceMeters = try c.decodeIfPresent(Double.self, forKey: .distanceMeters) ?? 0
+        camerasPassed = try c.decodeIfPresent(Int.self, forKey: .camerasPassed) ?? 0
+        camerasInLimit = try c.decodeIfPresent(Int.self, forKey: .camerasInLimit) ?? 0
+        savedFinesSum = try c.decodeIfPresent(Double.self, forKey: .savedFinesSum) ?? 0
+        riskFinesSum = try c.decodeIfPresent(Double.self, forKey: .riskFinesSum) ?? 0
+        cleanStreak = try c.decodeIfPresent(Int.self, forKey: .cleanStreak) ?? 0
+        bestStreak = try c.decodeIfPresent(Int.self, forKey: .bestStreak) ?? 0
+        lastTripRaisedBest = try c.decodeIfPresent(Bool.self, forKey: .lastTripRaisedBest)
     }
 }

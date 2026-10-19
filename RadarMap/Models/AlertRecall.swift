@@ -111,3 +111,16 @@ nonisolated struct AlertRecall {
         passedIDs.removeAll()
     }
 }
+
+extension AlertRecall.Tally {
+    /// Поле, добавленное позже, не делает старый файл «битым» (ревью S9).
+    nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init()
+        passed = try c.decodeIfPresent(Int.self, forKey: .passed) ?? 0
+        warned = try c.decodeIfPresent(Int.self, forKey: .warned) ?? 0
+        late = try c.decodeIfPresent(Int.self, forKey: .late) ?? 0
+        silent = try c.decodeIfPresent(Int.self, forKey: .silent) ?? 0
+        unused = try c.decodeIfPresent(Int.self, forKey: .unused) ?? 0
+    }
+}

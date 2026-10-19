@@ -46,7 +46,7 @@ struct BackupSection: View {
             }
             // Пока история не прочитана (сразу после разблокировки), копия
             // вышла бы пустой, а слияние — поверх пустоты (ревью S9).
-            .disabled(!env.trip.isLoaded)
+            .disabled(!env.trip.isLoaded || !env.trip.isLifetimeTrusted)
         } header: {
             Text("Мои данные")
         } footer: {

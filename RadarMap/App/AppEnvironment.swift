@@ -431,6 +431,10 @@ final class AppEnvironment {
         trip.onHistoryLoaded = { [weak self] in
             // Автостарт, ждавший историю, — сейчас, если всё ещё едем.
             self?.startPendingAutoStart()
+            // История прочлась (после разблокировки — пусть и по повтору, без
+            // уведомления): прочие хранилища — тоже, не дожидаясь экрана (S9).
+            self?.cameras.reloadUserDataIfNeeded()
+            self?.commuteProfiles.retryLoadNow()
             self?.refreshLearnedPlaces()
             self?.refreshWidgetSnapshot()
             // «Свои камеры» считаются ПО ИСТОРИИ, а bootstrap() успевает
@@ -605,6 +609,7 @@ final class AppEnvironment {
     /// через паузу повтора (ревью S9, третий круг).
     func reloadProtectedStores() {
         trip.retryLoadNow()
+        trip.retryLegacyLifetime()
         commuteProfiles.retryLoadNow()
         cameras.reloadUserDataIfNeeded()
     }
@@ -1049,6 +1054,9 @@ final class AppEnvironment {
     /// свежей. Считаем ЗДЕСЬ: виджет не имеет права вычислять — у него нет ни
     /// истории, ни права тратить батарею.
     func refreshWidgetSnapshot() {
+        // «За всё время» ещё не перенесено (старт до разблокировки) — виджет
+        // держит прошлый снимок, а не вклад одного процесса (ревью S9).
+        guard trip.isLifetimeTrusted else { return }
         #if DEBUG
         // Скриншот-хук `-widgetState empty|few|full`: виджет живёт в основном
         // не на полной неделе, а посмотреть скудные состояния иначе нечем —

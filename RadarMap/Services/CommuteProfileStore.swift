@@ -94,17 +94,23 @@ final class CommuteProfileStore {
         let delay = retryDelay
         retryDelay = min(retryDelay * 2, AppConfig.storeRetryMaxSeconds)
         Log.trips.notice("профиль дороги не читается — повтор через \(Int(delay), privacy: .public) с")
-        Task { [weak self] in
+        retryTask?.cancel()
+        retryTask = Task { [weak self] in
             await Task.pause(seconds: delay)
+            guard !Task.isCancelled else { return }
             self?.enqueue { store in await store.loadFromDisk() }
         }
     }
+
+    @ObservationIgnored private var retryTask: Task<Void, Never>?
 
     /// Данные стали доступны (разблокировка) — читать сейчас, не дожидаясь
     /// паузы повтора. Лишний вызов безвреден: чтение идёт через ту же
     /// очередь и выходит, если уже прочитано.
     func retryLoadNow() {
         guard blocked, !isLoaded else { return }
+        retryTask?.cancel()
+        retryTask = nil
         enqueue { store in await store.loadFromDisk() }
     }
 

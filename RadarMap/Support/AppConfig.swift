@@ -496,6 +496,9 @@ nonisolated enum AppConfig {
     /// Новый старт дальше этого от финиша прошлой — точно другая поездка
     /// (телефон приехал сюда не за рулём).
     nonisolated static let tripMergeMaxMeters: CLLocationDistance = 400
+    /// Плашка Live Activity прошлого процесса: столько ждём, что поездка
+    /// возобновится (автостарт после перезапуска системой), потом снимаем.
+    static let liveActivityOrphanGraceSeconds: TimeInterval = 180
     /// Пауза короче — склеиваем без вопросов: магазин, заправка, забрал человека.
     nonisolated static let tripMergeShortStopSeconds: TimeInterval = 15 * 60
     /// Пауза дольше — новая поездка при любых обстоятельствах.

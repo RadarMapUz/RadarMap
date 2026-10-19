@@ -285,6 +285,16 @@ final class LocationService: NSObject {
         // «Свои» камеры нужны и вне поездки: карта рисует их спокойными, и
         // список обязан быть готов до первого показа маркеров.
         refreshFamiliarCameras()
+        // Плашка прошлого процесса подхвачена (S14): поездка не возобновилась
+        // за пару минут — сирота, снять, а не держать до восьмичасового предела.
+        if liveActivity?.isActive == true {
+            Task { [weak self] in
+                await Task.pause(seconds: AppConfig.liveActivityOrphanGraceSeconds)
+                guard let self, !self.isTripActive, self.liveActivity?.isActive == true else { return }
+                Log.alerts.notice("Live Activity прошлого процесса снята: поездки нет")
+                self.liveActivity?.end()
+            }
+        }
         switch manager.authorizationStatus {
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
@@ -1282,7 +1292,9 @@ final class LocationService: NSObject {
         // на no-op внутри: `activityState` — вычисляемое свойство, и оно
         // собиралось каждую секунду ради вызова, который тут же выходил по
         // guard. Плашка не запущена почти всю жизнь приложения.
-        if liveActivity?.isActive == true {
+        // И только в поездке: подхваченная плашка прошлого процесса без
+        // поездки обновлялась бы фоновыми фиксами как живая (ревью S14).
+        if isTripActive, liveActivity?.isActive == true {
             liveActivity?.update(state: activityState,
                                  nearMeters: LiveActivityService.nearZone(alertRadius: effectiveAlertRadius))
         }

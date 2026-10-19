@@ -126,7 +126,7 @@ final class TripStats {
 
     /// Пока история не приехала, писать её на диск нельзя: запись, сделанная
     /// в этом окне, затёрла бы файл огрызком.
-    @ObservationIgnored private(set) var isLoaded = false
+    private(set) var isLoaded = false
 
     var camerasPassed: Int { passed.count }
 
@@ -515,7 +515,7 @@ final class TripStats {
         // «ничего не нашла», ставила свой флаг — и больше не запускалась
         // никогда, оставив мостовые проезды в Итогах навсегда. Остальной файл
         // этот флаг уважает (persist, persistDays), а миграция — нет.
-        guard isLoaded, !Storage.bool(.passAxisCleanup1), !axisByID.isEmpty else { return }
+        guard isLoaded, isLifetimeTrusted, !Storage.bool(.passAxisCleanup1), !axisByID.isEmpty else { return }
         let before = history
         let (cleaned, changed) = TripHistory.axisSanitized(history, axisByID: axisByID)
         if changed {
@@ -540,6 +540,16 @@ final class TripStats {
     /// исчезает из списка, но продолжает жить в километрах и рейтинге отчёта.
     /// Правка истории до её чтения отклоняется: в памяти только поездки
     /// окна, и при загрузке диск лёг бы поверх правки (ревью S9, третий круг).
+    /// Сбросить или заменить «за всё время» целиком — только когда ему
+    /// верим: в недоверенном процессе в памяти лишь его вклад.
+    private func lifetimeEditAllowed(_ what: String) -> Bool {
+        guard isLifetimeTrusted else {
+            Log.trips.error("\(what, privacy: .public): «за всё время» ещё не перенесено — отклонено")
+            return false
+        }
+        return true
+    }
+
     private func editAllowed(_ what: String) -> Bool {
         guard isLoaded else {
             Log.trips.error("\(what, privacy: .public): история ещё не прочитана — отклонено")
@@ -576,7 +586,7 @@ final class TripStats {
     func clearHistory() {
         // До чтения в памяти только поездки окна: «очистка» их и вернула бы
         // весь диск поверх при загрузке (ревью S9, третий круг).
-        guard editAllowed("очистка истории") else { return }
+        guard editAllowed("очистка истории"), lifetimeEditAllowed("очистка истории") else { return }
         history = []
         days = []
         lastFinishedRaw = nil
@@ -585,6 +595,9 @@ final class TripStats {
         persist()
         persistDays()
         persistLifetime()
+        // Старые ключи — тоже: иначе стёртое вернулось бы через перенос.
+        Storage.remove(.lifetimeStats)
+        Storage.remove(.alertRecallTotal)
         Task.detached(priority: .utility) { TimedTrackStore.removeAll() }
         onRecordsErased?(nil)
     }
@@ -946,9 +959,26 @@ final class TripStats {
     nonisolated struct LifetimeFile: Codable, Sendable {
         var lifetime: LifetimeStats
         var alertRecall: AlertRecall.Tally
+        /// Файл вклада недоверенного процесса: его метка.
+        var sessionID: String? = nil
+        /// Файл счётчиков: метка вклада, уже слитого внутрь. Слияние и
+        /// удаление файла вклада не атомарны вместе — по метке повторное
+        /// чтение не кладёт тот же вклад второй раз (ревью S9).
+        var mergedSession: String? = nil
+
+        /// Этот итог, а после него — вклад `later` (более позднего периода).
+        func followed(by later: LifetimeFile) -> LifetimeFile {
+            LifetimeFile(lifetime: lifetime.followed(by: later.lifetime),
+                         alertRecall: alertRecall + later.alertRecall,
+                         sessionID: nil, mergedSession: later.sessionID ?? mergedSession)
+        }
     }
 
     private var lifetimeURL: URL { Self.documents.appendingPathComponent("lifetime.json") }
+    /// Вклад процесса, которому нельзя верить UserDefaults (старт до
+    /// разблокировки, файла счётчиков ещё нет): копится отдельно и ложится
+    /// поверх перенесённого из UserDefaults, когда они прочтутся (ревью S9).
+    private var sessionURL: URL { Self.documents.appendingPathComponent("lifetime_session.json") }
 
     nonisolated private static var documents: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -987,9 +1017,15 @@ final class TripStats {
     /// Поездки, закончившиеся до чтения истории: их вклад в «за всё время»
     /// ложится поверх прочитанного при загрузке.
     @ObservationIgnored private var windowRecordIDs: Set<Double> = []
-    /// Счётчикам этого процесса можно верить: нет — не пишем их вовсе
-    /// (старт до разблокировки, файла ещё нет, а UserDefaults пусты).
-    @ObservationIgnored private var lifetimeTrusted = true
+    /// Счётчикам этого процесса можно верить. Нет (старт до разблокировки,
+    /// файла ещё нет, UserDefaults пусты) — в памяти только вклад процесса:
+    /// он пишется в lifetime_session.json, а «за всё время» не показывается.
+    private(set) var isLifetimeTrusted = true
+    /// Метка вклада, который копит этот недоверенный процесс.
+    @ObservationIgnored private var sessionID = UUID().uuidString
+    /// Метка последнего слитого вклада — переписывается в каждый файл
+    /// счётчиков, пока файл вклада может ещё лежать на диске.
+    @ObservationIgnored private var lastMergedSession: String?
     /// Повтор чтения — с нарастающей паузой (30 с … 10 мин).
     @ObservationIgnored private var loadRetryDelay = AppConfig.storeRetrySeconds
     @ObservationIgnored private var retryTask: Task<Void, Never>?
@@ -1009,12 +1045,13 @@ final class TripStats {
     /// Разбор трёх файлов вне main — поэлементно, с честным ответом на «не
     /// читается» (сценарий S9, 20.10): см. JSONFile.LoadResult.
     @concurrent private nonisolated static func decodeStore(
-        trips: URL, days: URL, lifetime: URL
+        trips: URL, days: URL, lifetime: URL, session: URL
     ) async -> (trips: JSONFile.LoadResult<LossyArray<TripRecord>>, days: JSONFile.LoadResult<LossyArray<TripDay>>,
-                lifetime: JSONFile.LoadResult<LifetimeFile>) {
+                lifetime: JSONFile.LoadResult<LifetimeFile>, session: JSONFile.LoadResult<LifetimeFile>) {
         (JSONFile.loadChecked(LossyArray<TripRecord>.self, from: trips, log: Log.trips),
          JSONFile.loadChecked(LossyArray<TripDay>.self, from: days, log: Log.trips),
-         JSONFile.loadChecked(LifetimeFile.self, from: lifetime, log: Log.trips))
+         JSONFile.loadChecked(LifetimeFile.self, from: lifetime, log: Log.trips),
+         JSONFile.loadChecked(LifetimeFile.self, from: session, log: Log.trips))
     }
 
     /// Разобрать ответ чтения: прочитанное, что сделать с файлом, и можно ли
@@ -1058,14 +1095,20 @@ final class TripStats {
         guard !isLoaded, !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
-        let result = await Self.decodeStore(trips: storeURL, days: daysURL, lifetime: lifetimeURL)
+        let result = await Self.decodeStore(trips: storeURL, days: daysURL, lifetime: lifetimeURL,
+                                            session: sessionURL)
         let tripsRead = Self.accept(result.trips)
         let daysRead = Self.accept(result.days)
-        var lifetimeAside = Aside.none
+        var lifetimeAside = Aside.none, sessionAside = Aside.none
         var lifetimeReadable = true
         switch result.lifetime {
         case .unreadable: lifetimeReadable = false
         case .corrupt: lifetimeAside = .move
+        case .missing, .loaded: break
+        }
+        switch result.session {
+        case .unreadable: lifetimeReadable = false
+        case .corrupt: sessionAside = .move
         case .missing, .loaded: break
         }
         // Файл есть, но не читается (процесс подняли до первой разблокировки
@@ -1076,7 +1119,7 @@ final class TripStats {
         // ПОСЛЕ этой проверки — и не вышло отложить — тоже «не читается».
         guard tripsRead.readable, daysRead.readable, lifetimeReadable,
               setAside(tripsRead.aside, storeURL), setAside(daysRead.aside, daysURL),
-              setAside(lifetimeAside, lifetimeURL) else {
+              setAside(lifetimeAside, lifetimeURL), setAside(sessionAside, sessionURL) else {
             scheduleRetry()
             return
         }
@@ -1110,11 +1153,16 @@ final class TripStats {
         // окна — они легли на нули. Продолжение склейкой, идущее сейчас,
         // увезло свою первую ногу из истории: её вклад — тоже (ревью S9).
         let legacy = Self.legacyLifetime()
-        var base = Self.lifetimeSource(result.lifetime, legacy: legacy.lifetime, legacyRecall: legacy.recall,
-                                       startedBlocked: startedBlocked, decodedTrips: decoded.trips)
+        var session: LifetimeFile?
+        if case .loaded(let value) = result.session { session = value }
+        var base = Self.lifetimeSource(result.lifetime, session: session, legacy: legacy.lifetime,
+                                       legacyRecall: legacy.recall, startedBlocked: startedBlocked,
+                                       decodedTrips: decoded.trips)
         if !base.trusted {
-            lifetimeTrusted = false
-            Log.trips.fault("«за всё время»: старт до разблокировки, файла нет, UserDefaults пусты — не пишем до следующего запуска")
+            isLifetimeTrusted = false
+            // Вклад прошлого недоверенного процесса продолжается под его меткой.
+            if let id = session?.sessionID { sessionID = id }
+            Log.trips.fault("«за всё время»: старт до разблокировки, файла нет, UserDefaults пусты — копим вклад процесса отдельно")
         }
         let contributions = Self.windowContributions(window: window, windowIDs: windowRecordIDs,
                                                      resumed: resumedFrom)
@@ -1126,6 +1174,7 @@ final class TripStats {
         }
         lifetime = base.file.lifetime
         alertRecall = base.file.alertRecall + pendingRecall
+        lastMergedSession = base.file.mergedSession
         let lifetimeChanged = base.needsWrite || !contributions.isEmpty || pendingRecall != AlertRecall.Tally()
         pendingRecall = AlertRecall.Tally()
         windowRecordIDs = []
@@ -1137,6 +1186,18 @@ final class TripStats {
             persistDays()
         }
         if lifetimeChanged { persistLifetime() }
+        if base.trusted, session != nil {
+            // Вклад прошлого недоверенного процесса уже внутри (или в истории,
+            // если счётчики пересобраны) — второй раз не нужен.
+            JSONFile.remove(at: sessionURL, log: Log.trips)
+        }
+        // Файл счётчиков прочитан в процессе, которому верим: старые ключи
+        // UserDefaults больше не источник — убрать, иначе стёртое («удалить
+        // все поездки») вернулось бы через перенос (ревью S9).
+        if case .loaded = result.lifetime, !startedBlocked {
+            Storage.remove(.lifetimeStats)
+            Storage.remove(.alertRecallTotal)
+        }
         finishLoading()
         onHistoryLoaded?()
     }
@@ -1166,22 +1227,30 @@ final class TripStats {
         retryTask = Task { [weak self] in await self?.loadFromDisk() }
     }
 
-    /// Откуда «за всё время» при чтении (ревью S9, третий круг). Чистая —
-    /// покрыта тестами. `needsWrite` — файла не было или он битый: записать
-    /// взятое; `trusted == false` — не писать вовсе (перенос — следующему
-    /// запуску): старт до разблокировки, файла нет, а пустые UserDefaults
-    /// могут быть пустым кэшем, а не правдой.
-    nonisolated static func lifetimeSource(_ result: JSONFile.LoadResult<LifetimeFile>,
+    /// Откуда «за всё время» при чтении (ревью S9). Чистая — покрыта
+    /// тестами. `needsWrite` — записать взятое; `trusted == false` — процессу
+    /// нельзя верить UserDefaults (старт до разблокировки, файла нет, записи
+    /// там не видно — может быть пустым кэшем): в памяти и на диске тогда
+    /// только вклад процесса (`session`), перенос — когда UserDefaults
+    /// прочтутся. `session` — такой вклад прошлого процесса.
+    nonisolated static func lifetimeSource(_ result: JSONFile.LoadResult<LifetimeFile>, session: LifetimeFile?,
                                            legacy: LifetimeStats?, legacyRecall: AlertRecall.Tally?,
                                            startedBlocked: Bool, decodedTrips: [TripRecord])
         -> (file: LifetimeFile, needsWrite: Bool, trusted: Bool) {
         let recall = legacyRecall ?? AlertRecall.Tally()
+        let untrusted = (file: session ?? LifetimeFile(lifetime: LifetimeStats(), alertRecall: AlertRecall.Tally()),
+                         needsWrite: false, trusted: false)
         switch result {
         case .loaded(let file):
-            return (file, false, true)
+            guard let session else { return (file, false, true) }
+            // Этот вклад уже слит (упали между записью и удалением его файла).
+            if let id = session.sessionID, file.mergedSession == id { return (file, false, true) }
+            return (file.followed(by: session), true, true)
         case .corrupt:
             // Отложен; лучшее, что осталось, — максимум по каждому полю из
-            // старой записи UserDefaults и пересборки по истории.
+            // старой записи UserDefaults и пересборки по истории (в истории
+            // и поездки недоверенного процесса — его вклад не нужен).
+            guard legacy != nil || !startedBlocked else { return untrusted }
             let rebuilt = LifetimeStats.rebuilt(from: decodedTrips)
             return (LifetimeFile(lifetime: legacy.map { TripBackupMerge.maxed($0, rebuilt) } ?? rebuilt,
                                  alertRecall: recall), true, true)
@@ -1189,16 +1258,37 @@ final class TripStats {
             // Перенос из UserDefaults (до 20.10 счётчики жили там). Запись
             // есть — она настоящая: пустой кэш врёт пустотой, а не цифрами.
             if let legacy {
-                return (LifetimeFile(lifetime: legacy, alertRecall: recall), true, true)
+                let migrated = LifetimeFile(lifetime: legacy, alertRecall: recall)
+                return (session.map { migrated.followed(by: $0) } ?? migrated, true, true)
             }
-            if startedBlocked && !decodedTrips.isEmpty {
-                return (LifetimeFile(lifetime: LifetimeStats(), alertRecall: recall), false, false)
-            }
-            // Свежая установка или версия без счётчиков — из истории, чтобы
-            // экономия и достижения не начинались с нуля.
+            // Записи не видно, а процесс поднят до разблокировки — это может
+            // быть пустой кэш, а не правда: ни нулей, ни пересборки поверх
+            // (ревью S9: у человека с пустой историей нули стёрли бы годы).
+            if startedBlocked { return untrusted }
+            // Свежая установка или версия без счётчиков — из истории (в ней и
+            // поездки недоверенного процесса).
             let rebuilt = decodedTrips.isEmpty ? LifetimeStats() : LifetimeStats.rebuilt(from: decodedTrips)
             return (LifetimeFile(lifetime: rebuilt, alertRecall: recall), true, true)
         }
+    }
+
+    /// UserDefaults прочлись после старта до разблокировки (разблокировка,
+    /// возврат на экран) — перенести их и положить сверху вклад процесса.
+    func retryLegacyLifetime() {
+        guard isLoaded, !isLifetimeTrusted else { return }
+        let legacy = Self.legacyLifetime()
+        guard let saved = legacy.lifetime else { return }
+        let merged = LifetimeFile(lifetime: saved, alertRecall: legacy.recall ?? AlertRecall.Tally())
+            .followed(by: LifetimeFile(lifetime: lifetime, alertRecall: alertRecall, sessionID: sessionID))
+        lifetime = merged.lifetime
+        alertRecall = merged.alertRecall
+        lastMergedSession = merged.mergedSession
+        isLifetimeTrusted = true
+        // Сначала файл счётчиков (синхронно, с меткой вклада), потом — убрать
+        // файл вклада: упадём между ними — метка не даст слить его дважды.
+        JSONFile.saveOrdered(merged, to: lifetimeURL, log: Log.trips, wait: true)
+        JSONFile.remove(at: sessionURL, log: Log.trips)
+        Log.trips.notice("«за всё время»: UserDefaults прочлись — перенос с вкладом процесса")
     }
 
     /// Поездки окна (закончились до чтения истории), чей вклад ложится
@@ -1229,7 +1319,9 @@ final class TripStats {
         // Гео-чистка: старые версии засчитывали камеры с чужих улиц — выкидываем
         // их из истории и пересчитываем баллы и счётчики. Второй прогон нужен
         // из-за сужения порога (120 → 70 м): развязки первый прогон пропускал.
-        if !Storage.bool(.passGeoCleanup2) {
+        // Чистки ставят флаги в UserDefaults — недоверенный процесс (кэш
+        // настроек может быть пуст) их не трогает: пройдут в следующий раз.
+        if isLifetimeTrusted, !Storage.bool(.passGeoCleanup2) {
             let before = history
             let (cleaned, changed) = TripHistory.sanitized(history)
             if changed {
@@ -1268,7 +1360,7 @@ final class TripStats {
         // Подъём лимитов до пола фиксации. Старые записи судились по тегу OSM
         // ниже 60 — в городе таких камер нет, и выставленные по ним штрафы и
         // снятые баллы были обвинением на пустом месте.
-        if !Storage.bool(.passLimitFloor1) {
+        if isLifetimeTrusted, !Storage.bool(.passLimitFloor1) {
             let before = history
             let (raised, changed) = TripHistory.limitFloored(history)
             if changed {
@@ -1311,7 +1403,8 @@ final class TripStats {
     /// (TripBackupMerge) — здесь только присвоение и запись на диск.
     func applyRestored(history: [TripRecord], days: [TripDay], lifetime: LifetimeStats) {
         // Слияние шло с пустой памятью — при чтении диск лёг бы поверх ещё раз.
-        guard editAllowed("восстановление из копии") else { return }
+        guard editAllowed("восстановление из копии"),
+              lifetimeEditAllowed("восстановление из копии") else { return }
         self.history = history
         self.days = days
         self.lifetime = lifetime
@@ -1406,11 +1499,11 @@ final class TripStats {
         guard let url = checkpointURL else { return }
         checkpointURL = nil
         let name = url.lastPathComponent
+        // Метка — сразу: чтение истории, идущее до удаления, не восстановит
+        // этот слепок (поездку, снятую «я пассажир», например; ревью S9).
+        Self.finishedCheckpoints.withLock { _ = $0.insert(name) }
         Task.detached(priority: .utility) {
-            Self.finishedCheckpoints.withLock { finished in
-                finished.insert(name)
-                JSONFile.remove(at: url, log: Log.trips)
-            }
+            Self.finishedCheckpoints.withLock { _ in JSONFile.remove(at: url, log: Log.trips) }
         }
     }
 
@@ -1418,7 +1511,10 @@ final class TripStats {
     private static func inflightFiles() -> [URL] {
         do {
             return try FileManager.default.contentsOfDirectory(at: documents, includingPropertiesForKeys: nil)
-                .filter { $0.lastPathComponent.hasPrefix("trip_inflight") && $0.pathExtension == "json" }
+                .filter { $0.lastPathComponent.hasPrefix("trip_inflight") && $0.pathExtension == "json"
+                    // Отложенный битый — не слепок: иначе он откладывался бы
+                    // снова на каждом чтении, а имя росло до предела.
+                    && !$0.lastPathComponent.contains(".corrupt-") }
                 .sorted { $0.lastPathComponent < $1.lastPathComponent }
         } catch {
             Log.trips.error("слепки поездок не перечислены: \(error.localizedDescription, privacy: .public)")
@@ -1431,7 +1527,8 @@ final class TripStats {
     /// автозапуск пройдёт через TripMerge — короткая пауза склеится, и
     /// дистанция продолжится, как будто вылета не было.
     private func restoreInflightIfAny() {
-        for url in Self.inflightFiles() where url != checkpointURL {
+        let finished = Self.finishedCheckpoints.withLock { $0 }
+        for url in Self.inflightFiles() where url != checkpointURL && !finished.contains(url.lastPathComponent) {
             restoreInflight(at: url)
         }
     }
@@ -1450,8 +1547,11 @@ final class TripStats {
             JSONFile.setAside(url, log: Log.trips)
             return
         }
-        switch Self.inflightAction(snapshotStartedAt: snapshot.startedAt, liveStartedAt: startedAt,
-                                   historyIDs: Set(history.map(\.id))) {
+        let id = snapshot.startedAt.timeIntervalSince1970
+        let saved = history.first { $0.id == id }
+        switch Self.inflightAction(snapshotStartedAt: snapshot.startedAt, snapshotLastPoint: snapshot.lastPointAt,
+                                   isContinuation: snapshot.baseDistance != nil, liveStartedAt: startedAt,
+                                   savedEndedAt: saved?.endedAt) {
         case .live:
             // Слепок ЖИВОЙ поездки (начатой, пока история ещё не читалась) —
             // не крэш: восстановить его значило бы получить её дважды.
@@ -1463,6 +1563,16 @@ final class TripStats {
             Log.trips.notice("слепок поездки уже в истории (слепок \(Int(snapshot.distanceMeters), privacy: .public) м) — не восстанавливаю")
             JSONFile.remove(at: url, log: Log.trips)
             return
+        case .replace:
+            // Продолжение склейкой, а в истории ещё её первая нога (запись
+            // истории после склейки не успела лечь до смерти процесса): слепок
+            // длиннее — он и есть поездка; первая нога в «за всё время» уже
+            // внесена, ниже — только прибавка (updatedResumed).
+            if let saved {
+                days = TripDayBook.unfolded(saved, from: days)
+                history.removeAll { $0.id == id }
+                Log.trips.notice("слепок продолжения длиннее записи — запись заменена")
+            }
         case .restore:
             break
         }
@@ -1493,14 +1603,17 @@ final class TripStats {
         Log.trips.info("восстановлена незавершённая поездка: \(Int(record.distanceMeters), privacy: .public) м")
     }
 
-    nonisolated enum InflightAction: Equatable { case live, duplicate, restore }
+    nonisolated enum InflightAction: Equatable { case live, duplicate, replace, restore }
 
     /// Что делать со слепком при чтении. Чистая — покрыта тестами.
-    nonisolated static func inflightAction(snapshotStartedAt: Date, liveStartedAt: Date?,
-                                           historyIDs: Set<Double>) -> InflightAction {
+    /// `savedEndedAt` — конец записи с тем же id в истории (nil — нет такой).
+    nonisolated static func inflightAction(snapshotStartedAt: Date, snapshotLastPoint: Date, isContinuation: Bool,
+                                           liveStartedAt: Date?, savedEndedAt: Date?) -> InflightAction {
         if snapshotStartedAt == liveStartedAt { return .live }
-        if historyIDs.contains(snapshotStartedAt.timeIntervalSince1970) { return .duplicate }
-        return .restore
+        guard let savedEndedAt else { return .restore }
+        // Слепок продолжения склейкой новее записи — запись это его первая нога.
+        if isContinuation, snapshotLastPoint > savedEndedAt.addingTimeInterval(60) { return .replace }
+        return .duplicate
     }
 
     /// Слепок → запись истории. Та же логика, что в finish(): порог 100 м,
@@ -1550,12 +1663,15 @@ final class TripStats {
             Log.trips.notice("«за всё время» не записано: история ещё не прочитана")
             return
         }
-        guard lifetimeTrusted else {
-            Log.trips.notice("«за всё время» не записано: перенос — на следующем запуске")
-            return
+        // Недоверенный процесс пишет только свой вклад — отдельным файлом.
+        if isLifetimeTrusted {
+            JSONFile.saveOrdered(LifetimeFile(lifetime: lifetime, alertRecall: alertRecall,
+                                              mergedSession: lastMergedSession),
+                                 to: lifetimeURL, log: Log.trips, wait: mustWriteSynchronously())
+        } else {
+            JSONFile.saveOrdered(LifetimeFile(lifetime: lifetime, alertRecall: alertRecall, sessionID: sessionID),
+                                 to: sessionURL, log: Log.trips, wait: mustWriteSynchronously())
         }
-        JSONFile.saveOrdered(LifetimeFile(lifetime: lifetime, alertRecall: alertRecall), to: lifetimeURL,
-                             log: Log.trips, wait: mustWriteSynchronously())
     }
     private func persist() {
         // См. isLoaded: пока история не приехала с диска, в файле лежит

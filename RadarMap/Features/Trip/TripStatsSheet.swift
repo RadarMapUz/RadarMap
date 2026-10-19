@@ -210,7 +210,9 @@ struct TripStatsSheet: View {
                     // же приёмом, что «Детали периода». Экран Итогов открывают
                     // ради ТЕКУЩЕГО периода; пожизненные цифры, охват и
                     // достижения читают раз в месяц, а место занимали всегда.
-                    if !trip.lifetime.isEmpty {
+                    // Не перенесено (старт до разблокировки) — в памяти лишь
+                    // вклад процесса: не показывать его как «за всё время».
+                    if !trip.lifetime.isEmpty, trip.isLifetimeTrusted {
                         lifetimeSection(trip: trip)
                             .entrance(5, appeared)
                             .id("lifetime")
@@ -584,7 +586,7 @@ struct TripStatsSheet: View {
                     .font(.rounded(13))
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if trip.lifetime.cleanStreak >= 2 {
+                if trip.isLifetimeTrusted, trip.lifetime.cleanStreak >= 2 {
                     // Огонёк цветной, подпись — обычным вторичным текстом:
                     // коричневая строка читалась как предупреждение, а это похвала.
                     HStack(spacing: 4) {

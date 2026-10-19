@@ -77,7 +77,10 @@ final class TripStats {
                                                "TripStats.onTripFinished") }
     }
 
-    @ObservationIgnored private var lastCoordinate: CLLocationCoordinate2D?
+    /// Одометр: опора, от которой считается пробег (S13). Она же — последняя
+    /// точка поездки.
+    @ObservationIgnored private var odometer = TripOdometer()
+    private var lastCoordinate: CLLocationCoordinate2D? { odometer.anchor }
     /// Сырой трек текущей поездки: точка каждые ≥30 м, упрощается при финише.
     @ObservationIgnored private var trackBuffer: [TrackPoint] = []
     /// Время каждой точки `trackBuffer` (секунды Unix; NaN — неизвестно).
@@ -150,7 +153,7 @@ final class TripStats {
     func begin(batteryPercent: Int? = nil) {
         maxSpeedKmh = 0
         distanceMeters = 0
-        lastCoordinate = nil
+        odometer = TripOdometer()
         passed = []
         stops = []
         trackBuffer = []
@@ -208,7 +211,7 @@ final class TripStats {
         lastFinishedRaw = nil
         // Склейка: подробный трек первой ноги продолжается той же записью.
         timedBuffer = TimedTrackStore.load(tripID: record.id) ?? []
-        lastCoordinate = record.endCoordinate
+        odometer = TripOdometer(anchor: record.endCoordinate, at: record.endedAt)
         stops = (record.stops ?? []) + [
             TripStop(id: UUID(),
                      lat: record.endLat ?? record.trackPoints.last?.lat ?? 0,
@@ -227,15 +230,10 @@ final class TripStats {
         // — наблюдаемые свойства, и их запись будила читателей каждый фикс
         // открытого приложения (аудит энергии 19.10).
         guard startedAt != nil else { return }
-        if let last = lastCoordinate {
-            // Тем же способом, что и весь пайплайн: HUD, гейты и запись проезда
-            // обязаны сходиться в цифрах, а на масштабе одного тика (десятки
-            // метров) разница с точной формулой — доли процента.
-            let step = GeoMath.fastDistance(last.latitude, last.longitude,
-                                            coordinate.latitude, coordinate.longitude)
-            if step < AppConfig.tripMaxStepMeters { distanceMeters += step }
-        }
-        lastCoordinate = coordinate
+        // speedKmh == 0 — Standstill признал стоянку (на ходу сглаженная
+        // скорость ровно нуля не даёт): опора стоит, дрожание не километры.
+        let step = odometer.advance(to: coordinate, at: time, stopped: speedKmh == 0)
+        if step > 0 { distanceMeters += step }
         maxSpeedKmh = max(maxSpeedKmh, speedKmh)
         lastPointAt = Date()
         if recordsTimedTrack {

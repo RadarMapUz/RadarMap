@@ -1837,9 +1837,15 @@ extension LocationService: CLLocationManagerDelegate {
     // precondition на самом горячем колбэке.
     nonisolated func locationManager(_ manager: CLLocationManager,
                                      didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last else { return }
-        let fix = LocationFilter.Fix(location)
-        Task { @MainActor in self.handleFix(fix) }
+        // Пачка (после фоновой паузы, после занятого главного потока) — все
+        // точки по порядку, а не только последняя: иначе пробег шёл хордой, а
+        // проезд камеры между точками пропадал вовсе (S13, 20.10). Устаревшие
+        // (старше maxFixAgeSeconds) фильтр отбросит сам.
+        let fixes = locations.map(LocationFilter.Fix.init)
+        guard !fixes.isEmpty else { return }
+        Task { @MainActor in
+            for fix in fixes { self.handleFix(fix) }
+        }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {

@@ -1052,6 +1052,8 @@ final class TripStats {
     /// файла ещё нет, UserDefaults пусты) — в памяти только вклад процесса:
     /// он пишется в lifetime_session.json, а «за всё время» не показывается.
     private(set) var isLifetimeTrusted = true
+    /// Недоверие началось с битого файла счётчиков: перенос — по его правилам.
+    @ObservationIgnored private var untrustedFromCorrupt = false
     /// Журнал правок, который копит этот недоверенный процесс.
     @ObservationIgnored private var session = LifetimeSession(id: UUID().uuidString, ops: [])
     /// Метка последнего слитого вклада — переписывается в каждый файл
@@ -1185,10 +1187,16 @@ final class TripStats {
         // увезло свою первую ногу из истории: её вклад — тоже (ревью S9).
         var previousSession: LifetimeSession?
         if case .loaded(let value) = result.session { previousSession = value }
-        var base = Self.lifetimeSource(result.lifetime, session: previousSession, legacy: Self.legacyLifetime(),
+        // Старые счётчики нужны, только если файла счётчиков нет или он битый:
+        // иначе каждый запуск разбирал бы весь файл настроек на главном потоке.
+        var fileLoaded = false
+        if case .loaded = result.lifetime { fileLoaded = true }
+        let legacy = fileLoaded ? Legacy(lifetime: nil, recall: nil, known: true) : Self.legacyLifetime()
+        var base = Self.lifetimeSource(result.lifetime, session: previousSession, legacy: legacy,
                                        decodedTrips: decoded.trips)
         if !base.trusted {
             isLifetimeTrusted = false
+            if case .corrupt = result.lifetime { untrustedFromCorrupt = true }
             // Журнал прошлого недоверенного процесса продолжается.
             if let previousSession { session = previousSession }
             Log.trips.fault("«за всё время»: старые счётчики неизвестны (до разблокировки) — копим журнал процесса")
@@ -1216,17 +1224,17 @@ final class TripStats {
         }
         if base.trusted, previousSession != nil {
             // Журнал прошлого недоверенного процесса уже внутри (или в
-            // истории, если счётчики пересобраны): сначала файл счётчиков —
-            // синхронно, с меткой, — потом удалить журнал (ревью S9).
-            persistLifetime(wait: true)
-            JSONFile.remove(at: sessionURL, log: Log.trips)
+            // истории, если счётчики пересобраны): сначала файл счётчиков, с
+            // меткой, потом удалить журнал — той же очередью записи (ревью S9).
+            persistLifetime()
+            JSONFile.removeOrdered(at: sessionURL, log: Log.trips)
         } else if lifetimeChanged {
             persistLifetime()
         }
         // Файл счётчиков прочитан в процессе, которому верим: старые ключи
         // UserDefaults больше не источник — убрать, иначе стёртое («удалить
         // все поездки») вернулось бы через перенос (ревью S9).
-        if case .loaded = result.lifetime, !startedBlocked {
+        if fileLoaded, !startedBlocked, Storage.data(.lifetimeStats) != nil || Storage.data(.alertRecallTotal) != nil {
             Storage.remove(.lifetimeStats)
             Storage.remove(.alertRecallTotal)
         }
@@ -1361,16 +1369,22 @@ final class TripStats {
         guard isLoaded, !isLifetimeTrusted else { return }
         let legacy = Self.legacyLifetime()
         guard legacy.lifetime != nil || legacy.known else { return }
-        let base = Self.lifetimeSource(.missing, session: session, legacy: legacy, decodedTrips: history)
+        // Первая нога идущего продолжения склейкой увезена из истории — для
+        // пересборки она нужна (её вклад иначе потерялся бы, ревью S9). Битый
+        // файл при чтении — те же правила, что тогда: максимум с пересборкой.
+        let trips = history + [resumedFrom].compactMap { $0 }
+        let origin: JSONFile.LoadResult<LifetimeFile> = untrustedFromCorrupt
+            ? .corrupt(CocoaError(.fileReadCorruptFile)) : .missing
+        let base = Self.lifetimeSource(origin, session: session, legacy: legacy, decodedTrips: trips)
         guard base.trusted else { return }
         lifetime = base.file.lifetime
         alertRecall = base.file.alertRecall
         lastMergedSession = base.file.mergedSession
         isLifetimeTrusted = true
-        // Сначала файл счётчиков (синхронно, с меткой журнала), потом — убрать
-        // журнал: упадём между ними — метка не даст проиграть его дважды.
-        persistLifetime(wait: true)
-        JSONFile.remove(at: sessionURL, log: Log.trips)
+        // Сначала файл счётчиков (с меткой журнала), потом — убрать журнал,
+        // той же очередью записи: метка не даст проиграть его дважды.
+        persistLifetime()
+        JSONFile.removeOrdered(at: sessionURL, log: Log.trips)
         Log.trips.notice("«за всё время»: старые счётчики прочлись — перенос с журналом процесса")
     }
 
@@ -1690,7 +1704,9 @@ final class TripStats {
         case .restore:
             break
         }
-        defer { JSONFile.remove(at: url, log: Log.trips) }
+        // Слепок уходит той же очередью, что и записи истории и счётчиков,
+        // после них: упадём раньше — восстановится снова, а не пропадёт.
+        defer { JSONFile.removeOrdered(at: url, log: Log.trips) }
         guard let record = Self.record(from: snapshot) else {
             Log.trips.notice("слепок незавершённой поездки короче 100 м — не восстановлен")
             noteDropped("crashShort")
@@ -1769,9 +1785,7 @@ final class TripStats {
         JSONFile.saveOrdered(days, to: daysURL, log: Log.trips, wait: mustWriteSynchronously())
     }
 
-    /// `wait` — записать прямо сейчас: перед удалением журнала, который уже
-    /// внутри файла счётчиков (иначе падение между ними его теряло).
-    private func persistLifetime(wait: Bool = false) {
+    private func persistLifetime() {
         // До загрузки «за всё время» в памяти — нули поверх нечитаемого: запись
         // затёрла бы годы километров (ревью S9).
         guard isLoaded else {
@@ -1782,9 +1796,9 @@ final class TripStats {
         if isLifetimeTrusted {
             JSONFile.saveOrdered(LifetimeFile(lifetime: lifetime, alertRecall: alertRecall,
                                               mergedSession: lastMergedSession),
-                                 to: lifetimeURL, log: Log.trips, wait: wait || mustWriteSynchronously())
+                                 to: lifetimeURL, log: Log.trips, wait: mustWriteSynchronously())
         } else {
-            JSONFile.saveOrdered(session, to: sessionURL, log: Log.trips, wait: wait || mustWriteSynchronously())
+            JSONFile.saveOrdered(session, to: sessionURL, log: Log.trips, wait: mustWriteSynchronously())
         }
     }
 

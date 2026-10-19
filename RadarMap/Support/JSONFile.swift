@@ -105,6 +105,13 @@ nonisolated enum JSONFile {
 
     private static let writer = DispatchQueue(label: "uz.radarmap.json-writer", qos: .utility)
 
+    /// Удалить файл в той же очереди, что и saveOrdered, — ПОСЛЕ всех записей,
+    /// поставленных раньше: «сначала записать то, во что файл вошёл, потом его
+    /// удалить» без ожидания записи на главном потоке (ревью S9).
+    static func removeOrdered(at url: URL, log: Logger) {
+        writer.async { remove(at: url, log: log) }
+    }
+
     /// Удалить кэш. Отсутствие файла — норма, а вот отказ в удалении значит,
     /// что данные, которым мы перестали верить, останутся лежать: это в лог.
     static func remove(at url: URL, log: Logger) {

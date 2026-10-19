@@ -577,7 +577,7 @@ final class LocationService: NSObject {
     }
 
     private func register(passes: [PassTracking.Pass]) {
-        for pass in passes {
+        for pass in passes where pass.camera.kind.recordsPasses {
             trip.registerPass(camera: pass.camera, speedKmh: pass.speedKmh,
                               limitKmh: pass.limitKmh, roadLimitKmh: pass.roadLimitKmh,
                               limitAssumed: pass.limitAssumed,

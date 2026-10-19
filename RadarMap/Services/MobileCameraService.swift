@@ -181,6 +181,10 @@ final class MobileCameraService {
                 let interval = self.pollInterval
                 if !self.isEnabled {
                     self.clearAll()   // выключили краудсорс — убираем и то, что уже на карте
+                } else if self.pruneExpired(now: Date()) {
+                    // Срок отметки вышел, а сервер молчит (нет сети, лёг) —
+                    // снимаем сами: «тренога впереди» часами после срока
+                    // хуже, чем её отсутствие (сценарий S5, 20.10).
                 } else if Date().timeIntervalSince(self.lastRefreshAt) >= interval {
                     // Сначала досылаем накопленное: чужая отметка подождёт
                     // секунду, своя ждала связи и может протухнуть.
@@ -214,6 +218,7 @@ final class MobileCameraService {
         guard !reports.isEmpty else { return }
         reports = []
         confirmations = [:]
+        expiries = [:]
         passTracks = [:]
         pendingConfirm = nil
         pendingConfirmAt = nil
@@ -284,9 +289,11 @@ final class MobileCameraService {
             lastETag = answer.etag
             let decoded = answer.value
             var fresh: [Int: Confirmation] = [:]
+            var expiries: [Int: Date] = [:]
             reports = decoded.reports.map { report in
                 let kind = ReportKind(rawValue: report.type ?? "") ?? .radar
                 let id = Self.idOffset + report.id
+                expiries[id] = Date(timeIntervalSince1970: report.expires)
                 fresh[id] = Confirmation(upvotes: report.up ?? 0,
                                          created: Date(timeIntervalSince1970: report.created ?? 0),
                                          confirmed: report.confirmed ?? true)
@@ -305,6 +312,7 @@ final class MobileCameraService {
                 )
             }
             confirmations = fresh
+            self.expiries = expiries
             // Окно ближайших камер пересоберёт наблюдатель ревизии базы
             // (AppEnvironment.observeCameraRevision) — сразу, и без экрана.
             store?.setMobileCameras(reports)
@@ -312,8 +320,33 @@ final class MobileCameraService {
                 onMyReportConfirmed?(confirmed)
             }
         } catch {
-            // сети нет — молча живём на последнем известном списке
+            // Сети нет или сервер не ответил — живём на последнем известном
+            // списке (и снимаем истёкшее сами, pruneExpired).
+            Log.network.notice("отметки водителей: опрос не удался — \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    /// Сроки отметок с сервера — по ним список чистится и без связи.
+    @ObservationIgnored private var expiries: [Int: Date] = [:]
+
+    /// Снять отметки, чей срок вышел. true — что-то сняли.
+    @discardableResult
+    func pruneExpired(now: Date) -> Bool {
+        let gone = Self.expired(expiries, now: now)
+        guard !gone.isEmpty else { return false }
+        reports.removeAll { gone.contains($0.id) }
+        for id in gone {
+            expiries[id] = nil
+            confirmations[id] = nil
+        }
+        store?.setMobileCameras(reports)
+        Log.network.notice("отметки водителей: сняты по сроку без сервера — \(gone.count, privacy: .public)")
+        return true
+    }
+
+    /// Чьи сроки вышли (чистая функция — под тестом).
+    nonisolated static func expired(_ expiries: [Int: Date], now: Date) -> Set<Int> {
+        Set(expiries.compactMap { $0.value <= now ? $0.key : nil })
     }
 
     // MARK: - Отметка и голосование

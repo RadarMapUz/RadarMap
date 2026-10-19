@@ -167,6 +167,8 @@ private func reportBySiri(_ kind: ReportKind) async -> IntentDialog {
         // Своя свежая отметка другого типа рядом превращает эту в уточнение:
         // сервер переписал тип той же точки, а не создал вторую.
         return IntentDialog("Тип отметки уточнён.")
+    case .queued(.serverBroken):
+        return IntentDialog("Сервер не отвечает — отправлю, как только ответит.")
     case .queued:
         return IntentDialog("Связи нет — отправлю, как только появится.")
     case .sent(.failed), .refused:

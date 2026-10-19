@@ -442,6 +442,25 @@ class APITest(ServerTestBase):
                              {"lat": 41.4001, "lon": 69.4001, "device": "b", "type": "post"})
         self.assertFalse(post["merged"], "пост не должен сливаться с ДТП рядом")
 
+    def test_queued_report_lives_from_when_it_was_marked(self):
+        """Отметка из очереди телефона (не было связи) — срок от момента,
+        когда её поставили (S25); вздорный возраст не принимается."""
+        import time as t
+        now = t.time()
+        _, fresh = _call(self.port, "POST", "/api/report",
+                         {"lat": 41.45, "lon": 69.45, "device": "q1", "type": "tripod"})
+        _, late = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.55, "lon": 69.55, "device": "q2", "type": "tripod", "age": 2400})
+        _, silly = _call(self.port, "POST", "/api/report",
+                         {"lat": 41.65, "lon": 69.65, "device": "q3", "type": "tripod", "age": "много"})
+        conn = sqlite3.connect(api.DB_PATH)
+        exp = {rid: conn.execute("SELECT expires FROM reports WHERE id = ?", (rid,)).fetchone()[0]
+               for rid in (fresh["id"], late["id"], silly["id"])}
+        conn.close()
+        self.assertAlmostEqual(exp[fresh["id"]] - exp[late["id"]], 2400, delta=5)
+        self.assertGreater(exp[late["id"]], now, "но ещё жива")
+        self.assertAlmostEqual(exp[silly["id"]], exp[fresh["id"]], delta=5)
+
     def test_report_bad_type(self):
         status, _ = _call(self.port, "POST", "/api/report",
                           {"lat": 41.4, "lon": 69.4, "device": "x", "type": "ufo"})

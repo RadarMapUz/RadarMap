@@ -139,12 +139,13 @@ final class ReportPlacementTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
     func testStaleReportIsDroppedRatherThanDelivered() {
-        // Через полчаса радар уехал, а мы бы предупредили: доставка здесь
-        // хуже молчания.
-        let (send, expired) = ReportQueue.split([pending(20), pending(2)], now: now)
-        XCTAssertEqual(send.count, 1)
-        XCTAssertEqual(expired.count, 1)
-        XCTAssertEqual(send.first?.at, pending(2).at)
+        // Через час радар уехал, а мы бы предупредили: доставка здесь хуже
+        // молчания. Тренога 20 минут назад — ещё стоит (S25: 15 минут
+        // выбрасывали отметку с трассы без покрытия); ДТП — уже нет.
+        let (send, expired) = ReportQueue.split([pending(50), pending(20), pending(25, kind: "accident"),
+                                                 pending(2)], now: now)
+        XCTAssertEqual(send.map(\.at), [pending(20).at, pending(2).at])
+        XCTAssertEqual(expired.count, 2)
     }
 
     func testFreshQueueGoesOutWhole() {

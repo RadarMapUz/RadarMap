@@ -104,15 +104,20 @@ nonisolated enum Commute {
         let ordered = history.filter { seen.insert($0.id).inserted }
             .sorted { $0.startedAt < $1.startedAt }
         var result: [Trip] = []
+        // Старт — шире конца: автостарт CoreMotion ловит поездку уже на ходу,
+        // в 400–1000 м от дома, и такие поездки в кармане «дорогой на работу»
+        // не становились никогда (сценарий S20, 20.10). Не шире трети пути
+        // дом–работа: иначе направления не различить.
+        let startRadius = max(radius, min(AppConfig.commuteGhostStartRadiusMeters, distance(home, work) / 3))
         for (index, record) in ordered.enumerated() {
             guard let end = record.endCoordinate,
                   let start = record.startCoordinate
                     ?? chainedStart(of: record, previous: index > 0 ? ordered[index - 1] : nil)
             else { continue }
             let direction: Direction
-            if distance(start, home) <= radius, distance(end, work) <= radius {
+            if distance(start, home) <= startRadius, distance(end, work) <= radius {
                 direction = .toWork
-            } else if distance(start, work) <= radius, distance(end, home) <= radius {
+            } else if distance(start, work) <= startRadius, distance(end, home) <= radius {
                 direction = .toHome
             } else {
                 continue

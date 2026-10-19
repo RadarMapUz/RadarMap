@@ -56,6 +56,21 @@ final class CommuteTests: XCTestCase {
         XCTAssertEqual(trips.first?.duration, 40 * 60)
     }
 
+    /// Автостарт поймал поездку в 800 м от дома (в кармане, уже на ходу) —
+    /// это всё ещё дорога на работу; конец — по-прежнему строго у работы
+    /// (сценарий S20, 20.10).
+    func testLateAutoStartStillCountsAsCommute() {
+        let lateStart = CLLocationCoordinate2D(latitude: home.latitude - 0.0072, longitude: home.longitude)  // ~800 м
+        let nearWork = CLLocationCoordinate2D(latitude: work.latitude - 0.0072, longitude: work.longitude)
+        let history = [
+            record(from: lateStart, to: work, start: at(daysAgo: 1, 8, 20), minutes: 48),
+            record(from: home, to: nearWork, start: at(daysAgo: 2, 8, 20), minutes: 48),
+        ]
+        let trips = Commute.trips(history: history, home: home, work: work)
+        XCTAssertEqual(trips.count, 1, "конец в 800 м от работы — не дорога на работу")
+        XCTAssertEqual(trips.first?.direction, .toWork)
+    }
+
     /// Старая запись без точки старта и без трека: старт — конец предыдущей
     /// поездки, если машина простояла ночь, а не неделю.
     func testChainedStartForOldRecords() {

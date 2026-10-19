@@ -83,7 +83,7 @@ final class RoadNetworkService {
 
     /// Только улицы: костяк района и местность рисовала схема приборки
     /// (удалена 11.10), а посадке отметки и схеме развязки нужны оси улиц.
-    @ObservationIgnored private var wantedSets: Swift.Set<RoadTiles.Set> = [.streets]
+    private static let wantedSets: Swift.Set<RoadTiles.Set> = [.streets]
     /// Распакованная местность по ключам наборов.
     @ObservationIgnored private var loadedAreas: [String: [SketchArea]] = [:]
     @ObservationIgnored private var loadedPoints: [String: [SketchPoint]] = [:]
@@ -399,7 +399,7 @@ final class RoadNetworkService {
         // окрестности), внутри тайла — набор по loadRank. Так первым на экране
         // появляется костяк того места, где мы стоим, а не дома соседнего
         // района.
-        let sets = wantedSets.sorted { $0.loadRank < $1.loadRank }
+        let sets = Self.wantedSets.sorted { $0.loadRank < $1.loadRank }
         return tiles.flatMap { tile in
             sets.map { RoadTiles.setKey(tile, $0) }
         }.filter { index.tiles[$0] != nil }

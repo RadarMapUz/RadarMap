@@ -37,6 +37,9 @@ final class ItogiScreenTests: XCTestCase {
             XCTAssertEqual(screen.insights, PeriodInsights.hero(summary).map { [$0] } ?? [])
             XCTAssertEqual(screen.trips.map(\.id),
                            TripHistory.historyList(history, period: period, anchor: now).map(\.id))
+            // Окно, а не вся история: поездка 40 дней назад в неделю и месяц
+            // (январь) не входит.
+            XCTAssertEqual(screen.trips.count, 2)
         }
     }
 
@@ -46,6 +49,7 @@ final class ItogiScreenTests: XCTestCase {
         let history = [record(daysAgo: 1, km: 12), record(daysAgo: 40, km: 50, passes: [overspeed(daysAgo: 40)])]
         let screen = ItogiScreen.build(days: [], history: history, period: .week, anchor: now, now: now)
         let direct = TripHistory.pendingFineNudge(history, now: now)
+        XCTAssertEqual(screen.pendingCount, 1, "превышение 40 дней назад — вне недели, но в напоминании")
         XCTAssertEqual(screen.pendingCount, direct?.count ?? 0)
         XCTAssertEqual(screen.pendingOldest, direct?.oldest)
     }

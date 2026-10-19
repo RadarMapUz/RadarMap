@@ -167,7 +167,7 @@ struct TripStatsSheet: View {
                         mapCard
                             .entrance(3, appeared)
                             .id("map")
-                        tripsSection(trip: trip, proxy: proxy)
+                        tripsSection(all: itogi.trips, proxy: proxy)
                             .entrance(3, appeared)
                             .id("history")
                         periodDetails(summary: summary, trip: trip)
@@ -230,8 +230,12 @@ struct TripStatsSheet: View {
                         }
                     }
                     if args.contains("-scrollCalendar") {
+                        // Календарь живёт в «Деталях» (6.1) — раскрыть, потом
+                        // прокрутить к ним.
+                        period = .month
+                        detailsExpanded = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            withMotion { proxy.scrollTo("calendar", anchor: .center) }
+                            withMotion { proxy.scrollTo("details", anchor: .top) }
                         }
                     }
                     // `-scrollTo risk|map|details|history|lifetime` — любой раздел.
@@ -550,14 +554,21 @@ struct TripStatsSheet: View {
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                     .lineLimit(1)
+                // Третий вариант — без слов: на SE при крупном кегле и в
+                // узбекском «↗ 100 % к прошлому месяцу» не помещается и под
+                // числом; голос всё равно говорит целиком (ревью 19.10).
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         distance
-                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta) }
+                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta, words: true) }
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        distance
+                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta, words: true) }
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         distance.minimumScaleFactor(0.6)
-                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta) }
+                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta, words: false) }
                     }
                 }
                 if let rating = summary.rating {
@@ -650,15 +661,17 @@ struct TripStatsSheet: View {
         }
     }
 
-    private func deltaBadge(_ delta: Int) -> some View {
+    private func deltaBadge(_ delta: Int, words: Bool) -> some View {
         let up = delta >= 0
-        return Label("\(abs(delta))% \(period.versusPrevious)", systemImage: up ? "arrow.up.right" : "arrow.down.right")
+        let text: LocalizedStringKey = words ? "\(abs(delta))% \(period.versusPrevious)" : "\(abs(delta))%"
+        return Label(text, systemImage: up ? "arrow.up.right" : "arrow.down.right")
             .font(.rounded(11, .bold))
             .foregroundStyle(up ? Theme.accent : Theme.textSecondary)
             .padding(.horizontal, 7).padding(.vertical, 3)
             .background((up ? Theme.accent : Theme.textSecondary).opacity(0.14), in: Capsule())
-            .accessibilityLabel(Text(up ? String(localized: "Больше, чем в прошлый период")
-                                        : String(localized: "Меньше, чем в прошлый период")))
+            .accessibilityLabel(Text((up ? String(localized: "Больше, чем в прошлый период")
+                                         : String(localized: "Меньше, чем в прошлый период"))
+                                     + ": \(abs(delta)) %"))
             .fixedSize()
     }
 
@@ -1229,8 +1242,9 @@ struct TripStatsSheet: View {
     /// Первые statsTripsPreview строк + «Показать все поездки (N)»: неделя
     /// активной езды — это 20+ записей, и без обрезки блок «За всё время»
     /// приходилось искать археологией.
-    private func tripsSection(trip: TripStats, proxy: ScrollViewProxy) -> some View {
-        let all = current.trips
+    /// `all` — из того же экрана, что герой: второе чтение `current` в кадр
+    /// смены периода собирало бы весь экран второй раз (ревью 19.10).
+    private func tripsSection(all: [TripRecord], proxy: ScrollViewProxy) -> some View {
         let shown = tripsExpanded ? all : Array(all.prefix(AppConfig.statsTripsPreview))
         return VStack(spacing: 10) {
             if let pair = mergeSuggestion {
@@ -1248,10 +1262,10 @@ struct TripStatsSheet: View {
                 onDelete: { record in
                     withMotion {
                         if mapSelection?.id == record.id { clearMapSelection() }
-                        trip.deleteRecord(id: record.id)
+                        env.trip.deleteRecord(id: record.id)
                     }
                 },
-                canMerge: { trip.canMergeWithPrevious(id: $0.id) },
+                canMerge: { env.trip.canMergeWithPrevious(id: $0.id) },
                 onMerge: { merge(next: $0) })
             if !tripsExpanded, all.count > AppConfig.statsTripsPreview {
                 Button {

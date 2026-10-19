@@ -23,6 +23,60 @@ nonisolated enum JSONFile {
         }
     }
 
+    /// Чтение с честным ответом: «файла нет» (первый запуск — норма) и «файл
+    /// есть, но прочесть нельзя» — РАЗНЫЕ вещи. Второе было тем же nil, и
+    /// следующая запись затирала данные человека пустым списком (сценарий S9,
+    /// 20.10): например, процесс подняли в фоне до первой разблокировки после
+    /// перезагрузки, файл защищён, — и история за месяцы уходила молча.
+    enum LoadResult<T> {
+        case missing
+        case loaded(T)
+        /// Файл есть, но не читается (защита до разблокировки, ввод-вывод) —
+        /// ничего не писать, попробовать позже.
+        case unreadable(Error)
+        /// Прочитан, но не разбирается — отложить в сторону, не затирать.
+        case corrupt(Error)
+    }
+
+    static func loadChecked<T: Decodable>(_ type: T.Type, from url: URL, log: Logger) -> LoadResult<T> {
+        guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            log.error("чтение \(url.lastPathComponent, privacy: .public): файл есть, но не читается — \(error.localizedDescription, privacy: .public)")
+            return .unreadable(error)
+        }
+        do {
+            return .loaded(try JSONDecoder().decode(T.self, from: data))
+        } catch {
+            log.fault("чтение \(url.lastPathComponent, privacy: .public): не разбирается — \(error.localizedDescription, privacy: .public)")
+            return .corrupt(error)
+        }
+    }
+
+    /// Отложить файл в сторону рядом: `trips.corrupt-1800000000.json`. Данные
+    /// человека не перезаписываются — их можно вернуть или разобрать. `copy` —
+    /// оставить и сам файл (часть записей прочиталась, файл ещё живой).
+    @discardableResult
+    static func setAside(_ url: URL, copy: Bool = false, log: Logger) -> Bool {
+        let aside = url.deletingPathExtension()
+            .appendingPathExtension("corrupt-\(Int(Date().timeIntervalSince1970))")
+            .appendingPathExtension(url.pathExtension)
+        do {
+            if copy {
+                try FileManager.default.copyItem(at: url, to: aside)
+            } else {
+                try FileManager.default.moveItem(at: url, to: aside)
+            }
+            log.notice("\(url.lastPathComponent, privacy: .public) отложен в \(aside.lastPathComponent, privacy: .public)")
+            return true
+        } catch {
+            log.error("\(url.lastPathComponent, privacy: .public) не отложен: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
     @discardableResult
     static func save<T: Encodable>(_ value: T, to url: URL, log: Logger) -> Bool {
         do {
@@ -60,5 +114,41 @@ nonisolated enum JSONFile {
         } catch {
             log.error("удаление \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
+    }
+}
+
+/// Массив, который читается поэлементно: одна битая запись не уносит с
+/// собой весь файл (сценарий S9, 20.10). Сколько выброшено — в `dropped`.
+nonisolated struct LossyArray<Element: Decodable>: Decodable {
+    let elements: [Element]
+    let dropped: Int
+    /// Первая причина отказа — в журнал (сколько и почему).
+    let firstError: String?
+
+    /// Принимает любое значение, ничего не читая: так разбор переходит к
+    /// следующему элементу после битого.
+    private struct Skip: Decodable {
+        init(from decoder: Decoder) throws {}
+    }
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var elements: [Element] = []
+        var dropped = 0
+        var firstError: String?
+        while !container.isAtEnd {
+            do {
+                elements.append(try container.decode(Element.self))
+            } catch {
+                if firstError == nil { firstError = String(describing: error) }
+                // Битый элемент — пропустить, не останавливая разбор. Не
+                // пропускается — дальше не прочесть (и не зациклиться).
+                guard (try? container.decode(Skip.self)) != nil else { break }
+                dropped += 1
+            }
+        }
+        self.elements = elements
+        self.dropped = dropped
+        self.firstError = firstError
     }
 }

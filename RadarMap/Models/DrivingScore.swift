@@ -231,6 +231,11 @@ nonisolated struct LifetimeStats: Codable, Equatable {
     var riskFinesSum = 0.0        // сум: сумма «возможных штрафов» за превышения
     var cleanStreak = 0           // подряд чистых поездок (текущая серия)
     var bestStreak = 0
+    /// Последняя поездка подняла рекорд серии. Нужно склейке: штраф второй
+    /// ноги отменяет шаг первой, и рекорд — только если его поднял этот шаг
+    /// («равен серии» не доказывает: рекорд мог быть таким и раньше). Старые
+    /// файлы и копии без поля — nil: рекорд тогда не трогаем.
+    var lastTripRaisedBest: Bool?
 
     /// Ни одной поездки за всё время — пожизненный блок Итогов скрыт целиком.
     var isEmpty: Bool { trips == 0 }
@@ -264,6 +269,79 @@ nonisolated struct LifetimeStats: Codable, Equatable {
         if limited > 0 {
             s.cleanStreak = fined == 0 ? s.cleanStreak + 1 : 0
             s.bestStreak = max(s.bestStreak, s.cleanStreak)
+        }
+        s.lastTripRaisedBest = s.bestStreak > stats.bestStreak
+        return s
+    }
+
+    /// Финиш ПРОДОЛЖЕННОЙ поездки (склейка, TripMerge): первая нога уже
+    /// внесена своим финишем — добавляем только то, что прибавилось, иначе
+    /// «за всё время» считало её дважды: 10 км до магазина + 3 после давали
+    /// 23 км и две поездки (сценарий S11, 20.10). Поездка та же — `trips` не
+    /// растёт; серия: новый штраф её обрывает, а чистые лимитные проезды
+    /// продлевают, только если у первой ноги лимитных не было (иначе шаг
+    /// серии уже сделан).
+    /// Этот итог, а после него — более поздний период `later`, посчитанный с
+    /// нуля (вклад процесса, которому нельзя было верить UserDefaults,
+    /// ревью S9). Счётчики складываются; серия `later` продолжает эту, если
+    /// в `later` не было штрафа, иначе она — своя; рекорд — наибольший.
+    func followed(by later: LifetimeStats) -> LifetimeStats {
+        var s = self
+        s.trips += later.trips
+        s.distanceMeters += later.distanceMeters
+        s.camerasPassed += later.camerasPassed
+        s.camerasInLimit += later.camerasInLimit
+        s.savedFinesSum += later.savedFinesSum
+        s.riskFinesSum += later.riskFinesSum
+        s.cleanStreak = later.riskFinesSum > 0 ? later.cleanStreak : cleanStreak + later.cleanStreak
+        s.bestStreak = max(bestStreak, later.bestStreak, s.cleanStreak)
+        s.lastTripRaisedBest = later.trips > 0 ? later.lastTripRaisedBest : lastTripRaisedBest
+        return s
+    }
+
+    nonisolated static func updatedResumed(_ stats: LifetimeStats,
+                                           basePasses: [DrivingScore.Pass],
+                                           allPasses: [DrivingScore.Pass],
+                                           distanceDelta: Double) -> LifetimeStats {
+        var s = stats
+        s.distanceMeters += max(0, distanceDelta)
+        let added = Array(allPasses.dropFirst(min(basePasses.count, allPasses.count)))
+        s.camerasPassed += added.count
+        var limited = 0, fined = 0
+        for pass in added {
+            guard let limit = pass.limitKmh else { continue }
+            limited += 1
+            let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
+            if fine > 0 {
+                fined += 1
+                s.riskFinesSum += fine
+            } else {
+                s.camerasInLimit += 1
+                s.savedFinesSum += FineSchedule.minimumFine
+            }
+        }
+        // Серия — для склеенной поездки как ОДНОЙ. Первая нога своим финишем
+        // уже сделала шаг, если была чистой лимитной; штраф второй ноги делает
+        // поездку нечистой — шаг отменяется, и рекорд, поднятый этим шагом,
+        // тоже (ревью S11: «20 чистых подряд» за поездку со штрафом).
+        let baseLimited = basePasses.contains { $0.limitKmh != nil }
+        let baseFined = basePasses.contains { pass in
+            pass.limitKmh.map { FineSchedule.fine(overKmh: pass.speedKmh - Double($0)) > 0 } ?? false
+        }
+        if baseLimited && !baseFined {
+            if fined > 0 {
+                if s.lastTripRaisedBest == true, s.bestStreak > 0 { s.bestStreak -= 1 }
+                s.lastTripRaisedBest = false
+                s.cleanStreak = 0
+            }
+        } else if !baseLimited, limited > 0 {
+            if fined > 0 {
+                s.cleanStreak = 0
+            } else {
+                s.cleanStreak += 1
+                s.lastTripRaisedBest = s.cleanStreak > s.bestStreak
+                s.bestStreak = max(s.bestStreak, s.cleanStreak)
+            }
         }
         return s
     }
@@ -396,5 +474,23 @@ nonisolated enum Achievements {
     /// одна цель с прогрессом отвечает.
     nonisolated static func next(for stats: LifetimeStats) -> Achievement? {
         all(for: stats).filter { !$0.earned }.max { $0.fraction < $1.fraction }
+    }
+}
+
+extension LifetimeStats {
+    /// Поле, добавленное позже, не делает старый файл «битым» (ревью S9):
+    /// синтезированный разбор требует все ключи, даже у полей по умолчанию.
+    nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init()
+        trips = try c.decodeIfPresent(Int.self, forKey: .trips) ?? 0
+        distanceMeters = try c.decodeIfPresent(Double.self, forKey: .distanceMeters) ?? 0
+        camerasPassed = try c.decodeIfPresent(Int.self, forKey: .camerasPassed) ?? 0
+        camerasInLimit = try c.decodeIfPresent(Int.self, forKey: .camerasInLimit) ?? 0
+        savedFinesSum = try c.decodeIfPresent(Double.self, forKey: .savedFinesSum) ?? 0
+        riskFinesSum = try c.decodeIfPresent(Double.self, forKey: .riskFinesSum) ?? 0
+        cleanStreak = try c.decodeIfPresent(Int.self, forKey: .cleanStreak) ?? 0
+        bestStreak = try c.decodeIfPresent(Int.self, forKey: .bestStreak) ?? 0
+        lastTripRaisedBest = try c.decodeIfPresent(Bool.self, forKey: .lastTripRaisedBest)
     }
 }

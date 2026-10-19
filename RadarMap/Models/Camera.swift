@@ -227,6 +227,13 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
     /// маркер-призрак и «возможно» в голосе. Для некраудсорса всегда false.
     var isUnconfirmedMobile: Bool { mobileConfirmed == false }
 
+    /// Та же камера с другим id (свои камеры при слиянии после нечитаемого старта).
+    func withID(_ id: Int) -> Camera {
+        Camera(id: id, region: region, city: city, location: location, lat: lat, lon: lon, type: type,
+               violations: violations, needsReview: needsReview, axis: axis, dir: dir, lanes: lanes,
+               cls: cls, bridge: bridge, road: road, split: split, twin: twin, mobileConfirmed: mobileConfirmed)
+    }
+
     /// Класс дороги в разобранном виде.
     var roadClass: RoadClass { RoadClass(raw: cls) }
 

@@ -285,6 +285,16 @@ final class LocationService: NSObject {
         // «Свои» камеры нужны и вне поездки: карта рисует их спокойными, и
         // список обязан быть готов до первого показа маркеров.
         refreshFamiliarCameras()
+        // Плашка прошлого процесса подхвачена (S14): поездка не возобновилась
+        // за пару минут — сирота, снять, а не держать до восьмичасового предела.
+        if liveActivity?.isActive == true {
+            Task { [weak self] in
+                await Task.pause(seconds: AppConfig.liveActivityOrphanGraceSeconds)
+                guard let self, !self.isTripActive, self.liveActivity?.isActive == true else { return }
+                Log.alerts.notice("Live Activity прошлого процесса снята: поездки нет")
+                self.liveActivity?.end()
+            }
+        }
         switch manager.authorizationStatus {
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
@@ -372,6 +382,10 @@ final class LocationService: NSObject {
         // == nil), поэтому одна попытка на поездку, не чаще.
         if foreground, isTripActive {
             liveActivity?.startIfNeeded(state: activityState)
+        } else if foreground, liveActivity?.isActive == true {
+            // Открыли приложение, а поездки нет: плашка — сирота прошлого
+            // процесса (его убили посреди поездки) — снять (S14).
+            liveActivity?.end()
         }
     }
 
@@ -567,9 +581,7 @@ final class LocationService: NSObject {
         notifier.clearDriverCheck()   // вопрос «вы за рулём?» больше не актуален
         let batteryPercent = BatteryProbe.percent()
         if asPassenger {
-            if trip.distanceMeters < AppConfig.passengerTripMinMeters { trip.cancel() } else {
-                trip.finish(batteryPercent: batteryPercent)
-            }
+            trip.discardAsPassenger()
         } else {
             trip.finish(endedManually: !auto, batteryPercent: batteryPercent)
             // Автостоп с телефоном в кармане: короткие итоги на локскрин —
@@ -1327,7 +1339,9 @@ final class LocationService: NSObject {
         // на no-op внутри: `activityState` — вычисляемое свойство, и оно
         // собиралось каждую секунду ради вызова, который тут же выходил по
         // guard. Плашка не запущена почти всю жизнь приложения.
-        if liveActivity?.isActive == true {
+        // И только в поездке: подхваченная плашка прошлого процесса без
+        // поездки обновлялась бы фоновыми фиксами как живая (ревью S14).
+        if isTripActive, liveActivity?.isActive == true {
             liveActivity?.update(state: activityState,
                                  nearMeters: LiveActivityService.nearZone(alertRadius: effectiveAlertRadius))
         }
@@ -1934,9 +1948,15 @@ extension LocationService: CLLocationManagerDelegate {
     // precondition на самом горячем колбэке.
     nonisolated func locationManager(_ manager: CLLocationManager,
                                      didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last else { return }
-        let fix = LocationFilter.Fix(location)
-        Task { @MainActor in self.handleFix(fix) }
+        // Пачка (после фоновой паузы, после занятого главного потока) — все
+        // точки по порядку, а не только последняя: иначе пробег шёл хордой, а
+        // проезд камеры между точками пропадал вовсе (S13, 20.10). Устаревшие
+        // (старше maxFixAgeSeconds) фильтр отбросит сам.
+        let fixes = locations.map(LocationFilter.Fix.init)
+        guard !fixes.isEmpty else { return }
+        Task { @MainActor in
+            for fix in fixes { self.handleFix(fix) }
+        }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {

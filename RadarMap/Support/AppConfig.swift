@@ -156,6 +156,12 @@ nonisolated enum AppConfig {
     /// работы, чтобы CoreMotion успел подтвердить поездку (его уверенный
     /// старт ждёт 8 с, а фоновое окно iOS — около 10).
     static let backgroundLaunchWindowSeconds: TimeInterval = 25
+    /// История не прочиталась (файл защищён до первой разблокировки) —
+    /// повтор через столько секунд, пока не прочтётся.
+    static let storeRetrySeconds: TimeInterval = 30
+    /// Потолок паузы между повторами чтения (не защита данных, а сбой — не
+    /// долбим диск каждые 30 с всю сессию).
+    static let storeRetryMaxSeconds: TimeInterval = 600
 
     // MARK: - Дорога камеры (направление, полосы, кусок проезжей части)
     // nonisolated: читаются из чистых RoadShape/RoadCorridor и их тестов.
@@ -498,10 +504,13 @@ nonisolated enum AppConfig {
     nonisolated static let cameraOverspeedWarnMarginKmh: Double = 2
 
     // MARK: - Склейка поездок (заезд по пути ≠ новая поездка)
-    /// «Я пассажир» — кусок короче этого не пишется вовсе.
-    static let passengerTripMinMeters: Double = 500
-    /// Шаг между фиксами длиннее этого — перелёт, в дистанцию поездки не идёт.
+    /// Шаг между фиксами длиннее этого — дыра (туннель, потеря сигнала,
+    /// поздний автостарт) или перелёт: в пробег идёт, только если средняя
+    /// скорость по хорде правдоподобна (`tripGapMaxSpeedMps`).
     nonisolated static let tripMaxStepMeters: Double = 500
+    /// Средняя скорость по хорде дыры, выше которой это не путь, а перелёт
+    /// приёмника (180 км/ч: хорда всегда короче дороги, честная дыра ниже).
+    nonisolated static let tripGapMaxSpeedMps: Double = 50
     // nonisolated: читаются из чистого TripMerge (и его тестов) без прыжка на main.
 
     /// Новый старт дальше этого от финиша прошлой — точно другая поездка
@@ -517,6 +526,9 @@ nonisolated enum AppConfig {
     /// Ручное объединение двух записей: старт второй — до 2 км от финиша
     /// первой (поздний автостарт); дальше — точно разные поездки.
     nonisolated static let tripManualMergeMaxMeters: CLLocationDistance = 2000
+    /// Плашка Live Activity прошлого процесса: столько ждём, что поездка
+    /// возобновится (автостарт после перезапуска системой), потом снимаем.
+    static let liveActivityOrphanGraceSeconds: TimeInterval = 180
     /// Пауза короче — склеиваем без вопросов: магазин, заправка, забрал человека.
     nonisolated static let tripMergeShortStopSeconds: TimeInterval = 15 * 60
     /// Пауза дольше — новая поездка при любых обстоятельствах.

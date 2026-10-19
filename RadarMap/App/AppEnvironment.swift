@@ -252,7 +252,10 @@ final class AppEnvironment {
         motion.onDrivingStart = { [weak self, weak location] in
             guard settings.tripStartMode.usesMotion, let location,
                   !location.isTripActive else { return }
-            guard self?.trip.isLoaded ?? true else {
+            // История ещё читается — подождать (склейка, восстановление);
+            // не читается вовсе (до первой разблокировки) — не ждать: поездка
+            // нужна сейчас, а пришедшее за окно встанет поверх прочитанного.
+            if let trip = self?.trip, !trip.isLoaded, !trip.isLoadBlocked {
                 self?.pendingAutoStart = true
                 return
             }
@@ -420,14 +423,18 @@ final class AppEnvironment {
                 ?? String(localized: "отметка")
             notifications?.notifyReportConfirmed(kind: kind)
         }
+        // История не читается (старт до разблокировки) — автостарт, ждавший
+        // её, не ждёт дальше: CoreMotion зовёт onDrivingStart один раз на
+        // начало езды, и первая поездка после перезагрузки пропала бы (ревью S9).
+        trip.onLoadBlocked = { [weak self] in self?.startPendingAutoStart() }
+        observeProtectedData()
         trip.onHistoryLoaded = { [weak self] in
             // Автостарт, ждавший историю, — сейчас, если всё ещё едем.
-            if let self, self.pendingAutoStart {
-                self.pendingAutoStart = false
-                if self.motion.isDriving, self.settings.tripStartMode.usesMotion, !self.location.isTripActive {
-                    self.location.startTrip(auto: true)
-                }
-            }
+            self?.startPendingAutoStart()
+            // История прочлась (после разблокировки — пусть и по повтору, без
+            // уведомления): прочие хранилища — тоже, не дожидаясь экрана (S9).
+            self?.cameras.reloadUserDataIfNeeded()
+            self?.commuteProfiles.retryLoadNow()
             self?.refreshLearnedPlaces()
             self?.refreshWidgetSnapshot()
             // «Свои камеры» считаются ПО ИСТОРИИ, а bootstrap() успевает
@@ -464,9 +471,13 @@ final class AppEnvironment {
         trip.onTripFinished = { [weak self, weak trip, weak notifications, weak usage] in
             guard let trip else { return }
             // История приходит от новых к старым — только что закрытая поездка первая.
-            if let last = trip.history.first {
-                usage?.noteTrip(distanceMeters: last.distanceMeters)
-                usage?.note { $0.passes += last.camerasPassed }
+            // Склейка — та же поездка: в статистику только прибавка километров.
+            // Проезды уже посчитаны по одному (notePass): здесь их не добавляем,
+            // иначе каждый считался дважды (сценарий S11, 20.10).
+            if trip.lastFinishWasContinuation {
+                usage?.note { $0.kilometres = (($0.kilometres + trip.lastFinishDistanceDelta / 1000) * 10).rounded() / 10 }
+            } else if trip.history.first != nil {
+                usage?.noteTrip(distanceMeters: trip.lastFinishDistanceDelta)
             }
             // Виджет — сразу: автозавершение в фоне иначе оставляло бы его
             // с цифрами «до поездки» до следующего открытия приложения.
@@ -583,6 +594,33 @@ final class AppEnvironment {
     /// ходу): склейка с только что прерванной поездкой и восстановление
     /// снимка ещё не видят её — ждём историю (ревью S3, 20.10).
     @ObservationIgnored private var pendingAutoStart = false
+
+    /// Автостарт, отложенный до истории, — сейчас, если всё ещё едем.
+    private func startPendingAutoStart() {
+        guard pendingAutoStart else { return }
+        pendingAutoStart = false
+        if motion.isDriving, settings.tripStartMode.usesMotion, !location.isTripActive {
+            location.startTrip(auto: true)
+        }
+    }
+
+    /// Данные телефона стали доступны (разблокировка после перезагрузки,
+    /// возврат на экран): хранилища, не прочитанные на старте, — сейчас, а не
+    /// через паузу повтора (ревью S9, третий круг).
+    func reloadProtectedStores() {
+        trip.retryLoadNow()
+        trip.retryLegacyLifetime()
+        commuteProfiles.retryLoadNow()
+        cameras.reloadUserDataIfNeeded()
+    }
+
+    private func observeProtectedData() {
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.protectedDataDidBecomeAvailableNotification,
+            object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reloadProtectedStores() }
+            }
+    }
 
     /// База камер изменилась (загрузка, своя камера, скрытие, чужая отметка) —
     /// пересобрать окно ближайших камер и оценить сразу. ОДНА точка: до 19.10
@@ -1016,6 +1054,9 @@ final class AppEnvironment {
     /// свежей. Считаем ЗДЕСЬ: виджет не имеет права вычислять — у него нет ни
     /// истории, ни права тратить батарею.
     func refreshWidgetSnapshot() {
+        // «За всё время» ещё не перенесено (старт до разблокировки) — виджет
+        // держит прошлый снимок, а не вклад одного процесса (ревью S9).
+        guard trip.isLifetimeTrusted else { return }
         #if DEBUG
         // Скриншот-хук `-widgetState empty|few|full`: виджет живёт в основном
         // не на полной неделе, а посмотреть скудные состояния иначе нечем —

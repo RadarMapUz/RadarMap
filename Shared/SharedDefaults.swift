@@ -325,8 +325,13 @@ nonisolated enum WidgetWeek {
     }
 
     /// Подписи дней в порядке календаря пользователя («пн»…«вс» или «вс»…«сб»).
-    static func dayLabels(calendar: Calendar = .current) -> [String] {
-        let symbols = calendar.veryShortStandaloneWeekdaySymbols
+    /// Порядок — от календаря (он же режет неделю на столбики), язык — от
+    /// приложения: при регионе «США» под русскими цифрами стояли «S M T W».
+    static func dayLabels(calendar: Calendar = .current,
+                          locale: Locale = NumberFormat.locale) -> [String] {
+        var named = calendar
+        named.locale = locale
+        let symbols = named.veryShortStandaloneWeekdaySymbols
         guard symbols.count == 7 else { return symbols }
         let first = calendar.firstWeekday - 1        // 1…7 → 0…6
         return (0..<7).map { symbols[($0 + first) % 7] }

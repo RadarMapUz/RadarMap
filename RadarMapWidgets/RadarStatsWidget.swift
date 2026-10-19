@@ -21,48 +21,44 @@ import WidgetKit
 import SwiftUI
 import UIKit
 
-/// Палитра виджета. В отличие от самого приложения — тёмного намеренно, ради
-/// радар-детекторного вида за рулём, — виджет живёт на ЧУЖОМ экране: рядом с
-/// «Погодой» и «Календарём», поверх светлых обоев. Вечно чёрный прямоугольник
-/// среди них читается дырой, поэтому здесь цвета динамические и следуют теме
-/// системы. Значения тёмной темы — те же, что в Theme приложения.
+/// Палитра виджета — палитра А приложения (WidgetPalette, числа сверяет
+/// тест с Theme). Виджет живёт на ЧУЖОМ экране, рядом с «Погодой» и
+/// «Календарём», поэтому следует теме системы: белая карточка днём,
+/// графитовая ночью — как панели самого приложения.
 enum SW {
-    private static func adaptive(light: Color, dark: Color) -> Color {
+    private static func color(_ pair: WidgetPalette.Pair) -> Color {
         Color(uiColor: UIColor { traits in
-            traits.userInterfaceStyle == .dark ? UIColor(dark) : UIColor(light)
+            rgb(traits.userInterfaceStyle == .dark ? pair.dark : pair.light)
         })
     }
 
-    /// Акценты в светлой теме темнее: неоновый циан на белом не читается
-    /// вовсе, а красный «риска» на светлом фоне слепит.
-    static let accent = adaptive(light: Color(red: 0.02, green: 0.45, blue: 0.60),
-                                 dark: Color(red: 0.235, green: 0.863, blue: 1.0))
-    static let camera = adaptive(light: Color(red: 0.80, green: 0.10, blue: 0.22),
-                                 dark: Color(red: 1.0, green: 0.27, blue: 0.38))
-    static let success = adaptive(light: Color(red: 0.08, green: 0.55, blue: 0.33),
-                                  dark: Color(red: 0.30, green: 0.87, blue: 0.56))
-    static let warning = adaptive(light: Color(red: 0.70, green: 0.47, blue: 0.03),
-                                  dark: Color(red: 1.0, green: 0.72, blue: 0.25))
+    private static func rgb(_ hex: UInt32) -> UIColor {
+        UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+    }
 
-    static let bgTop = adaptive(light: Color(red: 0.97, green: 0.98, blue: 1.0),
-                                dark: Color(red: 0.05, green: 0.08, blue: 0.16))
-    static let bgBottom = adaptive(light: Color(red: 0.90, green: 0.93, blue: 0.97),
-                                   dark: Color(red: 0.02, green: 0.04, blue: 0.07))
+    static let accent = color(WidgetPalette.accent)
+    static let camera = color(WidgetPalette.danger)
+    static let success = color(WidgetPalette.success)
+    static let warning = color(WidgetPalette.warning)
 
-    /// Текст. `primary` намеренно не `.white`: в светлой теме белым по белому
-    /// исчезала бы ровно та цифра, ради которой виджет и ставят.
-    static let primary = adaptive(light: Color(red: 0.06, green: 0.08, blue: 0.12),
-                                  dark: .white)
-    static let secondary = adaptive(light: Color(red: 0.06, green: 0.08, blue: 0.12).opacity(0.6),
-                                    dark: Color.white.opacity(0.6))
-    /// Нейтральный столбик дня и подложки плиток — «чернила» темы, а не белый.
-    static let ink = adaptive(light: Color(red: 0.06, green: 0.08, blue: 0.12),
-                              dark: .white)
+    static let bgTop = color(WidgetPalette.top)
+    static let bgBottom = color(WidgetPalette.bottom)
 
-    /// Те же пороги, что у баллов в приложении (DrivingScore.tier): виджет не
-    /// имеет права красить 70 иначе, чем список поездок.
+    static let primary = color(WidgetPalette.primary)
+    static let secondary = color(WidgetPalette.secondary)
+    static let tertiary = color(WidgetPalette.tertiary)
+    /// Подложки плиток и пустых столбиков — «чернила» темы, а не белый.
+    static let ink = primary
+
+    /// Цвет балла — ступени DrivingScore.tier через WidgetPalette.scoreTier.
     static func score(_ rating: Int) -> Color {
-        rating >= 75 ? success : rating >= 60 ? warning : camera
+        switch WidgetPalette.scoreTier(rating) {
+        case 2:  return success
+        case 1:  return warning
+        default: return camera
+        }
     }
 }
 
@@ -169,8 +165,11 @@ private struct RadarStatsView: View {
         // чёрную дыру. Блок компактный, а по высоте его центрирует рамка.
         VStack(alignment: .leading, spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(state == .noAccess ? SW.warning : SW.accent)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(state == .noAccess ? SW.warning : SW.accent,
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.system(size: 17, weight: .heavy, design: .rounded))
@@ -178,7 +177,7 @@ private struct RadarStatsView: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.7)
                 Text(detail)
-                    .font(.system(size: 11, design: .rounded))
+                    .font(.system(size: 12, design: .rounded))
                     .foregroundStyle(SW.secondary)
                     .lineLimit(2)
             }
@@ -194,49 +193,103 @@ private struct RadarStatsView: View {
     }
     private var state: WidgetState { WidgetWeek.state(snapshot) }
     private var hasData: Bool { state == .few || state == .full }
+    private var isStale: Bool { WidgetWeek.isStale(snapshot.updatedAt, now: entry.date) }
 
-    /// Шапка. Текущая неделя называется «Неделей», любая другая — своими
-    /// датами: показать прошлые цифры под словом «Неделя» значит соврать.
-    private var weekTitle: String {
-        guard let start = snapshot.weekStart else { return String(localized: "Неделя") }
-        guard !isCurrentWeek else { return String(localized: "Неделя") }
+    /// Даты недели снимка: «19–25 окт.».
+    private var weekDates: String? {
+        guard let start = snapshot.weekStart else { return nil }
         let end = start.addingTimeInterval(6 * 86400)
-        return start.formatted(.dateTime.day()) + "–"
-            + end.formatted(.dateTime.day().month(.abbreviated))
+        return start.formatted(.dateTime.day().locale(NumberFormat.locale)) + "–"
+            + end.formatted(.dateTime.day().month(.abbreviated).locale(NumberFormat.locale))
     }
 
-    /// Кольцо — километры к СВОЕЙ обычной неделе, и только они. Раньше внутри
-    /// стоял балл, и элемент нёс два разных смысла сразу: на макете это читалось
-    /// умно, на экране — как «55 процентов чего-то». Внутри теперь значок, балл
-    /// живёт внизу рядом с деньгами. Показываем только когда норма есть.
+    /// Шапка — как у экрана, куда ведёт тап: значок «Итогов» и неделя.
+    /// Текущая неделя называется словами, любая другая — своими датами:
+    /// показать прошлые цифры под словом «неделя» значит соврать.
+    private func header(showsDates: Bool) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "chart.bar.fill")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(SW.accent)
+            // Рядом с кольцом маленького размера «Итоги недели» не влезает —
+            // тогда просто «Итоги», а не «Итоги неде…».
+            ViewThatFits(in: .horizontal) {
+                headerTitle(isCurrentWeek ? String(localized: "Итоги недели") : weekDates)
+                headerTitle(isCurrentWeek ? String(localized: "Итоги") : weekDates)
+            }
+            Spacer(minLength: 4)
+            if showsDates, isCurrentWeek, let weekDates {
+                Text(weekDates)
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(SW.tertiary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private func headerTitle(_ text: String?) -> some View {
+        Text(text ?? String(localized: "Итоги недели"))
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .foregroundStyle(SW.secondary)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    /// Кольцо — километры к СВОЕЙ обычной неделе, и только они. Внутри —
+    /// значок: балл живёт рядом, отдельной меткой. Только когда норма есть.
     private func weekRing(diameter: CGFloat) -> some View {
         let progress = WidgetWeek.usualWeekProgress(distance: snapshot.weekDistance,
                                                     usual: snapshot.usualWeekDistance)
         return ZStack {
-            Circle().stroke(SW.accent.opacity(0.18), lineWidth: diameter * 0.11)
+            Circle().stroke(SW.accent.opacity(0.16), lineWidth: diameter * 0.12)
             Circle()
                 .trim(from: 0, to: max(0.03, progress))
-                .stroke(SW.accent, style: StrokeStyle(lineWidth: diameter * 0.11, lineCap: .round))
+                .stroke(SW.accent, style: StrokeStyle(lineWidth: diameter * 0.12, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             Image(systemName: "car.fill")
-                .font(.system(size: diameter * 0.3, weight: .bold))
+                .font(.system(size: diameter * 0.28, weight: .bold))
                 .foregroundStyle(SW.accent)
         }
         .frame(width: diameter, height: diameter)
     }
 
-    /// Балл и деньги одной строкой — оценка недели там, где ей место: под
-    /// фактом, а не внутри кольца километров.
-    private func verdictLine(size: CGFloat = 13) -> some View {
-        let rating = snapshot.weekRating
-        return HStack(spacing: 7) {
-            if rating >= 0 {
-                Text("\(rating)")
-                    .font(.system(size: size + 2, weight: .heavy, design: .rounded))
-                    .foregroundStyle(SW.score(rating))
+    /// Километры недели и дельта к прошлой — как в герое «Итогов». Дельта
+    /// уходит, если рядом с числом ей нет места: обрезанная цифра хуже.
+    private func hero(size: CGFloat) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                heroNumber(size: size)
+                if let badge = deltaBadge { badge }
             }
-            moneyLine(size: size)
+            heroNumber(size: size)
         }
+    }
+
+    private func heroNumber(size: CGFloat) -> some View {
+        Text(km(snapshot.weekDistance))
+            .font(.system(size: size, weight: .heavy, design: .rounded))
+            .foregroundStyle(SW.primary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+    }
+
+    /// «↗ 12%» — та же метка, что в «Итогах»: рост синим, спад серым.
+    private var deltaBadge: (some View)? {
+        guard state == .full, let delta = snapshot.weekDeltaPercent, delta != 0 else { return nil as AnyView? }
+        let up = delta > 0
+        let tint = up ? SW.accent : SW.secondary
+        return AnyView(
+            HStack(spacing: 2) {
+                Image(systemName: up ? "arrow.up.right" : "arrow.down.right")
+                    .font(.system(size: 9, weight: .heavy))
+                Text("\(abs(delta))%")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+            }
+            .foregroundStyle(tint)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(tint.opacity(0.14), in: Capsule())
+            .fixedSize()
+        )
     }
 
     /// Строка про норму: «как обычно» или насколько эта неделя отличается.
@@ -256,11 +309,26 @@ private struct RadarStatsView: View {
 
     /// Подзаголовок героя: при полной неделе — отличие от нормы, при скудной —
     /// последняя поездка. Сравнивать не с чем, но факт уже есть.
-    private var heroSubtitle: String? {
+    private var heroSubtitle: String? { heroSubtitle(compact: false) }
+
+    /// `compact` — без километров последней поездки: на маленьком размере
+    /// строка обрезалась ровно на них, а единственная поездка недели и так
+    /// стоит крупно в герое.
+    private func heroSubtitle(compact: Bool) -> String? {
         if state == .full { return usualLine }
         guard snapshot.lastTripDistance > 0, let at = snapshot.lastTripAt else { return nil }
-        return String(format: String(localized: "последняя — %@, %@"),
-                      at.formatted(.relative(presentation: .named)), km(snapshot.lastTripDistance))
+        let when = at.formatted(.relative(presentation: .named).locale(NumberFormat.locale))
+        return compact
+            ? String(format: String(localized: "последняя — %@"), when)
+            : String(format: String(localized: "последняя — %@, %@"), when, km(snapshot.lastTripDistance))
+    }
+
+    private func subtitle(_ size: CGFloat = 11, compact: Bool = false) -> some View {
+        Text(heroSubtitle(compact: compact) ?? "")
+            .font(.system(size: size, design: .rounded))
+            .foregroundStyle(SW.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
     }
 
     /// Подпись под столбиками: сегодня и средний ездовой день.
@@ -275,15 +343,46 @@ private struct RadarStatsView: View {
         return String(format: String(localized: "в среднем %@ за день"), km(average))
     }
 
-    /// Деньги недели одной строкой: щит и «без штрафов» или риск.
-    private func moneyLine(size: CGFloat = 13) -> some View {
+    /// Оценка недели: балл цветом ступени и деньги. Под фактом, а не внутри
+    /// кольца километров. Балл подписан — голое «67» читалось ничьим числом.
+    /// Балл и деньги в строку, а если не влезают — в две, но не обрезанные
+    /// («≈ 2,2 млн с…» на маленьком размере).
+    private func verdict(size: CGFloat = 12) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                scoreChip(size: size)
+                money(size: size).fixedSize()
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                scoreChip(size: size)
+                money(size: size)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func scoreChip(size: CGFloat) -> some View {
+        let rating = snapshot.weekRating
+        if rating >= 0 {
+            Text(String(format: String(localized: "балл %@"), "\(rating)"))
+                .font(.system(size: size, weight: .heavy, design: .rounded))
+                .foregroundStyle(SW.score(rating))
+                .lineLimit(1)
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(SW.score(rating).opacity(0.14), in: Capsule())
+                .fixedSize()
+        }
+    }
+
+    /// Деньги недели: щит и «без штрафов» или риск. Красный — у значка и
+    /// суммы, не у всей строки.
+    private func money(size: CGFloat) -> some View {
         let risk = snapshot.weekFineRisk
-        return HStack(spacing: 5) {
-            Image(systemName: risk > 0 ? "exclamationmark.shield.fill"
-                                       : "checkmark.shield.fill")
+        return HStack(spacing: 4) {
+            Image(systemName: risk > 0 ? "exclamationmark.shield.fill" : "checkmark.shield.fill")
                 .font(.system(size: size - 1, weight: .bold))
                 .foregroundStyle(risk > 0 ? SW.camera : SW.success)
-            Text(risk > 0 ? money(risk) : String(localized: "Без штрафов"))
+            Text(risk > 0 ? moneyText(risk) : String(localized: "Без штрафов"))
                 .font(.system(size: size, weight: .bold, design: .rounded))
                 .foregroundStyle(risk > 0 ? SW.camera : SW.primary)
                 .lineLimit(1)
@@ -291,24 +390,32 @@ private struct RadarStatsView: View {
         }
     }
 
-    /// Подпись мелким: поездки и дельта к прошлой неделе. Устаревший снимок
-    /// говорит об этом прямо — иначе человек считает, что сегодня не ездил.
-    private var caption: String {
-        if WidgetWeek.isStale(snapshot.updatedAt, now: entry.date) {
-            return String(localized: "Откройте приложение — обновим")
+    /// Подпись мелким: поездки и время за рулём, как под героем «Итогов».
+    /// Устаревший снимок говорит об этом прямо — иначе человек считает, что
+    /// сегодня не ездил.
+    private var caption: some View {
+        let text: String
+        if isStale {
+            text = String(localized: "Откройте приложение — обновим")
+        } else {
+            var parts = [String(format: String(localized: "Поездок: %lld"), snapshot.weekTrips)]
+            if snapshot.weekMovingDuration >= 60 {
+                parts.append(duration(snapshot.weekMovingDuration) + " " + String(localized: "за рулём"))
+            }
+            text = parts.joined(separator: " · ")
         }
-        var parts = [String(format: String(localized: "Поездок: %lld"), snapshot.weekTrips)]
-        if state == .full, let delta = snapshot.weekDeltaPercent, delta != 0 {
-            parts.append(String(format: String(localized: "%@%lld%% к прошлой"),
-                                delta > 0 ? "+" : "−", abs(delta)))
-        }
-        return parts.joined(separator: " · ")
+        return Text(text)
+            .font(.system(size: 10, design: .rounded))
+            .foregroundStyle(isStale ? SW.warning : SW.tertiary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
     }
 
-    /// Семь дней недели столбиками. Высота — километры, красный — день, в
-    /// который был штрафуемый проезд, тонкая полоска — не ездили. Пустой день
-    /// не исчезает: иначе неделя выглядит короче, чем была.
-    private func bars(height: CGFloat) -> some View {
+    /// Семь дней недели столбиками. Высота — километры; синий — ездовой день
+    /// (сегодня — полным цветом), красный — день со штрафуемым проездом,
+    /// тонкая полоска — не ездили. Пустой день не исчезает: иначе неделя
+    /// выглядит короче, чем была.
+    private func bars(height: CGFloat, barWidth: CGFloat = 12) -> some View {
         let heights = WidgetWeek.barHeights(snapshot.dayDistances)
         // Единственный ездовой день красным превращает виджет в аварийный щит,
         // хотя случилось обычное: цвет несёт смысл только в сравнении.
@@ -317,163 +424,159 @@ private struct RadarStatsView: View {
                               : [Bool](repeating: false, count: 7)
         let labels = WidgetWeek.dayLabels()
         let today = WidgetWeek.todayIndex(snapshot.weekStart, now: entry.date)
-        return HStack(alignment: .bottom, spacing: 5) {
+        return HStack(alignment: .bottom, spacing: 4) {
             ForEach(0..<7, id: \.self) { index in
+                let driven = heights[index] > 0
                 VStack(spacing: 4) {
-                    // Столбик уже ячейки: на семь дней ячейка ~40 pt, и во всю
-                    // ширину столбик читается блоком, а не графиком.
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(overspeed[index] ? SW.camera : SW.ink.opacity(0.28))
-                        .frame(width: 14, height: max(3, heights[index] * height))
-                        .overlay {
-                            if today == index {
-                                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                    .stroke(SW.ink.opacity(0.85), lineWidth: 1.5)
-                            }
-                        }
+                    RoundedRectangle(cornerRadius: barWidth / 3, style: .continuous)
+                        .fill(overspeed[index] ? SW.camera
+                              : !driven ? SW.ink.opacity(0.12)
+                              : today == index ? SW.accent : SW.accent.opacity(0.45))
+                        .frame(width: barWidth, height: max(3, heights[index] * height))
                     Text(labels[index])
-                        .font(.system(size: 9, design: .rounded))
-                        .foregroundStyle(today == index ? SW.primary : SW.secondary.opacity(0.7))
+                        .font(.system(size: 9, weight: today == index ? .heavy : .regular,
+                                      design: .rounded))
+                        .foregroundStyle(today == index ? SW.primary : SW.tertiary)
                 }
                 .frame(maxWidth: .infinity)
             }
         }
-        .frame(height: height + 14, alignment: .bottom)
+        .frame(height: height + 15, alignment: .bottom)
+    }
+
+    /// Пока неделя не набралась, столбиков нет — и место говорит почему,
+    /// вместо пустоты, которая выглядит поломкой.
+    /// `compact` — для узкой правой половины среднего размера: без значка,
+    /// иначе заголовок ломался на три строки, а пояснение обрезалось.
+    private func weekStartsHint(compact: Bool = false) -> some View {
+        HStack(spacing: 8) {
+            if !compact {
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(SW.accent)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Неделя только началась")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(SW.primary)
+                    .lineLimit(2)
+                Text("Дни столбиками — со второго дня за рулём")
+                    .font(.system(size: 10, design: .rounded))
+                    .foregroundStyle(SW.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(SW.ink.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     // MARK: - Размеры
 
-    /// Герой — километры. Балл и деньги никуда не делись, но перестали спорить
-    /// за взгляд: на виджет смотрят ради факта («сколько я наездил»), а за
-    /// оценкой идут в Итоги.
-    private func hero(size: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(weekTitle)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundStyle(SW.secondary)
-                .lineLimit(1)
-            Text(km(snapshot.weekDistance))
-                .font(.system(size: size, weight: .heavy, design: .rounded))
-                .foregroundStyle(SW.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            if let heroSubtitle {
-                Text(heroSubtitle)
-                    .font(.system(size: 10, design: .rounded))
-                    .foregroundStyle(SW.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-        }
-    }
-
-    /// Маленький: километры, кольцо к обычной неделе и одна приглушённая
-    /// строка про деньги. Без поездок — приглашение, а не нули.
+    /// Маленький: километры, норма, балл и деньги. Кольцо — в шапке справа.
     private var small: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 8) {
-                hero(size: 26)
-                Spacer(minLength: 0)
-                if state == .full { weekRing(diameter: 38) }
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 6) {
+                header(showsDates: false)
+                if state == .full { weekRing(diameter: 30) }
             }
-            Spacer(minLength: 0)
-            verdictLine()
-            Text(caption)
-                .font(.system(size: 10, design: .rounded))
-                .foregroundStyle(SW.secondary.opacity(0.8))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            Spacer(minLength: 4)
+            hero(size: 28)
+            if heroSubtitle != nil { subtitle(compact: true) }
+            Spacer(minLength: 6)
+            verdict(size: 11)
+            // Поездки и время — уже на среднем размере и в «Итогах»; здесь
+            // строка нужна, только чтобы сказать, что цифры старые.
+            if isStale { caption.padding(.top, 4) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
-    /// Средний: слева километры, справа их форма по дням.
+    /// Средний: слева километры и оценка, справа их форма по дням.
     private var medium: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .top, spacing: 8) {
-                    hero(size: 24)
-                    Spacer(minLength: 0)
-                    if state == .full { weekRing(diameter: 36) }
+        VStack(alignment: .leading, spacing: 8) {
+            header(showsDates: true)
+            HStack(alignment: .bottom, spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    hero(size: 26)
+                    if heroSubtitle != nil { subtitle() }
+                    Spacer(minLength: 6)
+                    verdict(size: 11)
+                    caption.padding(.top, 4)
                 }
-                Spacer(minLength: 0)
-                verdictLine()
-                Text(caption)
-                    .font(.system(size: 10, design: .rounded))
-                    .foregroundStyle(SW.secondary.opacity(0.8))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .frame(width: 134, alignment: .leading)
+                // 172: «балл 67» и «≈ 2,2 млн сум» помещаются в строку.
+                .frame(width: 172, alignment: .leading)
 
-            // Столбики имеют смысл с двух ездовых дней: один столбик и шесть
-            // прочерков — это не форма недели, а её отсутствие.
-            if state == .full {
-                VStack(spacing: 5) {
-                    bars(height: 56)
-                    Text(daysLine)
-                        .font(.system(size: 10, design: .rounded))
-                        .foregroundStyle(SW.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                // Столбики имеют смысл с двух ездовых дней: один столбик и
+                // шесть прочерков — это не форма недели, а её отсутствие.
+                if state == .full {
+                    VStack(spacing: 4) {
+                        bars(height: 52, barWidth: 11)
+                        Text(daysLine)
+                            .font(.system(size: 10, design: .rounded))
+                            .foregroundStyle(SW.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                } else {
+                    weekStartsHint(compact: true)
                 }
-            } else {
-                Text("Неделя только началась")
-                    .font(.system(size: 12, design: .rounded))
-                    .foregroundStyle(SW.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    /// Большой: километры в перспективе — неделя, месяц, всё время. И только
-    /// последней строкой то, по чему можно что-то сделать завтра.
+    /// Большой: «Итоги недели» целиком — километры к норме, оценка, дни,
+    /// перспектива (месяц, всё время, за рулём) и одно место, где теряете.
     private var large: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                hero(size: 34)
+            header(showsDates: true)
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    hero(size: 36)
+                    if heroSubtitle != nil { subtitle(12) }
+                }
                 Spacer(minLength: 0)
-                if state == .full {
-                    weekRing(diameter: 50)
-                }
+                if state == .full { weekRing(diameter: 50) }
             }
-            verdictLine(size: 15)
+            verdict(size: 13)
             if state == .full {
-                bars(height: 60)
-                Text(daysLine)
-                    .font(.system(size: 11, design: .rounded))
-                    .foregroundStyle(SW.secondary)
-            }
-            if hasData {
-                HStack(spacing: 0) {
-                    tile(km(snapshot.monthDistance), String(localized: "за месяц"))
-                    tileDivider
-                    // «Всего» — только когда это не тот же месяц другими
-                    // словами: у нового пользователя счёт начался с установки.
-                    if WidgetWeek.showsLifetime(month: snapshot.monthDistance,
-                                                lifetime: snapshot.lifetimeDistance) {
-                        tile(km(snapshot.lifetimeDistance), String(localized: "всего"))
-                    } else {
-                        tile("\(WidgetWeek.activeDayCount(snapshot.dayDistances))",
-                             String(localized: "дней за рулём"))
-                    }
-                    tileDivider
-                    tile(duration(snapshot.weekMovingDuration), String(localized: "за рулём"))
+                VStack(spacing: 5) {
+                    bars(height: 58, barWidth: 16)
+                    Text(daysLine)
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundStyle(SW.secondary)
+                        .lineLimit(1)
                 }
-                .padding(.vertical, 9)
-                .background(SW.ink.opacity(0.06),
-                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                if let place = snapshot.topRiskPlace, snapshot.topRiskPasses > 0 {
-                    riskRow(place: place, passes: snapshot.topRiskPasses)
-                }
+            } else {
+                weekStartsHint()
             }
-            if state == .full { Spacer(minLength: 0) }
+            HStack(spacing: 0) {
+                tile(km(snapshot.monthDistance), String(localized: "за месяц"))
+                tileDivider
+                // «Всего» — только когда это не тот же месяц другими
+                // словами: у нового пользователя счёт начался с установки.
+                if WidgetWeek.showsLifetime(month: snapshot.monthDistance,
+                                            lifetime: snapshot.lifetimeDistance) {
+                    tile(km(snapshot.lifetimeDistance), String(localized: "всего"))
+                } else {
+                    tile("\(WidgetWeek.activeDayCount(snapshot.dayDistances))",
+                         String(localized: "дней за рулём"))
+                }
+                tileDivider
+                tile(duration(snapshot.weekMovingDuration), String(localized: "за рулём"))
+            }
+            .padding(.vertical, 8)
+            .background(SW.ink.opacity(0.05),
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            if let place = snapshot.topRiskPlace, snapshot.topRiskPasses > 0 {
+                riskRow(place: place, passes: snapshot.topRiskPasses)
+            }
+            Spacer(minLength: 0)
+            caption
         }
-        // Пока неделя не набралась, содержимого на большой размер не хватает.
-        // Прижимать его к верху значит показать пустую нижнюю половину и
-        // выглядеть сломанным — центрируем, и разрежённость читается замыслом.
-        .frame(maxWidth: .infinity, maxHeight: .infinity,
-               alignment: state == .full ? .topLeading : .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func tile(_ value: String, _ label: String) -> some View {
@@ -486,35 +589,44 @@ private struct RadarStatsView: View {
             Text(label)
                 .font(.system(size: 10, design: .rounded))
                 .foregroundStyle(SW.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity)
     }
 
     private var tileDivider: some View {
-        Rectangle().fill(SW.ink.opacity(0.12)).frame(width: 1, height: 24)
+        Rectangle().fill(SW.ink.opacity(0.10)).frame(width: 1, height: 24)
     }
 
+    /// Где теряете баллы — то же место, что в «Итогах», одной строкой.
     private func riskRow(place: String, passes: Int) -> some View {
         HStack(spacing: 9) {
-            Image(systemName: "mappin.circle.fill")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(SW.camera)
+            Image(systemName: "mappin.and.ellipse")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 26, height: 26)
+                .background(SW.camera, in: Circle())
             VStack(alignment: .leading, spacing: 1) {
+                Text("Где теряете баллы")
+                    .font(.system(size: 10, design: .rounded))
+                    .foregroundStyle(SW.secondary)
                 Text(place)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(SW.primary)
                     .lineLimit(1)
-                Text(String(format: String(localized: "%lld проезда с превышением — здесь теряете больше всего"),
-                            passes))
-                    .font(.system(size: 10, design: .rounded))
-                    .foregroundStyle(SW.secondary)
-                    .lineLimit(2)
             }
-            Spacer(minLength: 0)
+            Spacer(minLength: 4)
+            Text(String(format: String(localized: "×%lld"), passes))
+                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .foregroundStyle(SW.camera)
         }
-        .padding(9)
-        .background(SW.camera.opacity(0.1),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(SW.camera.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(String(format: String(localized: "Где теряете баллы: %@, проездов с превышением: %lld"),
+                                        place, passes)))
     }
 
     // MARK: - Локскрин: старт поездки
@@ -534,7 +646,7 @@ private struct RadarStatsView: View {
 
     private var lockRectangular: some View {
         HStack(spacing: 8) {
-            Image(systemName: "camera.metering.center.weighted")
+            Image(systemName: "car.fill")
                 .font(.system(size: 16, weight: .bold))
             VStack(alignment: .leading, spacing: 1) {
                 Text("RadarMap")
@@ -572,10 +684,12 @@ private struct RadarStatsView: View {
             : String(format: String(localized: "%lld мин"), minutes)
     }
 
-    /// Сумы без копеек и по-короткому: на виджете места нет.
-    private func money(_ amount: Double) -> String {
+    /// Сумы без копеек и по-короткому: на виджете места нет. Миллионы — через
+    /// общее правило чисел: `%.1f` ставил точку посреди русского текста.
+    private func moneyText(_ amount: Double) -> String {
         if amount >= 1_000_000 {
-            return String(format: String(localized: "≈ %.1f млн сум"), amount / 1_000_000)
+            return "≈ " + String(format: String(localized: "%@ млн сум"),
+                                 NumberFormat.decimal(amount / 1_000_000))
         }
         return String(format: String(localized: "≈ %lld тыс сум"), Int(amount / 1000))
     }

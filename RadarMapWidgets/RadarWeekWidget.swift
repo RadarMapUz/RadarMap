@@ -138,6 +138,7 @@ private struct RadarWeekView: View {
     private func km(_ meters: Double) -> String {
         meters < 1000 ? String(format: String(localized: "%lld м"), Int(meters))
                       : String(format: String(localized: "%@ км"),
-                               (meters / 1000).formatted(.number.precision(.fractionLength(0))))
+                               (meters / 1000).formatted(.number.precision(.fractionLength(0))
+                                                            .locale(NumberFormat.locale)))
     }
 }

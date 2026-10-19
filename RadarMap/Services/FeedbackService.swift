@@ -15,6 +15,7 @@
 
 import Foundation
 import Observation
+import os
 
 /// Причина репорта — строки совпадают с серверным API.
 enum CameraReportReason: String {
@@ -86,7 +87,15 @@ final class FeedbackService {
     }
 
     private func enqueue(endpoint: String, json: [String: Any]) {
-        guard let body = try? JSONSerialization.data(withJSONObject: json) else { return }
+        let body: Data
+        do {
+            body = try JSONSerialization.data(withJSONObject: json)
+        } catch {
+            // Отзыв человека не теряется молча (правило 3): такое бывает только
+            // с нечисловым значением в теле — ошибка кода, её видно в журнале.
+            Log.app.fault("отзыв не закодирован и не поставлен в очередь: \(error.localizedDescription, privacy: .public)")
+            return
+        }
         pending.append(PendingItem(endpoint: endpoint, body: body, queuedAt: Date()))
         if pending.count > Self.queueCap { pending.removeFirst(pending.count - Self.queueCap) }
         saveQueue()

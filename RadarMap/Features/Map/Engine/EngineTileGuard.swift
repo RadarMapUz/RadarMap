@@ -159,6 +159,8 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
         // текущий сеанс работает.
         try? index.serialized().write(to: cacheURL, options: .atomic)
         if let tag = http.value(forHTTPHeaderField: "ETag") {
+            // Метка — только экономия трафика: не записалась — следующий запуск
+            // просто скачает индекс целиком.
             try? tag.write(to: etagURL, atomically: true, encoding: .utf8)
         }
         log.info("индекс MVT принят: \(index.count, privacy: .public) тайлов, разобран заново")

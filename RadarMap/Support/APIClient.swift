@@ -151,7 +151,12 @@ nonisolated struct APIClient {
         var req = request(path)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        do {
+            req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            // POST без тела ушёл бы молча и вернул бы 400 без объяснения.
+            Log.network.fault("тело \(path, privacy: .public) не закодировано: \(error.localizedDescription, privacy: .public)")
+        }
         return req
     }
 

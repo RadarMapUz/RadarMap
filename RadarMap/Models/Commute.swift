@@ -91,7 +91,7 @@ nonisolated enum Commute {
     /// Поездки дом↔работа из истории (любой порядок на входе, новые первыми на
     /// выходе). Старт старой записи без точки и трека берётся из конца
     /// предыдущей поездки, если между ними — обычная стоянка, а не неделя.
-    static func trips(history: [TripRecord],
+    static func trips<Source: CommuteTripSource>(history: [Source],
                       home: CLLocationCoordinate2D,
                       work: CLLocationCoordinate2D,
                       radius: CLLocationDistance = AppConfig.commutePlaceRadiusMeters) -> [Trip] {
@@ -125,7 +125,8 @@ nonisolated enum Commute {
         return result.reversed()
     }
 
-    private static func chainedStart(of record: TripRecord, previous: TripRecord?) -> CLLocationCoordinate2D? {
+    private static func chainedStart<Source: CommuteTripSource>(of record: Source,
+                                                                previous: Source?) -> CLLocationCoordinate2D? {
         guard let previous, let end = previous.endCoordinate else { return nil }
         let gap = record.startedAt.timeIntervalSince(previous.endedAt)
         guard gap >= 0, gap <= AppConfig.commuteChainMaxGapSeconds else { return nil }
@@ -210,5 +211,76 @@ nonisolated enum Commute {
 
     private static func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
         GeoMath.fastDistance(a.latitude, a.longitude, b.latitude, b.longitude)
+    }
+}
+
+// MARK: - Источник поездок и журнал
+
+/// Что «дороге» нужно знать о поездке. Запись истории — один источник,
+/// журнал (`CommuteLedger`) — второй: история держит 50 записей, а при
+/// трёх-четырёх поездках в день «медиана за 30 дней» на ней считалась за
+/// 12–17 дней (аудит 19.10).
+nonisolated protocol CommuteTripSource {
+    var id: Double { get }
+    var startedAt: Date { get }
+    var endedAt: Date { get }
+    var movingDuration: TimeInterval { get }
+    var distanceMeters: Double { get }
+    var startCoordinate: CLLocationCoordinate2D? { get }
+    var endCoordinate: CLLocationCoordinate2D? { get }
+}
+
+extension TripRecord: CommuteTripSource {}
+
+/// Журнал поездок для «дороги»: только концы, время и длина, 45 дней.
+/// Без трека, проездов и баллов — то, что нужно медиане, и ничего больше.
+/// Хранится там же, где профиль участков (CommuteProfileStore): на телефоне,
+/// вне резервной копии.
+nonisolated enum CommuteLedger {
+
+    struct Entry: Codable, Equatable, Sendable, CommuteTripSource {
+        let id: Double
+        let startedAt: Date
+        let endedAt: Date
+        let movingDuration: TimeInterval
+        let distanceMeters: Double
+        let startLat: Double?
+        let startLon: Double?
+        let endLat: Double?
+        let endLon: Double?
+
+        init(_ record: some CommuteTripSource) {
+            id = record.id
+            startedAt = record.startedAt
+            endedAt = record.endedAt
+            movingDuration = record.movingDuration
+            distanceMeters = record.distanceMeters
+            startLat = record.startCoordinate?.latitude
+            startLon = record.startCoordinate?.longitude
+            endLat = record.endCoordinate?.latitude
+            endLon = record.endCoordinate?.longitude
+        }
+
+        var startCoordinate: CLLocationCoordinate2D? {
+            guard let startLat, let startLon else { return nil }
+            return CLLocationCoordinate2D(latitude: startLat, longitude: startLon)
+        }
+        var endCoordinate: CLLocationCoordinate2D? {
+            guard let endLat, let endLon else { return nil }
+            return CLLocationCoordinate2D(latitude: endLat, longitude: endLon)
+        }
+    }
+
+    /// Журнал после новой истории: запись истории главнее (склейка поменяла
+    /// длину и финиш), старше окна — вон, новые первыми, не больше потолка.
+    static func updated(_ entries: [Entry], with history: [some CommuteTripSource], now: Date,
+                        keepDays: Double = AppConfig.commuteLedgerKeepDays,
+                        maxEntries: Int = AppConfig.commuteLedgerMaxEntries) -> [Entry] {
+        var byID = Dictionary(entries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for record in history { byID[record.id] = Entry(record) }
+        let oldest = now.addingTimeInterval(-keepDays * 86_400)
+        return Array(byID.values.filter { $0.startedAt >= oldest }
+            .sorted { $0.startedAt > $1.startedAt }
+            .prefix(maxEntries))
     }
 }

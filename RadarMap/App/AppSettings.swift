@@ -517,6 +517,9 @@ final class AppSettings {
     /// Подсказка «Домой / На работу» на главном экране по выученному
     /// распорядку. Выключается целиком — обучение молчит вместе с ней.
     var destinationSuggestions: Bool { didSet { store.set(destinationSuggestions, forKey: Keys.destinationHints) } }
+    /// Время дороги дом↔работа по участкам (CommuteProfile) — для прогноза
+    /// «приеду в 9:12». Хранится инвертированно: включено по умолчанию.
+    var commuteLearning: Bool { didSet { store.set(!commuteLearning, forKey: Keys.commuteLearningOff) } }
     /// Умная тишина: камеры, которые вы проезжаете регулярно и спокойно,
     /// перестают называться вслух (см. CameraFamiliarity). Выключенная —
     /// приложение говорит обо всех камерах, как в первый день.
@@ -676,6 +679,7 @@ final class AppSettings {
         static let mapAppearance = "mapAppearance"
         static let keepScreenOn = "keepScreenOn"
         static let destinationHints = "destinationSuggestions"
+        static let commuteLearningOff = "commuteLearningOff"
         static let smartSilence = "smartSilence"
         static let tripodHints = "tripodHints"
         static let mapPlaces = "mapPlaces"
@@ -770,6 +774,7 @@ final class AppSettings {
         showNextCamera = store.bool(forKey: Keys.nextCamera)
         keepScreenOn = store.bool(forKey: Keys.keepScreenOn)
         destinationSuggestions = store.bool(forKey: Keys.destinationHints)
+        commuteLearning = !store.bool(forKey: Keys.commuteLearningOff)
         smartSilence = store.bool(forKey: Keys.smartSilence)
         tripodHints = store.bool(forKey: Keys.tripodHints)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)

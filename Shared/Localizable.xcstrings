@@ -2320,6 +2320,38 @@
         }
       }
     },
+    "Время дороги дом–работа запоминается по участкам — из него получится прогноз «приеду в 9:12, как обычно». Только обычное время, не лучшее: гнать ради цифры незачем.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Время дороги дом–работа запоминается по участкам — из него получится прогноз «приеду в 9:12, как обычно». Только обычное время, не лучшее: гнать ради цифры незачем."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uy–ish yo‘li vaqti bo‘laklar bo‘yicha eslab qolinadi — undan «9:12 da yetib boraman, odatdagidek» degan prognoz chiqadi. Faqat odatiy vaqt, eng yaxshisi emas: raqam uchun shoshilishning hojati yo‘q."
+          }
+        }
+      }
+    },
+    "Время дороги на работу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Время дороги на работу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga yo‘l vaqti"
+          }
+        }
+      }
+    },
     "Время риска — %1$@: там %2$lld из %3$lld превышений": {
       "localizations": {
         "ru": {

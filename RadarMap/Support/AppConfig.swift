@@ -591,6 +591,34 @@ nonisolated enum AppConfig {
     /// «Дольше обычного» считаем заметным с этой разницы.
     nonisolated static let commuteNoticeableDelaySeconds: TimeInterval = 3 * 60
 
+    // MARK: Профиль дороги по участкам (CommuteProfile, «призрак»)
+    /// Короче — не дорога на работу, а переезд через двор.
+    nonisolated static let commuteProfileMinTripMeters: Double = 1000
+    /// Длина участка. 200 м — много длиннее шага трека (30 м) и шага фиксов,
+    /// и короче квартала: пробка у перекрёстка ложится в свой участок.
+    nonisolated static let commuteProfileSegmentMeters: Double = 200
+    /// «Близко к линии» — и для проекции, и для покрытия (коридор шире
+    /// упрощения трека в 22 м).
+    nonisolated static let commuteProfileNearMeters: Double = 40
+    /// Шаг выборки при сравнении путей.
+    nonisolated static let commuteProfileSampleMeters: Double = 50
+    /// Тот же путь — столько точек в обе стороны лежат на другом.
+    nonisolated static let commuteProfileSameRouteShare = 0.85
+    /// Две точки дальше по времени — между ними могло быть что угодно.
+    nonisolated static let commuteProfileMaxGapSeconds: Double = 120
+    /// Строка кладётся, только если измерена хотя бы такая доля участков.
+    nonisolated static let commuteProfileMinValidShare = 0.5
+    nonisolated static let commuteProfileMaxRows = 20
+    nonisolated static let commuteProfileKeepDays: Double = 45
+    nonisolated static let commuteProfileMaxVariants = 3
+    /// Линия варианта: упрощение и потолок вершин (~5 КБ на вариант).
+    nonisolated static let commuteProfileLineTolerance: Double = 10
+    nonisolated static let commuteProfileMaxVertices = 600
+    /// Журнал поездок для «дороги» — окно с запасом над 30 днями медианы.
+    nonisolated static let commuteLedgerKeepDays: Double = 45
+    /// Шесть поездок в день на 45 дней — с запасом.
+    nonisolated static let commuteLedgerMaxEntries = 300
+
     // MARK: - Обновление базы камер (OTA)
 
     /// Сервер с актуальной базой, краудсорсом и маршрутизацией.

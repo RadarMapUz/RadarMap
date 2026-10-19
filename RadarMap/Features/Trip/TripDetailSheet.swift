@@ -246,6 +246,13 @@ struct TripDetailSheet: View {
         .sheet(item: $selectedPass) { pass in
             PassMapSheet(pass: pass, track: record.trackPoints, record: record)
         }
+        #if DEBUG
+        // Скриншот-хук: `-openFirstPass` открывает первый проезд поездки.
+        .onAppear {
+            guard ProcessInfo.processInfo.arguments.contains("-openFirstPass") else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { selectedPass = record.passed.first }
+        }
+        #endif
     }
 }
 

@@ -243,7 +243,7 @@ final class TripStats {
     func registerPass(camera: Camera, speedKmh: Double, limitKmh: Int?,
                       roadLimitKmh: Int? = nil, limitAssumed: Bool = false,
                       courseDegrees: Double? = nil, speedAfterKmh: Double? = nil,
-                      date: Date = Date()) {
+                      silent: Bool = false, date: Date = Date()) {
         passed.append(PassedCamera(
             id: UUID(), cameraID: camera.id, typeRaw: camera.type,
             location: camera.displayTitle, speedKmh: speedKmh, date: date,
@@ -252,7 +252,8 @@ final class TripStats {
             // повторять одно и то же число в каждой записи истории незачем.
             roadLimitKmh: roadLimitKmh == limitKmh ? nil : roadLimitKmh,
             limitAssumed: limitAssumed ? true : nil,
-            courseDegrees: courseDegrees, speedAfterKmh: speedAfterKmh
+            courseDegrees: courseDegrees, speedAfterKmh: speedAfterKmh,
+            silent: silent ? true : nil
         ))
     }
 

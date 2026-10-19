@@ -112,4 +112,18 @@ final class AlertRecallTests: XCTestCase {
         recall.reset()
         XCTAssertTrue(recall.tally().isEmpty)
     }
+
+    /// Проезд камеры, о которой молчали, помечается в записи (6.7): экран
+    /// проезда поднимает жалобу «не предупредила» наверх. Старые записи без
+    /// поля читаются как «не знаем», а не как «молчали».
+    func testSilentPassIsMarkedAndOldRecordsAreUnknown() throws {
+        var recall = AlertRecall()
+        recall.noteAlert(cameraID: 1, distance: 400)
+        XCTAssertTrue(recall.wasAlerted(cameraID: 1))
+        XCTAssertFalse(recall.wasAlerted(cameraID: 2))
+
+        let old = #"{"id":"6E1D7C9A-8C2B-4A57-9D1E-2F3A4B5C6D7E","cameraID":2,"typeRaw":"Стационар радар","location":"Юнусабад","speedKmh":70,"date":0}"#
+        let decoded = try JSONDecoder().decode(PassedCamera.self, from: Data(old.utf8))
+        XCTAssertNil(decoded.silent)
+    }
 }

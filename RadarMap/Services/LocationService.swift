@@ -580,6 +580,7 @@ final class LocationService: NSObject {
                               limitAssumed: pass.limitAssumed,
                               courseDegrees: pass.courseDegrees,
                               speedAfterKmh: pass.speedAfterKmh,
+                              silent: !alertRecall.wasAlerted(cameraID: pass.camera.id),
                               date: pass.date)
             onPassRecorded?(pass.limitKmh == nil ? "none"
                             : (pass.limitAssumed ? "assumed" : "tag"))

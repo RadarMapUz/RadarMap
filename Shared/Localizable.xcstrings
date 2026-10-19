@@ -14039,6 +14039,22 @@
         }
       }
     },
+    "превышение на %lld км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "превышение на %lld км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld km/soat oshirish"
+          }
+        }
+      }
+    },
     "превышений": {
       "localizations": {
         "ru": {

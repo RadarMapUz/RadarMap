@@ -1266,8 +1266,7 @@ final class LocationService: NSObject {
         CameraActivityAttributes.ContentState(
             nearestTitle: nearestCamera?.displayTitle,
             nearestSymbol: nearestCamera?.kind.symbolName ?? "checkmark.shield.fill",
-            distanceMeters: distanceToNearest,
-            camerasNearby: nearbyCameras.count
+            distanceMeters: distanceToNearest
         )
     }
 

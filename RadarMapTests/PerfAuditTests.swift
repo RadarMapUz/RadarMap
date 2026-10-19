@@ -70,7 +70,7 @@ final class PerfAuditTests: XCTestCase {
 
     func testLiveActivityStepsOutsideTheZone() {
         var state = CameraActivityAttributes.ContentState(
-            nearestTitle: "Камера", nearestSymbol: "camera", distanceMeters: 812, camerasNearby: 3)
+            nearestTitle: "Камера", nearestSymbol: "camera", distanceMeters: 812)
         let far = LiveActivityService.quantize(state, nearMeters: 400)
         XCTAssertEqual(far.distanceMeters, 800, "вне зоны — шаг 100 м")
         XCTAssertEqual(LiveActivityService.interval(for: far, nearMeters: 400),

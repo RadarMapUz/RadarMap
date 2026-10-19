@@ -153,7 +153,9 @@ struct SettingsView: View {
     }
 
     static func tolerance(_ value: Double) -> String {
-        value == 0 ? "0 км/ч" : "+\(Int(value)) км/ч"
+        value == 0
+            ? String(localized: "0 км/ч")
+            : String(format: String(localized: "+%lld км/ч"), Int(value))
     }
 }
 

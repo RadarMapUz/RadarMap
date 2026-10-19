@@ -17,8 +17,8 @@ struct CameraActivityAttributes: ActivityAttributes {
         var nearestSymbol: String
         /// Расстояние до ближайшей камеры, метры.
         var distanceMeters: Double?
-        /// Сколько камер под мониторингом вокруг.
-        var camerasNearby: Int
+        // «Камер вокруг» убрано 19.10: строка «следит за N камерами» была шумом,
+        // а неквантованный счётчик слал обновления плашки и в пробке на месте.
     }
 }
 #endif

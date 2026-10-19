@@ -17,13 +17,19 @@ private enum WTheme {
     static let secondary = Color.white.opacity(0.62)
 }
 
+/// Числа — по языку плашки, как `Formatting.numberLocale` в приложении:
+/// `String(format:)` без локали давал «1.4 км» с точкой и в русском.
+private let numberLocale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "ru")
+
 /// Единицы — через каталог: плашка живёт на экране блокировки в том же
 /// языке, что и приложение, и «м»/«км» строкой в коде на узбекском остались
 /// бы русскими.
 private func format(_ meters: Double) -> String {
-    meters < 1000
-        ? String(format: String(localized: "%lld м"), Int(meters.rounded()))
-        : String(format: String(localized: "%.1f км"), meters / 1000)
+    guard meters >= 1000 else {
+        return String(format: String(localized: "%lld м"), Int(meters.rounded()))
+    }
+    let km = (meters / 1000).formatted(.number.precision(.fractionLength(1)).grouping(.never).locale(numberLocale))
+    return String(format: String(localized: "%@ км"), km)
 }
 
 struct CameraActivityWidget: Widget {
@@ -46,7 +52,11 @@ struct CameraActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    Text(context.state.nearestTitle ?? "Камер рядом нет")
+                    // `?? "…"` дал бы String — мимо каталога, на узбекском
+                    // осталось бы по-русски.
+                    Group {
+                        if let title = context.state.nearestTitle { Text(title) } else { Text("Камер рядом нет") }
+                    }
                         .font(.system(.footnote, design: .rounded))
                         .foregroundStyle(WTheme.secondary)
                         .lineLimit(2)
@@ -99,9 +109,6 @@ private struct LockScreenView: View {
                         .font(.system(.headline, design: .rounded))
                         .foregroundStyle(.white)
                 }
-                Text("RadarMap следит за \(state.camerasNearby) камерами вокруг")
-                    .font(.system(.caption2, design: .rounded))
-                    .foregroundStyle(WTheme.secondary.opacity(0.7))
             }
             Spacer(minLength: 0)
         }

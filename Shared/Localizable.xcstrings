@@ -34,22 +34,6 @@
         }
       }
     },
-    "%.1f км": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%.1f км"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%.1f km"
-          }
-        }
-      }
-    },
     "%1$@ и %2$@ разделяет стоянка %3$@": {
       "localizations": {
         "ru": {
@@ -756,6 +740,22 @@
         }
       }
     },
+    "+%lld км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%lld км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%lld km/soat"
+          }
+        }
+      }
+    },
     "+10 км/ч": {
       "localizations": {
         "ru": {
@@ -1044,6 +1044,22 @@
         }
       }
     },
+    "240 м": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "240 м"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "240 m"
+          }
+        }
+      }
+    },
     "3 400+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.": {
       "localizations": {
         "ru": {
@@ -1184,22 +1200,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "RadarMap"
-          }
-        }
-      }
-    },
-    "RadarMap следит за %lld камерами вокруг": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "RadarMap следит за %lld камерами вокруг"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "RadarMap atrofdagi %lld ta kamerani kuzatmoqda"
           }
         }
       }
@@ -2508,6 +2508,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jami: %lld"
+          }
+        }
+      }
+    },
+    "Встроенная база камер не читается — переустановите приложение.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Встроенная база камер не читается — переустановите приложение."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ichki kameralar bazasi o‘qilmayapti — ilovani qayta o‘rnating."
           }
         }
       }
@@ -4892,6 +4908,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kamera №%@"
+          }
+        }
+      }
+    },
+    "Камера, 300 метров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера, 300 метров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera, 300 metr"
           }
         }
       }
@@ -9413,6 +9445,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Radar belgilandi. Ogohlantirganingiz uchun rahmat!"
+          }
+        }
+      }
+    },
+    "Радар!": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Радар!"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar!"
           }
         }
       }

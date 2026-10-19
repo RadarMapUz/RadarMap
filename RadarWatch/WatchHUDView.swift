@@ -99,7 +99,9 @@ struct WatchHUDView: View {
 
     private func distanceText(_ meters: Int) -> String {
         if meters >= 1000 {
-            let km = String(format: "%.1f", locale: .current, Double(meters) / 1000)
+            // По языку приложения, не по региону часов (правило Formatting.numberLocale).
+            let km = (Double(meters) / 1000).formatted(.number.precision(.fractionLength(1)).grouping(.never)
+                .locale(Locale(identifier: Bundle.main.preferredLocalizations.first ?? "ru")))
             return String(format: String(localized: "%@ км"), km)
         }
         return String(format: String(localized: "%@ м"), String(meters))

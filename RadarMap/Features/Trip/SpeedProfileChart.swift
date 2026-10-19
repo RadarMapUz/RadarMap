@@ -131,7 +131,7 @@ struct SpeedProfileChart: View {
                                     Text("\(Int(sample.speedKmh)) км/ч")
                                         .font(.rounded(12, .bold).monospacedDigit())
                                         .foregroundStyle(Theme.textPrimary)
-                                    Text(String(format: String(localized: "%.1f км"), locale: .current, sample.km))
+                                    Text(String(format: String(localized: "%@ км"), Formatting.decimal(sample.km)))
                                         .font(.rounded(9, .medium))
                                         .foregroundStyle(Theme.textTertiary)
                                 }

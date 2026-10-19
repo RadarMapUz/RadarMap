@@ -112,6 +112,8 @@ final class CameraStore: CameraRepository {
                 new.id != old.id || new.type != old.type
                     || new.mobileConfirmed != old.mobileConfirmed
                     || new.lat != old.lat || new.lon != old.lon
+                    // Сервер продлил срок — новая подпись и новый срок гашения.
+                    || new.mobileExpires != old.mobileExpires || new.location != old.location
             }
         guard changed else { return false }
         mobile = cameras

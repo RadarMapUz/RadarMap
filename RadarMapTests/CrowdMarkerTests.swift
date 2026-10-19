@@ -24,4 +24,18 @@ final class CrowdMarkerTests: XCTestCase {
             XCTAssertTrue(kind.recordsPasses, "\(kind)")
         }
     }
+
+    /// Срок живёт в самой отметке — по нему она гаснет и в тихом фоне, где
+    /// опроса нет (геозоны, уведомление); у базы срока нет вовсе.
+    func testExpiryLivesInTheMarker() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func marker(_ expires: Date?) -> Camera {
+            Camera(id: 2_000_001, region: "", city: "", location: "", lat: 41.3, lon: 69.2,
+                   type: "Тренога", violations: [], needsReview: nil, mobileConfirmed: true,
+                   mobileExpires: expires)
+        }
+        XCTAssertTrue(marker(now.addingTimeInterval(-1)).isExpiredMobile(at: now))
+        XCTAssertFalse(marker(now.addingTimeInterval(60)).isExpiredMobile(at: now))
+        XCTAssertFalse(marker(nil).isExpiredMobile(at: now), "у камеры базы срока нет")
+    }
 }

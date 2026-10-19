@@ -253,9 +253,10 @@ final class TripStats {
             id: UUID(), cameraID: camera.id, typeRaw: camera.type,
             // Отметка водителей: её подпись — «исчезнет ~14:05», и в истории,
             // карточке «зона риска» и виджете она жила бы вечно (S6, 20.10).
-            location: camera.mobileConfirmed != nil
-                ? String(format: String(localized: "%@ (отметка водителей)"), camera.kind.displayName)
-                : camera.displayTitle,
+            // Пусто, а не «тип»: «зона риска» группирует по месту, и одна
+            // подпись на все отметки сложила бы город в одно «место» (ревью);
+            // экраны без места показывают тип сами.
+            location: camera.mobileConfirmed != nil ? "" : camera.displayTitle,
             speedKmh: speedKmh, date: date,
             lat: camera.lat, lon: camera.lon, limitKmh: limitKmh,
             // Сырой лимит храним, только если он отличается от итогового:

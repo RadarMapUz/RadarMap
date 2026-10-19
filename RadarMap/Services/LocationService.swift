@@ -577,7 +577,10 @@ final class LocationService: NSObject {
     }
 
     private func register(passes: [PassTracking.Pass]) {
-        for pass in passes where pass.camera.kind.recordsPasses {
+        // Пишутся проезды камер, которые меряют скорость (не «Пост», не «ДТП»),
+        // и не неподтверждённых отметок: подброшенная фальшивка на проспекте
+        // стоила бы баллов и «штрафа» каждому, кто мимо проехал (ревью S6).
+        for pass in passes where pass.camera.kind.recordsPasses && !pass.camera.isUnconfirmedMobile {
             trip.registerPass(camera: pass.camera, speedKmh: pass.speedKmh,
                               limitKmh: pass.limitKmh, roadLimitKmh: pass.roadLimitKmh,
                               limitAssumed: pass.limitAssumed,
@@ -819,7 +822,10 @@ final class LocationService: NSObject {
         }
         // Радиус окна — до самой дальней камеры в нём (список отсортирован).
         trackedRadius = tracked.last.map(distance(to:)) ?? .greatestFiniteMagnitude
-        let nearest = Array(tracked.prefix(AppConfig.maxMonitoredRegions))
+        // Геозоны — без истёкших отметок водителей: слотов всего двадцать.
+        let now = Date()
+        let nearest = Array(tracked.lazy.filter { !$0.isExpiredMobile(at: now) }
+            .prefix(AppConfig.maxMonitoredRegions))
         nearbyCameras = nearest
         alertedCameraIDs.formIntersection(Set(nearest.map(\.id)))
         // Плотность камер вокруг — сигнал «город» для умного режима оповещений.
@@ -1750,6 +1756,9 @@ final class LocationService: NSObject {
         guard let id = Self.cameraID(from: regionID),
               !alertedCameraIDs.contains(id),
               let camera = repository.cameras.first(where: { $0.id == id }),
+              // Истёкшая отметка водителей в тихом фоне (опроса нет) — не
+              // пугаем (сценарий S5, 20.10).
+              !camera.isExpiredMobile(at: Date()),
               settings.backgroundAlerts.allows(camera) else { return }
         alertedCameraIDs.insert(id)
         notifier.notifyApproaching(camera)

@@ -86,10 +86,6 @@ nonisolated enum CameraType: Hashable {
         }
     }
 
-    /// Внезапная точка: возникла только что, и знать о ней надо всегда —
-    /// стационарную камеру на своей дороге водитель помнит, передвижной радар,
-    /// треногу или ДТП — нет. Такие никогда не глушим и даём им более широкий
-    /// коридор: координата пришла из краудсорса и точна хуже реестровой.
     /// Камера МЕРЯЕТ скорость — её проезд пишется в историю, рейтинг и
     /// «возможные штрафы». Отметки «Пост ДПС» и «ДТП» скорость не меряют:
     /// проезд мимо них с превышением стоил баллов и «штрафа» (сценарий S6, 20.10).
@@ -100,6 +96,10 @@ nonisolated enum CameraType: Hashable {
         }
     }
 
+    /// Внезапная точка: возникла только что, и знать о ней надо всегда —
+    /// стационарную камеру на своей дороге водитель помнит, передвижной радар,
+    /// треногу или ДТП — нет. Такие никогда не глушим и даём им более широкий
+    /// коридор: координата пришла из краудсорса и точна хуже реестровой.
     var isSudden: Bool {
         switch self {
         case .mobileRadar, .tripod, .accident: return true
@@ -177,6 +177,15 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
     /// точка на испытательном сроке: рисуется призраком, голос говорит
     /// «возможно». Предупреждаем в любом случае — тишина хуже.
     let mobileConfirmed: Bool?
+    /// Срок отметки водителей (с сервера); nil — не краудсорс. По нему
+    /// истёкшая отметка гаснет и без связи — и в тихом фоне, где опроса нет
+    /// (геозоны, уведомление о приближении; сценарий S5, 20.10).
+    let mobileExpires: Date?
+
+    /// Отметка водителей, чей срок вышел.
+    func isExpiredMobile(at now: Date) -> Bool {
+        mobileExpires.map { $0 <= now } ?? false
+    }
 
     /// Стороны дороги ДОКАЗАННО поделены — только тогда геометрии можно глушить
     /// камеру за то, что мы едем по обратной проезжей части.
@@ -226,7 +235,8 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
          needsReview: Bool?, axis: Int? = nil, dir: Int? = nil,
          lanes: Int? = nil, cls: String? = nil, bridge: Bool? = nil,
          road: [Int]? = nil, split: Bool? = nil, twin: Bool? = nil,
-         mobileConfirmed: Bool? = nil) {
+         mobileConfirmed: Bool? = nil, mobileExpires: Date? = nil) {
+        self.mobileExpires = mobileExpires
         self.dir = dir
         self.lanes = lanes
         self.cls = cls
@@ -270,6 +280,7 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
         // В bundled/OTA-базе поля нет (не краудсорс) — nil; живые отметки
         // строит MobileCameraService из /api/mobile, не через Codable.
         mobileConfirmed = try c.decodeIfPresent(Bool.self, forKey: .mobileConfirmed)
+        mobileExpires = nil   // срок есть только у живых отметок
         violations = try c.decodeIfPresent([String].self, forKey: .violations)
             ?? Self.defaultViolations(forType: type)
     }

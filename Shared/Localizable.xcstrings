@@ -157,22 +157,6 @@
         }
       }
     },
-    "%@ (отметка водителей)": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ (отметка водителей)"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ (haydovchilar belgisi)"
-          }
-        }
-      }
-    },
     "%@ · %@": {
       "localizations": {
         "ru": {

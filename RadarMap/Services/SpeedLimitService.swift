@@ -463,12 +463,19 @@ final class SpeedLimitService {
 // MARK: - Индекс сегментов
 
 /// Иммутабельный индекс: строится в фоне, читается с главного потока без блокировок.
+///
+/// Точки всех сегментов — один плоский буфер, сегмент — отрезок в нём (пакет
+/// памяти 2.19, 20.10): 21 558 отдельных массивов `[MKMapPoint]` стоили по
+/// аллокации с заголовком на каждый, а разбор через JSONSerialization
+/// упаковывал каждое из 367 тысяч чисел в NSNumber — пик 20–30 МБ на старте.
 struct LimitIndex: Sendable, RoadNetworkSource {
     struct Segment: Sendable {
         let limit: Int
         /// Класс дороги. `.unknown` у файла формата 1 — там его просто нет.
         let cls: RoadClass
-        let pts: [MKMapPoint]
+        /// Точки сегмента — `points[start ..< start + count]` общего буфера.
+        let start: Int32
+        let count: Int32
         /// Рамка сегмента в единицах MKMapPoint.
         ///
         /// Ячейка грида — 1,1 км, а совпадением считается 35 м: почти всё, что
@@ -478,19 +485,7 @@ struct LimitIndex: Sendable, RoadNetworkSource {
         /// сегмент четырьмя сравнениями, до того как начнётся геометрия.
         let minX, minY, maxX, maxY: Double
 
-        init(limit: Int, cls: RoadClass = .unknown, pts: [MKMapPoint]) {
-            self.limit = limit
-            self.cls = cls
-            self.pts = pts
-            var minX = Double.greatestFiniteMagnitude, minY = Double.greatestFiniteMagnitude
-            var maxX = -Double.greatestFiniteMagnitude, maxY = -Double.greatestFiniteMagnitude
-            for point in pts {
-                minX = min(minX, point.x); maxX = max(maxX, point.x)
-                minY = min(minY, point.y); maxY = max(maxY, point.y)
-            }
-            self.minX = minX; self.minY = minY
-            self.maxX = maxX; self.maxY = maxY
-        }
+        var range: Range<Int> { Int(start) ..< Int(start) + Int(count) }
 
         /// Может ли эта дорога оказаться ближе `reach` (в единицах MKMapPoint).
         func mayReach(_ p: MKMapPoint, within reach: Double) -> Bool {
@@ -500,6 +495,8 @@ struct LimitIndex: Sendable, RoadNetworkSource {
     }
 
     let segments: [Segment]
+    /// Все точки всех сегментов подряд.
+    let points: [MKMapPoint]
     let grid: [Int: [Int32]]   // ячейка 0.01° → индексы сегментов
 
     // MARK: - Дороги для схемы на приборке
@@ -551,10 +548,11 @@ struct LimitIndex: Sendable, RoadNetworkSource {
             // Точки за радиусом отбрасываем, но линию не рвём: берём кусок от
             // первой до последней попавшей — иначе дорога рассыпалась бы на
             // обрывки там, где она просто длинная.
-            guard let first = segment.pts.firstIndex(where: within),
-                  let last = segment.pts.lastIndex(where: within),
+            let pts = points[segment.range]
+            guard let first = pts.firstIndex(where: within),
+                  let last = pts.lastIndex(where: within),
                   last > first else { return nil }
-            return RoadLine(points: segment.pts[first...last].map(\.coordinate))
+            return RoadLine(points: pts[first...last].map(\.coordinate))
         }
     }
 
@@ -565,65 +563,144 @@ struct LimitIndex: Sendable, RoadNetworkSource {
     }
 
     nonisolated static func build(from data: Data) -> LimitIndex? {
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let raw = root["segments"] as? [[Any]] else {
-            Log.route.error("speed_limits.json: неожиданный формат")
+        let built: Builder
+        do {
+            built = try JSONDecoder().decode(Builder.self, from: data)
+        } catch {
+            Log.route.error("speed_limits.json: неожиданный формат — \(error.localizedDescription, privacy: .public)")
             return nil
         }
+        return built.segments.isEmpty ? nil
+            : LimitIndex(segments: built.segments, points: built.points, grid: built.grid)
+    }
 
+    /// Разбор без NSNumber: сегмент за сегментом прямо в плоские буферы.
+    ///
+    /// Границы значения — второй забор после подписи. Подписанный индекс
+    /// (LimitsTrust, server/publish_limits.sh) гарантирует, что файл собрал
+    /// владелец, но не что OSM прав; а на переходный путь, пока подписанного
+    /// индекса телефон не видел, этот забор — вообще единственная защита:
+    /// файл приходит по HTTPS, но без подписи. Невозможные лимиты (в
+    /// Узбекистане минимум 20 — дворы, максимум 110–130; «5» и «300» —
+    /// испорченные данные) отвергают СЕГМЕНТ, а не файл: один битый лимит не
+    /// должен выключить двадцать тысяч честных. Форматов ДВА. Первый —
+    /// [limit, geometry], он остаётся на бою для уже установленных
+    /// приложений. Второй — [limit, cls, geometry]: без класса дороги лимит
+    /// это половина ответа, потому что отличить проспект от идущего вдоль
+    /// него дублёра больше нечем.
+    nonisolated private struct Builder: Decodable {
         var segments: [Segment] = []
-        segments.reserveCapacity(raw.count)
+        var points: [MKMapPoint] = []
         var grid: [Int: [Int32]] = [:]
 
-        for entry in raw {
-            // Границы значения — второй забор после подписи. Подписанный
-            // индекс (LimitsTrust, server/publish_limits.sh) гарантирует, что
-            // файл собрал владелец, но не что OSM прав; а на переходный путь,
-            // пока подписанного индекса телефон не видел, этот забор — вообще
-            // единственная защита: файл приходит по HTTPS, но без подписи.
-            // Явно отвергаем невозможные лимиты: в Узбекистане минимум 20
-            // (дворы), максимум 110–130, и «5» с «300» означают испорченные
-            // данные, а не дорогу. Отвергаем СЕГМЕНТ, а не файл: один битый
-            // лимит не должен выключить двадцать тысяч честных.
-            // Форматов ДВА. Первый — [limit, geometry], он остаётся на бою для
-            // уже установленных приложений. Второй — [limit, cls, geometry]:
-            // без класса дороги лимит это половина ответа, потому что отличить
-            // проспект от идущего вдоль него дублёра больше нечем.
-            guard let limit = (entry.first as? NSNumber)?.intValue,
-                  AppConfig.plausibleSpeedLimits.contains(limit),
-                  let flat = entry.last as? [NSNumber], flat.count >= 4,
-                  entry.count == 2 || entry.count == 3 else { continue }
-            let cls: RoadClass = entry.count == 3
-                ? RoadClass(code: (entry[1] as? NSNumber)?.intValue ?? 0)
-                : .unknown
+        private enum Keys: String, CodingKey { case segments }
 
-            var pts: [MKMapPoint] = []
-            pts.reserveCapacity(flat.count / 2)
+        init(from decoder: Decoder) throws {
+            let root = try decoder.container(keyedBy: Keys.self)
+            var list = try root.nestedUnkeyedContainer(forKey: .segments)
+            if let count = list.count {
+                segments.reserveCapacity(count)
+                points.reserveCapacity(count * 9)
+            }
+            while !list.isAtEnd {
+                // Entry не бросает на плохом содержимом — иначе курсор списка
+                // не сдвинулся бы и разбор зациклился.
+                if let entry = try list.decode(Entry.self).value { append(entry) }
+            }
+        }
+
+        private mutating func append(_ entry: Entry.Value) {
+            let start = points.count
             let segmentIndex = Int32(segments.count)
             var cells = Set<Int>()
-
+            var minX = Double.greatestFiniteMagnitude, minY = Double.greatestFiniteMagnitude
+            var maxX = -Double.greatestFiniteMagnitude, maxY = -Double.greatestFiniteMagnitude
             var previous: (lat: Double, lon: Double)?
+            let flat = entry.flat
             for i in stride(from: 0, to: flat.count - 1, by: 2) {
-                let lat = flat[i].doubleValue, lon = flat[i + 1].doubleValue
-                pts.append(MKMapPoint(CLLocationCoordinate2D(latitude: lat, longitude: lon)))
-                cells.insert(cellKey(lat: lat, lon: lon))
+                let lat = flat[i], lon = flat[i + 1]
+                let point = MKMapPoint(CLLocationCoordinate2D(latitude: lat, longitude: lon))
+                points.append(point)
+                minX = min(minX, point.x); maxX = max(maxX, point.x)
+                minY = min(minY, point.y); maxY = max(maxY, point.y)
+                cells.insert(LimitIndex.cellKey(lat: lat, lon: lon))
                 // Длинные прямые перегоны: отмечаем и промежуточные ячейки (шаг ~0.005°).
                 if let p = previous {
                     let steps = Int(max(abs(lat - p.lat), abs(lon - p.lon)) / 0.005)
                     if steps > 1 {
                         for s in 1..<steps {
                             let f = Double(s) / Double(steps)
-                            cells.insert(cellKey(lat: p.lat + (lat - p.lat) * f,
-                                                 lon: p.lon + (lon - p.lon) * f))
+                            cells.insert(LimitIndex.cellKey(lat: p.lat + (lat - p.lat) * f,
+                                                            lon: p.lon + (lon - p.lon) * f))
                         }
                     }
                 }
                 previous = (lat, lon)
             }
-            segments.append(Segment(limit: limit, cls: cls, pts: pts))
+            segments.append(Segment(limit: entry.limit, cls: entry.cls, start: Int32(start),
+                                    count: Int32(points.count - start),
+                                    minX: minX, minY: minY, maxX: maxX, maxY: maxY))
             for cell in cells { grid[cell, default: []].append(segmentIndex) }
         }
-        return segments.isEmpty ? nil : LimitIndex(segments: segments, grid: grid)
+    }
+
+    /// Одна запись файла; `value == nil` — запись отвергнута (не тот вид,
+    /// лимит вне правдоподобного, геометрии нет).
+    nonisolated private struct Entry: Decodable {
+        struct Value {
+            let limit: Int
+            let cls: RoadClass
+            let flat: [Double]
+        }
+        let value: Value?
+
+        init(from decoder: Decoder) throws {
+            // Числа — в разумных пределах ДО перевода в Int: Int(1e300) — крэш,
+            // а неподписанный файл переходного пути мог быть чем угодно.
+            guard var c = try? decoder.unkeyedContainer(), let count = c.count,
+                  count == 2 || count == 3,
+                  let limitNumber = (try? c.decode(Number.self))?.value,
+                  abs(limitNumber) < 1000,
+                  AppConfig.plausibleSpeedLimits.contains(Int(limitNumber)) else {
+                value = nil
+                return
+            }
+            var cls = RoadClass.unknown
+            if count == 3 {
+                // Номер класса не число — класс неизвестен, сегмент остаётся.
+                let code = (try? c.decode(Number.self))?.value ?? 0
+                cls = RoadClass(code: abs(code) < 1000 ? Int(code) : 0)
+            }
+            guard let flat = (try? c.decode(Numbers.self))?.values, flat.count >= 4,
+                  Self.isGeometry(flat) else {
+                value = nil
+                return
+            }
+            value = Value(limit: Int(limitNumber), cls: cls, flat: flat)
+        }
+
+        /// Пары [lat, lon] на Земле: вне её — испорченный файл, а не дорога.
+        private static func isGeometry(_ flat: [Double]) -> Bool {
+            stride(from: 0, to: flat.count - 1, by: 2).allSatisfy { i in
+                abs(flat[i]) <= 90 && abs(flat[i + 1]) <= 180
+            }
+        }
+    }
+
+    /// Число или ничего — без исключения, чтобы курсор массива сдвинулся.
+    nonisolated private struct Number: Decodable {
+        let value: Double?
+        init(from decoder: Decoder) throws {
+            value = try? decoder.singleValueContainer().decode(Double.self)
+        }
+    }
+
+    /// Массив чисел или ничего (хоть одно не число — вся геометрия не годится).
+    nonisolated private struct Numbers: Decodable {
+        let values: [Double]?
+        init(from decoder: Decoder) throws {
+            values = try? decoder.singleValueContainer().decode([Double].self)
+        }
     }
 
     /// Кандидаты кольца 3×3 ячеек вокруг точки. Один сегмент лежит в нескольких
@@ -699,9 +776,9 @@ struct LimitIndex: Sendable, RoadNetworkSource {
             if prefersMajorRoads, segment.cls == .pedestrian { continue }
             var localSquared = reachSquared
             var local: (point: MKMapPoint, dx: Double, dy: Double)?
-            let pts = segment.pts
-            for i in 0..<(pts.count - 1) {
-                let a = pts[i], b = pts[i + 1]
+            let range = segment.range
+            for i in range.lowerBound ..< (range.upperBound - 1) {
+                let a = points[i], b = points[i + 1]
                 // Ближайшая точка на отрезке AB.
                 let dx = b.x - a.x, dy = b.y - a.y
                 let len2 = dx * dx + dy * dy

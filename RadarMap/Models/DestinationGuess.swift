@@ -28,7 +28,10 @@ struct DestinationGuess: Equatable {
     /// Медиана своих поездок туда за 30 дней; nil — истории мало.
     let usual: TimeInterval?
     /// При выезде сейчас (8.8.6): медиана на этот час по профилю пути плюс
-    /// сегодняшние пробки сверх обычного; nil — профиль на этот час не набран.
+    /// сегодняшние пробки сверх обычного. Только когда мы стоим у начала этой
+    /// дороги (у дома — «на работу», у работы — «домой»): из ресторана в 15 км
+    /// профиль «работа → дом» про «сейчас» не говорит ничего. nil — тогда
+    /// честное «обычно» за месяц.
     var estimate: CommuteEstimate.Estimate?
 
     static func == (a: DestinationGuess, b: DestinationGuess) -> Bool {
@@ -42,19 +45,20 @@ struct DestinationGuess: Equatable {
     /// строка не должна прыгать каждые две минуты вместе с now.json.
     var usualText: String? {
         if let estimate {
-            let now = String(format: String(localized: "сейчас ~%@"),
-                             Formatting.unbreakable(Formatting.duration(estimate.seconds)))
+            let head = String(format: String(localized: "сейчас ~%@"),
+                              Formatting.unbreakable(Formatting.duration(estimate.seconds)))
             let jam = Int((estimate.jamSeconds / 60).rounded())
-            guard jam >= AppConfig.commuteJamShowMinutes else { return now }
-            return now + ", " + String(localized: "пробки +\(jam) мин")
+            guard jam >= AppConfig.commuteJamShowMinutes else { return head }
+            return head + ", " + String(localized: "пробки +\(jam) мин")
         }
         return usual.map { String(format: String(localized: "обычно %@"),
                                   Formatting.unbreakable(Formatting.duration($0))) }
     }
 
-    /// Строка под заголовком: адрес и «обычно», что есть.
+    /// Строка под заголовком: время и адрес, что есть. Время — первым: строка
+    /// в одну линию, и на узком экране обрезаться должен адрес, а не «пробки +8».
     var subtitle: String {
-        let parts = [placeTitle, usualText].compactMap { $0 }
+        let parts = [usualText, placeTitle].compactMap { $0 }
         guard !parts.isEmpty else { return String(localized: "Ваш обычный маршрут") }
         let line = parts.joined(separator: " · ")
         return line.prefix(1).uppercased() + line.dropFirst()
@@ -82,12 +86,24 @@ struct DestinationGuess: Equatable {
                                                     now: now, calendar: calendar) else { return nil }
         let direction: Commute.Direction = place.kind == .work ? .toWork : .toHome
         let typical = usual(direction)
-        let now = estimate(direction)
+        // «Сейчас» — только от начала этой дороги: у дома, если едем на работу,
+        // у работы — если домой.
+        let origin = places.first { $0.kind == (place.kind == .work ? .home : .work) }
+        let atOrigin = zip2(coordinate, origin).map {
+            GeoMath.fastDistance($0.latitude, $0.longitude, $1.lat, $1.lon)
+                <= AppConfig.commuteGhostStartRadiusMeters
+        } ?? false
+        let forNow = atOrigin ? estimate(direction) : nil
         if let hand = manual(place.kind) {
             return DestinationGuess(kind: place.kind, coordinate: hand.coordinate,
-                                    placeTitle: hand.title, usual: typical, estimate: now)
+                                    placeTitle: hand.title, usual: typical, estimate: forNow)
         }
         return DestinationGuess(kind: place.kind, coordinate: place.coordinate,
-                                placeTitle: nil, usual: typical, estimate: now)
+                                placeTitle: nil, usual: typical, estimate: forNow)
+    }
+
+    private static func zip2<A, B>(_ a: A?, _ b: B?) -> (A, B)? {
+        guard let a, let b else { return nil }
+        return (a, b)
     }
 }

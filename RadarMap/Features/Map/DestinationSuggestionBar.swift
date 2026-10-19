@@ -68,9 +68,16 @@ struct DestinationSuggestionBar: View {
             }
             .buttonStyle(PressableStyle())
             .transition(.move(edge: .bottom).combined(with: .opacity))
-            // «Сейчас ~44 мин»: при появлении строки и на каждых новых пробках
-            // (раз в 2 мин, пока смотрят карту); сам расчёт троттлится в env.
-            .task(id: env.traffic.revision) { env.refreshDepartureEstimates() }
+            // «Сейчас ~44 мин»: сразу при появлении строки, на новых пробках и
+            // профиле, и раз в 2 мин, пока строка на экране — без пробок
+            // (выключены, нет сети) часы идут всё равно. Пересчёт — только
+            // если ключ сменился (env).
+            .task(id: EstimateTrigger(traffic: env.traffic.revision, book: env.commuteProfiles.revision)) {
+                while !Task.isCancelled {
+                    env.refreshDepartureEstimates()
+                    await Task.pause(seconds: AppConfig.commuteEstimateTickSeconds)
+                }
+            }
             // Долгий тап — выключить. Вернуть можно в Настройках, там же
             // объяснено, откуда приложение это знает.
             .contextMenu {
@@ -81,6 +88,11 @@ struct DestinationSuggestionBar: View {
                 }
             }
         }
+    }
+
+    private struct EstimateTrigger: Equatable {
+        let traffic: Int
+        let book: Int
     }
 
     /// Куда предлагаем ехать прямо сейчас — общая догадка с машиной

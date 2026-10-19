@@ -25,7 +25,10 @@ final class CommuteProfileStore {
     /// Снос без прыжка на актор — тот же обход бага рантайма, что у моделей.
     nonisolated deinit {}
 
-    private(set) var book = CommuteProfile.Book()
+    private(set) var book = CommuteProfile.Book() { didSet { revision &+= 1 } }
+    /// Растёт с каждой сменой профиля (чтение, свёртка, стирание): по нему
+    /// «сейчас ~44 мин» понимает, что считать заново.
+    private(set) var revision = 0
     private(set) var ledger: [CommuteLedger.Entry] = []
     /// Файлы прочитаны: до этого журнал на диск не пишется — запись затёрла
     /// бы его огрызком из одной истории.
@@ -82,6 +85,9 @@ final class CommuteProfileStore {
                                          arrival: record.endedAt, stops: stops, limits: limits)
             guard store.generation == started else { return }
             store.book = book
+            #if DEBUG
+            if store.isDemo { return }
+            #endif
             await Self.save(book, to: Self.profileURL)
             let rows = book[direction].reduce(0) { $0 + $1.rows.count }
             Log.trips.info("профиль дороги: \(direction.rawValue, privacy: .public), вариантов \(book[direction].count, privacy: .public), строк \(rows, privacy: .public)")
@@ -101,9 +107,13 @@ final class CommuteProfileStore {
     }
 
     #if DEBUG
+    /// Демо-профиль в памяти: свёртка и стирание его на диск не пишут.
+    @ObservationIgnored private var isDemo = false
+
     /// Снимок `-demoCommutes`: профиль пути дом↔работа по прямой, пять будних
-    /// утр и вечеров — «сейчас ~44 мин» без настоящих поездок. Только в
-    /// памяти, на диск не пишется.
+    /// утр и вечеров — «сейчас ~44 мин» без настоящих поездок. Встаёт в ту же
+    /// очередь, что и чтение с диска, — после него, и прочитанное его не
+    /// затрёт; на диск не пишется.
     func seedDemo(home: CLLocationCoordinate2D, work: CLLocationCoordinate2D, now: Date = Date()) {
         func variant(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D, hour: Int,
                      minutes: [Double]) -> CommuteProfile.Variant {
@@ -130,8 +140,11 @@ final class CommuteProfileStore {
         var book = CommuteProfile.Book()
         book.toWork = [variant(home, work, hour: 8, minutes: [44, 41, 47, 43, 45])]
         book.toHome = [variant(work, home, hour: 18, minutes: [39, 37, 42, 38, 40])]
-        self.book = book
-        isLoaded = true
+        enqueue { store in
+            store.isDemo = true
+            store.book = book
+            store.onLoaded?()
+        }
     }
     #endif
 
@@ -166,6 +179,9 @@ final class CommuteProfileStore {
         let started = generation
         enqueue { store in
             guard store.generation == started else { return }
+            #if DEBUG
+            if store.isDemo { return }
+            #endif
             await Self.save(book, to: Self.profileURL)
         }
     }

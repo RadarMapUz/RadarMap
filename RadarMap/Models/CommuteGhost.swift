@@ -79,6 +79,23 @@ nonisolated enum CommuteGhost {
     static func selectRows(_ rows: [CommuteProfile.Row], weekend: Bool, departureMinute: Int,
                            calendar: Calendar = .current,
                            minRows: Int = AppConfig.commuteGhostMinRows) -> [CommuteProfile.Row]? {
+        selectRowsTiered(rows, weekend: weekend, departureMinute: departureMinute,
+                         calendar: calendar, minRows: minRows)?.rows
+    }
+
+    /// Насколько выборка про этот час: окно ±60 мин, ±120 или весь день.
+    enum RowTier: Int, Comparable, Sendable {
+        case hour, twoHours, allDay
+        static func < (a: RowTier, b: RowTier) -> Bool { a.rawValue < b.rawValue }
+    }
+
+    /// То же, что `selectRows`, и из какого окна взято: «сейчас ~44 мин» до
+    /// выезда (CommuteEstimate) честно только для ±60/±120 — медиана всего
+    /// дня в три часа ночи не «сейчас».
+    static func selectRowsTiered(_ rows: [CommuteProfile.Row], weekend: Bool, departureMinute: Int,
+                                 calendar: Calendar = .current,
+                                 minRows: Int = AppConfig.commuteGhostMinRows)
+        -> (rows: [CommuteProfile.Row], tier: RowTier)? {
         let sameClass = rows.filter { $0.weekend == weekend }
         func near(_ window: Int) -> [CommuteProfile.Row] {
             sameClass.filter {
@@ -87,8 +104,9 @@ nonisolated enum CommuteGhost {
                 return min(d, 1440 - d) <= window
             }
         }
-        for candidate in [near(60), near(120), sameClass] where candidate.count >= minRows {
-            return candidate
+        for (candidate, tier) in [(near(60), RowTier.hour), (near(120), .twoHours), (sameClass, .allDay)]
+            where candidate.count >= minRows {
+            return (candidate, tier)
         }
         return nil
     }

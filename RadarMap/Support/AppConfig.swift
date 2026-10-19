@@ -707,8 +707,13 @@ nonisolated enum AppConfig {
     nonisolated static let commuteJamMinShare = 0.3
     /// «Пробки +N» в подсказке — только от стольких минут: меньше — шум.
     nonisolated static let commuteJamShowMinutes = 3
-    /// Оценка до выезда пересчитывается не чаще (и по новым пробкам), с.
-    nonisolated static let commuteEstimateRefreshSeconds: TimeInterval = 120
+    /// Оценка до выезда пересчитывается со сменой этой «четверти часа» (и
+    /// сразу — на новых пробках или профиле), с.
+    nonisolated static let commuteEstimateSlotSeconds: TimeInterval = 15 * 60
+    /// Старше — не «сейчас»: строка возвращается к «обычно», с.
+    nonisolated static let commuteEstimateMaxAgeSeconds: TimeInterval = 20 * 60
+    /// Строка «Домой/На работу» на экране — проверка, не пора ли пересчитать, с.
+    nonisolated static let commuteEstimateTickSeconds: TimeInterval = 120
     /// Поездка — «дорога на работу», если началась не дальше 1 км от дома
     /// (и наоборот): автостарт CoreMotion срабатывает уже на ходу.
     nonisolated static let commuteGhostStartRadiusMeters: Double = 1000

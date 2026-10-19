@@ -592,7 +592,21 @@ final class AppEnvironment {
     /// плюс пробки now.json сверх обычного — всё на телефоне. Считается по
     /// событиям (refreshDepartureEstimates), не в body.
     private(set) var departureEstimates: [Commute.Direction: CommuteEstimate.Estimate] = [:]
-    @ObservationIgnored private var departureEstimatesKey: (at: Date, traffic: Int)?
+    /// Когда оценка посчитана: старше `commuteEstimateMaxAgeSeconds` — не
+    /// «сейчас» (машина спрашивает догадку и без строки на телефоне).
+    @ObservationIgnored private var departureEstimatesAt: Date?
+    /// От чего посчитано: те же пробки, тот же профиль и та же четверть часа —
+    /// пересчитывать нечего.
+    @ObservationIgnored private var departureEstimatesKey: DepartureEstimateKey?
+    /// Растёт при каждом запросе и сбросе: опоздавший ответ (обучение уже
+    /// выключили, история стёрта, пришёл запрос новее) не пишется.
+    @ObservationIgnored private var departureEstimatesGeneration = 0
+
+    private struct DepartureEstimateKey: Equatable {
+        let traffic: Int
+        let book: Int
+        let slot: Int
+    }
 
     /// Разовая чистка проездов, засчитанных с моста над камерой. Нужны и оси
     /// камер, и прочитанная история; порядок их прихода не определён.
@@ -661,28 +675,46 @@ final class AppEnvironment {
             learned: learnedPlaces,
             manual: { [settings] kind in settings.place(for: kind == .home ? .home : .work) },
             usual: { [commute] direction in commute.first { $0.direction == direction }?.usual },
-            estimate: { [departureEstimates] direction in departureEstimates[direction] },
+            estimate: { [departureEstimates, departureEstimatesAt] direction in
+                guard let at = departureEstimatesAt,
+                      now.timeIntervalSince(at) <= AppConfig.commuteEstimateMaxAgeSeconds else { return nil }
+                return departureEstimates[direction]
+            },
             from: location.currentCoordinate, now: now)
     }
 
-    /// Пересчитать «сейчас ~44 мин»: не чаще раза в `commuteEstimateRefreshSeconds`
-    /// и сразу — на новых пробках. Профиль и now.json уже в памяти; сама
-    /// сверка линии с рёбрами — вне main.
-    func refreshDepartureEstimates() {
+    /// Пересчитать «сейчас ~44 мин», если что-то поменялось: пробки (или их
+    /// выключили), профиль пути (свёртка поездки, стирание) или четверть часа
+    /// на часах. Иначе — ничего: звать можно часто. Сверка линии с рёбрами —
+    /// вне main.
+    func refreshDepartureEstimates(now: Date = Date()) {
         guard settings.commuteLearning, commuteProfiles.isLoaded else {
-            if !departureEstimates.isEmpty { departureEstimates = [:] }
+            resetDepartureEstimates()
             return
         }
-        let now = Date()
-        if let key = departureEstimatesKey, key.traffic == traffic.revision,
-           now.timeIntervalSince(key.at) < AppConfig.commuteEstimateRefreshSeconds { return }
-        departureEstimatesKey = (now, traffic.revision)
+        let shown = traffic.isShown
+        let key = DepartureEstimateKey(traffic: shown ? traffic.revision : -1,
+                                       book: commuteProfiles.revision,
+                                       slot: Int(now.timeIntervalSince1970 / AppConfig.commuteEstimateSlotSeconds))
+        guard key != departureEstimatesKey else { return }
+        departureEstimatesKey = key
+        departureEstimatesGeneration &+= 1
+        let generation = departureEstimatesGeneration
         let book = commuteProfiles.book
-        let snapshot = traffic.snapshot
+        let snapshot = shown ? traffic.snapshot : nil
         Task {
             let next = await Self.departureEstimates(book: book, snapshot: snapshot, now: now)
+            guard generation == departureEstimatesGeneration, settings.commuteLearning else { return }
+            departureEstimatesAt = now
             if next != departureEstimates { departureEstimates = next }
         }
+    }
+
+    private func resetDepartureEstimates() {
+        departureEstimatesGeneration &+= 1
+        departureEstimatesKey = nil
+        departureEstimatesAt = nil
+        if !departureEstimates.isEmpty { departureEstimates = [:] }
     }
 
     @concurrent
@@ -751,8 +783,7 @@ final class AppEnvironment {
             commuteGhostPending = false
             commuteLive.stop()
             commuteProfiles.clear()
-            departureEstimates = [:]
-            departureEstimatesKey = nil
+            resetDepartureEstimates()
         }
         refreshCommute()
     }
@@ -787,6 +818,10 @@ final class AppEnvironment {
             ? ArrivalTarget.suggestion(arrivals: trips.filter { $0.direction == .toWork }.map(\.arrival),
                                        now: Date())
             : nil
+        // Профиль загрузился, поездка свернулась, историю стёрли, места
+        // сменились — «сейчас ~44 мин» пересчитывается тут же (ключ решит,
+        // есть ли что).
+        refreshDepartureEstimates()
     }
 
     #if DEBUG

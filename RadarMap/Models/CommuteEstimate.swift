@@ -30,33 +30,47 @@ nonisolated enum CommuteEstimate {
         let jamSeconds: Double
     }
 
-    /// Оценка при выезде в `now`: вариант с самой богатой выборкой на этот час
-    /// (при равенстве — недавний), его медиана, плюс пробки сверх q75.
-    /// nil — профиль на этот час не набран (меньше трёх поездок).
+    /// Оценка при выезде в `now`: вариант, чья выборка ближе к этому часу
+    /// (окно ±60 лучше ±120), при равенстве — богаче, затем недавний; его
+    /// медиана плюс пробки сверх q75. nil — у этого часа нет трёх поездок в
+    /// окне ±120 мин: медиана всего дня — не «сейчас», и строка остаётся при
+    /// «обычно» за месяц. Округлено до минут: пересчёт по новым пробкам не
+    /// трогает строку, пока цифра на ней та же.
     static func beforeDeparture(variants: [CommuteProfile.Variant], now: Date,
                                 snapshot: TrafficSnapshot?, calendar: Calendar = .current) -> Estimate? {
         let weekend = calendar.isDateInWeekend(now)
         let minute = CommuteProfile.minuteOfDay(now, calendar: calendar)
-        var best: (variant: CommuteProfile.Variant, base: CommuteGhost.Baseline)?
+        var best: (variant: CommuteProfile.Variant, base: CommuteGhost.Baseline, tier: CommuteGhost.RowTier)?
         for variant in variants {
-            guard let rows = CommuteGhost.selectRows(variant.rows, weekend: weekend,
-                                                     departureMinute: minute, calendar: calendar),
-                  let base = CommuteGhost.baseline(ends: variant.ends, limitKmh: variant.limitKmh, rows: rows)
+            guard let selected = CommuteGhost.selectRowsTiered(variant.rows, weekend: weekend,
+                                                               departureMinute: minute, calendar: calendar),
+                  selected.tier < .allDay,
+                  let base = CommuteGhost.baseline(ends: variant.ends, limitKmh: variant.limitKmh,
+                                                   rows: selected.rows)
             else { continue }
             if let current = best {
-                let richer = base.rows != current.base.rows ? base.rows > current.base.rows
-                                                            : variant.lastUsed > current.variant.lastUsed
-                guard richer else { continue }
+                let better: Bool
+                if selected.tier != current.tier {
+                    better = selected.tier < current.tier
+                } else if base.rows != current.base.rows {
+                    better = base.rows > current.base.rows
+                } else {
+                    better = variant.lastUsed > current.variant.lastUsed
+                }
+                guard better else { continue }
             }
-            best = (variant, base)
+            best = (variant, base, selected.tier)
         }
         guard let best else { return nil }
-        let variant = best.variant, base = best.base
         var jam = 0.0
         if let snapshot, snapshot.isFresh(now: now) {
-            jam = jamExtra(base, crowd: crowdSeconds(line: variant.coordinates, base: base, snapshot: snapshot))
+            jam = jamExtra(best.base, crowd: crowdSeconds(line: best.variant.coordinates, base: best.base,
+                                                          snapshot: snapshot))
         }
-        return Estimate(seconds: base.total + jam, jamSeconds: jam)
+        // Обе части — в целых минутах, и сумма сходится с тем, что видно:
+        // «сейчас ~52 мин, пробки +8 мин» = обычные 44 + 8.
+        let jamMinutes = (jam / 60).rounded() * 60
+        return Estimate(seconds: (best.base.total / 60).rounded() * 60 + jamMinutes, jamSeconds: jamMinutes)
     }
 
     /// Время по пробкам на каждом участке линии; nil — пробки на участке не
@@ -82,7 +96,8 @@ nonisolated enum CommuteEstimate {
                 guard along + t * length <= base.length else { break }
                 let point = CLLocationCoordinate2D(latitude: p.latitude + (q.latitude - p.latitude) * t,
                                                    longitude: p.longitude + (q.longitude - p.longitude) * t)
-                guard let edge = snapshot.matchingEdge(at: point, course: course), edge.level >= 2 else { continue }
+                guard let edge = snapshot.matchingEdge(at: point, course: course), edge.level >= 2,
+                      Self.liesAlong(point, edge) else { continue }
                 let j = base.locate(along + t * length).segment
                 jamTime[j] += step / (max(3, edge.kmh) / 3.6)
                 matched[j] += step
@@ -95,6 +110,19 @@ nonisolated enum CommuteEstimate {
             let rest = max(0, len - matched[j]) / len
             return jamTime[j] + rest * base.median[j]
         }
+    }
+
+    /// Шаг засчитывается пробке, только если его точка проецируется ВНУТРЬ
+    /// ребра: допуск в 18 м по месту продлевал бы каждое ребро на 18 м за
+    /// концы, и 50 м пробки на углу считались бы как 75 (ревью 19.10).
+    static func liesAlong(_ p: CLLocationCoordinate2D, _ edge: TrafficEdge) -> Bool {
+        let k = cos(p.latitude * .pi / 180) * 111_320
+        let ax = (edge.a.longitude - p.longitude) * k, ay = (edge.a.latitude - p.latitude) * 111_320
+        let dx = (edge.b.longitude - edge.a.longitude) * k, dy = (edge.b.latitude - edge.a.latitude) * 111_320
+        let len2 = dx * dx + dy * dy
+        guard len2 > 0 else { return false }
+        let t = -(ax * dx + ay * dy) / len2
+        return t >= 0 && t <= 1
     }
 
     /// Пробки сверх обычного с участка `segment` до конца: участок, где по

@@ -29,8 +29,9 @@ final class CommuteEstimateTests: XCTestCase {
     }
 
     /// Прямая 4 км на восток, 20 участков по 200 м. Утро: 18–25 с на участок
-    /// (медиана 20, q75 22); вечер — вдвое дольше.
-    private func variant() -> CommuteProfile.Variant {
+    /// (медиана 20, q75 22); вечер — вдвое дольше. `only` — свои строки вместо этих.
+    private func variant(only: [(hour: Int, minute: Int, seconds: Int)]? = nil,
+                         lastUsed: Date? = nil) -> CommuteProfile.Variant {
         var line: [Int32] = []
         for i in 0..<81 {
             let p = point(50 * Double(i))
@@ -38,16 +39,24 @@ final class CommuteEstimateTests: XCTestCase {
             line.append(Int32((p.longitude * 1e5).rounded()))
         }
         var rows: [CommuteProfile.Row] = []
-        for (i, s) in [18, 20, 20, 22, 25].enumerated() {
-            for (hour, scale) in [(8, 1), (18, 2)] {
-                rows.append(CommuteProfile.Row(tripID: Double(i * 10 + hour),
-                                               departure: at(hour, day: 4 + i),
+        if let only {
+            for (i, r) in only.enumerated() {
+                rows.append(CommuteProfile.Row(tripID: Double(i), departure: at(r.hour, r.minute, day: 4 + i % 5),
                                                weekend: false, arrivalMinute: 0,
-                                               seconds: [UInt16](repeating: UInt16(s * scale), count: 20)))
+                                               seconds: [UInt16](repeating: UInt16(r.seconds), count: 20)))
+            }
+        } else {
+            for (i, s) in [18, 20, 20, 22, 25].enumerated() {
+                for (hour, scale) in [(8, 1), (18, 2)] {
+                    rows.append(CommuteProfile.Row(tripID: Double(i * 10 + hour),
+                                                   departure: at(hour, day: 4 + i),
+                                                   weekend: false, arrivalMinute: 0,
+                                                   seconds: [UInt16](repeating: UInt16(s * scale), count: 20)))
+                }
             }
         }
         return CommuteProfile.Variant(id: UUID(), line: line, ends: (1...20).map { Float($0 * 200) },
-                                      limitKmh: [], rows: rows, lastUsed: at(8))
+                                      limitKmh: [], rows: rows, lastUsed: lastUsed ?? at(8))
     }
 
     /// Рёбра по 100 м на отрезке [from, to] линии; `westbound` — встречная полоса.
@@ -68,26 +77,61 @@ final class CommuteEstimateTests: XCTestCase {
                                                                     snapshot: nil, calendar: utc))
         let evening = try XCTUnwrap(CommuteEstimate.beforeDeparture(variants: [variant()], now: at(18, 5),
                                                                     snapshot: nil, calendar: utc))
-        XCTAssertEqual(morning.seconds, 400, accuracy: 1, "утром — утренняя медиана")
-        XCTAssertEqual(evening.seconds, 800, accuracy: 1, "вечером — вечерняя, а не общая за месяц")
+        // В целых минутах: 400 с → 7 мин, 800 с → 13 мин.
+        XCTAssertEqual(morning.seconds, 7 * 60, "утром — утренняя медиана")
+        XCTAssertEqual(evening.seconds, 13 * 60, "вечером — вечерняя, а не общая за месяц")
         XCTAssertEqual(morning.jamSeconds, 0)
     }
 
-    /// 1 км пробки 10 км/ч: 72 с на участок вместо 20 — +52 с на каждом из пяти.
+    /// 1 км пробки 10 км/ч: 72 с на участок вместо 20 — +52 с на каждом из
+    /// пяти, 260 с — в целых минутах 4; сумма сходится с тем, что видно.
     func testJamWorseThanUsualAdds() throws {
         let e = try XCTUnwrap(CommuteEstimate.beforeDeparture(
             variants: [variant()], now: at(8, 5), snapshot: snapshot(from: 1000, to: 2000, kmh: 10), calendar: utc))
-        XCTAssertEqual(e.jamSeconds, 5 * 52, accuracy: 15)
-        XCTAssertEqual(e.seconds, 400 + e.jamSeconds, accuracy: 0.5)
+        XCTAssertEqual(e.jamSeconds, 4 * 60)
+        XCTAssertEqual(e.seconds, 7 * 60 + 4 * 60, "обычные 7 + пробки 4 — как на строке")
+        let base = try XCTUnwrap(CommuteGhost.baseline(ends: variant().ends, limitKmh: [],
+                                                       rows: try XCTUnwrap(CommuteGhost.selectRows(
+                                                           variant().rows, weekend: false, departureMinute: 485,
+                                                           calendar: utc))))
+        let crowd = CommuteEstimate.crowdSeconds(line: variant().coordinates, base: base,
+                                                 snapshot: snapshot(from: 1000, to: 2000, kmh: 10))
+        XCTAssertEqual(CommuteEstimate.jamExtra(base, crowd: crowd), 5 * 52, accuracy: 3)
+        XCTAssertNil(crowd[4], "соседний участок не задет: шаг за концом ребра — не пробка")
+        XCTAssertNil(crowd[10])
     }
 
-    /// 40 км/ч — 18 с на участок: не хуже обычной утренней пробки, которая уже
-    /// в медиане водителя. Ни прибавки, ни «сегодня быстрее».
+    /// 34 км/ч — 21 с на участок: медленнее медианы (20), но не хуже q75 (22) —
+    /// это обычная утренняя пробка, она уже в медиане. Ни прибавки, ни «быстрее».
     func testUsualTrafficIsNotCountedTwice() throws {
         let e = try XCTUnwrap(CommuteEstimate.beforeDeparture(
-            variants: [variant()], now: at(8, 5), snapshot: snapshot(from: 1000, to: 2000, kmh: 40), calendar: utc))
+            variants: [variant()], now: at(8, 5), snapshot: snapshot(from: 1000, to: 2000, kmh: 34), calendar: utc))
         XCTAssertEqual(e.jamSeconds, 0)
-        XCTAssertEqual(e.seconds, 400, accuracy: 1)
+        XCTAssertEqual(e.seconds, 7 * 60)
+    }
+
+    /// Пробка на половине участка: пробочная половина по скорости рёбер,
+    /// остальное — по медиане водителя.
+    func testHalfASegmentBlendsJamAndUsual() throws {
+        let v = variant()
+        let rows = try XCTUnwrap(CommuteGhost.selectRows(v.rows, weekend: false, departureMinute: 485, calendar: utc))
+        let base = try XCTUnwrap(CommuteGhost.baseline(ends: v.ends, limitKmh: v.limitKmh, rows: rows))
+        let crowd = CommuteEstimate.crowdSeconds(line: v.coordinates, base: base,
+                                                 snapshot: snapshot(from: 1000, to: 1100, kmh: 10))
+        XCTAssertEqual(try XCTUnwrap(crowd[5]), 100 / (10 / 3.6) + 10, accuracy: 2)
+    }
+
+    /// Ближе к этому часу — лучше богаче: 4 поездки в 8:00 честнее, чем 8 в
+    /// полдень или 5 в 9:40, для выезда в 8:05.
+    func testTheVariantOfThisHourWins() throws {
+        let morning = variant(only: (0..<4).map { _ in (8, 0, 25) })
+        let midday = variant(only: (0..<8).map { _ in (11, 30, 20) }, lastUsed: at(9))
+        let later = variant(only: (0..<5).map { _ in (9, 40, 30) }, lastUsed: at(9))
+        for order in [[morning, midday, later], [later, midday, morning]] {
+            let e = try XCTUnwrap(CommuteEstimate.beforeDeparture(variants: order, now: at(8, 5),
+                                                                  snapshot: nil, calendar: utc))
+            XCTAssertEqual(e.seconds, 8 * 60, "500 с утреннего варианта, в минутах")
+        }
     }
 
     func testOncomingJamDoesNotSlowUs() throws {
@@ -104,12 +148,13 @@ final class CommuteEstimateTests: XCTestCase {
         XCTAssertEqual(e.jamSeconds, 0, "файл 25-минутной давности — данных нет")
     }
 
-    /// Одно ребро у края участка (меньше трети длины) — не пробка участка.
+    /// Одно ребро у края участка (четверть длины) — не пробка участка, хотя
+    /// допуск по месту и продлевает ребро за концы.
     func testACornerIsNotASegmentJam() throws {
         let v = variant()
         let base = try XCTUnwrap(CommuteGhost.baseline(ends: v.ends, limitKmh: v.limitKmh, rows: v.rows))
         let corner = TrafficSnapshot(generated: at(8), edges: [
-            TrafficEdge(a: point(1160), b: point(1200), level: 3, kmh: 5, modelKmh: 50)])
+            TrafficEdge(a: point(1150), b: point(1200), level: 3, kmh: 5, modelKmh: 50)])
         let crowd = CommuteEstimate.crowdSeconds(line: v.coordinates, base: base, snapshot: corner)
         XCTAssertNil(crowd[5])
         XCTAssertEqual(crowd.compactMap(\.self).count, 0)
@@ -126,13 +171,17 @@ final class CommuteEstimateTests: XCTestCase {
         XCTAssertEqual(CommuteEstimate.jamExtra(base, crowd: crowd, from: 10), 0)
     }
 
-    /// В 13:00 рядом нет ни утренних, ни вечерних выездов — берутся все
-    /// будние (медиана десяти); в выходной будничная история молчит.
-    func testMiddayAndWeekend() throws {
-        let midday = try XCTUnwrap(CommuteEstimate.beforeDeparture(variants: [variant()], now: at(13),
-                                                                   snapshot: nil, calendar: utc))
-        XCTAssertEqual(midday.seconds, 20 * 30.5, accuracy: 1)
+    /// В 13:00 в окне ±2 ч нет ни утренних, ни вечерних выездов: медиана
+    /// всего дня — не «сейчас», оценки нет (строка остаётся при «обычно»).
+    /// В выходной будничная история тоже молчит.
+    func testNoEstimateOutsideTheHoursDrivenOrOnWeekend() {
+        XCTAssertNil(CommuteEstimate.beforeDeparture(variants: [variant()], now: at(13), snapshot: nil,
+                                                     calendar: utc))
+        XCTAssertNil(CommuteEstimate.beforeDeparture(variants: [variant()], now: at(3), snapshot: nil,
+                                                     calendar: utc))
         XCTAssertNil(CommuteEstimate.beforeDeparture(variants: [variant()], now: at(8, day: 16),
                                                      snapshot: nil, calendar: utc))
+        XCTAssertNotNil(CommuteEstimate.beforeDeparture(variants: [variant()], now: at(9, 50), snapshot: nil,
+                                                        calendar: utc), "±2 ч от 8:00 — ещё «этот час»")
     }
 }

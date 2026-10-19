@@ -168,4 +168,30 @@ final class TripBackupTests: XCTestCase {
                                            customCameras: [], hiddenCameraIDs: [2, 3])
         XCTAssertEqual(result.hiddenCameraIDs, [1, 2, 3])
     }
+
+    // MARK: - S15: итоги дня сходятся со списком
+
+    /// На телефоне в этот день поездка A, в копии — B и C того же дня.
+    /// Слияние даёт три поездки в списке — и три в итогах дня, а не две
+    /// «более полной» строки копии.
+    func testRestoredDayMatchesTheTripList() {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let dayStart = utc.startOfDay(for: Date(timeIntervalSince1970: 1_700_000_000))
+        func trip(_ id: Double, hour: Double) -> TripRecord {
+            TripRecord(id: id, startedAt: dayStart.addingTimeInterval(hour * 3600),
+                       endedAt: dayStart.addingTimeInterval(hour * 3600 + 1200),
+                       distanceMeters: 5000, maxSpeedKmh: 60, passed: [])
+        }
+        let own = [trip(1, hour: 9)]
+        let archived = [trip(2, hour: 13), trip(3, hour: 18)]
+        let result = TripBackupMerge.merge(backup(history: archived,
+                                                  days: TripDayBook.rebuilt(from: archived, calendar: utc)),
+                                           history: own, days: TripDayBook.rebuilt(from: own, calendar: utc),
+                                           lifetime: LifetimeStats(), customCameras: [], hiddenCameraIDs: [],
+                                           calendar: utc)
+        XCTAssertEqual(result.history.count, 3)
+        XCTAssertEqual(result.days.first(where: { $0.day == dayStart })?.trips, 3)
+        XCTAssertEqual(result.days.first(where: { $0.day == dayStart })?.distanceMeters ?? 0, 15_000, accuracy: 0.1)
+    }
 }

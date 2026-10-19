@@ -93,7 +93,8 @@ nonisolated enum TripBackupMerge {
                       days: [TripDay],
                       lifetime: LifetimeStats,
                       customCameras: [Camera],
-                      hiddenCameraIDs: Set<Int>) -> Result {
+                      hiddenCameraIDs: Set<Int>,
+                      calendar: Calendar = .current) -> Result {
         // --- поездки: своё выигрывает, чужое дополняет ---
         var byID: [Double: TripRecord] = [:]
         for record in backup.history { byID[record.id] = record }
@@ -109,6 +110,18 @@ nonisolated enum TripBackupMerge {
         for day in days {
             if let existing = byDay[day.day], existing.trips > day.trips { continue }
             byDay[day.day] = day
+        }
+        // Строка дня, у которой все поездки есть в объединённой истории, —
+        // свёртка из них (S15, 20.10): «полнее» с одной стороны теряла
+        // поездки другой — в списке три поездки дня, а в итогах две. Если
+        // часть поездок дня уже вырезана из истории, свёртка короче строк —
+        // тогда остаётся строка (у старых дней правды больше нигде нет).
+        let recordsByDay = Dictionary(grouping: mergedHistory) { calendar.startOfDay(for: $0.startedAt) }
+        for key in Array(byDay.keys) {
+            guard let records = recordsByDay[key],
+                  let rebuilt = TripDayBook.rebuilt(from: records, calendar: calendar).first,
+                  rebuilt.trips >= (byDay[key]?.trips ?? 0) else { continue }
+            byDay[key] = rebuilt
         }
         let mergedDays = byDay.values.sorted { $0.day > $1.day }
 

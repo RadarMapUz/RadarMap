@@ -35,7 +35,9 @@ nonisolated enum OneTimeHints {
             case .toggles:
                 return String(localized: "Тап по скорости — быстрые переключатели")
             case .radar:
-                return String(localized: "Жёлтая кнопка — отметить радар для других")
+                // Про жест: без подсказки удержание (тренога, ДТП) не
+                // находит никто — веер виден, только когда уже открыт (5.6).
+                return String(localized: "«Радар!» — отметка для других. Удержите — тренога или ДТП")
             case .smartSilence:
                 return String(localized: "Знакомые камеры больше не называю вслух — вы их знаете")
             }

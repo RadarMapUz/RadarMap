@@ -1170,11 +1170,10 @@ struct MapScreen: View {
             .strokeBorder(Theme.edgePanel, lineWidth: 1))
     }
 
-    /// Пункты меню поездки: то, что в покое лежит в нижнем баре.
-    ///
-    /// Один список на оба входа. Разойдутся они мгновенно, стоит завести
-    /// второй, — это уже было с двумя жёлтыми кнопками «Радар», у которых
-    /// одинаковый вид давал разное действие.
+    /// Пункты меню поездки — только то, что нужно В ДОРОГЕ (5.3): куда
+    /// ехать, что впереди, кому сказать время прибытия. «Итоги», «Настройки»
+    /// и «Добавить камеру» за рулём — экраны на минуту чтения или прицел на
+    /// карте; они ждут остановки в нижнем баре.
     @ViewBuilder private var tripActionItems: some View {
         Button { map.showSearch = true } label: {
             Label("Поиск", systemImage: "magnifyingglass")
@@ -1182,8 +1181,11 @@ struct MapScreen: View {
         Button { showMyPlaces = true } label: {
             Label("Мои места", systemImage: Icon.myPlaces)
         }
-        Button { map.showStats = true } label: {
-            Label("Итоги", systemImage: "chart.bar.fill")
+        // Число камер впереди иначе не видно нигде, кроме капсулы на подходе.
+        if env.route.isActive {
+            Button { showRouteCameras = true } label: {
+                Label("Камеры на маршруте", systemImage: Icon.cameras)
+            }
         }
         // Время прибытия знакомому — пока идёт маршрут (EtaShareService).
         if env.etaShare.isSharing {
@@ -1197,7 +1199,9 @@ struct MapScreen: View {
                 Label("Поделиться прибытием", systemImage: "square.and.arrow.up")
             }
         }
-        moreActionItems
+        Button { map.showNearbySheet = true } label: {
+            Label("Рядом", systemImage: "list.bullet")
+        }
     }
 
     /// Редкое: в баре место занимало бы всегда, а нужно раз в месяц.

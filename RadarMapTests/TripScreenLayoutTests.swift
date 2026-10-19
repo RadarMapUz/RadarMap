@@ -145,6 +145,18 @@ final class TripScreenLayoutTests: XCTestCase {
                                                        isSignalStale: true))
     }
 
+    /// Одно расстояние до одной камеры: на подходе говорит чип сверху,
+    /// капсула той же камеры внизу молчит; другая камера — капсула остаётся.
+    func testCapsuleYieldsToTheChipForTheSameCamera() {
+        XCTAssertFalse(TripScreenLayout.showsCameraCapsule(capsuleCameraID: 7, chipCameraID: 7, chipShown: true))
+        XCTAssertTrue(TripScreenLayout.showsCameraCapsule(capsuleCameraID: 7, chipCameraID: 7, chipShown: false),
+                      "далеко — чипа нет, камера живёт капсулой")
+        XCTAssertTrue(TripScreenLayout.showsCameraCapsule(capsuleCameraID: 7, chipCameraID: 9, chipShown: true),
+                      "ближайшая по прямой — не та, что на маршруте")
+        XCTAssertTrue(TripScreenLayout.showsCameraCapsule(capsuleCameraID: 7, chipCameraID: nil, chipShown: true),
+                      "чип о потере сигнала — капсула нужна")
+    }
+
     // MARK: - «Поездка сохранена»
 
     /// Характеризация бага: «после „Завершить“ поездка куда-то делась».

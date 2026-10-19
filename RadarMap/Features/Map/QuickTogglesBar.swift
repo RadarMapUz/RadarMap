@@ -44,10 +44,14 @@ struct QuickTogglesBar: View {
                     }
                 }
             }
-            Text(settings.voiceMode.detail)
-                .font(.rounded(10))
-                .foregroundStyle(Theme.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
+            // Пояснение — абзац для чтения: на ходу его не читают, а панель
+            // от него на треть выше (5.5). Стоя — показываем.
+            if env.location.speedKmh < AppConfig.speakSpeedThresholdKmh {
+                Text(settings.voiceMode.detail)
+                    .font(.rounded(10))
+                    .foregroundStyle(Theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             // Сели пассажиром, а поездка уже стартовала — выход в один тап.
             if env.location.isTripActive {

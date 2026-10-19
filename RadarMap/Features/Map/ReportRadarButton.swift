@@ -195,13 +195,30 @@ struct ReportRadarButton: View {
             if isSending {
                 ProgressView().controlSize(.small).tint(foreground)
             } else {
-                Image(systemName: symbol)
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(foreground)
+                VStack(spacing: 2) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 17, weight: .bold))
+                    // Первые поездки — с подписью (5.6): жёлтый квадрат с
+                    // волнами без слова не читается кнопкой «отметить радар».
+                    if showsCaption {
+                        Text("Радар!")
+                            .font(.system(size: 10, weight: .heavy, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+                .foregroundStyle(foreground)
             }
         }
         // Крупнее «стопа» рядом: по ней бьют вслепую и чаще всего.
         .frame(width: Self.buttonSide, height: Self.buttonSide)
+    }
+
+    /// Подпись под значком, пока поездок меньше `radarCaptionTrips` и кнопка
+    /// в покое (отмена и вспышка результата говорят значком).
+    private var showsCaption: Bool {
+        flash == nil && fan == nil
+            && env.trip.lifetime.trips < AppConfig.radarCaptionTrips
     }
 
     private var symbol: String {

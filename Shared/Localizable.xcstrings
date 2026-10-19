@@ -1252,6 +1252,22 @@
         }
       }
     },
+    "«Радар!» — отметка для других. Удержите — тренога или ДТП": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Радар!» — отметка для других. Удержите — тренога или ДТП"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Radar!» — boshqalar uchun belgi. Bosib turing — uch oyoq yoki YTH"
+          }
+        }
+      }
+    },
     "«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов.": {
       "localizations": {
         "ru": {
@@ -3861,22 +3877,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sun'iy yo'ldoshlarni kutmoqdamiz"
-          }
-        }
-      }
-    },
-    "Жёлтая кнопка — отметить радар для других": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Жёлтая кнопка — отметить радар для других"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sariq tugma — boshqalar uchun radarni belgilash"
           }
         }
       }

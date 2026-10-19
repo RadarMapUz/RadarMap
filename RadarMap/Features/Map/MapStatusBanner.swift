@@ -60,12 +60,24 @@ struct MapStatusBanner: View {
         if arguments.contains("-forceOffline") { return .offline(offlineNotice(online: false) ?? .general) }
         if arguments.contains("-forceNoLimits") { return .noSpeedLimits }
         #endif
-        if let message = env.config.banner { return .server(message) }
-        if let notice = offlineNotice(online: env.network.isOnline) { return .offline(notice) }
-        if env.thermal.mode.explains { return .overheated }
-        if !env.speedLimits.isReady { return .noSpeedLimits }
-        return nil
+        // Решает чистая политика (MapStatusPick): в поездке — только сеть.
+        let offline = offlineNotice(online: env.network.isOnline)
+        switch MapStatusPick.pick(hasServerMessage: env.config.banner != nil,
+                                  isOffline: offline != nil,
+                                  isOverheated: env.thermal.mode.explains,
+                                  limitsReady: env.speedLimits.isReady,
+                                  inTrip: inTrip) {
+        case .server?:        return env.config.banner.map { .server($0) }
+        case .offline?:       return offline.map { .offline($0) }
+        case .overheated?:    return .overheated
+        case .noSpeedLimits?: return .noSpeedLimits
+        case nil:             return nil
+        }
     }
+
+    private var inTrip: Bool { env.location.isTripActive }
+    /// В поездке — одна строка: пояснение и кнопки ждут остановки.
+    private var compact: Bool { MapStatusPick.isCompact(inTrip: inTrip) }
 
     /// Какую плашку «нет связи» показать. Координата читается только без
     /// связи: со связью плашка не должна перерисовываться на каждом GPS-тике.
@@ -144,8 +156,16 @@ struct MapStatusBanner: View {
         }
     }
 
-    private func shell(symbol: String, tint: Color, title: String, body: String?,
-                       id: String, action: (String, () -> Void)? = nil) -> some View {
+    private func shell(symbol: String, tint: Color, title: String, body rawBody: String?,
+                       id: String, action rawAction: (String, () -> Void)? = nil) -> some View {
+        let body = compact ? nil : rawBody
+        let action = compact ? nil : rawAction
+        return shellContent(symbol: symbol, tint: tint, title: title, body: body,
+                            id: id, action: action)
+    }
+
+    private func shellContent(symbol: String, tint: Color, title: String, body: String?,
+                              id: String, action: (String, () -> Void)?) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: symbol)
                 .foregroundStyle(tint)

@@ -127,7 +127,14 @@ struct TripLiveBar: View {
     @ViewBuilder
     private var cameraCapsule: some View {
         let route = env.route
-        if route.isActive, env.settings.showNextCamera, let next = route.nextCamera {
+        let location = env.location
+        let chipShown = TripScreenLayout.showsCameraChip(
+            distance: location.nearestCamera == nil ? nil : location.distanceToNearest,
+            isAlerting: location.alertLevel >= 1, isSignalStale: location.isSignalStale)
+        if route.isActive, env.settings.showNextCamera, let next = route.nextCamera,
+           TripScreenLayout.showsCameraCapsule(capsuleCameraID: next.camera.id,
+                                               chipCameraID: location.nearestCamera?.id,
+                                               chipShown: chipShown) {
             Button(action: onShowCameras) {
                 HStack(spacing: 5) {
                     Image(systemName: next.camera.kind.symbolName)

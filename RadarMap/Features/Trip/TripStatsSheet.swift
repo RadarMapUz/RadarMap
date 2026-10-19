@@ -554,15 +554,21 @@ struct TripStatsSheet: View {
                 Text(period.caption)
                     .font(.rounded(11, .medium))
                     .foregroundStyle(Theme.textTertiary)
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(Formatting.distance(summary.distance))
-                        .font(.rounded(30, .heavy))
-                        .foregroundStyle(Theme.textPrimary)
-                        .contentTransition(.numericText())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                    if let delta = summary.distanceDeltaPercent {
-                        deltaBadge(delta)
+                // Метка дельты словами — «↘ 89 % к прошлой неделе» (6.3); не
+                // влезает рядом с числом — встаёт под ним, а не сжимает его.
+                let distance = Text(Formatting.distance(summary.distance))
+                    .font(.rounded(30, .heavy))
+                    .foregroundStyle(Theme.textPrimary)
+                    .contentTransition(.numericText())
+                    .lineLimit(1)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        distance
+                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta) }
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        distance.minimumScaleFactor(0.6)
+                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta) }
                     }
                 }
                 if let rating = summary.rating {
@@ -618,14 +624,17 @@ struct TripStatsSheet: View {
     private func ratingDeltaBadge(_ delta: Int) -> some View {
         let up = delta > 0
         let tint = up ? Theme.success : Theme.danger
+        // Число без подписи: рядом с ним уже стоит уровень рейтинга, а «к
+        // прошлой неделе» сказано меткой километров выше. Голос — целиком.
         return Label(up ? "+\(delta)" : "\(delta)",
                      systemImage: up ? "arrow.up" : "arrow.down")
             .font(.rounded(11, .bold).monospacedDigit())
             .foregroundStyle(tint)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(tint.opacity(0.14), in: Capsule())
-            .accessibilityLabel(Text(up ? String(localized: "Рейтинг вырос")
-                                        : String(localized: "Рейтинг снизился")))
+            .accessibilityLabel(Text((up ? String(localized: "Рейтинг вырос")
+                                         : String(localized: "Рейтинг снизился"))
+                                     + " " + period.versusPrevious))
     }
 
     // MARK: - Строка вывода (живёт в герой-карточке)
@@ -654,13 +663,14 @@ struct TripStatsSheet: View {
 
     private func deltaBadge(_ delta: Int) -> some View {
         let up = delta >= 0
-        return Label("\(abs(delta))%", systemImage: up ? "arrow.up.right" : "arrow.down.right")
+        return Label("\(abs(delta))% \(period.versusPrevious)", systemImage: up ? "arrow.up.right" : "arrow.down.right")
             .font(.rounded(11, .bold))
             .foregroundStyle(up ? Theme.accent : Theme.textSecondary)
             .padding(.horizontal, 7).padding(.vertical, 3)
             .background((up ? Theme.accent : Theme.textSecondary).opacity(0.14), in: Capsule())
             .accessibilityLabel(Text(up ? String(localized: "Больше, чем в прошлый период")
                                         : String(localized: "Меньше, чем в прошлый период")))
+            .fixedSize()
     }
 
     // MARK: - Зона риска (тап — карта с фокусом на камере)
@@ -1216,7 +1226,6 @@ struct TripStatsSheet: View {
             TripHistorySection(
                 title: period.tripsTitle,
                 records: shown,
-                total: all.count,
                 selectedID: mapSelection?.id,
                 onShowOnMap: { showOnMap($0, proxy: proxy) },
                 onOpenDetail: { selectedRecord = $0 },

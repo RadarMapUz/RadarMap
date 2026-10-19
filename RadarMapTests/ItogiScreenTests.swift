@@ -34,7 +34,7 @@ final class ItogiScreenTests: XCTestCase {
                                            anchor: now, now: now)
             let summary = TripHistory.summary(days: [], history: history, period: period, anchor: now)
             XCTAssertEqual(screen.summary, summary)
-            XCTAssertEqual(screen.insights, PeriodInsights.build(summary))
+            XCTAssertEqual(screen.insights, PeriodInsights.hero(summary).map { [$0] } ?? [])
             XCTAssertEqual(screen.trips.map(\.id),
                            TripHistory.historyList(history, period: period, anchor: now).map(\.id))
         }

@@ -48,6 +48,16 @@ nonisolated enum PeriodInsights {
         return Array(found.prefix(AppConfig.insightsMaxCount))
     }
 
+    /// Один вывод для героя «Итогов» (6.1–6.2): место и часы риска живут в
+    /// «Где теряете» и «Когда рискуете», движение рейтинга — меткой у числа;
+    /// здесь — только то, чего нигде больше нет (динамика, чистый период,
+    /// оговорка о лимитах).
+    static func hero(_ summary: PeriodSummary) -> Insight? {
+        build(summary).first { !heroDuplicates.contains($0.id) }
+    }
+
+    static let heroDuplicates: Set<String> = ["place", "hours", "rating.up", "rating.down"]
+
     // MARK: - Правила
 
     /// Динамика нарушений к прошлому такому же периоду. Требуем и относительное

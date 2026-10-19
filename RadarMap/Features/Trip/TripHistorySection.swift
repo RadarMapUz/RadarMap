@@ -19,9 +19,6 @@ struct TripHistorySection: View {
     /// «Поездки за неделю» / «за месяц» / «Последние поездки» — приходит сверху.
     let title: String
     let records: [TripRecord]
-    /// Сколько поездок в периоде всего: список бывает обрезан до первых пяти,
-    /// а счётчик в шапке обязан говорить правду про весь период.
-    let total: Int
     /// Какая поездка сейчас показана на карте.
     let selectedID: Double?
     let onShowOnMap: (TripRecord) -> Void
@@ -36,11 +33,9 @@ struct TripHistorySection: View {
     // герой периода наверху Итогов — двух источников правды быть не должно.
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: title) {
-                Text(String(format: String(localized: "Всего: %lld"), total))
-                    .font(.rounded(15, .medium))
-                    .foregroundStyle(Theme.textTertiary)
-            }
+            // Без «Всего: N»: число поездок уже сказано в герое («Поездок: 8»),
+            // а обрезанный список называет его на кнопке «Показать все (N)» (6.2).
+            SectionHeader(title: title) { EmptyView() }
 
             ForEach(TripHistory.dayGroups(records), id: \.day) { group in
                 Text(Formatting.dayTitle(group.day))
@@ -90,7 +85,9 @@ struct TripHistorySection: View {
                     // «Почему не 100» — прямо в строке: самая дорогая камера
                     // поездки. Раньше балл 55 объяснялся только в деталке.
                     if let worst = Self.worstPenalty(record) {
-                        Text(verbatim: "−\(worst.points) · \(worst.place)")
+                        // «−25 баллов · Юнусабад»: голое «−25» читалось
+                        // чем угодно — км/ч, минутами (6.3).
+                        Text(verbatim: "−" + String(localized: "\(worst.points) баллов") + " · " + worst.place)
                             .font(.rounded(11, .medium))
                             .foregroundStyle(Theme.danger)
                             .lineLimit(1)

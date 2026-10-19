@@ -16,7 +16,7 @@ import Foundation
 
 nonisolated struct ItogiScreen: Equatable {
     var summary: PeriodSummary
-    /// Выводы героя (PeriodInsights) — по той же сводке.
+    /// Вывод героя (PeriodInsights.hero) — один, без дублей других карточек.
     var insights: [Insight]
     /// «Ждут ответа: N» — по всей истории, не по окну (см. pendingFineNudge).
     var pendingCount: Int
@@ -37,7 +37,7 @@ nonisolated struct ItogiScreen: Equatable {
                                           period: period, anchor: anchor)
         let nudge = TripHistory.pendingFineNudge(history, now: now)
         return ItogiScreen(summary: summary,
-                           insights: PeriodInsights.build(summary),
+                           insights: PeriodInsights.hero(summary).map { [$0] } ?? [],
                            pendingCount: nudge?.count ?? 0,
                            pendingOldest: nudge?.oldest,
                            trips: TripHistory.historyList(history, period: period, anchor: anchor))

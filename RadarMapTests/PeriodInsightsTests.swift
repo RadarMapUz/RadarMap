@@ -230,6 +230,16 @@ final class PeriodInsightsTests: XCTestCase {
 
     // MARK: - Ближайшее достижение
 
+    /// Герою — один вывод и не тот, что уже сказан рядом: место и часы
+    /// риска есть в своих карточках, движение рейтинга — меткой «−19 к прошлой».
+    func testHeroSkipsWhatOtherCardsAlreadySay() {
+        for id in ["place", "hours", "rating.up", "rating.down"] {
+            XCTAssertTrue(PeriodInsights.heroDuplicates.contains(id))
+        }
+        XCTAssertFalse(PeriodInsights.heroDuplicates.contains("trend.worse"))
+        XCTAssertFalse(PeriodInsights.heroDuplicates.contains("clean"))
+    }
+
     func testNextAchievementIsClosestUnearned() {
         var stats = LifetimeStats()
         stats.distanceMeters = 950_000      // 950 км из 1000 — почти

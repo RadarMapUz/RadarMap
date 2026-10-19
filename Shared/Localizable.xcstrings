@@ -867,6 +867,22 @@
         }
       }
     },
+    "%lld%% %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld%% %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld%% %2$@"
+          }
+        }
+      }
+    },
     "+%lld км/ч": {
       "localizations": {
         "ru": {
@@ -2683,22 +2699,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Doim to‘liq iboralar va oldindan: kameralar kam, keyingisiga uzoq."
-          }
-        }
-      }
-    },
-    "Всего: %lld": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Всего: %lld"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jami: %lld"
           }
         }
       }
@@ -13225,6 +13225,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "odatdagi %@ dan"
+          }
+        }
+      }
+    },
+    "к прошлой неделе": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "к прошлой неделе"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘tgan haftaga nisbatan"
+          }
+        }
+      }
+    },
+    "к прошлому дню": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "к прошлому дню"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘tgan kunga nisbatan"
+          }
+        }
+      }
+    },
+    "к прошлому месяцу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "к прошлому месяцу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘tgan oyga nisbatan"
           }
         }
       }

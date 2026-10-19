@@ -619,11 +619,15 @@ final class TripStats {
     /// выезда (раньше выехал — быстрее доехал), вечер домой. Добавляется к
     /// истории, дом и работа выучиваются из неё же.
     /// `simctl launch <app> -demoHistory -demoCommutes -showStats`.
+    /// Дом и работа демо-дороги — их же берёт демо-профиль пути (8.8.6).
+    static let demoHome = CLLocationCoordinate2D(latitude: 41.2930, longitude: 69.2150)
+    static let demoWork = CLLocationCoordinate2D(latitude: 41.3285, longitude: 69.3010)
+
     func seedDemoCommutes() {
         // Не там, где стартует остальная демо-история (41.3110, 69.2790): её
         // утренние выезды сделали бы «работу» домом, и дорога не выучилась бы.
-        let home = CLLocationCoordinate2D(latitude: 41.2930, longitude: 69.2150)
-        let work = CLLocationCoordinate2D(latitude: 41.3285, longitude: 69.3010)
+        let home = Self.demoHome
+        let work = Self.demoWork
         let calendar = Calendar.current
         let now = Date()
         func line(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> [Double] {

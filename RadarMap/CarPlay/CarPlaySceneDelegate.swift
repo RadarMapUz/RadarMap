@@ -856,6 +856,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Пауза — на первый точный фикс: догадка смотрит, где мы стоим.
     private func offerDestinationSoon() {
         guard !offeredDestination else { return }
+        // «Сейчас ~44 мин» в баннере — свежий, а не тот, что строка на
+        // телефоне посчитала утром (телефон в кармане, строки нет).
+        env.refreshDepartureEstimates()
         offerTask?.cancel()
         offerTask = Task { @MainActor [weak self] in
             await Task.pause(seconds: AppConfig.carPlayDestinationOfferDelay)

@@ -25,7 +25,10 @@ final class CommuteProfileStore {
     /// Снос без прыжка на актор — тот же обход бага рантайма, что у моделей.
     nonisolated deinit {}
 
-    private(set) var book = CommuteProfile.Book()
+    private(set) var book = CommuteProfile.Book() { didSet { revision &+= 1 } }
+    /// Растёт с каждой сменой профиля (чтение, свёртка, стирание): по нему
+    /// «сейчас ~44 мин» понимает, что считать заново.
+    private(set) var revision = 0
     private(set) var ledger: [CommuteLedger.Entry] = []
     /// Файлы прочитаны: до этого журнал на диск не пишется — запись затёрла
     /// бы его огрызком из одной истории.
@@ -82,6 +85,9 @@ final class CommuteProfileStore {
                                          arrival: record.endedAt, stops: stops, limits: limits)
             guard store.generation == started else { return }
             store.book = book
+            #if DEBUG
+            if store.isDemo { return }
+            #endif
             await Self.save(book, to: Self.profileURL)
             let rows = book[direction].reduce(0) { $0 + $1.rows.count }
             Log.trips.info("профиль дороги: \(direction.rawValue, privacy: .public), вариантов \(book[direction].count, privacy: .public), строк \(rows, privacy: .public)")
@@ -99,6 +105,48 @@ final class CommuteProfileStore {
                                    limitAt: limits.map { index in { index.limit(near: $0) } },
                                    now: Date())
     }
+
+    #if DEBUG
+    /// Демо-профиль в памяти: свёртка и стирание его на диск не пишут.
+    @ObservationIgnored private var isDemo = false
+
+    /// Снимок `-demoCommutes`: профиль пути дом↔работа по прямой, пять будних
+    /// утр и вечеров — «сейчас ~44 мин» без настоящих поездок. Встаёт в ту же
+    /// очередь, что и чтение с диска, — после него, и прочитанное его не
+    /// затрёт; на диск не пишется.
+    func seedDemo(home: CLLocationCoordinate2D, work: CLLocationCoordinate2D, now: Date = Date()) {
+        func variant(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D, hour: Int,
+                     minutes: [Double]) -> CommuteProfile.Variant {
+            let length = GeoMath.fastDistance(a.latitude, a.longitude, b.latitude, b.longitude)
+            let count = max(1, Int(length / 200))
+            var line: [Int32] = []
+            for k in 0...count {
+                let t = Double(k) / Double(count)
+                line.append(Int32(((a.latitude + (b.latitude - a.latitude) * t) * 1e5).rounded()))
+                line.append(Int32(((a.longitude + (b.longitude - a.longitude) * t) * 1e5).rounded()))
+            }
+            let ends = (1...count).map { Float(length * Double($0) / Double(count)) }
+            let rows = minutes.enumerated().map { i, total in
+                let day = Calendar.current.date(byAdding: .day, value: -(i + 1) * 7 / 5 - 1, to: now) ?? now
+                let departure = Calendar.current.date(bySettingHour: hour, minute: 20, second: 0, of: day) ?? day
+                return CommuteProfile.Row(tripID: departure.timeIntervalSince1970, departure: departure,
+                                          weekend: false, arrivalMinute: 0,
+                                          seconds: [UInt16](repeating: UInt16(total * 60 / Double(count)),
+                                                            count: count))
+            }
+            return CommuteProfile.Variant(id: UUID(), line: line, ends: ends, limitKmh: [], rows: rows,
+                                          lastUsed: now)
+        }
+        var book = CommuteProfile.Book()
+        book.toWork = [variant(home, work, hour: 8, minutes: [44, 41, 47, 43, 45])]
+        book.toHome = [variant(work, home, hour: 18, minutes: [39, 37, 42, 38, 40])]
+        enqueue { store in
+            store.isDemo = true
+            store.book = book
+            store.onLoaded?()
+        }
+    }
+    #endif
 
     // MARK: - Журнал
 
@@ -131,6 +179,9 @@ final class CommuteProfileStore {
         let started = generation
         enqueue { store in
             guard store.generation == started else { return }
+            #if DEBUG
+            if store.isDemo { return }
+            #endif
             await Self.save(book, to: Self.profileURL)
         }
     }

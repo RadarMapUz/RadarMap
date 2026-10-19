@@ -178,6 +178,9 @@ struct RootView: View {
                 // такого пользователя лишь после ручного убийства процесса.
                 // Свои интервалы (6 ч / 3 ч / сутки) сервисы держат сами.
                 env.refreshRemoteIfNeeded()
+                // «Сейчас ~44 мин» — свежий после возвращения: строка на карте
+                // могла простоять в фоне час.
+                env.refreshDepartureEstimates()
             case .background:
                 env.location.setForeground(false)   // в поездке непрерывный GPS продолжит работать
                 env.setPhoneSceneActive(false)       // опрос гаснет, если и CarPlay нет

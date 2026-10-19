@@ -423,7 +423,7 @@ nonisolated struct TileRoadNetwork: RoadNetworkSource {
             // sha256 с подписанным индексом, но дельты в формате ничем не
             // ограничены, и накопленная координата в кривом-но-подписанном
             // тайле уронила бы приложение прямо в поездке.
-            cls = UInt8(truncatingIfNeeded: line.kind.hashValue)
+            cls = line.kind.stableCode
             count = Int32(truncatingIfNeeded: line.points.count)
             ax = Int32(truncatingIfNeeded: Int(first.latitude * RoadTiles.scale))
             ay = Int32(truncatingIfNeeded: Int(first.longitude * RoadTiles.scale))

@@ -103,12 +103,14 @@ final class SpeedSmootherTests: XCTestCase {
         XCTAssertEqual(SpeedBound.capped(0, distanceFilter: 6, secondsSinceFix: 20), 0)
     }
 
-    /// Экран открыт или CarPlay — фильтра нет, фиксы раз в секунду и стоя.
-    /// Подземный паркинг на 15 км/ч: через 5 с молчания цифра уже не 15, через
-    /// 20 с — ноль (сценарий S8, 20.10; раньше она застывала навсегда).
-    func testNoFilterSilenceStillBoundsTheSpeed() {
-        XCTAssertEqual(SpeedBound.capped(15, distanceFilter: -1, secondsSinceFix: 1), 15, "обычный интервал")
-        XCTAssertEqual(SpeedBound.capped(15, distanceFilter: -1, secondsSinceFix: 5), 7.2, accuracy: 0.01)
+    /// Экран открыт или CarPlay — фильтра нет: молчание GPS — потеря
+    /// сигнала, а не «проехали меньше фильтра». На 90 км/ч пропущенный фикс
+    /// (2 с) и даже 7 с под эстакадой — цифра та же; дольше окна «нет
+    /// сигнала» — ноль, а не вечные 15 под землёй (сценарий S8, ревью 20.10).
+    func testNoFilterSilenceHoldsThenZero() {
+        XCTAssertEqual(SpeedBound.capped(90, distanceFilter: -1, secondsSinceFix: 2), 90)
+        XCTAssertEqual(SpeedBound.capped(90, distanceFilter: -1, secondsSinceFix: 7), 90)
+        XCTAssertEqual(SpeedBound.capped(90, distanceFilter: -1, secondsSinceFix: 9), 0)
         XCTAssertEqual(SpeedBound.capped(15, distanceFilter: -1, secondsSinceFix: 20), 0)
     }
 

@@ -107,7 +107,7 @@ struct TripCameraChip: View {
                     .font(.rounded(13, .semibold))
                     .foregroundStyle(Theme.warning)
                     .frame(width: 28, height: 28)
-                Text("Нет сигнала GPS")
+                Text(location.isAuthorized ? "Нет сигнала GPS" : "Нет доступа к геопозиции")
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
